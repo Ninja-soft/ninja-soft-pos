@@ -1,0 +1,254 @@
+# Permisos y Roles — NinjaSoft POS
+
+Define los roles del sistema, sus permisos asociados y la lógica de autorización. Es referencia única para frontend, Edge Functions y revisiones de seguridad.
+
+## 1. Tipos de usuarios
+
+NinjaSoft POS distingue dos categorías de usuarios:
+
+| Categoría | Atributo identificador | Acceso |
+|---|---|---|
+| Usuarios de cliente | `is_internal = false` | Solo a su(s) tenant(s) vía `tenant_users`. |
+| Staff interno NinjaSoft | `is_internal = true` | Panel interno + acceso controlado a cualquier tenant con auditoría. |
+
+## 2. Roles de cliente
+
+Los roles viven en la tabla `tenant_users.role`. Un usuario puede tener distinto rol en distintos tenants.
+
+| Rol | Quién | Alcance |
+|---|---|---|
+| `owner` | Dueño / titular del negocio | Todo dentro del tenant. Único que puede cambiar el plan, ceder titularidad, eliminar el tenant. |
+| `manager` | Encargado, gerente | Operación completa salvo administración de plan y titularidad. |
+| `cashier` | Cajero, mozo, vendedor | Solo POS, caja, clientes (lectura). |
+| `viewer` | Contador, auditor externo | Solo lectura de reportes y comprobantes. |
+
+> **Regla.** Un tenant siempre tiene al menos un `owner`. No se puede dejar un tenant sin owner.
+
+## 3. Roles internos NinjaSoft
+
+Definidos por la combinación `is_internal = true` + `internal_role`.
+
+| Rol interno | Quién | Alcance |
+|---|---|---|
+| `super_admin` | Founders, CTO | Todo el panel interno. Único que puede asignar roles internos. |
+| `support` | Equipo de soporte | Ver tenants, abrir contexto con motivo, asistir clientes. |
+| `sales` | Equipo comercial | Ver tenants, cambiar planes, no ve datos operativos. |
+| `developer` | Equipo de desarrollo | Acceso técnico (feature flags, logs, debugging). |
+
+## 4. Matriz de permisos — Clientes
+
+Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
+
+### 4.1 Punto de Venta
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Vender productos | ✅ | ✅ | ✅ | ❌ |
+| Aplicar descuento ≤ 10% | ✅ | ✅ | ✅ | ❌ |
+| Aplicar descuento > 10% | ✅ | ✅ | ⚠️ (requiere PIN de manager) | ❌ |
+| Anular venta del día | ✅ | ✅ | ⚠️ (requiere PIN) | ❌ |
+| Anular venta días anteriores | ✅ | ✅ | ❌ | ❌ |
+| Ver ventas propias | ✅ | ✅ | ✅ | ✅ |
+| Ver ventas de otros cajeros | ✅ | ✅ | ❌ | ✅ |
+
+### 4.2 Caja
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Abrir turno propio | ✅ | ✅ | ✅ | ❌ |
+| Cerrar turno propio | ✅ | ✅ | ✅ | ❌ |
+| Cerrar turno de otro | ✅ | ✅ | ❌ | ❌ |
+| Movimientos de caja (retiros, ingresos) | ✅ | ✅ | ⚠️ (solo ingresos < $10k) | ❌ |
+| Ver arqueo histórico | ✅ | ✅ | ✅ (solo el propio) | ✅ |
+
+### 4.3 Productos y stock
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Crear producto | ✅ | ✅ | ❌ | ❌ |
+| Editar producto | ✅ | ✅ | ❌ | ❌ |
+| Cambiar precio | ✅ | ✅ | ❌ | ❌ |
+| Baja lógica de producto | ✅ | ✅ | ❌ | ❌ |
+| Ajuste manual de stock | ✅ | ✅ | ❌ | ❌ |
+| Ver stock | ✅ | ✅ | ✅ | ✅ |
+| Importar productos masivamente | ✅ | ⚠️ (con confirmación) | ❌ | ❌ |
+
+### 4.4 Clientes
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Alta de cliente | ✅ | ✅ | ✅ | ❌ |
+| Editar cliente | ✅ | ✅ | ⚠️ (solo datos de contacto) | ❌ |
+| Baja de cliente | ✅ | ✅ | ❌ | ❌ |
+| Ver cuenta corriente | ✅ | ✅ | ❌ | ✅ |
+
+### 4.5 Usuarios y configuración
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Invitar usuario | ✅ | ⚠️ (no puede invitar owners) | ❌ | ❌ |
+| Cambiar rol | ✅ | ⚠️ (no puede crear/quitar owners) | ❌ | ❌ |
+| Eliminar usuario | ✅ | ✅ (no a owners) | ❌ | ❌ |
+| Cambiar configuración del tenant | ✅ | ⚠️ (no plan, no titularidad) | ❌ | ❌ |
+| Cambiar plan | ✅ | ❌ | ❌ | ❌ |
+| Ceder titularidad | ✅ | ❌ | ❌ | ❌ |
+| Eliminar tenant | ✅ | ❌ | ❌ | ❌ |
+
+### 4.6 Reportes
+
+| Acción | Owner | Manager | Cashier | Viewer |
+|---|---|---|---|---|
+| Reporte del día (propio) | ✅ | ✅ | ✅ | ✅ |
+| Reporte completo del negocio | ✅ | ✅ | ❌ | ✅ |
+| Exportar reportes | ✅ | ✅ | ❌ | ✅ |
+| Ver audit_logs | ✅ | ✅ | ❌ | ✅ |
+
+## 5. Matriz de permisos — Internos NinjaSoft
+
+| Acción | super_admin | support | sales | developer |
+|---|---|---|---|---|
+| Ver listado de tenants | ✅ | ✅ | ✅ | ✅ |
+| Crear tenant | ✅ | ⚠️ | ✅ | ❌ |
+| Suspender tenant | ✅ | ⚠️ | ✅ | ❌ |
+| Eliminar tenant | ✅ | ❌ | ❌ | ❌ |
+| Abrir contexto de tenant (impersonation) | ✅ | ✅ | ⚠️ (solo lectura) | ✅ |
+| Cambiar plan | ✅ | ⚠️ | ✅ | ❌ |
+| Activar/desactivar feature flag global | ✅ | ❌ | ❌ | ✅ |
+| Activar/desactivar feature flag por tenant | ✅ | ⚠️ | ⚠️ | ✅ |
+| Ver audit_logs cross-tenant | ✅ | ✅ | ❌ | ✅ |
+| Asignar rol interno | ✅ | ❌ | ❌ | ❌ |
+| Modificar `system_settings` | ✅ | ❌ | ❌ | ⚠️ |
+
+⚠️ en internos significa "requiere registro de motivo en audit_logs".
+
+## 6. Convención de nombres de permisos
+
+Formato: `<recurso>:<acción>`. Lista canónica vive en `lib/permissions/permissions.ts`:
+
+```typescript
+export const PERMISSIONS = [
+  // POS
+  'sales:create',
+  'sales:void',
+  'sales:discount_high',
+  'sales:view_all',
+  
+  // Caja
+  'cash_shift:open',
+  'cash_shift:close_own',
+  'cash_shift:close_any',
+  'cash_movement:create',
+  
+  // Productos
+  'products:create',
+  'products:update',
+  'products:delete',
+  'products:price_change',
+  'stock:adjust',
+  'stock:import',
+  
+  // Clientes
+  'customers:create',
+  'customers:update',
+  'customers:delete',
+  
+  // Usuarios y config
+  'users:invite',
+  'users:role_change',
+  'users:delete',
+  'tenant:settings',
+  'tenant:plan_change',
+  'tenant:transfer',
+  'tenant:delete',
+  
+  // Reportes
+  'reports:view_own',
+  'reports:view_all',
+  'reports:export',
+  'audit:view',
+  
+  // Internos
+  'internal:tenants_manage',
+  'internal:plans_manage',
+  'internal:flags_manage',
+  'internal:impersonate',
+  'internal:roles_assign',
+] as const
+
+export type Permission = typeof PERMISSIONS[number]
+```
+
+## 7. Helper `can()`
+
+API canónica:
+
+```typescript
+// lib/permissions/can.ts
+export function can(user: User | null, permission: Permission, context?: object): boolean
+```
+
+Uso en componentes:
+
+```tsx
+import { can } from '@/lib/permissions/can'
+
+function VoidSaleButton({ sale }: { sale: Sale }) {
+  const user = useUser()
+  if (!can(user, 'sales:void', { sale })) return null
+  return <Button onClick={handleVoid}>Anular</Button>
+}
+```
+
+Uso en Edge Functions: igual, importando desde un módulo compartido.
+
+## 8. Componente `<PermissionGate>`
+
+Para envolver UI condicional:
+
+```tsx
+<PermissionGate permission="users:invite">
+  <InviteUserButton />
+</PermissionGate>
+
+<PermissionGate permission="users:invite" fallback={<p>No tenés permisos.</p>}>
+  <InviteUserForm />
+</PermissionGate>
+```
+
+## 9. Cambios de permisos
+
+Los permisos asociados a roles son **definiciones de código**, no datos en BD. Esto es intencional: mantiene la matriz versionada y trazable.
+
+Para overrides puntuales por tenant (ej. un cliente que necesita que sus managers también puedan eliminar usuarios), usar feature flags + lógica explícita en `can()`.
+
+```typescript
+// Ejemplo conceptual
+if (hasFeatureFlag('manager_can_delete_users') && user.role === 'manager') {
+  return permission === 'users:delete'
+}
+```
+
+## 10. Anti-patrones
+
+❌ Hardcodear el chequeo del rol en lugar de usar `can()`:
+```tsx
+{user.role === 'owner' && <Button>Editar plan</Button>}  // MAL
+```
+✅ Correcto:
+```tsx
+<PermissionGate permission="tenant:plan_change">
+  <Button>Editar plan</Button>
+</PermissionGate>
+```
+
+❌ Confiar solo en ocultar UI: la Edge Function **siempre** revalida.
+
+❌ Crear roles nuevos sin discusión: la matriz está pensada para cubrir 95% de casos. Casos especiales se modelan con feature flags.
+
+## 11. Tests obligatorios
+
+El agente `qa-engineer` debe garantizar:
+
+- Test por rol que verifique que **no puede** hacer las acciones que no le corresponden.
+- Test de Edge Function que rechace requests con `tenant_id` ajeno.
+- Test de RLS que verifique aislamiento entre tenants (ver `05-security.md`).

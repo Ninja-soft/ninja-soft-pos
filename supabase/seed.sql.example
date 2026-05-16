@@ -1,0 +1,135 @@
+-- =============================================================================
+-- NinjaSoft POS — Seed de desarrollo (ejemplo)
+-- =============================================================================
+-- Datos mínimos para arrancar a probar en LOCAL. NO ejecutar en staging
+-- ni en producción.
+--
+-- Uso:
+--   cp supabase/seed.sql.example supabase/seed.sql
+--   psql "$(supabase status -o env | grep DB_URL | cut -d= -f2)" -f supabase/seed.sql
+-- =============================================================================
+
+begin;
+
+-- -----------------------------------------------------------------------------
+-- Plans (planes comerciales)
+-- -----------------------------------------------------------------------------
+-- Asumimos que las migraciones ya crearon la tabla `plans`.
+-- Estos son los planes base para dev.
+insert into plans (code, name, monthly_price_ars, max_users, max_stores, is_active)
+values
+  ('start',      'Start',      0,     2,  1,  true),
+  ('pro',        'Pro',        15000, 5,  2,  true),
+  ('business',   'Business',   35000, 15, 5,  true),
+  ('enterprise', 'Enterprise', 0,     null, null, true) -- precio a convenir, sin límites
+on conflict (code) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Feature flags base
+-- -----------------------------------------------------------------------------
+insert into feature_flags (key, name, description, default_enabled)
+values
+  ('afip_integration',     'Integración AFIP',        'Facturación electrónica',         false),
+  ('multi_store',          'Multi-local',             'Soporta más de un local',         false),
+  ('discount_by_percent',  'Descuento por porcentaje','Descuento porcentual en venta',   true),
+  ('suspended_sales',      'Ventas suspendidas',      'Suspender y retomar ventas',      true),
+  ('barcode_scanner',      'Lector de código de barras','Soporte para lector USB',       true),
+  ('customer_accounts',    'Cuenta corriente',        'Cuenta corriente de clientes',    false)
+on conflict (key) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Tenant de ejemplo
+-- -----------------------------------------------------------------------------
+-- ID fijo para que sea referenciable desde otros seeds y tests.
+insert into tenants (id, name, slug, plan_code, status)
+values (
+  '00000000-0000-0000-0000-000000000001',
+  'Kiosco Don Juan',
+  'kiosco-don-juan',
+  'pro',
+  'active'
+)
+on conflict (id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Usuario owner del tenant
+-- -----------------------------------------------------------------------------
+-- En desarrollo local, crear el usuario primero en Supabase Auth:
+--   supabase auth signup --email owner@ejemplo.local --password ninjasoft
+-- Después copiar el `id` y reemplazarlo abajo.
+-- O usar el panel de Supabase Studio (http://localhost:54323).
+
+-- Ejemplo (reemplazar el UUID):
+-- insert into tenant_users (tenant_id, user_id, role)
+-- values (
+--   '00000000-0000-0000-0000-000000000001',
+--   'AQUI-EL-UUID-DEL-USER-DE-AUTH',
+--   'owner'
+-- )
+-- on conflict do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Local
+-- -----------------------------------------------------------------------------
+insert into stores (id, tenant_id, name, address)
+values (
+  '00000000-0000-0000-0000-000000000010',
+  '00000000-0000-0000-0000-000000000001',
+  'Local Principal',
+  'Av. Siempreviva 742'
+)
+on conflict (id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Caja
+-- -----------------------------------------------------------------------------
+insert into cash_registers (id, tenant_id, store_id, name)
+values (
+  '00000000-0000-0000-0000-000000000020',
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000010',
+  'Caja 1'
+)
+on conflict (id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Categorías
+-- -----------------------------------------------------------------------------
+insert into categories (id, tenant_id, name)
+values
+  ('00000000-0000-0000-0000-000000000030', '00000000-0000-0000-0000-000000000001', 'Bebidas'),
+  ('00000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000001', 'Almacén'),
+  ('00000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-000000000001', 'Limpieza')
+on conflict (id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Productos
+-- -----------------------------------------------------------------------------
+insert into products (tenant_id, sku, barcode, name, category_id, price_ars, stock)
+values
+  ('00000000-0000-0000-0000-000000000001', 'BEB-001', '7790895000164', 'Coca-Cola 500ml',     '00000000-0000-0000-0000-000000000030', 1200, 50),
+  ('00000000-0000-0000-0000-000000000001', 'BEB-002', '7790895000171', 'Agua mineral 500ml',  '00000000-0000-0000-0000-000000000030', 800,  80),
+  ('00000000-0000-0000-0000-000000000001', 'ALM-001', '7790070411006', 'Fideos 500g',         '00000000-0000-0000-0000-000000000031', 1500, 30),
+  ('00000000-0000-0000-0000-000000000001', 'ALM-002', '7790070411013', 'Arroz 1kg',           '00000000-0000-0000-0000-000000000031', 2200, 20),
+  ('00000000-0000-0000-0000-000000000001', 'LIM-001', '7790250022505', 'Lavandina 1L',        '00000000-0000-0000-0000-000000000032', 1800, 15)
+on conflict (tenant_id, sku) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- Cliente de ejemplo
+-- -----------------------------------------------------------------------------
+insert into customers (tenant_id, name, document_type, document_number, email)
+values (
+  '00000000-0000-0000-0000-000000000001',
+  'María Pérez',
+  'DNI',
+  '12345678',
+  'maria@ejemplo.local'
+)
+on conflict do nothing;
+
+commit;
+
+-- =============================================================================
+-- Listo. Loguearse en la app con el usuario de Auth creado más arriba
+-- y deberías ver el tenant "Kiosco Don Juan" con productos y un cliente.
+-- =============================================================================

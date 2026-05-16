@@ -1,0 +1,234 @@
+# CLAUDE.md — Contexto maestro de NinjaSoft POS
+
+> Este archivo es el **primer documento** que cualquier sesión de Claude (Claude Code, Claude Cowork, agente especializado) debe leer al arrancar. Define el proyecto, las reglas no negociables y el sistema de trabajo.
+
+---
+
+## 1. ¿Qué es NinjaSoft POS?
+
+POS SaaS multi-tenant para Argentina. Soluciones para kioscos, textiles, retail, restaurantes y pymes.
+
+Tres planos del sistema:
+- **Producto:** lo que usan los clientes finales (POS, panel del cliente).
+- **Plataforma:** lo que administra NinjaSoft (panel interno, tenants, planes).
+- **Operaciones:** soporte, auditoría, suscripciones, trazabilidad.
+
+Visión completa: [`docs/01-mvp.md`](docs/01-mvp.md).
+
+---
+
+## 2. Stack
+
+- **Frontend:** Next.js 14+ (App Router) + TypeScript + Tailwind CSS.
+- **Backend:** Supabase (Postgres + Auth + Storage + Edge Functions).
+- **Deploy:** Vercel.
+- **Estado servidor:** TanStack Query.
+- **Estado cliente (POS):** Zustand.
+- **Validación:** Zod.
+- **Forms:** React Hook Form + Zod.
+- **Tests:** Vitest + Playwright.
+
+Detalle: [`docs/03-architecture.md`](docs/03-architecture.md).
+
+---
+
+## 3. Principios no negociables
+
+Estas reglas son **arquitectónicas**: romper alguna obliga a detener y revisar.
+
+1. **Multi-tenant desde el commit 1.** Toda tabla operativa lleva `tenant_id` con RLS activa.
+2. **`service_role` nunca en frontend.** Solo en Edge Functions o scripts server-side.
+3. **Auditoría obligatoria.** Acciones críticas escriben en `audit_logs` antes de responder.
+4. **Migraciones versionadas.** Todo cambio de esquema vive en `supabase/migrations/`.
+5. **Feature flags antes que branches de código.** Toda función opcional vive detrás de un flag.
+6. **Baja lógica.** `deleted_at` en lugar de `DELETE` físico para datos de negocio.
+7. **UUID primary keys** en todas las entidades de negocio.
+8. **Mobile-first** en POS.
+9. **Tema base: `ninja-dark`** (ver brand book).
+10. **Documentación viva.** Las decisiones se registran, no se memorizan.
+
+---
+
+## 4. Sistema de agentes
+
+Este proyecto trabaja con un **equipo de agentes especializados** orquestados por un Project Manager. **Toda tarea entra por el PM.**
+
+- Roster completo: [`.claude/agents/README.md`](.claude/agents/README.md).
+- Project Manager: [`.claude/agents/project-manager.md`](.claude/agents/project-manager.md).
+
+Patrón de uso:
+
+```
+Actuá como el Project Manager descrito en .claude/agents/project-manager.md.
+
+Tarea:
+[descripción]
+```
+
+El PM:
+1. Lee contexto.
+2. Produce plan estructurado.
+3. Delega a especialistas (en paralelo cuando es seguro).
+4. Cierra con entrada en decision-log y changelog.
+
+---
+
+## 5. Estructura del repositorio
+
+```
+ninjasoft-pos/
+├── app/                          # Next.js App Router
+│   ├── (public)/                 # landing, pricing
+│   ├── (auth)/                   # login, signup, recover
+│   ├── (pos)/                    # punto de venta
+│   ├── (admin)/                  # panel del cliente
+│   └── (internal)/               # panel interno NinjaSoft
+├── components/
+│   ├── ui/                       # primitivos (Button, Input, Card…)
+│   ├── pos/
+│   ├── admin/
+│   ├── internal/
+│   └── landing/
+├── modules/                      # lógica de negocio por dominio
+│   ├── pos/
+│   ├── products/
+│   ├── stock/
+│   ├── cash-register/
+│   ├── customers/
+│   ├── sales/
+│   ├── reports/
+│   ├── subscriptions/
+│   └── auth/
+├── lib/
+│   ├── supabase/                 # clientes Supabase
+│   ├── edge/                     # llamadas tipadas a Edge Functions
+│   ├── permissions/              # roles, permisos, feature flags
+│   ├── audit/                    # helpers de auditoría
+│   ├── theme/                    # tokens y helpers de tema
+│   └── utils/
+├── hooks/
+├── types/
+│   └── database.ts               # generado por Supabase CLI
+├── supabase/
+│   ├── migrations/
+│   ├── functions/
+│   ├── policies/                 # documentación de policies RLS
+│   └── seed.sql
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   ├── e2e/
+│   └── factories/
+├── scripts/
+├── public/
+├── docs/                         # documentación viva (ver docs/README.md)
+├── .claude/
+│   ├── agents/                   # definiciones de agentes
+│   └── settings.local.json       # config local (no commitear con secretos)
+├── .env.example
+├── CLAUDE.md                     # este archivo
+├── CHANGELOG.md
+├── README.md
+└── package.json
+```
+
+---
+
+## 6. Convenciones
+
+### Git
+
+- `main` = producción. Nunca commit directo.
+- Ramas: `feature/<nombre>`, `fix/<nombre>`, `chore/<nombre>`, `docs/<nombre>`.
+- Commits: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`).
+- Una rama, un PR, un objetivo claro.
+
+Detalle: [`docs/workflows/git-workflow.md`](docs/workflows/git-workflow.md).
+
+### Código
+
+- TypeScript estricto (`strict: true`).
+- ESLint + Prettier.
+- Imports absolutos con alias `@/` para `src/` (o `./` si no usás src).
+- Componentes con `forwardRef` y `displayName` cuando hace falta.
+- Tests al lado del archivo o en `tests/` (decidir y mantener consistencia).
+
+### Base de datos
+
+Ver [`docs/04-database.md`](docs/04-database.md) y el agente `supabase-architect`.
+
+---
+
+## 7. Antes de empezar a trabajar
+
+Cualquier sesión (humano o agente) debe:
+
+1. Leer este archivo.
+2. Leer [`docs/01-mvp.md`](docs/01-mvp.md) y [`docs/02-roadmap.md`](docs/02-roadmap.md).
+3. Revisar las últimas entradas de [`docs/17-decision-log.md`](docs/17-decision-log.md) y [`CHANGELOG.md`](CHANGELOG.md).
+4. Identificar qué agente corresponde a la tarea.
+5. Si es tarea no trivial → ir vía PM.
+
+---
+
+## 8. Reglas de comunicación con el equipo humano
+
+- **Plan antes de código** en tareas no triviales.
+- **Resumen al cerrar** con archivos tocados, riesgos y próximo paso.
+- **Sin código de relleno.** Si una sección de archivo no cambia, no se reescribe.
+- **Honestidad ante bloqueos.** Si falta información, se pide; no se asume.
+- **Sin "ya que estaba".** No mezclar cambios fuera del alcance del PR.
+
+---
+
+## 9. Archivos sensibles
+
+Estos archivos requieren cuidado especial. No tocarlos sin razón clara:
+
+- `supabase/migrations/*` aplicadas (son inmutables; se corrigen con migraciones nuevas).
+- `next.config.mjs` (afecta build y producción).
+- `tailwind.config.ts` (afecta el sistema visual entero).
+- `package.json` y `pnpm-lock.yaml` (mantener versiones consistentes).
+- Cualquier archivo en `.env*`.
+
+---
+
+## 10. Comandos de bolsillo
+
+```bash
+# Setup local
+pnpm install
+pnpm db:start            # Supabase local con Docker
+pnpm db:reset            # reset + migraciones + seed
+pnpm db:types            # regenera types/database.ts
+pnpm dev                 # Next.js dev
+
+# Calidad
+pnpm lint
+pnpm typecheck
+pnpm test
+
+# Base de datos
+pnpm db:migrate:new <nombre>
+supabase functions serve
+```
+
+---
+
+## 11. Referencia rápida de documentos
+
+| Necesito… | Voy a… |
+|---|---|
+| Saber qué hace el producto | [`docs/01-mvp.md`](docs/01-mvp.md) |
+| Ver en qué hito estamos | [`docs/02-roadmap.md`](docs/02-roadmap.md) |
+| Entender la arquitectura | [`docs/03-architecture.md`](docs/03-architecture.md) |
+| Diseñar una tabla | [`docs/04-database.md`](docs/04-database.md), `supabase-architect` |
+| Manejar permisos | [`docs/06-permissions-roles.md`](docs/06-permissions-roles.md) |
+| Implementar UI | [`docs/11-ui-brand.md`](docs/11-ui-brand.md), `ui-designer` |
+| Hacer un deploy | [`docs/13-deployment.md`](docs/13-deployment.md), `devops` |
+| Reportar un bug | `qa-engineer` |
+| Empezar una feature | Project Manager |
+
+---
+
+> Si después de leer esto tenés dudas, pedí al PM que las aclare antes de tocar código.

@@ -1,0 +1,46 @@
+{
+  "_comment": "Copiar este archivo a .claude/settings.local.json (NO commitearlo). Configura el acceso del agente supabase-architect a la DB local vía MCP.",
+
+  "mcpServers": {
+    "supabase-local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--db-url",
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+      ],
+      "_comment": "Conexión a la DB LOCAL de Supabase CLI. Reemplazar el connection string si lo cambiaste con `supabase start --db-url ...`."
+    }
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(supabase:*)",
+      "Bash(pnpm:*)",
+      "Bash(git:*)",
+      "Read(./supabase/**)",
+      "Edit(./supabase/migrations/**)",
+      "Edit(./supabase/functions/**)",
+      "Edit(./app/**)",
+      "Edit(./components/**)",
+      "Edit(./lib/**)",
+      "Edit(./tests/**)",
+      "Edit(./docs/**)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(*production*)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "_comment_env": "Los .env los lee directamente Next.js, no necesita acceder Claude. Esto evita que un agente filtre el service_role en un mensaje."
+    ]
+  },
+
+  "_notes": [
+    "Este archivo es local de cada dev. NO commitear.",
+    "El .env.local sigue siendo necesario para que pnpm dev y supabase CLI funcionen.",
+    "MCP da acceso directo a la DB local; combinado con SUPABASE_SERVICE_ROLE_KEY en .env.local, el agente supabase-architect tiene control total en local.",
+    "En producción, ningún agente tiene este nivel de acceso. Ver ADR-007."
+  ]
+}

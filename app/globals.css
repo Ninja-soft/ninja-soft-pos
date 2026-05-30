@@ -17,89 +17,104 @@
    ninja-light por defecto; ninja-dark es el tema principal de la marca.
    ============================================================================= */
 :root {
-  --background: #f8f7ff;
-  --foreground: #161026;
-
-  --card: #ffffff;
-  --card-foreground: #161026;
-
-  --popover: #ffffff;
-  --popover-foreground: #161026;
-
-  --primary: #ff4b22;
-  --primary-foreground: #100a2e;
-
-  --secondary: #f1eeff;
-  --secondary-foreground: #21135a;
-
-  --muted: #f6f3ff;
-  --muted-foreground: #6e6688;
-
-  --accent: #ffd21f;
-  --accent-foreground: #100a2e;
-
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-
-  --border: #e3ddf5;
-  --input: #e3ddf5;
-  --ring: #ff6a1a;
-
-  --radius: 1rem;
+  --radius: 0.75rem;
 }
 
+/* ---------- Void (violeta) — tema principal ---------- */
+:root,
 [data-theme="ninja-dark"] {
-  --background: #09051c;
-  --foreground: #f7f7ff;
-
-  --card: rgba(20, 13, 53, 0.78);
-  --card-foreground: #f7f7ff;
-
-  --popover: #140d35;
-  --popover-foreground: #f7f7ff;
-
-  --primary: #ff4b22;
-  --primary-foreground: #100a2e;
-
+  --background: #0a0518;
+  --foreground: #f4f2ff;
+  --card: rgba(22, 15, 48, 0.72);
+  --card-foreground: #f4f2ff;
+  --popover: #15103a;
+  --popover-foreground: #f4f2ff;
+  --primary: #ff5a2c;
+  --primary-foreground: #0a0518;
   --secondary: rgba(255, 255, 255, 0.06);
-  --secondary-foreground: #f7f7ff;
-
-  --muted: rgba(255, 255, 255, 0.06);
-  --muted-foreground: #b8aedc;
-
+  --secondary-foreground: #edeaff;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #a99fd0;
   --accent: #ffd21f;
   --accent-foreground: #100a2e;
-
-  --destructive: #ff4b4b;
+  --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
-
   --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: #ff6a1a;
+  --pattern: rgba(255, 255, 255, 0.05);
 }
 
+/* ---------- Noir (carbón neutro) ---------- */
+[data-theme="ninja-noir"] {
+  --background: #0b0c0f;
+  --foreground: #f2f3f5;
+  --card: rgba(255, 255, 255, 0.04);
+  --card-foreground: #f2f3f5;
+  --popover: #15171c;
+  --popover-foreground: #f2f3f5;
+  --primary: #ff5a2c;
+  --primary-foreground: #0b0c0f;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #f2f3f5;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #9aa0ab;
+  --accent: #ffc23d;
+  --accent-foreground: #0b0c0f;
+  --destructive: #ff5a5a;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.07);
+  --ring: #ff6a1a;
+  --pattern: rgba(255, 255, 255, 0.045);
+}
+
+/* ---------- Lavanda (claro) ---------- */
 [data-theme="ninja-light"] {
-  --background: #f8f7ff;
-  --foreground: #161026;
-
-  --card: rgba(255, 255, 255, 0.86);
-  --card-foreground: #161026;
-
+  --background: #f6f5fc;
+  --foreground: #15111f;
+  --card: #ffffff;
+  --card-foreground: #15111f;
   --popover: #ffffff;
-  --popover-foreground: #161026;
-
-  --secondary: #f1eeff;
-  --secondary-foreground: #21135a;
-
-  --muted: #f6f3ff;
-  --muted-foreground: #6e6688;
-
+  --popover-foreground: #15111f;
+  --primary: #e8431b;
+  --primary-foreground: #ffffff;
+  --secondary: #eeeafb;
+  --secondary-foreground: #3a2c73;
+  --muted: #f0edfa;
+  --muted-foreground: #6b6388;
+  --accent: #e8a400;
+  --accent-foreground: #1a1330;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-
-  --border: #e3ddf5;
-  --input: #ddd6f0;
+  --border: #e6e1f3;
+  --input: #e2dcf1;
   --ring: #ff6a1a;
+  --pattern: rgba(30, 22, 60, 0.06);
+}
+
+/* ---------- Arena (claro cálido) ---------- */
+[data-theme="ninja-sand"] {
+  --background: #fbf7f1;
+  --foreground: #211a12;
+  --card: #ffffff;
+  --card-foreground: #211a12;
+  --popover: #ffffff;
+  --popover-foreground: #211a12;
+  --primary: #e8431b;
+  --primary-foreground: #ffffff;
+  --secondary: #f4ece0;
+  --secondary-foreground: #5a4632;
+  --muted: #f3ebdd;
+  --muted-foreground: #7a6b57;
+  --accent: #e08900;
+  --accent-foreground: #211a12;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #eadfcf;
+  --input: #e7dcc9;
+  --ring: #ff6a1a;
+  --pattern: rgba(60, 40, 20, 0.06);
 }
 
 @layer base {

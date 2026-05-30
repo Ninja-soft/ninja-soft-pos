@@ -8,10 +8,22 @@ import {
   useState,
 } from "react";
 
-export type ThemeName = "ninja-dark" | "ninja-light";
+export type ThemeName =
+  | "ninja-dark"
+  | "ninja-noir"
+  | "ninja-light"
+  | "ninja-sand";
+
+export const THEMES: { name: ThemeName; label: string; dark: boolean }[] = [
+  { name: "ninja-dark", label: "Void (violeta)", dark: true },
+  { name: "ninja-noir", label: "Noir (carbón)", dark: true },
+  { name: "ninja-light", label: "Lavanda (claro)", dark: false },
+  { name: "ninja-sand", label: "Arena (claro cálido)", dark: false },
+];
 
 const STORAGE_KEY = "ninja-theme";
 const DEFAULT_THEME: ThemeName = "ninja-dark";
+const VALID = THEMES.map((t) => t.name);
 
 interface ThemeContextValue {
   theme: ThemeName;
@@ -21,35 +33,33 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function applyTheme(theme: ThemeName) {
-  document.documentElement.setAttribute("data-theme", theme);
-}
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<ThemeName>(DEFAULT_THEME);
 
-  // Sincroniza con lo que el script anti-FOUC dejó en el <html>.
   useEffect(() => {
     const current = document.documentElement.getAttribute(
       "data-theme",
     ) as ThemeName | null;
-    if (current === "ninja-dark" || current === "ninja-light") {
-      setThemeState(current);
-    }
+    if (current && VALID.includes(current)) setThemeState(current);
   }, []);
 
   const setTheme = useCallback((next: ThemeName) => {
     setThemeState(next);
-    applyTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
-      // localStorage no disponible: el tema vive solo en memoria.
+      // sin persistencia
     }
   }, []);
 
+  // Toggle rápido claro/oscuro (alterna entre el dark y light por defecto).
   const toggleTheme = useCallback(() => {
-    setTheme(theme === "ninja-dark" ? "ninja-light" : "ninja-dark");
+    setTheme(
+      theme === "ninja-light" || theme === "ninja-sand"
+        ? "ninja-dark"
+        : "ninja-light",
+    );
   }, [theme, setTheme]);
 
   return (
@@ -61,18 +71,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 export function useTheme(): ThemeContextValue {
   const ctx = useContext(ThemeContext);
-  if (!ctx) {
-    throw new Error("useTheme debe usarse dentro de <ThemeProvider>");
-  }
+  if (!ctx) throw new Error("useTheme debe usarse dentro de <ThemeProvider>");
   return ctx;
 }
 
-/** Script inline que setea el tema antes de la hidratación (evita flash). */
 export const themeInitScript = `
 (function () {
   try {
+    var valid = ${JSON.stringify(VALID)};
     var stored = localStorage.getItem('${STORAGE_KEY}');
-    var theme = stored === 'ninja-light' || stored === 'ninja-dark' ? stored : '${DEFAULT_THEME}';
+    var theme = valid.indexOf(stored) !== -1 ? stored : '${DEFAULT_THEME}';
     document.documentElement.setAttribute('data-theme', theme);
   } catch (e) {
     document.documentElement.setAttribute('data-theme', '${DEFAULT_THEME}');

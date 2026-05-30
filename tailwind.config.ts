@@ -95,18 +95,29 @@ const config: Config = {
           "linear-gradient(135deg, #F8F7FF 0%, #F1EEFF 52%, #FFFFFF 100%)",
       },
       keyframes: {
-        "fade-in": {
-          from: { opacity: "0" },
-          to: { opacity: "1" },
-        },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
         "slide-up": {
           from: { opacity: "0", transform: "translateY(8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "overlay-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "overlay-out": { from: { opacity: "1" }, to: { opacity: "0" } },
+        "modal-in": {
+          from: { opacity: "0", transform: "translate(-50%, -50%) scale(0.95)" },
+          to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+        },
+        "modal-out": {
+          from: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+          to: { opacity: "0", transform: "translate(-50%, -50%) scale(0.97)" },
         },
       },
       animation: {
         "fade-in": "fade-in 180ms ease-out",
         "slide-up": "slide-up 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "overlay-in": "overlay-in 160ms ease-out",
+        "overlay-out": "overlay-out 130ms ease-in forwards",
+        "modal-in": "modal-in 210ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "modal-out": "modal-out 130ms ease-in forwards",
       },
     },
   },

@@ -1,7 +1,7 @@
 // =============================================================================
 // GENERADO AUTOMÁTICAMENTE — no editar a mano.
 // Origen: Supabase project hrkditzrsavehnhngakb (dev/staging).
-// Regenerar con: pnpm db:types  (supabase gen types typescript)
+// Regenerar con: pnpm db:types
 // =============================================================================
 
 export type Json =
@@ -65,6 +65,57 @@ export type Database = {
         }
         Relationships: []
       }
+      categories: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          parent_id: string | null
+          sort_order: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          parent_id?: string | null
+          sort_order?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          parent_id?: string | null
+          sort_order?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feature_flags: {
         Row: {
           created_at: string
@@ -124,6 +175,165 @@ export type Database = {
           yearly_price_ars?: number | null
         }
         Relationships: []
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          category_id: string | null
+          cost: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          metadata: Json
+          name: string
+          price: number
+          sku: string | null
+          stock: number
+          stock_min: number | null
+          tenant_id: string
+          unit: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json
+          name: string
+          price: number
+          sku?: string | null
+          stock?: number
+          stock_min?: number | null
+          tenant_id: string
+          unit?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json
+          name?: string
+          price?: number
+          sku?: string | null
+          stock?: number
+          stock_min?: number | null
+          tenant_id?: string
+          unit?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          delta: number
+          id: string
+          notes: string | null
+          product_id: string
+          reason: string
+          reference_id: string | null
+          store_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          delta: number
+          id?: string
+          notes?: string | null
+          product_id: string
+          reason: string
+          reference_id?: string | null
+          store_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          delta?: number
+          id?: string
+          notes?: string | null
+          product_id?: string
+          reason?: string
+          reference_id?: string | null
+          store_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriptions: {
         Row: {

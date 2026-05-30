@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 1 — Catálogo (capa DB):** tablas `categories`, `products`, `stock_movements` con RLS de aislamiento por tenant, índices (SKU/barcode únicos parciales, nombre, categoría), `updated_at` automático y triggers de auditoría en `products` y `stock_movements`. Tipos regenerados. Aplicado a dev/staging; advisors sin lints de tablas (queda pendiente activar leaked-password-protection en Auth).
+
 - **Esquema base de BD (Hito 0)** aplicado al proyecto Supabase dev/staging y versionado en `supabase/migrations/`:
   - Tablas: `tenants`, `users` (espejo de `auth.users`), `tenant_users`, `plans`, `subscriptions`, `feature_flags`, `tenant_feature_flags`, `system_settings`, `audit_logs`.
   - Funciones helper: `current_tenant_id()`, `is_internal()`, `set_updated_at()`, `write_audit_log()`, `handle_new_user()`.

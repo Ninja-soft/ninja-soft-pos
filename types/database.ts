@@ -222,6 +222,60 @@ export type Database = {
         }
         Relationships: []
       }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          deleted_at: string | null
+          document_number: string | null
+          document_type: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          iva_condition: string | null
+          metadata: Json
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          document_number?: string | null
+          document_type?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          iva_condition?: string | null
+          metadata?: Json
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          document_number?: string | null
+          document_type?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          iva_condition?: string | null
+          metadata?: Json
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           created_at: string

@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Package, Receipt, ShoppingCart, Wallet } from "lucide-react";
+import {
+  Building2,
+  Package,
+  Receipt,
+  ShoppingCart,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { buttonVariants } from "@/components/ui/Button";
@@ -64,6 +71,9 @@ export default async function DashboardPage() {
             </Link>
             <Link href="/caja" className={buttonVariants({ variant: "secondary" })}>
               <Wallet size={16} /> Caja
+            </Link>
+            <Link href="/clientes" className={buttonVariants({ variant: "secondary" })}>
+              <Users size={16} /> Clientes
             </Link>
           </div>
         )}

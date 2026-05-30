@@ -15,11 +15,14 @@ export function Eyebrow({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2.5 font-display text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground",
+        "inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground",
         className,
       )}
     >
-      <span className="h-px w-6 bg-ninja-flame" aria-hidden />
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-ninja-gradient shadow-ninjaGlow"
+        aria-hidden
+      />
       {children}
     </span>
   );

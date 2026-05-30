@@ -112,8 +112,8 @@ export function AppShell({
         className="mb-4 flex items-center gap-2 px-2 py-1"
       >
         <Isotype className="h-8 w-auto" />
-        <span className="font-display text-lg font-bold tracking-tight">
-          Ninja<span className="text-ninja-flameSoft">Soft</span>
+        <span className="font-sans text-lg font-extrabold tracking-tight">
+          Ninja<span className="text-ninja-flameSoft">Pos</span>
         </span>
       </Link>
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  History,
   Pencil,
   Plus,
   Search,
@@ -17,6 +18,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Isotype } from "@/components/brand/Logo";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
+import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { useProducts, useProductMutations } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -25,6 +27,7 @@ export default function ProductosPage() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const { toast } = useToast();
 
@@ -42,6 +45,10 @@ export default function ProductosPage() {
   function openAdjust(p: Product) {
     setSelected(p);
     setAdjustOpen(true);
+  }
+  function openHistory(p: Product) {
+    setSelected(p);
+    setHistoryOpen(true);
   }
   async function onDelete(p: Product) {
     if (!window.confirm(`¿Eliminar "${p.name}"? (baja lógica)`)) return;
@@ -161,6 +168,13 @@ export default function ProductosPage() {
                           <SlidersHorizontal size={16} />
                         </button>
                         <button
+                          onClick={() => openHistory(p)}
+                          title="Historial de stock"
+                          className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <History size={16} />
+                        </button>
+                        <button
                           onClick={() => openEdit(p)}
                           title="Editar"
                           className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
@@ -192,6 +206,11 @@ export default function ProductosPage() {
       <StockAdjustModal
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
+        product={selected}
+      />
+      <StockHistoryModal
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
         product={selected}
       />
     </div>

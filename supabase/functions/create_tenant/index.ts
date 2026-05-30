@@ -128,6 +128,20 @@ Deno.serve(async (req: Request) => {
     joined_at: new Date().toISOString(),
   });
 
+  // 3b. Sucursal + caja por defecto (docs/08 §8).
+  const { data: store } = await admin
+    .from("stores")
+    .insert({ tenant_id: tenant.id, name: "Sucursal principal", is_default: true })
+    .select("id")
+    .single();
+  if (store) {
+    await admin.from("cash_registers").insert({
+      tenant_id: tenant.id,
+      store_id: store.id,
+      name: "Caja 1",
+    });
+  }
+
   // 4. JWT: tenant activo.
   await admin.auth.admin.updateUserById(user.id, {
     app_metadata: {

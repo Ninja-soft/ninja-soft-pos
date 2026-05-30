@@ -22,6 +22,14 @@ export function useCategories() {
   });
 }
 
+export function useStockMovements(productId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["products", "movements", productId],
+    queryFn: () => productsApi.movements(productId!),
+    enabled: enabled && Boolean(productId),
+  });
+}
+
 export function useProductMutations() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["products"] });

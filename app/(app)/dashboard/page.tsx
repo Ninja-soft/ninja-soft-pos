@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, Package } from "lucide-react";
+import { Building2, Package, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { buttonVariants } from "@/components/ui/Button";
@@ -53,6 +53,9 @@ export default async function DashboardPage() {
 
         {memberships.length > 0 && (
           <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/pos" className={buttonVariants()}>
+              <ShoppingCart size={16} /> Punto de venta
+            </Link>
             <Link href="/productos" className={buttonVariants({ variant: "secondary" })}>
               <Package size={16} /> Productos
             </Link>

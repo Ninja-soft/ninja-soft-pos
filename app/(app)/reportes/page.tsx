@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Download } from "lucide-react";
+import { Download } from "lucide-react";
+import { format, startOfDay, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Isotype } from "@/components/brand/Logo";
+import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { useSalesReport } from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { exportXlsx } from "@/lib/utils/xlsx";
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -20,79 +20,101 @@ const METHOD_LABELS: Record<string, string> = {
   other: "Otro",
 };
 
-function isoDay(offsetDays = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
-}
-
 export default function ReportesPage() {
-  const [from, setFrom] = useState(isoDay(-6));
-  const [to, setTo] = useState(isoDay(0));
+  const [range, setRange] = useState<DateRange | undefined>(() => ({
+    from: startOfDay(subDays(new Date(), 6)),
+    to: startOfDay(new Date()),
+  }));
 
   const { fromISO, toISO } = useMemo(() => {
-    const f = new Date(`${from}T00:00:00`);
-    const t = new Date(`${to}T00:00:00`);
+    const f = startOfDay(range?.from ?? new Date());
+    const t = startOfDay(range?.to ?? range?.from ?? new Date());
     t.setDate(t.getDate() + 1); // inclusivo del día "hasta"
     return { fromISO: f.toISOString(), toISO: t.toISOString() };
-  }, [from, to]);
+  }, [range]);
 
   const { data, isLoading } = useSalesReport(fromISO, toISO);
 
-  function exportCsv() {
+  async function exportReporte() {
     if (!data) return;
-    const lines: string[] = [];
-    lines.push(`Reporte de ventas,${from},${to}`);
-    lines.push(`Total,${data.total}`);
-    lines.push(`Cantidad,${data.count}`);
-    lines.push("");
-    lines.push("Por día,Total,Ventas");
-    data.by_day.forEach((r) => lines.push(`${r.day},${r.total},${r.count}`));
-    lines.push("");
-    lines.push("Por medio de pago,Total");
-    data.by_method.forEach((r) =>
-      lines.push(`${METHOD_LABELS[r.method] ?? r.method},${r.total}`),
-    );
-    lines.push("");
-    lines.push("Por categoría,Total,Cantidad");
-    data.by_category.forEach((r) =>
-      lines.push(`${r.category},${r.total},${r.qty}`),
-    );
-    lines.push("");
-    lines.push("Por cajero,Total,Ventas");
-    data.by_user.forEach((r) => lines.push(`${r.cashier},${r.total},${r.count}`));
-
-    const blob = new Blob([lines.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `reporte-ventas-${from}_${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const tag = `${format(range?.from ?? new Date(), "yyyy-MM-dd")}_${format(
+      range?.to ?? range?.from ?? new Date(),
+      "yyyy-MM-dd",
+    )}`;
+    await exportXlsx(`reporte-ventas-${tag}`, [
+      {
+        name: "Resumen",
+        title: `Reporte de ventas · ${tag}`,
+        columns: [
+          { header: "Métrica", key: "k", width: 22 },
+          { header: "Valor", key: "v", type: "money", width: 18 },
+        ],
+        rows: [
+          { k: "Total vendido", v: data.total },
+          { k: "Cantidad de ventas", v: data.count },
+        ],
+      },
+      {
+        name: "Por día",
+        columns: [
+          { header: "Día", key: "day", width: 14 },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Ventas", key: "count", type: "number" },
+        ],
+        rows: data.by_day,
+        totals: {
+          total: data.by_day.reduce((a, r) => a + r.total, 0),
+          count: data.by_day.reduce((a, r) => a + r.count, 0),
+        },
+      },
+      {
+        name: "Medios de pago",
+        columns: [
+          { header: "Medio", key: "method", width: 18 },
+          { header: "Total", key: "total", type: "money" },
+        ],
+        rows: data.by_method.map((r) => ({
+          method: METHOD_LABELS[r.method] ?? r.method,
+          total: r.total,
+        })),
+        totals: { total: data.by_method.reduce((a, r) => a + r.total, 0) },
+      },
+      {
+        name: "Categorías",
+        columns: [
+          { header: "Categoría", key: "category", width: 24 },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Cantidad", key: "qty", type: "number" },
+        ],
+        rows: data.by_category,
+        totals: { total: data.by_category.reduce((a, r) => a + r.total, 0) },
+      },
+      {
+        name: "Cajeros",
+        columns: [
+          { header: "Cajero", key: "cashier", width: 24 },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Ventas", key: "count", type: "number" },
+        ],
+        rows: data.by_user,
+        totals: { total: data.by_user.reduce((a, r) => a + r.total, 0) },
+      },
+    ]);
   }
-
-  const inputCls =
-    "h-11 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
   return (
     <>
-<div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
         <Eyebrow>Información</Eyebrow>
         <Display className="mt-3 text-3xl md:text-4xl">Reportes</Display>
 
         <div className="mt-6 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Desde</label>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
+            <label className="text-xs text-muted-foreground">Período</label>
+            <DateRangePicker value={range} onChange={setRange} />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground">Hasta</label>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
-          </div>
-          <Button variant="secondary" onClick={exportCsv} disabled={!data}>
-            <Download size={16} /> Exportar CSV
+          <Button variant="secondary" onClick={exportReporte} disabled={!data}>
+            <Download size={16} /> Exportar XLSX
           </Button>
         </div>
 

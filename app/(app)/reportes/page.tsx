@@ -77,20 +77,8 @@ export default function ReportesPage() {
     "h-11 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
   return (
-    <div className="app-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <ArrowLeft size={15} /> Panel
-            </span>
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-6 py-10">
+    <>
+<div className="mx-auto max-w-6xl px-6 py-8">
         <Eyebrow>Información</Eyebrow>
         <Display className="mt-3 text-3xl md:text-4xl">Reportes</Display>
 
@@ -168,8 +156,8 @@ export default function ReportesPage() {
             />
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
 

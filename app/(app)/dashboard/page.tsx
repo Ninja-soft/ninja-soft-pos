@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { buttonVariants } from "@/components/ui/Button";
 import {
   Card,
@@ -62,10 +61,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="app-bg min-h-screen text-foreground">
-      <DashboardHeader email={user.email ?? ""} />
-
-      <main className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-8">
         <Eyebrow>Panel</Eyebrow>
         <Display className="mt-4 text-3xl md:text-5xl">
           Hola
@@ -152,7 +148,6 @@ export default async function DashboardPage() {
             </Card>
           )}
         </div>
-      </main>
     </div>
   );
 }

@@ -35,20 +35,8 @@ export default function ClientesPage() {
   }
 
   return (
-    <div className="app-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <ArrowLeft size={15} /> Panel
-            </span>
-          </Link>
-          <ThemeToggle />
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-6 py-10">
+    <>
+<div className="mx-auto max-w-6xl px-6 py-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>Clientes</Eyebrow>
@@ -144,13 +132,13 @@ export default function ClientesPage() {
             </tbody>
           </table>
         </div>
-      </main>
+      </div>
 
       <CustomerFormModal
         open={formOpen}
         onOpenChange={setFormOpen}
         customer={selected}
       />
-    </div>
+    </>
   );
 }

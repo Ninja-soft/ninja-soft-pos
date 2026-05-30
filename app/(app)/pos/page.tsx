@@ -132,15 +132,10 @@ export default function PosPage() {
   }
 
   return (
-    <div className="app-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <ArrowLeft size={15} /> Panel
-            </span>
-          </Link>
+    <>
+      <div className="mx-auto max-w-7xl px-6 py-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-lg font-bold tracking-tight">Punto de venta</h1>
           <div className="flex items-center gap-3">
             <span
               className={
@@ -161,12 +156,10 @@ export default function PosPage() {
                 Abrir caja
               </Button>
             )}
-            <ThemeToggle />
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-6 py-6 lg:grid-cols-[1fr_380px]">
+        <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Búsqueda + productos */}
         <section>
           <div className="flex gap-2">
@@ -298,7 +291,8 @@ export default function PosPage() {
             </Button>
           </div>
         </aside>
-      </main>
+        </div>
+      </div>
 
       <OpenShiftModal
         open={openShiftModal}
@@ -325,6 +319,6 @@ export default function PosPage() {
         onOpenChange={setScanOpen}
         onDetected={(code) => setSearch(code)}
       />
-    </div>
+    </>
   );
 }

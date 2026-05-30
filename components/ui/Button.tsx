@@ -9,7 +9,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-ninja-gradient text-ninja-voidViolet font-bold shadow-ninjaGlow hover:scale-[1.01] active:scale-[0.99]",
+          "bg-[linear-gradient(180deg,#ff6a2c_0%,#ec3f17_100%)] text-white font-semibold shadow-sm transition hover:brightness-[1.06] active:brightness-95",
         secondary:
           "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/70",
         ghost: "text-foreground hover:bg-secondary/60",

@@ -20,7 +20,7 @@ export default function InternalTenantsPage() {
       <Eyebrow>Operaciones</Eyebrow>
       <Display className="mt-3 text-3xl md:text-4xl">Tenants</Display>
 
-      <div className="mt-6 overflow-hidden rounded-ninjaLg border border-border bg-card">
+      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
@@ -58,7 +58,7 @@ export default function InternalTenantsPage() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{t.planName ?? "—"}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex rounded-ninjaFull border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
+                  <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
                     {STATUS_LABELS[t.status] ?? t.status}
                   </span>
                 </td>

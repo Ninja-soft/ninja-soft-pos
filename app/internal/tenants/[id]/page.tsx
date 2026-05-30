@@ -135,8 +135,8 @@ export default function InternalTenantDetail({
                     }
                     className={
                       effective
-                        ? "h-6 w-11 rounded-ninjaFull bg-ninja-flame px-0.5 transition"
-                        : "h-6 w-11 rounded-ninjaFull bg-muted px-0.5 transition"
+                        ? "h-6 w-11 rounded-full bg-ninja-flame px-0.5 transition"
+                        : "h-6 w-11 rounded-full bg-muted px-0.5 transition"
                     }
                     aria-label={`Toggle ${f.key}`}
                   >

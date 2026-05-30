@@ -65,7 +65,7 @@ export default function ClientesPage() {
           />
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-ninjaLg border border-border bg-card">
+        <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
@@ -114,14 +114,14 @@ export default function ClientesPage() {
                           setFormOpen(true);
                         }}
                         title="Editar"
-                        className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       >
                         <Pencil size={16} />
                       </button>
                       <button
                         onClick={() => onDelete(c)}
                         title="Eliminar"
-                        className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                       >
                         <Trash2 size={16} />
                       </button>

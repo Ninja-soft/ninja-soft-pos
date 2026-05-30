@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               key={item.id}
               onOpenChange={(open) => !open && remove(item.id)}
               className={cn(
-                "group pointer-events-auto flex items-start gap-3 rounded-xl border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground shadow-ninjaSoft ring-1 backdrop-blur-xl",
+                "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground shadow-ninjaSoft ring-1 backdrop-blur-xl",
                 "data-[state=open]:animate-slide-up data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform",
                 v.ring,
               )}

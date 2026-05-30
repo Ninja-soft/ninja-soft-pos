@@ -30,7 +30,7 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <>
-          <div className="ticket-print rounded-ninjaMd border border-border bg-background p-4 font-mono text-sm text-foreground">
+          <div className="ticket-print rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground">
             <div className="text-center">
               <div className="font-display text-base font-bold">NinjaSoft POS</div>
               <div className="text-xs text-muted-foreground">Ticket no fiscal</div>

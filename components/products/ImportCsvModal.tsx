@@ -87,7 +87,7 @@ export function ImportCsvModal({
           <Download size={15} /> Descargar plantilla
         </button>
 
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-ninjaLg border border-dashed border-input bg-background px-4 py-6 text-sm text-muted-foreground transition hover:border-ninja-flameSoft">
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-background px-4 py-6 text-sm text-muted-foreground transition hover:border-ninja-flameSoft">
           <Upload size={16} />
           {fileName || "Elegí un archivo .csv"}
           <input type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
@@ -99,7 +99,7 @@ export function ImportCsvModal({
           </p>
         )}
         {errors.length > 0 && (
-          <div className="max-h-32 overflow-y-auto rounded-ninjaMd border border-red-400/20 bg-red-400/10 p-3 text-xs text-red-200">
+          <div className="max-h-32 overflow-y-auto rounded-lg border border-red-400/20 bg-red-400/10 p-3 text-xs text-red-200">
             {errors.map((e, i) => (
               <div key={i}>{e}</div>
             ))}

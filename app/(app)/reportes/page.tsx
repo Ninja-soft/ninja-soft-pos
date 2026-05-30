@@ -171,7 +171,7 @@ function ReportTable({
   rows: string[][];
 }) {
   return (
-    <div className="overflow-hidden rounded-ninjaLg border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="border-b border-border px-4 py-3 font-display font-bold">
         {title}
       </div>

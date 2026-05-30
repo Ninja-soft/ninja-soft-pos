@@ -23,7 +23,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "inline-flex flex-wrap gap-1 rounded-xl border border-border bg-muted/50 p-1",
+        "inline-flex flex-wrap gap-1 rounded-lg border border-border bg-muted/50 p-1",
         className,
       )}
     >

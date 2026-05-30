@@ -76,10 +76,11 @@ export function DateRangePicker({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
+          side="bottom"
           align="start"
           sideOffset={6}
-          className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft outline-none data-[state=open]:animate-modal-in"
-          style={{ ["--rdp-accent-color" as string]: "#ec3f17", ["--rdp-accent-background-color" as string]: "rgba(236,63,23,0.12)" }}
+          avoidCollisions={false}
+          className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft outline-none"
         >
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex flex-row flex-wrap gap-1 sm:flex-col sm:border-r sm:border-border sm:pr-3">
@@ -98,6 +99,7 @@ export function DateRangePicker({
               ))}
             </div>
             <DayPicker
+              className="rdp-ninja"
               mode="range"
               locale={es}
               weekStartsOn={1}

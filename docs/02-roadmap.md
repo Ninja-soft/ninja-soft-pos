@@ -221,9 +221,19 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
     - *super-admin:* todo (sumar/quitar staff, borrar tenants, facturación, acciones peligrosas).
     - *admin:* gestión de tenants/usuarios/soporte; sin tocar staff ni acciones destructivas.
     - *soporte:* solo-lectura + acciones limitadas (notas, ver salud, reset de contraseña).
-  - Gestión total de usuarios: ver todos, **pausar/suspender/reactivar**, cambiar roles, **sumar poderes**, y **sumar usuarios como staff NinjaSoft** (con su nivel).
+  - Gestión total de usuarios (staff): ver todos, **pausar/suspender/reactivar**, cambiar roles, **sumar poderes**, y **sumar usuarios como staff NinjaSoft** (con su nivel).
   - Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md).
   - *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff.
+
+- **H11b — Miembros del negocio (lo gestiona el DUEÑO en `/dashboard-team`).**
+  - **Dos clases de miembro** (el dueño elige al crear):
+    - **Con login:** email + contraseña, recibe invitación (Edge Function `invite_user`). Nombre real **o** genérico (ej. "Cajero A").
+    - **Perfil sin login:** etiqueta para identificar quién vende (ej. "Cajero A"), **sin email**, con **PIN opcional** para fichar en el POS. Útil en kioscos con caja compartida.
+  - **Nombre por membresía:** el rótulo (real o genérico) vive en la membresía, no en la cuenta global → la misma persona puede ser "Cajero A" en un negocio y otra cosa en otro. Nueva columna `display_name` en `tenant_users` (+ tabla `cashier_profiles` para los sin-login, con `pin_hash`).
+  - **Avatares:** set de **presets** (iniciales con color de marca + ilustraciones/emoji) elegibles ya; **subida de imagen propia** se habilita en **F6 (WebP)**. Columna `avatar` en la membresía/perfil.
+  - **Edición por el dueño:** el rol `owner` (y `manager` según permisos) puede **editar** miembros (nombre, rol, avatar), **suspender/reactivar** y resetear PIN. Validado por RLS + Edge Function `update_member` (guard owner/manager del tenant). Todo auditado.
+  - *Backend requerido (deploy con Supabase):* migración (`tenant_users.display_name`, `tenant_users.avatar`, tabla `cashier_profiles`), Edge Functions `invite_user` (extendida con nombre/genérico) y `update_member`, RPC de listado ya cubierto por `tenant_members()`.
+  - *Criterio:* el dueño crea "Cajero A" sin email con avatar preset y PIN; luego lo renombra y lo suspende; un cajero no puede editar a otros.
 
 - **H12 — Suscripciones y planes en caliente.**
   - Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.

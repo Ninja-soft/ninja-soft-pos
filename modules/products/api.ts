@@ -107,6 +107,53 @@ export const productsApi = {
   },
 };
 
+export const productsImportApi = {
+  bulkImport: async (
+    rows: import("./import").ParsedProduct[],
+  ): Promise<number> => {
+    const supabase = createClient();
+
+    // Resolver categorías por nombre (crear las faltantes).
+    const names = Array.from(
+      new Set(rows.map((r) => r.category).filter((c): c is string => !!c)),
+    );
+    const map = new Map<string, string>();
+    if (names.length) {
+      const { data: existing } = await supabase
+        .from("categories")
+        .select("id, name")
+        .is("deleted_at", null);
+      for (const c of existing ?? []) map.set(c.name.toLowerCase(), c.id);
+
+      const missing = names.filter((n) => !map.has(n.toLowerCase()));
+      if (missing.length) {
+        const { data: created, error } = await supabase
+          .from("categories")
+          .insert(missing.map((name) => ({ name })))
+          .select("id, name");
+        if (error) throw error;
+        for (const c of created ?? []) map.set(c.name.toLowerCase(), c.id);
+      }
+    }
+
+    const payload = rows.map((r) => ({
+      name: r.name,
+      sku: r.sku,
+      barcode: r.barcode,
+      price: r.price,
+      cost: r.cost,
+      stock: r.stock,
+      stock_min: r.stock_min,
+      unit: r.unit,
+      category_id: r.category ? (map.get(r.category.toLowerCase()) ?? null) : null,
+    }));
+
+    const { error } = await supabase.from("products").insert(payload);
+    if (error) throw error;
+    return payload.length;
+  },
+};
+
 export const categoriesApi = {
   list: async (): Promise<Category[]> => {
     const supabase = createClient();

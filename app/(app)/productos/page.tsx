@@ -10,6 +10,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -19,6 +20,7 @@ import { Isotype } from "@/components/brand/Logo";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
+import { ImportCsvModal } from "@/components/products/ImportCsvModal";
 import { useProducts, useProductMutations } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -28,6 +30,7 @@ export default function ProductosPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const { toast } = useToast();
 
@@ -80,9 +83,14 @@ export default function ProductosPage() {
             <Eyebrow>Catálogo</Eyebrow>
             <Display className="mt-3 text-3xl md:text-4xl">Productos</Display>
           </div>
-          <Button onClick={openNew}>
-            <Plus size={16} /> Nuevo producto
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <Upload size={16} /> Importar CSV
+            </Button>
+            <Button onClick={openNew}>
+              <Plus size={16} /> Nuevo producto
+            </Button>
+          </div>
         </div>
 
         <div className="relative mt-6 max-w-md">
@@ -213,6 +221,7 @@ export default function ProductosPage() {
         onOpenChange={setHistoryOpen}
         product={selected}
       />
+      <ImportCsvModal open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

@@ -4,6 +4,8 @@
 
 POS SaaS multi-tenant para Argentina. Pensado para kioscos, textiles, retail, restaurantes y pymes que necesitan algo robusto, simple y que entienda el contexto local (AFIP, formas de pago, rubros).
 
+**Estado:** MVP funcional (hitos H0–H6). Implementado: auth + onboarding de tenant, catálogo y stock, POS con caja y ticket, anulaciones, clientes, reportes y panel interno. Sin Docker local podés correr la app apuntando `.env.local` al proyecto Supabase de dev/staging. Ver `CHANGELOG.md`.
+
 ---
 
 ## Stack
@@ -119,15 +121,13 @@ Ver `docs/workflows/agent-workflow.md` para el flujo completo.
 pnpm dev              # Next.js en modo dev
 pnpm build            # Build de producción
 pnpm lint             # ESLint
-pnpm type-check       # TypeScript sin emitir
+pnpm typecheck        # TypeScript sin emitir
 pnpm test             # Vitest
-pnpm test:e2e         # Playwright
-
-supabase start        # Levantar stack local
-supabase stop         # Bajar stack local
-supabase db reset     # Reset + reaplicar migraciones
-supabase migration new <nombre>   # Nueva migración
+pnpm format           # Prettier
+pnpm db:types         # Regenerar types/database.ts desde Supabase
 ```
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) corre `lint + typecheck + test + build` en cada push a `main` y en cada PR.
 
 ---
 

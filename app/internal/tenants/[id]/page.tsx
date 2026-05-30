@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
+import { Display, Heading } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import {
   useInternalTenants,
@@ -52,15 +52,25 @@ export default function InternalTenantDetail({
     <>
       <Link
         href="/internal/tenants"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
-        <ArrowLeft size={15} /> Negocios
+        <ArrowLeft size={15} /> Volver a negocios
       </Link>
-      <Eyebrow>Negocio</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">
-        {tenant?.name ?? "…"}
-      </Display>
-      <p className="mt-2 text-muted-foreground">{tenant?.slug}</p>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Display className="text-3xl md:text-4xl">
+          {tenant?.name ?? "…"}
+        </Display>
+        {(() => {
+          const st = tenant?.subStatus ?? tenant?.status;
+          return st ? (
+            <span className="rounded-md bg-ninja-flame/12 px-2.5 py-1 text-xs font-semibold text-ninja-flameSoft">
+              {STATUSES.find((s) => s.key === st)?.name ?? st}
+            </span>
+          ) : null;
+        })()}
+      </div>
+      <p className="mt-1.5 text-sm text-muted-foreground">{tenant?.slug}</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>

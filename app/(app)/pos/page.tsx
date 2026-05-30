@@ -7,6 +7,7 @@ import {
   Lock,
   Minus,
   Plus,
+  ScanBarcode,
   Search,
   Trash2,
   Unlock,
@@ -33,6 +34,7 @@ import {
   PaymentModal,
 } from "@/components/pos/PosModals";
 import { TicketModal } from "@/components/sales/TicketModal";
+import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function PosPage() {
@@ -43,6 +45,7 @@ export default function PosPage() {
   const [paymentModal, setPaymentModal] = useState(false);
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const { data: products } = useProducts(search);
   const { data: shift } = useOpenShift();
@@ -166,18 +169,29 @@ export default function PosPage() {
       <main className="mx-auto grid max-w-7xl gap-6 px-6 py-6 lg:grid-cols-[1fr_380px]">
         {/* Búsqueda + productos */}
         <section>
-          <div className="relative">
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar producto por nombre, SKU o código…"
-              autoFocus
-              className="h-12 w-full rounded-ninjaLg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar producto por nombre, SKU o código…"
+                autoFocus
+                className="h-12 w-full rounded-ninjaLg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+              />
+            </div>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-12 w-12"
+              onClick={() => setScanOpen(true)}
+              aria-label="Escanear código"
+            >
+              <ScanBarcode size={18} />
+            </Button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products?.map((p) => (
@@ -306,6 +320,11 @@ export default function PosPage() {
         loading={sale.isPending}
       />
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+      <BarcodeScanner
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        onDetected={(code) => setSearch(code)}
+      />
     </div>
   );
 }

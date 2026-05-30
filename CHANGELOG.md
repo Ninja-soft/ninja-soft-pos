@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Deseable F1 — Lector de código de barras por cámara:** componente `BarcodeScanner` (API nativa `BarcodeDetector`, formatos EAN/UPC/Code128, fallback si no soportado) integrado en el POS; al detectar, completa la búsqueda. 
 - **Deseable F1 — Import CSV de productos:** parser CSV propio (con comillas), validación por fila, plantilla descargable y `bulkImport` que resuelve/crea categorías por nombre e inserta en lote. Modal "Importar CSV" en `/productos`.
 - **CI (gap F0):** workflow GitHub Actions (`.github/workflows/ci.yml`) que corre lint + typecheck + test + build en cada push a `main` y PR (pnpm + Node 20, env dummy para el build). README actualizado (estado del MVP + scripts reales).
 - **Hito 6 — Hardening (tests):** suite unitaria por capa (14 tests): carrito Zustand + subtotales, validador CUIT/CUIL, resumen de arqueo de caja, formato, y componente Button. `tests/README.md` documenta el suite y el plan del test de aislamiento multi-tenant (e2e, requiere stack Supabase local). Aislamiento garantizado hoy por RLS.

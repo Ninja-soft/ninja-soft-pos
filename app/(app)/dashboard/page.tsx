@@ -35,9 +35,12 @@ export default async function DashboardPage() {
     tenants: { name: string; slug: string; status: string } | null;
   };
 
+  // Solo MIS membresías. No nos apoyamos en RLS para el scope acá: un usuario
+  // interno (is_internal) vería todos los tenants, así que filtramos por user_id.
   const { data } = await supabase
     .from("tenant_users")
     .select("role, status, tenants(name, slug, status)")
+    .eq("user_id", user.id)
     .eq("status", "active");
   const memberships = (data ?? []) as unknown as MembershipRow[];
 

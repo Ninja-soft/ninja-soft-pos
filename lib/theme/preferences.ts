@@ -8,6 +8,7 @@ export interface UiPrefs {
   display?: string;
   price?: string;
   bg?: string;
+  priceAccent?: string;
 }
 
 const KEYS = {
@@ -15,6 +16,7 @@ const KEYS = {
   display: "ninja-display",
   price: "ninja-price",
   bg: "ninja-bg",
+  priceAccent: "ninja-price-accent",
 };
 
 export function readLocalPrefs(): UiPrefs {
@@ -25,6 +27,7 @@ export function readLocalPrefs(): UiPrefs {
     display: g(KEYS.display),
     price: g(KEYS.price),
     bg: g(KEYS.bg),
+    priceAccent: g(KEYS.priceAccent),
   };
 }
 

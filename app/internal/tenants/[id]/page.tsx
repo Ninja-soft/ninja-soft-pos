@@ -25,7 +25,7 @@ const STATUSES = [
   { key: "cancelled", name: "Cancelado" },
 ];
 const selectCls =
-  "h-11 w-full rounded-ninjaLg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
+  "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
 export default function InternalTenantDetail({
   params,
@@ -52,7 +52,7 @@ export default function InternalTenantDetail({
     <>
       <Link
         href="/internal/tenants"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-ninja-lavender hover:text-white"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft size={15} /> Tenants
       </Link>
@@ -60,7 +60,7 @@ export default function InternalTenantDetail({
       <Display className="mt-3 text-3xl md:text-4xl">
         {tenant?.name ?? "…"}
       </Display>
-      <p className="mt-2 text-ninja-lavender">{tenant?.slug}</p>
+      <p className="mt-2 text-muted-foreground">{tenant?.slug}</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>
@@ -121,7 +121,7 @@ export default function InternalTenantDetail({
                   <div>
                     <div className="font-mono text-sm">{f.key}</div>
                     {f.description && (
-                      <div className="text-xs text-ninja-lavender">
+                      <div className="text-xs text-muted-foreground">
                         {f.description}
                       </div>
                     )}
@@ -136,7 +136,7 @@ export default function InternalTenantDetail({
                     className={
                       effective
                         ? "h-6 w-11 rounded-ninjaFull bg-ninja-flame px-0.5 transition"
-                        : "h-6 w-11 rounded-ninjaFull bg-white/15 px-0.5 transition"
+                        : "h-6 w-11 rounded-ninjaFull bg-muted px-0.5 transition"
                     }
                     aria-label={`Toggle ${f.key}`}
                   >

@@ -64,12 +64,12 @@ export default function ProductosPage() {
   }
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/dashboard" className="flex items-center gap-3">
             <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-ninja-lavender">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <ArrowLeft size={15} /> Panel
             </span>
           </Link>
@@ -102,13 +102,13 @@ export default function ProductosPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por nombre, SKU o código…"
-            className="h-11 w-full rounded-ninjaLg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           />
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-ninjaLg border border-white/10 bg-white/[0.04]">
+        <div className="mt-6 overflow-hidden rounded-ninjaLg border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-white/[0.06] text-left text-xs uppercase tracking-[0.14em] text-white/45">
+            <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Producto</th>
                 <th className="px-4 py-3">Categoría</th>
@@ -117,10 +117,10 @@ export default function ProductosPage() {
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/10 text-white/80">
+            <tbody className="divide-y divide-border text-foreground">
               {isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-white/50">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     Cargando productos…
                   </td>
                 </tr>
@@ -137,7 +137,7 @@ export default function ProductosPage() {
               )}
               {!isLoading && !isError && products?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-white/50">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     No hay productos todavía. Creá el primero con “Nuevo producto”.
                   </td>
                 </tr>
@@ -146,16 +146,16 @@ export default function ProductosPage() {
                 const low =
                   (p.stock_min ?? 0) > 0 && p.stock <= (p.stock_min ?? 0);
                 return (
-                  <tr key={p.id} className="transition hover:bg-white/[0.03]">
+                  <tr key={p.id} className="transition hover:bg-muted/40">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-white">{p.name}</div>
+                      <div className="font-medium text-foreground">{p.name}</div>
                       {p.sku && (
-                        <div className="font-mono text-xs text-white/40">
+                        <div className="font-mono text-xs text-muted-foreground">
                           {p.sku}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-white/60">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {p.categories?.name ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -171,28 +171,28 @@ export default function ProductosPage() {
                         <button
                           onClick={() => openAdjust(p)}
                           title="Ajustar stock"
-                          className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <SlidersHorizontal size={16} />
                         </button>
                         <button
                           onClick={() => openHistory(p)}
                           title="Historial de stock"
-                          className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <History size={16} />
                         </button>
                         <button
                           onClick={() => openEdit(p)}
                           title="Editar"
-                          className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
+                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => onDelete(p)}
                           title="Eliminar"
-                          className="rounded-ninjaSm p-2 text-white/60 transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                         >
                           <Trash2 size={16} />
                         </button>

@@ -15,7 +15,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        display: ["var(--font-nunito)", "sans-serif"],
+        display: ["var(--font-display)", "sans-serif"],
         sans: ["var(--font-inter)", "sans-serif"],
         mono: ["var(--font-jetbrains)", "monospace"],
       },
@@ -80,10 +80,10 @@ const config: Config = {
         ninjaFull: "999px",
       },
       boxShadow: {
-        ninjaSoft: "0 20px 60px rgba(0, 0, 0, 0.28)",
-        ninjaGlow: "0 0 32px rgba(255, 106, 26, 0.32)",
-        ninjaGoldGlow: "0 0 32px rgba(255, 210, 31, 0.22)",
-        ninjaVioletGlow: "0 0 42px rgba(109, 74, 255, 0.24)",
+        ninjaSoft: "0 6px 20px rgba(8, 5, 20, 0.16)",
+        ninjaGlow: "0 0 24px rgba(255, 106, 26, 0.22)",
+        ninjaGoldGlow: "0 0 24px rgba(255, 210, 31, 0.16)",
+        ninjaVioletGlow: "0 0 32px rgba(109, 74, 255, 0.18)",
       },
       backgroundImage: {
         "ninja-gradient":

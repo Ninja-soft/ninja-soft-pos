@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils/cn";
 
-// Sistema tipográfico NinjaSoft. Ver brandBook §16 (Jerarquía) y §14-15.
-// Device de marca: título en Nunito bold (roman) + palabra acento en itálica.
-//   - tono "muted"  → lavanda (títulos de sección).
-//   - tono "gradient" → degradado flame→gold (énfasis fuerte / hero).
+// Sistema tipográfico NinjaSoft.
+//   - Texto y títulos: Inter (font-sans) → lectura clara en todo el dashboard.
+//   - Destacados (eyebrows, acentos, nombres): Space Grotesk (font-display, tech).
+//   - Precios/números: ver componente <Money> (font-mono tabular-nums).
 
 export function Eyebrow({
   children,
@@ -15,7 +15,7 @@ export function Eyebrow({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground",
+        "inline-flex items-center gap-2.5 font-display text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground",
         className,
       )}
     >
@@ -29,7 +29,7 @@ type AccentTone = "muted" | "gradient";
 
 export function Accent({
   children,
-  tone = "muted",
+  tone = "gradient",
   className,
 }: {
   children: React.ReactNode;
@@ -39,10 +39,10 @@ export function Accent({
   return (
     <span
       className={cn(
-        "font-display italic",
+        "font-display",
         tone === "gradient"
           ? "bg-ninja-gradient bg-clip-text text-transparent"
-          : "text-ninja-lavender",
+          : "text-ninja-flameSoft",
         className,
       )}
     >
@@ -61,7 +61,7 @@ export function Display({
   return (
     <h1
       className={cn(
-        "font-display text-4xl font-black leading-[1.05] tracking-[-0.04em] md:text-6xl",
+        "font-sans text-3xl font-extrabold leading-[1.1] tracking-[-0.02em] md:text-5xl",
         className,
       )}
     >
@@ -82,11 +82,24 @@ export function Heading({
   return (
     <Tag
       className={cn(
-        "font-display text-2xl font-bold tracking-[-0.03em] md:text-3xl",
+        "font-sans text-xl font-bold tracking-[-0.01em] md:text-2xl",
         className,
       )}
     >
       {children}
     </Tag>
+  );
+}
+
+/** Monto/precio con fuente mono tabular (alineación de dígitos). */
+export function Money({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={cn("font-mono tabular-nums", className)}>{children}</span>
   );
 }

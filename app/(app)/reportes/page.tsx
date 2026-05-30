@@ -74,15 +74,15 @@ export default function ReportesPage() {
   }
 
   const inputCls =
-    "h-11 rounded-ninjaLg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
+    "h-11 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/dashboard" className="flex items-center gap-3">
             <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-ninja-lavender">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <ArrowLeft size={15} /> Panel
             </span>
           </Link>
@@ -96,11 +96,11 @@ export default function ReportesPage() {
 
         <div className="mt-6 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-ninja-lavender">Desde</label>
+            <label className="text-xs text-muted-foreground">Desde</label>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls} />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-ninja-lavender">Hasta</label>
+            <label className="text-xs text-muted-foreground">Hasta</label>
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputCls} />
           </div>
           <Button variant="secondary" onClick={exportCsv} disabled={!data}>
@@ -111,15 +111,15 @@ export default function ReportesPage() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <Card>
             <CardContent className="p-5">
-              <p className="text-sm text-ninja-lavender">Total vendido</p>
-              <p className="mt-2 font-display text-3xl font-black text-ninja-gold">
+              <p className="text-sm text-muted-foreground">Total vendido</p>
+              <p className="mt-2 font-mono tabular-nums text-3xl font-black text-ninja-gold">
                 {formatCurrency(data?.total ?? 0)}
               </p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-5">
-              <p className="text-sm text-ninja-lavender">Cantidad de ventas</p>
+              <p className="text-sm text-muted-foreground">Cantidad de ventas</p>
               <p className="mt-2 font-display text-3xl font-black">
                 {data?.count ?? 0}
               </p>
@@ -128,7 +128,7 @@ export default function ReportesPage() {
         </div>
 
         {isLoading ? (
-          <p className="mt-8 text-center text-sm text-ninja-lavender">Cargando…</p>
+          <p className="mt-8 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : (
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             <ReportTable
@@ -183,12 +183,12 @@ function ReportTable({
   rows: string[][];
 }) {
   return (
-    <div className="overflow-hidden rounded-ninjaLg border border-white/10 bg-white/[0.04]">
-      <div className="border-b border-white/10 px-4 py-3 font-display font-bold">
+    <div className="overflow-hidden rounded-ninjaLg border border-border bg-card">
+      <div className="border-b border-border px-4 py-3 font-display font-bold">
         {title}
       </div>
       <table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase tracking-[0.14em] text-white/45">
+        <thead className="text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
           <tr>
             {cols.map((c, i) => (
               <th key={c} className={i === 0 ? "px-4 py-2" : "px-4 py-2 text-right"}>
@@ -197,10 +197,10 @@ function ReportTable({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/10 text-white/80">
+        <tbody className="divide-y divide-border text-foreground">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={cols.length} className="px-4 py-6 text-center text-white/40">
+              <td colSpan={cols.length} className="px-4 py-6 text-center text-muted-foreground">
                 Sin datos.
               </td>
             </tr>

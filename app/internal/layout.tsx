@@ -21,7 +21,7 @@ export default async function InternalLayout({
   if (!isInternal) redirect("/dashboard");
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-3">
@@ -31,7 +31,7 @@ export default async function InternalLayout({
             </span>
             <Link
               href="/internal/tenants"
-              className="ml-4 text-sm text-ninja-lavender hover:text-white"
+              className="ml-4 text-sm text-muted-foreground hover:text-foreground"
             >
               Tenants
             </Link>

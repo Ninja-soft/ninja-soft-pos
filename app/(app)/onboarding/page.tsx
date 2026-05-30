@@ -86,7 +86,7 @@ export default function OnboardingPage() {
                 </label>
                 <select
                   id="industry"
-                  className="h-11 w-full rounded-ninjaLg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+                  className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
                   {...register("industry")}
                 >
                   {INDUSTRIES.map((key) => (

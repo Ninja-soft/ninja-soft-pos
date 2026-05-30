@@ -132,12 +132,12 @@ export default function PosPage() {
   }
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <Link href="/dashboard" className="flex items-center gap-3">
             <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-ninja-lavender">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <ArrowLeft size={15} /> Panel
             </span>
           </Link>
@@ -146,7 +146,7 @@ export default function PosPage() {
               className={
                 hasShift
                   ? "inline-flex items-center gap-1.5 rounded-ninjaFull border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300"
-                  : "inline-flex items-center gap-1.5 rounded-ninjaFull border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-semibold text-white/60"
+                  : "inline-flex items-center gap-1.5 rounded-ninjaFull border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground"
               }
             >
               {hasShift ? <Unlock size={13} /> : <Lock size={13} />}
@@ -180,7 +180,7 @@ export default function PosPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar producto por nombre, SKU o código…"
                 autoFocus
-                className="h-12 w-full rounded-ninjaLg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+                className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
               />
             </div>
             <Button
@@ -200,10 +200,10 @@ export default function PosPage() {
                 onClick={() =>
                   addProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price })
                 }
-                className="rounded-ninjaLg border border-white/10 bg-white/[0.04] p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-white/[0.07]"
+                className="rounded-ninjaLg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
               >
-                <div className="truncate font-medium text-white">{p.name}</div>
-                <div className="mt-1 text-xs text-white/40">
+                <div className="truncate font-medium text-foreground">{p.name}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
                   {formatQty(p.stock)} {p.unit}
                 </div>
                 <div className="mt-2 font-semibold text-ninja-gold">
@@ -212,7 +212,7 @@ export default function PosPage() {
               </button>
             ))}
             {products?.length === 0 && (
-              <p className="col-span-full py-10 text-center text-sm text-white/40">
+              <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
                 Sin resultados.
               </p>
             )}
@@ -220,24 +220,24 @@ export default function PosPage() {
         </section>
 
         {/* Carrito */}
-        <aside className="flex h-[calc(100vh-7rem)] flex-col rounded-ninjaXl border border-white/10 bg-white/[0.04] p-4">
+        <aside className="flex h-[calc(100vh-7rem)] flex-col rounded-ninjaXl border border-border bg-card p-4">
           <h2 className="font-display text-lg font-bold">Carrito</h2>
           <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
             {lines.length === 0 && (
-              <p className="py-10 text-center text-sm text-white/40">
+              <p className="py-10 text-center text-sm text-muted-foreground">
                 Agregá productos para vender.
               </p>
             )}
             {lines.map((l) => (
               <div
                 key={l.productId}
-                className="rounded-ninjaMd border border-white/10 bg-white/[0.03] p-3"
+                className="rounded-ninjaMd border border-border bg-muted/40 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-medium text-white">{l.name}</span>
+                  <span className="text-sm font-medium text-foreground">{l.name}</span>
                   <button
                     onClick={() => removeLine(l.productId)}
-                    className="text-white/40 hover:text-red-300"
+                    className="text-muted-foreground hover:text-red-300"
                   >
                     <X size={15} />
                   </button>
@@ -246,14 +246,14 @@ export default function PosPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setQuantity(l.productId, l.quantity - 1)}
-                      className="rounded-ninjaSm border border-white/10 p-1 hover:bg-white/10"
+                      className="rounded-ninjaSm border border-border p-1 hover:bg-muted"
                     >
                       <Minus size={14} />
                     </button>
                     <span className="w-8 text-center text-sm">{l.quantity}</span>
                     <button
                       onClick={() => setQuantity(l.productId, l.quantity + 1)}
-                      className="rounded-ninjaSm border border-white/10 p-1 hover:bg-white/10"
+                      className="rounded-ninjaSm border border-border p-1 hover:bg-muted"
                     >
                       <Plus size={14} />
                     </button>
@@ -266,12 +266,12 @@ export default function PosPage() {
             ))}
           </div>
 
-          <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
-            <div className="flex items-center justify-between text-sm text-white/60">
+          <div className="mt-3 space-y-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
-            <div className="flex items-center justify-between gap-2 text-sm text-white/60">
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
               <span>Descuento</span>
               <input
                 type="number"
@@ -284,7 +284,7 @@ export default function PosPage() {
             </div>
             <div className="flex items-center justify-between pt-1">
               <span className="font-display text-lg font-bold">Total</span>
-              <span className="font-display text-3xl font-black text-ninja-gold">
+              <span className="font-mono tabular-nums text-3xl font-black text-ninja-gold">
                 {formatCurrency(total)}
               </span>
             </div>

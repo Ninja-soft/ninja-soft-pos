@@ -99,12 +99,12 @@ export default function CajaPage() {
   }
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <Link href="/dashboard" className="flex items-center gap-3">
             <Isotype className="h-7 w-auto" />
-            <span className="flex items-center gap-1 text-sm text-ninja-lavender">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <ArrowLeft size={15} /> Panel
             </span>
           </Link>
@@ -118,7 +118,7 @@ export default function CajaPage() {
 
         {!shift ? (
           <Card className="mt-6">
-            <CardContent className="p-6 text-ninja-lavender">
+            <CardContent className="p-6 text-muted-foreground">
               No hay una caja abierta. Abrila desde el{" "}
               <Link href="/pos" className="text-ninja-flameSoft hover:underline">
                 punto de venta
@@ -162,7 +162,7 @@ export default function CajaPage() {
             <Card className="mt-3">
               <CardContent className="p-4">
                 {Object.keys(summary!.byMethod).length === 0 ? (
-                  <p className="text-sm text-ninja-lavender">Sin ventas aún.</p>
+                  <p className="text-sm text-muted-foreground">Sin ventas aún.</p>
                 ) : (
                   <ul className="divide-y divide-border">
                     {Object.entries(summary!.byMethod).map(([k, v]) => (
@@ -196,9 +196,9 @@ export default function CajaPage() {
                                 : "Anulación"}
                         </span>
                         {m.reason && (
-                          <span className="ml-2 text-ninja-lavender">{m.reason}</span>
+                          <span className="ml-2 text-muted-foreground">{m.reason}</span>
                         )}
-                        <div className="text-xs text-ninja-lavender">
+                        <div className="text-xs text-muted-foreground">
                           {new Date(m.created_at).toLocaleString("es-AR")}
                           {m.payment_method
                             ? ` · ${METHOD_LABELS[m.payment_method] ?? m.payment_method}`
@@ -217,7 +217,7 @@ export default function CajaPage() {
                     </li>
                   ))}
                   {(movements ?? []).length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-ninja-lavender">
+                    <li className="px-4 py-6 text-center text-sm text-muted-foreground">
                       Sin movimientos.
                     </li>
                   )}
@@ -273,12 +273,12 @@ function SummaryCard({
   return (
     <Card>
       <CardContent className="p-5">
-        <p className="text-sm text-ninja-lavender">{label}</p>
+        <p className="text-sm text-muted-foreground">{label}</p>
         <p
           className={
             highlight
-              ? "mt-2 font-display text-2xl font-black text-ninja-gold"
-              : "mt-2 font-display text-2xl font-bold"
+              ? "mt-2 font-mono tabular-nums text-2xl font-black text-ninja-gold"
+              : "mt-2 font-mono tabular-nums text-2xl font-bold"
           }
         >
           {formatCurrency(value)}

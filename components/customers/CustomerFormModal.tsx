@@ -20,7 +20,7 @@ import type { Customer } from "@/modules/customers/api";
 import { useCustomerMutations } from "@/modules/customers/hooks";
 
 const selectCls =
-  "h-11 w-full rounded-ninjaLg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
+  "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
 export function CustomerFormModal({
   open,

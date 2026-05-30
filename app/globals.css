@@ -151,6 +151,21 @@
     linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
 }
 
+/* Fondo de las pantallas del producto: cambia con el tema activo. */
+.app-bg {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 75, 34, 0.16), transparent 30%),
+    radial-gradient(circle at 82% 12%, rgba(95, 58, 214, 0.24), transparent 34%),
+    radial-gradient(circle at 70% 82%, rgba(255, 210, 31, 0.08), transparent 28%),
+    linear-gradient(135deg, #09051c 0%, #100a2e 48%, #21135a 100%);
+}
+[data-theme="ninja-light"] .app-bg {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255, 106, 26, 0.1), transparent 28%),
+    radial-gradient(circle at 85% 0%, rgba(74, 45, 163, 0.12), transparent 32%),
+    linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
+}
+
 /* Ticket no fiscal: al imprimir, solo se ve el ticket. */
 @media print {
   body * {

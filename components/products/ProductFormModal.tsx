@@ -116,7 +116,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             Categoría
           </label>
           <select
-            className="h-11 w-full rounded-ninjaLg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
             {...register("category_id")}
           >
             <option value="">Sin categoría</option>
@@ -131,7 +131,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               value={newCat}
               onChange={(e) => setNewCat(e.target.value)}
               placeholder="Nueva categoría"
-              className="h-9 flex-1 rounded-ninjaMd border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
             />
             <Button
               type="button"

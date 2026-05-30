@@ -62,7 +62,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
+    <div className="app-bg min-h-screen text-foreground">
       <DashboardHeader email={user.email ?? ""} />
 
       <main className="mx-auto max-w-6xl px-6 py-10">
@@ -74,21 +74,21 @@ export default async function DashboardPage() {
           ) : null}
           .
         </Display>
-        <p className="mt-3 text-ninja-lavender">
+        <p className="mt-3 text-muted-foreground">
           Este es el shell base de NinjaSoft POS.
         </p>
 
         {memberships.length > 0 && (
           <Card className="mt-6 max-w-xs">
             <CardContent className="p-5">
-              <p className="text-sm text-ninja-lavender">Ventas de hoy</p>
-              <p className="mt-2 font-display text-3xl font-black text-ninja-gold">
+              <p className="text-sm text-muted-foreground">Ventas de hoy</p>
+              <p className="mt-2 font-mono tabular-nums text-3xl font-black text-ninja-gold">
                 {new Intl.NumberFormat("es-AR", {
                   style: "currency",
                   currency: "ARS",
                 }).format(todayTotal)}
               </p>
-              <p className="mt-1 text-xs text-ninja-lavender">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {todayCount} venta{todayCount === 1 ? "" : "s"}
               </p>
             </CardContent>
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
                     <h3 className="mt-3 font-display text-lg font-bold">
                       {m.tenants?.name ?? "Negocio"}
                     </h3>
-                    <p className="mt-1 text-sm text-ninja-lavender">
+                    <p className="mt-1 text-sm text-muted-foreground">
                       Rol: {m.role} · {m.tenants?.status}
                     </p>
                   </CardContent>

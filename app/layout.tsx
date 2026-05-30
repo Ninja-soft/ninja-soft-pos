@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Nunito, JetBrains_Mono } from "next/font/google";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { themeInitScript } from "@/lib/theme/ThemeProvider";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -9,10 +9,10 @@ const inter = Inter({
   variable: "--font-inter",
   display: "swap",
 });
-const nunito = Nunito({
+// Display "tech" para destacados (eyebrows, nombres, acentos).
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  style: ["normal", "italic"],
-  variable: "--font-nunito",
+  variable: "--font-display",
   display: "swap",
 });
 const jetbrains = JetBrains_Mono({
@@ -39,7 +39,7 @@ export default function RootLayout({
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${inter.variable} ${nunito.variable} ${jetbrains.variable}`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrains.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

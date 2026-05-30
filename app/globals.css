@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================================
+   Tokens semánticos NinjaSoft. Ver UI-NinjaSof.md §14.
+   ninja-light por defecto; ninja-dark es el tema principal de la marca.
+   ============================================================================= */
+:root {
+  --background: #f8f7ff;
+  --foreground: #161026;
+
+  --card: #ffffff;
+  --card-foreground: #161026;
+
+  --popover: #ffffff;
+  --popover-foreground: #161026;
+
+  --primary: #ff4b22;
+  --primary-foreground: #100a2e;
+
+  --secondary: #f1eeff;
+  --secondary-foreground: #21135a;
+
+  --muted: #f6f3ff;
+  --muted-foreground: #6e6688;
+
+  --accent: #ffd21f;
+  --accent-foreground: #100a2e;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: #e3ddf5;
+  --input: #e3ddf5;
+  --ring: #ff6a1a;
+
+  --radius: 1rem;
+}
+
+[data-theme="ninja-dark"] {
+  --background: #09051c;
+  --foreground: #f7f7ff;
+
+  --card: rgba(20, 13, 53, 0.78);
+  --card-foreground: #f7f7ff;
+
+  --popover: #140d35;
+  --popover-foreground: #f7f7ff;
+
+  --primary: #ff4b22;
+  --primary-foreground: #100a2e;
+
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #f7f7ff;
+
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: #b8aedc;
+
+  --accent: #ffd21f;
+  --accent-foreground: #100a2e;
+
+  --destructive: #ff4b4b;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #ff6a1a;
+}
+
+[data-theme="ninja-light"] {
+  --background: #f8f7ff;
+  --foreground: #161026;
+
+  --card: rgba(255, 255, 255, 0.86);
+  --card-foreground: #161026;
+
+  --popover: #ffffff;
+  --popover-foreground: #161026;
+
+  --secondary: #f1eeff;
+  --secondary-foreground: #21135a;
+
+  --muted: #f6f3ff;
+  --muted-foreground: #6e6688;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #e3ddf5;
+  --input: #ddd6f0;
+  --ring: #ff6a1a;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--foreground);
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgba(255, 106, 26, 0.32);
+    color: #f7f7ff;
+  }
+
+  /* Caret visible mientras se escribe. */
+  input,
+  textarea {
+    caret-color: var(--foreground);
+  }
+
+  /* Autofill: el navegador fuerza un fondo claro y el texto blanco quedaba
+     invisible. Forzamos color del texto al foreground del tema y matamos el
+     fondo de autofill con el truco de transition + box-shadow. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: var(--foreground);
+    caret-color: var(--foreground);
+    -webkit-box-shadow: 0 0 0px 1000px var(--background) inset;
+    box-shadow: 0 0 0px 1000px var(--background) inset;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+}
+
+/* Fondo atmosférico de marca para tema dark (UI-NinjaSof.md §7). */
+.ninja-dark-bg {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 75, 34, 0.16), transparent 30%),
+    radial-gradient(circle at 82% 12%, rgba(95, 58, 214, 0.24), transparent 34%),
+    radial-gradient(circle at 70% 82%, rgba(255, 210, 31, 0.08), transparent 28%),
+    linear-gradient(135deg, #09051c 0%, #100a2e 48%, #21135a 100%);
+}
+
+.ninja-light-bg {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255, 106, 26, 0.1), transparent 28%),
+    radial-gradient(circle at 85% 0%, rgba(74, 45, 163, 0.12), transparent 32%),
+    linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
+}
+
+/* Grid técnico sutil (UI-NinjaSof.md §26). */
+.ninja-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.08) 1px,
+    transparent 1px
+  );
+  background-size: 32px 32px;
+}

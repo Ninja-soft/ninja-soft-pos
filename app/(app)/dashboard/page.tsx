@@ -71,7 +71,8 @@ export default async function DashboardPage() {
           .
         </Display>
         <p className="mt-3 text-muted-foreground">
-          Este es el shell base de NinjaSoft POS.
+          Tu centro de operaciones. Desde acá vendés, controlás la caja y seguís
+          tus resultados.
         </p>
 
         {memberships.length > 0 && (

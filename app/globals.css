@@ -302,7 +302,8 @@
 .rdp-ninja .rdp-day_button:hover {
   background-color: rgba(127, 127, 127, 0.15);
 }
-.rdp-ninja .rdp-today:not(.rdp-selected) .rdp-day_button {
+/* "Hoy" (salvo que esté seleccionado o dentro del rango): resaltado en flama. */
+.rdp-ninja .rdp-today:not(.rdp-selected):not(.rdp-range_middle) .rdp-day_button {
   color: #ec3f17;
   font-weight: 700;
 }
@@ -310,15 +311,15 @@
 .rdp-ninja .rdp-range_start .rdp-day_button,
 .rdp-ninja .rdp-range_end .rdp-day_button,
 .rdp-ninja .rdp-selected:not(.rdp-range_middle) .rdp-day_button {
-  background-color: #ec3f17;
-  color: #fff;
-  border-color: #ec3f17;
+  background-color: #ec3f17 !important;
+  color: #fff !important;
+  border-color: #ec3f17 !important;
 }
 /* Días intermedios: fondo tenue, texto del tema (legible en dark y light). */
 .rdp-ninja .rdp-range_middle .rdp-day_button {
-  background-color: rgba(236, 63, 23, 0.15);
-  color: inherit;
-  border: none;
+  background-color: rgba(236, 63, 23, 0.18) !important;
+  color: var(--popover-foreground) !important;
+  border: none !important;
 }
 .rdp-ninja .rdp-chevron {
   fill: currentColor;

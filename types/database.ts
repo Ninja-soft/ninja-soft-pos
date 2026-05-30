@@ -900,6 +900,17 @@ export type Database = {
         Args: { p_from: string; p_to: string }
         Returns: Json
       }
+      tenant_members: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          user_id: string
+          email: string
+          full_name: string | null
+          role: string
+          status: string
+          joined_at: string | null
+        }[]
+      }
       void_sale: {
         Args: { p_reason: string; p_sale_id: string }
         Returns: undefined

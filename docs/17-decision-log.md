@@ -283,6 +283,41 @@ Ver `11-ui-brand.md`.
 
 ---
 
+## ADR-009 — `current_tenant_id()` lee `app_metadata.current_tenant_id`
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Claude Code (build Hito 0)
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+Dos documentos definían `current_tenant_id()` de forma distinta:
+
+- `08-multi-tenant.md` y `03-architecture.md`: `(auth.jwt() -> 'app_metadata' ->> 'current_tenant_id')::uuid`.
+- `04-database.md`: `(auth.jwt() ->> 'tenant_id')::uuid`.
+
+Al implementar el esquema base del Hito 0 había que elegir una y que toda la RLS la use consistentemente.
+
+### Decisión
+
+`current_tenant_id()` resuelve el tenant desde `app_metadata.current_tenant_id` (la versión de `08-multi-tenant.md`, documento autoritativo del modelo multi-tenant). El cambio de tenant activo actualiza `app_metadata` vía Edge Function `switch_tenant` y refresca el JWT.
+
+Se agregó además `is_internal()` que lee `app_metadata.is_internal`, usada por las policies de tablas globales.
+
+### Alternativas consideradas
+
+- **`jwt ->> 'tenant_id'` (top-level claim):** requeriría custom claims fuera de `app_metadata`, menos estándar en Supabase Auth. Descartada.
+- **Versión `app_metadata`:** estándar Supabase (`updateUserById({ app_metadata })`), ya descrita en el doc autoritativo. Elegida.
+
+### Consecuencias
+
+- **Positivas:** una sola fuente de verdad, alineada con el flujo `switch_tenant`. Linter de seguridad de Supabase sin findings tras hardening (`search_path` fijo en helpers, `handle_new_user` sin EXECUTE público).
+- **Negativas:** queda drift en `04-database.md` (snippet con `tenant_id`) que debe corregirse en una pasada de documentación. También `04-database.md` usa `plans.limits`/sin `rollout_strategy` mientras `16`/`07` describen `plans.features`/`rollout_strategy`: el esquema implementado sigue a `04` (autoridad de BD); reconciliar docs después.
+- **Seguimiento:** corregir snippets de `04-database.md`; agregar suite de aislamiento `tests/multi-tenant.test.ts` cuando exista auth/frontend.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

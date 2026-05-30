@@ -42,6 +42,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Deploy.** Publicación de una versión. En NinjaSoft pasa por Vercel automáticamente cuando se mergea a una rama configurada. Ver `13-deployment.md`.
 
+**Display cliente.** Segunda pantalla del POS, visible para el comprador. Muestra carrito, total, vuelto, QR de pago y mensajes del negocio. En web se implementa como ruta dedicada sincronizada con la caja. Ver `20-hardware-pos.md`.
+
 ## E
 
 **Edge Function.** Función serverless de Supabase escrita en Deno/TypeScript. Donde vive la lógica sensible: AFIP, webhooks, integraciones de pago.
@@ -63,6 +65,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 ## I
 
 **Idempotencia.** Propiedad de una operación que da el mismo resultado si se ejecuta una o varias veces. Crítica en pagos, webhooks y Edge Functions.
+
+**Impresora térmica.** Impresora de ticket de 58mm u 80mm usada en mostrador. Puede operar con impresión web básica o con conector ESC/POS cuando se necesita corte, cajón o control fino. Ver `20-hardware-pos.md`.
 
 ## J
 
@@ -111,6 +115,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Service role.** Clave privilegiada de Supabase. Saltea RLS. **Nunca** en frontend. Solo en Edge Functions o backend confiable.
 
 **SKU.** Stock Keeping Unit. Código interno único de un producto dentro de un tenant. Distinto al código de barras (que puede ser compartido entre tenants si es un EAN estándar).
+
+**Scanner.** Lector de códigos usado en POS. Puede ser USB HID tipo teclado, Bluetooth o cámara móvil. El POS debe mantener foco, normalizar códigos y evitar lecturas duplicadas. Ver `20-hardware-pos.md`.
 
 **Suspensión.** Estado de un tenant que pierde acceso por falta de pago u otra razón. No se borran datos. Se reactiva restaurando el acceso.
 

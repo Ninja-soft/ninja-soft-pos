@@ -4,6 +4,8 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 
 > **Convención.** Los hitos del MVP (`H0`–`H6`) están detallados en [`01-mvp.md`](./01-mvp.md). Este documento extiende el plan más allá del MVP.
 
+> **Seguimiento.** Todo entregable accionable del roadmap ampliado se escribe como checkbox Markdown: `- [ ]` pendiente, `- [x]` hecho. Al marcar algo como hecho, agregar evidencia breve: PR, commit, ruta, test, deploy o demo que lo valida. No se marca un hito completo si no pasó su corte de control.
+
 ## Visión por fases
 
 | Fase | Nombre | Duración estimada | Estado |
@@ -18,9 +20,10 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟡 Planificación |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 Planificación |
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
+| **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 Planificación |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
-> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F9 → F3 (AFIP)**. Las **mejoras transversales (TX)** — flatpickr y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
+> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F9 → F3 (AFIP)**. Las **mejoras transversales (TX)** — flatpickr y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
 ---
 
@@ -180,7 +183,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ## Plan ampliado (2026-05-30)
 
-Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
+Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F9 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
 
 ### F6 — Personalización del producto
 
@@ -269,9 +272,63 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - **H21** — **Pagos360** (links de pago / cobranzas).
   - *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
+### F10 — Hardware y mostrador PRO
+
+Objetivo: que el POS opere como sistema de mostrador profesional: impresoras configurables, scanners confiables, periféricos por caja/sucursal y segunda pantalla para el cliente. Todo debe ser configurable por tenant, sucursal, caja y perfil de dispositivo.
+
+- [ ] **H26 — Configuración avanzada de impresión.**
+  - [ ] Perfiles de impresión por **tenant / sucursal / caja**: ticket 58mm, ticket 80mm, A4, etiqueta, cocina/comanda, comprobante interno.
+  - [ ] Selector de destino por tipo de documento: ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, comanda, devolución, nota de crédito futura.
+  - [ ] Plantillas con variables: logo, datos fiscales, QR, leyendas legales, redes, promociones, cajero, caja, sucursal, medios de pago.
+  - [ ] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual.
+  - [ ] Web print nativo: `window.print()` para navegador, A4 y fallback universal.
+  - [ ] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza.
+  - [ ] QZ Tray / WebUSB / WebSerial evaluados por compatibilidad.
+  - [ ] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar.
+  - [ ] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto.
+
+- [ ] **H27 — Scanners y captura de códigos PRO.**
+  - [ ] Soporte para lector USB HID tipo teclado, cámara móvil (`BarcodeDetector` cuando exista), entrada manual y scanners Bluetooth.
+  - [ ] Perfiles de scanner por caja: prefijo/sufijo, Enter automático, delay entre caracteres, normalización de EAN/UPC/Code128/QR.
+  - [ ] Modo continuo en POS: foco blindado en búsqueda, lectura sin tocar mouse, beep/feedback visual, prevención de lecturas duplicadas.
+  - [ ] Producto por SKU/barcode.
+  - [ ] QR de pago.
+  - [ ] QR de cliente/fidelización.
+  - [ ] Etiquetas internas de balanza/precio-peso.
+  - [ ] Diagnóstico de scanner: pantalla de prueba que muestra caracteres recibidos, tiempos y formato detectado.
+  - [ ] *Criterio:* un lector USB escanea 100 productos seguidos sin perder foco ni duplicar lecturas; un móvil usa cámara como fallback.
+
+- [ ] **H28 — Etiquetas, códigos y balanzas.**
+  - [ ] Generador de etiquetas de producto con SKU, barcode, precio, nombre corto y variantes.
+  - [ ] Impresión por lote: productos seleccionados, cambio de precio, stock recibido, variantes.
+  - [ ] Soporte para etiquetas de balanza: parsing configurable de código con precio o peso embebido.
+  - [ ] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza.
+  - [ ] *Criterio:* el negocio imprime 200 etiquetas tras importar productos y el POS interpreta una etiqueta de balanza como producto + peso/precio.
+
+- [ ] **H29 — Doble pantalla / display cliente.**
+  - [ ] Ventana secundaria del navegador: el cajero abre una pantalla cliente en otro monitor (`/customer-display`), sincronizada por BroadcastChannel/local storage o Realtime.
+  - [ ] Display cliente dedicado: tablet/celular en la misma caja mostrando carrito, total, promociones y QR de pago.
+  - [ ] Modo hardware futuro: integración con display serial/USB de dos líneas para importes básicos.
+  - [ ] Nombre del negocio y caja en pantalla cliente.
+  - [ ] Ítems del carrito en vivo.
+  - [ ] Subtotal, descuentos, total y vuelto.
+  - [ ] QR de Mercado Pago/MODO cuando aplique.
+  - [ ] Mensaje final: “Pago recibido”, “Gracias”, promoción o invitación a fidelización.
+  - [ ] Configuración por tenant: tema, logo, mostrar/ocultar precios unitarios, banners, idle screen, idioma.
+  - [ ] Seguridad: nunca mostrar datos sensibles del cajero, panel interno, tokens ni información privada de otros clientes.
+  - [ ] Limitación técnica documentada: el navegador no puede controlar monitores como una app nativa; el flujo robusto es abrir una URL de display cliente y mantenerla sincronizada.
+  - [ ] *Criterio:* el cajero cobra en el POS y el segundo monitor/tablet muestra carrito, QR y total en tiempo real sin recargar.
+
+- [ ] **H30 — Centro de diagnóstico de hardware.**
+  - [ ] Pantalla `/configuracion/hardware` con estado de impresoras, scanners, pantalla cliente, cajón y balanza.
+  - [ ] Pruebas guiadas: imprimir ticket de prueba, abrir cajón, probar scanner, probar display cliente, probar balanza.
+  - [ ] Logs locales de hardware y errores legibles para soporte.
+  - [ ] Export de diagnóstico para NinjaSoft.
+  - [ ] *Criterio:* soporte puede pedir “Exportar diagnóstico” y ver qué periférico falla sin conectarse a la máquina del cliente.
+
 ### F3 — AFIP (ya proyectada, se ejecuta al final de esta tanda)
 
-Sin cambios de alcance: ver [F3](#f3--integración-afip-y-producción) y [`15-afip-integration.md`](./15-afip-integration.md). Se prioriza **después** de F6–F8 (requiere certificados por tenant y homologación).
+Sin cambios de alcance: ver [F3](#f3--integración-afip-y-producción) y [`15-afip-integration.md`](./15-afip-integration.md). Se prioriza **después** de F6–F8/F10 (requiere certificados por tenant, homologación y tickets/comprobantes ya configurables).
 
 ---
 
@@ -347,7 +404,8 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Variantes (talle/color), SKU compuesto (textil) | F6/H10 + F5 (perfil textil) |
 | Devoluciones, cambios, notas de crédito | F1 (anulación) + F3 (NC) — *falta flujo de cambio/devolución → backlog* |
 | Reportes/BI y exportaciones con diseño | F1 (reportes) + **TX-2 (XLSX)** + F9/H25 |
-| Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 |
+| Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 + **F10/H26–H30** |
+| Segunda pantalla / display cliente (carrito, QR, total, vuelto) | **F10/H29** |
 | Pedidos online / delivery (PedidosYa, Rappi, Tienda Nube, Mercado Libre) | F5 (marketplace) |
 | Modo offline con sincronización | Backlog |
 | App móvil para gerentes | Backlog |

@@ -43,6 +43,7 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [17](./17-decision-log.md) | **Decision log** — registro de decisiones | Todos |
 | [18](./18-qa-checklist.md) | **QA checklist** | QA |
 | [19](./19-glossary.md) | **Glosario** | Todos |
+| [20](./20-hardware-pos.md) | **Hardware y mostrador PRO** — impresoras, scanners, balanzas, doble pantalla | Frontend, soporte, hardware |
 
 ## Workflows
 

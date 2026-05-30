@@ -19,7 +19,7 @@ export function DropdownContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-44 overflow-hidden rounded-ninjaMd border border-border bg-popover p-1.5 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in",
+          "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in",
           className,
         )}
         {...props}
@@ -35,7 +35,7 @@ export function DropdownItem({
   return (
     <DropdownMenu.Item
       className={cn(
-        "flex cursor-pointer select-none items-center gap-2 rounded-ninjaSm px-3 py-2 text-sm outline-none transition focus:bg-secondary/70 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        "flex cursor-pointer select-none items-center gap-2 rounded-md px-3 py-2 text-sm outline-none transition focus:bg-secondary/70 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}

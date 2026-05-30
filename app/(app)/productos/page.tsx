@@ -94,7 +94,7 @@ export default function ProductosPage() {
           />
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-ninjaLg border border-border bg-card">
+        <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
@@ -159,28 +159,28 @@ export default function ProductosPage() {
                         <button
                           onClick={() => openAdjust(p)}
                           title="Ajustar stock"
-                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <SlidersHorizontal size={16} />
                         </button>
                         <button
                           onClick={() => openHistory(p)}
                           title="Historial de stock"
-                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <History size={16} />
                         </button>
                         <button
                           onClick={() => openEdit(p)}
                           title="Editar"
-                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                         >
                           <Pencil size={16} />
                         </button>
                         <button
                           onClick={() => onDelete(p)}
                           title="Eliminar"
-                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                         >
                           <Trash2 size={16} />
                         </button>

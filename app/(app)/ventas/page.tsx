@@ -44,7 +44,7 @@ export default function VentasPage() {
         <Eyebrow>Operación</Eyebrow>
         <Display className="mt-3 text-3xl md:text-4xl">Ventas</Display>
 
-        <div className="mt-6 overflow-hidden rounded-ninjaLg border border-border bg-card">
+        <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
@@ -81,11 +81,11 @@ export default function VentasPage() {
                   </td>
                   <td className="px-4 py-3">
                     {s.status === "voided" ? (
-                      <span className="inline-flex rounded-ninjaFull border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+                      <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300">
                         Anulada
                       </span>
                     ) : (
-                      <span className="inline-flex rounded-ninjaFull border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                      <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
                         Completada
                       </span>
                     )}
@@ -95,7 +95,7 @@ export default function VentasPage() {
                       <button
                         onClick={() => openTicket(s.id)}
                         title="Ticket"
-                        className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       >
                         <Receipt size={16} />
                       </button>
@@ -103,7 +103,7 @@ export default function VentasPage() {
                         <button
                           onClick={() => onVoid(s.id, s.number)}
                           title="Anular"
-                          className="rounded-ninjaSm p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                         >
                           <Ban size={16} />
                         </button>

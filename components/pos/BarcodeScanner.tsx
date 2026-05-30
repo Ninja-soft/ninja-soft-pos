@@ -84,7 +84,7 @@ export function BarcodeScanner({
       {error ? (
         <p className="py-4 text-sm text-destructive">{error}</p>
       ) : (
-        <div className="overflow-hidden rounded-ninjaLg border border-border bg-black">
+        <div className="overflow-hidden rounded-lg border border-border bg-black">
           <video
             ref={videoRef}
             className="aspect-video w-full object-cover"

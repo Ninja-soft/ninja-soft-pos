@@ -63,22 +63,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default function ConfiguracionPage() {
   const { theme, setTheme } = useTheme();
   const { display, price, bg, setDisplay, setPrice, setBg } = useAppearance();
-  const [designOpen, setDesignOpen] = useState(true);
+  const [designOpen, setDesignOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8">
+    <div className="mx-auto max-w-5xl px-6 py-8">
       <Eyebrow>Preferencias</Eyebrow>
       <Display className="mt-3">Configuración</Display>
       <p className="mt-2 text-muted-foreground">
-        Personalizá la apariencia. Los cambios se aplican al instante y se
-        guardan en tu cuenta (te siguen en cualquier dispositivo).
+        Dejá NinjaPos a tu gusto. Lo que cambiás se ve al toque y queda guardado
+        en tu cuenta, así lo encontrás igual en cualquier dispositivo.
       </p>
 
       {/* Sección colapsable: Diseño */}
       <Card className="mt-8">
         <button
           onClick={() => setDesignOpen((o) => !o)}
-          className="flex w-full items-center gap-3 p-5 text-left"
+          className="flex w-full items-center gap-3 rounded-lg p-5 text-left transition hover:bg-muted/40"
         >
           <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
             <Palette size={18} />
@@ -110,7 +110,7 @@ export default function ConfiguracionPage() {
                       key={t.name}
                       onClick={() => setTheme(t.name)}
                       className={cn(
-                        "rounded-xl border p-2 text-left transition",
+                        "rounded-lg border p-2 text-left transition",
                         active
                           ? "border-ninja-flame ring-2 ring-ninja-flame/30"
                           : "border-border hover:border-ninja-flameSoft/40",
@@ -160,7 +160,7 @@ export default function ConfiguracionPage() {
                 className="pt-1 text-2xl font-extrabold tracking-tight"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                NinjaPos — ágil y seguro
+                Ninja Pos es ágil y seguro
               </p>
             </Field>
 
@@ -190,7 +190,7 @@ export default function ConfiguracionPage() {
                       key={k}
                       onClick={() => setBg(k)}
                       className={cn(
-                        "rounded-xl border p-2 transition",
+                        "rounded-lg border p-2 transition",
                         active
                           ? "border-ninja-flame ring-2 ring-ninja-flame/30"
                           : "border-border hover:border-ninja-flameSoft/40",

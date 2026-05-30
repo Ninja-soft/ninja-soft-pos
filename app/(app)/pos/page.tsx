@@ -140,8 +140,8 @@ export default function PosPage() {
             <span
               className={
                 hasShift
-                  ? "inline-flex items-center gap-1.5 rounded-ninjaFull border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300"
-                  : "inline-flex items-center gap-1.5 rounded-ninjaFull border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground"
+                  ? "inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300"
+                  : "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground"
               }
             >
               {hasShift ? <Unlock size={13} /> : <Lock size={13} />}
@@ -191,7 +191,7 @@ export default function PosPage() {
                 onClick={() =>
                   addProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price })
                 }
-                className="rounded-ninjaLg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
+                className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
               >
                 <div className="truncate font-medium text-foreground">{p.name}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
@@ -211,7 +211,7 @@ export default function PosPage() {
         </section>
 
         {/* Carrito */}
-        <aside className="flex h-[calc(100vh-7rem)] flex-col rounded-ninjaXl border border-border bg-card p-4">
+        <aside className="flex h-[calc(100vh-7rem)] flex-col rounded-lg border border-border bg-card p-4">
           <h2 className="font-display text-lg font-bold">Carrito</h2>
           <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
             {lines.length === 0 && (
@@ -222,7 +222,7 @@ export default function PosPage() {
             {lines.map((l) => (
               <div
                 key={l.productId}
-                className="rounded-ninjaMd border border-border bg-muted/40 p-3"
+                className="rounded-lg border border-border bg-muted/40 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium text-foreground">{l.name}</span>
@@ -237,14 +237,14 @@ export default function PosPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setQuantity(l.productId, l.quantity - 1)}
-                      className="rounded-ninjaSm border border-border p-1 hover:bg-muted"
+                      className="rounded-md border border-border p-1 hover:bg-muted"
                     >
                       <Minus size={14} />
                     </button>
                     <span className="w-8 text-center text-sm">{l.quantity}</span>
                     <button
                       onClick={() => setQuantity(l.productId, l.quantity + 1)}
-                      className="rounded-ninjaSm border border-border p-1 hover:bg-muted"
+                      className="rounded-md border border-border p-1 hover:bg-muted"
                     >
                       <Plus size={14} />
                     </button>
@@ -270,7 +270,7 @@ export default function PosPage() {
                 value={discountTotal || ""}
                 onChange={(e) => setDiscountTotal(Number(e.target.value) || 0)}
                 placeholder="0"
-                className="h-8 w-24 rounded-ninjaSm border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                className="h-8 w-24 rounded-md border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
               />
             </div>
             <div className="flex items-center justify-between pt-1">

@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
+import { buttonVariants } from "@/components/ui/Button";
 import {
   Card,
   CardContent,
@@ -69,12 +71,17 @@ export default async function DashboardPage() {
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>Todavía no perteneces a ningún negocio</CardTitle>
+                <CardTitle>Todavía no tenés un negocio</CardTitle>
                 <CardDescription>
-                  Cuando un negocio te invite o crees uno, lo vas a ver acá. El
-                  alta de tenants se habilita en el siguiente hito.
+                  Creá tu negocio para empezar a cargar productos, controlar
+                  stock y vender. Arrancás con 14 días de trial.
                 </CardDescription>
               </CardHeader>
+              <CardContent>
+                <Link href="/onboarding" className={buttonVariants()}>
+                  Crear mi negocio
+                </Link>
+              </CardContent>
             </Card>
           )}
         </div>

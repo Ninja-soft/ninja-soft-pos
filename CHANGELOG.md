@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 6 — Hardening (tests):** suite unitaria por capa (14 tests): carrito Zustand + subtotales, validador CUIT/CUIL, resumen de arqueo de caja, formato, y componente Button. `tests/README.md` documenta el suite y el plan del test de aislamiento multi-tenant (e2e, requiere stack Supabase local). Aislamiento garantizado hoy por RLS.
 - **Hito 5 — Panel interno NinjaSoft:** rutas `/internal/*` protegidas por `is_internal` (app_metadata). Listado de tenants con plan/estado, detalle por tenant con cambio de plan, cambio de estado de suscripción y toggle de feature flags. RPCs `internal_set_plan`/`internal_set_subscription_status`/`internal_set_flag` (SECURITY DEFINER con guard `is_internal()`, auditadas, EXECUTE solo authenticated). Bootstrap: marcar al staff con `app_metadata.is_internal=true`.
 - **Hito 4 cerrado — Reportes:** RPC `sales_report(from,to)` (agregados por día, medio de pago, categoría y cajero; `SECURITY DEFINER` con guard de tenant, EXECUTE revocado a anon). Página `/reportes` con rango de fechas, KPIs (total/cantidad), 4 tablas y export CSV. Métrica "ventas de hoy" en el dashboard. Con esto Hito 4 (clientes + reportes) queda completo.
 - **Hito 4 — Clientes:** tabla `customers` (RLS, defaults, FK `sales.customer_id`), módulo customers con validación de CUIT/CUIL (dígito verificador) y DNI, CRUD en `/clientes` (alta/edición/baja lógica, búsqueda por nombre/documento, condición IVA). Reportes del Hito 4 pendientes (próxima vuelta).

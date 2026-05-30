@@ -48,7 +48,7 @@ export async function updateSession(request: NextRequest) {
   // Con sesión en página de auth → dashboard.
   if (user && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard-team";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 

@@ -18,7 +18,7 @@ export default async function InternalLayout({
   const isInternal =
     (user.app_metadata as { is_internal?: boolean } | null)?.is_internal ===
     true;
-  if (!isInternal) redirect("/dashboard-team");
+  if (!isInternal) redirect("/dashboard");
 
   return (
     <div className="app-bg min-h-screen text-foreground">

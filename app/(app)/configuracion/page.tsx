@@ -70,8 +70,8 @@ export default function ConfiguracionPage() {
       <Eyebrow>Preferencias</Eyebrow>
       <Display className="mt-3">Configuración</Display>
       <p className="mt-2 text-muted-foreground">
-        Dejá NinjaPos a tu gusto. Lo que cambiás se ve al toque y queda guardado
-        en tu cuenta, así lo encontrás igual en cualquier dispositivo.
+        Ajustá NinjaPos a tu medida. Los cambios se aplican al instante y quedan
+        guardados en tu cuenta, disponibles en cualquier dispositivo.
       </p>
 
       {/* Sección colapsable: Diseño */}

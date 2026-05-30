@@ -1,17 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CreditCard, Palette, Users } from "lucide-react";
+import { Building2, CreditCard, Palette } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
+import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
+import { TeamSection } from "@/components/dashboard-team/TeamSection";
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Dueño",
-  manager: "Encargado",
-  cashier: "Cajero",
-  viewer: "Solo lectura",
-};
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
   active: "Activa",
@@ -72,12 +67,6 @@ export default async function DashboardTeamPage() {
     .limit(1);
   const sub = (subData?.[0] as unknown as Sub) ?? null;
 
-  // Miembros del equipo (RLS: el dueño ve los de su tenant).
-  const { data: members } = await supabase
-    .from("tenant_users")
-    .select("role, status, joined_at, user_id")
-    .order("joined_at", { ascending: true });
-
   const tenant = membership.tenants;
 
   return (
@@ -121,50 +110,8 @@ export default async function DashboardTeamPage() {
         </Card>
       </div>
 
-      {/* Equipo */}
-      <div className="mt-8 flex items-center justify-between">
-        <Heading as="h2" className="flex items-center gap-2">
-          <Users size={18} /> Equipo
-        </Heading>
-        <span
-          className={buttonVariants({ variant: "secondary", size: "sm" })}
-          aria-disabled
-          title="Próximamente"
-          style={{ opacity: 0.6, pointerEvents: "none" }}
-        >
-          Invitar usuario (pronto)
-        </span>
-      </div>
-      <Card className="mt-3">
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Miembro</th>
-                <th className="px-4 py-3">Rol</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Desde</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {(members ?? []).map((m) => (
-                <tr key={m.user_id}>
-                  <td className="px-4 py-3">
-                    {m.user_id === user.id ? `${user.email} (vos)` : "Miembro"}
-                  </td>
-                  <td className="px-4 py-3">{ROLE_LABELS[m.role] ?? m.role}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{m.status}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {m.joined_at
-                      ? new Date(m.joined_at).toLocaleDateString("es-AR")
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {/* Equipo (cliente: lista + invitar) */}
+      <TeamSection currentUserId={user.id} />
 
       {/* Accesos */}
       <div className="mt-8 flex flex-wrap gap-3">

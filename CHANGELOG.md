@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 4 cerrado — Reportes:** RPC `sales_report(from,to)` (agregados por día, medio de pago, categoría y cajero; `SECURITY DEFINER` con guard de tenant, EXECUTE revocado a anon). Página `/reportes` con rango de fechas, KPIs (total/cantidad), 4 tablas y export CSV. Métrica "ventas de hoy" en el dashboard. Con esto Hito 4 (clientes + reportes) queda completo.
 - **Hito 4 — Clientes:** tabla `customers` (RLS, defaults, FK `sales.customer_id`), módulo customers con validación de CUIT/CUIL (dígito verificador) y DNI, CRUD en `/clientes` (alta/edición/baja lógica, búsqueda por nombre/documento, condición IVA). Reportes del Hito 4 pendientes (próxima vuelta).
 - **Hito 3 — Caja y turnos:** página `/caja` con resumen del turno (apertura, ventas netas, ingresos/egresos, efectivo esperado), ventas por medio de pago, ingresos/egresos manuales con motivo, listado de movimientos y reporte Z exportable (CSV + impresión). Apertura/cierre con arqueo ya venían del POS. Cierra Hito 3.
 - **Hito 2 cerrado — ticket no fiscal + anulación:** página `/ventas` (lista de ventas, estado, ticket imprimible vía `@media print`, anulación con motivo). RPC atómica `void_sale` (revierte stock e inserta contramovimiento de caja). Ticket automático tras cobrar en el POS. Quick-link Ventas en dashboard. Con esto Hito 2 (POS) queda completo.

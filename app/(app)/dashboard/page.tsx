@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  BarChart3,
   Building2,
   Package,
   Receipt,
@@ -41,6 +42,25 @@ export default async function DashboardPage() {
     .eq("status", "active");
   const memberships = (data ?? []) as unknown as MembershipRow[];
 
+  // Métrica: ventas de hoy (UTC).
+  let todayTotal = 0;
+  let todayCount = 0;
+  if (memberships.length > 0) {
+    const now = new Date();
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    const { data: report } = await supabase.rpc("sales_report", {
+      p_from: start.toISOString(),
+      p_to: end.toISOString(),
+    });
+    const r = report as { total?: number; count?: number } | null;
+    todayTotal = r?.total ?? 0;
+    todayCount = r?.count ?? 0;
+  }
+
   return (
     <div className="ninja-dark-bg min-h-screen text-ninja-softWhite">
       <DashboardHeader email={user.email ?? ""} />
@@ -59,6 +79,23 @@ export default async function DashboardPage() {
         </p>
 
         {memberships.length > 0 && (
+          <Card className="mt-6 max-w-xs">
+            <CardContent className="p-5">
+              <p className="text-sm text-ninja-lavender">Ventas de hoy</p>
+              <p className="mt-2 font-display text-3xl font-black text-ninja-gold">
+                {new Intl.NumberFormat("es-AR", {
+                  style: "currency",
+                  currency: "ARS",
+                }).format(todayTotal)}
+              </p>
+              <p className="mt-1 text-xs text-ninja-lavender">
+                {todayCount} venta{todayCount === 1 ? "" : "s"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {memberships.length > 0 && (
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="/pos" className={buttonVariants()}>
               <ShoppingCart size={16} /> Punto de venta
@@ -74,6 +111,9 @@ export default async function DashboardPage() {
             </Link>
             <Link href="/clientes" className={buttonVariants({ variant: "secondary" })}>
               <Users size={16} /> Clientes
+            </Link>
+            <Link href="/reportes" className={buttonVariants({ variant: "secondary" })}>
+              <BarChart3 size={16} /> Reportes
             </Link>
           </div>
         )}

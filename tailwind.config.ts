@@ -81,7 +81,7 @@ const config: Config = {
         ninjaFull: "999px",
       },
       boxShadow: {
-        ninjaSoft: "0 6px 20px rgba(8, 5, 20, 0.16)",
+        ninjaSoft: "var(--shadow-soft, 0 6px 20px rgba(8, 5, 20, 0.16))",
         ninjaGlow: "0 0 24px rgba(255, 106, 26, 0.22)",
         ninjaGoldGlow: "0 0 24px rgba(255, 210, 31, 0.16)",
         ninjaVioletGlow: "0 0 32px rgba(109, 74, 255, 0.18)",

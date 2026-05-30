@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { persistPrefs } from "./preferences";
 
 export type ThemeName =
   | "ninja-dark"
@@ -51,6 +52,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // sin persistencia
     }
+    void persistPrefs();
   }, []);
 
   // Toggle rápido claro/oscuro (alterna entre el dark y light por defecto).

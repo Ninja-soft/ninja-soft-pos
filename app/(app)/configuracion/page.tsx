@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, Palette } from "lucide-react";
 import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -23,145 +25,209 @@ const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
   "ninja-sand": { bg: "#fbf7f1", a: "#e8431b", b: "#e08900" },
 };
 
-function Section({
-  kicker,
-  title,
-  desc,
-  children,
-}: {
-  kicker: string;
-  title: string;
-  desc?: string;
-  children: React.ReactNode;
-}) {
+// Preview del patrón de fondo sobre un mini tile oscuro.
+const BG_PREVIEW: Record<BgStyle, React.CSSProperties> = {
+  dots: {
+    backgroundImage: "radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px)",
+    backgroundSize: "9px 9px",
+  },
+  grid: {
+    backgroundImage:
+      "linear-gradient(rgba(255,255,255,0.28) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.28) 1px, transparent 1px)",
+    backgroundSize: "12px 12px",
+  },
+  crosses: {
+    backgroundImage:
+      "linear-gradient(rgba(255,255,255,0.2) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(255,255,255,0.2) 1.5px, transparent 1.5px), linear-gradient(rgba(255,75,34,0.6) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(255,75,34,0.6) 1.5px, transparent 1.5px)",
+    backgroundSize: "14px 14px, 14px 14px, 42px 42px, 42px 42px",
+  },
+  diagonal: {
+    backgroundImage:
+      "repeating-linear-gradient(45deg, rgba(255,255,255,0.28) 0, rgba(255,255,255,0.28) 1px, transparent 1px, transparent 8px)",
+  },
+  mesh: {
+    backgroundImage:
+      "radial-gradient(circle at 25% 20%, rgba(255,75,34,0.5), transparent 45%), radial-gradient(circle at 80% 30%, rgba(95,58,214,0.6), transparent 50%)",
+  },
+};
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Card>
-      <CardContent className="space-y-4 p-6">
-        <div>
-          <Eyebrow>{kicker}</Eyebrow>
-          <Heading as="h2" className="mt-2 text-base md:text-lg">
-            {title}
-          </Heading>
-          {desc && <p className="mt-1 text-sm text-muted-foreground">{desc}</p>}
-        </div>
-        {children}
-      </CardContent>
-    </Card>
+    <div className="space-y-2">
+      <div className="text-sm font-medium">{label}</div>
+      {children}
+    </div>
   );
 }
 
 export default function ConfiguracionPage() {
   const { theme, setTheme } = useTheme();
   const { display, price, bg, setDisplay, setPrice, setBg } = useAppearance();
+  const [designOpen, setDesignOpen] = useState(true);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <Eyebrow>Preferencias</Eyebrow>
       <Display className="mt-3">Configuración</Display>
       <p className="mt-2 text-muted-foreground">
-        Diseño del sistema. Los cambios se aplican al instante y se guardan en
-        este dispositivo.
+        Personalizá la apariencia. Los cambios se aplican al instante y se
+        guardan en tu cuenta (te siguen en cualquier dispositivo).
       </p>
 
-      <div className="mt-8 space-y-5">
-        <Section
-          kicker="Diseño"
-          title="Tema"
-          desc="Elegí la paleta de toda la aplicación."
+      {/* Sección colapsable: Diseño */}
+      <Card className="mt-8">
+        <button
+          onClick={() => setDesignOpen((o) => !o)}
+          className="flex w-full items-center gap-3 p-5 text-left"
         >
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {THEMES.map((t) => {
-              const sw = THEME_SWATCH[t.name];
-              const active = theme === t.name;
-              return (
-                <button
-                  key={t.name}
-                  onClick={() => setTheme(t.name)}
-                  className={cn(
-                    "group rounded-xl border p-2 text-left transition",
-                    active
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
-                  )}
-                >
-                  <div
-                    className="relative h-14 w-full overflow-hidden rounded-lg"
-                    style={{ background: sw.bg }}
-                  >
-                    <span
-                      className="absolute bottom-2 left-2 h-3 w-3 rounded-full"
-                      style={{ background: sw.a }}
-                    />
-                    <span
-                      className="absolute bottom-2 left-6 h-3 w-3 rounded-full"
-                      style={{ background: sw.b }}
-                    />
-                  </div>
-                  <div className="mt-2 truncate text-xs font-medium">
-                    {t.label}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </Section>
-
-        <Section
-          kicker="Tipografía"
-          title="Fuente de títulos"
-          desc="Para encabezados y destacados."
-        >
-          <Segmented
-            value={display}
-            onChange={(v) => setDisplay(v as DisplayFont)}
-            options={Object.entries(DISPLAY_FONTS).map(([k, v]) => ({
-              value: k,
-              label: v.label,
-              preview: (
-                <span style={{ fontFamily: `var(${v.var})` }}>{v.label}</span>
-              ),
-            }))}
-          />
-        </Section>
-
-        <Section
-          kicker="Tipografía"
-          title="Fuente de precios"
-          desc="Para montos y números."
-        >
-          <div className="flex flex-col gap-3">
-            <Segmented
-              value={price}
-              onChange={(v) => setPrice(v as PriceFont)}
-              options={Object.entries(PRICE_FONTS).map(([k, v]) => ({
-                value: k,
-                label: v.label,
-                preview: (
-                  <span style={{ fontFamily: `var(${v.var})` }}>{v.label}</span>
-                ),
-              }))}
-            />
-            <span className="font-price text-2xl font-bold tabular-nums text-ninja-gold">
-              {formatCurrency(1234567.89)}
+          <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
+            <Palette size={18} />
+          </span>
+          <span className="flex-1">
+            <span className="block font-semibold">Diseño</span>
+            <span className="block text-sm text-muted-foreground">
+              Tema, tipografías y fondo
             </span>
-          </div>
-        </Section>
-
-        <Section
-          kicker="Atmósfera"
-          title="Fondo"
-          desc="Patrón del fondo de las pantallas."
-        >
-          <Segmented
-            value={bg}
-            onChange={(v) => setBg(v as BgStyle)}
-            options={Object.entries(BG_STYLES).map(([k, v]) => ({
-              value: k,
-              label: v,
-            }))}
+          </span>
+          <ChevronDown
+            size={18}
+            className={cn(
+              "text-muted-foreground transition",
+              designOpen ? "" : "-rotate-90",
+            )}
           />
-        </Section>
-      </div>
+        </button>
+
+        {designOpen && (
+          <CardContent className="space-y-7 border-t border-border p-6">
+            <Field label="Tema">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {THEMES.map((t) => {
+                  const sw = THEME_SWATCH[t.name];
+                  const active = theme === t.name;
+                  return (
+                    <button
+                      key={t.name}
+                      onClick={() => setTheme(t.name)}
+                      className={cn(
+                        "rounded-xl border p-2 text-left transition",
+                        active
+                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                          : "border-border hover:border-ninja-flameSoft/40",
+                      )}
+                    >
+                      <div
+                        className="relative h-16 w-full overflow-hidden rounded-lg border border-black/5"
+                        style={{ background: sw.bg }}
+                      >
+                        <span
+                          className="absolute bottom-2 left-2 h-3.5 w-3.5 rounded-full"
+                          style={{ background: sw.a }}
+                        />
+                        <span
+                          className="absolute bottom-2 left-7 h-3.5 w-3.5 rounded-full"
+                          style={{ background: sw.b }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5 text-xs font-medium">
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            active ? "bg-ninja-flame" : "bg-transparent",
+                          )}
+                        />
+                        {t.label}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+
+            <Field label="Fuente de títulos">
+              <Segmented
+                value={display}
+                onChange={(v) => setDisplay(v as DisplayFont)}
+                options={Object.entries(DISPLAY_FONTS).map(([k, v]) => ({
+                  value: k,
+                  label: v.label,
+                  preview: (
+                    <span style={{ fontFamily: `var(${v.var})` }}>{v.label}</span>
+                  ),
+                }))}
+              />
+              <p
+                className="pt-1 text-2xl font-extrabold tracking-tight"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                NinjaPos — ágil y seguro
+              </p>
+            </Field>
+
+            <Field label="Fuente de precios">
+              <Segmented
+                value={price}
+                onChange={(v) => setPrice(v as PriceFont)}
+                options={Object.entries(PRICE_FONTS).map(([k, v]) => ({
+                  value: k,
+                  label: v.label,
+                  preview: (
+                    <span style={{ fontFamily: `var(${v.var})` }}>{v.label}</span>
+                  ),
+                }))}
+              />
+              <p className="pt-1 font-price text-2xl font-bold tabular-nums text-ninja-gold">
+                {formatCurrency(1234567.89)}
+              </p>
+            </Field>
+
+            <Field label="Fondo">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {(Object.keys(BG_STYLES) as BgStyle[]).map((k) => {
+                  const active = bg === k;
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setBg(k)}
+                      className={cn(
+                        "rounded-xl border p-2 transition",
+                        active
+                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                          : "border-border hover:border-ninja-flameSoft/40",
+                      )}
+                    >
+                      <div
+                        className="h-12 w-full rounded-lg border border-black/10"
+                        style={{ backgroundColor: "#14102e", ...BG_PREVIEW[k] }}
+                      />
+                      <div className="mt-1.5 truncate text-xs font-medium">
+                        {BG_STYLES[k]}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Placeholder para futuras secciones */}
+      <Card className="mt-4 opacity-60">
+        <CardContent className="flex items-center gap-3 p-5">
+          <span className="grid h-10 w-10 place-items-center rounded-lg bg-muted text-muted-foreground">
+            <Heading as="h3" className="text-base">
+              ⚙
+            </Heading>
+          </span>
+          <div>
+            <div className="font-semibold">Negocio y cuenta</div>
+            <div className="text-sm text-muted-foreground">
+              Datos del negocio, usuarios y medios de pago — próximamente.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -7,10 +7,11 @@ import {
   useEffect,
   useState,
 } from "react";
+import { persistPrefs } from "./preferences";
 
 export type DisplayFont = "sora" | "bricolage" | "syne" | "outfit";
 export type PriceFont = "inter" | "spacemono" | "plexmono" | "jetbrains";
-export type BgStyle = "grid" | "dots" | "mesh";
+export type BgStyle = "dots" | "grid" | "crosses" | "diagonal" | "mesh";
 
 export const DISPLAY_FONTS: Record<DisplayFont, { var: string; label: string }> = {
   sora: { var: "--font-sora", label: "Sora" },
@@ -25,13 +26,15 @@ export const PRICE_FONTS: Record<PriceFont, { var: string; label: string }> = {
   jetbrains: { var: "--font-jetbrains", label: "JetBrains Mono" },
 };
 export const BG_STYLES: Record<BgStyle, string> = {
-  grid: "Grid técnico (cruces)",
   dots: "Dot grid",
+  grid: "Grid de líneas",
+  crosses: "Cruces tech",
+  diagonal: "Diagonales",
   mesh: "Mesh / glow",
 };
 
 const KEYS = { display: "ninja-display", price: "ninja-price", bg: "ninja-bg" };
-const DEFAULTS = { display: "sora", price: "inter", bg: "grid" } as const;
+const DEFAULTS = { display: "sora", price: "inter", bg: "dots" } as const;
 
 interface AppearanceValue {
   display: DisplayFont;
@@ -78,16 +81,19 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     setDisplayS(v);
     applyDisplay(v);
     try { localStorage.setItem(KEYS.display, v); } catch {}
+    void persistPrefs();
   }, []);
   const setPrice = useCallback((v: PriceFont) => {
     setPriceS(v);
     applyPrice(v);
     try { localStorage.setItem(KEYS.price, v); } catch {}
+    void persistPrefs();
   }, []);
   const setBg = useCallback((v: BgStyle) => {
     setBgS(v);
     applyBg(v);
     try { localStorage.setItem(KEYS.bg, v); } catch {}
+    void persistPrefs();
   }, []);
 
   return (
@@ -111,7 +117,8 @@ export const appearanceInitScript = `
     var PF={inter:'--font-inter',spacemono:'--font-spacemono',plexmono:'--font-plexmono',jetbrains:'--font-jetbrains'};
     var d=localStorage.getItem('${KEYS.display}'); d=DF[d]?d:'${DEFAULTS.display}';
     var p=localStorage.getItem('${KEYS.price}'); p=PF[p]?p:'${DEFAULTS.price}';
-    var b=localStorage.getItem('${KEYS.bg}'); b=(b==='grid'||b==='dots'||b==='mesh')?b:'${DEFAULTS.bg}';
+    var bgs=['dots','grid','crosses','diagonal','mesh'];
+    var b=localStorage.getItem('${KEYS.bg}'); b=bgs.indexOf(b)!==-1?b:'${DEFAULTS.bg}';
     var r=document.documentElement;
     r.style.setProperty('--font-display','var('+DF[d]+')');
     r.style.setProperty('--font-price','var('+PF[p]+')');

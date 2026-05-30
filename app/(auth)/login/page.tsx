@@ -35,7 +35,7 @@ export default function LoginPage() {
       setServerError("Email o contraseña incorrectos.");
       return;
     }
-    router.push("/dashboard");
+    router.push("/dashboard-team");
     router.refresh();
   }
 

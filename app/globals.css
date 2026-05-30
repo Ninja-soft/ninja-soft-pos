@@ -176,23 +176,69 @@
     linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
 }
 
-/* Fondo de las pantallas del producto. Color base por token (theme-aware) +
-   patrón seleccionable vía [data-bg] (grid / dots / mesh). Ver brand book §26. */
+/* Sombra suave theme-aware: sutil en oscuro, casi nula en claro (se apoya en
+   el borde, no en sombras paralelas). */
+:root,
+[data-theme="ninja-dark"] {
+  --shadow-soft: 0 6px 20px rgba(8, 5, 20, 0.18);
+}
+[data-theme="ninja-noir"] {
+  --shadow-soft: 0 6px 20px rgba(0, 0, 0, 0.24);
+}
+[data-theme="ninja-light"] {
+  --shadow-soft: 0 1px 2px rgba(30, 22, 60, 0.05);
+}
+[data-theme="ninja-sand"] {
+  --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.05);
+}
+
+/* Fondo de las pantallas. Color base por token (theme-aware) + patrón
+   seleccionable vía [data-bg]. Ver brand book §26. Default: dots. */
 .app-bg {
   background-color: var(--background);
   background-attachment: fixed;
 }
-/* Grid técnico (cruces): líneas finas que cruzan. */
+/* Dot grid (default). */
+[data-bg="dots"] .app-bg {
+  background-image: radial-gradient(var(--pattern) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+/* Grid de líneas finas. */
 [data-bg="grid"] .app-bg {
   background-image:
     linear-gradient(var(--pattern) 1px, transparent 1px),
     linear-gradient(90deg, var(--pattern) 1px, transparent 1px);
   background-size: 34px 34px;
 }
-/* Dot grid. */
-[data-bg="dots"] .app-bg {
-  background-image: radial-gradient(var(--pattern) 1.2px, transparent 1.2px);
-  background-size: 22px 22px;
+/* Cruces tech: "+" tenues neutros + algunas cruces flame (brand §26 Tech Grid). */
+[data-bg="crosses"] .app-bg {
+  background-image:
+    /* cruz neutra: barra vertical + horizontal */
+    linear-gradient(var(--pattern) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, var(--pattern) 1.5px, transparent 1.5px),
+    /* cruces flame espaciadas */
+    linear-gradient(rgba(255, 75, 34, 0.16) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(255, 75, 34, 0.16) 1.5px, transparent 1.5px);
+  background-size:
+    40px 40px,
+    40px 40px,
+    200px 200px,
+    200px 200px;
+  background-position:
+    center,
+    center,
+    20px 60px,
+    20px 60px;
+}
+/* Diagonales sutiles. */
+[data-bg="diagonal"] .app-bg {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--pattern) 0,
+    var(--pattern) 1px,
+    transparent 1px,
+    transparent 14px
+  );
 }
 /* Mesh / glow cálido. */
 [data-bg="mesh"] .app-bg {

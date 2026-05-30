@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  Building2,
   ChevronDown,
   KeyRound,
   LayoutDashboard,
@@ -38,7 +39,10 @@ type Item = { href: string; label: string; icon: React.ElementType };
 type Group = { label: string; items: Item[] };
 
 const NAV: { top: Item[]; groups: Group[] } = {
-  top: [{ href: "/dashboard-team", label: "Inicio", icon: LayoutDashboard }],
+  top: [
+    { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
+    { href: "/dashboard-team", label: "Panel del dueño", icon: Building2 },
+  ],
   groups: [
     {
       label: "Operación",
@@ -165,7 +169,7 @@ export function AppShell({
   const nav = (
     <nav className="flex h-full flex-col gap-1 p-3">
       <Link
-        href="/dashboard-team"
+        href="/dashboard"
         onClick={() => setDrawer(false)}
         className="mb-4 flex items-center gap-2.5 px-2 py-2"
       >

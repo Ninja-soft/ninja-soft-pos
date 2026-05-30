@@ -41,7 +41,7 @@ export default function OnboardingPage() {
       await createTenant(values);
       // Refrescar la sesión para que el JWT tome app_metadata.current_tenant_id.
       await createClient().auth.refreshSession();
-      router.push("/dashboard-team");
+      router.push("/dashboard");
       router.refresh();
     } catch (e) {
       setServerError(

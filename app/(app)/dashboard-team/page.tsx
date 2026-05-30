@@ -1,153 +1,180 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  BarChart3,
-  Building2,
-  Package,
-  Receipt,
-  ShoppingCart,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { Building2, CreditCard, Palette, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
+import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card";
-import { Display, Accent, Eyebrow } from "@/components/ui/Typography";
 
-export default async function DashboardPage() {
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  manager: "Encargado",
+  cashier: "Cajero",
+  viewer: "Solo lectura",
+};
+const STATUS_LABELS: Record<string, string> = {
+  trial: "Prueba",
+  active: "Activa",
+  past_due: "Pago pendiente",
+  suspended: "Suspendida",
+  cancelled: "Cancelada",
+};
+
+export default async function DashboardTeamPage() {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  // El middleware ya protege la ruta; doble check por seguridad.
   if (!user) redirect("/login");
 
-  type MembershipRow = {
+  type Membership = {
     role: string;
-    status: string;
-    tenants: { name: string; slug: string; status: string } | null;
+    tenants: {
+      name: string;
+      industry: string | null;
+      status: string;
+      trial_ends_at: string | null;
+    } | null;
   };
-
-  const { data } = await supabase
+  const { data: memData } = await supabase
     .from("tenant_users")
-    .select("role, status, tenants(name, slug, status)")
-    .eq("status", "active");
-  const memberships = (data ?? []) as unknown as MembershipRow[];
+    .select("role, tenants(name, industry, status, trial_ends_at)")
+    .eq("status", "active")
+    .limit(1);
+  const membership = (memData?.[0] as unknown as Membership) ?? null;
 
-  // Métrica: ventas de hoy (UTC).
-  let todayTotal = 0;
-  let todayCount = 0;
-  if (memberships.length > 0) {
-    const now = new Date();
-    const start = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  if (!membership?.tenants) {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-8">
+        <Eyebrow>Administración</Eyebrow>
+        <Display className="mt-3">Panel del dueño</Display>
+        <Card className="mt-6">
+          <CardContent className="p-6 text-muted-foreground">
+            Todavía no tenés un negocio.{" "}
+            <Link href="/onboarding" className="text-ninja-flameSoft hover:underline">
+              Creá uno
+            </Link>{" "}
+            para administrarlo.
+          </CardContent>
+        </Card>
+      </div>
     );
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
-    const { data: report } = await supabase.rpc("sales_report", {
-      p_from: start.toISOString(),
-      p_to: end.toISOString(),
-    });
-    const r = report as { total?: number; count?: number } | null;
-    todayTotal = r?.total ?? 0;
-    todayCount = r?.count ?? 0;
   }
 
+  type Sub = {
+    status: string;
+    current_period_end: string | null;
+    plans: { name: string; key: string } | null;
+  };
+  const { data: subData } = await supabase
+    .from("subscriptions")
+    .select("status, current_period_end, plans(name, key)")
+    .limit(1);
+  const sub = (subData?.[0] as unknown as Sub) ?? null;
+
+  // Miembros del equipo (RLS: el dueño ve los de su tenant).
+  const { data: members } = await supabase
+    .from("tenant_users")
+    .select("role, status, joined_at, user_id")
+    .order("joined_at", { ascending: true });
+
+  const tenant = membership.tenants;
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-        <Eyebrow>Panel</Eyebrow>
-        <Display className="mt-4 text-3xl md:text-5xl">
-          Hola
-          {user.user_metadata.full_name ? (
-            <Accent>, {user.user_metadata.full_name}</Accent>
-          ) : null}
-          .
-        </Display>
-        <p className="mt-3 text-muted-foreground">
-          Este es el shell base de NinjaSoft POS.
-        </p>
+    <div className="mx-auto max-w-5xl px-6 py-8">
+      <Eyebrow>Administración</Eyebrow>
+      <Display className="mt-3">{tenant.name}</Display>
+      <p className="mt-2 text-muted-foreground">
+        Acá administrás tu NinjaPos: equipo, suscripción y configuración.
+      </p>
 
-        {memberships.length > 0 && (
-          <Card className="mt-6 max-w-xs">
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">Ventas de hoy</p>
-              <p className="mt-2 font-price tabular-nums text-3xl font-black text-ninja-gold">
-                {new Intl.NumberFormat("es-AR", {
-                  style: "currency",
-                  currency: "ARS",
-                }).format(todayTotal)}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {todayCount} venta{todayCount === 1 ? "" : "s"}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {memberships.length > 0 && (
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/pos" className={buttonVariants()}>
-              <ShoppingCart size={16} /> Punto de venta
-            </Link>
-            <Link href="/productos" className={buttonVariants({ variant: "secondary" })}>
-              <Package size={16} /> Productos
-            </Link>
-            <Link href="/ventas" className={buttonVariants({ variant: "secondary" })}>
-              <Receipt size={16} /> Ventas
-            </Link>
-            <Link href="/caja" className={buttonVariants({ variant: "secondary" })}>
-              <Wallet size={16} /> Caja
-            </Link>
-            <Link href="/clientes" className={buttonVariants({ variant: "secondary" })}>
-              <Users size={16} /> Clientes
-            </Link>
-            <Link href="/reportes" className={buttonVariants({ variant: "secondary" })}>
-              <BarChart3 size={16} /> Reportes
-            </Link>
-          </div>
-        )}
-
-        <div className="mt-8">
-          {memberships.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {memberships.map((m, i) => (
-                <Card key={i}>
-                  <CardContent className="p-6">
-                    <Building2 className="text-ninja-flameSoft" size={20} />
-                    <h3 className="mt-3 font-display text-lg font-bold">
-                      {m.tenants?.name ?? "Negocio"}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Rol: {m.role} · {m.tenants?.status}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {/* Negocio */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Building2 size={16} /> <span className="text-sm">Negocio</span>
             </div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Todavía no tenés un negocio</CardTitle>
-                <CardDescription>
-                  Creá tu negocio para empezar a cargar productos, controlar
-                  stock y vender. Arrancás con 14 días de trial.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href="/onboarding" className={buttonVariants()}>
-                  Crear mi negocio
-                </Link>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            <p className="mt-2 text-lg font-semibold">{tenant.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {tenant.industry ?? "—"} · {STATUS_LABELS[tenant.status] ?? tenant.status}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Suscripción */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <CreditCard size={16} /> <span className="text-sm">Suscripción</span>
+            </div>
+            <p className="mt-2 text-lg font-semibold">
+              {sub?.plans?.name ?? "Sin plan"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : "—"}
+              {sub?.current_period_end
+                ? ` · vence ${new Date(sub.current_period_end).toLocaleDateString("es-AR")}`
+                : ""}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Equipo */}
+      <div className="mt-8 flex items-center justify-between">
+        <Heading as="h2" className="flex items-center gap-2">
+          <Users size={18} /> Equipo
+        </Heading>
+        <span
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+          aria-disabled
+          title="Próximamente"
+          style={{ opacity: 0.6, pointerEvents: "none" }}
+        >
+          Invitar usuario (pronto)
+        </span>
+      </div>
+      <Card className="mt-3">
+        <CardContent className="p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">Miembro</th>
+                <th className="px-4 py-3">Rol</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Desde</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {(members ?? []).map((m) => (
+                <tr key={m.user_id}>
+                  <td className="px-4 py-3">
+                    {m.user_id === user.id ? `${user.email} (vos)` : "Miembro"}
+                  </td>
+                  <td className="px-4 py-3">{ROLE_LABELS[m.role] ?? m.role}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{m.status}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {m.joined_at
+                      ? new Date(m.joined_at).toLocaleDateString("es-AR")
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Accesos */}
+      <div className="mt-8 flex flex-wrap gap-3">
+        <Link href="/configuracion" className={buttonVariants({ variant: "secondary" })}>
+          <Palette size={16} /> Apariencia
+        </Link>
+        <Link href="/dashboard" className={buttonVariants({ variant: "secondary" })}>
+          Ir al POS
+        </Link>
+      </div>
     </div>
   );
 }

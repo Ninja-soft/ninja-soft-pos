@@ -25,15 +25,18 @@ export default async function DashboardTeamPage() {
   type Membership = {
     role: string;
     tenants: {
+      id: string;
       name: string;
       industry: string | null;
       status: string;
       trial_ends_at: string | null;
     } | null;
   };
+  // Filtramos por user_id: un usuario interno vería todos los tenants por RLS.
   const { data: memData } = await supabase
     .from("tenant_users")
-    .select("role, tenants(name, industry, status, trial_ends_at)")
+    .select("role, tenants(id, name, industry, status, trial_ends_at)")
+    .eq("user_id", user.id)
     .eq("status", "active")
     .limit(1);
   const membership = (memData?.[0] as unknown as Membership) ?? null;
@@ -61,13 +64,14 @@ export default async function DashboardTeamPage() {
     current_period_end: string | null;
     plans: { name: string; key: string } | null;
   };
+  const tenant = membership.tenants;
+
   const { data: subData } = await supabase
     .from("subscriptions")
     .select("status, current_period_end, plans(name, key)")
+    .eq("tenant_id", tenant.id)
     .limit(1);
   const sub = (subData?.[0] as unknown as Sub) ?? null;
-
-  const tenant = membership.tenants;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -111,7 +115,7 @@ export default async function DashboardTeamPage() {
       </div>
 
       {/* Equipo (cliente: lista + invitar) */}
-      <TeamSection currentUserId={user.id} />
+      <TeamSection currentUserId={user.id} tenantId={tenant.id} />
 
       {/* Accesos */}
       <div className="mt-8 flex flex-wrap gap-3">

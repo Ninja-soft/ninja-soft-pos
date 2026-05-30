@@ -34,7 +34,13 @@ type Member = {
   joined_at: string | null;
 };
 
-export function TeamSection({ currentUserId }: { currentUserId: string }) {
+export function TeamSection({
+  currentUserId,
+  tenantId,
+}: {
+  currentUserId: string;
+  tenantId: string;
+}) {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -43,7 +49,7 @@ export function TeamSection({ currentUserId }: { currentUserId: string }) {
   const [role, setRole] = useState<AssignableRole>("cashier");
 
   const { data: members = [], isLoading } = useQuery({
-    queryKey: ["tenant-members"],
+    queryKey: ["tenant-members", tenantId],
     queryFn: async (): Promise<Member[]> => {
       const { data, error } = await supabase.rpc("tenant_members");
       if (error) {
@@ -51,6 +57,7 @@ export function TeamSection({ currentUserId }: { currentUserId: string }) {
         const { data: tu } = await supabase
           .from("tenant_users")
           .select("user_id, role, status, joined_at")
+          .eq("tenant_id", tenantId)
           .order("joined_at", { ascending: true });
         return (tu ?? []).map((m) => ({
           user_id: m.user_id,

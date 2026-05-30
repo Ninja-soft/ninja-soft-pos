@@ -52,3 +52,4 @@ supabase/.env
 .turbo/
 .cache/
 *.tsbuildinfo
+.vercel

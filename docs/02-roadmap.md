@@ -17,8 +17,10 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟡 Planificación |
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟡 Planificación |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 Planificación |
+| **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
+| **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
-> **Orden de ejecución acordado (2026-05-30):** **F6 → F7 → F8 → F3 (AFIP)**. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30) para el detalle de hitos y los cortes de control obligatorios al cierre de cada uno.
+> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F9 → F3 (AFIP)**. Las **mejoras transversales (TX)** — flatpickr y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
 ---
 
@@ -203,11 +205,12 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - Preview en vivo y selección por sucursal.
   - *Criterio:* un tenant configura su ticket y lo imprime/descarga sin intervención.
 
-- **H10 — Catálogo público + promociones + variantes.**
+- **H10 — Catálogo público + variantes.**
   - Catálogo web por tenant (productos, fotos, precios, stock visible opcional).
-  - Motor de **promociones declarativo** (2x1, % por volumen, vigencia por fecha/horario, combinables/exclusivas).
   - Variantes por rubro (talle/color para textil; SKU compuesto).
-  - *Criterio:* una promo "Miércoles 30% bebidas" se configura desde el panel y aplica sola.
+  - Listas de precios por canal (mostrador / catálogo / mayorista).
+  - *Criterio:* un tenant publica su catálogo con fotos y variantes sin tocar código.
+  - *Nota:* el motor de promociones se trata aparte y a fondo en **[F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro)**.
 
 ### F7 — Panel interno PRO + comunicaciones
 
@@ -262,6 +265,89 @@ Sin cambios de alcance: ver [F3](#f3--integración-afip-y-producción) y [`15-af
 
 ---
 
+### F9 — Motor de promociones PRO
+
+Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo, Shopify POS) en promociones. Motor **declarativo** (reglas sin código), evaluado en el carrito en tiempo real, auditable y combinable. Configurable 100% por el dueño desde el panel.
+
+- **H22 — Núcleo del motor de reglas.**
+  - Modelo declarativo: **condiciones** (productos, categorías, marcas, cantidad, monto, cliente/segmento, día/horario, canal, sucursal, medio de pago) → **acciones** (% descuento, monto fijo, precio fijo, producto bonificado, envío/recargo).
+  - Evaluación en el carrito en vivo, con prioridad, **combinables o exclusivas**, y tope de descuento.
+  - Vigencia por fecha/horario (usa el calendario unificado de TX).
+  - *Criterio:* "Miércoles 30% en bebidas de 18 a 21hs" se configura sin código y aplica solo en ese rango.
+
+- **H23 — Catálogo de tipos de promoción.**
+  - **2x1 / 3x2 / NxM**, **% por volumen** (escalonado), **combos/bundles** a precio especial, **descuento por segundo ítem**, **precio por pack**, **regalo por compra** (gift with purchase), **descuento por medio de pago**, **happy hour**, **liquidación por temporada**.
+  - **Cupones / códigos** (únicos o multiuso, con límite de usos, por cliente o global).
+  - *Criterio:* cada tipo tiene su preset configurable y un ejemplo de demo.
+
+- **H24 — Segmentación y fidelización.**
+  - Reglas por **segmento de cliente** (nuevos, frecuentes, cumpleaños, lista mayorista).
+  - Base para **fidelización**: puntos, niveles, recompensas canjeables (gancha con cuenta corriente de clientes).
+  - **Gift cards** y saldo a favor.
+  - *Criterio:* un cliente "VIP" recibe automáticamente un precio/beneficio distinto en el POS.
+
+- **H25 — Gobierno, simulación y reporte de promociones.**
+  - **Simulador**: previsualizar el efecto de una promo sobre ventas históricas antes de activarla.
+  - **Tope de impacto** y aprobación (rol manager/owner), todo auditado.
+  - **Reporte de performance** por promoción (uso, descuento otorgado, margen, incremental).
+  - Export en **XLSX** (ver TX) y al catálogo/canales.
+  - *Criterio:* el dueño ve cuánto descuento otorgó cada promo y su impacto en margen.
+
+---
+
+## TX — Mejoras transversales (UX y datos)
+
+Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de forma continua en todo el producto. No son una fase con fin: son estándar del proyecto.
+
+- **TX-1 — Calendario unificado con flatpickr.**
+  - Reemplazar todo selector de fecha por **flatpickr**, en **español (es)**, **un solo calendario**, con **selección de rango** (desde/hasta) donde aplique (reportes, promociones, suscripciones, filtros).
+  - Presets rápidos (hoy, ayer, últimos 7/30 días, este mes, mes pasado).
+  - Componente reutilizable `DateRangePicker` único; nada de inputs de fecha sueltos.
+  - *Criterio:* en reportes se elige "últimos 30 días" o un rango con un calendario en español; mismo componente en todos lados.
+
+- **TX-2 — Exportaciones en XLSX con diseño (reemplazo de CSV).**
+  - Eliminar CSV como formato de export. Usar **XLSX con diseño**: encabezados con color de marca, filas alternadas, **fila de totales**, formato de moneda/fecha, **filtros (autofilter)** y **paneles congelados** (freeze header).
+  - Aplicar a reportes de ventas, caja, stock, clientes, promociones; nombre de archivo con tenant + rango.
+  - Helper único `exportXlsx()` reutilizable; respeta el branding del tenant (TX se apoya en F6/H8).
+  - *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
+
+- **TX-3 — Pulido UX continuo.**
+  - Estados vacíos, skeletons, toasts consistentes, accesibilidad, atajos de teclado en POS.
+  - Se evalúa al cierre de cada hito como parte del gate manual.
+
+---
+
+## Benchmark de mercado (qué hace a un POS "pro")
+
+Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales: Fudo, Bistrosoft, Maxirest, Aligare). Mapeo de capacidades pro → dónde las cubre NinjaSoft. Sirve para validar que el roadmap no tenga huecos.
+
+| Capacidad pro del mercado | Dónde la cubre NinjaSoft |
+|---|---|
+| Venta rápida, búsqueda, carrito, descuentos, pago mixto | F1 (MVP) + F8/H14 |
+| Promociones avanzadas (NxM, combos, cupones, fidelización, gift cards) | **F9 (nuevo)** |
+| Pasarelas de pago presenciales y QR (MP Point, MODO, Payway, Getnet, Fiserv, etc.) | F8/H15+ |
+| Facturación electrónica / fiscal (AFIP, CAE) | F3 |
+| Fotos de producto, branding, tickets a medida, catálogo público | F6 |
+| Multi-sucursal, multi-caja, transferencias de stock | F4 |
+| Inventario avanzado: lotes, vencimientos, series, conteos, alertas | **Backlog → promover a fase de Inventario PRO** |
+| Compras y proveedores (órdenes de compra, recepción, costos) | Backlog |
+| Cuenta corriente de clientes y proveedores (fiado) | Backlog (gancha con F9/H24) |
+| Restaurante: mesas, comandas, KDS, división de cuenta, modificadores | F5 (perfil restaurante) |
+| Variantes (talle/color), SKU compuesto (textil) | F6/H10 + F5 (perfil textil) |
+| Devoluciones, cambios, notas de crédito | F1 (anulación) + F3 (NC) — *falta flujo de cambio/devolución → backlog* |
+| Reportes/BI y exportaciones con diseño | F1 (reportes) + **TX-2 (XLSX)** + F9/H25 |
+| Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 |
+| Pedidos online / delivery (PedidosYa, Rappi, Tienda Nube, Mercado Libre) | F5 (marketplace) |
+| Modo offline con sincronización | Backlog |
+| App móvil para gerentes | Backlog |
+| Roles y permisos granulares; staff multinivel | F1 (roles) + **F7/H11 (staff NinjaSoft)** |
+| Multimoneda / listas de precios por canal | F6/H10 (listas) + Backlog (multimoneda) |
+| Reservas / turnos | Backlog |
+
+> **Conclusión del benchmark:** los huecos relevantes vs. POS líderes son **inventario avanzado**, **compras/proveedores**, **cuenta corriente (fiado)** y **devoluciones/cambios**. Se agregan al backlog priorizado abajo; inventario y compras son candidatos a fase propia tras F9.
+
+---
+
 ## Cortes de control y testing estricto
 
 **Regla:** ningún hito se considera cerrado sin pasar su corte de control. No se avanza al siguiente hito con el anterior "al 80%".
@@ -291,15 +377,20 @@ Sin cambios de alcance: ver [F3](#f3--integración-afip-y-producción) y [`15-af
 
 ## Backlog para fases siguientes (no priorizado)
 
+- **Inventario PRO** (candidato a fase propia tras F9): lotes, vencimientos, números de serie, conteos/ajustes, alertas de stock mínimo, multi-depósito.
+- **Compras y proveedores:** órdenes de compra, recepción, costos, actualización de precios.
+- **Devoluciones y cambios:** flujo dedicado (cambio de talle/producto, nota de crédito, reintegro por medio de pago).
+- **Cuenta corriente de clientes** (fiado) — gancha con F9/H24 (fidelización) y segmentos.
+- **Cuenta corriente de proveedores.**
+- **Reservas / turnos** (servicios, peluquerías, gastronomía).
+- **Multimoneda** y tipo de cambio.
 - App móvil nativa (React Native) para gerentes en movimiento.
 - Modo offline con sincronización al recuperar conexión.
-- Sistema de fidelización (puntos, niveles).
-- Compras y proveedores.
-- Cuenta corriente de clientes.
-- Cuenta corriente de proveedores.
-- Producción y recetas (para restaurantes y manufactura).
+- Producción y recetas / escandallo (restaurantes y manufactura).
 - E-commerce integrado (alternativa a Tienda Nube).
 - Multi-país (Uruguay, Chile, México) — requiere abstraer facturación electrónica.
+
+> *Nota:* **Fidelización (puntos/niveles), gift cards y cupones** se movieron del backlog a **F9 — Motor de promociones PRO** (H23–H24).
 
 ---
 

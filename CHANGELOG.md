@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 5 — Panel interno NinjaSoft:** rutas `/internal/*` protegidas por `is_internal` (app_metadata). Listado de tenants con plan/estado, detalle por tenant con cambio de plan, cambio de estado de suscripción y toggle de feature flags. RPCs `internal_set_plan`/`internal_set_subscription_status`/`internal_set_flag` (SECURITY DEFINER con guard `is_internal()`, auditadas, EXECUTE solo authenticated). Bootstrap: marcar al staff con `app_metadata.is_internal=true`.
 - **Hito 4 cerrado — Reportes:** RPC `sales_report(from,to)` (agregados por día, medio de pago, categoría y cajero; `SECURITY DEFINER` con guard de tenant, EXECUTE revocado a anon). Página `/reportes` con rango de fechas, KPIs (total/cantidad), 4 tablas y export CSV. Métrica "ventas de hoy" en el dashboard. Con esto Hito 4 (clientes + reportes) queda completo.
 - **Hito 4 — Clientes:** tabla `customers` (RLS, defaults, FK `sales.customer_id`), módulo customers con validación de CUIT/CUIL (dígito verificador) y DNI, CRUD en `/clientes` (alta/edición/baja lógica, búsqueda por nombre/documento, condición IVA). Reportes del Hito 4 pendientes (próxima vuelta).
 - **Hito 3 — Caja y turnos:** página `/caja` con resumen del turno (apertura, ventas netas, ingresos/egresos, efectivo esperado), ventas por medio de pago, ingresos/egresos manuales con motivo, listado de movimientos y reporte Z exportable (CSV + impresión). Apertura/cierre con arqueo ya venían del POS. Cierra Hito 3.

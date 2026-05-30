@@ -876,6 +876,18 @@ export type Database = {
         Returns: Json
       }
       current_tenant_id: { Args: never; Returns: string }
+      internal_set_flag: {
+        Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_set_plan: {
+        Args: { p_plan_key: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_set_subscription_status: {
+        Args: { p_status: string; p_tenant_id: string }
+        Returns: undefined
+      }
       is_internal: { Args: never; Returns: boolean }
       open_cash_shift: {
         Args: { p_opening_amount: number; p_register_id: string }

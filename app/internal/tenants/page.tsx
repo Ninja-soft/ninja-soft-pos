@@ -18,7 +18,11 @@ export default function InternalTenantsPage() {
   return (
     <>
       <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Tenants</Display>
+      <Display className="mt-3 text-3xl md:text-4xl">Negocios</Display>
+      <p className="mt-2 text-muted-foreground">
+        Todos los clientes del SaaS. Entrá a uno para gestionar su plan y
+        suscripción.
+      </p>
 
       <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
         <table className="w-full text-sm">

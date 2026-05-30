@@ -54,9 +54,9 @@ export default function InternalTenantDetail({
         href="/internal/tenants"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft size={15} /> Tenants
+        <ArrowLeft size={15} /> Negocios
       </Link>
-      <Eyebrow>Tenant</Eyebrow>
+      <Eyebrow>Negocio</Eyebrow>
       <Display className="mt-3 text-3xl md:text-4xl">
         {tenant?.name ?? "…"}
       </Display>

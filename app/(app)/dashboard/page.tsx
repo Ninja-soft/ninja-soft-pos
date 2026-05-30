@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2 } from "lucide-react";
+import { Building2, Package } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { buttonVariants } from "@/components/ui/Button";
@@ -48,8 +48,16 @@ export default async function DashboardPage() {
           .
         </Display>
         <p className="mt-3 text-ninja-lavender">
-          Este es el shell base de NinjaSoft POS (Hito 0).
+          Este es el shell base de NinjaSoft POS.
         </p>
+
+        {memberships.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/productos" className={buttonVariants({ variant: "secondary" })}>
+              <Package size={16} /> Productos
+            </Link>
+          </div>
+        )}
 
         <div className="mt-8">
           {memberships.length > 0 ? (

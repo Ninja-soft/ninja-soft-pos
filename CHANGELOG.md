@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 1 — Catálogo (UI + lógica):** módulo `products` (schemas Zod, api, hooks TanStack Query), página `/productos` con lista, búsqueda (nombre/SKU/barcode), alta/edición (modal), baja lógica, categorías 1 nivel con alta inline, y ajuste de stock con motivo vía RPC atómica `adjust_product_stock` (transacción única, RLS-safe). Defaults `tenant_id = current_tenant_id()` / `created_by = auth.uid()` en `categories`/`products`. Quick-link a Productos desde el dashboard.
+- Upgrade `@supabase/supabase-js` → 2.106 y `@supabase/ssr` → 0.10 (alinea tipos generados PostgREST 14.5; los writes tipaban como `never` con la versión previa).
 - **Onboarding de tenant (cierre de Hito 0):** Edge Function `create_tenant` (crea tenant trial 14d + subscription plan Start + `tenant_users` owner, setea `app_metadata.current_tenant_id`, audita) y UI `/onboarding` (form negocio + rubro, refresca sesión). Empty-state del dashboard ahora linkea al alta. Desbloquea la RLS por tenant para todo el producto.
 - **Hito 1 — Catálogo (capa DB):** tablas `categories`, `products`, `stock_movements` con RLS de aislamiento por tenant, índices (SKU/barcode únicos parciales, nombre, categoría), `updated_at` automático y triggers de auditoría en `products` y `stock_movements`. Tipos regenerados. Aplicado a dev/staging; advisors sin lints de tablas (queda pendiente activar leaked-password-protection en Auth).
 

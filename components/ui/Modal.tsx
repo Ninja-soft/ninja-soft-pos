@@ -28,25 +28,27 @@ export function Modal({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[3px] data-[state=open]:animate-overlay-in data-[state=closed]:animate-overlay-out" />
         <Dialog.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-popover p-6 text-popover-foreground shadow-ninjaSoft outline-none data-[state=open]:animate-modal-in data-[state=closed]:animate-modal-out",
+            "fixed left-1/2 top-1/2 z-50 flex max-h-[92dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-ninjaSoft outline-none data-[state=open]:animate-modal-in data-[state=closed]:animate-modal-out",
             className,
           )}
         >
-          {title && (
-            <Dialog.Title className="text-lg font-bold tracking-tight">
-              {title}
-            </Dialog.Title>
+          {(title || description) && (
+            <div className="shrink-0 border-b border-border px-6 py-4 pr-12">
+              {title && (
+                <Dialog.Title className="text-lg font-bold tracking-tight">
+                  {title}
+                </Dialog.Title>
+              )}
+              {description && (
+                <Dialog.Description className="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </Dialog.Description>
+              )}
+            </div>
           )}
-          {description && (
-            <Dialog.Description className="mt-1 text-sm text-muted-foreground">
-              {description}
-            </Dialog.Description>
-          )}
-          <div className={cn(title || description ? "mt-4" : undefined)}>
-            {children}
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
           <Dialog.Close
-            className="absolute right-4 top-4 rounded-ninjaSm p-1 text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute right-3 top-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Cerrar"
           >
             <X size={18} />

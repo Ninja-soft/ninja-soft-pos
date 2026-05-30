@@ -10,26 +10,35 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   Package,
   Receipt,
   Settings,
   ShoppingCart,
+  Sun,
   Users,
   Wallet,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
+import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype } from "@/components/brand/Logo";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
+import {
+  Dropdown,
+  DropdownContent,
+  DropdownItem,
+  DropdownLabel,
+  DropdownSeparator,
+  DropdownTrigger,
+} from "@/components/ui/Dropdown";
 
 type Item = { href: string; label: string; icon: React.ElementType };
 type Group = { label: string; items: Item[] };
 
-// Estructura escalable: agregar grupos/items acá.
 const NAV: { top: Item[]; groups: Group[] } = {
-  top: [{ href: "/dashboard", label: "Inicio", icon: LayoutDashboard }],
+  top: [{ href: "/dashboard-team", label: "Inicio", icon: LayoutDashboard }],
   groups: [
     {
       label: "Operación",
@@ -81,6 +90,55 @@ function NavLink({
   );
 }
 
+function UserMenu({
+  email,
+  onChangePassword,
+  onSignOut,
+}: {
+  email: string;
+  onChangePassword: () => void;
+  onSignOut: () => void;
+}) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "ninja-dark" || theme === "ninja-noir";
+  const initial = (email[0] ?? "?").toUpperCase();
+
+  return (
+    <Dropdown>
+      <DropdownTrigger asChild>
+        <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ninja-gradient text-sm font-bold text-ninja-voidViolet">
+            {initial}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+            {email}
+          </span>
+          <ChevronDown size={15} className="shrink-0 text-muted-foreground" />
+        </button>
+      </DropdownTrigger>
+      <DropdownContent align="start" className="w-[232px]">
+        <DropdownLabel>Cuenta</DropdownLabel>
+        <DropdownItem
+          onSelect={(e) => {
+            e.preventDefault();
+            toggleTheme();
+          }}
+        >
+          {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          {isDark ? "Modo claro" : "Modo oscuro"}
+        </DropdownItem>
+        <DropdownItem onSelect={onChangePassword}>
+          <KeyRound size={15} /> Cambiar contraseña
+        </DropdownItem>
+        <DropdownSeparator />
+        <DropdownItem onSelect={onSignOut} className="text-destructive">
+          <LogOut size={15} /> Cerrar sesión
+        </DropdownItem>
+      </DropdownContent>
+    </Dropdown>
+  );
+}
+
 export function AppShell({
   email,
   children,
@@ -107,14 +165,11 @@ export function AppShell({
   const nav = (
     <nav className="flex h-full flex-col gap-1 p-3">
       <Link
-        href="/dashboard"
+        href="/dashboard-team"
         onClick={() => setDrawer(false)}
-        className="mb-4 flex items-center gap-2 px-2 py-1"
+        className="mb-4 flex items-center gap-2 px-2 py-2"
       >
-        <Isotype className="h-8 w-auto" />
-        <span className="font-sans text-lg font-extrabold tracking-tight">
-          Ninja<span className="text-ninja-flameSoft">Pos</span>
-        </span>
+        <Isotype className="h-9 w-auto" priority />
       </Link>
 
       {NAV.top.map((it) => (
@@ -132,7 +187,7 @@ export function AppShell({
           <div key={g.label} className="mt-3">
             <button
               onClick={() => setOpen((s) => ({ ...s, [g.label]: !isOpen }))}
-              className="flex w-full items-center justify-between px-3 py-1 font-display text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground"
+              className="flex w-full items-center justify-between rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition hover:text-foreground"
             >
               {g.label}
               <ChevronDown
@@ -156,35 +211,22 @@ export function AppShell({
         );
       })}
 
-      <div className="mt-auto space-y-2 border-t border-border pt-3">
-        <div className="truncate px-3 text-xs text-muted-foreground">{email}</div>
-        <div className="flex items-center gap-2 px-1">
-          <ThemeToggle />
-        </div>
-        <button
-          onClick={() => setPwOpen(true)}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        >
-          <KeyRound size={16} /> Cambiar contraseña
-        </button>
-        <button
-          onClick={signOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-destructive transition hover:bg-destructive/10"
-        >
-          <LogOut size={16} /> Cerrar sesión
-        </button>
+      <div className="mt-auto pt-3">
+        <UserMenu
+          email={email}
+          onChangePassword={() => setPwOpen(true)}
+          onSignOut={signOut}
+        />
       </div>
     </nav>
   );
 
   return (
     <div className="flex min-h-dvh">
-      {/* Sidebar fijo (desktop) */}
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
         {nav}
       </aside>
 
-      {/* Drawer (mobile) */}
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
@@ -205,7 +247,6 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Topbar mobile */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />

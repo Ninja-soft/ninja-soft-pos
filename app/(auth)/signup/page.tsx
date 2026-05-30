@@ -41,7 +41,7 @@ export default function SignupPage() {
     }
     // Si la confirmación por email está activa, no hay sesión todavía.
     if (data.session) {
-      router.push("/dashboard");
+      router.push("/dashboard-team");
       router.refresh();
     } else {
       setDone(true);

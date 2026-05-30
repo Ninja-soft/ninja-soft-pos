@@ -162,29 +162,27 @@ export default function PosPage() {
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Búsqueda + productos */}
         <section>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search
-                size={16}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar producto por nombre, SKU o código…"
-                autoFocus
-                className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-              />
-            </div>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="h-12 w-12"
+          <div className="relative">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar producto por nombre, SKU o código…"
+              autoFocus
+              className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-12 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+            />
+            <button
+              type="button"
               onClick={() => setScanOpen(true)}
               aria-label="Escanear código"
+              title="Escanear código"
+              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
             >
               <ScanBarcode size={18} />
-            </Button>
+            </button>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products?.map((p) => (

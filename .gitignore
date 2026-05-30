@@ -4,6 +4,7 @@ node_modules/
 
 # Build outputs
 .next/
+next-env.d.ts
 out/
 build/
 dist/
@@ -42,6 +43,7 @@ supabase/.env
 # Claude Code (local settings con secrets)
 .claude/settings.local.json
 .claude/cache/
+.claude/*.lock
 
 # Worktrees (si quedaran adyacentes al repo)
 ../ninjasoft-pos-*/

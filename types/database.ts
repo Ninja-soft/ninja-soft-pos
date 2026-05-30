@@ -1,7 +1,7 @@
 // =============================================================================
 // GENERADO AUTOMÁTICAMENTE — no editar a mano.
 // Origen: Supabase project hrkditzrsavehnhngakb (dev/staging).
-// Regenerar con: pnpm db:types  (supabase gen types typescript)
+// Regenerar con: pnpm db:types
 // =============================================================================
 
 export type Json =
@@ -13,8 +13,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -65,6 +63,219 @@ export type Database = {
         }
         Relationships: []
       }
+      cash_movements: {
+        Row: {
+          amount: number
+          cash_shift_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          payment_method: string | null
+          reason: string | null
+          reference_id: string | null
+          tenant_id: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          cash_shift_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_method?: string | null
+          reason?: string | null
+          reference_id?: string | null
+          tenant_id?: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          cash_shift_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_method?: string | null
+          reason?: string | null
+          reference_id?: string | null
+          tenant_id?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      cash_registers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          store_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          store_id: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          store_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cash_shifts: {
+        Row: {
+          cash_register_id: string
+          closed_at: string | null
+          closed_by: string | null
+          closing_amount: number | null
+          created_at: string
+          difference: number | null
+          expected_amount: number | null
+          id: string
+          notes: string | null
+          opened_at: string
+          opened_by: string
+          opening_amount: number
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          cash_register_id: string
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_amount?: number | null
+          created_at?: string
+          difference?: number | null
+          expected_amount?: number | null
+          id?: string
+          notes?: string | null
+          opened_at?: string
+          opened_by?: string
+          opening_amount: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          cash_register_id?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_amount?: number | null
+          created_at?: string
+          difference?: number | null
+          expected_amount?: number | null
+          id?: string
+          notes?: string | null
+          opened_at?: string
+          opened_by?: string
+          opening_amount?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          parent_id: string | null
+          sort_order: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          parent_id?: string | null
+          sort_order?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          parent_id?: string | null
+          sort_order?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          deleted_at: string | null
+          document_number: string | null
+          document_type: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          iva_condition: string | null
+          metadata: Json
+          name: string
+          notes: string | null
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          document_number?: string | null
+          document_type?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          iva_condition?: string | null
+          metadata?: Json
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          document_number?: string | null
+          document_type?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          iva_condition?: string | null
+          metadata?: Json
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           created_at: string
@@ -86,6 +297,39 @@ export type Database = {
           description?: string | null
           id?: string
           key?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          metadata: Json
+          method: string
+          reference: string | null
+          sale_id: string
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          method: string
+          reference?: string | null
+          sale_id: string
+          tenant_id?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          metadata?: Json
+          method?: string
+          reference?: string | null
+          sale_id?: string
+          tenant_id?: string
         }
         Relationships: []
       }
@@ -122,6 +366,289 @@ export type Database = {
           monthly_price_ars?: number
           name?: string
           yearly_price_ars?: number | null
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          category_id: string | null
+          cost: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          metadata: Json
+          name: string
+          price: number
+          sku: string | null
+          stock: number
+          stock_min: number | null
+          tenant_id: string
+          unit: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json
+          name: string
+          price: number
+          sku?: string | null
+          stock?: number
+          stock_min?: number | null
+          tenant_id?: string
+          unit?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          category_id?: string | null
+          cost?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          metadata?: Json
+          name?: string
+          price?: number
+          sku?: string | null
+          stock?: number
+          stock_min?: number | null
+          tenant_id?: string
+          unit?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_items: {
+        Row: {
+          created_at: string
+          discount: number
+          id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          sale_id: string
+          sku: string | null
+          subtotal: number
+          tenant_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          discount?: number
+          id?: string
+          product_id: string
+          product_name: string
+          quantity: number
+          sale_id: string
+          sku?: string | null
+          subtotal: number
+          tenant_id?: string
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          discount?: number
+          id?: string
+          product_id?: string
+          product_name?: string
+          quantity?: number
+          sale_id?: string
+          sku?: string | null
+          subtotal?: number
+          tenant_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_items_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales: {
+        Row: {
+          cash_shift_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          discount_total: number
+          id: string
+          notes: string | null
+          number: number
+          status: string
+          store_id: string
+          subtotal: number
+          tax_total: number
+          tenant_id: string
+          total: number
+          updated_at: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          cash_shift_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          discount_total?: number
+          id?: string
+          notes?: string | null
+          number: number
+          status?: string
+          store_id: string
+          subtotal: number
+          tax_total?: number
+          tenant_id?: string
+          total: number
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          cash_shift_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          discount_total?: number
+          id?: string
+          notes?: string | null
+          number?: number
+          status?: string
+          store_id?: string
+          subtotal?: number
+          tax_total?: number
+          tenant_id?: string
+          total?: number
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: []
+      }
+      stock_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          delta: number
+          id: string
+          notes: string | null
+          product_id: string
+          reason: string
+          reference_id: string | null
+          store_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          delta: number
+          id?: string
+          notes?: string | null
+          product_id: string
+          reason: string
+          reference_id?: string | null
+          store_id?: string | null
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          delta?: number
+          id?: string
+          notes?: string | null
+          product_id?: string
+          reason?: string
+          reference_id?: string | null
+          store_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          address: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          phone: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          phone?: string | null
+          tenant_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -162,22 +689,7 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "subscriptions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "plans"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "subscriptions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: true
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       system_settings: {
         Row: {
@@ -222,29 +734,7 @@ export type Database = {
           id?: string
           tenant_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_feature_flags_configured_by_fkey"
-            columns: ["configured_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_feature_flags_feature_flag_id_fkey"
-            columns: ["feature_flag_id"]
-            isOneToOne: false
-            referencedRelation: "feature_flags"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_feature_flags_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       tenant_users: {
         Row: {
@@ -280,22 +770,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "tenant_users_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tenant_users_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       tenants: {
         Row: {
@@ -377,8 +852,55 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_product_stock: {
+        Args: {
+          p_delta: number
+          p_notes?: string
+          p_product_id: string
+          p_reason: string
+        }
+        Returns: number
+      }
+      close_cash_shift: {
+        Args: { p_closing_amount: number; p_notes?: string; p_shift_id: string }
+        Returns: number
+      }
+      create_sale: {
+        Args: {
+          p_customer_id?: string
+          p_discount_total?: number
+          p_items: Json
+          p_notes?: string
+          p_payments: Json
+        }
+        Returns: Json
+      }
       current_tenant_id: { Args: never; Returns: string }
+      internal_set_flag: {
+        Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_set_plan: {
+        Args: { p_plan_key: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_set_subscription_status: {
+        Args: { p_status: string; p_tenant_id: string }
+        Returns: undefined
+      }
       is_internal: { Args: never; Returns: boolean }
+      open_cash_shift: {
+        Args: { p_opening_amount: number; p_register_id: string }
+        Returns: string
+      }
+      sales_report: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      void_sale: {
+        Args: { p_reason: string; p_sale_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Hito 2 cerrado — ticket no fiscal + anulación:** página `/ventas` (lista de ventas, estado, ticket imprimible vía `@media print`, anulación con motivo). RPC atómica `void_sale` (revierte stock e inserta contramovimiento de caja). Ticket automático tras cobrar en el POS. Quick-link Ventas en dashboard. Con esto Hito 2 (POS) queda completo.
 - **Hito 2 — POS operativo (núcleo):** página `/pos` con búsqueda de productos, carrito (Zustand) con cantidades y descuentos, descuento global, total y cobro. RPCs atómicas `create_sale` (venta + items + descuento de stock + movimiento de caja + número correlativo, requiere turno abierto), `open_cash_shift` y `close_cash_shift` (arqueo con diferencia). Apertura/cierre de caja desde el POS, medios de pago (efectivo con vuelto, débito/crédito/transferencia/QR). Bloqueo de venta sin caja abierta. Quick-links POS/Productos en dashboard.
 - **Backbone operativo (capa DB Hito 2/3):** tablas `stores`, `cash_registers`, `cash_shifts`, `cash_movements`, `sales`, `sale_items`, `payments` con RLS por tenant, defaults `tenant_id`/`created_by`, `cash_shifts.difference` calculada, auditoría en sales/payments/cash_shifts/cash_movements y FK `stock_movements.store_id`. `create_tenant` ahora siembra sucursal + caja por defecto. (Tipos TS de estas tablas se regeneran al implementar el POS.)
 - **Hito 1 cerrado:** historial de movimientos de stock por producto (modal en `/productos`).

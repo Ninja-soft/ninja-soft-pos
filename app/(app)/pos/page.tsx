@@ -32,6 +32,7 @@ import {
   CloseShiftModal,
   PaymentModal,
 } from "@/components/pos/PosModals";
+import { TicketModal } from "@/components/sales/TicketModal";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function PosPage() {
@@ -40,6 +41,8 @@ export default function PosPage() {
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
   const [paymentModal, setPaymentModal] = useState(false);
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [ticketOpen, setTicketOpen] = useState(false);
 
   const { data: products } = useProducts(search);
   const { data: shift } = useOpenShift();
@@ -114,6 +117,8 @@ export default function PosPage() {
         description: `Total ${formatCurrency(res.total)}`,
         variant: "success",
       });
+      setTicketId(res.sale_id);
+      setTicketOpen(true);
     } catch (e) {
       toast({
         title: "No se pudo cobrar",
@@ -300,6 +305,7 @@ export default function PosPage() {
         onConfirm={handleSale}
         loading={sale.isPending}
       />
+      <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
     </div>
   );
 }

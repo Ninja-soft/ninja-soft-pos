@@ -151,6 +151,29 @@
     linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
 }
 
+/* Ticket no fiscal: al imprimir, solo se ve el ticket. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .ticket-print,
+  .ticket-print * {
+    visibility: visible;
+  }
+  .ticket-print {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 16px;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
 /* Grid técnico sutil (UI-NinjaSof.md §26). */
 .ninja-grid {
   background-image: radial-gradient(

@@ -827,6 +827,10 @@ export type Database = {
         Args: { p_opening_amount: number; p_register_id: string }
         Returns: string
       }
+      void_sale: {
+        Args: { p_reason: string; p_sale_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

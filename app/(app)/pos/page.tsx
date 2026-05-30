@@ -197,7 +197,7 @@ export default function PosPage() {
                 <div className="mt-1 text-xs text-muted-foreground">
                   {formatQty(p.stock)} {p.unit}
                 </div>
-                <div className="mt-2 font-semibold text-ninja-gold">
+                <div className="mt-2 font-semibold text-foreground">
                   {formatCurrency(p.price)}
                 </div>
               </button>
@@ -275,7 +275,7 @@ export default function PosPage() {
             </div>
             <div className="flex items-center justify-between pt-1">
               <span className="font-display text-lg font-bold">Total</span>
-              <span className="font-price tabular-nums text-3xl font-black text-ninja-gold">
+              <span className="font-price tabular-nums text-3xl font-black text-foreground">
                 {formatCurrency(total)}
               </span>
             </div>

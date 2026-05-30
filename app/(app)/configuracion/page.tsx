@@ -176,7 +176,7 @@ export default function ConfiguracionPage() {
                   ),
                 }))}
               />
-              <p className="pt-1 font-price text-2xl font-bold tabular-nums text-ninja-gold">
+              <p className="pt-1 font-price text-2xl font-bold tabular-nums text-foreground">
                 {formatCurrency(1234567.89)}
               </p>
             </Field>

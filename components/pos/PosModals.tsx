@@ -149,7 +149,7 @@ export function PaymentModal({
             />
             <p className="text-sm text-ninja-lavender">
               Vuelto:{" "}
-              <span className="font-semibold text-ninja-gold">
+              <span className="font-semibold text-foreground">
                 {formatCurrency(change)}
               </span>
             </p>

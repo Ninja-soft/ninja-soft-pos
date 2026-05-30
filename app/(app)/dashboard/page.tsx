@@ -79,7 +79,7 @@ export default async function DashboardPage() {
           <Card className="mt-6 max-w-xs">
             <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">Ventas de hoy</p>
-              <p className="mt-2 font-price tabular-nums text-3xl font-black text-ninja-gold">
+              <p className="mt-2 font-price tabular-nums text-3xl font-black text-foreground">
                 {new Intl.NumberFormat("es-AR", {
                   style: "currency",
                   currency: "ARS",

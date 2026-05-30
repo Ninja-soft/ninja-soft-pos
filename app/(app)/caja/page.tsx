@@ -21,6 +21,8 @@ import { useOpenShift } from "@/modules/pos/hooks";
 import { useShiftMovements, useAddMovement } from "@/modules/cash/hooks";
 import { summarize } from "@/modules/cash/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { exportXlsx } from "@/lib/utils/xlsx";
+import { format } from "date-fns";
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -72,30 +74,42 @@ export default function CajaPage() {
     }
   }
 
-  function exportCsv() {
+  async function exportZ() {
     if (!shift || !summary) return;
-    const rows = [
-      ["Reporte Z — turno", shift.id],
-      ["Apertura", String(summary.opening)],
-      ["Ventas netas", String(summary.salesTotal)],
-      ["Ingresos manuales", String(summary.income)],
-      ["Egresos manuales", String(summary.expense)],
-      ["Efectivo esperado", String(summary.cashExpected)],
-      [],
-      ["Medio de pago", "Monto"],
-      ...Object.entries(summary.byMethod).map(([k, v]) => [
-        METHOD_LABELS[k] ?? k,
-        String(v),
-      ]),
-    ];
-    const csv = rows.map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `reporte-z-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    await exportXlsx(`reporte-z-${format(new Date(), "yyyy-MM-dd")}`, [
+      {
+        name: "Reporte Z",
+        title: `Reporte Z · turno ${shift.id.slice(0, 8)}`,
+        columns: [
+          { header: "Concepto", key: "k", width: 22 },
+          { header: "Monto", key: "v", type: "money", width: 18 },
+        ],
+        rows: [
+          { k: "Apertura", v: summary.opening },
+          { k: "Ventas netas", v: summary.salesTotal },
+          { k: "Ingresos manuales", v: summary.income },
+          { k: "Egresos manuales", v: summary.expense },
+          { k: "Efectivo esperado", v: summary.cashExpected },
+        ],
+      },
+      {
+        name: "Por medio de pago",
+        columns: [
+          { header: "Medio", key: "method", width: 18 },
+          { header: "Monto", key: "amount", type: "money" },
+        ],
+        rows: Object.entries(summary.byMethod).map(([k, v]) => ({
+          method: METHOD_LABELS[k] ?? k,
+          amount: v,
+        })),
+        totals: {
+          amount: Object.values(summary.byMethod).reduce(
+            (a, v) => a + (v as number),
+            0,
+          ),
+        },
+      },
+    ]);
   }
 
   return (
@@ -123,8 +137,8 @@ export default function CajaPage() {
               <Button variant="secondary" onClick={() => setModalType("expense")}>
                 <ArrowUpCircle size={16} /> Egreso
               </Button>
-              <Button variant="secondary" onClick={exportCsv}>
-                <Download size={16} /> Exportar Z (CSV)
+              <Button variant="secondary" onClick={exportZ}>
+                <Download size={16} /> Exportar Z (XLSX)
               </Button>
               <Button variant="secondary" onClick={() => window.print()}>
                 <Printer size={16} /> Imprimir Z

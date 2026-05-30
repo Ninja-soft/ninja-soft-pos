@@ -280,3 +280,46 @@
   );
   background-size: 32px 32px;
 }
+
+/* Calendario (react-day-picker) con la paleta NinjaPos. Ver DateRangePicker. */
+.rdp-ninja {
+  --rdp-accent-color: #ec3f17;
+  --rdp-accent-background-color: rgba(236, 63, 23, 0.15);
+  --rdp-day-width: 2.25rem;
+  --rdp-day-height: 2.25rem;
+  --rdp-day_button-width: 2.25rem;
+  --rdp-day_button-height: 2.25rem;
+  --rdp-range_start-color: #fff;
+  --rdp-range_end-color: #fff;
+  --rdp-range_start-background: #ec3f17;
+  --rdp-range_end-background: #ec3f17;
+  margin: 0;
+  font-size: 0.875rem;
+}
+.rdp-ninja .rdp-day_button {
+  border-radius: 0.5rem;
+}
+.rdp-ninja .rdp-day_button:hover {
+  background-color: rgba(127, 127, 127, 0.15);
+}
+.rdp-ninja .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: #ec3f17;
+  font-weight: 700;
+}
+/* Inicio y fin del rango: fondo flama, texto blanco legible. */
+.rdp-ninja .rdp-range_start .rdp-day_button,
+.rdp-ninja .rdp-range_end .rdp-day_button,
+.rdp-ninja .rdp-selected:not(.rdp-range_middle) .rdp-day_button {
+  background-color: #ec3f17;
+  color: #fff;
+  border-color: #ec3f17;
+}
+/* Días intermedios: fondo tenue, texto del tema (legible en dark y light). */
+.rdp-ninja .rdp-range_middle .rdp-day_button {
+  background-color: rgba(236, 63, 23, 0.15);
+  color: inherit;
+  border: none;
+}
+.rdp-ninja .rdp-chevron {
+  fill: currentColor;
+}

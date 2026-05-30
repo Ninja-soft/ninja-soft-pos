@@ -307,7 +307,13 @@
   color: #ec3f17;
   font-weight: 700;
 }
-/* Inicio y fin del rango: fondo flama, texto blanco legible. */
+/* Inicio y fin del rango: solo el chip flama, SIN la "media barra" de conexión
+   que react-day-picker pinta en la celda. */
+.rdp-ninja .rdp-range_start,
+.rdp-ninja .rdp-range_end,
+.rdp-ninja .rdp-range_middle {
+  background: transparent !important;
+}
 .rdp-ninja .rdp-range_start .rdp-day_button,
 .rdp-ninja .rdp-range_end .rdp-day_button,
 .rdp-ninja .rdp-selected:not(.rdp-range_middle) .rdp-day_button {
@@ -315,10 +321,11 @@
   color: #fff !important;
   border-color: #ec3f17 !important;
 }
-/* Días intermedios: fondo tenue, texto del tema (legible en dark y light). */
+/* Días intermedios: fondo tenue + número NARANJA (visible en dark y light). */
 .rdp-ninja .rdp-range_middle .rdp-day_button {
-  background-color: rgba(236, 63, 23, 0.18) !important;
-  color: var(--popover-foreground) !important;
+  background-color: rgba(255, 106, 26, 0.16) !important;
+  color: #ff6a1a !important;
+  font-weight: 600;
   border: none !important;
 }
 .rdp-ninja .rdp-chevron {

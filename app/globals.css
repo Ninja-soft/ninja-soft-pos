@@ -324,3 +324,21 @@
 .rdp-ninja .rdp-chevron {
   fill: currentColor;
 }
+
+/* Resalte de números/precios con degradado configurable (data-price-accent). */
+.price-hl {
+  background-image: var(
+    --price-gradient,
+    linear-gradient(135deg, #ff4b22 0%, #ff8a1f 48%, #ffd21f 100%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+/* "neutro": sin degradado, usa el color del tema. */
+[data-price-accent="neutro"] .price-hl {
+  background-image: none;
+  -webkit-text-fill-color: var(--foreground);
+  color: var(--foreground);
+}

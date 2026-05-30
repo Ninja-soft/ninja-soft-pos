@@ -279,7 +279,7 @@ function SummaryCard({
         <p
           className={
             highlight
-              ? "mt-2 font-price tabular-nums text-2xl font-black text-foreground"
+              ? "price-hl mt-2 font-price tabular-nums text-2xl font-black"
               : "mt-2 font-price tabular-nums text-2xl font-bold"
           }
         >

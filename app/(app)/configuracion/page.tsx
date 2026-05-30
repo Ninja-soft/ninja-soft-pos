@@ -12,9 +12,11 @@ import {
   DISPLAY_FONTS,
   PRICE_FONTS,
   BG_STYLES,
+  PRICE_ACCENTS,
   type DisplayFont,
   type PriceFont,
   type BgStyle,
+  type PriceAccent,
 } from "@/lib/theme/AppearanceProvider";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -62,7 +64,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function ConfiguracionPage() {
   const { theme, setTheme } = useTheme();
-  const { display, price, bg, setDisplay, setPrice, setBg } = useAppearance();
+  const {
+    display,
+    price,
+    bg,
+    priceAccent,
+    setDisplay,
+    setPrice,
+    setBg,
+    setPriceAccent,
+  } = useAppearance();
   const [designOpen, setDesignOpen] = useState(false);
 
   return (
@@ -176,8 +187,40 @@ export default function ConfiguracionPage() {
                   ),
                 }))}
               />
-              <p className="pt-1 font-price text-2xl font-bold tabular-nums text-foreground">
+              <p className="price-hl pt-1 font-price text-2xl font-bold tabular-nums">
                 {formatCurrency(1234567.89)}
+              </p>
+            </Field>
+
+            <Field label="Resalte de precios">
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(PRICE_ACCENTS) as PriceAccent[]).map((k) => {
+                  const active = priceAccent === k;
+                  const grad = PRICE_ACCENTS[k].gradient;
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setPriceAccent(k)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
+                        active
+                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                          : "border-border hover:border-ninja-flameSoft/40",
+                      )}
+                    >
+                      <span
+                        className="h-5 w-5 rounded-full border border-black/10"
+                        style={{
+                          background: grad || "var(--foreground)",
+                        }}
+                      />
+                      {PRICE_ACCENTS[k].label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="price-hl pt-2 font-price text-2xl font-bold tabular-nums">
+                {formatCurrency(98765.43)}
               </p>
             </Field>
 

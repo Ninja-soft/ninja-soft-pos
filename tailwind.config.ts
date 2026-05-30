@@ -16,6 +16,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         display: ["var(--font-display)", "sans-serif"],
+        price: ["var(--font-price)", "ui-monospace", "monospace"],
         sans: ["var(--font-inter)", "sans-serif"],
         mono: ["var(--font-jetbrains)", "monospace"],
       },

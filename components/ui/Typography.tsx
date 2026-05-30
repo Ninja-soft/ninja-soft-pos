@@ -100,6 +100,6 @@ export function Money({
   className?: string;
 }) {
   return (
-    <span className={cn("font-mono tabular-nums", className)}>{children}</span>
+    <span className={cn("font-price tabular-nums", className)}>{children}</span>
   );
 }

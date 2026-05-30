@@ -12,6 +12,7 @@ import {
   Menu,
   Package,
   Receipt,
+  Settings,
   ShoppingCart,
   Users,
   Wallet,
@@ -47,6 +48,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       items: [
         { href: "/clientes", label: "Clientes", icon: Users },
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
+        { href: "/configuracion", label: "Configuración", icon: Settings },
       ],
     },
   ],

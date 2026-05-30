@@ -277,7 +277,7 @@ export default function PosPage() {
             </div>
             <div className="flex items-center justify-between pt-1">
               <span className="font-display text-lg font-bold">Total</span>
-              <span className="font-mono tabular-nums text-3xl font-black text-ninja-gold">
+              <span className="font-price tabular-nums text-3xl font-black text-ninja-gold">
                 {formatCurrency(total)}
               </span>
             </div>

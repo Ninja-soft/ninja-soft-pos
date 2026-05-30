@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Defaults de fuentes configurables (sobrescritos por AppearanceProvider). */
+:root {
+  --font-display: var(--font-sora);
+  --font-price: var(--font-inter);
+  --pattern: rgba(20, 16, 38, 0.06);
+}
+[data-theme="ninja-dark"] {
+  --pattern: rgba(255, 255, 255, 0.05);
+}
+
 /* =============================================================================
    Tokens semánticos NinjaSoft. Ver UI-NinjaSof.md §14.
    ninja-light por defecto; ninja-dark es el tema principal de la marca.
@@ -151,19 +161,30 @@
     linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
 }
 
-/* Fondo de las pantallas del producto: cambia con el tema activo. */
+/* Fondo de las pantallas del producto. Color base por token (theme-aware) +
+   patrón seleccionable vía [data-bg] (grid / dots / mesh). Ver brand book §26. */
 .app-bg {
-  background:
-    radial-gradient(circle at 18% 18%, rgba(255, 75, 34, 0.16), transparent 30%),
-    radial-gradient(circle at 82% 12%, rgba(95, 58, 214, 0.24), transparent 34%),
-    radial-gradient(circle at 70% 82%, rgba(255, 210, 31, 0.08), transparent 28%),
-    linear-gradient(135deg, #09051c 0%, #100a2e 48%, #21135a 100%);
+  background-color: var(--background);
+  background-attachment: fixed;
 }
-[data-theme="ninja-light"] .app-bg {
-  background:
-    radial-gradient(circle at 15% 10%, rgba(255, 106, 26, 0.1), transparent 28%),
-    radial-gradient(circle at 85% 0%, rgba(74, 45, 163, 0.12), transparent 32%),
-    linear-gradient(135deg, #f8f7ff 0%, #f1eeff 52%, #ffffff 100%);
+/* Grid técnico (cruces): líneas finas que cruzan. */
+[data-bg="grid"] .app-bg {
+  background-image:
+    linear-gradient(var(--pattern) 1px, transparent 1px),
+    linear-gradient(90deg, var(--pattern) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+/* Dot grid. */
+[data-bg="dots"] .app-bg {
+  background-image: radial-gradient(var(--pattern) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+/* Mesh / glow cálido. */
+[data-bg="mesh"] .app-bg {
+  background-image:
+    radial-gradient(circle at 16% 14%, rgba(255, 75, 34, 0.12), transparent 30%),
+    radial-gradient(circle at 84% 10%, rgba(95, 58, 214, 0.16), transparent 34%),
+    radial-gradient(circle at 72% 86%, rgba(255, 210, 31, 0.06), transparent 28%);
 }
 
 /* Ticket no fiscal: al imprimir, solo se ve el ticket. */

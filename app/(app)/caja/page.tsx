@@ -265,8 +265,8 @@ function SummaryCard({
         <p
           className={
             highlight
-              ? "mt-2 font-mono tabular-nums text-2xl font-black text-ninja-gold"
-              : "mt-2 font-mono tabular-nums text-2xl font-bold"
+              ? "mt-2 font-price tabular-nums text-2xl font-black text-ninja-gold"
+              : "mt-2 font-price tabular-nums text-2xl font-bold"
           }
         >
           {formatCurrency(value)}

@@ -100,7 +100,7 @@ export default function ReportesPage() {
           <Card>
             <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">Total vendido</p>
-              <p className="mt-2 font-mono tabular-nums text-3xl font-black text-ninja-gold">
+              <p className="mt-2 font-price tabular-nums text-3xl font-black text-ninja-gold">
                 {formatCurrency(data?.total ?? 0)}
               </p>
             </CardContent>

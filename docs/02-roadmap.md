@@ -299,8 +299,9 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
 
 Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de forma continua en todo el producto. No son una fase con fin: son estándar del proyecto.
 
-- **TX-1 — Calendario unificado con flatpickr.**
-  - Reemplazar todo selector de fecha por **flatpickr**, en **español (es)**, **un solo calendario**, con **selección de rango** (desde/hasta) donde aplique (reportes, promociones, suscripciones, filtros).
+- **TX-1 — Calendario unificado con react-day-picker.**
+  - Librería: **react-day-picker (v9)** + **Radix Popover** (patrón shadcn), estilado con Tailwind/cva como el resto del sistema. Locale **español (es)** vía date-fns. *(Se descartó flatpickr por ser JS vanilla y chocar con el stack React/Radix; ver ADR.)*
+  - **Un solo calendario**, con **selección de rango** (desde/hasta) donde aplique (reportes, promociones, suscripciones, filtros).
   - Presets rápidos (hoy, ayer, últimos 7/30 días, este mes, mes pasado).
   - Componente reutilizable `DateRangePicker` único; nada de inputs de fecha sueltos.
   - *Criterio:* en reportes se elige "últimos 30 días" o un rango con un calendario en español; mismo componente en todos lados.

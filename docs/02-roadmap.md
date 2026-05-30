@@ -8,12 +8,17 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 
 | Fase | Nombre | Duración estimada | Estado |
 |---|---|---|---|
-| **F0** | Fundación técnica | 2 semanas | 🔴 No iniciado |
-| **F1** | MVP vendible (POS + Admin) | 10–12 semanas | 🔴 No iniciado |
-| **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🔴 No iniciado |
+| **F0** | Fundación técnica | 2 semanas | 🟢 Funcional |
+| **F1** | MVP vendible (POS + Admin) | 10–12 semanas | 🟢 Funcional (base H0–H6) |
+| **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟡 En progreso |
 | **F3** | Integración AFIP y producción | 4–6 semanas | 🔴 No iniciado |
 | **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 Planificación |
 | **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 Planificación |
+| **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟡 Planificación |
+| **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟡 Planificación |
+| **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 Planificación |
+
+> **Orden de ejecución acordado (2026-05-30):** **F6 → F7 → F8 → F3 (AFIP)**. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30) para el detalle de hitos y los cortes de control obligatorios al cierre de cada uno.
 
 ---
 
@@ -168,6 +173,119 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] Un cliente textil puede gestionar 500 SKUs con variantes sin pasar por NinjaSoft.
 - [ ] Una promoción "Miércoles 30% en bebidas" se configura desde el panel del cliente y aplica automáticamente.
 - [ ] La API permite a un cliente Enterprise sincronizar 1000 productos en < 60s.
+
+---
+
+## Plan ampliado (2026-05-30)
+
+Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
+
+### F6 — Personalización del producto
+
+Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurable por tenant, con persistencia y multi-dispositivo.
+
+- **H7 — Fotos de productos → WebP.**
+  - Subida de imágenes por producto (drag&drop, múltiples).
+  - Conversión a **WebP** en **Edge Function con `sharp`**: genera varios tamaños (thumb / card / full), guarda en Supabase Storage con RLS por tenant.
+  - Galería por producto (orden, foto principal, baja lógica).
+  - Optimización de peso (target < 100 KB en `card`).
+  - *Criterio:* subir un JPG de 4 MB resulta en un WebP servido < 100 KB sin pérdida visible.
+
+- **H8 — Branding por tenant.**
+  - Logo del negocio, color de acento (dentro de límites de marca), datos fiscales/contacto.
+  - Aplicado en POS, tickets, emails y catálogo.
+  - (Opcional Enterprise) dominio propio para el catálogo.
+  - *Criterio:* el logo y color del tenant se ven en ticket, email y catálogo sin tocar código.
+
+- **H9 — Tickets y comprobantes personalizables.**
+  - Plantillas de ticket configurables: logo, leyendas, QR, redes, pie legal.
+  - Formatos **58mm / 80mm** (térmica) y **A4** (PDF).
+  - Preview en vivo y selección por sucursal.
+  - *Criterio:* un tenant configura su ticket y lo imprime/descarga sin intervención.
+
+- **H10 — Catálogo público + promociones + variantes.**
+  - Catálogo web por tenant (productos, fotos, precios, stock visible opcional).
+  - Motor de **promociones declarativo** (2x1, % por volumen, vigencia por fecha/horario, combinables/exclusivas).
+  - Variantes por rubro (talle/color para textil; SKU compuesto).
+  - *Criterio:* una promo "Miércoles 30% bebidas" se configura desde el panel y aplica sola.
+
+### F7 — Panel interno PRO + comunicaciones
+
+Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usuarios, planes y comunicaciones.
+
+- **H11 — Roles de staff NinjaSoft + gestión total de usuarios.**
+  - Tres niveles de staff: **super-admin**, **admin**, **soporte**.
+    - *super-admin:* todo (sumar/quitar staff, borrar tenants, facturación, acciones peligrosas).
+    - *admin:* gestión de tenants/usuarios/soporte; sin tocar staff ni acciones destructivas.
+    - *soporte:* solo-lectura + acciones limitadas (notas, ver salud, reset de contraseña).
+  - Gestión total de usuarios: ver todos, **pausar/suspender/reactivar**, cambiar roles, **sumar poderes**, y **sumar usuarios como staff NinjaSoft** (con su nivel).
+  - Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md).
+  - *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff.
+
+- **H12 — Suscripciones y planes en caliente.**
+  - Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
+  - Aumentar/limitar poderes y feature flags por tenant.
+  - *Criterio:* pasar un tenant de Start a Pro aplica al instante y queda auditado.
+
+- **H13 — Emails configurables (HTML + variables).**
+  - **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …), preview y **versionado**.
+  - **Catálogo de emails del sistema**: bienvenida, invitación de usuario, reset de contraseña, trial por vencer, pago vencido, suspensión, etc. — cada uno editable.
+  - **Proveedores de envío:** **Resend** (transaccional) + **Brevo** (masivos/campañas). Credenciales encriptadas; abstracción de proveedor.
+  - **Logs de envío** (estado, destinatario, plantilla, proveedor) y reintentos.
+  - **Envíos masivos / campañas** a segmentos de tenants/usuarios.
+  - *Criterio:* editar la plantilla "trial por vencer", previsualizar con variables reales y enviarla; el envío queda registrado con su estado.
+
+### F8 — Pagos y cobros
+
+Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectura primero, integraciones por etapas** (un sub-hito por proveedor).
+
+- **H14 — Arquitectura de pagos (base).**
+  - Registro de **proveedores de pago** y catálogo de medios.
+  - Habilitación y **configuración por tenant** (credenciales **encriptadas**, modo sandbox/producción).
+  - **UI de cobro abstracta** en el POS (un medio → un flujo), **pago mixto** (varios medios en una venta) y conciliación básica.
+  - Medios manuales reales desde el arranque: **Efectivo**, **Transferencia bancaria**, **Pago mixto**.
+  - *Criterio:* una venta se cobra con efectivo + transferencia (mixto) y queda conciliada.
+
+- **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
+  - **H15** — Mercado Pago + **Mercado Point** (QR + tarjeta presencial).
+  - **H16** — **MODO** vía QR interoperable.
+  - **H17** — **Payway / Prisma**.
+  - **H18** — **Getnet**.
+  - **H19** — **Fiserv / Posnet / Clover**.
+  - **H20** — **Mobbex** como **orquestador** (abstrae varios proveedores; opcional según convenga).
+  - **H21** — **Pagos360** (links de pago / cobranzas).
+  - *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
+
+### F3 — AFIP (ya proyectada, se ejecuta al final de esta tanda)
+
+Sin cambios de alcance: ver [F3](#f3--integración-afip-y-producción) y [`15-afip-integration.md`](./15-afip-integration.md). Se prioriza **después** de F6–F8 (requiere certificados por tenant y homologación).
+
+---
+
+## Cortes de control y testing estricto
+
+**Regla:** ningún hito se considera cerrado sin pasar su corte de control. No se avanza al siguiente hito con el anterior "al 80%".
+
+### Gate automático (obligatorio en cada hito)
+1. `pnpm lint` sin warnings.
+2. `pnpm typecheck` limpio.
+3. `pnpm test` (unit + integración) en verde, **con tests nuevos que cubran el hito**.
+4. `pnpm build` exitoso.
+5. Migraciones aplicadas y `db:types` regenerado si cambió el esquema.
+6. RLS verificada: tests que prueben aislamiento por tenant del esquema nuevo.
+
+### Gate manual (checklist por hito)
+- [ ] Criterio de cierre del hito demostrado (demo concreta).
+- [ ] Acciones críticas escriben en `audit_logs`.
+- [ ] `service_role` no aparece en frontend.
+- [ ] Feature nueva detrás de feature flag si es opcional.
+- [ ] Entrada en [`17-decision-log.md`](./17-decision-log.md) y `CHANGELOG.md`.
+- [ ] Deploy a producción verificado (estado READY) y humo manual en la ruta nueva.
+
+### Cobertura mínima de tests por capa
+- **Edge Functions / RPC:** test de happy-path + test de autorización (rol incorrecto / otro tenant rechazado).
+- **Componentes:** render + interacción principal.
+- **Flujos críticos (pago, cobro, facturación):** test de integración end-to-end del camino feliz y de un error transitorio.
 
 ---
 

@@ -377,6 +377,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [ ] **H19** — **Fiserv / Posnet / Clover**.
   - [ ] **H20** — **Mobbex** como **orquestador** (abstrae varios proveedores; opcional según convenga).
   - [ ] **H21** — **Pagos360** (links de pago / cobranzas).
+  - [ ] **H21c** — **Nave (Banco Galicia)** (billetera/QR + links de cobro). Ya está en el catálogo de medios de pago (logo + "Próximamente"); falta la integración de cobro.
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
 - [ ] **H21b — Orquestador de pagos estilo VTOL.**

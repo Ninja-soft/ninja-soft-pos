@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { DayPicker, type DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
@@ -59,6 +59,15 @@ export function DateRangePicker({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [months, setMonths] = useState(1);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 640px)");
+    const sync = () => setMonths(query.matches ? 2 : 1);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -79,8 +88,8 @@ export function DateRangePicker({
           side="bottom"
           align="start"
           sideOffset={6}
-          avoidCollisions={false}
-          className="z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft outline-none"
+          collisionPadding={12}
+          className="z-50 max-h-[min(38rem,calc(100dvh-1.5rem))] w-[calc(100vw-1.5rem)] overflow-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft outline-none sm:w-auto"
         >
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex flex-row flex-wrap gap-1 sm:flex-col sm:border-r sm:border-border sm:pr-3">
@@ -103,7 +112,7 @@ export function DateRangePicker({
               mode="range"
               locale={es}
               weekStartsOn={1}
-              numberOfMonths={2}
+              numberOfMonths={months}
               selected={value}
               onSelect={onChange}
             />

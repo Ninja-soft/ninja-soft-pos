@@ -17,7 +17,11 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { useProducts, useTopProducts } from "@/modules/products/hooks";
+import {
+  useProducts,
+  useTopProducts,
+  useProductSerials,
+} from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { verticalHas } from "@/lib/verticals/config";
 import {
@@ -58,6 +62,18 @@ export default function PosPage() {
     price: number;
   } | null>(null);
   const [weighGrams, setWeighGrams] = useState("");
+  const [serialProduct, setSerialProduct] = useState<{
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+  } | null>(null);
+  const [serialChoice, setSerialChoice] = useState("");
+  const [serialOther, setSerialOther] = useState("");
+  const { data: serialList } = useProductSerials(
+    serialProduct?.id ?? null,
+    serialProduct !== null,
+  );
 
   const { data: products } = useProducts(search);
   const { data: shift } = useOpenShift();
@@ -72,22 +88,43 @@ export default function PosPage() {
   const discountTotal = useCartStore((s) => s.discountTotal);
   const addProduct = useCartStore((s) => s.addProduct);
   const addWeighed = useCartStore((s) => s.addWeighed);
+  const addSerialized = useCartStore((s) => s.addSerialized);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
 
-  // Click en un producto: por peso (unit kg) abre el modal de peso; si no, lo agrega.
+  // Click en un producto: serializado abre picker de serial; por peso (kg) abre
+  // modal de peso; si no, lo agrega directo.
   function pickProduct(p: {
     id: string;
     name: string;
     sku: string | null;
     price: number;
     unit: string;
+    is_serialized?: boolean;
   }) {
-    if (p.unit === "kg") {
+    if (p.is_serialized) {
+      setSerialProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setSerialChoice("");
+      setSerialOther("");
+    } else if (p.unit === "kg") {
       setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
       setWeighGrams("");
     } else {
       addProduct(p);
     }
+  }
+
+  function confirmSerial() {
+    if (!serialProduct) return;
+    const serial =
+      serialChoice === "__other__" ? serialOther.trim() : serialChoice.trim();
+    if (!serial) {
+      toast({ title: "Elegí o ingresá un N° de serie", variant: "error" });
+      return;
+    }
+    addSerialized(serialProduct, serial);
+    setSerialProduct(null);
+    setSerialChoice("");
+    setSerialOther("");
   }
 
   function confirmWeigh() {
@@ -165,6 +202,7 @@ export default function PosPage() {
         items: lines.map((l) => ({
           product_id: l.productId,
           ...(l.productId ? {} : { name: l.name }),
+          ...(l.serial ? { serial: l.serial } : {}),
           quantity: l.quantity,
           unit_price: l.unitPrice,
           discount: l.discount,
@@ -270,6 +308,7 @@ export default function PosPage() {
                         sku: p.sku,
                         price: p.price,
                         unit: p.unit,
+                        is_serialized: p.is_serialized,
                       })
                     }
                     className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
@@ -300,6 +339,7 @@ export default function PosPage() {
                     sku: p.sku,
                     price: p.price,
                     unit: p.unit,
+                    is_serialized: p.is_serialized,
                   })
                 }
                 className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
@@ -339,7 +379,14 @@ export default function PosPage() {
                 className="rounded-lg border border-border bg-muted/40 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-sm font-medium text-foreground">{l.name}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground">{l.name}</span>
+                    {l.serial && (
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        S/N: {l.serial}
+                      </span>
+                    )}
+                  </span>
                   <button
                     onClick={() => removeLine(l.lineId)}
                     className="text-muted-foreground hover:text-red-300"
@@ -499,6 +546,66 @@ export default function PosPage() {
               Cancelar
             </Button>
             <Button onClick={confirmWeigh}>Agregar al carrito</Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={serialProduct !== null}
+        onOpenChange={(o) => !o && setSerialProduct(null)}
+        title={serialProduct ? `N° de serie — ${serialProduct.name}` : "N° de serie"}
+      >
+        <div className="space-y-4">
+          <div className="max-h-56 space-y-1.5 overflow-y-auto">
+            {(serialList ?? [])
+              .filter((s) => s.status === "in_stock")
+              .map((s) => (
+                <label
+                  key={s.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
+                >
+                  <input
+                    type="radio"
+                    name="serial"
+                    className="accent-ninja-flame"
+                    checked={serialChoice === s.serial}
+                    onChange={() => setSerialChoice(s.serial)}
+                  />
+                  <span className="font-mono">{s.serial}</span>
+                </label>
+              ))}
+            {(serialList ?? []).filter((s) => s.status === "in_stock").length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Sin seriales precargados. Ingresá uno abajo.
+              </p>
+            )}
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted">
+              <input
+                type="radio"
+                name="serial"
+                className="accent-ninja-flame"
+                checked={serialChoice === "__other__"}
+                onChange={() => setSerialChoice("__other__")}
+              />
+              Otro (ingresar / escanear)
+            </label>
+          </div>
+          {serialChoice === "__other__" && (
+            <Input
+              label="N° de serie"
+              autoFocus
+              value={serialOther}
+              onChange={(e) => setSerialOther(e.target.value)}
+              placeholder="IMEI / S/N"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmSerial();
+              }}
+            />
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setSerialProduct(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmSerial}>Agregar al carrito</Button>
           </div>
         </div>
       </Modal>

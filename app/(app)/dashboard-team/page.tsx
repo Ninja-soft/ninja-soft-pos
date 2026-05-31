@@ -115,7 +115,11 @@ export default async function DashboardTeamPage() {
       </div>
 
       {/* Equipo (cliente: lista + invitar) */}
-      <TeamSection currentUserId={user.id} tenantId={tenant.id} />
+      <TeamSection
+        currentUserId={user.id}
+        tenantId={tenant.id}
+        canManage={["owner", "manager"].includes(membership.role)}
+      />
 
       {/* Accesos */}
       <div className="mt-8 flex flex-wrap gap-3">

@@ -34,7 +34,7 @@ export function BarcodeScanner({
     ).BarcodeDetector;
     if (!Ctor) {
       setError(
-        "Tu navegador no soporta lectura por cámara. Usá un lector USB o buscá por código.",
+        "Este navegador no soporta lectura por cámara. Si tenés un lector USB o Bluetooth, cerrá esta ventana y escaneá directo: el código se carga solo al carrito.",
       );
       return;
     }
@@ -94,7 +94,8 @@ export function BarcodeScanner({
         </div>
       )}
       <p className="mt-3 text-center text-xs text-muted-foreground">
-        Apuntá la cámara al código de barras.
+        Apuntá la cámara al código de barras. ¿Tenés un lector USB o Bluetooth?
+        No hace falta abrir esto: escaneá en cualquier parte del POS y se agrega solo.
       </p>
     </Modal>
   );

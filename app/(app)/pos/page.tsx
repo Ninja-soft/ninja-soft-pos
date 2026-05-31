@@ -34,6 +34,8 @@ import {
   useDefaultRegister,
   usePosMutations,
 } from "@/modules/pos/hooks";
+import { useScanner } from "@/modules/pos/useScanner";
+import { productsApi } from "@/modules/products/api";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -158,6 +160,28 @@ export default function PosPage() {
   const subtotal = cartSubtotal(lines);
   const total = Math.max(0, subtotal - discountTotal);
   const hasShift = Boolean(shift);
+
+  // Lector USB/Bluetooth (HID): escanea en cualquier parte del POS y agrega.
+  useScanner(async (code) => {
+    try {
+      const p = await productsApi.findByCode(code);
+      if (p) {
+        pickProduct({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          price: p.price,
+          unit: p.unit,
+          is_serialized: p.is_serialized,
+        });
+      } else {
+        setSearch(code);
+        toast({ title: `Sin producto para "${code}"`, variant: "info" });
+      }
+    } catch {
+      setSearch(code);
+    }
+  });
 
   async function handleOpenShift(opening: number) {
     if (!register) {

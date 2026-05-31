@@ -47,6 +47,23 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
+  // Busca un producto por código de barras o SKU exacto (para escaneo).
+  findByCode: async (code: string): Promise<Product | null> => {
+    const c = code.trim();
+    // Solo códigos simples: evita romper el filtro .or() y inyección.
+    if (!/^[A-Za-z0-9._\-]+$/.test(c)) return null;
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .or(`barcode.eq.${c},sku.eq.${c}`)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as unknown as Product | null;
+  },
+
   // Productos más vendidos (frecuentes) para la venta rápida del kiosco.
   top: async (limit = 12): Promise<Product[]> => {
     const supabase = createClient();

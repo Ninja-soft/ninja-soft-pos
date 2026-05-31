@@ -10,7 +10,8 @@ export interface SalePaymentInput {
   reference?: string;
 }
 export interface SaleItemInput {
-  product_id: string;
+  product_id: string | null; // null = ítem de monto libre (venta rápida)
+  name?: string; // nombre del ítem libre (cuando product_id es null)
   quantity: number;
   unit_price: number;
   discount: number;

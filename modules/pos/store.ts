@@ -3,7 +3,8 @@
 import { create } from "zustand";
 
 export interface CartLine {
-  productId: string;
+  lineId: string; // id local de la línea (estable; soporta ítems sin producto)
+  productId: string | null; // null = ítem de monto libre (venta rápida)
   name: string;
   sku: string | null;
   unitPrice: number;
@@ -20,9 +21,10 @@ interface CartState {
     sku: string | null;
     price: number;
   }) => void;
-  setQuantity: (productId: string, quantity: number) => void;
-  setLineDiscount: (productId: string, discount: number) => void;
-  removeLine: (productId: string) => void;
+  addFreeAmount: (p: { name?: string; amount: number }) => void;
+  setQuantity: (lineId: string, quantity: number) => void;
+  setLineDiscount: (lineId: string, discount: number) => void;
+  removeLine: (lineId: string) => void;
   setDiscountTotal: (amount: number) => void;
   clear: () => void;
 }
@@ -44,6 +46,7 @@ export const useCartStore = create<CartState>((set) => ({
         lines: [
           ...state.lines,
           {
+            lineId: crypto.randomUUID(),
             productId: p.id,
             name: p.name,
             sku: p.sku,
@@ -54,21 +57,36 @@ export const useCartStore = create<CartState>((set) => ({
         ],
       };
     }),
-  setQuantity: (productId, quantity) =>
+  addFreeAmount: (p) =>
+    set((state) => ({
+      lines: [
+        ...state.lines,
+        {
+          lineId: crypto.randomUUID(),
+          productId: null,
+          name: p.name?.trim() || "Venta rápida",
+          sku: null,
+          unitPrice: p.amount,
+          quantity: 1,
+          discount: 0,
+        },
+      ],
+    })),
+  setQuantity: (lineId, quantity) =>
     set((state) => ({
       lines: state.lines
-        .map((l) => (l.productId === productId ? { ...l, quantity } : l))
+        .map((l) => (l.lineId === lineId ? { ...l, quantity } : l))
         .filter((l) => l.quantity > 0),
     })),
-  setLineDiscount: (productId, discount) =>
+  setLineDiscount: (lineId, discount) =>
     set((state) => ({
       lines: state.lines.map((l) =>
-        l.productId === productId ? { ...l, discount } : l,
+        l.lineId === lineId ? { ...l, discount } : l,
       ),
     })),
-  removeLine: (productId) =>
+  removeLine: (lineId) =>
     set((state) => ({
-      lines: state.lines.filter((l) => l.productId !== productId),
+      lines: state.lines.filter((l) => l.lineId !== lineId),
     })),
   setDiscountTotal: (amount) => set({ discountTotal: amount }),
   clear: () => set({ lines: [], discountTotal: 0 }),

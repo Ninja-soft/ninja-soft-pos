@@ -3,21 +3,22 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
+  Banknote,
   Lock,
   Minus,
   Plus,
   ScanBarcode,
   Search,
-  Trash2,
   Unlock,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype } from "@/components/brand/Logo";
 import { useProducts } from "@/modules/products/hooks";
+import { useMyTenant } from "@/modules/tenants/hooks";
+import { verticalHas } from "@/lib/verticals/config";
 import {
   useCartStore,
   cartSubtotal,
@@ -46,19 +47,37 @@ export default function PosPage() {
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [freeOpen, setFreeOpen] = useState(false);
+  const [freeAmount, setFreeAmount] = useState("");
+  const [freeName, setFreeName] = useState("");
 
   const { data: products } = useProducts(search);
   const { data: shift } = useOpenShift();
   const { data: register } = useDefaultRegister();
   const { open, close, sale } = usePosMutations();
+  const { data: myTenant } = useMyTenant();
+  const quickSale = verticalHas(myTenant?.industry, "quickSale");
 
   const lines = useCartStore((s) => s.lines);
   const discountTotal = useCartStore((s) => s.discountTotal);
   const addProduct = useCartStore((s) => s.addProduct);
+  const addFreeAmount = useCartStore((s) => s.addFreeAmount);
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
   const clear = useCartStore((s) => s.clear);
+
+  function confirmFreeAmount() {
+    const amount = Number(freeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: "Ingresá un monto válido", variant: "error" });
+      return;
+    }
+    addFreeAmount({ name: freeName, amount });
+    setFreeAmount("");
+    setFreeName("");
+    setFreeOpen(false);
+  }
 
   const subtotal = cartSubtotal(lines);
   const total = Math.max(0, subtotal - discountTotal);
@@ -106,6 +125,7 @@ export default function PosPage() {
       const res = await sale.mutateAsync({
         items: lines.map((l) => ({
           product_id: l.productId,
+          ...(l.productId ? {} : { name: l.name }),
           quantity: l.quantity,
           unit_price: l.unitPrice,
           discount: l.discount,
@@ -184,6 +204,17 @@ export default function PosPage() {
               <ScanBarcode size={18} />
             </button>
           </div>
+
+          {quickSale && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-3 w-full"
+              onClick={() => setFreeOpen(true)}
+            >
+              <Banknote size={16} /> Venta rápida (monto libre)
+            </Button>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products?.map((p) => (
               <button
@@ -221,13 +252,13 @@ export default function PosPage() {
             )}
             {lines.map((l) => (
               <div
-                key={l.productId}
+                key={l.lineId}
                 className="rounded-lg border border-border bg-muted/40 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium text-foreground">{l.name}</span>
                   <button
-                    onClick={() => removeLine(l.productId)}
+                    onClick={() => removeLine(l.lineId)}
                     className="text-muted-foreground hover:text-red-300"
                   >
                     <X size={15} />
@@ -236,14 +267,14 @@ export default function PosPage() {
                 <div className="mt-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setQuantity(l.productId, l.quantity - 1)}
+                      onClick={() => setQuantity(l.lineId, l.quantity - 1)}
                       className="rounded-md border border-border p-1 hover:bg-muted"
                     >
                       <Minus size={14} />
                     </button>
                     <span className="w-8 text-center text-sm">{l.quantity}</span>
                     <button
-                      onClick={() => setQuantity(l.productId, l.quantity + 1)}
+                      onClick={() => setQuantity(l.lineId, l.quantity + 1)}
                       className="rounded-md border border-border p-1 hover:bg-muted"
                     >
                       <Plus size={14} />
@@ -317,6 +348,35 @@ export default function PosPage() {
         onOpenChange={setScanOpen}
         onDetected={(code) => setSearch(code)}
       />
+      <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta rápida">
+        <div className="space-y-4">
+          <Input
+            label="Monto"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            autoFocus
+            value={freeAmount}
+            onChange={(e) => setFreeAmount(e.target.value)}
+            placeholder="0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmFreeAmount();
+            }}
+          />
+          <Input
+            label="Detalle (opcional)"
+            value={freeName}
+            onChange={(e) => setFreeName(e.target.value)}
+            placeholder="Venta rápida"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setFreeOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmFreeAmount}>Agregar al carrito</Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

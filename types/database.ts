@@ -1076,6 +1076,18 @@ export type Database = {
           },
         ]
       }
+      system_email_templates: {
+        Row: { key: string; subject: string; html: string; updated_at: string }
+        Insert: { key: string; subject?: string; html?: string; updated_at?: string }
+        Update: { key?: string; subject?: string; html?: string; updated_at?: string }
+        Relationships: []
+      }
+      system_email_config: {
+        Row: { id: boolean; from_name: string; from_email: string; updated_at: string }
+        Insert: { id?: boolean; from_name?: string; from_email?: string; updated_at?: string }
+        Update: { id?: boolean; from_name?: string; from_email?: string; updated_at?: string }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           key: string

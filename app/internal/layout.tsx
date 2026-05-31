@@ -45,6 +45,12 @@ export default async function InternalLayout({
               >
                 Staff
               </Link>
+              <Link
+                href="/internal/emails"
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Emails
+              </Link>
             </nav>
           </div>
           <ThemeToggle />

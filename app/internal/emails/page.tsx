@@ -1,0 +1,222 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Mail, Send } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/components/ui/Toast";
+import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
+import { cn } from "@/lib/utils/cn";
+
+type Saved = Record<string, { subject: string; html: string }>;
+
+export default function InternalEmailsPage() {
+  const supabase = createClient();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [selectedKey, setSelectedKey] = useState(EMAIL_TEMPLATES[0]!.key);
+  const [subject, setSubject] = useState("");
+  const [html, setHtml] = useState("");
+  const [fromName, setFromName] = useState("NinjaPos");
+  const [fromEmail, setFromEmail] = useState("");
+
+  const { data: config } = useQuery({
+    queryKey: ["system-email-config"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("system_email_config")
+        .select("from_name, from_email")
+        .eq("id", true)
+        .maybeSingle();
+      return data ?? { from_name: "NinjaPos", from_email: "" };
+    },
+  });
+  useEffect(() => {
+    if (config) {
+      setFromName(config.from_name ?? "NinjaPos");
+      setFromEmail(config.from_email ?? "");
+    }
+  }, [config]);
+
+  const { data: saved = {} } = useQuery<Saved>({
+    queryKey: ["system-email-templates"],
+    queryFn: async (): Promise<Saved> => {
+      const { data } = await supabase
+        .from("system_email_templates")
+        .select("key, subject, html");
+      const map: Saved = {};
+      (data ?? []).forEach((t) => (map[t.key] = { subject: t.subject, html: t.html }));
+      return map;
+    },
+  });
+
+  const def = EMAIL_TEMPLATES.find((t) => t.key === selectedKey)!;
+  useEffect(() => {
+    const ov = saved[selectedKey];
+    setSubject(ov?.subject ?? def.defaultSubject);
+    setHtml(ov?.html ?? def.defaultHtml);
+  }, [selectedKey, saved, def.defaultSubject, def.defaultHtml]);
+
+  const saveCfg = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("system_email_config")
+        .upsert(
+          { id: true, from_name: fromName.trim(), from_email: fromEmail.trim() },
+          { onConflict: "id" },
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Remitente guardado", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["system-email-config"] });
+    },
+    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+  });
+
+  const saveTpl = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("system_email_templates")
+        .upsert({ key: selectedKey, subject, html }, { onConflict: "key" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Plantilla guardada", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["system-email-templates"] });
+    },
+    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+  });
+
+  const sendTest = useMutation({
+    mutationFn: async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const vars = sampleVars("NinjaPos");
+      const { data, error } = await supabase.functions.invoke("send_email", {
+        body: {
+          to: user?.email,
+          subject: renderTemplate(subject, vars),
+          html: renderTemplate(html, vars),
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () =>
+      toast({ title: "Email de prueba enviado", variant: "success" }),
+    onError: (e) =>
+      toast({
+        title: "No se pudo enviar",
+        description: e instanceof Error ? e.message : "Revisá remitente y RESEND_API_KEY.",
+        variant: "error",
+      }),
+  });
+
+  const vars = sampleVars("NinjaPos");
+
+  return (
+    <>
+      <Eyebrow>Operaciones</Eyebrow>
+      <Display className="mt-3 text-3xl md:text-4xl">Emails del sistema</Display>
+      <p className="mt-2 text-muted-foreground">
+        Editá los emails que NinjaPos envía a los usuarios y configurá el remitente.
+      </p>
+
+      {/* Remitente */}
+      <Card className="mt-6">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <Send size={16} /> Remitente
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Nombre" value={fromName} onChange={(e) => setFromName(e.target.value)} />
+            <Input
+              label="Email (dominio verificado en Resend)"
+              type="email"
+              placeholder="hola@tudominio.com"
+              value={fromEmail}
+              onChange={(e) => setFromEmail(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
+              Guardar remitente
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            El envío usa Resend. Cargá el secret <code>RESEND_API_KEY</code> en Supabase.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Plantillas */}
+      <Card className="mt-6">
+        <CardContent className="space-y-5 p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <Mail size={16} /> Plantillas
+          </div>
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {EMAIL_TEMPLATES.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setSelectedKey(t.key)}
+                className={cn(
+                  "shrink-0 rounded-lg px-3 py-1.5 text-sm transition",
+                  selectedKey === t.key
+                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">{def.description}</p>
+          <Input label="Asunto" value={subject} onChange={(e) => setSubject(e.target.value)} />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Contenido (HTML)
+            </label>
+            <textarea
+              value={html}
+              onChange={(e) => setHtml(e.target.value)}
+              rows={7}
+              className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Variables: {def.variables.map((v) => `{{${v}}}`).join("  ")}
+            </p>
+          </div>
+          <div>
+            <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
+            <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
+              <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">
+                Asunto: {renderTemplate(subject, vars)}
+              </div>
+              <div dangerouslySetInnerHTML={{ __html: renderTemplate(html, vars) }} />
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => sendTest.mutate()}
+              disabled={sendTest.isPending}
+            >
+              <Send size={16} /> Enviar prueba
+            </Button>
+            <Button onClick={() => saveTpl.mutate()} disabled={saveTpl.isPending}>
+              Guardar plantilla
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}

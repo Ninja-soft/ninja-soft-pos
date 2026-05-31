@@ -147,13 +147,9 @@ export function InternalShell({
                 <span className="block truncate text-sm font-medium text-foreground">
                   {name}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
-                    <ShieldCheck size={11} /> Team NinjaSoft
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {level ? LEVEL_LABELS[level] ?? level : "Staff"}
-                  </span>
+                <span className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                  <ShieldCheck size={11} className="shrink-0" />
+                  Team NinjaSoft · {level ? LEVEL_LABELS[level] ?? level : "Staff"}
                 </span>
               </span>
               <ChevronDown size={15} className="shrink-0 text-muted-foreground" />

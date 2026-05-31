@@ -531,6 +531,41 @@ El panel internal será una consola separada:
 
 ---
 
+## ADR-016 — Planes custom, aumentos de cuota y notificaciones por cuenta
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El modelo de planes base (Start/Pro/Business/Enterprise) no alcanza para operar ventas reales: algunos clientes necesitarán límites especiales, módulos puntuales, precio acordado, aumento de cuota individual o condiciones comerciales temporales. Además, cada cambio relevante debe comunicarse dentro de la cuenta, no solo por email.
+
+### Decisión
+
+Se agregan tres capacidades:
+
+- **Plan custom por tenant:** clonado desde un plan base, con límites, módulos, soporte, precio, moneda, ciclo y vigencia propios.
+- **Aumentos de cuota/precio por cliente:** inmediatos o programados, con fecha efectiva, motivo, aviso, aceptación opcional, antes/después y auditoría.
+- **Centro de notificaciones por cuenta:** inbox in-app, banners y acciones para novedades, cobros, vencimientos, límites, cambios de plan, AFIP, seguridad y soporte.
+
+El panel internal será la fuente operativa para crear planes custom, modificar cuota/límites, programar aumentos y enviar notificaciones a tenants o segmentos.
+
+### Alternativas consideradas
+
+- **Crear un plan global por cada excepción comercial:** descartado; ensucia catálogo comercial y vuelve inmanejable el producto.
+- **Guardar precio custom solo como nota:** descartado; no se puede auditar ni aplicar límites de forma consistente.
+- **Comunicar cambios solo por email:** descartado; el email se pierde y no da una fuente de verdad dentro de la cuenta.
+
+### Consecuencias
+
+- **Positivas:** permite cerrar acuerdos comerciales flexibles sin romper planes globales; mejora transparencia con clientes; deja trazabilidad fuerte.
+- **Negativas:** agrega complejidad de billing, comunicación y permisos; requiere UI cuidadosa para no aplicar aumentos silenciosos.
+- **Seguimiento:** diseñar `tenant_plan_overrides`, `subscription_price_changes`, `account_notifications` y métricas de lectura/acción antes de activar cobro real.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

@@ -663,10 +663,10 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
   - [ ] Helper único `exportXlsx()` reutilizable; respeta el branding del tenant (TX se apoya en F6/H8).
   - [ ] *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
 
-- [ ] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).**
-  - [ ] **Productos y clientes se importan SIEMPRE en XLSX** (se elimina el import CSV actual de productos). Igual para depósitos, stock inicial, listas de precios, medios de pago, garantías, motivos de devolución.
-  - [ ] **Descargar plantilla de muestra XLSX** por entidad (encabezados + 1-2 filas de ejemplo + hoja de ayuda con formatos/valores válidos).
-  - [ ] **Exportar toda la base** en XLSX (productos, clientes, etc.) — sirve de backup y de base para reimportar editando.
+- [~] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).** — *Productos hecho (PR #37); clientes y demás entidades pendientes.*
+  - [~] **Productos y clientes se importan SIEMPRE en XLSX**: **productos ✅** (se eliminó el modal CSV, ahora `ImportProductsModal` XLSX). Clientes y resto (depósitos, stock, listas, medios, garantías, motivos) pendientes.
+  - [x] **Descargar plantilla de muestra XLSX** (productos: hoja de datos + ejemplo + hoja "Ayuda").
+  - [x] **Exportar toda la base** en XLSX (productos: botón "Exportar XLSX" en `/productos`). Clientes pendiente.
   - [ ] Toda importación: validación previa, preview, dry-run, confirmación, reporte de errores por fila y auditoría. Sin imports silenciosos.
   - [ ] Helper único de import (parse XLSX con `exceljs`) + reuso del `exportXlsx` (TX-2) para plantillas y export de base.
   - [ ] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.

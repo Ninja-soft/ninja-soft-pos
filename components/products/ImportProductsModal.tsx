@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { productsImportApi } from "@/modules/products/api";
 import {
-  CSV_TEMPLATE,
-  parseProductsCsv,
+  PRODUCT_IMPORT_COLUMNS,
+  PRODUCT_TEMPLATE_ROW,
+  parseProductsXlsx,
   type ParsedProduct,
 } from "@/modules/products/import";
+import { exportXlsx } from "@/lib/utils/xlsx";
 
-export function ImportCsvModal({
+export function ImportProductsModal({
   open,
   onOpenChange,
 }: {
@@ -53,20 +55,41 @@ export function ImportCsvModal({
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    const text = await file.text();
-    const res = parseProductsCsv(text);
-    setRows(res.rows);
-    setErrors(res.errors);
+    try {
+      const res = await parseProductsXlsx(await file.arrayBuffer());
+      setRows(res.rows);
+      setErrors(res.errors);
+    } catch {
+      setRows([]);
+      setErrors(["No se pudo leer el archivo. ¿Es un .xlsx válido?"]);
+    }
   }
 
-  function downloadTemplate() {
-    const blob = new Blob([CSV_TEMPLATE], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "plantilla-productos.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  async function downloadTemplate() {
+    await exportXlsx("plantilla-productos", [
+      {
+        name: "Productos",
+        title: "Plantilla de productos — NinjaPos",
+        columns: PRODUCT_IMPORT_COLUMNS,
+        rows: [PRODUCT_TEMPLATE_ROW],
+      },
+      {
+        name: "Ayuda",
+        columns: [
+          { header: "Columna", key: "col", width: 16 },
+          { header: "Qué poner", key: "help", width: 60 },
+        ],
+        rows: [
+          { col: "name", help: "Obligatorio. Nombre del producto." },
+          { col: "price", help: "Obligatorio. Precio de venta (número)." },
+          { col: "sku / barcode", help: "Opcionales. Código interno / de barras." },
+          { col: "cost", help: "Opcional. Costo." },
+          { col: "stock / stock_min", help: "Opcionales. Stock actual y mínimo." },
+          { col: "unit", help: "Opcional. Unidad (un, kg, lt…). Default 'un'." },
+          { col: "category", help: "Opcional. Si no existe, se crea." },
+        ],
+      },
+    ]);
   }
 
   return (
@@ -76,21 +99,26 @@ export function ImportCsvModal({
         if (!o) reset();
         onOpenChange(o);
       }}
-      title="Importar productos (CSV)"
-      description="Columnas: name, sku, barcode, price, cost, stock, stock_min, unit, category."
+      title="Importar productos (XLSX)"
+      description="Descargá la plantilla, completala y subila. Te mostramos qué entra y qué no."
     >
       <div className="space-y-4">
         <button
           onClick={downloadTemplate}
           className="inline-flex items-center gap-1.5 text-sm text-ninja-flameSoft hover:underline"
         >
-          <Download size={15} /> Descargar plantilla
+          <Download size={15} /> Descargar plantilla XLSX
         </button>
 
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-background px-4 py-6 text-sm text-muted-foreground transition hover:border-ninja-flameSoft">
           <Upload size={16} />
-          {fileName || "Elegí un archivo .csv"}
-          <input type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
+          {fileName || "Elegí un archivo .xlsx"}
+          <input
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={onFile}
+          />
         </label>
 
         {rows.length > 0 && (

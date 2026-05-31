@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
+  Download,
   History,
   Pencil,
   Plus,
@@ -13,16 +13,16 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype } from "@/components/brand/Logo";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
-import { ImportCsvModal } from "@/components/products/ImportCsvModal";
+import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { useProducts, useProductMutations } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
+import { createClient } from "@/lib/supabase/client";
+import { exportXlsx } from "@/lib/utils/xlsx";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function ProductosPage() {
@@ -53,6 +53,45 @@ export default function ProductosPage() {
     setSelected(p);
     setHistoryOpen(true);
   }
+  async function exportBase() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("products")
+      .select("name, sku, barcode, price, cost, stock, stock_min, unit, categories(name)")
+      .is("deleted_at", null)
+      .order("name", { ascending: true });
+    const rows = (data ?? []).map((p) => ({
+      name: p.name,
+      sku: p.sku ?? "",
+      barcode: p.barcode ?? "",
+      price: p.price,
+      cost: p.cost ?? "",
+      stock: p.stock,
+      stock_min: p.stock_min ?? "",
+      unit: p.unit,
+      category:
+        (p.categories as unknown as { name: string } | null)?.name ?? "",
+    }));
+    await exportXlsx("productos", [
+      {
+        name: "Productos",
+        title: "Base de productos — NinjaPos",
+        columns: [
+          { header: "name", key: "name" },
+          { header: "sku", key: "sku" },
+          { header: "barcode", key: "barcode" },
+          { header: "price", key: "price", type: "money" },
+          { header: "cost", key: "cost", type: "money" },
+          { header: "stock", key: "stock", type: "number" },
+          { header: "stock_min", key: "stock_min", type: "number" },
+          { header: "unit", key: "unit" },
+          { header: "category", key: "category" },
+        ],
+        rows,
+      },
+    ]);
+  }
+
   async function onDelete(p: Product) {
     if (!window.confirm(`¿Eliminar "${p.name}"? (baja lógica)`)) return;
     try {
@@ -71,9 +110,12 @@ export default function ProductosPage() {
             <Eyebrow>Catálogo</Eyebrow>
             <Display className="mt-3 text-3xl md:text-4xl">Productos</Display>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={exportBase}>
+              <Download size={16} /> Exportar XLSX
+            </Button>
             <Button variant="secondary" onClick={() => setImportOpen(true)}>
-              <Upload size={16} /> Importar CSV
+              <Upload size={16} /> Importar XLSX
             </Button>
             <Button onClick={openNew}>
               <Plus size={16} /> Nuevo producto
@@ -209,7 +251,7 @@ export default function ProductosPage() {
         onOpenChange={setHistoryOpen}
         product={selected}
       />
-      <ImportCsvModal open={importOpen} onOpenChange={setImportOpen} />
+      <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} />
     </>
   );
 }

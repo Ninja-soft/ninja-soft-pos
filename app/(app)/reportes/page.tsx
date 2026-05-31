@@ -1,15 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, SlidersHorizontal } from "lucide-react";
 import { format, startOfDay, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+import { Switch } from "@/components/ui/Switch";
+import {
+  Dropdown,
+  DropdownContent,
+  DropdownLabel,
+  DropdownTrigger,
+} from "@/components/ui/Dropdown";
 import { useSalesReport } from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
+
+const REPORTS = [
+  { key: "by_day", label: "Por día" },
+  { key: "by_method", label: "Por medio de pago" },
+  { key: "by_category", label: "Por categoría" },
+  { key: "by_user", label: "Por cajero" },
+] as const;
+type ReportKey = (typeof REPORTS)[number]["key"];
+const DEFAULT_VIS: Record<ReportKey, boolean> = {
+  by_day: true,
+  by_method: true,
+  by_category: true,
+  by_user: true,
+};
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -102,20 +124,57 @@ export default function ReportesPage() {
     ]);
   }
 
+  const [vis, setVis] = useState<Record<ReportKey, boolean>>(DEFAULT_VIS);
+  useEffect(() => {
+    loadReportPrefs().then((p) => {
+      if (p) setVis((v) => ({ ...v, ...p }));
+    });
+  }, []);
+  function toggle(k: ReportKey) {
+    setVis((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      void saveReportPrefs(next);
+      return next;
+    });
+  }
+
   return (
     <>
       <div className="mx-auto max-w-6xl px-6 py-8">
         <Eyebrow>Información</Eyebrow>
         <Display className="mt-3 text-3xl md:text-4xl">Reportes</Display>
 
-        <div className="mt-6 flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
+        <div className="-mx-6 mt-6 flex items-end gap-3 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex shrink-0 flex-col gap-1">
             <label className="text-xs text-muted-foreground">Período</label>
             <DateRangePicker value={range} onChange={setRange} />
           </div>
-          <Button variant="secondary" onClick={exportReporte} disabled={!data}>
+          <Button variant="secondary" className="shrink-0" onClick={exportReporte} disabled={!data}>
             <Download size={16} /> Exportar XLSX
           </Button>
+          <Dropdown>
+            <DropdownTrigger asChild>
+              <Button variant="secondary" className="shrink-0">
+                <SlidersHorizontal size={16} /> Personalizar
+              </Button>
+            </DropdownTrigger>
+            <DropdownContent align="end" className="w-60">
+              <DropdownLabel>Reportes a mostrar</DropdownLabel>
+              {REPORTS.map((r) => (
+                <div
+                  key={r.key}
+                  className="flex items-center justify-between gap-3 px-2 py-1.5 text-sm"
+                >
+                  {r.label}
+                  <Switch
+                    checked={vis[r.key]}
+                    onCheckedChange={() => toggle(r.key)}
+                    label={r.label}
+                  />
+                </div>
+              ))}
+            </DropdownContent>
+          </Dropdown>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -141,41 +200,49 @@ export default function ReportesPage() {
           <p className="mt-8 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : (
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <ReportTable
-              title="Por día"
-              cols={["Día", "Total", "Ventas"]}
-              rows={(data?.by_day ?? []).map((r) => [
-                r.day,
-                formatCurrency(r.total),
-                String(r.count),
-              ])}
-            />
-            <ReportTable
-              title="Por medio de pago"
-              cols={["Medio", "Total"]}
-              rows={(data?.by_method ?? []).map((r) => [
-                METHOD_LABELS[r.method] ?? r.method,
-                formatCurrency(r.total),
-              ])}
-            />
-            <ReportTable
-              title="Por categoría"
-              cols={["Categoría", "Total", "Cant."]}
-              rows={(data?.by_category ?? []).map((r) => [
-                r.category,
-                formatCurrency(r.total),
-                formatQty(r.qty),
-              ])}
-            />
-            <ReportTable
-              title="Por cajero"
-              cols={["Cajero", "Total", "Ventas"]}
-              rows={(data?.by_user ?? []).map((r) => [
-                r.cashier,
-                formatCurrency(r.total),
-                String(r.count),
-              ])}
-            />
+            {vis.by_day && (
+              <ReportTable
+                title="Por día"
+                cols={["Día", "Total", "Ventas"]}
+                rows={(data?.by_day ?? []).map((r) => [
+                  r.day,
+                  formatCurrency(r.total),
+                  String(r.count),
+                ])}
+              />
+            )}
+            {vis.by_method && (
+              <ReportTable
+                title="Por medio de pago"
+                cols={["Medio", "Total"]}
+                rows={(data?.by_method ?? []).map((r) => [
+                  METHOD_LABELS[r.method] ?? r.method,
+                  formatCurrency(r.total),
+                ])}
+              />
+            )}
+            {vis.by_category && (
+              <ReportTable
+                title="Por categoría"
+                cols={["Categoría", "Total", "Cant."]}
+                rows={(data?.by_category ?? []).map((r) => [
+                  r.category,
+                  formatCurrency(r.total),
+                  formatQty(r.qty),
+                ])}
+              />
+            )}
+            {vis.by_user && (
+              <ReportTable
+                title="Por cajero"
+                cols={["Cajero", "Total", "Ventas"]}
+                rows={(data?.by_user ?? []).map((r) => [
+                  r.cashier,
+                  formatCurrency(r.total),
+                  String(r.count),
+                ])}
+              />
+            )}
           </div>
         )}
       </div>

@@ -909,12 +909,12 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
   - [ ] Helper único de import (parse XLSX con `exceljs`) + reuso del `exportXlsx` (TX-2) para plantillas y export de base.
   - [ ] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.
 
-- [ ] **TX-5 — Reportes PRO configurables por usuario.**
-  - [ ] **Tablero de reportes configurable**: cada usuario elige **qué reportes ver**, en qué **orden**, y puede **ocultar** los que no usa. Preferencia persistida por usuario (`users.settings`, cross-device).
-  - [ ] **Catálogo de reportes ampliable** (se pueden agregar nuevos sin romper los existentes): ventas por día/medio/categoría/cajero, top productos, márgenes, stock bajo, caja/arqueos, clientes, evolución temporal, comparativos por período.
-  - [ ] Filtros guardables (rango con el calendario de TX-1, sucursal, medio de pago, categoría) y presets por usuario.
-  - [ ] **Reporte Excel avanzado**: export multi-hoja con encabezados de marca, totales, subtotales por grupo, autofilter, paneles congelados y formato moneda/fecha (sobre `exportXlsx` de TX-2); incluye las dimensiones elegidas.
-  - [ ] *Criterio:* un usuario arma su tablero (agrega/oculta/ordena reportes), lo encuentra igual en otro dispositivo, y descarga un Excel avanzado con sus reportes y filtros aplicados.
+- [~] **TX-5 — Reportes PRO configurables por usuario.** — *Base hecha (PR #46): mostrar/ocultar reportes persistido. Falta orden, más reportes y filtros guardables.*
+  - [~] **Tablero de reportes configurable**: cada usuario **muestra/oculta** reportes con "Personalizar"; persistido en `users.settings.reports` (cross-device, merge sin pisar apariencia). **Orden (drag) pendiente.**
+  - [ ] **Catálogo de reportes ampliable**: hoy día/medio/categoría/cajero; faltan top productos, márgenes, stock bajo, clientes, comparativos.
+  - [ ] Filtros guardables (rango/sucursal/medio/categoría) y presets por usuario.
+  - [x] **Reporte Excel avanzado**: export multi-hoja con marca, totales, autofilter, header congelado, formato moneda/fecha (`exportXlsx`).
+  - [~] *Criterio:* el usuario muestra/oculta reportes y lo encuentra igual en otro dispositivo; descarga Excel. (Orden y filtros guardables pendientes.)
 
 - [ ] **TX-3 — Pulido UX continuo.**
   - [ ] Estados vacíos, skeletons, toasts consistentes, accesibilidad, atajos de teclado en POS.

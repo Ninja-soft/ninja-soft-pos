@@ -31,38 +31,65 @@ export function readLocalPrefs(): UiPrefs {
   };
 }
 
-/** Escribe en Supabase las prefs actuales (lee del localStorage ya actualizado). */
-export async function persistPrefs(): Promise<void> {
+async function readRemoteSettings(): Promise<Record<string, unknown>> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return {};
+  const { data } = await supabase
+    .from("users")
+    .select("settings")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  return (data?.settings as Record<string, unknown> | null) ?? {};
+}
+
+/** Merge de un patch en public.users.settings (no pisa otras claves). */
+async function patchRemoteSettings(patch: Record<string, unknown>): Promise<void> {
   try {
     const supabase = createClient();
     const {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) return;
+    const current = await readRemoteSettings();
     await supabase
       .from("users")
-      .update({ settings: readLocalPrefs() as never })
+      .update({ settings: { ...current, ...patch } as never })
       .eq("id", session.user.id);
   } catch {
-    // sin sesión / sin red: queda solo en localStorage
+    // sin sesión / sin red
   }
+}
+
+/** Escribe las prefs de apariencia (merge; conserva otras claves como reports). */
+export async function persistPrefs(): Promise<void> {
+  await patchRemoteSettings(readLocalPrefs() as Record<string, unknown>);
 }
 
 /** Lee las prefs guardadas del usuario logueado (o null). */
 export async function loadRemotePrefs(): Promise<UiPrefs | null> {
   try {
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) return null;
-    const { data } = await supabase
-      .from("users")
-      .select("settings")
-      .eq("id", session.user.id)
-      .maybeSingle();
-    return (data?.settings as UiPrefs | null) ?? null;
+    const s = await readRemoteSettings();
+    return s as UiPrefs;
   } catch {
     return null;
   }
+}
+
+// --- Preferencias de reportes (TX-5): qué reportes ver, por usuario. ---
+export type ReportPrefs = Record<string, boolean>;
+
+export async function loadReportPrefs(): Promise<ReportPrefs | null> {
+  try {
+    const s = await readRemoteSettings();
+    return (s.reports as ReportPrefs | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveReportPrefs(prefs: ReportPrefs): Promise<void> {
+  await patchRemoteSettings({ reports: prefs });
 }

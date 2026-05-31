@@ -257,11 +257,12 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [ ] QR, leyendas extra y preview por sucursal.
   - [~] *Criterio:* un tenant configura su ticket (logo/datos/pie/ancho) y lo imprime; descarga A4 pendiente.
 
-- [ ] **H10 — Catálogo público + variantes.**
-  - [ ] Catálogo web por tenant (productos, fotos, precios, stock visible opcional).
+- [~] **H10 — Catálogo público + variantes.** — *Catálogo público base hecho (PR #32); variantes y listas por canal pendientes.*
+  - [x] Catálogo web público por tenant en `/c/<slug>` (RPC `public_catalog` SECURITY DEFINER, anónimo; solo tenants activos y productos activos). Muestra logo/branding, fotos, precios y categorías.
   - [ ] Variantes por rubro (talle/color para textil; SKU compuesto).
   - [ ] Listas de precios por canal (mostrador / catálogo / mayorista).
-  - [ ] *Criterio:* un tenant publica su catálogo con fotos y variantes sin tocar código.
+  - [ ] Carrito/pedido desde el catálogo (cruza con F12/F13 y delivery).
+  - [x] *Criterio (base):* un tenant con productos activos publica su catálogo en `/c/<slug>` sin tocar código.
   - *Nota:* el motor de promociones se trata aparte y a fondo en **[F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro)**.
 
 ### F7 — Panel interno PRO + comunicaciones

@@ -1299,6 +1299,7 @@ export type Database = {
         Args: { p_opening_amount: number; p_register_id: string }
         Returns: string
       }
+      public_catalog: { Args: { p_slug: string }; Returns: Json }
       sales_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       tenant_members: {
         Args: Record<PropertyKey, never>

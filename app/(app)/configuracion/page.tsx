@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Palette } from "lucide-react";
-import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
+import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
@@ -19,6 +19,7 @@ import {
   type PriceAccent,
 } from "@/lib/theme/AppearanceProvider";
 import { formatCurrency } from "@/lib/utils/format";
+import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
   "ninja-dark": { bg: "#0a0518", a: "#ff5a2c", b: "#ffd21f" },
@@ -255,22 +256,8 @@ export default function ConfiguracionPage() {
         )}
       </Card>
 
-      {/* Placeholder para futuras secciones */}
-      <Card className="mt-4 opacity-60">
-        <CardContent className="flex items-center gap-3 p-5">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-muted text-muted-foreground">
-            <Heading as="h3" className="text-base">
-              ⚙
-            </Heading>
-          </span>
-          <div>
-            <div className="font-semibold">Negocio y cuenta</div>
-            <div className="text-sm text-muted-foreground">
-              Datos del negocio, usuarios y medios de pago — próximamente.
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Marca del negocio (solo owner/manager; el componente se auto-oculta) */}
+      <BrandingCard />
     </div>
   );
 }

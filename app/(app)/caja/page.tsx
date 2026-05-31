@@ -20,6 +20,7 @@ import { Isotype } from "@/components/brand/Logo";
 import { useOpenShift } from "@/modules/pos/hooks";
 import { useShiftMovements, useAddMovement } from "@/modules/cash/hooks";
 import { summarize } from "@/modules/cash/api";
+import { ZClosuresHistory } from "@/components/cash/ZClosuresHistory";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { format } from "date-fns";
@@ -228,6 +229,10 @@ export default function CajaPage() {
             </Card>
           </>
         )}
+
+        <div className="mt-10">
+          <ZClosuresHistory />
+        </div>
       </div>
 
       <Modal

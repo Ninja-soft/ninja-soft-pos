@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
 
 export type CashMovement = Tables<"cash_movements">;
+export type ZClosure = Tables<"cash_z_closures">;
 
 export interface ShiftSummary {
   opening: number;
@@ -38,6 +39,18 @@ export const cashApi = {
       reason,
     });
     if (error) throw error;
+  },
+
+  // Historial inmutable de cierres Z (más reciente primero).
+  zClosures: async (): Promise<ZClosure[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("cash_z_closures")
+      .select("*")
+      .order("z_number", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return (data ?? []) as ZClosure[];
   },
 };
 

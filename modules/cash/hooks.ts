@@ -15,6 +15,13 @@ export function useShiftMovements(shiftId: string | null) {
   });
 }
 
+export function useZClosures() {
+  return useQuery({
+    queryKey: ["cash", "z-closures"],
+    queryFn: () => cashApi.zClosures(),
+  });
+}
+
 export function useAddMovement() {
   const qc = useQueryClient();
   return useMutation({

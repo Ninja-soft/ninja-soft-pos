@@ -61,7 +61,7 @@ Deno.serve(async (req: Request) => {
   const email = (body.email ?? "").trim().toLowerCase();
   const role = body.role ?? "";
   const displayName = (body.display_name ?? "").trim().slice(0, 80) || null;
-  const avatar = (body.avatar ?? "").trim().slice(0, 40) || null;
+  const avatar = (body.avatar ?? "").trim().slice(0, 300) || null;
   if (!EMAIL_RE.test(email)) return json({ error: "invalid_email" }, 400);
   if (!ASSIGNABLE_ROLES.includes(role)) return json({ error: "invalid_role" }, 400);
 

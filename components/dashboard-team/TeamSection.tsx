@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, IdCard } from "lucide-react";
+import { UserPlus, Pencil, IdCard, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
+import { resizeToWebp } from "@/lib/utils/image";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
@@ -47,11 +48,39 @@ function AvatarPicker({
   value,
   onChange,
   name,
+  tenantId,
 }: {
   value: string | null;
   onChange: (v: string | null) => void;
   name: string;
+  tenantId: string;
 }) {
+  const supabase = createClient();
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const isUrl = !!value && /^https?:\/\//.test(value);
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const webp = await resizeToWebp(file, 256, 0.85);
+      const path = `${tenantId}/members/${crypto.randomUUID()}.webp`;
+      const up = await supabase.storage
+        .from("tenant-assets")
+        .upload(path, webp, { contentType: "image/webp", upsert: false });
+      if (up.error) throw up.error;
+      const { data: pub } = supabase.storage.from("tenant-assets").getPublicUrl(path);
+      onChange(pub.publicUrl);
+    } catch {
+      toast({ title: "No se pudo subir la foto", variant: "error" });
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
@@ -82,6 +111,31 @@ function AvatarPicker({
           </button>
         );
       })}
+      {/* Foto propia */}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={busy}
+        className={cn(
+          "grid h-9 w-9 place-items-center overflow-hidden rounded-full ring-2 transition hover:bg-muted",
+          isUrl ? "ring-ninja-flame" : "ring-transparent",
+          busy && "opacity-50",
+        )}
+        title="Subir foto"
+      >
+        {isUrl ? (
+          <Avatar name={name || "?"} avatar={value} size={32} />
+        ) : (
+          <Upload size={16} className="text-muted-foreground" />
+        )}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => onFile(e.target.files?.[0])}
+      />
     </div>
   );
 }
@@ -359,7 +413,7 @@ export function TeamSection({
             </div>
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
-              <AvatarPicker value={avatar} onChange={setAvatar} name={name} />
+              <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
@@ -454,7 +508,7 @@ export function TeamSection({
             </div>
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
-              <AvatarPicker value={avatar} onChange={setAvatar} name={name} />
+              <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />
             </div>
             <div className="flex items-center justify-between pt-1">
               <Button
@@ -570,7 +624,7 @@ export function TeamSection({
             <Input label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
-              <AvatarPicker value={avatar} onChange={setAvatar} name={name} />
+              <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />
             </div>
             <Input
               label="PIN (opcional, para fichar en el POS)"

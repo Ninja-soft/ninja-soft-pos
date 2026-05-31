@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
+import { InternalNav } from "@/components/layout/InternalNav";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export default async function InternalLayout({
@@ -32,26 +33,7 @@ export default async function InternalLayout({
                 Interno
               </span>
             </Link>
-            <nav className="hidden items-center gap-1 sm:flex">
-              <Link
-                href="/internal/tenants"
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                Negocios
-              </Link>
-              <Link
-                href="/internal/staff"
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                Staff
-              </Link>
-              <Link
-                href="/internal/emails"
-                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                Emails
-              </Link>
-            </nav>
+            <InternalNav />
           </div>
           <ThemeToggle />
         </div>

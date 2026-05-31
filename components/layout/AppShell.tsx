@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils/cn";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
+import { Avatar } from "@/components/ui/Avatar";
 import {
   Dropdown,
   DropdownContent,
@@ -105,17 +107,42 @@ function UserMenu({
 }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
-  const initial = (email[0] ?? "?").toUpperCase();
+
+  // Foto + nombre configurados del usuario (su membresía activa).
+  const { data: me } = useQuery({
+    queryKey: ["my-shell-profile"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("tenant_users")
+        .select("display_name, avatar")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      return { display_name: data?.display_name ?? null, avatar: data?.avatar ?? null };
+    },
+  });
+  const name = me?.display_name || email;
 
   return (
     <Dropdown>
       <DropdownTrigger asChild>
         <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ninja-gradient text-sm font-bold text-ninja-voidViolet">
-            {initial}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-            {email}
+          <Avatar name={name} avatar={me?.avatar} size={32} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {name}
+            </span>
+            {me?.display_name && (
+              <span className="block truncate text-xs text-muted-foreground">
+                {email}
+              </span>
+            )}
           </span>
           <ChevronDown size={15} className="shrink-0 text-muted-foreground" />
         </button>

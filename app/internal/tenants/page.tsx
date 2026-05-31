@@ -24,8 +24,8 @@ export default function InternalTenantsPage() {
         suscripción.
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full text-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Negocio</th>

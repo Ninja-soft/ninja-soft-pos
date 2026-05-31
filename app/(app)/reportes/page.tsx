@@ -341,7 +341,8 @@ function ReportTable({
       <div className="border-b border-border px-4 py-3 font-display font-bold">
         {title}
       </div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[320px] text-sm">
         <thead className="text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
           <tr>
             {cols.map((c, i) => (
@@ -374,6 +375,7 @@ function ReportTable({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

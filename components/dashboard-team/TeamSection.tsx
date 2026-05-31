@@ -263,8 +263,12 @@ export function TeamSection({
                     </td>
                     {canManage && (
                       <td className="px-4 py-3 text-right">
-                        {m.user_id !== currentUserId && m.role !== "owner" && (
-                          <EditMemberDialog member={m} onDone={refresh} />
+                        {(m.user_id === currentUserId || m.role !== "owner") && (
+                          <EditMemberDialog
+                            member={m}
+                            isSelf={m.user_id === currentUserId}
+                            onDone={refresh}
+                          />
                         )}
                       </td>
                     )}
@@ -429,7 +433,15 @@ export function TeamSection({
     );
   }
 
-  function EditMemberDialog({ member, onDone }: { member: Member; onDone: () => void }) {
+  function EditMemberDialog({
+    member,
+    isSelf,
+    onDone,
+  }: {
+    member: Member;
+    isSelf: boolean;
+    onDone: () => void;
+  }) {
     const [open, setOpen] = useState(false);
     const [name, setName] = useState(member.display_name ?? "");
     const [role, setRole] = useState<AssignableRole>(
@@ -446,7 +458,8 @@ export function TeamSection({
             action: "update_member",
             user_id: member.user_id,
             display_name: name.trim(),
-            role,
+            // No se cambia el propio rol desde acá.
+            ...(isSelf ? {} : { role }),
             avatar,
           },
         });
@@ -494,32 +507,38 @@ export function TeamSection({
             className="space-y-5"
           >
             <Input label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
-            <div>
-              <span className="mb-2 block text-sm font-medium text-muted-foreground">Rol</span>
-              <Segmented<AssignableRole>
-                value={role}
-                onChange={setRole}
-                options={[
-                  { value: "manager", label: "Encargado" },
-                  { value: "cashier", label: "Cajero" },
-                  { value: "viewer", label: "Solo lectura" },
-                ]}
-              />
-            </div>
+            {!isSelf && (
+              <div>
+                <span className="mb-2 block text-sm font-medium text-muted-foreground">Rol</span>
+                <Segmented<AssignableRole>
+                  value={role}
+                  onChange={setRole}
+                  options={[
+                    { value: "manager", label: "Encargado" },
+                    { value: "cashier", label: "Cajero" },
+                    { value: "viewer", label: "Solo lectura" },
+                  ]}
+                />
+              </div>
+            )}
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
               <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />
             </div>
             <div className="flex items-center justify-between pt-1">
-              <Button
-                type="button"
-                variant={member.status === "suspended" ? "secondary" : "ghost"}
-                onClick={() => toggleStatus.mutate()}
-                disabled={toggleStatus.isPending}
-                className={member.status !== "suspended" ? "text-destructive" : ""}
-              >
-                {member.status === "suspended" ? "Reactivar" : "Suspender"}
-              </Button>
+              {isSelf ? (
+                <span />
+              ) : (
+                <Button
+                  type="button"
+                  variant={member.status === "suspended" ? "secondary" : "ghost"}
+                  onClick={() => toggleStatus.mutate()}
+                  disabled={toggleStatus.isPending}
+                  className={member.status !== "suspended" ? "text-destructive" : ""}
+                >
+                  {member.status === "suspended" ? "Reactivar" : "Suspender"}
+                </Button>
+              )}
               <Button type="submit" disabled={save.isPending}>
                 {save.isPending ? "Guardando…" : "Guardar"}
               </Button>

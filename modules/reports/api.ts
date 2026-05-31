@@ -7,6 +7,7 @@ export interface SalesReport {
   by_method: { method: string; total: number }[];
   by_category: { category: string; total: number; qty: number }[];
   by_user: { cashier: string; total: number; count: number }[];
+  by_product: { product: string; total: number; qty: number }[];
 }
 
 export const reportsApi = {

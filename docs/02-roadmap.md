@@ -27,9 +27,10 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 Planificación |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
+| **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
-> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
+> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
 ---
 
@@ -224,7 +225,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ## Plan ampliado (2026-05-30)
 
-Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
+Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
 
 ### F6 — Personalización del producto
 
@@ -324,10 +325,10 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
   - [ ] *Criterio:* pasar un tenant de Start trial a un plan custom "Pro Heladería Lucas" activo con vencimiento, pago registrado, cuota aumentada, módulos activados y notificación pendiente queda auditado de punta a punta.
 
-- [ ] **H13 — Emails configurables (HTML + variables).**
-  - [ ] **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …), preview y **versionado**.
-  - [ ] **Catálogo de emails del sistema**: bienvenida, invitación de usuario, reset de contraseña, trial por vencer, pago vencido, suspensión, etc. — cada uno editable.
-  - [ ] **Proveedores de envío:** **Resend** (transaccional) + **Brevo** (masivos/campañas). Credenciales encriptadas; abstracción de proveedor.
+- [~] **H13 — Emails configurables (HTML + variables).** — *Editor + catálogo hechos (PR #45). Envío (Resend) pendiente de API key.*
+  - [x] **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …) y **preview en vivo**. Tabla `email_templates` por tenant (override de defaults). UI en `/configuracion` → Emails (owner/manager). *(Versionado: pendiente.)*
+  - [x] **Catálogo de emails del sistema**: bienvenida, invitación de usuario, reset de contraseña, trial por vencer, pago vencido, suspensión — cada uno editable (`lib/email/templates.ts`).
+  - [ ] **Proveedores de envío:** **Resend** (transaccional) + **Brevo** (masivos/campañas). Credenciales encriptadas; abstracción de proveedor. *(Bloqueado: requiere API key + dominio verificado.)*
   - [ ] **Logs de envío** (estado, destinatario, plantilla, proveedor) y reintentos.
   - [ ] **Envíos masivos / campañas** a segmentos de tenants/usuarios.
   - [ ] *Criterio:* editar la plantilla "trial por vencer", previsualizar con variables reales y enviarla; el envío queda registrado con su estado.
@@ -362,6 +363,14 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [ ] **H20** — **Mobbex** como **orquestador** (abstrae varios proveedores; opcional según convenga).
   - [ ] **H21** — **Pagos360** (links de pago / cobranzas).
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
+
+- [ ] **H21b — Orquestador de pagos estilo VTOL.**
+  - [ ] Router de pagos por proveedor/adquirente/terminal/canal con prioridad, fallback y reglas de ruteo.
+  - [ ] Estado central de transacciones: iniciada, autorizada, capturada, rechazada, reversada, anulada, conciliada, en disputa.
+  - [ ] Conciliación automática por lote, cupón, autorización, terminal, adquirente y liquidación.
+  - [ ] Monitoreo de terminales, alarmas de caída, reintentos seguros y recuperación automática.
+  - [ ] Trazabilidad por transacción y auditoría completa sin guardar datos sensibles de tarjeta.
+  - [ ] *Criterio:* si un proveedor falla, el POS ofrece fallback autorizado y la operación queda conciliable sin duplicar cobro.
 
 ### F10 — Hardware y mostrador PRO
 
@@ -753,6 +762,80 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Marketplace de apps: integración aprobada, permisos visibles, instalación/desinstalación y health por app.
   - [ ] *Criterio:* un partner recibe webhook de venta, consulta detalle por API y queda auditado por tenant.
 
+### F16 — Comercio unificado tipo Napse/TOTVS
+
+Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTOL, Fiscal Flow y Promo) y llevar NinjaSoft a una capa de **comercio unificado** para cadenas, franquicias y retailers que necesitan operar tienda física, e-commerce, marketplaces, pagos, fiscal, promociones, fidelización y devoluciones desde un solo cockpit. Ver [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md).
+
+- [ ] **H76 — Unified Commerce Cockpit.**
+  - [ ] Cockpit central de ventas, inventario, pedidos, pagos, fiscal, devoluciones, promociones y fidelización por canal/sucursal/marca.
+  - [ ] Vista 360 de operación en tiempo real: tiendas físicas, catálogo público, e-commerce, marketplace, QR, WhatsApp y delivery.
+  - [ ] Alertas operativas con SLA: pedido demorado, stock roto, pago sin conciliar, factura bloqueada, devolución pendiente, terminal caída.
+  - [ ] *Criterio:* un gerente ve en una sola pantalla qué canal vende, qué pedidos faltan surtir, qué pagos fallaron y qué stock está comprometido.
+
+- [ ] **H77 — Jornadas omnicanal avanzadas.**
+  - [ ] Stock Lookup / Endless Aisle: vender desde una tienda usando stock de otra sucursal o depósito.
+  - [ ] Click & Collect: compra online, retiro en tienda, reserva de stock, preparación y entrega con identidad validada.
+  - [ ] Ship from Store: venta online o de tienda con envío desde sucursal óptima.
+  - [ ] Reserve Online, Try/Pay in Store: reserva online, prueba en tienda y conversión a venta.
+  - [ ] Devoluciones y cambios cross-channel: comprar online y devolver/cambiar en tienda con stock y fiscal consistentes.
+  - [ ] *Criterio:* un cliente compra online, retira en sucursal, cambia un producto en otra sucursal y todo queda conciliado.
+
+- [ ] **H78 — OMS y surtido multi-origen.**
+  - [ ] Order Management System liviano: pedidos, reservas, picking, packing, despacho, entrega, cancelación y reembolso.
+  - [ ] Asignación de origen por reglas: cercanía, stock, margen, SLA, capacidad, horario y costo de envío.
+  - [ ] Picking por app/PWA, sustituciones autorizadas, faltantes, preparación parcial y split fulfillment.
+  - [ ] *Criterio:* un pedido con 3 ítems se divide entre depósito central y sucursal sin perder trazabilidad.
+
+- [ ] **H79 — Fiscal Hub multi-canal y multi-país.**
+  - [ ] Abstracción fiscal por país/provincia/canal: AFIP/ARCA Argentina primero, arquitectura preparada para otros países.
+  - [ ] Ciclo completo de comprobante: emitir, almacenar XML/PDF, enviar al cliente, reimprimir, anular, nota de crédito/débito y auditar.
+  - [ ] Contingencia autónoma por tienda/caja con cola fiscal, alertas 24/7, reintento, bloqueo preventivo y tablero fiscal.
+  - [ ] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos.
+  - [ ] *Criterio:* una cadena opera ventas físicas y online con comprobantes centralizados, contingencia y trazabilidad por país/canal.
+
+- [ ] **H80 — Promo & Loyalty omnicanal enterprise.**
+  - [ ] Campañas omnicanal: POS, catálogo, e-commerce, WhatsApp, QR, marketplace y app futura.
+  - [ ] Simulador de campañas, coexistencia, exclusividad, conflictos, presupuesto, forecast de impacto y ticket promedio esperado.
+  - [ ] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento.
+  - [ ] Automatizaciones por evento: primera compra, cumpleaños, abandono, recompra, cliente inactivo, devolución, ticket alto.
+  - [ ] *Criterio:* una campaña se simula, se publica en todos los canales y mide uso, margen, ticket promedio y recurrencia.
+
+- [ ] **H81 — Clienteling y venta asistida móvil.**
+  - [ ] POS móvil para vendedor: buscar cliente, ver historial, preferencias, talles, garantías, deuda, puntos y recomendaciones.
+  - [ ] Venta asistida desde celular/tablet con QR de pago, stock de otra tienda, cross-selling/up-selling y envío a domicilio.
+  - [ ] Lista de deseos, carrito persistente omnicanal y recuperación de venta iniciada en otro canal.
+  - [ ] *Criterio:* un vendedor atiende en salón desde celular, cobra con QR y evita que el cliente pase por caja.
+
+- [ ] **H82 — Prevención de fraude y riesgo operativo.**
+  - [ ] Detección de operaciones sospechosas: anulaciones repetidas, descuentos excesivos, devoluciones anómalas, pagos fallidos, caja fuera de patrón.
+  - [ ] Reglas de bloqueo, revisión manual, aprobación por supervisor y scoring de riesgo.
+  - [ ] Señales de fraude omnicanal: abuso de cupones, cambios cross-channel, múltiples cuentas, chargebacks, vale/gift card sospechosa.
+  - [ ] *Criterio:* una devolución de alto riesgo pide aprobación y queda marcada para auditoría.
+
+- [ ] **H83 — Operación de cadenas, marcas y franquicias.**
+  - [ ] Multi-marca/multi-negocio dentro de un grupo empresarial.
+  - [ ] Franquicias: configuración central con overrides locales, catálogo central, precios sugeridos/obligatorios y reportes por franquiciado.
+  - [ ] Consolidación regional: país, moneda, impuestos, canales, depósitos, roles y permisos por unidad de negocio.
+  - [ ] *Criterio:* una franquicia recibe catálogo/precios desde central, opera localmente y reporta ventas consolidadas.
+
+- [ ] **H84 — Marketplace y e-commerce integration hub.**
+  - [ ] Conectores configurables para Tienda Nube, Mercado Libre, Shopify/WooCommerce futuro, PedidosYa/Rappi futuro y ERP externo.
+  - [ ] Mapeo de catálogo, categorías, variantes, modifiers, impuestos, estados y medios por canal.
+  - [ ] Sincronización con colas, dead-letter, replay, comparación de divergencias y health por integración.
+  - [ ] *Criterio:* si Mercado Libre queda desincronizado, el cockpit muestra divergencia y permite replay controlado.
+
+- [ ] **H85 — Observabilidad enterprise de comercio unificado.**
+  - [ ] Tableros de salud: pagos, fiscal, integraciones, stock, OMS, promociones, webhooks, hardware y offline.
+  - [ ] Alarmas por SLA, error rate, latencia, backlog de colas, terminal caída, fiscal bloqueado o integración degradada.
+  - [ ] Runbooks operativos para soporte: qué revisar, cómo reintentar, cómo escalar y cómo cerrar incidente.
+  - [ ] *Criterio:* soporte detecta una caída de pagos, identifica proveedor/canal afectado y ejecuta runbook sin consultar SQL.
+
+- [ ] **H86 — Benchmark Napse parity y demos enterprise.**
+  - [ ] Matriz de paridad contra Napse Bridge/Omni/VTOL/Fiscal Flow/Promo, mantenida por producto.
+  - [ ] Demos enterprise por vertical: supermercado, moda, farmacia, tienda departamental, franquicia, mayorista.
+  - [ ] Dataset demo con miles de productos, múltiples sucursales, e-commerce, promociones, fidelización, devoluciones y pagos conciliados.
+  - [ ] *Criterio:* ventas puede mostrar un flujo omnicanal completo tipo cadena retail sin preparar datos manualmente.
+
 ### F15 — Escuela NinjaSoft + onboarding guiado configurable
 
 Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela interna, recorridos guiados, checklist por rubro, ayuda contextual y configuración desde internal para cambiar qué se enseña, cuándo y a quién. Ver [`28-school-onboarding.md`](./28-school-onboarding.md).
@@ -841,7 +924,7 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
 
 ## Benchmark de mercado (qué hace a un POS "pro")
 
-Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales: Fudo, Bistrosoft, Maxirest, Aligare). Mapeo de capacidades pro → dónde las cubre NinjaSoft. Sirve para validar que el roadmap no tenga huecos.
+Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales: Fudo, Bistrosoft, Maxirest, Aligare; enterprise Latam: **Napse/TOTVS**). Mapeo de capacidades pro → dónde las cubre NinjaSoft. Sirve para validar que el roadmap no tenga huecos.
 
 | Capacidad pro del mercado | Dónde la cubre NinjaSoft |
 |---|---|
@@ -853,7 +936,9 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Packs de sesiones, membresías simples y gift cards | **F12/H41** + F9/H55 |
 | Promociones avanzadas (NxM, combos, cupones, fidelización, gift cards) | **F9 (nuevo)** |
 | Pasarelas de pago presenciales y QR (MP Point, MODO, Payway, Getnet, Fiserv, etc.) | F8/H15+ |
+| Orquestador de pagos, ruteo, conciliación, alarmas y fallback tipo VTOL | **F8/H21b** + F16/H85 |
 | Facturación electrónica / fiscal (AFIP, CAE) | F3 |
+| Fiscal hub multi-canal, contingencia, XML/PDF, almacenamiento y multi-país | **F16/H79** + F3 |
 | Fotos de producto, branding, tickets a medida, catálogo público | F6 |
 | Multi-sucursal, multi-caja, transferencias de stock | F4 |
 | Inventario avanzado: lotes, vencimientos, series, conteos, alertas | **F14/H64** |
@@ -876,6 +961,12 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 + **F10/H22–H26** |
 | Segunda pantalla / display cliente (carrito, QR, total, vuelto) | **F10/H25** |
 | Pedidos online / delivery (PedidosYa, Rappi, Tienda Nube, Mercado Libre) | F5 (marketplace) |
+| Click & Collect, Ship from Store, Endless Aisle, Stock Lookup, devoluciones cross-channel | **F16/H77–H78** |
+| Cockpit central de comercio unificado | **F16/H76** |
+| Clienteling, POS móvil y venta asistida en salón | **F16/H81** |
+| Prevención de fraude y riesgo operativo omnicanal | **F16/H82** |
+| Operación de cadenas, marcas, franquicias y multi-negocio | **F16/H83** |
+| Integration hub con replay/dead-letter/health por conector | **F16/H84–H85** |
 | Modo offline completo con sincronización | **F14/H65** (AFIP offline mínimo cubierto en F3) |
 | App móvil para gerentes | Backlog, apoyada en API/webhooks F14/H68 |
 | Roles y permisos granulares; staff multinivel | F1 (roles) + **F7/H11 (staff NinjaSoft)** |
@@ -883,7 +974,7 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Reservas / turnos | **F12/H38** + F13/H51 para reservas gastronómicas |
 | Escuela, tours, ayuda contextual y certificaciones | **F15/H69–H75** |
 
-> **Conclusión del benchmark:** los huecos relevantes vs. POS líderes dejan de quedar en backlog: **inventario avanzado**, **compras/proveedores**, **modo offline completo**, **recargos/cuotas enterprise**, **API/webhooks** y **gobierno de configuración** pasan a **F14 — Motor comercial enterprise**. La oportunidad de adopción se cubre con **F15 — Escuela NinjaSoft + onboarding guiado configurable**, para reducir soporte y acelerar primera venta.
+> **Conclusión del benchmark:** los huecos relevantes vs. POS líderes dejan de quedar en backlog: **inventario avanzado**, **compras/proveedores**, **modo offline completo**, **recargos/cuotas enterprise**, **API/webhooks** y **gobierno de configuración** pasan a **F14 — Motor comercial enterprise**. La revisión específica contra Napse/TOTVS agrega una capa separada: **F16 — Comercio unificado**, con cockpit, OMS, journeys omnicanal, pagos tipo VTOL, fiscal hub, fidelización, prevención de fraude, franquicias y demos enterprise. La oportunidad de adopción se cubre con **F15 — Escuela NinjaSoft + onboarding guiado configurable**, para reducir soporte y acelerar primera venta.
 
 ---
 

@@ -702,6 +702,43 @@ Reglas:
 
 ---
 
+## 8.6 Extensión F16 — comercio unificado tipo Napse/TOTVS
+
+Cuando entre F16, se agregará un bloque para OMS, pagos orquestados, fiscal hub, promociones/fidelización enterprise, integraciones y riesgo:
+
+- [ ] `commerce_orders`: orden omnicanal con canal, origen, estado, cliente, totales y referencias externas.
+- [ ] `commerce_order_items`: ítems de orden con snapshot, canal, fulfillment y estado.
+- [ ] `commerce_reservations`: reservas de stock por canal/sucursal/depósito con expiración.
+- [ ] `fulfillment_tasks`: picking, packing, entrega, retiro y tareas de preparación.
+- [ ] `fulfillment_shipments`: envíos, retiro en tienda, ship-from-store y tracking.
+- [ ] `cross_channel_returns`: devoluciones/cambios entre canales con trazabilidad fiscal/stock/pago.
+- [ ] `payment_transactions`: estado único de pagos presenciales, QR, link, e-commerce y marketplace.
+- [ ] `payment_reconciliations`: conciliaciones por lote, cupón, autorización, terminal, adquirente y liquidación.
+- [ ] `payment_terminal_health`: salud de terminales, caídas, latencia y último heartbeat.
+- [ ] `fiscal_documents`: comprobantes fiscales/no fiscales por país/canal/venta/orden.
+- [ ] `fiscal_document_files`: XML/PDF/adjuntos con almacenamiento seguro y retención.
+- [ ] `promo_campaigns`: campañas omnicanal con presupuesto, vigencia, simulación y estado.
+- [ ] `loyalty_accounts`: cuenta de fidelización por cliente.
+- [ ] `loyalty_movements`: puntos, cashback, beneficios, vencimientos y canjes.
+- [ ] `gift_cards`: gift cards/vales con saldo, vencimiento y riesgo.
+- [ ] `customer_wallets`: monedero electrónico/saldo a favor enterprise.
+- [ ] `integration_connectors`: conectores por canal/app/ERP/marketplace.
+- [ ] `integration_jobs`: jobs de sync con estado, intento, payload hash e idempotencia.
+- [ ] `integration_dead_letters`: errores no resueltos con replay manual auditado.
+- [ ] `risk_rules`: reglas de riesgo/fraude por tenant/canal.
+- [ ] `risk_events`: eventos sospechosos, score, resolución y auditoría.
+
+Reglas:
+
+- [ ] Toda entidad cross-channel lleva `tenant_id`, `source_channel`, `external_reference` e `idempotency_key` cuando aplique.
+- [ ] Los conectores nunca escriben directo en tablas críticas sin pasar por comandos idempotentes.
+- [ ] Pagos y fiscal tienen estados propios, no se infieren solo desde `sales.status`.
+- [ ] Devoluciones cross-channel vinculan orden/venta original, pago, documento fiscal y movimiento de stock.
+- [ ] Dead-letter y replay son operaciones auditadas y visibles para soporte.
+- [ ] Riesgo/fraude nunca bloquea silenciosamente: debe explicar regla, score y acción requerida.
+
+---
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

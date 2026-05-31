@@ -2,6 +2,8 @@
 
 Documento de referencia para F14. Define el sistema central de configuracion comercial de NinjaSoft POS: planes, cuotas, add-ons, recargos, financiacion, reglas, inventario PRO, compras, offline, omnicanal, API y gobierno de cambios.
 
+La capa de comercio unificado inspirada especificamente en Napse/TOTVS se documenta aparte en [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md). F14 define el motor; F16 define la experiencia enterprise completa sobre ese motor.
+
 ## 1. Principio
 
 Toda configuracion comercial que cambie precio, acceso, limite, stock, cobro, comision, canal o riesgo operativo debe ser:
@@ -321,6 +323,17 @@ Reglas:
 - [ ] Mapeo de producto/modificador/categoria.
 - [ ] Conciliacion de ventas externas.
 
+Extensiones F16 inspiradas en Napse/TOTVS:
+
+- [ ] Unified Commerce Cockpit.
+- [ ] Stock Lookup / Endless Aisle.
+- [ ] Click & Collect.
+- [ ] Ship from Store.
+- [ ] Reserve Online, Try/Pay in Store.
+- [ ] Devoluciones cross-channel.
+- [ ] OMS con picking, packing, split fulfillment y SLA.
+- [ ] Clienteling y mobile POS.
+
 ## 11. API, webhooks y marketplace de apps
 
 API:
@@ -352,6 +365,16 @@ Marketplace:
 - [ ] Health por app.
 - [ ] Revocacion inmediata.
 
+Todo conector enterprise debe sumar:
+
+- [ ] Health check.
+- [ ] Retry con backoff.
+- [ ] Dead-letter queue.
+- [ ] Replay manual auditado.
+- [ ] Mapeo de entidades por canal.
+- [ ] Comparador de divergencias.
+- [ ] Runbook de soporte.
+
 ## 12. BI/AI operativo
 
 Recomendaciones objetivo:
@@ -382,4 +405,3 @@ Cada recomendacion debe mostrar:
 - [ ] Una orden de compra actualiza stock/costo con recepcion parcial.
 - [ ] Una venta offline se sincroniza sin duplicar venta, caja ni stock.
 - [ ] Toda configuracion sensible queda en audit log con antes/despues y motivo.
-

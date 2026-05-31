@@ -331,7 +331,7 @@ Con el MVP (H0–H6) funcional y desplegado, el equipo definió extender el alca
 
 ### Decisión
 
-Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014/ADR-018/ADR-019 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3**. Definiciones clave:
+Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014/ADR-018/ADR-019/ADR-020 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3**. Definiciones clave:
 
 - **Pagos:** arquitectura extensible primero (registro de proveedores, credenciales encriptadas por tenant, UI de cobro abstracta, pago mixto) y **una integración por etapas** por proveedor: Mercado Pago/Point, MODO (QR interoperable), Payway/Prisma, Getnet, Fiserv/Posnet/Clover, **Mobbex como orquestador opcional**, Pagos360. Medios manuales (efectivo, transferencia, mixto) desde la base.
 - **Staff NinjaSoft:** tres niveles — **super-admin**, **admin**, **soporte** — con matriz de permisos versionada.
@@ -674,6 +674,56 @@ F15 define:
 - **Positivas:** menor friccion de adopcion, menos tickets repetitivos, onboarding por rubro y certificacion por rol.
 - **Negativas:** exige gobierno de contenido, versionado de tours y cuidado para no saturar al usuario con mensajes.
 - **Seguimiento:** disenar `learning_courses`, `guided_tours`, `onboarding_checklists`, `onboarding_suggestions`, `suggestion_events` y el panel internal de configuracion antes de iniciar F15.
+
+---
+
+## ADR-020 — Benchmark Napse/TOTVS y comercio unificado
+
+**Fecha:** 2026-05-31
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+Se pidió revisar el roadmap especialmente contra Napse/TOTVS. La comparación muestra que el producto no debe quedarse solo en POS + pagos + promociones: para competir en retail enterprise necesita una capa de comercio unificado que conecte tienda física, e-commerce, marketplace, stock, OMS, pagos, fiscal, promociones, fidelización, devoluciones, riesgo y operación de cadenas.
+
+Referencias analizadas:
+
+- Napse Bridge: punto de venta omnicanal, inventario, OMS, reglas, pagos, fiscal y fidelización.
+- Napse VTOL: medios de pago omnicanal, ruteo, conciliación, alarmas, trazabilidad y alta disponibilidad.
+- Napse Fiscal Flow: emisión fiscal centralizada, XML/PDF, contingencia, multi-negocio y multi-país.
+- Napse Promo: promociones, simulación, coexistencia, cupones, puntos, gift cards y automatizaciones.
+- Napse Omni: Click & Collect, Ship from Store, devoluciones cross-channel, stock centralizado e integración con e-commerce/marketplaces.
+
+### Decisión
+
+Se agrega **F16 — Comercio unificado tipo Napse/TOTVS** y [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md).
+
+F16 define:
+
+- Unified Commerce Cockpit.
+- Jornadas omnicanal: Stock Lookup, Endless Aisle, Click & Collect, Ship from Store, Reserve Online/Try in Store y devoluciones cross-channel.
+- OMS y fulfillment multi-origen.
+- Fiscal Hub multi-canal y multi-país.
+- Promo & Loyalty enterprise.
+- Clienteling y mobile POS.
+- Prevención de fraude y riesgo operativo.
+- Operación de cadenas, marcas y franquicias.
+- Integration hub con health, retry, dead-letter y replay.
+- Observabilidad enterprise y demos por vertical.
+
+### Alternativas consideradas
+
+- **Meter todo en F14:** descartado. F14 es el motor comercial; F16 es la experiencia enterprise integrada sobre ese motor.
+- **Tratar Napse solo como proveedor de pagos/fiscal:** descartado. Napse opera como suite de comercio unificado, no solo gateway.
+- **Dejarlo como benchmark informal:** descartado. Para que sea accionable necesita fase, hitos, QA, modelo de datos y ADR.
+
+### Consecuencias
+
+- **Positivas:** NinjaSoft queda con una ruta clara para cadenas, franquicias y retailers grandes; el roadmap compite contra suites Latam reales, no solo POS livianos.
+- **Negativas:** F16 agrega mucha complejidad de OMS, sincronización, conciliación, fiscal, integraciones y soporte.
+- **Seguimiento:** diseñar `commerce_orders`, `fulfillment_tasks`, `payment_transactions`, `fiscal_documents`, `promo_campaigns`, `loyalty_accounts`, `integration_jobs`, `risk_events` y el cockpit antes de iniciar F16.
 
 ---
 

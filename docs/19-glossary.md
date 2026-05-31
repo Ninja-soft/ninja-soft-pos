@@ -42,6 +42,10 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Comanda.** Orden enviada a cocina, barra, cafetería, heladería o despacho. Puede imprimirse o mostrarse en KDS. No es lo mismo que ticket fiscal.
 
+**Comercio unificado.** Operación integrada de tienda física, e-commerce, marketplaces, pagos, fiscal, stock, pedidos, devoluciones, promociones y fidelización desde una sola plataforma.
+
+**Clienteling.** Venta asistida donde el vendedor usa datos de cliente, historial, preferencias, stock y recomendaciones para mejorar la atención en tienda.
+
 **CUIT/CUIL.** Identificadores fiscales argentinos. CUIT para empresas, CUIL para personas. Algunos clientes los exigen en el ticket.
 
 **Cuota / límite de plan.** Capacidad contratada por un tenant: usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento o módulos. Puede venir del plan base o de un override custom.
@@ -56,6 +60,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Display cliente.** Segunda pantalla del POS, visible para el comprador. Muestra carrito, total, vuelto, QR de pago y mensajes del negocio. En web se implementa como ruta dedicada sincronizada con la caja. Ver `20-hardware-pos.md`.
 
+**Dead-letter.** Cola de eventos o integraciones que fallaron definitivamente y requieren revisión/replay manual auditado.
+
 ## E
 
 **Edge Function.** Función serverless de Supabase escrita en Deno/TypeScript. Donde vive la lógica sensible: AFIP, webhooks, integraciones de pago.
@@ -69,6 +75,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Feature flag.** Switch que activa o desactiva una funcionalidad sin tocar código. Toda diferencia entre planes o rubros pasa por una flag. Ver `07-feature-flags.md`.
 
 **Fiado / cuenta corriente.** Venta que queda como deuda del cliente para cobrar después. Tiene límite, vencimiento y antigüedad de deuda.
+
+**Fiscal Hub.** Capa central de comprobantes fiscales/no fiscales: emisión, reintentos, XML/PDF, contingencia, almacenamiento, envío y auditoría.
 
 ## G
 
@@ -142,6 +150,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Practice sandbox.** Laboratorio demo donde un usuario practica flujos sin afectar caja, stock, pagos ni facturacion real.
 
+**Payment orchestrator.** Capa que enruta pagos entre proveedores/adquirentes/terminales, maneja fallback, estados, conciliación, alarmas y auditoría.
+
 ## R
 
 **Rate limit.** Límite de cantidad de requests por unidad de tiempo. Aplica a endpoints públicos y a Edge Functions sensibles.
@@ -153,6 +163,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Recargo de medio de pago.** Incremento automático del total según variante de cobro, por ejemplo tarjeta en cuotas.
 
 **Rule precedence.** Orden con el que se resuelven reglas o configuraciones cuando hay varios niveles aplicables: global, plan, tenant, sucursal, caja, canal, rol, usuario y vigencia.
+
+**Risk engine.** Motor de reglas/scoring para detectar descuentos, anulaciones, devoluciones, pagos o cupones sospechosos.
 
 ## S
 
@@ -185,6 +197,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Trial.** Estado inicial de un tenant nuevo. Acceso completo por X días, después se exige plan pago o pasa a suspendido.
 
 **Turno (cash shift).** Lapso entre apertura y cierre de una caja. Toda venta pertenece a un turno. Tabla `cash_shifts`.
+
+**Unified Commerce Cockpit.** Panel central para ver salud y operación de ventas, pedidos, stock, pagos, fiscal, integraciones, promociones y devoluciones en tiempo real.
 
 ## V
 

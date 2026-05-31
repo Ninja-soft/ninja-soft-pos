@@ -830,6 +830,58 @@ export type Database = {
           },
         ]
       }
+      product_serials: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          sale_id: string | null
+          serial: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          sale_id?: string | null
+          serial: string
+          status?: string
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          sale_id?: string | null
+          serial?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_serials_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_serials_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_serials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           barcode: string | null
@@ -844,6 +896,7 @@ export type Database = {
           image_url: string | null
           is_active: boolean
           is_kit: boolean
+          is_serialized: boolean
           metadata: Json
           name: string
           price: number
@@ -872,6 +925,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           is_kit?: boolean
+          is_serialized?: boolean
           metadata?: Json
           name: string
           price: number
@@ -900,6 +954,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           is_kit?: boolean
+          is_serialized?: boolean
           metadata?: Json
           name?: string
           price?: number
@@ -962,6 +1017,7 @@ export type Database = {
           product_name: string
           quantity: number
           sale_id: string
+          serial: string | null
           sku: string | null
           subtotal: number
           tenant_id: string
@@ -975,6 +1031,7 @@ export type Database = {
           product_name: string
           quantity: number
           sale_id: string
+          serial?: string | null
           sku?: string | null
           subtotal: number
           tenant_id?: string
@@ -988,6 +1045,7 @@ export type Database = {
           product_name?: string
           quantity?: number
           sale_id?: string
+          serial?: string | null
           sku?: string | null
           subtotal?: number
           tenant_id?: string

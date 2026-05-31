@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { brandsApi, categoriesApi, productsApi } from "./api";
+import { brandsApi, categoriesApi, productsApi, serialsApi } from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
 
 export function useProducts(search: string) {
@@ -53,6 +53,30 @@ export function useSaveKitComponents(kitId: string) {
       productsApi.saveKitComponents(kitId, components),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["products", "kit", kitId] }),
   });
+}
+
+export function useProductSerials(productId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["products", "serials", productId],
+    queryFn: () => serialsApi.list(productId!),
+    enabled: enabled && Boolean(productId),
+  });
+}
+
+export function useSerialMutations(productId: string) {
+  const qc = useQueryClient();
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ["products", "serials", productId] });
+  return {
+    add: useMutation({
+      mutationFn: (serials: string[]) => serialsApi.add(productId, serials),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => serialsApi.remove(id),
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 export function useProductMutations() {

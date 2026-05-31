@@ -6,7 +6,6 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
-import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -121,10 +120,6 @@ export default async function DashboardTeamPage() {
         tenantId={tenant.id}
         canManage={["owner", "manager"].includes(membership.role)}
       />
-
-      {["owner", "manager"].includes(membership.role) && (
-        <BrandingCard tenantId={tenant.id} />
-      )}
 
       {/* Accesos */}
       <div className="mt-8 flex flex-wrap gap-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Palette, Store } from "lucide-react";
+import { CreditCard, Mail, Palette, Store } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -21,12 +21,14 @@ import {
 import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
+import { EmailTemplatesCard } from "@/components/dashboard-team/EmailTemplatesCard";
 
-type Section = "apariencia" | "marca" | "pagos";
+type Section = "apariencia" | "marca" | "pagos" | "emails";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
   { key: "marca", label: "Marca del negocio", icon: Store },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
+  { key: "emails", label: "Emails", icon: Mail },
 ];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
@@ -272,6 +274,9 @@ export default function ConfiguracionPage() {
 
           {/* Medios de pago (solo owner/manager; se auto-oculta) */}
           {section === "pagos" && <PaymentMethodsCard />}
+
+          {/* Emails (solo owner/manager; se auto-oculta) */}
+          {section === "emails" && <EmailTemplatesCard />}
         </div>
       </div>
     </div>

@@ -133,6 +133,20 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 - [ ] Offline no duplica ventas, pagos, caja ni stock al sincronizar.
 - [ ] API/webhooks respetan scopes, rate limit y logs por tenant.
 
+### Comercio unificado tipo Napse/TOTVS
+
+- [ ] Click & Collect reserva stock, prepara pedido, valida retiro y descuenta stock correcto.
+- [ ] Ship from Store asigna origen por regla y permite split fulfillment.
+- [ ] Una devolución cross-channel actualiza orden, stock, pago, vale/NC y auditoría.
+- [ ] El cockpit muestra pedidos, pagos, fiscal, integraciones y alertas sin consultar SQL.
+- [ ] El orquestador de pagos soporta fallback sin duplicar transacciones.
+- [ ] Conciliación de pagos detecta faltantes/sobrantes por lote, cupón, autorización y terminal.
+- [ ] Fiscal hub conserva XML/PDF, reintentos, contingencia y estados por comprobante.
+- [ ] Promociones omnicanal respetan coexistencia, exclusividad, presupuesto y simulación.
+- [ ] Fidelización registra puntos/cashback/gift card/monedero con vencimiento y trazabilidad.
+- [ ] Conectores tienen health, retry, dead-letter y replay auditado.
+- [ ] Riesgo/fraude pide aprobación en operaciones sospechosas y explica la regla aplicada.
+
 ### Escuela y onboarding
 
 - [ ] Un tenant nuevo recibe checklist adaptado a rubro, plan y rol.

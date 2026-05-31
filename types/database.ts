@@ -405,6 +405,33 @@ export type Database = {
           },
         ]
       }
+      email_templates: {
+        Row: {
+          tenant_id: string
+          key: string
+          subject: string
+          html: string
+          enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          tenant_id: string
+          key: string
+          subject?: string
+          html?: string
+          enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          tenant_id?: string
+          key?: string
+          subject?: string
+          html?: string
+          enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           created_at: string

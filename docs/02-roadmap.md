@@ -325,13 +325,15 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
   - [ ] *Criterio:* pasar un tenant de Start trial a un plan custom "Pro Heladería Lucas" activo con vencimiento, pago registrado, cuota aumentada, módulos activados y notificación pendiente queda auditado de punta a punta.
 
-- [~] **H13 — Emails configurables (HTML + variables).** — *Editor + catálogo hechos (PR #45). Envío (Resend) pendiente de API key.*
-  - [x] **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …) y **preview en vivo**. Tabla `email_templates` por tenant (override de defaults). UI en `/configuracion` → Emails (owner/manager). *(Versionado: pendiente.)*
-  - [x] **Catálogo de emails del sistema**: bienvenida, invitación de usuario, reset de contraseña, trial por vencer, pago vencido, suspensión — cada uno editable (`lib/email/templates.ts`).
-  - [ ] **Proveedores de envío:** **Resend** (transaccional) + **Brevo** (masivos/campañas). Credenciales encriptadas; abstracción de proveedor. *(Bloqueado: requiere API key + dominio verificado.)*
-  - [ ] **Logs de envío** (estado, destinatario, plantilla, proveedor) y reintentos.
-  - [ ] **Envíos masivos / campañas** a segmentos de tenants/usuarios.
-  - [ ] *Criterio:* editar la plantilla "trial por vencer", previsualizar con variables reales y enviarla; el envío queda registrado con su estado.
+- [~] **H13 — Emails del sistema (NinjaSoft, en `/internal/emails`).** — *Editor + remitente + envío Resend hechos (PR #51). Falta cargar el secret `RESEND_API_KEY`.*
+  - [x] **Emails del sistema son GLOBALES y se editan en `/internal/emails`** (no en el POS del cliente). Tablas `system_email_templates` + `system_email_config` (RLS solo `is_internal`). Override de defaults de `lib/email/templates.ts`.
+  - [x] **Editor HTML + variables + preview en vivo**; catálogo: bienvenida, invitación, reset, trial por vencer, pago vencido, suspensión.
+  - [x] **Remitente configurable** (nombre + email de dominio verificado) en `/internal/emails`.
+  - [x] **Envío real con Resend** (Edge Function `send_email`, guard `is_internal`) + botón "Enviar prueba". *(Falta: cargar el secret `RESEND_API_KEY` en Supabase.)*
+  - [x] **Log de envío** en `audit_logs` (acción `email_sent`).
+  - [ ] **Brevo** + **envíos masivos** y reintentos (siguiente etapa).
+  - [ ] **POS del cliente:** los tenants suman **sus propios proveedores** para **campañas masivas** a sus clientes (en `/configuracion` del tenant) — *fase aparte (no son los emails del sistema).*
+  - [x] *Criterio:* en `/internal/emails` se edita una plantilla, se previsualiza con variables y se envía una prueba (una vez cargado `RESEND_API_KEY`).
 
 - [ ] **H13b — Centro de notificaciones por cuenta.**
   - [ ] Panel de notificaciones dentro de cada tenant: novedades, cambios de plan, vencimientos, pagos, alertas de uso, seguridad, AFIP, mantenimiento y soporte.

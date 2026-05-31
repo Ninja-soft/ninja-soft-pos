@@ -136,6 +136,8 @@ CI hace esto automáticamente en cada deploy.
 
 ## 5. Scripts en `package.json`
 
+### 5.1 Scripts actuales
+
 ```json
 {
   "scripts": {
@@ -144,21 +146,28 @@ CI hace esto automáticamente en cada deploy.
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "test:run": "vitest run",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "db:types": "supabase gen types typescript --project-id hrkditzrsavehnhngakb > types/database.ts"
+  }
+}
+```
+
+### 5.2 Scripts objetivo
+
+Agregar cuando existan los flujos correspondientes:
+
+```json
+{
+  "scripts": {
     "test:e2e": "playwright test",
     "test:coverage": "vitest run --coverage",
-    
     "db:reset": "supabase db reset",
     "db:diff": "supabase db diff",
-    "db:push:staging": "supabase db push --project-ref $STAGING_REF",
-    "db:push:prod": "supabase db push --project-ref $PROD_REF",
-    
     "fn:serve": "supabase functions serve",
     "fn:deploy:staging": "supabase functions deploy --project-ref $STAGING_REF",
-    "fn:deploy:prod": "supabase functions deploy --project-ref $PROD_REF",
-    
-    "types:gen": "supabase gen types typescript --project-ref $STAGING_REF > lib/supabase/types.ts"
+    "fn:deploy:prod": "supabase functions deploy --project-ref $PROD_REF"
   }
 }
 ```
@@ -185,12 +194,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - uses: supabase/setup-cli@v1
-      - run: supabase start
-      - run: supabase db reset
-      - run: pnpm test:run
-      - run: pnpm test:e2e
+      - run: pnpm test
+      - run: pnpm build
 ```
+
+Objetivo siguiente: sumar Supabase local, tests multi-tenant y Playwright cuando existan los scripts y fixtures.
 
 ### 6.2 `.github/workflows/deploy-staging.yml`
 Corre al mergear a `develop`.
@@ -295,5 +303,5 @@ Después de cada deploy a producción:
 
 - **RTO** (Recovery Time Objective): 4 horas.
 - **RPO** (Recovery Point Objective): 1 hora (max data loss).
-- Plan documentado en `docs/security-reviews/disaster-recovery.md` (Fase 3).
+- Plan documentado en [`docs/security-reviews/disaster-recovery.md`](./security-reviews/disaster-recovery.md) (base creada; se completa en Fase 3).
 - Test de DR cada 6 meses.

@@ -158,7 +158,7 @@ Para releases con impacto visible:
 
 ## Post-mortems
 
-Cuando algo serio pasa en producción, se escribe un post-mortem corto en `docs/postmortems/YYYY-MM-DD-titulo.md`. Contiene:
+Cuando algo serio pasa en producción, se escribe un post-mortem corto en `docs/post-mortems/YYYY-MM-DD-titulo.md` usando [`docs/templates/post-mortem.md`](../templates/post-mortem.md). Contiene:
 
 - Qué pasó (resumen).
 - Línea de tiempo.

@@ -11,6 +11,11 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Roadmap F10 — Hardware y mostrador PRO:** fase nueva para configuración avanzada de impresoras, scanners, etiquetas/balanzas, doble pantalla/display cliente y diagnóstico de hardware. Se agregó `docs/20-hardware-pos.md` y checkboxes de seguimiento en `docs/02-roadmap.md`.
+- **Roadmap robusto:** se agregó F1.5 Hardening pre-piloto, se ordenaron hitos H7–H56 con checkboxes, se reforzó AFIP con cola fiscal, venta offline y gate de homologación → producción, y se registró ADR-011.
+- **Roadmap F11 — Configuración retail avanzada:** medios de pago con recargos/cuotas, garantías extendidas, devoluciones/cambios con vales, cuenta corriente, pedidos de salón, despacho, depósitos/transferencias, roles retail e importación masiva XLSX para datos maestros. Se agregó `docs/21-retail-advanced-settings.md` y ADR-012.
+- **Roadmap F12 — Comercios simples y servicios:** modo catálogo chico, cobro rápido por botones, modificadores para heladería/cafetería, agenda para peluquería/estética, comisiones, propinas, packs de sesiones y oportunidad comercial por rubro. Se agregó `docs/22-simple-commerce-services.md` y ADR-013.
+- **Roadmap F13 — Gastronomía PRO:** mesas, salones, comandas impresas, ruteo por estación, KDS/pantalla de cocina, cafetería/heladería, delivery/takeaway, recetas/escandallo, reservas gastronómicas y reportes operativos. Se agregó `docs/23-restaurant-cafe-operations.md` y ADR-014.
 - **Deseable F1 — Lector de código de barras por cámara:** componente `BarcodeScanner` (API nativa `BarcodeDetector`, formatos EAN/UPC/Code128, fallback si no soportado) integrado en el POS; al detectar, completa la búsqueda. 
 - **Deseable F1 — Import CSV de productos:** parser CSV propio (con comillas), validación por fila, plantilla descargable y `bulkImport` que resuelve/crea categorías por nombre e inserta en lote. Modal "Importar CSV" en `/productos`.
 - **CI (gap F0):** workflow GitHub Actions (`.github/workflows/ci.yml`) que corre lint + typecheck + test + build en cada push a `main` y PR (pnpm + Node 20, env dummy para el build). README actualizado (estado del MVP + scripts reales).

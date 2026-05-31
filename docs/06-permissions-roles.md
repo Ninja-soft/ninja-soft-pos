@@ -228,6 +228,59 @@ if (hasFeatureFlag('manager_can_delete_users') && user.role === 'manager') {
 }
 ```
 
+## 9.1 Roles retail propios
+
+F11 agrega roles configurables por tenant para comercios con separación de salón, caja y despacho. Los presets iniciales son:
+
+| Rol | Descripción |
+|---|---|
+| `salesperson_retail` | Vendedor de salón. Arma pedidos para que cobre la cajera. No cobra ni anula. |
+| `dispatcher` | Expedicionista. Prepara y entrega pedidos pendientes de despacho. No toca caja ni POS. |
+| `cashier_plus` | Cajero estándar + facturar pedidos de salón + reimprimir + descuentos por encima del tope. |
+| `retail_manager` | Encargado con visibilidad total: manager + pedidos de todos + configuración comercial + stock de otras sucursales. |
+
+Reglas:
+
+- [ ] Los roles de sistema se pueden editar pero no borrar.
+- [ ] El tenant puede crear roles propios con permisos granulares.
+- [ ] Cada cambio de permiso queda en `audit_logs`.
+- [ ] Las Edge Functions revalidan permisos; no alcanza con ocultar botones.
+
+## 9.2 Roles de servicios y agenda
+
+F12 agrega presets para comercios de servicios donde importa la agenda, el profesional y la comisión:
+
+| Rol | Descripción |
+|---|---|
+| `service_professional` | Profesional que ve su agenda, cobra o solicita cobro según configuración y consulta su productividad. |
+| `front_desk` | Recepción/caja. Agenda turnos, maneja walk-ins, cobra servicios y productos. |
+| `service_manager` | Encargado de servicios. Ve agenda de todos, comisiones, propinas, no-shows y reportes. |
+
+Reglas:
+
+- [ ] El profesional puede quedar limitado a su propia agenda y ventas.
+- [ ] La recepción puede cobrar sin modificar comisiones ni reportes globales.
+- [ ] Cambios de comisión, propina o profesional asignado quedan auditados.
+
+## 9.3 Roles gastronómicos
+
+F13 agrega presets para restaurante/cafetería/heladería con operación por salón, cocina/barra y despacho:
+
+| Rol | Descripción |
+|---|---|
+| `waiter` | Mozo. Abre mesas, carga pedidos, envía comandas y puede pedir cuenta según permisos. |
+| `head_waiter` | Encargado de salón. Mueve/une mesas, reasigna mozos, autoriza anulaciones de comanda. |
+| `kitchen_staff` | Cocina/barra. Ve KDS/comandas de su estación y cambia estados de preparación. |
+| `delivery_dispatcher` | Despacho. Gestiona take away/delivery, cadetes, estados y etiquetas de pedido. |
+| `restaurant_manager` | Manager gastronómico. Configura salones, estaciones, menú, ruteo, reportes y permisos. |
+
+Reglas:
+
+- [ ] Cocina/barra no toca caja ni precios.
+- [ ] Mozo no anula ítems ya enviados a cocina sin autorización.
+- [ ] Cambios de mesa, transferencia de mozo, reimpresión y cancelación de comanda quedan auditados.
+- [ ] El manager puede configurar estaciones e impresoras/KDS, pero no cambiar plan del tenant.
+
 ## 10. Anti-patrones
 
 ❌ Hardcodear el chequeo del rol en lugar de usar `can()`:

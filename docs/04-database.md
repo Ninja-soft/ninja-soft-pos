@@ -25,11 +25,14 @@ create or replace function current_tenant_id()
 returns uuid
 language sql stable
 as $$
-  select (auth.jwt() ->> 'tenant_id')::uuid
+  select coalesce(
+    (auth.jwt() -> 'app_metadata' ->> 'current_tenant_id')::uuid,
+    null
+  )
 $$;
 ```
 
-El `tenant_id` se inyecta al JWT al hacer login, después de elegir tenant (custom claim o app metadata).
+El `tenant_id` activo se guarda en `app_metadata.current_tenant_id` después de elegir tenant. Esta decisión está registrada en ADR-009.
 
 ---
 
@@ -554,7 +557,57 @@ Las columnas `product_name` y `sku` se copian al crear el item porque el product
 
 `sales.number` es un correlativo por tenant. Se genera en la Edge Function `create_sale` con `select coalesce(max(number), 0) + 1 from sales where tenant_id = X for update;` dentro de la transacción.
 
-Cuando entre AFIP (Fase 2), se sumará `point_of_sale` y `voucher_number` AFIP.
+Cuando entre AFIP (Fase 3), se sumará `point_of_sale` y `voucher_number` AFIP.
+
+---
+
+## 8.1 Extensión F12 — servicios y agenda
+
+Cuando entre F12 (comercios simples y servicios), se agregará un bloque de tablas operativas multi-tenant:
+
+- [ ] `service_items`: servicios vendibles sin stock obligatorio, con duración, precio, categoría y comisión default.
+- [ ] `appointment_resources`: profesionales, sillas, cabinas o recursos reservables.
+- [ ] `appointments`: turno, cliente, profesional/recurso, estado, seña, no-show y notas.
+- [ ] `appointment_services`: servicios asociados al turno.
+- [ ] `service_sessions`: packs/sesiones vendidas y saldo consumible.
+- [ ] `staff_commissions`: comisión calculada por venta/servicio/producto/profesional.
+- [ ] `tips`: propinas por venta/profesional/medio de pago.
+- [ ] `item_modifiers`: modificadores simples para catálogo chico (tamaño, sabor, topping, extra).
+
+Reglas:
+
+- [ ] Todas las tablas operativas llevan `tenant_id` y RLS estándar.
+- [ ] Servicios pueden venderse en `sale_items` como snapshot igual que productos.
+- [ ] El stock es opcional para servicios; si un servicio consume insumos, se modela como extensión posterior de inventario/recetas.
+- [ ] Cambios de turno, comisión, profesional asignado y packs quedan auditados.
+
+---
+
+## 8.2 Extensión F13 — gastronomía
+
+Cuando entre F13 (gastronomía PRO), se agregará un bloque de tablas operativas multi-tenant para mesas, comandas y cocina:
+
+- [ ] `dining_areas`: salones/sectores (principal, terraza, barra, patio).
+- [ ] `dining_tables`: mesas con capacidad, posición, estado y sector.
+- [ ] `restaurant_orders`: pedido gastronómico por mesa/mostrador/delivery/takeaway.
+- [ ] `restaurant_order_items`: ítems con curso, estación, estado de cocina y snapshot.
+- [ ] `order_modifiers`: modificadores gastronómicos por ítem.
+- [ ] `kitchen_stations`: cocina, barra, cafetería, heladería, parrilla, postres, despacho.
+- [ ] `kitchen_tickets`: comandas enviadas a impresión/KDS.
+- [ ] `kitchen_ticket_items`: detalle ruteado por estación.
+- [ ] `table_transfers`: movimientos/uniones/transferencias de mesa.
+- [ ] `delivery_orders`: datos de canal, dirección, cadete, estado y horario prometido.
+- [ ] `recipes` y `recipe_items`: receta/escandallo e insumos.
+- [ ] `production_batches`: producción previa y merma básica.
+
+Reglas:
+
+- [ ] Todas las tablas operativas llevan `tenant_id` y RLS estándar.
+- [ ] Una venta puede nacer desde `restaurant_orders` y terminar en `sales` al cobrar.
+- [ ] Las comandas son append-only: una anulación o cambio posterior genera ticket de corrección, no borra historia.
+- [ ] El ruteo a estación debe ser idempotente para evitar doble impresión o doble aparición en KDS.
+- [ ] Mover/unir/dividir mesas queda auditado.
+- [ ] Si se activa receta/escandallo, el descuento de insumos debe ser idempotente y reversible por anulación.
 
 ---
 

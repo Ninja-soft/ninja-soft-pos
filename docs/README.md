@@ -33,7 +33,7 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 
 | # | Documento | Quién lo lee |
 |---|---|---|
-| [15](./15-afip-integration.md) | **AFIP integration** (Fase 2) | Backend |
+| [15](./15-afip-integration.md) | **AFIP integration** (Fase 3) | Backend |
 | [16](./16-subscription-model.md) | **Modelo de suscripción** | Producto, ventas |
 
 ## Operativos
@@ -44,6 +44,12 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [18](./18-qa-checklist.md) | **QA checklist** | QA |
 | [19](./19-glossary.md) | **Glosario** | Todos |
 | [20](./20-hardware-pos.md) | **Hardware y mostrador PRO** — impresoras, scanners, balanzas, doble pantalla | Frontend, soporte, hardware |
+| [21](./21-retail-advanced-settings.md) | **Configuración retail avanzada** — recargos, garantías, devoluciones, cuenta corriente, depósitos, Excel masivo | Producto, frontend, backend |
+| [22](./22-simple-commerce-services.md) | **Comercios simples y servicios** — heladerías, peluquerías, agenda, catálogo chico y cobro rápido | Producto, frontend, ventas |
+| [23](./23-restaurant-cafe-operations.md) | **Gastronomía PRO** — mesas, comandas, cocina/KDS, cafetería, heladería, delivery/takeaway | Producto, frontend, soporte |
+| [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |
+| [Security reviews](./security-reviews/README.md) | Incidentes, revisiones y hallazgos de seguridad | Seguridad, devs |
+| [Templates](./templates/post-mortem.md) | Plantillas operativas reutilizables | Todos |
 
 ## Workflows
 

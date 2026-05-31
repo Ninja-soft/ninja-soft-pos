@@ -28,6 +28,50 @@ Webservice: **WSFEv1** (factura electrónica) y **WSAA** (autenticación).
 
 Switch por tenant en `tenant.afip_environment`. Default `homologation`.
 
+### 2.0 Modalidad de facturación por tenant
+
+Cada tenant elige cómo factura:
+
+| Modalidad | Significado |
+|---|---|
+| `ninjasoft_afip` | NinjaSoft emite factura electrónica desde el POS. Requiere CUIT, punto de venta, certificado y modo AFIP configurado. |
+| `external_manual` | El comercio factura fuera de NinjaSoft (portal AFIP/ARCA u otro sistema). Las ventas quedan como comprobantes internos no fiscales. |
+
+Reglas:
+
+- [ ] La modalidad se configura por tenant y queda auditada.
+- [ ] Si está en `external_manual`, el POS nunca intenta emitir CAE automáticamente.
+- [ ] Si está en `ninjasoft_afip`, toda venta fiscalizable entra al flujo fiscal/cola fiscal.
+- [ ] El ticket debe indicar claramente si es comprobante interno no fiscal o comprobante fiscal autorizado.
+
+### 2.1 Gate de homologación → producción
+
+Un tenant no puede pasar a producción solo por toggle manual. El panel debe exigir:
+
+- [ ] CUIT del tenant validado.
+- [ ] Punto de venta configurado.
+- [ ] Certificado y clave privada de producción cargados y desencriptables.
+- [ ] Certificado de homologación probado.
+- [ ] 20 comprobantes consecutivos aprobados en homologación.
+- [ ] Numeración sincronizada con `FECompUltimoAutorizado`.
+- [ ] Cola fiscal sin comprobantes bloqueados.
+- [ ] Usuario interno confirma el cambio con motivo auditado.
+
+La homologación y producción usan certificados, TA cacheado y numeración separados.
+
+### 2.2 Asistente de configuración AFIP/ARCA
+
+El flujo recomendado no debe exigir OpenSSL ni conocimiento técnico al cliente.
+
+- [ ] Wizard paso a paso: CUIT, condición IVA, punto de venta, ambiente, certificado.
+- [ ] Modo asistido: NinjaSoft genera CSR/certificado requerido y guía al usuario para pegar/subir lo necesario en AFIP/ARCA.
+- [ ] Modo experto: subir `.crt` y `.key` propios.
+- [ ] Validación inmediata de certificado/clave.
+- [ ] Prueba de conexión WSAA/WSFEv1.
+- [ ] Emisión de comprobante de prueba en homologación.
+- [ ] Checklist visual para pasar a producción.
+- [ ] Errores en lenguaje accionable, no códigos crudos como única respuesta.
+
 ## 3. Arquitectura
 
 ```
@@ -119,6 +163,30 @@ Cifrado se hace en Edge Function de alta de credenciales, usando una master key 
 
 Cola de reintentos: tabla `afip_retry_queue` procesada por cron Edge Function cada 5 minutos.
 
+### 7.1 Cola fiscal robusta
+
+La cola fiscal es el centro operativo de AFIP. No es solo retry técnico: también es la bandeja de trabajo para soporte y owner/manager cuando un comprobante requiere corrección.
+
+| Estado | Significado | Acción |
+|---|---|---|
+| `pending` | Comprobante creado, todavía no enviado. | Procesar por worker. |
+| `processing` | Worker lo tomó. | Lock temporal con timeout. |
+| `retrying` | Falló por error transitorio. | Reintentar con backoff. |
+| `approved` | AFIP devolvió CAE. | Actualizar venta/comprobante. |
+| `rejected` | AFIP rechazó por payload/regla fiscal. | Requiere acción humana. |
+| `blocked` | Falta dato/configuración/certificado. | Resolver configuración. |
+| `dead_letter` | Superó reintentos máximos o error persistente. | Soporte revisa manualmente. |
+
+Reglas:
+
+- [ ] Cada item de cola guarda `tenant_id`, `sale_id`, `voucher_type`, `point_of_sale`, `environment`, `attempt_count`, `next_attempt_at`, `last_error_code`, `last_error_message`.
+- [ ] Cada pedido fiscal usa idempotencia por `sale_id + voucher_type + point_of_sale + environment`.
+- [ ] El worker usa locks para evitar doble emisión.
+- [ ] Antes de pedir CAE se verifica numeración contra `FECompUltimoAutorizado` si hay drift o cambio de día.
+- [ ] Los XML request/response se conservan aunque la emisión falle.
+- [ ] El panel permite reintentar, bloquear, marcar como requiere datos o escalar a soporte.
+- [ ] Toda acción manual queda en `audit_logs`.
+
 ## 8. Numeración
 
 - Por punto de venta + tipo de comprobante.
@@ -141,6 +209,37 @@ Cola de reintentos: tabla `afip_retry_queue` procesada por cron Edge Function ca
 - Cuando llega el CAE, el ticket se reemprime (o se marca el comprobante como completo si fue digital).
 
 **Razón:** la venta no espera por AFIP. El cliente paga y se va. Si AFIP falla, lo resolvemos sin bloquear operación.
+
+### 9.2.1 Venta offline / AFIP offline
+
+El POS diferencia dos casos:
+
+| Caso | Qué pasa |
+|---|---|
+| Sin internet en el local | La venta se guarda localmente como pendiente de sincronización. No se intenta AFIP. |
+| Internet disponible pero AFIP falla | La venta se guarda en DB y el comprobante entra a cola fiscal. |
+
+Reglas:
+
+- [ ] La venta offline usa número interno/provisorio, nunca número fiscal definitivo.
+- [ ] Al reconectar, se sincroniza la venta, se asigna correlativo real si corresponde y se encola AFIP.
+- [ ] El ticket offline dice claramente "Comprobante interno pendiente de autorización fiscal".
+- [ ] El owner/manager ve un panel de ventas pendientes de sincronizar/fiscalizar.
+- [ ] Si la fecha fiscal queda fuera de rango por demora, el comprobante pasa a `blocked` con acción sugerida.
+- [ ] No se pierde el pago ni el stock: el sync debe ser idempotente.
+- [ ] El cashier puede seguir vendiendo si el negocio acepta operar offline, controlado por feature flag/configuración.
+
+### 9.2.2 Contingencia AFIP/ARCA
+
+La contingencia es un modo explícito para seguir vendiendo cuando AFIP/ARCA no responde.
+
+- [ ] Solo owner/manager o staff autorizado puede activar contingencia.
+- [ ] Activar contingencia exige motivo y queda en `audit_logs`.
+- [ ] Mientras está activa, los comprobantes fiscalizables se emiten como internos/provisorios y entran a cola fiscal.
+- [ ] El POS muestra banner persistente "Contingencia fiscal activa".
+- [ ] Al desactivar contingencia, el sistema procesa la cola fiscal por orden y muestra aprobados/rechazados/bloqueados.
+- [ ] Si AFIP vuelve pero hay drift de numeración, la cola pasa a `blocked` hasta conciliar.
+- [ ] La contingencia no debe confundirse con modalidad `external_manual`: en contingencia sí se emitirá AFIP al normalizar.
 
 ### 9.3 Si AFIP rechaza definitivamente
 - Notificación al owner/manager: "Comprobante X rechazado, motivo Y."
@@ -199,7 +298,7 @@ Proceso por cliente:
 1. Cliente solicita pasaje a producción.
 2. NinjaSoft valida que homologación corrió OK 20+ comprobantes.
 3. Cliente sube certificado de producción (distinto del de homologación).
-4. Toggle `tenant.afip_environment = 'production'`.
+4. Usuario interno ejecuta el cambio desde el panel; el sistema valida el gate de homologación → producción.
 5. Próximo comprobante usa producción.
 
 ## 15. Errores frecuentes de AFIP (referencia rápida)

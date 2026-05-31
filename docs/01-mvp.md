@@ -49,6 +49,8 @@ El sistema se compone de **tres planos** que deben permanecer separados desde el
 **Rubros secundarios (Fase 2):**
 
 - Restaurantes (mesa, mostrador, takeaway).
+- Resto-bares, cafeterías, heladerías, panaderías chicas, rotiserías, fast food y food trucks con mesas, mostrador, comandas o cobro rápido.
+- Peluquerías, barberías, estética/uñas/spa y servicios con agenda.
 - Pymes con stock y facturación electrónica.
 
 **Personas del producto:**
@@ -115,7 +117,7 @@ Estos ocho módulos son **bloqueantes**. Sin todos ellos no se sale a piloto.
 - Selección de cliente opcional (para fidelización futura).
 - Selección de medio de pago: efectivo, débito, crédito, transferencia, QR (configurables por tenant).
 - Cálculo automático de vuelto en efectivo.
-- Impresión de ticket no fiscal en MVP; ticket fiscal en Fase 2 con AFIP.
+- Impresión de ticket no fiscal en MVP; ticket fiscal en F3 con AFIP.
 - Anulación de venta con motivo y permiso requerido.
 
 **Criterio de aceptación:** Un cajero hace 50 ventas en una hora sin tocar el mouse.
@@ -191,12 +193,12 @@ Roles base del MVP (no editables por el cliente en Fase 1):
 
 Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No deben implementarse sin aprobación documentada en `decision-log.md`.
 
-- Facturación electrónica AFIP (Fase 2).
-- Multi-sucursal real con consolidación (Fase 2).
+- Facturación electrónica AFIP (F3).
+- Multi-sucursal real con consolidación (F4).
 - Motor avanzado de promociones (combos, escalonadas, por horario).
 - Programa de fidelización y puntos.
 - Integración con e-commerce (Tiendanube, WooCommerce, Mercado Libre).
-- App nativa móvil (Fase 3, evaluar PWA primero).
+- App nativa móvil (backlog; evaluar PWA primero).
 - Multi-moneda y multi-país.
 - Integraciones con hardware avanzado (balanzas, displays de cliente).
 
@@ -215,8 +217,8 @@ Estas funcionalidades son importantes pero **explícitamente** fuera del MVP. No
 | Validación | Zod | Schemas compartidos cliente/servidor |
 | Forms | React Hook Form + Zod | Mejor performance, validación integrada |
 | Deploy | Vercel | Previews por rama, edge network |
-| Observabilidad | Vercel Analytics + Supabase Logs + Sentry (Fase 2) | Métricas, errores, performance |
-| Testing | Vitest (unit) + Playwright (e2e Fase 2) | Velocidad + cobertura real |
+| Observabilidad | Vercel Analytics + Supabase Logs + Sentry (F3+) | Métricas, errores, performance |
+| Testing | Vitest (unit) + Playwright (hardening pre-piloto) | Velocidad + cobertura real |
 
 ---
 
@@ -371,7 +373,7 @@ Desde el Hito 0 se debe medir:
 - **POS:** Punto de venta. La pantalla de mostrador.
 - **Edge Function:** función serverless de Supabase, usada para lógica de negocio sensible.
 - **Z:** cierre de caja del turno (reporte tradicional).
-- **CAE:** Código de Autorización Electrónico de AFIP (Fase 2).
+- **CAE:** Código de Autorización Electrónico de AFIP (F3).
 
 ---
 

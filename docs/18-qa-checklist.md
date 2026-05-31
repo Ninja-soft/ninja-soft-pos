@@ -14,7 +14,7 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 
 - [ ] Compila sin errores (`pnpm build`).
 - [ ] Linter pasa sin warnings nuevos (`pnpm lint`).
-- [ ] Type-check pasa (`pnpm type-check`).
+- [ ] Type-check pasa (`pnpm typecheck`).
 - [ ] Tests unitarios pasan (`pnpm test`).
 - [ ] Si la PR toca código crítico (POS, caja, pagos, RLS), tiene tests nuevos o ajustados.
 - [ ] No quedó código comentado, `console.log` ni `TODO` sin issue asociado.

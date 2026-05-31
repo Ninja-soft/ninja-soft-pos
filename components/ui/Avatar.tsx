@@ -1,11 +1,50 @@
+import {
+  Cat,
+  Dog,
+  Bird,
+  Fish,
+  Rabbit,
+  Crown,
+  Star,
+  Heart,
+  Rocket,
+  Flame,
+  Coffee,
+  IceCream,
+  Scissors,
+  ShoppingCart,
+  Store,
+  Sparkles,
+  Leaf,
+  Smile,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-// Avatares de miembros: presets emoji o iniciales con color determinístico.
-// La subida de imagen propia se habilita en F6 (WebP).
-export const AVATAR_PRESETS = [
-  "🦊", "🐯", "🐼", "🦁", "🐵", "🐧", "🐶", "🐱", "🦉", "🐝",
-  "🚀", "⭐", "🔥", "🎯", "🍦", "☕", "✂️", "🛒",
-] as const;
+// Avatares de miembros: iconos (lucide) o iniciales con color determinístico.
+// La subida de imagen propia se habilita en F6 (WebP). Sin emojis.
+export const AVATAR_ICONS: Record<string, LucideIcon> = {
+  cat: Cat,
+  dog: Dog,
+  bird: Bird,
+  fish: Fish,
+  rabbit: Rabbit,
+  crown: Crown,
+  star: Star,
+  heart: Heart,
+  rocket: Rocket,
+  flame: Flame,
+  coffee: Coffee,
+  icecream: IceCream,
+  scissors: Scissors,
+  cart: ShoppingCart,
+  store: Store,
+  sparkles: Sparkles,
+  leaf: Leaf,
+  smile: Smile,
+};
+
+export const AVATAR_PRESETS = Object.keys(AVATAR_ICONS);
 
 const COLORS = [
   "#ff6a2c", "#ec3f17", "#ffb020", "#7c4dff", "#2db8a3",
@@ -38,7 +77,7 @@ export function Avatar({
   size?: number;
   className?: string;
 }) {
-  const isEmoji = !!avatar && /\p{Extended_Pictographic}/u.test(avatar);
+  const Icon = avatar ? AVATAR_ICONS[avatar] : undefined;
   const color = COLORS[hash(name || avatar || "?") % COLORS.length];
   return (
     <span
@@ -46,15 +85,10 @@ export function Avatar({
         "inline-grid shrink-0 place-items-center rounded-full font-semibold text-white",
         className,
       )}
-      style={{
-        width: size,
-        height: size,
-        fontSize: isEmoji ? size * 0.55 : size * 0.4,
-        background: isEmoji ? "rgba(127,127,127,0.15)" : color,
-      }}
+      style={{ width: size, height: size, fontSize: size * 0.4, background: color }}
       aria-hidden
     >
-      {isEmoji ? avatar : initials(name)}
+      {Icon ? <Icon size={Math.round(size * 0.5)} /> : initials(name)}
     </span>
   );
 }

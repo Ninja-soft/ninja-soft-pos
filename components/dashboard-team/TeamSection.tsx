@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
-import { Avatar, AVATAR_PRESETS } from "@/components/ui/Avatar";
+import { Avatar, AVATAR_ICONS, AVATAR_PRESETS } from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils/cn";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -65,19 +65,23 @@ function AvatarPicker({
       >
         <Avatar name={name || "?"} size={32} />
       </button>
-      {AVATAR_PRESETS.map((e) => (
-        <button
-          key={e}
-          type="button"
-          onClick={() => onChange(e)}
-          className={cn(
-            "grid h-9 w-9 place-items-center rounded-full text-lg ring-2 transition hover:bg-muted",
-            value === e ? "ring-ninja-flame" : "ring-transparent",
-          )}
-        >
-          {e}
-        </button>
-      ))}
+      {AVATAR_PRESETS.map((key) => {
+        const Icon = AVATAR_ICONS[key];
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={cn(
+              "grid h-9 w-9 place-items-center rounded-full ring-2 transition hover:bg-muted",
+              value === key ? "ring-ninja-flame" : "ring-transparent",
+            )}
+            title={key}
+          >
+            {Icon ? <Icon size={18} /> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -57,28 +57,34 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
-  create: async (input: ProductOutput): Promise<void> => {
+  create: async (input: ProductOutput): Promise<Product> => {
     const supabase = createClient();
-    const { error } = await supabase.from("products").insert({
-      name: input.name,
-      sku: input.sku,
-      barcode: input.barcode,
-      category_id: input.category_id ?? null,
-      brand_id: input.brand_id ?? null,
-      price: input.price,
-      cost: input.cost ?? null,
-      stock: input.stock,
-      stock_min: input.stock_min,
-      unit: input.unit,
-      tax_rate: input.tax_rate,
-      season: input.season,
-      tags: toTags(input.tags),
-      description: input.description,
-      is_active: input.is_active,
-      is_kit: input.is_kit,
-      track_stock: input.track_stock,
-    });
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        name: input.name,
+        sku: input.sku,
+        barcode: input.barcode,
+        category_id: input.category_id ?? null,
+        brand_id: input.brand_id ?? null,
+        price: input.price,
+        cost: input.cost ?? null,
+        stock: input.stock,
+        stock_min: input.stock_min,
+        unit: input.unit,
+        tax_rate: input.tax_rate,
+        season: input.season,
+        tags: toTags(input.tags),
+        image_url: input.image_url,
+        description: input.description,
+        is_active: input.is_active,
+        is_kit: input.is_kit,
+        track_stock: input.track_stock,
+      })
+      .select("*")
+      .single();
     if (error) throw error;
+    return data as unknown as Product;
   },
 
   update: async (id: string, input: ProductOutput): Promise<void> => {
@@ -102,6 +108,8 @@ export const productsApi = {
         is_active: input.is_active,
         is_kit: input.is_kit,
         track_stock: input.track_stock,
+        // image_url no se toca en update: en edición la maneja la galería
+        // (ProductImages). El campo URL del form aplica al crear.
       })
       .eq("id", id);
     if (error) throw error;

@@ -31,7 +31,11 @@ interface Props {
 }
 
 export function ProductFormModal({ open, onOpenChange, product }: Props) {
-  const isEdit = Boolean(product);
+  // Tras crear, guardamos el producto nuevo para seguir en modo edición
+  // (subir fotos / cargar componentes / serial sin reabrir).
+  const [created, setCreated] = useState<Product | null>(null);
+  const active = product ?? created;
+  const isEdit = Boolean(active);
   const { toast } = useToast();
   const { data: categories } = useCategories();
   const createCategory = useCreateCategory();
@@ -55,6 +59,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
   useEffect(() => {
     if (open) {
+      setCreated(null);
       reset({
         name: product?.name ?? "",
         sku: product?.sku ?? "",
@@ -69,6 +74,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         tax_rate: product?.tax_rate ?? 21,
         season: product?.season ?? "",
         tags: product?.tags?.join(", ") ?? "",
+        image_url: product?.image_url ?? "",
         description: product?.description ?? "",
         is_active: product?.is_active ?? true,
         is_kit: product?.is_kit ?? false,
@@ -80,14 +86,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   async function onSubmit(values: ProductInput) {
     const parsed = values as unknown as ProductOutput;
     try {
-      if (isEdit && product) {
-        await update.mutateAsync({ id: product.id, input: parsed });
+      if (active) {
+        await update.mutateAsync({ id: active.id, input: parsed });
         toast({ title: "Producto actualizado", variant: "success" });
-      } else {
-        await create.mutateAsync(parsed);
-        toast({ title: "Producto creado", variant: "success" });
+        onOpenChange(false);
+        return;
       }
-      onOpenChange(false);
+      const nuevo = await create.mutateAsync(parsed);
+      setCreated(nuevo);
+      toast({
+        title: "Producto creado",
+        description: "Ahora podés subir fotos o cargar componentes.",
+        variant: "success",
+      });
+      return;
     } catch (e) {
       toast({
         title: "No se pudo guardar",
@@ -242,10 +254,17 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           <Input label="Tags (separados por coma)" placeholder="oferta, premium" {...register("tags")} />
         </div>
 
+        {!active && (
+          <Input
+            label="URL de imagen (opcional)"
+            placeholder="https://…"
+            {...register("image_url")}
+          />
+        )}
         <Input label="Descripción" {...register("description")} />
 
-        {isEdit && product && (
-          <ProductImages productId={product.id} tenantId={product.tenant_id} />
+        {active && (
+          <ProductImages productId={active.id} tenantId={active.tenant_id} />
         )}
 
         <label className="flex items-center gap-2 text-sm text-foreground">
@@ -281,10 +300,10 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </span>
         </label>
 
-        {isEdit && product && isKit && <KitComponentsEditor kitId={product.id} />}
-        {!isEdit && isKit && (
+        {active && isKit && <KitComponentsEditor kitId={active.id} />}
+        {!active && isKit && (
           <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            Guardá el combo primero; después podés cargar sus componentes editándolo.
+            Guardá el combo primero; después podés cargar sus componentes acá mismo.
           </p>
         )}
 

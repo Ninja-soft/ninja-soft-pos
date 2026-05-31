@@ -16,6 +16,7 @@ import {
 import type { Product } from "@/modules/products/api";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
+import { SerialsEditor } from "@/components/products/SerialsEditor";
 import {
   useCategories,
   useCreateCategory,
@@ -56,6 +57,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     resolver: zodResolver(ProductSchema),
   });
   const isKit = watch("is_kit");
+  const isSerialized = watch("is_serialized");
 
   useEffect(() => {
     if (open) {
@@ -78,6 +80,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         description: product?.description ?? "",
         is_active: product?.is_active ?? true,
         is_kit: product?.is_kit ?? false,
+        is_serialized: product?.is_serialized ?? false,
         track_stock: product?.track_stock ?? true,
       });
     }
@@ -304,6 +307,27 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {!active && isKit && (
           <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
             Guardá el combo primero; después podés cargar sus componentes acá mismo.
+          </p>
+        )}
+
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            {...register("is_serialized")}
+          />
+          <span>
+            Producto serializado (IMEI / N° de serie)
+            <span className="block text-xs text-muted-foreground">
+              Cada unidad tiene un serial único. Al vender, el cajero elige cuál sale.
+            </span>
+          </span>
+        </label>
+
+        {active && isSerialized && <SerialsEditor productId={active.id} />}
+        {!active && isSerialized && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Guardá el producto primero; después podés cargar los seriales acá mismo.
           </p>
         )}
 

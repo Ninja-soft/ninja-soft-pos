@@ -26,6 +26,7 @@ export const ProductSchema = z.object({
   description: optionalText(500),
   is_active: z.boolean().default(true),
   is_kit: z.boolean().default(false),
+  is_serialized: z.boolean().default(false),
   track_stock: z.boolean().default(true),
 });
 export type ProductInput = z.input<typeof ProductSchema>;

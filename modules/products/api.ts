@@ -79,6 +79,7 @@ export const productsApi = {
         description: input.description,
         is_active: input.is_active,
         is_kit: input.is_kit,
+        is_serialized: input.is_serialized,
         track_stock: input.track_stock,
       })
       .select("*")
@@ -107,6 +108,7 @@ export const productsApi = {
         description: input.description,
         is_active: input.is_active,
         is_kit: input.is_kit,
+        is_serialized: input.is_serialized,
         track_stock: input.track_stock,
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
@@ -287,6 +289,48 @@ export const categoriesApi = {
       .from("categories")
       .update({ deleted_at: now })
       .or(`id.eq.${id},parent_id.eq.${id}`);
+    if (error) throw error;
+  },
+};
+
+export type ProductSerial = Tables<"product_serials">;
+
+export const serialsApi = {
+  list: async (productId: string): Promise<ProductSerial[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_serials")
+      .select("*")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as ProductSerial[];
+  },
+
+  add: async (productId: string, serials: string[]): Promise<void> => {
+    const clean = Array.from(
+      new Set(serials.map((s) => s.trim()).filter(Boolean)),
+    );
+    if (clean.length === 0) return;
+    const supabase = createClient();
+    // Ignora duplicados existentes (unique product_id+serial).
+    const { error } = await supabase
+      .from("product_serials")
+      .upsert(
+        clean.map((serial) => ({ product_id: productId, serial })),
+        { onConflict: "product_id,serial", ignoreDuplicates: true },
+      );
+    if (error) throw error;
+  },
+
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    // Solo se borran los disponibles; los vendidos quedan como histórico.
+    const { error } = await supabase
+      .from("product_serials")
+      .delete()
+      .eq("id", id)
+      .eq("status", "in_stock");
     if (error) throw error;
   },
 };

@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send } from "lucide-react";
+import { Mail, Plus, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import {
+  Dropdown,
+  DropdownContent,
+  DropdownItem,
+  DropdownLabel,
+  DropdownTrigger,
+} from "@/components/ui/Dropdown";
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
 import { cn } from "@/lib/utils/cn";
 
@@ -60,6 +67,30 @@ export default function InternalEmailsPage() {
     setSubject(ov?.subject ?? def.defaultSubject);
     setHtml(ov?.html ?? def.defaultHtml);
   }, [selectedKey, saved, def.defaultSubject, def.defaultHtml]);
+
+  // Insertar variables en el cursor (asunto o HTML).
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
+  const [activeField, setActiveField] = useState<"subject" | "html">("html");
+
+  function insertVar(name: string) {
+    const token = `{{${name}}}`;
+    const isSubject = activeField === "subject";
+    const el = isSubject ? subjectRef.current : htmlRef.current;
+    const cur = isSubject ? subject : html;
+    const setter = isSubject ? setSubject : setHtml;
+    const start = el?.selectionStart ?? cur.length;
+    const end = el?.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
+    setter(next);
+    requestAnimationFrame(() => {
+      if (el) {
+        const pos = start + token.length;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
+  }
 
   const saveCfg = useMutation({
     mutationFn: async () => {
@@ -178,20 +209,47 @@ export default function InternalEmailsPage() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">{def.description}</p>
-          <Input label="Asunto" value={subject} onChange={(e) => setSubject(e.target.value)} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">{def.description}</p>
+            <Dropdown>
+              <DropdownTrigger asChild>
+                <Button variant="secondary" size="sm">
+                  <Plus size={15} /> Insertar variable
+                </Button>
+              </DropdownTrigger>
+              <DropdownContent align="end" className="w-56">
+                <DropdownLabel>
+                  Insertar en {activeField === "subject" ? "el asunto" : "el contenido"}
+                </DropdownLabel>
+                {def.variables.map((v) => (
+                  <DropdownItem key={v} onSelect={() => insertVar(v)}>
+                    <code className="text-xs">{`{{${v}}}`}</code>
+                  </DropdownItem>
+                ))}
+              </DropdownContent>
+            </Dropdown>
+          </div>
+          <Input
+            ref={subjectRef}
+            label="Asunto"
+            value={subject}
+            onFocus={() => setActiveField("subject")}
+            onChange={(e) => setSubject(e.target.value)}
+          />
           <div>
             <label className="mb-2 block text-sm font-medium text-muted-foreground">
               Contenido (HTML)
             </label>
             <textarea
+              ref={htmlRef}
               value={html}
+              onFocus={() => setActiveField("html")}
               onChange={(e) => setHtml(e.target.value)}
               rows={7}
               className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
             />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Variables: {def.variables.map((v) => `{{${v}}}`).join("  ")}
+              Tocá un campo (asunto o contenido) y luego “Insertar variable”.
             </p>
           </div>
           <div>

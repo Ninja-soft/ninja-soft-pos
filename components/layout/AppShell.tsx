@@ -161,7 +161,8 @@ function UserMenu({
               </span>
             )}
             {role && (
-              <span className="mt-0.5 inline-flex max-w-full items-center truncate rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+              <span className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full bg-ninja-flame/12 px-2 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                <ShieldCheck size={11} className="shrink-0" />
                 {ROLE_LABELS[role] ?? role}
               </span>
             )}

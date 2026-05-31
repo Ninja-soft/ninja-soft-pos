@@ -36,17 +36,7 @@ const PROVIDER_LOGO: Record<string, string> = {
   fiserv: "/img/medios_de_pago/Fiserv_cube.webp",
   mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
   pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
-};
-
-// Logo ancho (con texto) para el modal de conexión.
-const PROVIDER_LOGO_LARGE: Record<string, string> = {
-  mercadopago: "/img/medios_de_pago/mercado_pago_large.webp",
-  modo: "/img/medios_de_pago/Modo_large.webp",
-  payway: "/img/medios_de_pago/payway_large.webp",
-  getnet: "/img/medios_de_pago/getnet_large.webp",
-  fiserv: "/img/medios_de_pago/Fiserv_large.webp",
-  mobbex: "/img/medios_de_pago/Mobbex_large.webp",
-  pagos360: "/img/medios_de_pago/Pagos360_large.webp",
+  nave: "/img/medios_de_pago/nave_cube.webp",
 };
 
 // Resumen corto bajo el nombre (qué tipo de medio es).
@@ -299,13 +289,13 @@ export function PaymentMethodsCard() {
             >
               <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
                 {/* Logo */}
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-ninjaSm border border-border bg-white">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-ninjaSm">
                   {PROVIDER_LOGO[p.key] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={PROVIDER_LOGO[p.key]}
                       alt={p.name}
-                      className="h-full w-full object-contain p-1.5"
+                      className="h-full w-full object-contain"
                     />
                   ) : (
                     <CreditCard size={18} className="text-muted-foreground" />
@@ -496,13 +486,13 @@ export function PaymentMethodsCard() {
         title={connectingProvider ? `Conectar ${connectingProvider.name}` : "Conectar"}
       >
         <div className="space-y-4">
-          {connectKey && PROVIDER_LOGO_LARGE[connectKey] && (
-            <div className="flex items-center justify-center rounded-xl border border-border bg-white p-5">
+          {connectKey && PROVIDER_LOGO[connectKey] && (
+            <div className="flex items-center justify-center py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={PROVIDER_LOGO_LARGE[connectKey]}
+                src={PROVIDER_LOGO[connectKey]}
                 alt={connectingProvider?.name ?? ""}
-                className="h-10 w-auto object-contain"
+                className="h-14 w-auto object-contain"
               />
             </div>
           )}

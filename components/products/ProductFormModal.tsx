@@ -66,9 +66,13 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         stock: product?.stock ?? 0,
         stock_min: product?.stock_min ?? 0,
         unit: product?.unit ?? "un",
+        tax_rate: product?.tax_rate ?? 21,
+        season: product?.season ?? "",
+        tags: product?.tags?.join(", ") ?? "",
         description: product?.description ?? "",
         is_active: product?.is_active ?? true,
         is_kit: product?.is_kit ?? false,
+        track_stock: product?.track_stock ?? true,
       });
     }
   }, [open, product, reset]);
@@ -218,7 +222,13 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             <Input label="Stock inicial" type="number" step="0.001" {...register("stock")} />
           )}
           <Input label="Stock mínimo" type="number" step="0.001" {...register("stock_min")} />
-          <Input label="Unidad" {...register("unit")} />
+          <Input label="Unidad (un, kg, lt…)" {...register("unit")} />
+          <Input label="IVA %" type="number" step="0.5" {...register("tax_rate")} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Temporada" placeholder="Verano 2026" {...register("season")} />
+          <Input label="Tags (separados por coma)" placeholder="oferta, premium" {...register("tags")} />
         </div>
 
         <Input label="Descripción" {...register("description")} />
@@ -230,6 +240,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" className="accent-ninja-flame" {...register("is_active")} />
           Activo
+        </label>
+
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            {...register("track_stock")}
+          />
+          <span>
+            Controla stock
+            <span className="block text-xs text-muted-foreground">
+              Si está apagado, no descuenta stock al venderse (ej. servicios).
+            </span>
+          </span>
         </label>
 
         <label className="flex items-start gap-2 text-sm text-foreground">

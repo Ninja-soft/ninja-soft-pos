@@ -49,13 +49,26 @@ describe("cart store", () => {
         unitPrice: 100,
         quantity: 3,
         discount: 50,
+        unit: "un",
       }),
     ).toBe(250);
     expect(
       cartSubtotal([
-        { lineId: "l1", productId: "a", name: "a", sku: null, unitPrice: 100, quantity: 1, discount: 0 },
-        { lineId: "l2", productId: "b", name: "b", sku: null, unitPrice: 200, quantity: 2, discount: 100 },
+        { lineId: "l1", productId: "a", name: "a", sku: null, unitPrice: 100, quantity: 1, discount: 0, unit: "un" },
+        { lineId: "l2", productId: "b", name: "b", sku: null, unitPrice: 200, quantity: 2, discount: 100, unit: "un" },
       ]),
     ).toBe(400);
+  });
+
+  it("agrega por peso (kg) y acumula peso", () => {
+    const { addWeighed } = useCartStore.getState();
+    const prod = { id: "k1", name: "Jamón", sku: null, price: 1000 };
+    addWeighed(prod, 0.25);
+    addWeighed(prod, 0.1);
+    const lines = useCartStore.getState().lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.unit).toBe("kg");
+    expect(lines[0]!.quantity).toBeCloseTo(0.35);
+    expect(lineSubtotal(lines[0]!)).toBeCloseTo(350);
   });
 });

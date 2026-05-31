@@ -51,6 +51,13 @@ export default function PosPage() {
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
+  const [weighProduct, setWeighProduct] = useState<{
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+  } | null>(null);
+  const [weighGrams, setWeighGrams] = useState("");
 
   const { data: products } = useProducts(search);
   const { data: shift } = useOpenShift();
@@ -64,7 +71,36 @@ export default function PosPage() {
   const lines = useCartStore((s) => s.lines);
   const discountTotal = useCartStore((s) => s.discountTotal);
   const addProduct = useCartStore((s) => s.addProduct);
+  const addWeighed = useCartStore((s) => s.addWeighed);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
+
+  // Click en un producto: por peso (unit kg) abre el modal de peso; si no, lo agrega.
+  function pickProduct(p: {
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+    unit: string;
+  }) {
+    if (p.unit === "kg") {
+      setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setWeighGrams("");
+    } else {
+      addProduct(p);
+    }
+  }
+
+  function confirmWeigh() {
+    if (!weighProduct) return;
+    const grams = Number(weighGrams);
+    if (!Number.isFinite(grams) || grams <= 0) {
+      toast({ title: "Ingresá un peso válido", variant: "error" });
+      return;
+    }
+    addWeighed(weighProduct, grams / 1000);
+    setWeighProduct(null);
+    setWeighGrams("");
+  }
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
@@ -228,13 +264,22 @@ export default function PosPage() {
                   <button
                     key={p.id}
                     onClick={() =>
-                      addProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price })
+                      pickProduct({
+                        id: p.id,
+                        name: p.name,
+                        sku: p.sku,
+                        price: p.price,
+                        unit: p.unit,
+                      })
                     }
                     className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
                   >
                     <div className="truncate font-medium text-foreground">{p.name}</div>
                     <div className="mt-2 font-semibold text-foreground">
                       {formatCurrency(p.price)}
+                      {p.unit === "kg" && (
+                        <span className="text-xs font-normal text-muted-foreground"> /kg</span>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -249,7 +294,13 @@ export default function PosPage() {
               <button
                 key={p.id}
                 onClick={() =>
-                  addProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price })
+                  pickProduct({
+                    id: p.id,
+                    name: p.name,
+                    sku: p.sku,
+                    price: p.price,
+                    unit: p.unit,
+                  })
                 }
                 className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
               >
@@ -259,6 +310,9 @@ export default function PosPage() {
                 </div>
                 <div className="mt-2 font-semibold text-foreground">
                   {formatCurrency(p.price)}
+                  {p.unit === "kg" && (
+                    <span className="text-xs font-normal text-muted-foreground"> /kg</span>
+                  )}
                 </div>
               </button>
             ))}
@@ -294,21 +348,27 @@ export default function PosPage() {
                   </button>
                 </div>
                 <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setQuantity(l.lineId, l.quantity - 1)}
-                      className="rounded-md border border-border p-1 hover:bg-muted"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-8 text-center text-sm">{l.quantity}</span>
-                    <button
-                      onClick={() => setQuantity(l.lineId, l.quantity + 1)}
-                      className="rounded-md border border-border p-1 hover:bg-muted"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
+                  {l.unit === "kg" ? (
+                    <span className="text-sm text-muted-foreground">
+                      {formatQty(l.quantity)} kg × {formatCurrency(l.unitPrice)}/kg
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setQuantity(l.lineId, l.quantity - 1)}
+                        className="rounded-md border border-border p-1 hover:bg-muted"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="w-8 text-center text-sm">{l.quantity}</span>
+                      <button
+                        onClick={() => setQuantity(l.lineId, l.quantity + 1)}
+                        className="rounded-md border border-border p-1 hover:bg-muted"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  )}
                   <span className="text-sm font-semibold">
                     {formatCurrency(lineSubtotal(l))}
                   </span>
@@ -403,6 +463,42 @@ export default function PosPage() {
               Cancelar
             </Button>
             <Button onClick={confirmFreeAmount}>Agregar al carrito</Button>
+          </div>
+        </div>
+      </Modal>
+      <Modal
+        open={weighProduct !== null}
+        onOpenChange={(o) => !o && setWeighProduct(null)}
+        title={weighProduct ? `Peso — ${weighProduct.name}` : "Peso"}
+      >
+        <div className="space-y-4">
+          <Input
+            label="Peso en gramos"
+            type="number"
+            inputMode="decimal"
+            step="1"
+            autoFocus
+            value={weighGrams}
+            onChange={(e) => setWeighGrams(e.target.value)}
+            placeholder="Ej. 350"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmWeigh();
+            }}
+          />
+          {weighProduct && Number(weighGrams) > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {formatQty(Number(weighGrams) / 1000)} kg ×{" "}
+              {formatCurrency(weighProduct.price)}/kg ={" "}
+              <span className="font-semibold text-foreground">
+                {formatCurrency((Number(weighGrams) / 1000) * weighProduct.price)}
+              </span>
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setWeighProduct(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmWeigh}>Agregar al carrito</Button>
           </div>
         </div>
       </Modal>

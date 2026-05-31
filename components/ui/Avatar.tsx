@@ -77,8 +77,22 @@ export function Avatar({
   size?: number;
   className?: string;
 }) {
-  const Icon = avatar ? AVATAR_ICONS[avatar] : undefined;
+  const isUrl = !!avatar && /^https?:\/\//.test(avatar);
+  const Icon = avatar && !isUrl ? AVATAR_ICONS[avatar] : undefined;
   const color = COLORS[hash(name || avatar || "?") % COLORS.length];
+
+  if (isUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatar!}
+        alt={name}
+        className={cn("shrink-0 rounded-full object-cover", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   return (
     <span
       className={cn(

@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
       const patch: Record<string, unknown> = {};
       if (body.display_name !== undefined)
         patch.display_name = clip(body.display_name, 80) || null;
-      if (body.avatar !== undefined) patch.avatar = clip(body.avatar, 40) || null;
+      if (body.avatar !== undefined) patch.avatar = clip(body.avatar, 300) || null;
       if (body.role !== undefined) {
         const role = String(body.role);
         if (!ASSIGNABLE_ROLES.includes(role)) return json({ error: "invalid_role" }, 400);
@@ -137,7 +137,7 @@ Deno.serve(async (req: Request) => {
     if (action === "create_profile") {
       const displayName = clip(body.display_name, 80);
       if (!displayName) return json({ error: "missing_display_name" }, 400);
-      const avatar = clip(body.avatar, 40) || null;
+      const avatar = clip(body.avatar, 300) || null;
       const pin = clip(body.pin, 12);
       const pin_hash = pin ? await hashPin(pin) : null;
       const { data, error } = await admin
@@ -156,7 +156,7 @@ Deno.serve(async (req: Request) => {
       const patch: Record<string, unknown> = {};
       if (body.display_name !== undefined)
         patch.display_name = clip(body.display_name, 80);
-      if (body.avatar !== undefined) patch.avatar = clip(body.avatar, 40) || null;
+      if (body.avatar !== undefined) patch.avatar = clip(body.avatar, 300) || null;
       if (body.pin !== undefined) {
         const pin = clip(body.pin, 12);
         patch.pin_hash = pin ? await hashPin(pin) : null;

@@ -25,9 +25,11 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 Planificación |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 Planificación |
+| **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
+| **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
-> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
+> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
 ---
 
@@ -222,7 +224,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ## Plan ampliado (2026-05-30)
 
-Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
+Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
 
 ### F6 — Personalización del producto
 
@@ -674,6 +676,129 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
   - [ ] Export en **XLSX** (ver TX) y al catálogo/canales.
   - [ ] *Criterio:* el dueño ve cuánto descuento otorgó cada promo y su impacto en margen.
 
+### F14 — Motor comercial enterprise
+
+Objetivo: convertir la configuración comercial en un sistema central y auditado: planes, cuotas, recargos, impuestos, costos, reglas, inventario avanzado, compras, offline completo, omnicanal, API y analítica. F11 cubre retail avanzado; F14 lo vuelve **enterprise, versionado, simulable y gobernado**. Ver [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md).
+
+- [ ] **H57 — Jerarquía de configuración y precedencia.**
+  - [ ] Niveles: global NinjaSoft → plan → tenant → rubro → sucursal → caja → canal → rol → usuario → horario/campaña.
+  - [ ] Resolución de valor efectivo con explicación: "este recargo viene de tenant, sobrescrito por sucursal".
+  - [ ] Conflictos detectados antes de guardar.
+  - [ ] *Criterio:* un owner ve por qué una caja usa una regla distinta y puede volver al default sin SQL.
+
+- [ ] **H58 — Planes, cuotas, add-ons y entitlements enterprise.**
+  - [ ] Plan base, plan custom por tenant, add-ons, paquetes de módulos, límites blandos/duros y medición de uso.
+  - [ ] Cuotas configurables: usuarios, sucursales, cajas, productos, ventas, comprobantes AFIP, almacenamiento, mensajes, integraciones, API calls.
+  - [ ] Exceso de uso: aviso, grace period, upgrade sugerido, cargo adicional o bloqueo gradual según política.
+  - [ ] *Criterio:* internal crea un plan específico para un cliente con 8 sucursales, add-on gastronómico y límite de 100.000 ventas/mes.
+
+- [ ] **H59 — Recargos, financiación, tasas y redondeos por contexto.**
+  - [ ] Recargos/descuentos por medio, marca, adquirente, plan de cuotas, canal, sucursal, horario, ticket mínimo y rol.
+  - [ ] Configuración de financiación: interés compuesto/simple, cuotas sin interés absorbidas por comercio, costo financiero total visible, vigencia y topes.
+  - [ ] Service charge, propina sugerida, fee delivery, cargo por packaging, impuesto/tasa local y redondeo por moneda.
+  - [ ] Transparencia: todo recargo aparece antes de cobrar y en ticket/comprobante cuando corresponda.
+  - [ ] *Criterio:* "Visa 6 cuotas +18%" aplica solo en sucursal A, de lunes a viernes, con simulación del total antes de cobrar.
+
+- [ ] **H60 — Motor de reglas comerciales unificado.**
+  - [ ] Condiciones/acciones para precio, descuento, recargo, comisión, límite, alerta, bloqueo o sugerencia.
+  - [ ] Prioridad, exclusividad, combinabilidad, vigencia, audiencia, test A/B y simulador con ventas históricas.
+  - [ ] Unifica promociones F9, recargos F11, planes F7/F14, comisiones F12 y reglas gastronómicas F13.
+  - [ ] *Criterio:* una regla "mayorista paga transferencia sin recargo y 5% menos desde 20 unidades" se configura sin código.
+
+- [ ] **H61 — Facturación SaaS, dunning y ledger de cobros NinjaSoft.**
+  - [ ] Ledger interno por tenant: cargos, créditos, descuentos, impuestos, pagos, deuda, vencimientos y recibos.
+  - [ ] Dunning configurable: aviso preventivo, vencido, grace period, suspensión parcial, suspensión total y reactivación.
+  - [ ] Aumentos masivos segmentados con preview, exclusiones, aceptación requerida y notificaciones automáticas.
+  - [ ] *Criterio:* billing programa aumento del 20% para planes Pro, excluye clientes con contrato vigente y ve impacto MRR antes de aplicar.
+
+- [ ] **H62 — Centro de configuración PRO.**
+  - [ ] Plantillas por rubro: kiosco, retail, electro, textil, cafetería, heladería, restaurante, peluquería, servicios.
+  - [ ] Import/export de configuración XLSX/JSON: medios, recargos, roles, tickets, tipos de entrega, depósitos, reglas, salones, mesas, comisiones.
+  - [ ] Versionado, diff, preview, rollback y ambiente sandbox por tenant.
+  - [ ] *Criterio:* se clona la configuración de una sucursal a otra, se revisa diff y se revierte en un click.
+
+- [ ] **H63 — Gobierno de cambios y aprobaciones.**
+  - [ ] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo.
+  - [ ] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud.
+  - [ ] Alertas a owner/manager/internal cuando una configuración crítica cambia.
+  - [ ] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito.
+
+- [ ] **H64 — Inventario PRO, compras y proveedores.**
+  - [ ] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría.
+  - [ ] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores.
+  - [ ] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales.
+  - [ ] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote.
+
+- [ ] **H65 — Offline-first completo.**
+  - [ ] POS/PWA con cache local, cola de ventas/pagos/comandas/stock, reintentos y resolución de conflictos.
+  - [ ] Reconciliación al reconectar: stock, caja, numeración interna, cola fiscal, pagos y auditoría.
+  - [ ] Políticas por tenant: qué se permite offline, montos máximos, usuarios autorizados, duración máxima y bloqueo preventivo.
+  - [ ] *Criterio:* un local vende 3 horas sin internet y al volver sincroniza sin duplicar ventas ni romper caja/stock/AFIP.
+
+- [ ] **H66 — Omnicanal, marketplace hub y catálogo sincronizado.**
+  - [ ] Canales: mostrador, catálogo público, QR mesa, WhatsApp, Tienda Nube, Mercado Libre, delivery propio, PedidosYa/Rappi futuro.
+  - [ ] Stock reservado por canal, precios/listas por canal, estados de pedido, cancelación, reembolso y conciliación.
+  - [ ] Mapeo de productos/modificadores/categorías por canal sin duplicar catálogo base.
+  - [ ] *Criterio:* un producto cambia de precio y se sincroniza a catálogo/QR/marketplace según reglas del canal.
+
+- [ ] **H67 — BI/AI operativo y recomendaciones.**
+  - [ ] Forecast de demanda, alertas de anomalías, productos muertos, margen bajo, quiebres probables, staff necesario y horarios pico.
+  - [ ] Recomendaciones accionables: subir stock, cambiar precio, crear combo, revisar cajero, reponer insumo, contactar cliente inactivo.
+  - [ ] Explicabilidad: cada recomendación muestra datos usados y confianza.
+  - [ ] *Criterio:* el owner recibe "te vas a quedar sin café el viernes" con evidencia y orden de compra sugerida.
+
+- [ ] **H68 — API pública, webhooks y app marketplace.**
+  - [ ] API versionada con OAuth/API keys por tenant, scopes, rate limits, logs y rotación de credenciales.
+  - [ ] Webhooks para venta, pago, stock, cliente, turno, factura, comanda, notificación y cambio de plan.
+  - [ ] Marketplace de apps: integración aprobada, permisos visibles, instalación/desinstalación y health por app.
+  - [ ] *Criterio:* un partner recibe webhook de venta, consulta detalle por API y queda auditado por tenant.
+
+### F15 — Escuela NinjaSoft + onboarding guiado configurable
+
+Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela interna, recorridos guiados, checklist por rubro, ayuda contextual y configuración desde internal para cambiar qué se enseña, cuándo y a quién. Ver [`28-school-onboarding.md`](./28-school-onboarding.md).
+
+- [ ] **H69 — Escuela NinjaSoft por módulos.**
+  - [ ] Biblioteca de cursos: primeros pasos, POS, caja, productos, clientes, reportes, hardware, AFIP, retail, servicios, gastronomía, internal para staff.
+  - [ ] Cada lección tiene objetivo, pasos, capturas/video, demo interactiva, errores comunes, checklist y prueba corta.
+  - [ ] Progreso por usuario, rol, tenant y rubro.
+  - [ ] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico.
+
+- [ ] **H70 — Tours y recorridos guiados configurables.**
+  - [ ] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador.
+  - [ ] Pasos con ancla en UI, tooltip, modal, spotlight, tarea, bloqueo opcional o "hacer ahora".
+  - [ ] Versionado de tours, draft/publicado, A/B test y métricas de finalización.
+  - [ ] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro.
+
+- [ ] **H71 — Checklist de activación y health de adopción.**
+  - [ ] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique.
+  - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
+  - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
+  - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
+
+- [ ] **H72 — Ayuda contextual y base de conocimiento.**
+  - [ ] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
+  - [ ] Buscador, etiquetas, contenido relacionado, feedback útil/no útil y sugerencia de artículo desde soporte.
+  - [ ] Modo "mostrarme con mis datos" usando demo segura o datos anonimizados.
+  - [ ] *Criterio:* desde `/pos`, un cajero busca "anular venta" y ve guía exacta para su rol.
+
+- [ ] **H73 — Laboratorio/demo segura.**
+  - [ ] Sandbox por tenant con datos de ejemplo para practicar sin afectar caja/stock/facturación real.
+  - [ ] Reset de demo, escenarios por rubro y ejercicios guiados.
+  - [ ] Separación visual fuerte entre demo y producción.
+  - [ ] *Criterio:* un owner practica una devolución y una comanda sin generar movimientos reales.
+
+- [ ] **H74 — Configuración internal de sugerencias, nudges y comunicaciones de onboarding.**
+  - [ ] Internal crea sugerencias por evento: registro, primer login, sin productos, sin caja abierta, venta fallida, hardware no probado, trial por vencer.
+  - [ ] Audiencia, prioridad, frecuencia, cooldown, expiración, canal, CTA y fallback a soporte.
+  - [ ] No molestar: límite de mensajes por sesión/día y preferencias por tenant.
+  - [ ] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta.
+
+- [ ] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.**
+  - [ ] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno.
+  - [ ] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta.
+  - [ ] Sugerencias automáticas de capacitación según errores reales del tenant.
+  - [ ] *Criterio:* internal ve que un tenant falla en cierres de caja y le recomienda curso + tour de arqueo.
+
 ---
 
 ## TX — Mejoras transversales (UX y datos)
@@ -731,11 +856,14 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Facturación electrónica / fiscal (AFIP, CAE) | F3 |
 | Fotos de producto, branding, tickets a medida, catálogo público | F6 |
 | Multi-sucursal, multi-caja, transferencias de stock | F4 |
-| Inventario avanzado: lotes, vencimientos, series, conteos, alertas | **Backlog → promover a fase de Inventario PRO** |
-| Compras y proveedores (órdenes de compra, recepción, costos) | Backlog |
+| Inventario avanzado: lotes, vencimientos, series, conteos, alertas | **F14/H64** |
+| Compras y proveedores (órdenes de compra, recepción, costos) | **F14/H64** |
 | Cuenta corriente de clientes (fiado) | **F11/H31** + gancha con F9/H55 |
-| Cuenta corriente de proveedores | Backlog |
+| Cuenta corriente de proveedores | **F14/H64** |
 | Medios de pago con variantes, cuotas y recargos | **F11/H27** |
+| Configuración enterprise de cuotas, add-ons, límites y entitlements | **F14/H58** |
+| Motor de recargos, financiación, tasas y redondeos por contexto | **F14/H59** |
+| Gobierno de reglas comerciales, approvals y rollback | **F14/H60–H63** |
 | Garantías extendidas con prima y comisión | **F11/H28** |
 | Devoluciones/cambios con vales y motivos | **F11/H29** |
 | Pedidos de salón, reservas y despacho separado | **F11/H32** |
@@ -748,13 +876,14 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 + **F10/H22–H26** |
 | Segunda pantalla / display cliente (carrito, QR, total, vuelto) | **F10/H25** |
 | Pedidos online / delivery (PedidosYa, Rappi, Tienda Nube, Mercado Libre) | F5 (marketplace) |
-| Modo offline completo con sincronización | Backlog (AFIP offline mínimo cubierto en F3) |
-| App móvil para gerentes | Backlog |
+| Modo offline completo con sincronización | **F14/H65** (AFIP offline mínimo cubierto en F3) |
+| App móvil para gerentes | Backlog, apoyada en API/webhooks F14/H68 |
 | Roles y permisos granulares; staff multinivel | F1 (roles) + **F7/H11 (staff NinjaSoft)** |
-| Multimoneda / listas de precios por canal | F6/H10 (listas) + Backlog (multimoneda) |
+| Multimoneda / listas de precios por canal | F6/H10 (listas) + **F14/H59/H66** |
 | Reservas / turnos | **F12/H38** + F13/H51 para reservas gastronómicas |
+| Escuela, tours, ayuda contextual y certificaciones | **F15/H69–H75** |
 
-> **Conclusión del benchmark:** los huecos relevantes vs. POS líderes son **inventario avanzado**, **compras/proveedores** y **modo offline completo**. Cuenta corriente, devoluciones/cambios, depósitos, despacho, garantías, recargos y Excel masivo pasan a **F11 — Configuración retail avanzada**. La oportunidad nueva es **catálogo chico + servicios**: negocios con baja complejidad de inventario pero alta frecuencia de cobro o agenda, cubiertos por **F12 — Comercios simples y servicios**.
+> **Conclusión del benchmark:** los huecos relevantes vs. POS líderes dejan de quedar en backlog: **inventario avanzado**, **compras/proveedores**, **modo offline completo**, **recargos/cuotas enterprise**, **API/webhooks** y **gobierno de configuración** pasan a **F14 — Motor comercial enterprise**. La oportunidad de adopción se cubre con **F15 — Escuela NinjaSoft + onboarding guiado configurable**, para reducir soporte y acelerar primera venta.
 
 ---
 
@@ -789,15 +918,15 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 
 ## Backlog para fases siguientes (no priorizado)
 
-- [ ] **Inventario PRO** (candidato a fase propia tras F9): lotes, vencimientos, números de serie, conteos/ajustes, alertas de stock mínimo, multi-depósito.
-- [ ] **Compras y proveedores:** órdenes de compra, recepción, costos, actualización de precios.
+- [ ] **Inventario PRO avanzado fuera de F14:** WMS profundo, ubicaciones/bin picking, ondas de preparación, inventario por radiofrecuencia y terminales industriales.
+- [ ] **Compras y proveedores avanzados fuera de F14:** EDI, portal de proveedor, licitaciones, conciliación automática de facturas de proveedor.
 - [ ] **Devoluciones y cambios avanzados:** cubierto en F11/H29; queda en backlog solo integración posterior con nota de crédito fiscal automática si AFIP requiere ampliar flujo.
 - [ ] **Cuenta corriente de clientes** (fiado) — base en F11/H31; gancha con F9/H55 (fidelización) y segmentos.
 - [ ] **Cuenta corriente de proveedores.**
 - [ ] **Reservas / turnos avanzados** multi-recurso o de capacidad compleja; base cubierta en F12/H38 y reservas gastronómicas en F13/H51.
-- [ ] **Multimoneda** y tipo de cambio.
+- [ ] **Multimoneda avanzada:** cobertura multi-país, contabilidad bimonetaria y reglas fiscales por país; base comercial cubierta en F14/H59.
 - [ ] App móvil nativa (React Native) para gerentes en movimiento.
-- [ ] Modo offline completo con sincronización al recuperar conexión (AFIP offline mínimo queda en F3).
+- [ ] Offline industrial avanzado: sincronización multi-dispositivo con conflictos complejos y hardware local; base offline-first cubierta en F14/H65.
 - [ ] Producción y recetas avanzadas / escandallo industrial; base gastronómica cubierta en F13/H50.
 - [ ] E-commerce integrado (alternativa a Tienda Nube).
 - [ ] Multi-país (Uruguay, Chile, México) — requiere abstraer facturación electrónica.

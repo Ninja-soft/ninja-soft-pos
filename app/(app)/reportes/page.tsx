@@ -27,6 +27,7 @@ const REPORTS = [
   { key: "by_category", label: "Por categoría" },
   { key: "by_user", label: "Por cajero" },
   { key: "by_product", label: "Top productos" },
+  { key: "by_customer", label: "Top clientes" },
   { key: "low_stock", label: "Stock bajo" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
@@ -36,6 +37,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_category: true,
   by_user: true,
   by_product: true,
+  by_customer: true,
   low_stock: true,
 };
 
@@ -136,6 +138,16 @@ export default function ReportesPage() {
         ],
         rows: data.by_product,
         totals: { total: data.by_product.reduce((a, r) => a + r.total, 0) },
+      },
+      {
+        name: "Top clientes",
+        columns: [
+          { header: "Cliente", key: "customer", width: 28 },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Ventas", key: "count", type: "number" },
+        ],
+        rows: data.by_customer,
+        totals: { total: data.by_customer.reduce((a, r) => a + r.total, 0) },
       },
     ]);
   }
@@ -283,6 +295,17 @@ export default function ReportesPage() {
                   r.product,
                   formatCurrency(r.total),
                   formatQty(r.qty),
+                ])}
+              />
+            )}
+            {vis.by_customer && (
+              <ReportTable
+                title="Top clientes"
+                cols={["Cliente", "Total", "Ventas"]}
+                rows={(data?.by_customer ?? []).map((r) => [
+                  r.customer,
+                  formatCurrency(r.total),
+                  String(r.count),
                 ])}
               />
             )}

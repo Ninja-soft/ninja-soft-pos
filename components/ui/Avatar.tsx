@@ -70,13 +70,32 @@ export function Avatar({
   name,
   avatar,
   size = 36,
+  loading = false,
   className,
 }: {
   name: string;
   avatar?: string | null;
   size?: number;
+  loading?: boolean;
   className?: string;
 }) {
+  if (loading) {
+    return (
+      <span
+        className={cn(
+          "inline-grid shrink-0 place-items-center rounded-full bg-muted",
+          className,
+        )}
+        style={{ width: size, height: size }}
+        aria-label="Cargando"
+      >
+        <span
+          className="animate-spin rounded-full border-2 border-muted-foreground/30 border-t-ninja-flameSoft"
+          style={{ width: size * 0.5, height: size * 0.5 }}
+        />
+      </span>
+    );
+  }
   const isUrl = !!avatar && /^https?:\/\//.test(avatar);
   const Icon = avatar && !isUrl ? AVATAR_ICONS[avatar] : undefined;
   const color = COLORS[hash(name || avatar || "?") % COLORS.length];

@@ -98,10 +98,14 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 ### Suscripciones y planes (panel interno NinjaSoft)
 
 - [ ] Solo staff de NinjaSoft accede al panel interno.
+- [ ] Entrar directo a `/internal` sin sesión redirige a login y vuelve al panel interno después de autenticar.
 - [ ] Crear un tenant lo deja en estado `trial`.
 - [ ] Cambiar de plan registra el cambio con autor, fecha y motivo.
 - [ ] Suspender un tenant bloquea login pero no borra datos.
 - [ ] Reactivar un tenant restaura el acceso.
+- [ ] Desde internal se puede invitar usuario a un tenant, reenviar invitación y cambiar rol con auditoría.
+- [ ] Super-admin puede convertir un usuario existente en staff interno; admin/support no pueden.
+- [ ] No se puede quitar el último `super_admin`.
 
 ### Feature flags
 

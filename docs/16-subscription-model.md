@@ -231,6 +231,24 @@ Calculadas en dashboard interno (F2+):
 | Reactivar | `super_admin`, `sales`. |
 | Modificar precio | `super_admin` (no debería pasar, hay precios fijos por plan). |
 
+## 13.1 Operación desde panel internal
+
+La consola internal debe concentrar toda la operación de suscripciones sin SQL:
+
+- [ ] Alta de tenant y asignación de plan inicial.
+- [ ] Cambio de plan inmediato.
+- [ ] Cambio de estado con motivo: `trial`, `active`, `past_due`, `suspended`, `cancelled`.
+- [ ] Extensión o acorte de trial.
+- [ ] Registro de pago manual: fecha, medio, monto, período cubierto y referencia.
+- [ ] Registro de deuda o pago pendiente.
+- [ ] Próxima fecha de vencimiento.
+- [ ] Precio acordado/descuento comercial con vigencia.
+- [ ] Notas comerciales internas.
+- [ ] Historial completo con antes/después, actor, fecha y motivo.
+- [ ] Email/plantilla asociada a cada transición.
+
+Ver [`24-internal-ops-panel.md`](./24-internal-ops-panel.md).
+
 ## 14. Comunicación al cliente
 
 Templates de email (a definir en F2):

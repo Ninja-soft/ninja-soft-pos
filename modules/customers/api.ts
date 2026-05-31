@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
 import type { CustomerOutput } from "./schemas";
+import type { ParsedCustomer } from "./import";
 
 export type Customer = Tables<"customers">;
 
@@ -49,6 +50,16 @@ export const customersApi = {
       .update(payload(input))
       .eq("id", id);
     if (error) throw error;
+  },
+
+  bulkImport: async (rows: ParsedCustomer[]): Promise<number> => {
+    if (rows.length === 0) return 0;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("customers")
+      .insert(rows.map((r) => ({ ...r, is_active: true })));
+    if (error) throw error;
+    return rows.length;
   },
 
   softDelete: async (id: string): Promise<void> => {

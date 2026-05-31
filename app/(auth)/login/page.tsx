@@ -18,7 +18,11 @@ import {
 } from "@/components/ui/Card";
 import { Accent, Eyebrow } from "@/components/ui/Typography";
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: { next?: string };
+}) {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
   const {
@@ -26,6 +30,9 @@ export default function LoginPage() {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({ resolver: zodResolver(LoginSchema) });
+
+  const next = searchParams?.next;
+  const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : null;
 
   async function onSubmit(values: LoginInput) {
     setServerError(null);
@@ -35,7 +42,7 @@ export default function LoginPage() {
       setServerError("Email o contraseña incorrectos.");
       return;
     }
-    router.push("/dashboard");
+    router.push((safeNext ?? "/dashboard") as never);
     router.refresh();
   }
 
@@ -46,7 +53,11 @@ export default function LoginPage() {
         <CardTitle>
           Iniciar <Accent>sesión</Accent>
         </CardTitle>
-        <CardDescription>Accedé a tu negocio en NinjaSoft.</CardDescription>
+        <CardDescription>
+          {safeNext?.startsWith("/internal")
+            ? "Accedé al panel interno de NinjaSoft."
+            : "Accedé a tu negocio en NinjaSoft."}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>

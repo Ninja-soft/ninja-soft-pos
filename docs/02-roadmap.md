@@ -286,6 +286,18 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md).
   - [ ] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff.
 
+- [ ] **H11c — Consola internal completa + login independiente.**
+  - [x] Entrar directo a `/internal` redirige a `/internal/tenants`; si no hay sesión, login conserva destino interno (`/login?next=/internal/tenants`).
+  - [ ] Pantalla de acceso interno con copy y layout diferenciado de POS/tenant.
+  - [ ] Dashboard internal con KPIs SaaS: MRR, ARR, trials, activos, past_due, suspendidos, churn, conversión trial→paid, tickets de soporte y alertas.
+  - [ ] Buscador global por tenant, CUIT, email owner, teléfono, slug, plan, estado, feature flag y fecha de alta.
+  - [ ] Ficha 360 del tenant: datos legales/comerciales, owners, usuarios, sucursales, cajas, ventas, módulos activos, flags, salud, últimos errores y actividad.
+  - [ ] Desde internal se puede invitar usuarios al tenant, reenviar invitación, cambiar rol, suspender/reactivar miembro y resetear acceso con motivo.
+  - [ ] Desde internal se puede convertir un usuario existente en staff NinjaSoft y asignarle rol/nivel interno según permiso.
+  - [ ] Impersonation/abrir contexto de tenant solo con motivo, duración limitada, banner visible y auditoría.
+  - [ ] Acciones peligrosas requieren confirmación fuerte, motivo y quedan en `audit_logs`.
+  - [ ] *Criterio:* un super-admin entra por `/internal` sin pasar por POS, encuentra un tenant, invita un owner/cajero, cambia plan, activa módulos y promueve un usuario a admin interno, todo auditado.
+
 - [x] **H11b — Miembros del negocio (lo gestiona el DUEÑO en `/dashboard-team`).** — *Hecho (PR #25, 2026-05-30).*
   - [x] **Dos clases de miembro** (el dueño elige al crear):
     - **Con login:** email + contraseña, recibe invitación (Edge Function `invite_user`). Nombre real **o** genérico (ej. "Cajero A").
@@ -297,10 +309,15 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] *Criterio:* el dueño crea "Cajero A" sin email con avatar preset y PIN; luego lo renombra y lo suspende; un cajero no puede editar a otros.
   - *Pendiente menor:* el PIN se hashea con SHA-256 (uso de baja seguridad); migrar a bcrypt cuando se implemente el fichaje en el POS (F12).
 
-- [ ] **H12 — Suscripciones y planes en caliente.**
+- [ ] **H12 — Suscripciones, billing manual y lifecycle comercial.**
   - [ ] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
-  - [ ] Aumentar/limitar poderes y feature flags por tenant.
-  - [ ] *Criterio:* pasar un tenant de Start a Pro aplica al instante y queda auditado.
+  - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
+  - [ ] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo.
+  - [ ] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento.
+  - [ ] Descuentos comerciales, precio acordado, cupones/manual override y notas internas con vigencia.
+  - [ ] Historial de cambios de plan/estado/precio con antes/después, autor, fecha, motivo y fuente.
+  - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
+  - [ ] *Criterio:* pasar un tenant de Start trial a Pro activo con vencimiento, pago registrado, módulos activados y email de bienvenida pendiente queda auditado de punta a punta.
 
 - [ ] **H13 — Emails configurables (HTML + variables).**
   - [ ] **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …), preview y **versionado**.

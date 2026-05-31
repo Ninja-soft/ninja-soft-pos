@@ -26,14 +26,26 @@ Los roles viven en la tabla `tenant_users.role`. Un usuario puede tener distinto
 
 ## 3. Roles internos NinjaSoft
 
-Definidos por la combinación `is_internal = true` + `internal_role`.
+Definidos por la combinación `is_internal = true` + `internal_level` en `app_metadata` y espejo `users.internal_level`.
 
-| Rol interno | Quién | Alcance |
+### 3.1 Niveles implementados
+
+| Nivel interno | Quién | Alcance |
 |---|---|---|
-| `super_admin` | Founders, CTO | Todo el panel interno. Único que puede asignar roles internos. |
-| `support` | Equipo de soporte | Ver tenants, abrir contexto con motivo, asistir clientes. |
-| `sales` | Equipo comercial | Ver tenants, cambiar planes, no ve datos operativos. |
-| `developer` | Equipo de desarrollo | Acceso técnico (feature flags, logs, debugging). |
+| `super_admin` | Founders, CTO | Todo el panel interno. Único que puede asignar/quitar staff crítico. |
+| `admin` | Operaciones NinjaSoft | Gestiona tenants, planes, estados, flags y soporte. No puede quitar el último super-admin. |
+| `support` | Equipo de soporte | Lectura + acciones acotadas de soporte con motivo. No cambia planes ni staff. |
+
+### 3.2 Roles objetivo por área
+
+Estos roles pueden implementarse como permisos granulares sobre `internal_level` o como una tabla futura `internal_staff_roles`:
+
+| Rol objetivo | Quién | Alcance |
+|---|---|---|
+| `sales` | Equipo comercial | Alta comercial, trials, upgrades, reactivaciones y notas comerciales. |
+| `billing` | Administración/cobranzas | Pagos manuales, deuda, vencimientos, suspensión/reactivación por cobranza. |
+| `developer` | Equipo técnico | Logs, health, flags técnicos y debugging. No cambia precio/plan. |
+| `support_lead` | Soporte avanzado | Impersonation controlada, escalaciones y acciones temporales con motivo. |
 
 ## 4. Matriz de permisos — Clientes
 
@@ -105,19 +117,23 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 
 ## 5. Matriz de permisos — Internos NinjaSoft
 
-| Acción | super_admin | support | sales | developer |
-|---|---|---|---|---|
-| Ver listado de tenants | ✅ | ✅ | ✅ | ✅ |
-| Crear tenant | ✅ | ⚠️ | ✅ | ❌ |
-| Suspender tenant | ✅ | ⚠️ | ✅ | ❌ |
-| Eliminar tenant | ✅ | ❌ | ❌ | ❌ |
-| Abrir contexto de tenant (impersonation) | ✅ | ✅ | ⚠️ (solo lectura) | ✅ |
-| Cambiar plan | ✅ | ⚠️ | ✅ | ❌ |
-| Activar/desactivar feature flag global | ✅ | ❌ | ❌ | ✅ |
-| Activar/desactivar feature flag por tenant | ✅ | ⚠️ | ⚠️ | ✅ |
-| Ver audit_logs cross-tenant | ✅ | ✅ | ❌ | ✅ |
-| Asignar rol interno | ✅ | ❌ | ❌ | ❌ |
-| Modificar `system_settings` | ✅ | ❌ | ❌ | ⚠️ |
+| Acción | super_admin | admin | support | sales | billing | developer |
+|---|---|---|---|---|---|---|
+| Ver listado de tenants | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Crear tenant | ✅ | ✅ | ⚠️ | ✅ | ❌ | ❌ |
+| Suspender tenant | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Eliminar tenant | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Abrir contexto de tenant (impersonation) | ✅ | ✅ | ⚠️ solo lectura | ❌ | ❌ | ⚠️ debugging |
+| Cambiar plan | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Extender trial | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Registrar pago manual | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Activar/desactivar feature flag global | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Activar/desactivar feature flag por tenant | ✅ | ✅ | ❌ | ⚠️ comercial | ❌ | ✅ |
+| Invitar usuarios a tenant | ✅ | ✅ | ⚠️ soporte | ✅ | ❌ | ❌ |
+| Convertir usuario en staff interno | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Cambiar rol interno | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Ver audit_logs cross-tenant | ✅ | ✅ | ✅ | ⚠️ comercial | ✅ | ✅ |
+| Modificar `system_settings` | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
 
 ⚠️ en internos significa "requiere registro de motivo en audit_logs".
 

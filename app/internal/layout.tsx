@@ -13,7 +13,7 @@ export default async function InternalLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?next=/internal/tenants");
 
   const isInternal =
     (user.app_metadata as { is_internal?: boolean } | null)?.is_internal ===

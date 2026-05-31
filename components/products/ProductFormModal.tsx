@@ -82,6 +82,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         is_kit: product?.is_kit ?? false,
         is_serialized: product?.is_serialized ?? false,
         track_stock: product?.track_stock ?? true,
+        allow_negative:
+          product?.allow_negative == null
+            ? "inherit"
+            : product.allow_negative
+              ? "yes"
+              : "no",
       });
     }
   }, [open, product, reset]);
@@ -286,6 +292,22 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             <span className="block text-xs text-muted-foreground">
               Si está apagado, no descuenta stock al venderse (ej. servicios).
             </span>
+          </span>
+        </label>
+
+        <label className="block text-sm text-foreground">
+          Venta sin stock
+          <select
+            {...register("allow_negative")}
+            className="mt-1 h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+          >
+            <option value="inherit">Según configuración general</option>
+            <option value="yes">Permitir igual (vende en negativo)</option>
+            <option value="no">No permitir</option>
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Reemplaza, solo para este producto, el ajuste global de
+            “vender sin stock”.
           </span>
         </label>
 

@@ -11,6 +11,7 @@ export interface CartLine {
   quantity: number;
   discount: number; // descuento por línea (monto)
   unit: string; // 'un' por defecto; 'kg' = ítem por peso
+  serial?: string | null; // N° de serie (producto serializado)
 }
 
 interface CartState {
@@ -26,6 +27,10 @@ interface CartState {
   addWeighed: (
     p: { id: string; name: string; sku: string | null; price: number },
     weight: number,
+  ) => void;
+  addSerialized: (
+    p: { id: string; name: string; sku: string | null; price: number },
+    serial: string,
   ) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
   setQuantity: (lineId: string, quantity: number) => void;
@@ -94,6 +99,23 @@ export const useCartStore = create<CartState>((set) => ({
         ],
       };
     }),
+  addSerialized: (p, serial) =>
+    set((state) => ({
+      lines: [
+        ...state.lines,
+        {
+          lineId: crypto.randomUUID(),
+          productId: p.id,
+          name: p.name,
+          sku: p.sku,
+          unitPrice: p.price,
+          quantity: 1,
+          discount: 0,
+          unit: "un",
+          serial: serial.trim(),
+        },
+      ],
+    })),
   addFreeAmount: (p) =>
     set((state) => ({
       lines: [

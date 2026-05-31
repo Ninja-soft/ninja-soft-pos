@@ -241,15 +241,15 @@ export function TeamSection({
                       <div className="flex items-center gap-3">
                         <Avatar name={memberName(m)} avatar={m.avatar} size={34} />
                         <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {memberName(m)}
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-medium">{memberName(m)}</span>
                             {m.user_id === currentUserId && (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                (vos)
+                              <span className="shrink-0 rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                                vos
                               </span>
                             )}
                           </div>
-                          {m.email && m.display_name && (
+                          {m.email && memberName(m) !== m.email && (
                             <div className="truncate text-xs text-muted-foreground">
                               {m.email}
                             </div>

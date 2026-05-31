@@ -72,12 +72,21 @@ export function InternalShell({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase
-        .from("users")
-        .select("full_name, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle();
-      return { full_name: data?.full_name ?? null, avatar_url: data?.avatar_url ?? null };
+      // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
+      const [acc, mem] = await Promise.all([
+        supabase.from("users").select("full_name, avatar_url").eq("id", user.id).maybeSingle(),
+        supabase
+          .from("tenant_users")
+          .select("display_name, avatar")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      return {
+        full_name: acc.data?.full_name ?? mem.data?.display_name ?? null,
+        avatar_url: acc.data?.avatar_url ?? mem.data?.avatar ?? null,
+      };
     },
   });
   const name = me?.full_name || email;

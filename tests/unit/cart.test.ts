@@ -24,13 +24,25 @@ describe("cart store", () => {
   it("setQuantity a 0 elimina la línea", () => {
     const { addProduct, setQuantity } = useCartStore.getState();
     addProduct(P);
-    setQuantity("p1", 0);
+    const lineId = useCartStore.getState().lines[0]!.lineId;
+    setQuantity(lineId, 0);
     expect(useCartStore.getState().lines).toHaveLength(0);
+  });
+
+  it("agrega un ítem de monto libre (sin producto)", () => {
+    const { addFreeAmount } = useCartStore.getState();
+    addFreeAmount({ name: "", amount: 500 });
+    const lines = useCartStore.getState().lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.productId).toBeNull();
+    expect(lines[0]!.name).toBe("Venta rápida");
+    expect(lines[0]!.unitPrice).toBe(500);
   });
 
   it("calcula subtotales con descuento", () => {
     expect(
       lineSubtotal({
+        lineId: "l1",
         productId: "p1",
         name: "x",
         sku: null,
@@ -41,8 +53,8 @@ describe("cart store", () => {
     ).toBe(250);
     expect(
       cartSubtotal([
-        { productId: "a", name: "a", sku: null, unitPrice: 100, quantity: 1, discount: 0 },
-        { productId: "b", name: "b", sku: null, unitPrice: 200, quantity: 2, discount: 100 },
+        { lineId: "l1", productId: "a", name: "a", sku: null, unitPrice: 100, quantity: 1, discount: 0 },
+        { lineId: "l2", productId: "b", name: "b", sku: null, unitPrice: 200, quantity: 2, discount: 100 },
       ]),
     ).toBe(400);
   });

@@ -44,6 +44,10 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 - [ ] Theme oscuro y claro se ven bien.
 - [ ] Estados de carga, vacío y error están implementados.
 - [ ] El foco visible y la navegación por teclado funcionan.
+- [ ] Pasa el gate de diseño y estructura de [`26-design-structure-control.md`](./26-design-structure-control.md).
+- [ ] No hay overflow horizontal, textos cortados, botones desbordados ni acciones tapadas por elementos sticky.
+- [ ] Las acciones primarias/secundarias/destructivas están jerarquizadas correctamente.
+- [ ] Si la pantalla toca POS/internal/configuración/reportes, respeta el layout esperado para ese tipo de pantalla.
 
 ---
 

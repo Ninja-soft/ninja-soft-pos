@@ -775,6 +775,8 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 - [ ] Acciones críticas escriben en `audit_logs`.
 - [ ] `service_role` no aparece en frontend.
 - [ ] Feature nueva detrás de feature flag si es opcional.
+- [ ] Control de diseño y estructura aprobado según [`26-design-structure-control.md`](./26-design-structure-control.md).
+- [ ] Capturas o demo de responsive en mobile/tablet/desktop si el hito toca UI.
 - [ ] Entrada en [`17-decision-log.md`](./17-decision-log.md) y `CHANGELOG.md`.
 - [ ] Deploy a producción verificado (estado READY) y humo manual en la ruta nueva.
 

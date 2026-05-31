@@ -566,6 +566,39 @@ El panel internal será la fuente operativa para crear planes custom, modificar 
 
 ---
 
+## ADR-017 — Gate de diseño y estructura
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El producto está creciendo en muchas verticales: POS, internal, retail avanzado, servicios, gastronomía, AFIP y notificaciones. Sin un control explícito, cada módulo puede sumar pantallas con estructura distinta, componentes duplicados o deuda visual.
+
+### Decisión
+
+Se crea [`26-design-structure-control.md`](./26-design-structure-control.md) como gate obligatorio para toda PR que toque UI o estructura frontend.
+
+El gate valida:
+
+- Reutilización de componentes del sistema.
+- Jerarquía visual y layout correcto por tipo de pantalla.
+- Responsive mobile/tablet/desktop.
+- Accesibilidad mínima.
+- Estados loading/empty/error/success.
+- Separación de lógica por módulo.
+- Evidencia visual o demo para pantallas críticas.
+
+### Consecuencias
+
+- **Positivas:** consistencia visual, menos duplicación, menos regresiones responsive y una barra clara para aceptar UI.
+- **Negativas:** cada PR de UI requiere más evidencia y revisión.
+- **Seguimiento:** agregar Playwright screenshots/visual checks cuando el suite E2E esté consolidado.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

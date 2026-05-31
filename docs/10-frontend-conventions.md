@@ -233,6 +233,20 @@ const buttonVariants = cva(
 - FID < 100ms.
 - Tiempo entre "Cobrar" y confirmación < 500ms (sin contar AFIP).
 
+## 8.2 Gate de estructura frontend
+
+Toda PR que agregue o modifique UI debe pasar [`26-design-structure-control.md`](./26-design-structure-control.md).
+
+Reglas adicionales:
+
+- [ ] La ruta vive en el grupo correcto: `(auth)`, `(app)`, `(public)`, `internal`.
+- [ ] La lógica de dominio vive en `modules/<dominio>`.
+- [ ] Componentes de pantalla no acumulan lógica de API, permisos, formateo y layout a la vez.
+- [ ] Formularios complejos se separan en schema, hook/mutation y componente visual.
+- [ ] Tablas/listas reutilizan patrón común antes de crear markup propio.
+- [ ] Si aparece un patrón repetido 2 veces, se promueve a componente compartido.
+- [ ] Si una pantalla supera 300 líneas, se justifica o se divide.
+
 ## 9. Naming
 
 | Cosa | Convención | Ejemplo |

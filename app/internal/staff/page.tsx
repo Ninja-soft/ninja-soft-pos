@@ -152,8 +152,8 @@ export default function InternalStaffPage() {
       )}
 
       <Card className="mt-6">
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[520px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Persona</th>

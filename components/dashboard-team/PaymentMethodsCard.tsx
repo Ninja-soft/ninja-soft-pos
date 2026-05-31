@@ -124,13 +124,13 @@ export function PaymentMethodsCard() {
       </p>
       <Card className="mt-3">
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[420px] text-sm">
+          <table className="w-full min-w-[480px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
-                <th className="px-4 py-3">Medio</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3 text-right">Recargo %</th>
-                <th className="px-4 py-3 text-right">Activo</th>
+                <th className="whitespace-nowrap px-4 py-3">Medio</th>
+                <th className="whitespace-nowrap px-4 py-3">Tipo</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Recargo %</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right">Activo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -138,8 +138,8 @@ export function PaymentMethodsCard() {
                 const m = byKey.get(p.key);
                 return (
                   <tr key={p.key}>
-                    <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="whitespace-nowrap px-4 py-3 font-medium">{p.name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                       {KIND_LABELS[p.kind] ?? p.kind}
                     </td>
                     <td className="px-4 py-3 text-right">

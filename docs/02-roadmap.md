@@ -269,8 +269,8 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
 
 Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usuarios, planes y comunicaciones.
 
-- [ ] **H11 — Roles de staff NinjaSoft + gestión total de usuarios.**
-  - [ ] Tres niveles de staff: **super-admin**, **admin**, **soporte**.
+- [~] **H11 — Roles de staff NinjaSoft + gestión total de usuarios.** — *Backend hecho (PR #33: niveles + guards + edge fn `staff_admin` con bootstrap); falta UI de staff en `/internal`.*
+  - [x] Tres niveles de staff: **super-admin**, **admin**, **soporte**.
     - *super-admin:* todo (sumar/quitar staff, borrar tenants, facturación, acciones peligrosas).
     - *admin:* gestión de tenants/usuarios/soporte; sin tocar staff ni acciones destructivas.
     - *soporte:* solo-lectura + acciones limitadas (notas, ver salud, reset de contraseña).
@@ -655,11 +655,13 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
   - [ ] Helper único `exportXlsx()` reutilizable; respeta el branding del tenant (TX se apoya en F6/H8).
   - [ ] *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
 
-- [ ] **TX-4 — Importaciones masivas XLSX como estándar.**
-  - [ ] Toda entidad operativa importante debe poder importarse por Excel cuando tenga sentido: productos, clientes, depósitos, stock inicial, listas de precios, medios de pago, garantías, motivos de devolución.
-  - [ ] Toda importación tiene plantilla, validación previa, preview, dry-run, confirmación, reporte de errores por fila y auditoría.
-  - [ ] No se aceptan imports silenciosos: si una fila no entra, el usuario debe saber por qué y cómo corregirla.
-  - [ ] *Criterio:* cualquier módulo nuevo que agregue datos maestros debe definir si requiere import/export XLSX antes de cerrar el hito.
+- [ ] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).**
+  - [ ] **Productos y clientes se importan SIEMPRE en XLSX** (se elimina el import CSV actual de productos). Igual para depósitos, stock inicial, listas de precios, medios de pago, garantías, motivos de devolución.
+  - [ ] **Descargar plantilla de muestra XLSX** por entidad (encabezados + 1-2 filas de ejemplo + hoja de ayuda con formatos/valores válidos).
+  - [ ] **Exportar toda la base** en XLSX (productos, clientes, etc.) — sirve de backup y de base para reimportar editando.
+  - [ ] Toda importación: validación previa, preview, dry-run, confirmación, reporte de errores por fila y auditoría. Sin imports silenciosos.
+  - [ ] Helper único de import (parse XLSX con `exceljs`) + reuso del `exportXlsx` (TX-2) para plantillas y export de base.
+  - [ ] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.
 
 - [ ] **TX-3 — Pulido UX continuo.**
   - [ ] Estados vacíos, skeletons, toasts consistentes, accesibilidad, atajos de teclado en POS.

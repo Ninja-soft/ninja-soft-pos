@@ -1224,6 +1224,7 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          internal_level: string | null
           is_internal: boolean
           locale: string | null
           settings: Json
@@ -1235,6 +1236,7 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          internal_level?: string | null
           is_internal?: boolean
           locale?: string | null
           settings?: Json
@@ -1246,6 +1248,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          internal_level?: string | null
           is_internal?: boolean
           locale?: string | null
           settings?: Json
@@ -1282,6 +1285,17 @@ export type Database = {
         Returns: Json
       }
       current_tenant_id: { Args: Record<PropertyKey, never>; Returns: string }
+      internal_level: { Args: Record<PropertyKey, never>; Returns: string }
+      internal_list_staff: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          email: string
+          full_name: string | null
+          internal_level: string | null
+          created_at: string
+        }[]
+      }
       internal_set_flag: {
         Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }
         Returns: undefined

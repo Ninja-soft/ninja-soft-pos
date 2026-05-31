@@ -22,6 +22,7 @@ export const ProductSchema = z.object({
   tax_rate: z.coerce.number().min(0).max(100).default(21),
   season: optionalText(60),
   tags: optionalText(300), // coma-separado en el form; el api lo pasa a array
+  image_url: optionalText(600),
   description: optionalText(500),
   is_active: z.boolean().default(true),
   is_kit: z.boolean().default(false),

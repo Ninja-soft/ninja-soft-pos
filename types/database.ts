@@ -1565,6 +1565,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      top_products: {
+        Args: { p_limit?: number }
+        Returns: Database["public"]["Tables"]["products"]["Row"][]
+      }
       void_sale: {
         Args: { p_reason: string; p_sale_id: string }
         Returns: undefined

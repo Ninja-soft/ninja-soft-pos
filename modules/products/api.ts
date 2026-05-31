@@ -31,6 +31,16 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
+  // Productos más vendidos (frecuentes) para la venta rápida del kiosco.
+  top: async (limit = 12): Promise<Product[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("top_products", {
+      p_limit: limit,
+    });
+    if (error) throw error;
+    return (data ?? []) as unknown as Product[];
+  },
+
   create: async (input: ProductOutput): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.from("products").insert({

@@ -329,7 +329,7 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] **Emails del sistema son GLOBALES y se editan en `/internal/emails`** (no en el POS del cliente). Tablas `system_email_templates` + `system_email_config` (RLS solo `is_internal`). Override de defaults de `lib/email/templates.ts`.
   - [x] **Editor HTML + variables + preview en vivo**; catálogo: bienvenida, invitación, reset, trial por vencer, pago vencido, suspensión.
   - [x] **Remitente configurable** (nombre + email de dominio verificado) en `/internal/emails`.
-  - [x] **Envío real con Resend** (Edge Function `send_email`, guard `is_internal`) + botón "Enviar prueba". *(Falta: cargar el secret `RESEND_API_KEY` en Supabase.)*
+  - [x] **Envío real por SMTP propio** (denomailer, sin secrets de backend): el remitente y el servidor SMTP se configuran desde `/internal/emails` (host/puerto/usuario/clave/secure/from). Edge Functions `set_email_smtp` (guarda) y `send_email` (envía, guard `is_internal`); clave en `system_email_smtp` (RLS solo service_role), lectura sin clave vía `get_email_smtp()`. Botón "Enviar prueba".
   - [x] **Log de envío** en `audit_logs` (acción `email_sent`).
   - [ ] **Brevo** + **envíos masivos** y reintentos (siguiente etapa).
   - [ ] **POS del cliente:** los tenants suman **sus propios proveedores** para **campañas masivas** a sus clientes (en `/configuracion` del tenant) — *fase aparte (no son los emails del sistema).*

@@ -1372,6 +1372,7 @@ export type Database = {
         Returns: Json
       }
       current_tenant_id: { Args: Record<PropertyKey, never>; Returns: string }
+      get_email_smtp: { Args: Record<PropertyKey, never>; Returns: Json }
       internal_level: { Args: Record<PropertyKey, never>; Returns: string }
       internal_list_staff: {
         Args: Record<PropertyKey, never>

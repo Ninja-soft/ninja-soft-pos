@@ -10,6 +10,8 @@ export interface InternalTenant {
   planKey: string | null;
   planName: string | null;
   subStatus: string | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
 }
 
 export interface TenantFlag {
@@ -25,7 +27,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, subscriptions(status, plans(key, name))",
+        "id, name, slug, status, industry, created_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email))",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -40,9 +42,15 @@ export const internalApi = {
         status: string;
         plans: { key: string; name: string } | null;
       }[];
+      tenant_users: {
+        role: string;
+        users: { full_name: string | null; email: string } | null;
+      }[];
     };
     return ((data ?? []) as unknown as Row[]).map((t) => {
       const sub = t.subscriptions?.[0];
+      const owner =
+        t.tenant_users?.find((x) => x.role === "owner") ?? t.tenant_users?.[0];
       return {
         id: t.id,
         name: t.name,
@@ -53,6 +61,8 @@ export const internalApi = {
         planKey: sub?.plans?.key ?? null,
         planName: sub?.plans?.name ?? null,
         subStatus: sub?.status ?? null,
+        ownerName: owner?.users?.full_name ?? null,
+        ownerEmail: owner?.users?.email ?? null,
       };
     });
   },

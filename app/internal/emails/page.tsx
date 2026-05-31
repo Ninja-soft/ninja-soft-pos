@@ -28,26 +28,41 @@ export default function InternalEmailsPage() {
   const [selectedKey, setSelectedKey] = useState(EMAIL_TEMPLATES[0]!.key);
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
-  const [fromName, setFromName] = useState("NinjaPos");
-  const [fromEmail, setFromEmail] = useState("");
+  const [smtp, setSmtp] = useState({
+    host: "",
+    port: "587",
+    secure: false,
+    username: "",
+    password: "",
+    from_name: "NinjaPos",
+    from_email: "",
+  });
+  const [hasPassword, setHasPassword] = useState(false);
 
-  const { data: config } = useQuery({
-    queryKey: ["system-email-config"],
+  const { data: smtpCfg } = useQuery({
+    queryKey: ["system-email-smtp"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("system_email_config")
-        .select("from_name, from_email")
-        .eq("id", true)
-        .maybeSingle();
-      return data ?? { from_name: "NinjaPos", from_email: "" };
+      const { data } = await supabase.rpc("get_email_smtp");
+      return (data as Record<string, unknown> | null) ?? null;
     },
   });
   useEffect(() => {
-    if (config) {
-      setFromName(config.from_name ?? "NinjaPos");
-      setFromEmail(config.from_email ?? "");
+    if (smtpCfg) {
+      setSmtp((s) => ({
+        ...s,
+        host: String(smtpCfg.host ?? ""),
+        port: String(smtpCfg.port ?? "587"),
+        secure: !!smtpCfg.secure,
+        username: String(smtpCfg.username ?? ""),
+        from_name: String(smtpCfg.from_name ?? "NinjaPos"),
+        from_email: String(smtpCfg.from_email ?? ""),
+        password: "",
+      }));
+      setHasPassword(!!smtpCfg.has_password);
     }
-  }, [config]);
+  }, [smtpCfg]);
+  const setS = (k: keyof typeof smtp, v: string | boolean) =>
+    setSmtp((s) => ({ ...s, [k]: v }));
 
   const { data: saved = {} } = useQuery<Saved>({
     queryKey: ["system-email-templates"],
@@ -94,17 +109,14 @@ export default function InternalEmailsPage() {
 
   const saveCfg = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("system_email_config")
-        .upsert(
-          { id: true, from_name: fromName.trim(), from_email: fromEmail.trim() },
-          { onConflict: "id" },
-        );
+      const { error } = await supabase.functions.invoke("set_email_smtp", {
+        body: { ...smtp, port: Number(smtp.port) || 587 },
+      });
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Remitente guardado", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["system-email-config"] });
+      toast({ title: "SMTP guardado", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["system-email-smtp"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -144,7 +156,7 @@ export default function InternalEmailsPage() {
     onError: (e) =>
       toast({
         title: "No se pudo enviar",
-        description: e instanceof Error ? e.message : "Revisá remitente y RESEND_API_KEY.",
+        description: e instanceof Error ? e.message : "Revisá la configuración SMTP.",
         variant: "error",
       }),
   });
@@ -159,29 +171,69 @@ export default function InternalEmailsPage() {
         Editá los emails que NinjaPos envía a los usuarios y configurá el remitente.
       </p>
 
-      {/* Remitente */}
+      {/* SMTP del remitente (config propia, sin secrets de backend) */}
       <Card className="mt-6">
         <CardContent className="space-y-4 p-5">
           <div className="flex items-center gap-2 font-semibold">
-            <Send size={16} /> Remitente
+            <Send size={16} /> Servidor de envío (SMTP)
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Nombre" value={fromName} onChange={(e) => setFromName(e.target.value)} />
             <Input
-              label="Email (dominio verificado en Resend)"
+              label="Servidor SMTP"
+              placeholder="smtp.gmail.com"
+              value={smtp.host}
+              onChange={(e) => setS("host", e.target.value)}
+            />
+            <Input
+              label="Puerto"
+              inputMode="numeric"
+              placeholder="587"
+              value={smtp.port}
+              onChange={(e) => setS("port", e.target.value.replace(/\D/g, ""))}
+            />
+            <Input
+              label="Usuario"
+              placeholder="tu@email.com"
+              value={smtp.username}
+              onChange={(e) => setS("username", e.target.value)}
+            />
+            <Input
+              label={hasPassword ? "Contraseña (dejar vacío para no cambiar)" : "Contraseña"}
+              type="password"
+              placeholder={hasPassword ? "••••••••" : ""}
+              value={smtp.password}
+              onChange={(e) => setS("password", e.target.value)}
+            />
+            <Input
+              label="Nombre del remitente"
+              value={smtp.from_name}
+              onChange={(e) => setS("from_name", e.target.value)}
+            />
+            <Input
+              label="Email del remitente"
               type="email"
               placeholder="hola@tudominio.com"
-              value={fromEmail}
-              onChange={(e) => setFromEmail(e.target.value)}
+              value={smtp.from_email}
+              onChange={(e) => setS("from_email", e.target.value)}
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              className="accent-ninja-flame"
+              checked={smtp.secure}
+              onChange={(e) => setS("secure", e.target.checked)}
+            />
+            Conexión segura (SSL/TLS, puerto 465)
+          </label>
           <div className="flex justify-end">
             <Button onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
-              Guardar remitente
+              Guardar SMTP
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            El envío usa Resend. Cargá el secret <code>RESEND_API_KEY</code> en Supabase.
+            Usá tu propio email (ej. Gmail con contraseña de aplicación, o el SMTP de
+            tu hosting). No requiere servicios pagos ni secrets externos.
           </p>
         </CardContent>
       </Card>

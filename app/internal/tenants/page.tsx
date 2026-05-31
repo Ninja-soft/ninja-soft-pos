@@ -25,10 +25,11 @@ export default function InternalTenantsPage() {
       </p>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full min-w-[560px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Negocio</th>
+              <th className="px-4 py-3">Dueño</th>
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Alta</th>
@@ -37,14 +38,14 @@ export default function InternalTenantsPage() {
           <tbody className="divide-y divide-border text-foreground">
             {isLoading && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                   Cargando…
                 </td>
               </tr>
             )}
             {!isLoading && tenants?.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                   No hay tenants.
                 </td>
               </tr>
@@ -59,6 +60,10 @@ export default function InternalTenantsPage() {
                     {t.name}
                   </Link>
                   <div className="text-xs text-muted-foreground">{t.slug}</div>
+                </td>
+                <td className="px-4 py-3">
+                  <div>{t.ownerName ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{t.ownerEmail ?? "—"}</div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{t.planName ?? "—"}</td>
                 <td className="px-4 py-3">

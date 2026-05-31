@@ -332,11 +332,26 @@
   fill: currentColor;
 }
 
-/* Resalte de números/precios con degradado configurable (data-price-accent). */
+/* Swap del wordmark NinjaPos según el tema: la versión clara (Ninja en blanco)
+   en temas oscuros, la versión oscura en temas claros. */
+.wordmark-on-light {
+  display: none;
+}
+[data-theme="ninja-light"] .wordmark-on-dark,
+[data-theme="ninja-sand"] .wordmark-on-dark {
+  display: none;
+}
+[data-theme="ninja-light"] .wordmark-on-light,
+[data-theme="ninja-sand"] .wordmark-on-light {
+  display: inline-block;
+}
+
+/* Resalte de números/precios con degradado configurable (data-price-accent).
+   Default = violeta (flama→violeta). */
 .price-hl {
   background-image: var(
     --price-gradient,
-    linear-gradient(135deg, #ff4b22 0%, #ff8a1f 48%, #ffd21f 100%)
+    linear-gradient(135deg, #ff4b22, #7c4dff)
   );
   -webkit-background-clip: text;
   background-clip: text;

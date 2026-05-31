@@ -236,14 +236,15 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio:* subir una imagen grande resulta en un WebP liviano servido por URL pública; sin policy de listado en el bucket.
   - *Pendiente menor:* multi-tamaño (thumb/card/full) — hoy se sirve una sola imagen optimizada; los thumbnails se muestran por CSS. Drag&drop para reordenar queda para una iteración.
 
-- [ ] **H8 — Branding por tenant.**
-  - [ ] Logo del negocio, color de acento (dentro de límites de marca), datos fiscales/contacto.
-  - [ ] Datos legales del comercio: razón social, condición IVA, CUIT/CUIL, teléfono, email, dirección legal, provincia, ciudad/localidad.
-  - [ ] Modo del negocio/rubro operativo: retail, electro/electrónica, textil, kiosco, restaurante salón, resto-bar, cafetería/take away, heladería, fast food, rotisería, panadería, food truck, peluquería/estética, servicios profesionales, pyme genérica.
-  - [ ] Logo del comercio en PNG/JPG/WebP con validación de peso y dimensiones.
-  - [ ] Aplicado en POS, tickets, emails y catálogo.
+- [x] **H8 — Branding por tenant.** — *Parcial/base hecha (PR #29, 2026-05-31).*
+  - [x] Logo del negocio (subida → WebP, bucket `tenant-assets` con RLS), color de acento (presets dentro de límites de marca), datos comerciales.
+  - [x] Datos legales del comercio: razón social, CUIT, teléfono, dirección, pie de ticket. Tabla `tenant_branding` (escritura owner/manager por RLS). UI en `/dashboard-team` (BrandingCard).
+  - [ ] Modo del negocio/rubro operativo (presets por rubro) — *pendiente; se cruza con F12/F13.*
+  - [x] Logo en PNG/JPG/WebP → se normaliza a WebP en el navegador.
+  - [x] Aplicado en **tickets** (logo + razón social + CUIT/dirección/teléfono + pie). *Emails y catálogo: cuando existan (H13/H10).*
   - [ ] (Opcional Enterprise) dominio propio para el catálogo.
-  - [ ] *Criterio:* el logo y color del tenant se ven en ticket, email y catálogo sin tocar código.
+  - [x] *Criterio:* el logo y los datos del tenant se ven en el ticket sin tocar código.
+  - *Pendiente:* condición IVA/provincia/ciudad y selector de rubro; aplicar acento al catálogo (H10).
 
 - [ ] **H9 — Tickets y comprobantes personalizables.**
   - [ ] Plantillas de ticket configurables: logo, leyendas, QR, redes, pie legal.

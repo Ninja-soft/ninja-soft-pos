@@ -1019,6 +1019,53 @@ export type Database = {
         }
         Relationships: []
       }
+      tenant_branding: {
+        Row: {
+          accent: string | null
+          address: string | null
+          cuit: string | null
+          legal_name: string | null
+          logo_path: string | null
+          logo_url: string | null
+          phone: string | null
+          tenant_id: string
+          ticket_footer: string | null
+          updated_at: string
+        }
+        Insert: {
+          accent?: string | null
+          address?: string | null
+          cuit?: string | null
+          legal_name?: string | null
+          logo_path?: string | null
+          logo_url?: string | null
+          phone?: string | null
+          tenant_id: string
+          ticket_footer?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accent?: string | null
+          address?: string | null
+          cuit?: string | null
+          legal_name?: string | null
+          logo_path?: string | null
+          logo_url?: string | null
+          phone?: string | null
+          tenant_id?: string
+          ticket_footer?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_branding_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_feature_flags: {
         Row: {
           configured_at: string

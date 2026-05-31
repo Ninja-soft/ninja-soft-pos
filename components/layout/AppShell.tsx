@@ -43,6 +43,13 @@ import {
 type Item = { href: string; label: string; icon: React.ElementType };
 type Group = { label: string; items: Item[] };
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  manager: "Encargado",
+  cashier: "Cajero",
+  viewer: "Solo lectura",
+};
+
 const NAV: { top: Item[]; groups: Group[] } = {
   top: [
     { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -101,11 +108,13 @@ function NavLink({
 
 function UserMenu({
   email,
+  role,
   onChangePassword,
   onEditProfile,
   onSignOut,
 }: {
   email: string;
+  role: string | null;
   onChangePassword: () => void;
   onEditProfile: () => void;
   onSignOut: () => void;
@@ -149,6 +158,11 @@ function UserMenu({
             {me?.display_name && (
               <span className="block truncate text-xs text-muted-foreground">
                 {email}
+              </span>
+            )}
+            {role && (
+              <span className="mt-0.5 inline-flex max-w-full items-center truncate rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                {ROLE_LABELS[role] ?? role}
               </span>
             )}
           </span>
@@ -303,6 +317,7 @@ export function AppShell({
         )}
         <UserMenu
           email={email}
+          role={shell?.role ?? null}
           onChangePassword={() => setPwOpen(true)}
           onEditProfile={() => setPfOpen(true)}
           onSignOut={signOut}

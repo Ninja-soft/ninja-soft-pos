@@ -75,6 +75,20 @@ Deno.serve(async (req: Request) => {
   });
   if (!tokRes.ok) {
     const detail = await tokRes.text();
+    console.error("mp_oauth exchange_failed", tokRes.status, detail.slice(0, 500));
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: stateRow.user_id,
+      entity_type: "payment_secrets",
+      entity_id: null,
+      action: "payment_oauth_error",
+      after_data: {
+        status: tokRes.status,
+        redirect_uri: ps.redirect_uri,
+        client_id: ps.client_id,
+        detail: detail.slice(0, 500),
+      },
+    });
     return json({ error: "exchange_failed", detail: detail.slice(0, 300) }, 502);
   }
   const tok = (await tokRes.json()) as {
@@ -84,7 +98,10 @@ Deno.serve(async (req: Request) => {
     user_id?: number | string;
     expires_in?: number;
   };
-  if (!tok.access_token) return json({ error: "no_access_token" }, 502);
+  if (!tok.access_token) {
+    console.error("mp_oauth no_access_token", JSON.stringify(tok).slice(0, 300));
+    return json({ error: "no_access_token" }, 502);
+  }
 
   const expiresAt = tok.expires_in
     ? new Date(Date.now() + tok.expires_in * 1000).toISOString()

@@ -370,7 +370,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [ ] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado.
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
-  - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) hechos** (PR #83 + #84): Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook` (estado en vivo por polling + verificación contra MP); botón "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Falta:** OAuth "Conectar con MP", Mercado **Point** (tarjeta presencial) y conciliación.
+  - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) + OAuth "Conectar con MP" hechos**: Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook`, `mp_oauth_start`, `mp_oauth_callback` (`state` anti-CSRF, refresh de token); botón "Conectar con Mercado Pago" (un click) y "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Billing de suscripciones**: credenciales de plataforma en `platform_secrets` editables desde `/internal/pagos` (`set_platform_secret`), `mp_subscription_checkout` (preapproval) + `mp_billing_webhook`; "Generar link de cobro" en el detalle del tenant. **Falta:** Mercado **Point** (tarjeta presencial) y conciliación.
   - [ ] **H16** — **MODO** vía QR interoperable.
   - [ ] **H17** — **Payway / Prisma**.
   - [ ] **H18** — **Getnet**.

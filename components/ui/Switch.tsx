@@ -8,11 +8,13 @@ export function Switch({
   onCheckedChange,
   label,
   className,
+  disabled = false,
 }: {
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   label?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -20,9 +22,10 @@ export function Switch({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-40",
         checked ? "bg-ninja-gradient" : "bg-muted",
         className,
       )}

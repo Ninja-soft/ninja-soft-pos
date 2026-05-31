@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Building2,
   ChevronDown,
+  CreditCard,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -40,6 +41,7 @@ const NAV = [
   { href: "/internal/tenants", label: "Negocios", icon: Building2 },
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },
+  { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
 ];
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",

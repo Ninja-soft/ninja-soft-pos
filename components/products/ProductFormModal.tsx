@@ -19,6 +19,8 @@ import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import {
   useCategories,
   useCreateCategory,
+  useBrands,
+  useCreateBrand,
   useProductMutations,
 } from "@/modules/products/hooks";
 
@@ -33,8 +35,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { toast } = useToast();
   const { data: categories } = useCategories();
   const createCategory = useCreateCategory();
+  const { data: brands } = useBrands();
+  const createBrand = useCreateBrand();
   const { create, update } = useProductMutations();
   const [newCat, setNewCat] = useState("");
+  const [newBrand, setNewBrand] = useState("");
 
   const {
     register,
@@ -55,6 +60,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         sku: product?.sku ?? "",
         barcode: product?.barcode ?? "",
         category_id: product?.category_id ?? null,
+        brand_id: product?.brand_id ?? null,
         price: product?.price ?? 0,
         cost: product?.cost ?? undefined,
         stock: product?.stock ?? 0,
@@ -96,6 +102,18 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       toast({ title: "Categoría creada", variant: "success" });
     } catch {
       toast({ title: "No se pudo crear la categoría", variant: "error" });
+    }
+  }
+
+  async function addBrand() {
+    if (newBrand.trim().length < 1) return;
+    try {
+      const b = await createBrand.mutateAsync(newBrand.trim());
+      setValue("brand_id", b.id);
+      setNewBrand("");
+      toast({ title: "Marca creada", variant: "success" });
+    } catch {
+      toast({ title: "No se pudo crear la marca", variant: "error" });
     }
   }
 
@@ -144,6 +162,40 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               size="sm"
               onClick={addCategory}
               loading={createCategory.isPending}
+            >
+              <Plus size={15} /> Agregar
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Marca
+          </label>
+          <select
+            className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            {...register("brand_id")}
+          >
+            <option value="">Sin marca</option>
+            {brands?.map((b) => (
+              <option key={b.id} value={b.id} className="bg-ninja-deepViolet">
+                {b.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newBrand}
+              onChange={(e) => setNewBrand(e.target.value)}
+              placeholder="Nueva marca"
+              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={addBrand}
+              loading={createBrand.isPending}
             >
               <Plus size={15} /> Agregar
             </Button>

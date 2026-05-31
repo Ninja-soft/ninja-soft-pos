@@ -11,6 +11,7 @@ export type Product = Tables<"products"> & {
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
+export type Brand = Tables<"brands">;
 export type StockMovement = Tables<"stock_movements">;
 export interface KitComponent {
   id: string;
@@ -54,6 +55,7 @@ export const productsApi = {
       sku: input.sku,
       barcode: input.barcode,
       category_id: input.category_id ?? null,
+      brand_id: input.brand_id ?? null,
       price: input.price,
       cost: input.cost ?? null,
       stock: input.stock,
@@ -75,6 +77,7 @@ export const productsApi = {
         sku: input.sku,
         barcode: input.barcode,
         category_id: input.category_id ?? null,
+        brand_id: input.brand_id ?? null,
         price: input.price,
         cost: input.cost ?? null,
         stock_min: input.stock_min,
@@ -240,5 +243,29 @@ export const categoriesApi = {
       .single();
     if (error) throw error;
     return data as Category;
+  },
+};
+
+export const brandsApi = {
+  list: async (): Promise<Brand[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("brands")
+      .select("*")
+      .is("deleted_at", null)
+      .order("name");
+    if (error) throw error;
+    return (data ?? []) as Brand[];
+  },
+
+  create: async (name: string): Promise<Brand> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("brands")
+      .insert({ name })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data as Brand;
   },
 };

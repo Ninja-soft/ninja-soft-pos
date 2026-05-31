@@ -59,6 +59,38 @@ export type Database = {
         }
         Relationships: []
       }
+      brands: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brands_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_movements: {
         Row: {
           amount: number
@@ -801,6 +833,7 @@ export type Database = {
       products: {
         Row: {
           barcode: string | null
+          brand_id: string | null
           category_id: string | null
           cost: number | null
           created_at: string
@@ -824,6 +857,7 @@ export type Database = {
         }
         Insert: {
           barcode?: string | null
+          brand_id?: string | null
           category_id?: string | null
           cost?: number | null
           created_at?: string
@@ -847,6 +881,7 @@ export type Database = {
         }
         Update: {
           barcode?: string | null
+          brand_id?: string | null
           category_id?: string | null
           cost?: number | null
           created_at?: string
@@ -869,6 +904,13 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_category_id_fkey"
             columns: ["category_id"]

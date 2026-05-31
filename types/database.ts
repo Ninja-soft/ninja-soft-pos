@@ -1030,6 +1030,7 @@ export type Database = {
           phone: string | null
           tenant_id: string
           ticket_footer: string | null
+          ticket_width: string
           updated_at: string
         }
         Insert: {
@@ -1042,6 +1043,7 @@ export type Database = {
           phone?: string | null
           tenant_id: string
           ticket_footer?: string | null
+          ticket_width?: string
           updated_at?: string
         }
         Update: {
@@ -1054,6 +1056,7 @@ export type Database = {
           phone?: string | null
           tenant_id?: string
           ticket_footer?: string | null
+          ticket_width?: string
           updated_at?: string
         }
         Relationships: [

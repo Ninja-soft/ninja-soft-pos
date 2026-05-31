@@ -331,7 +331,7 @@ Con el MVP (H0–H6) funcional y desplegado, el equipo definió extender el alca
 
 ### Decisión
 
-Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014/ADR-018/ADR-019/ADR-020 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3**. Definiciones clave:
+Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014/ADR-018/ADR-019/ADR-020 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3**. Definiciones clave:
 
 - **Pagos:** arquitectura extensible primero (registro de proveedores, credenciales encriptadas por tenant, UI de cobro abstracta, pago mixto) y **una integración por etapas** por proveedor: Mercado Pago/Point, MODO (QR interoperable), Payway/Prisma, Getnet, Fiserv/Posnet/Clover, **Mobbex como orquestador opcional**, Pagos360. Medios manuales (efectivo, transferencia, mixto) desde la base.
 - **Staff NinjaSoft:** tres niveles — **super-admin**, **admin**, **soporte** — con matriz de permisos versionada.

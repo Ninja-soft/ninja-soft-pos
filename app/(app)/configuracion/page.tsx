@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Palette, Store } from "lucide-react";
+import { CreditCard, Palette, Store } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -20,11 +20,13 @@ import {
 } from "@/lib/theme/AppearanceProvider";
 import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
+import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 
-type Section = "apariencia" | "marca";
+type Section = "apariencia" | "marca" | "pagos";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
   { key: "marca", label: "Marca del negocio", icon: Store },
+  { key: "pagos", label: "Medios de pago", icon: CreditCard },
 ];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
@@ -267,6 +269,9 @@ export default function ConfiguracionPage() {
 
           {/* Marca del negocio (solo owner/manager; el componente se auto-oculta) */}
           {section === "marca" && <BrandingCard />}
+
+          {/* Medios de pago (solo owner/manager; se auto-oculta) */}
+          {section === "pagos" && <PaymentMethodsCard />}
         </div>
       </div>
     </div>

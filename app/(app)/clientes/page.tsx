@@ -78,14 +78,15 @@ export default function ClientesPage() {
             <Eyebrow>Clientes</Eyebrow>
             <Display className="mt-3 text-3xl md:text-4xl">Clientes</Display>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={exportBase}>
+          <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Button variant="secondary" className="shrink-0" onClick={exportBase}>
               <Download size={16} /> Exportar XLSX
             </Button>
-            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+            <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}>
               <Upload size={16} /> Importar XLSX
             </Button>
             <Button
+              className="shrink-0"
               onClick={() => {
                 setSelected(null);
                 setFormOpen(true);
@@ -109,8 +110,8 @@ export default function ClientesPage() {
           />
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Nombre</th>

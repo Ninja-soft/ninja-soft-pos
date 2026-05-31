@@ -228,3 +228,19 @@ Antes de escribir un componente:
 2. Si no existe, primero consultar el inventario en este doc.
 3. Si tampoco está en el inventario, proponer la adición en un PR separado con el agente `ui-designer`.
 4. **No crear componentes UI ad-hoc** dentro de features. Promover al sistema.
+
+## 16. Control de diseño y estructura
+
+Toda pantalla nueva o modificada debe pasar el gate de [`26-design-structure-control.md`](./26-design-structure-control.md).
+
+Mínimo obligatorio:
+
+- [ ] Jerarquía visual clara.
+- [ ] Componentes del sistema reutilizados.
+- [ ] Estados loading/empty/error/success.
+- [ ] Responsive validado.
+- [ ] Accesibilidad básica validada.
+- [ ] Sin estilos fuera de tokens.
+- [ ] Sin duplicación de patrones existentes.
+
+Si el cambio afecta POS, internal, reportes o configuración, el control es bloqueante para cerrar el hito.

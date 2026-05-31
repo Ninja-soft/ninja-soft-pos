@@ -10,10 +10,10 @@ import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 
 const KIND_LABELS: Record<string, string> = {
-  manual: "Manual",
-  gateway: "Pasarela",
-  qr: "QR",
-  orchestrator: "Orquestador",
+  manual: "Lo cobrás vos",
+  gateway: "Tarjeta / online",
+  qr: "Pago con QR",
+  orchestrator: "Varias pasarelas",
 };
 
 type Provider = { key: string; name: string; kind: string; sort: number };
@@ -24,10 +24,33 @@ type Method = {
   surcharge_pct: number;
 };
 
-export function PaymentMethodsCard({ tenantId }: { tenantId: string }) {
+export function PaymentMethodsCard() {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  const { data: ctx } = useQuery({
+    queryKey: ["my-payments-ctx"],
+    queryFn: async (): Promise<{ tenantId: string; canManage: boolean } | null> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data: mem } = await supabase
+        .from("tenant_users")
+        .select("tenant_id, role")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (!mem) return null;
+      return {
+        tenantId: mem.tenant_id,
+        canManage: ["owner", "manager"].includes(mem.role),
+      };
+    },
+  });
+  const tenantId = ctx?.tenantId ?? "";
 
   const { data: providers = [] } = useQuery({
     queryKey: ["payment-providers"],
@@ -43,6 +66,7 @@ export function PaymentMethodsCard({ tenantId }: { tenantId: string }) {
 
   const { data: methods = [] } = useQuery({
     queryKey: ["tenant-payment-methods", tenantId],
+    enabled: !!tenantId,
     queryFn: async (): Promise<Method[]> => {
       const { data } = await supabase
         .from("tenant_payment_methods")
@@ -83,18 +107,24 @@ export function PaymentMethodsCard({ tenantId }: { tenantId: string }) {
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
+  if (!ctx || !ctx.canManage) return null;
+
   return (
-    <section className="mt-8">
-      <Heading as="h2" className="flex items-center gap-2">
+    <section>
+      <Heading as="h2" className="flex items-center gap-2 text-base">
         <CreditCard size={18} /> Medios de pago
       </Heading>
       <p className="mt-1 text-sm text-muted-foreground">
-        Activá los medios que aceptás y su recargo. Las pasarelas se conectan en una
-        etapa siguiente.
+        Activá los medios que aceptás y su recargo. Referencia de tipos:{" "}
+        <strong>Lo cobrás vos</strong> (efectivo/transferencia, lo registrás a mano),{" "}
+        <strong>Tarjeta / online</strong> (cobra con tarjeta o link, ej. Mercado Pago),{" "}
+        <strong>Pago con QR</strong> (el cliente escanea, ej. MODO), y{" "}
+        <strong>Varias pasarelas</strong> (un servicio que conecta otras, ej. Mobbex).
+        Las pasarelas se conectan en una etapa siguiente.
       </p>
       <Card className="mt-3">
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[420px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Medio</th>

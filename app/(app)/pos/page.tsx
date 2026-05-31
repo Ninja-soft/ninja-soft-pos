@@ -9,6 +9,7 @@ import {
   Plus,
   ScanBarcode,
   Search,
+  Star,
   Unlock,
   X,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { useProducts } from "@/modules/products/hooks";
+import { useProducts, useTopProducts } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { verticalHas } from "@/lib/verticals/config";
 import {
@@ -57,6 +58,8 @@ export default function PosPage() {
   const { open, close, sale } = usePosMutations();
   const { data: myTenant } = useMyTenant();
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
+  const showFrequent = quickSale && !search.trim();
+  const { data: topProducts } = useTopProducts(showFrequent);
 
   const lines = useCartStore((s) => s.lines);
   const discountTotal = useCartStore((s) => s.discountTotal);
@@ -214,6 +217,32 @@ export default function PosPage() {
             >
               <Banknote size={16} /> Venta rápida (monto libre)
             </Button>
+          )}
+          {showFrequent && topProducts && topProducts.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Star size={13} className="text-ninja-flameSoft" /> Frecuentes
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {topProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      addProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price })
+                    }
+                    className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
+                  >
+                    <div className="truncate font-medium text-foreground">{p.name}</div>
+                    <div className="mt-2 font-semibold text-foreground">
+                      {formatCurrency(p.price)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-5 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Todos los productos
+              </div>
+            </div>
           )}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products?.map((p) => (

@@ -15,6 +15,14 @@ export function useProducts(search: string) {
   });
 }
 
+export function useTopProducts(enabled: boolean, limit = 12) {
+  return useQuery({
+    queryKey: ["products", "top", limit],
+    queryFn: () => productsApi.top(limit),
+    enabled,
+  });
+}
+
 export function useCategories() {
   return useQuery({
     queryKey: ["categories", "list"],

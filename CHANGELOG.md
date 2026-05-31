@@ -11,6 +11,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **TX-1 — Calendario unificado (`react-day-picker`):** componente `DateRangePicker` (rango + presets, locale es) en Reportes; reemplaza los inputs de fecha nativos.
+- **TX-2 — Export XLSX con diseño:** helper `exportXlsx`/`buildWorkbook` (encabezado de marca, totales, autofilter, header congelado); reemplaza el CSV en Reportes y en el Reporte Z de Caja.
+- **F7/H11b — Miembros del negocio:** gestión por el dueño en `/dashboard-team`. Usuarios con login (invitación por email, nombre real o genérico, avatar) y perfiles sin login (tipo "Cajero A", PIN opcional). Edición de nombre/rol/avatar y suspender/reactivar. Backend: tabla `cashier_profiles`, `tenant_users.display_name/avatar`, `tenant_members()` extendida, Edge Functions `invite_user` y `member_admin`. Componente `Avatar` (presets). 
+- **UI — Resalte de precios configurable:** números con degradado (default marca flama→oro), elegible en Configuración (5 opciones), persistente cross-device.
 - **Roadmap F10 — Hardware y mostrador PRO:** fase nueva para configuración avanzada de impresoras, scanners, etiquetas/balanzas, doble pantalla/display cliente y diagnóstico de hardware. Se agregó `docs/20-hardware-pos.md` y checkboxes de seguimiento en `docs/02-roadmap.md`.
 - **Roadmap robusto:** se agregó F1.5 Hardening pre-piloto, se ordenaron hitos H7–H56 con checkboxes, se reforzó AFIP con cola fiscal, venta offline y gate de homologación → producción, y se registró ADR-011.
 - **Roadmap F11 — Configuración retail avanzada:** medios de pago con recargos/cuotas, garantías extendidas, devoluciones/cambios con vales, cuenta corriente, pedidos de salón, despacho, depósitos/transferencias, roles retail e importación masiva XLSX para datos maestros. Se agregó `docs/21-retail-advanced-settings.md` y ADR-012.

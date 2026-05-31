@@ -1,10 +1,36 @@
 "use client";
 
 import { Printer } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail } from "@/modules/sales/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+
+type Branding = {
+  logo_url: string | null;
+  legal_name: string | null;
+  cuit: string | null;
+  phone: string | null;
+  address: string | null;
+  ticket_footer: string | null;
+};
+
+function useBranding(enabled: boolean) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: ["ticket-branding"],
+    enabled,
+    queryFn: async (): Promise<Branding | null> => {
+      const { data } = await supabase
+        .from("tenant_branding")
+        .select("logo_url, legal_name, cuit, phone, address, ticket_footer")
+        .maybeSingle();
+      return (data as Branding | null) ?? null;
+    },
+  });
+}
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -23,6 +49,7 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
+  const { data: brand } = useBranding(open);
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Ticket" className="max-w-sm">
@@ -32,7 +59,24 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
         <>
           <div className="ticket-print rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground">
             <div className="text-center">
-              <div className="font-display text-base font-bold">NinjaSoft POS</div>
+              {brand?.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={brand.logo_url}
+                  alt=""
+                  className="mx-auto mb-1 h-12 w-auto object-contain"
+                />
+              )}
+              <div className="font-display text-base font-bold">
+                {brand?.legal_name || "NinjaSoft POS"}
+              </div>
+              {(brand?.cuit || brand?.phone || brand?.address) && (
+                <div className="text-[10px] leading-tight text-muted-foreground">
+                  {brand?.cuit && <div>CUIT {brand.cuit}</div>}
+                  {brand?.address && <div>{brand.address}</div>}
+                  {brand?.phone && <div>{brand.phone}</div>}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">Ticket no fiscal</div>
             </div>
             <div className="my-3 border-t border-dashed border-border" />
@@ -79,7 +123,7 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
               </div>
             )}
             <div className="mt-4 text-center text-xs text-muted-foreground">
-              ¡Gracias por su compra!
+              {brand?.ticket_footer || "¡Gracias por su compra!"}
             </div>
           </div>
 

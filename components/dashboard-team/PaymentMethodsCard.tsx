@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Link2, Check, Clock } from "lucide-react";
+import { CreditCard, Link2, Check, Clock, ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Modal } from "@/components/ui/Modal";
@@ -49,6 +49,57 @@ const PROVIDER_LOGO_LARGE: Record<string, string> = {
   pagos360: "/img/medios_de_pago/Pagos360_large.webp",
 };
 
+// Resumen corto bajo el nombre (qué tipo de medio es).
+const PROVIDER_CHIP: Record<string, string> = {
+  manual: "Lo cobrás vos · sin conexión",
+  gateway: "Cobro online · tarjeta",
+  qr: "Cobro online · QR",
+  orchestrator: "Conecta varias pasarelas",
+};
+
+// Explicación desplegable por medio: qué pasa al activar, conexión y proceso.
+type Explain = {
+  activa: string;
+  conexion?: string;
+  pasos?: string[];
+  recargo?: string;
+};
+const PROVIDER_INFO: Record<string, Explain> = {
+  cash: {
+    activa:
+      "Aparece como forma de pago en el POS. El monto cobrado entra al arqueo de caja.",
+    pasos: [
+      "En el POS tocás Cobrar y elegís Efectivo.",
+      "Recibís la plata en mano y das el vuelto.",
+      "La venta queda registrada y suma al cierre de caja (Z).",
+    ],
+    recargo:
+      "Si ponés un %, se suma al total al pagar con este medio. Efectivo suele quedar en 0.",
+  },
+  transfer: {
+    activa:
+      "Aparece como forma de pago en el POS para cobrar por transferencia a tu cuenta.",
+    pasos: [
+      "El cliente transfiere a tu CBU/alias.",
+      "Verificás que la plata haya llegado.",
+      "Registrás la venta (la confirmación es manual, no se valida sola).",
+    ],
+    recargo: "Si ponés un %, se suma al total al pagar por transferencia.",
+  },
+  mercadopago: {
+    activa:
+      "Habilita el botón Cobrar con QR en el POS. La plata entra a tu cuenta de Mercado Pago.",
+    conexion:
+      "Conectá tu cuenta en un click (Conectar con Mercado Pago) o pegando tu Access Token. Sin conectar, el QR no funciona.",
+    pasos: [
+      "En el POS tocás Cobrar con QR.",
+      "El cliente escanea el QR con su app de Mercado Pago y paga.",
+      "Al acreditarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo: "Si ponés un %, se suma al total al cobrar con Mercado Pago.",
+  },
+};
+
 type Provider = { key: string; name: string; kind: string; sort: number };
 type Method = {
   provider_key: string;
@@ -65,6 +116,15 @@ export function PaymentMethodsCard() {
   const [connectKey, setConnectKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -219,113 +279,216 @@ export function PaymentMethodsCard() {
         <CreditCard size={18} /> Medios de pago
       </Heading>
       <p className="mt-1 text-sm text-muted-foreground">
-        Activá los medios que aceptás y su recargo. Para cobrar online, conectá tu
-        cuenta del proveedor en <strong>Conexión</strong>. Mercado Pago se conecta
-        en un click.
+        Activá los medios que aceptás y su recargo. Tocá la flecha{" "}
+        <ChevronDown size={13} className="inline align-middle" /> de cada medio para
+        ver qué hace al activarlo y cómo es el proceso.
       </p>
-      <Card className="mt-3">
-        <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              <tr>
-                <th className="whitespace-nowrap px-4 py-3">Medio</th>
-                <th className="whitespace-nowrap px-4 py-3">Tipo</th>
-                <th className="whitespace-nowrap px-4 py-3">Conexión</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Recargo %</th>
-                <th className="whitespace-nowrap px-4 py-3 text-right">Activo</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {providers.map((p) => {
-                const m = byKey.get(p.key);
-                return (
-                  <tr key={p.key}>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-white">
-                          {PROVIDER_LOGO[p.key] ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={PROVIDER_LOGO[p.key]}
-                              alt={p.name}
-                              className="h-full w-full object-contain p-1"
-                            />
-                          ) : (
-                            <CreditCard size={16} className="text-muted-foreground" />
-                          )}
-                        </span>
-                        <span className="font-medium">{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                      {KIND_LABELS[p.kind] ?? p.kind}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {p.kind === "manual" ? (
-                        <span className="text-xs text-muted-foreground">No requiere</span>
-                      ) : !IMPLEMENTED.has(p.key) ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock size={13} /> Próximamente
-                        </span>
+      <div className="mt-3 flex flex-col gap-2.5">
+        {providers.map((p) => {
+          const m = byKey.get(p.key);
+          const connected = Boolean(m?.config?.connected);
+          const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
+          const isOpen = expanded.has(p.key);
+          const info = PROVIDER_INFO[p.key];
+          return (
+            <Card
+              key={p.key}
+              className={
+                connected ? "overflow-hidden border-emerald-500/30" : "overflow-hidden"
+              }
+            >
+              <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
+                {/* Logo */}
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-ninjaSm border border-border bg-white">
+                  {PROVIDER_LOGO[p.key] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={PROVIDER_LOGO[p.key]}
+                      alt={p.name}
+                      className="h-full w-full object-contain p-1.5"
+                    />
+                  ) : (
+                    <CreditCard size={18} className="text-muted-foreground" />
+                  )}
+                </span>
+
+                {/* Nombre + chip de tipo */}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{p.name}</div>
+                  <div className="mt-1 inline-flex items-center rounded-ninjaFull border border-ninja-brightViolet/30 bg-ninja-brightViolet/10 px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {PROVIDER_CHIP[p.kind] ?? KIND_LABELS[p.kind] ?? p.kind}
+                  </div>
+                </div>
+
+                {/* Estado de conexión */}
+                <div className="hidden shrink-0 sm:block">
+                  {p.kind === "manual" ? (
+                    <span className="text-xs text-muted-foreground">No requiere</span>
+                  ) : soon ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock size={13} /> Próximamente
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setConnectKey(p.key);
+                        setToken("");
+                        setShowManual(false);
+                      }}
+                      className={
+                        connected
+                          ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:underline"
+                          : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
+                      }
+                    >
+                      {connected ? (
+                        <>
+                          <Check size={13} /> Conectado
+                        </>
                       ) : (
-                        <button
-                          onClick={() => {
-                            setConnectKey(p.key);
-                            setToken("");
-                            setShowManual(false);
-                          }}
-                          className={
-                            m?.config?.connected
-                              ? "inline-flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline"
-                              : "inline-flex items-center gap-1 text-xs font-medium text-ninja-flameSoft hover:underline"
-                          }
-                        >
-                          {m?.config?.connected ? (
-                            <>
-                              <Check size={13} /> Conectado
-                            </>
-                          ) : (
-                            <>
-                              <Link2 size={13} /> Conectar
-                            </>
-                          )}
-                        </button>
+                        <>
+                          <Link2 size={13} /> Conectar
+                        </>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        defaultValue={m?.surcharge_pct ?? 0}
-                        onBlur={(e) =>
-                          save.mutate({
-                            provider_key: p.key,
-                            surcharge_pct: Number(e.target.value) || 0,
-                          })
+                    </button>
+                  )}
+                </div>
+
+                {/* Recargo */}
+                <div className="hidden shrink-0 flex-col items-end gap-0.5 md:flex">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Recargo %
+                  </span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    defaultValue={m?.surcharge_pct ?? 0}
+                    disabled={soon}
+                    onBlur={(e) =>
+                      save.mutate({
+                        provider_key: p.key,
+                        surcharge_pct: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="h-9 w-[68px] rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft disabled:opacity-40"
+                  />
+                </div>
+
+                {/* Switch activar */}
+                <Switch
+                  checked={m?.enabled ?? false}
+                  disabled={soon}
+                  onCheckedChange={(v) => save.mutate({ provider_key: p.key, enabled: v })}
+                  label={`Activar ${p.name}`}
+                />
+
+                {/* Desplegar explicación */}
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(p.key)}
+                  aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
+                  aria-expanded={isOpen}
+                  className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:text-foreground"
+                >
+                  <ChevronDown
+                    size={18}
+                    className={isOpen ? "rotate-180 transition" : "transition"}
+                  />
+                </button>
+              </div>
+
+              {/* Detalle desplegable */}
+              {isOpen && (
+                <div className="space-y-3 border-t border-dashed border-border bg-muted/30 px-4 py-4 text-sm">
+                  {/* En mobile, conexión + recargo viven acá (se ocultan en la fila). */}
+                  <div className="flex flex-wrap items-center gap-3 sm:hidden">
+                    {p.kind === "manual" ? (
+                      <span className="text-xs text-muted-foreground">Sin conexión</span>
+                    ) : soon ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock size={13} /> Próximamente
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConnectKey(p.key);
+                          setToken("");
+                          setShowManual(false);
+                        }}
+                        className={
+                          connected
+                            ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"
+                            : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
                         }
-                        className="h-9 w-20 rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end">
-                        <Switch
-                          checked={m?.enabled ?? false}
-                          disabled={p.kind !== "manual" && !IMPLEMENTED.has(p.key)}
-                          onCheckedChange={(v) =>
-                            save.mutate({ provider_key: p.key, enabled: v })
-                          }
-                          label={`Activar ${p.name}`}
-                        />
+                      >
+                        {connected ? (
+                          <>
+                            <Check size={13} /> Conectado
+                          </>
+                        ) : (
+                          <>
+                            <Link2 size={13} /> Conectar
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {info ? (
+                    <>
+                      <div>
+                        <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                          Qué pasa al activar
+                        </div>
+                        <p className="text-muted-foreground">{info.activa}</p>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+                      {info.conexion && (
+                        <div>
+                          <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                            Conexión
+                          </div>
+                          <p className="text-muted-foreground">{info.conexion}</p>
+                        </div>
+                      )}
+                      {info.pasos && (
+                        <div>
+                          <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                            Cómo es el proceso
+                          </div>
+                          <ol className="space-y-1.5">
+                            {info.pasos.map((step, i) => (
+                              <li key={i} className="flex gap-2.5 text-muted-foreground">
+                                <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                                  {i + 1}
+                                </span>
+                                <span>{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                      {info.recargo && (
+                        <div>
+                          <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                            Recargo
+                          </div>
+                          <p className="text-muted-foreground">{info.recargo}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      Integración en camino. Pronto vas a poder conectar tu cuenta y
+                      cobrar con {p.name} desde el POS.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
 
       <Modal
         open={connectKey !== null}

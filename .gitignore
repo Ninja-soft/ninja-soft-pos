@@ -53,3 +53,6 @@ supabase/.env
 .cache/
 *.tsbuildinfo
 .vercel
+
+# Brainstorming visual companion
+.superpowers/

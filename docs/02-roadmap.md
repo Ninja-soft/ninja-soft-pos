@@ -257,6 +257,14 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [ ] QR, leyendas extra y preview por sucursal.
   - [~] *Criterio:* un tenant configura su ticket (logo/datos/pie/ancho) y lo imprime; descarga A4 pendiente.
 
+- [ ] **H9b — Editor visual de ticket (canvas) + envío por email.**
+  - [ ] **Editor visual tipo canvas**: el dueño diseña su ticket/comprobante arrastrando bloques (logo, encabezado, datos del negocio, ítems, totales, QR, leyendas, redes, imagen, separadores). Muy personalizable, WYSIWYG.
+  - [ ] Plantillas guardables por tenant y por tipo (ticket 58/80mm, comprobante A4, recibo). Preview en vivo con datos reales de una venta.
+  - [ ] Render a imagen/PDF desde el diseño (canvas → PNG/PDF) para imprimir, descargar y adjuntar.
+  - [ ] **Envío del comprobante por email al cliente** (usa el proveedor de H13: Resend) con el diseño elegido; registro de envío y reenvío.
+  - [ ] Botón "Enviar por email" en el ticket de una venta (pide/usa el email del cliente).
+  - [ ] *Criterio:* el dueño diseña su ticket en el editor visual, lo guarda, y al cobrar puede enviarlo por email al cliente con ese diseño.
+
 - [~] **H10 — Catálogo público + variantes.** — *Catálogo público base hecho (PR #32); variantes y listas por canal pendientes.*
   - [x] Catálogo web público por tenant en `/c/<slug>` (RPC `public_catalog` SECURITY DEFINER, anónimo; solo tenants activos y productos activos). Muestra logo/branding, fotos, precios y categorías.
   - [ ] Variantes por rubro (talle/color para textil; SKU compuesto).

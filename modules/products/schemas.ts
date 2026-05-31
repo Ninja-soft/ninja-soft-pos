@@ -13,6 +13,7 @@ export const ProductSchema = z.object({
   sku: optionalText(60),
   barcode: optionalText(60),
   category_id: z.string().uuid().nullable().optional(),
+  brand_id: z.string().uuid().nullable().optional(),
   price: z.coerce.number().nonnegative("Debe ser ≥ 0"),
   cost: z.coerce.number().nonnegative("Debe ser ≥ 0").optional(),
   stock: z.coerce.number().default(0),

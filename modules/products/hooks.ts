@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { categoriesApi, productsApi } from "./api";
+import { brandsApi, categoriesApi, productsApi } from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
 
 export function useProducts(search: string) {
@@ -86,5 +86,20 @@ export function useCreateCategory() {
   return useMutation({
     mutationFn: (input: CategoryInput) => categoriesApi.create(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+  });
+}
+
+export function useBrands() {
+  return useQuery({
+    queryKey: ["brands", "list"],
+    queryFn: () => brandsApi.list(),
+  });
+}
+
+export function useCreateBrand() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => brandsApi.create(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["brands"] }),
   });
 }

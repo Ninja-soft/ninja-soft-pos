@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H24 (parcial) — Etiquetas e impresiones:** página `/etiquetas` para imprimir etiquetas por lote (selección de productos + copias, vista previa, `window.print()`). Código de barras **Code 39 sin dependencias** (generador puro `lib/barcode/code39` + componente SVG `Barcode`). Lógica de etiquetas en `lib/labels` con tests. Link en el menú (Catálogo). Balanza (parsing/WebSerial) queda pendiente.
+
 - **TX-1 — Calendario unificado (`react-day-picker`):** componente `DateRangePicker` (rango + presets, locale es) en Reportes; reemplaza los inputs de fecha nativos.
 - **TX-2 — Export XLSX con diseño:** helper `exportXlsx`/`buildWorkbook` (encabezado de marca, totales, autofilter, header congelado); reemplaza el CSV en Reportes y en el Reporte Z de Caja.
 - **F7/H11b — Miembros del negocio:** gestión por el dueño en `/dashboard-team`. Usuarios con login (invitación por email, nombre real o genérico, avatar) y perfiles sin login (tipo "Cajero A", PIN opcional). Edición de nombre/rol/avatar y suspender/reactivar. Backend: tabla `cashier_profiles`, `tenant_users.display_name/avatar`, `tenant_members()` extendida, Edge Functions `invite_user` y `member_admin`. Componente `Avatar` (presets). 

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Sun,
+  Tag,
   UserCog,
   Users,
   Wallet,
@@ -66,7 +67,10 @@ const NAV: { top: Item[]; groups: Group[] } = {
     },
     {
       label: "Catálogo",
-      items: [{ href: "/productos", label: "Productos", icon: Package }],
+      items: [
+        { href: "/productos", label: "Productos", icon: Package },
+        { href: "/etiquetas", label: "Etiquetas", icon: Tag },
+      ],
     },
     {
       label: "Gestión",

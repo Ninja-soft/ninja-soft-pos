@@ -413,12 +413,12 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [ ] Diagnóstico de scanner: pantalla de prueba que muestra caracteres recibidos, tiempos y formato detectado.
   - [ ] *Criterio:* un lector USB escanea 100 productos seguidos sin perder foco ni duplicar lecturas; un móvil usa cámara como fallback.
 
-- [ ] **H24 — Etiquetas, códigos y balanzas.**
-  - [ ] Generador de etiquetas de producto con SKU, barcode, precio, nombre corto y variantes.
-  - [ ] Impresión por lote: productos seleccionados, cambio de precio, stock recibido, variantes.
+- [~] **H24 — Etiquetas, códigos y balanzas.** — *Generador + impresión por lote hechos (PR #79). Balanza (parsing/WebSerial) pendiente.*
+  - [x] Generador de etiquetas de producto con nombre, precio y código de barras (Code 39 sin dependencias, SVG). Variantes pendientes (cruza con F6/H10).
+  - [x] Impresión por lote: selección de productos + cantidad de copias por producto, vista previa y `window.print()` (página `/etiquetas`, hoja `ticket-print`). Hasta 200 copias por producto.
   - [ ] Soporte para etiquetas de balanza: parsing configurable de código con precio o peso embebido.
   - [ ] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza.
-  - [ ] *Criterio:* el negocio imprime 200 etiquetas tras importar productos y el POS interpreta una etiqueta de balanza como producto + peso/precio.
+  - [x] *Criterio (impresión):* el negocio selecciona productos e imprime un lote de etiquetas con nombre/precio/código sin tocar código. *(Balanza queda pendiente.)*
 
 - [ ] **H25 — Doble pantalla / display cliente.**
   - [ ] Ventana secundaria del navegador: el cajero abre una pantalla cliente en otro monitor (`/customer-display`), sincronizada por BroadcastChannel/local storage o Realtime.

@@ -98,6 +98,10 @@ export const productsApi = {
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
         track_stock: input.track_stock,
+        allow_negative:
+          input.allow_negative === "inherit"
+            ? null
+            : input.allow_negative === "yes",
       })
       .select("*")
       .single();
@@ -127,6 +131,10 @@ export const productsApi = {
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
         track_stock: input.track_stock,
+        allow_negative:
+          input.allow_negative === "inherit"
+            ? null
+            : input.allow_negative === "yes",
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       })

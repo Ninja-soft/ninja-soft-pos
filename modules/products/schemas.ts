@@ -28,6 +28,8 @@ export const ProductSchema = z.object({
   is_kit: z.boolean().default(false),
   is_serialized: z.boolean().default(false),
   track_stock: z.boolean().default(true),
+  // Override de venta en negativo: "inherit" usa el ajuste global del tenant.
+  allow_negative: z.enum(["inherit", "yes", "no"]).default("inherit"),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

@@ -4,7 +4,7 @@ import type { Database } from "@/types/database";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/recover"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/recover", "/reset-password"];
 
 // Refresca la sesión y aplica redirecciones de auth. Ver docs/05-security.md §3.
 export async function updateSession(request: NextRequest) {

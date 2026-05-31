@@ -727,6 +727,33 @@ F16 define:
 
 ---
 
+## ADR-021 — Código de barras Code 39 sin dependencias
+
+**Fecha:** 2026-05-31
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Corrida autónoma (orden de Lucas Ponzoni)
+
+### Contexto
+
+H24 (etiquetas) necesita renderizar un código de barras escaneable en la etiqueta. Las librerías típicas (`jsbarcode`, `bwip-js`) agregan una dependencia y el build local cuelga por Dropbox, lo que vuelve riesgoso instalar paquetes sin poder validar el build localmente.
+
+### Decisión
+
+Implementar un generador **Code 39** propio, sin dependencias (`lib/barcode/code39.ts`): tabla de patrones de 9 elementos por carácter → segmentos barra/espacio → SVG (`components/products/Barcode.tsx`). Code 39 es alfanumérico, auto-checkeante y legible por lectores USB/cámara comunes; suficiente para etiquetas internas de góndola.
+
+### Alternativas descartadas
+
+- **jsbarcode/bwip-js:** descartado por ahora para no sumar dependencia con build local no verificable; se puede revisar si se necesita EAN-13/Code128 con dígito verificador.
+- **EAN-13 manual:** descartado; más complejo (dígito verificador, codificación L/G/R) para el objetivo de etiquetas internas.
+
+### Consecuencias
+
+- **Positivas:** cero dependencias nuevas; función pura testeable (unit tests); SVG liviano e imprimible.
+- **Negativas:** Code 39 es menos denso que Code128 y no trae dígito verificador; si se requieren EAN-13 reales de góndola, habrá que sumar un generador específico (futura ADR).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

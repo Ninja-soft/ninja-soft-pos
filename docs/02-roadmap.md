@@ -476,16 +476,16 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Wizard de devolución/cambio con trazabilidad, reintegro por medio de pago, vale o diferencia a cobrar.
   - [ ] *Criterio:* un cambio por talle vuelve al depósito original; un defectuoso va a merma; ambos quedan auditados.
 
-- [~] **H30 — Settings operativos del POS.** — *PR1 hecho: tabla `pos_settings` + Configuración → Operación del POS. `create_sale` aplica descuento máximo por rol, redondeo del total y bloqueo de stock negativo. Defaults permisivos (no cambian comportamiento previo). Falta PR2: arqueo ciego, tolerancia de cierre, SKU automático, override de negativo por producto, requerir cliente y señas.*
+- [~] **H30 — Settings operativos del POS.** — *PR1 + PR2 hechos: tabla `pos_settings` + Configuración → Operación del POS. `create_sale` aplica descuento máximo por rol, redondeo del total y bloqueo de stock negativo; `close_cash_shift` exige motivo por tolerancia; trigger de SKU automático. Defaults permisivos (no cambian comportamiento previo). Falta: override de venta en negativo por producto (UI), requerir cliente y señas.*
   - [x] Permitir vender en negativo global (`pos_settings.allow_negative_stock`); override por producto (`products.allow_negative`) preparado, UI en PR2.
   - [ ] Requerir cliente para registrar venta. *(necesita selector de cliente en el POS)*
   - [ ] Señas: reservar stock sin descontar hasta cobrar saldo, o descontar al cobrar seña.
   - [x] Descuento máximo global por rol/cajero (validado en `create_sale` + tope en el POS).
   - [x] Redondeo del total por múltiplo configurable (autoritativo en `create_sale`).
-  - [ ] Arqueo ciego al cerrar caja. *(PR2)*
-  - [ ] Tolerancia sin justificación en cierre de caja. *(PR2)*
-  - [ ] SKU automático para productos sin código de barras con prefijo configurable. *(PR2)*
-  - [~] *Criterio:* un cashier no puede superar el descuento máximo (hecho); el cierre exige motivo si supera la tolerancia (PR2).
+  - [x] Arqueo ciego al cerrar caja. *(el modal de cierre no muestra el esperado; el cajero cuenta a ciegas)*
+  - [x] Tolerancia sin justificación en cierre de caja (`require_close_reason` + `close_tolerance`; `close_cash_shift` exige motivo si supera).
+  - [x] SKU automático para productos sin código de barras con prefijo configurable (trigger `products_auto_sku`).
+  - [x] *Criterio:* un cashier no puede superar el descuento máximo; el cierre exige motivo si supera la tolerancia.
 
 - [ ] **H30b — Cierres Z inmutables e historial contable de caja.**
   - [ ] Al cerrar una caja se genera un **Cierre Z**: cierre **contable diario del turno**, registro **inmutable** (no editable ni borrable) con su **snapshot consolidado** del turno.

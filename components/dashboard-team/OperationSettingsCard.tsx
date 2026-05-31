@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SlidersHorizontal, Percent, CircleDollarSign, PackageMinus } from "lucide-react";
+import {
+  SlidersHorizontal,
+  Percent,
+  CircleDollarSign,
+  PackageMinus,
+  Barcode,
+  Lock,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -14,6 +21,10 @@ type Settings = {
   max_discount: Record<string, number>;
   rounding_multiple: number;
   allow_negative_stock: boolean;
+  sku_auto: boolean;
+  sku_prefix: string;
+  require_close_reason: boolean;
+  close_tolerance: number;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -59,7 +70,9 @@ export function OperationSettingsCard() {
     queryFn: async (): Promise<Settings> => {
       const { data } = await supabase
         .from("pos_settings")
-        .select("max_discount, rounding_multiple, allow_negative_stock")
+        .select(
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance",
+        )
         .eq("tenant_id", tenantId)
         .maybeSingle();
       return (
@@ -67,6 +80,10 @@ export function OperationSettingsCard() {
           max_discount: { owner: 100, manager: 100, cashier: 100, viewer: 100 },
           rounding_multiple: 0,
           allow_negative_stock: true,
+          sku_auto: false,
+          sku_prefix: "",
+          require_close_reason: false,
+          close_tolerance: 0,
         }
       );
     },
@@ -75,6 +92,10 @@ export function OperationSettingsCard() {
   const [maxDisc, setMaxDisc] = useState<Record<string, number>>({});
   const [rounding, setRounding] = useState(0);
   const [allowNeg, setAllowNeg] = useState(false);
+  const [skuAuto, setSkuAuto] = useState(false);
+  const [skuPrefix, setSkuPrefix] = useState("");
+  const [requireReason, setRequireReason] = useState(false);
+  const [tolerance, setTolerance] = useState(0);
 
   useEffect(() => {
     if (!settings) return;
@@ -85,6 +106,10 @@ export function OperationSettingsCard() {
     });
     setRounding(settings.rounding_multiple ?? 0);
     setAllowNeg(settings.allow_negative_stock ?? true);
+    setSkuAuto(settings.sku_auto ?? false);
+    setSkuPrefix(settings.sku_prefix ?? "");
+    setRequireReason(settings.require_close_reason ?? false);
+    setTolerance(settings.close_tolerance ?? 0);
   }, [settings]);
 
   const save = useMutation({
@@ -100,6 +125,10 @@ export function OperationSettingsCard() {
           },
           rounding_multiple: Math.max(0, Number(rounding) || 0),
           allow_negative_stock: allowNeg,
+          sku_auto: skuAuto,
+          sku_prefix: skuPrefix.trim(),
+          require_close_reason: requireReason,
+          close_tolerance: Math.max(0, Number(tolerance) || 0),
         },
         { onConflict: "tenant_id" },
       );
@@ -201,6 +230,80 @@ export function OperationSettingsCard() {
             onCheckedChange={setAllowNeg}
             label="Permitir venta en negativo"
           />
+        </CardContent>
+      </Card>
+
+      {/* SKU automático */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <Barcode size={16} className="text-ninja-flameSoft" /> SKU automático
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Si un producto se crea sin SKU, se genera solo con un prefijo + número.
+              </p>
+            </div>
+            <Switch
+              checked={skuAuto}
+              onCheckedChange={setSkuAuto}
+              label="SKU automático"
+            />
+          </div>
+          {skuAuto && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Prefijo</span>
+              <input
+                value={skuPrefix}
+                onChange={(e) => setSkuPrefix(e.target.value)}
+                placeholder="Ej. ART-"
+                maxLength={12}
+                className="h-9 w-40 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+              />
+              <span className="text-xs text-muted-foreground">
+                → {(skuPrefix || "") + "00001"}
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Cierre de caja */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <Lock size={16} className="text-ninja-flameSoft" /> Motivo en el cierre de caja
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Exige escribir un motivo al cerrar si la diferencia (faltante o
+                sobrante) supera la tolerancia.
+              </p>
+            </div>
+            <Switch
+              checked={requireReason}
+              onCheckedChange={setRequireReason}
+              label="Exigir motivo en el cierre"
+            />
+          </div>
+          {requireReason && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Tolerancia $</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={tolerance}
+                onChange={(e) => setTolerance(Number(e.target.value) || 0)}
+                className={numCls}
+              />
+              <span className="text-xs text-muted-foreground">
+                Diferencias hasta este monto no piden motivo.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

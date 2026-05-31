@@ -36,7 +36,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.includes(pathname);
+  // Catálogo público por slug: /c/<slug> es accesible sin sesión.
+  const isPublic =
+    PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/c/");
 
   // Sin sesión en ruta protegida → login.
   if (!user && !isPublic) {

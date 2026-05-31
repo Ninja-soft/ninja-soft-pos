@@ -10,6 +10,7 @@ export interface CartLine {
   unitPrice: number;
   quantity: number;
   discount: number; // descuento por línea (monto)
+  unit: string; // 'un' por defecto; 'kg' = ítem por peso
 }
 
 interface CartState {
@@ -20,7 +21,12 @@ interface CartState {
     name: string;
     sku: string | null;
     price: number;
+    unit?: string;
   }) => void;
+  addWeighed: (
+    p: { id: string; name: string; sku: string | null; price: number },
+    weight: number,
+  ) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
   setQuantity: (lineId: string, quantity: number) => void;
   setLineDiscount: (lineId: string, discount: number) => void;
@@ -53,6 +59,37 @@ export const useCartStore = create<CartState>((set) => ({
             unitPrice: p.price,
             quantity: 1,
             discount: 0,
+            unit: p.unit ?? "un",
+          },
+        ],
+      };
+    }),
+  addWeighed: (p, weight) =>
+    set((state) => {
+      const existing = state.lines.find(
+        (l) => l.productId === p.id && l.unit === "kg",
+      );
+      if (existing) {
+        return {
+          lines: state.lines.map((l) =>
+            l.lineId === existing.lineId
+              ? { ...l, quantity: l.quantity + weight }
+              : l,
+          ),
+        };
+      }
+      return {
+        lines: [
+          ...state.lines,
+          {
+            lineId: crypto.randomUUID(),
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            unitPrice: p.price,
+            quantity: weight,
+            discount: 0,
+            unit: "kg",
           },
         ],
       };
@@ -69,6 +106,7 @@ export const useCartStore = create<CartState>((set) => ({
           unitPrice: p.amount,
           quantity: 1,
           discount: 0,
+          unit: "un",
         },
       ],
     })),

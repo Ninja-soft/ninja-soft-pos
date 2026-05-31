@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard } from "lucide-react";
+import { CreditCard, Link2, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 const KIND_LABELS: Record<string, string> = {
   manual: "Lo cobrás vos",
@@ -22,12 +25,15 @@ type Method = {
   enabled: boolean;
   sandbox: boolean;
   surcharge_pct: number;
+  config: { connected?: boolean } | null;
 };
 
 export function PaymentMethodsCard() {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [connectKey, setConnectKey] = useState<string | null>(null);
+  const [token, setToken] = useState("");
 
   const { data: ctx } = useQuery({
     queryKey: ["my-payments-ctx"],
@@ -70,7 +76,7 @@ export function PaymentMethodsCard() {
     queryFn: async (): Promise<Method[]> => {
       const { data } = await supabase
         .from("tenant_payment_methods")
-        .select("provider_key, enabled, sandbox, surcharge_pct")
+        .select("provider_key, enabled, sandbox, surcharge_pct, config")
         .eq("tenant_id", tenantId);
       return (data ?? []) as Method[];
     },
@@ -107,7 +113,34 @@ export function PaymentMethodsCard() {
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
+  const connect = useMutation({
+    mutationFn: async (vars: {
+      provider_key: string;
+      token?: string;
+      clear?: boolean;
+    }) => {
+      const body = vars.clear
+        ? { provider_key: vars.provider_key, action: "clear" }
+        : { provider_key: vars.provider_key, secrets: { access_token: vars.token } };
+      const { data, error } = await supabase.functions.invoke("set_payment_secret", {
+        body,
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+    },
+    onSuccess: () => {
+      toast({ title: "Listo", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
+      setConnectKey(null);
+      setToken("");
+    },
+    onError: () => toast({ title: "No se pudo guardar la conexión", variant: "error" }),
+  });
+
   if (!ctx || !ctx.canManage) return null;
+
+  const connectingProvider = providers.find((p) => p.key === connectKey);
+  const connectingConnected = Boolean(byKey.get(connectKey ?? "")?.config?.connected);
 
   return (
     <section>
@@ -120,7 +153,8 @@ export function PaymentMethodsCard() {
         <strong>Tarjeta / online</strong> (cobra con tarjeta o link, ej. Mercado Pago),{" "}
         <strong>Pago con QR</strong> (el cliente escanea, ej. MODO), y{" "}
         <strong>Varias pasarelas</strong> (un servicio que conecta otras, ej. Mobbex).
-        Las pasarelas se conectan en una etapa siguiente.
+        En “Conexión” cargás las credenciales del proveedor (ej. el Access Token de
+        Mercado Pago) para cobrar online.
       </p>
       <Card className="mt-3">
         <CardContent className="overflow-x-auto p-0">
@@ -129,6 +163,7 @@ export function PaymentMethodsCard() {
               <tr>
                 <th className="whitespace-nowrap px-4 py-3">Medio</th>
                 <th className="whitespace-nowrap px-4 py-3">Tipo</th>
+                <th className="whitespace-nowrap px-4 py-3">Conexión</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Recargo %</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Activo</th>
               </tr>
@@ -141,6 +176,31 @@ export function PaymentMethodsCard() {
                     <td className="whitespace-nowrap px-4 py-3 font-medium">{p.name}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                       {KIND_LABELS[p.kind] ?? p.kind}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {p.kind === "manual" ? (
+                        <span className="text-xs text-muted-foreground">No requiere</span>
+                      ) : m?.config?.connected ? (
+                        <button
+                          onClick={() => {
+                            setConnectKey(p.key);
+                            setToken("");
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 hover:underline"
+                        >
+                          <Check size={13} /> Conectado
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setConnectKey(p.key);
+                            setToken("");
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-ninja-flameSoft hover:underline"
+                        >
+                          <Link2 size={13} /> Conectar
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <input
@@ -175,6 +235,57 @@ export function PaymentMethodsCard() {
           </table>
         </CardContent>
       </Card>
+
+      <Modal
+        open={connectKey !== null}
+        onOpenChange={(o) => !o && setConnectKey(null)}
+        title={connectingProvider ? `Conectar ${connectingProvider.name}` : "Conectar"}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Pegá el <strong>Access Token</strong> de tu cuenta de Mercado Pago. Lo
+            encontrás en tu panel de MP → Tus integraciones / Credenciales. Se guarda
+            cifrado del lado del servidor; nunca se expone al navegador.
+          </p>
+          <Input
+            label="Access Token"
+            type="password"
+            autoComplete="off"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={connectingConnected ? "•••••• (ya configurado)" : "APP_USR-..."}
+          />
+          <div className="flex items-center justify-between gap-2">
+            {connectingConnected ? (
+              <Button
+                variant="ghost"
+                className="text-destructive"
+                disabled={connect.isPending}
+                onClick={() =>
+                  connect.mutate({ provider_key: connectKey!, clear: true })
+                }
+              >
+                Desconectar
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setConnectKey(null)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={connect.isPending || token.trim().length < 8}
+                onClick={() =>
+                  connect.mutate({ provider_key: connectKey!, token: token.trim() })
+                }
+              >
+                {connect.isPending ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }

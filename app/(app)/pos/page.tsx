@@ -4,13 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
-  Lock,
   Minus,
   Plus,
   ScanBarcode,
   Search,
   Star,
-  Unlock,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -34,6 +32,7 @@ import {
   useDefaultRegister,
   usePosMutations,
   useMpMethod,
+  usePosSettings,
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
@@ -88,6 +87,10 @@ export default function PosPage() {
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
   const { data: mp } = useMpMethod();
   const mpReady = Boolean(mp?.enabled && mp?.connected);
+  const { data: posSettings } = usePosSettings();
+  const role = myTenant?.role ?? "cashier";
+  const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
+  const rounding = posSettings?.rounding ?? 0;
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
 
@@ -163,8 +166,25 @@ export default function PosPage() {
   }
 
   const subtotal = cartSubtotal(lines);
-  const total = Math.max(0, subtotal - discountTotal);
+  const rawTotal = Math.max(0, subtotal - discountTotal);
+  // Redondeo del total al múltiplo configurado (H30). El server reaplica el
+  // mismo redondeo de forma autoritativa en create_sale.
+  const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
   const hasShift = Boolean(shift);
+
+  // Tope de descuento por rol (H30): no se puede pasar del máximo del rol.
+  function handleDiscountChange(value: number) {
+    const max = (subtotal * maxDiscPct) / 100;
+    if (value > max + 0.001) {
+      setDiscountTotal(Math.max(0, Math.floor(max)));
+      toast({
+        title: `Descuento máximo ${maxDiscPct}% para tu rol`,
+        variant: "error",
+      });
+    } else {
+      setDiscountTotal(Math.max(0, value));
+    }
+  }
 
   // Lector USB/Bluetooth (HID): escanea en cualquier parte del POS y agrega.
   useScanner(async (code) => {
@@ -268,11 +288,17 @@ export default function PosPage() {
             <span
               className={
                 hasShift
-                  ? "inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300"
-                  : "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground"
+                  ? "inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-emerald-300"
+                  : "inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
               }
             >
-              {hasShift ? <Unlock size={13} /> : <Lock size={13} />}
+              <span
+                className={
+                  hasShift
+                    ? "h-2 w-2 rounded-full bg-emerald-400"
+                    : "h-2 w-2 rounded-full bg-muted-foreground/50"
+                }
+              />
               {hasShift ? "Caja abierta" : "Caja cerrada"}
             </span>
             {hasShift ? (
@@ -466,7 +492,7 @@ export default function PosPage() {
                 type="number"
                 step="0.01"
                 value={discountTotal || ""}
-                onChange={(e) => setDiscountTotal(Number(e.target.value) || 0)}
+                onChange={(e) => handleDiscountChange(Number(e.target.value) || 0)}
                 placeholder="0"
                 className="h-8 w-24 rounded-md border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
               />

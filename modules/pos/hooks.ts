@@ -28,6 +28,13 @@ export function useMpMethod() {
   });
 }
 
+export function usePosSettings() {
+  return useQuery({
+    queryKey: ["pos", "settings"],
+    queryFn: () => posApi.posSettings(),
+  });
+}
+
 export function usePosMutations() {
   const qc = useQueryClient();
   const invalidateShift = () =>

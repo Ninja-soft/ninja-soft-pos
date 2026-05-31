@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { CreditCard, Palette, Store, Tag } from "lucide-react";
+import { CreditCard, Palette, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -21,14 +21,16 @@ import {
 import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
+import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 
-type Section = "apariencia" | "rubro" | "marca" | "pagos";
+type Section = "apariencia" | "rubro" | "marca" | "pagos" | "operacion";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
   { key: "rubro", label: "Rubro del negocio", icon: Tag },
   { key: "marca", label: "Marca del negocio", icon: Store },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
+  { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
 ];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
@@ -281,6 +283,9 @@ export default function ConfiguracionPage() {
               <PaymentMethodsCard />
             </Suspense>
           )}
+
+          {/* Operación del POS (solo owner/manager; se auto-oculta) */}
+          {section === "operacion" && <OperationSettingsCard />}
         </div>
       </div>
     </div>

@@ -1,12 +1,13 @@
 "use client";
 
-import { Printer } from "lucide-react";
+import { FileDown, Printer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail } from "@/modules/sales/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 
 type Branding = {
   logo_url: string | null;
@@ -131,9 +132,22 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
             </div>
           </div>
 
-          <div className="no-print mt-4 flex justify-end gap-2">
+          <div className="no-print mt-4 flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cerrar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                downloadTicketPdf({
+                  sale: data.sale,
+                  items: data.items,
+                  payments: data.payments,
+                  brand: brand ?? null,
+                })
+              }
+            >
+              <FileDown size={16} /> A4 (PDF)
             </Button>
             <Button onClick={() => window.print()}>
               <Printer size={16} /> Imprimir

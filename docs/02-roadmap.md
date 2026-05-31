@@ -246,9 +246,9 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio:* el logo y los datos del tenant se ven en el ticket sin tocar código.
   - *Pendiente:* condición IVA/provincia/ciudad y selector de rubro; aplicar acento al catálogo (H10).
 
-- [~] **H9 — Tickets y comprobantes personalizables.** — *Base hecha (PR #30); falta A4/PDF, QR y preview por sucursal.*
+- [~] **H9 — Tickets y comprobantes personalizables.** — *Base hecha (PR #30, #31); falta QR, título configurable y preview por sucursal.*
   - [x] Plantillas de ticket con logo, datos comerciales y pie configurable (vía branding H8).
-  - [~] Formatos **58mm / 80mm** (térmica) — selector por tenant aplicado al ticket/impresión. **A4 (PDF)** pendiente.
+  - [x] Formatos **58mm / 80mm** (térmica, selector por tenant aplicado al ticket/impresión) y **A4 (PDF)** descargable (`jspdf`, PR #31).
   - [ ] Título del comprobante configurable (ej. "Comprobante no fiscal").
   - [x] Texto al pie del ticket configurable.
   - [x] Logo en el ticket (si hay branding).

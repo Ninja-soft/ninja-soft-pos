@@ -26,8 +26,8 @@ export default async function InternalLayout({
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-6">
           <div className="flex items-center gap-5">
             <Link href="/internal/tenants" className="flex items-center gap-2.5">
-              <Isotype className="h-7 w-auto" priority />
-              <WordmarkPos className="h-5 w-auto" priority />
+              <Isotype className="h-8 w-auto" priority />
+              <WordmarkPos className="h-7 w-auto" priority />
               <span className="rounded-md bg-ninja-flame/12 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft">
                 Interno
               </span>

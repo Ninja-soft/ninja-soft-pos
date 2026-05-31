@@ -276,6 +276,19 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio (base):* un tenant con productos activos publica su catálogo en `/c/<slug>` sin tocar código.
   - *Nota:* el motor de promociones se trata aparte y a fondo en **[F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro)**.
 
+- [ ] **H10b — Catálogo PRO: ficha de producto completa, marcas y categorías.**
+  - [ ] **Form de alta/edición de producto rico** (mejor que la competencia: una sola pantalla, todo opcional, defaults inteligentes): nombre, **EAN/código de barras**, **SKU interno** (auto-generado al guardar si no se carga, con prefijo configurable — gancha con H30), precio de venta, costo, **categoría**, **marca**, **IVA %**, **unidad de medida**.
+  - [ ] **Subida de fotos opcional con conversión a WebP** en el propio alta (no solo en edición): arrastrar/elegir imagen → WebP liviano client-side → galería; también admite **URL de imagen**. (Reusa H7.)
+  - [ ] **Datos adicionales plegables:** descripción larga (para ticket/catálogo), **tags** (lista separada por coma, para filtros y promos), **temporada** (ej. "Verano 2026"), **garantía de fábrica en meses** (gancha con H28: imprime en ticket y habilita garantía extendida).
+  - [ ] **Categorías con 2 niveles** (rubro → sub-rubro, ej. Indumentaria → Calzado): alta/edición/orden, máximo 2 niveles, asignables al producto. *(La tabla `categories` ya soporta `parent_id`.)*
+  - [ ] **Catálogo de marcas** por tenant: alta/edición, asignación a productos y uso como **condición de promociones por marca** (gancha con F9/H54).
+  - [ ] **Controla stock (toggle por producto):** si está apagado, el producto **no descuenta stock** al venderse (ej. servicios). Default según rubro.
+  - [ ] **Permite venta en cero/negativo (override por producto)** del setting global (gancha con H30).
+  - [ ] **Producto serializado (IMEI/N° de serie):** cada unidad tiene serie única; al vender, el cajero elige el serial que sale. Útil para celulares, notebooks, electro. *(Base avanzada en F14/H64; acá queda el flag y el flujo básico de captura/selección.)*
+  - [ ] **Kit / combo (BOM de retail):** un kit no tiene stock propio; al venderse descuenta el stock de sus **componentes** según cantidades configuradas. *(Distinto del combo de precio de F9/H54 y de las recetas gastronómicas de F13/H50.)*
+  - [ ] **Stock inicial por depósito** desde el alta (gancha con F11/H33) y **variantes talle/color** (gancha con F6/H10) cuando el producto las tenga.
+  - [ ] *Criterio:* el dueño crea un producto con marca, IVA, foto WebP, tags y garantía en una sola pantalla; arma una categoría de 2 niveles; marca un servicio como "no controla stock"; define un kit que descuenta sus componentes; y un electro como serializado que pide el N° de serie al vender.
+
 ### F7 — Panel interno PRO + comunicaciones
 
 Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usuarios, planes y comunicaciones.
@@ -472,6 +485,13 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Tolerancia sin justificación en cierre de caja.
   - [ ] SKU automático para productos sin código de barras con prefijo configurable.
   - [ ] *Criterio:* un cashier no puede superar el descuento máximo; el cierre exige motivo si supera la tolerancia.
+
+- [ ] **H30b — Cierres Z inmutables e historial contable de caja.**
+  - [ ] Al cerrar una caja se genera un **Cierre Z**: cierre **contable diario del turno**, registro **inmutable** (no editable ni borrable) con su **snapshot consolidado** del turno.
+  - [ ] Snapshot del Z: número correlativo de Z por sucursal/caja, apertura/cierre, cajero, ventas (cantidad y total), **desglose por medio de pago**, ingresos/egresos de caja, descuentos, anulaciones, monto esperado vs. contado, **diferencia**, e items vendidos resumidos.
+  - [ ] **Historial de Cierres Z** (pantalla dedicada en Caja): lista filtrable por fecha/sucursal/caja/cajero; cada Z se puede ver, **reimprimir** (ticket/A4, gancha con F10/H22) y exportar XLSX (TX-2). Nunca se edita.
+  - [ ] Integridad: el Z queda enlazado a sus ventas/movimientos; cualquier ajuste posterior va por contramovimiento auditado, no por edición del Z.
+  - [ ] *Criterio:* al cerrar caja aparece su Z en el historial con el consolidado del turno; se puede reimprimir y exportar, pero no modificar.
 
 - [ ] **H31 — Cuenta corriente y grupos de clientes.**
   - [ ] Medio de pago "Cuenta corriente" que deja deuda del cliente.
@@ -958,6 +978,11 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Importación masiva por Excel de datos maestros | **F11/H34** + **TX-4** |
 | Restaurante: mesas, comandas, KDS, división de cuenta, modificadores | **F13/H43–H52** |
 | Variantes (talle/color), SKU compuesto (textil) | F6/H10 + F5 (perfil textil) |
+| Ficha de producto PRO (marca, IVA, tags, temporada, foto WebP, garantía) | **F6/H10b** |
+| Catálogo de marcas y categorías de 2 niveles | **F6/H10b** |
+| Control de stock por producto (servicios) y kit/combo con BOM | **F6/H10b** (+ F12/H35 sin stock) |
+| Producto serializado (IMEI / N° de serie) | **F6/H10b** + F14/H64 (series enterprise) |
+| Cierre Z inmutable e historial contable de caja | **F11/H30b** |
 | Devoluciones, cambios, notas de crédito | **F11/H29** + F3 (NC fiscal cuando aplique) |
 | Reportes/BI y exportaciones con diseño | F1 (reportes) + **TX-2 (XLSX)** + F9/H56 + F13/H52 |
 | Hardware: impresora térmica/fiscal, cajón, balanza, lector | F4 + **F10/H22–H26** |

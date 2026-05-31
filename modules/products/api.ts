@@ -20,6 +20,15 @@ export interface KitComponent {
   quantity: number;
 }
 
+// "oferta, premium" -> ["oferta","premium"]; null/"" -> [].
+function toTags(v: string | null | undefined): string[] {
+  if (!v) return [];
+  return v
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 export const productsApi = {
   list: async (search?: string): Promise<Product[]> => {
     const supabase = createClient();
@@ -61,9 +70,13 @@ export const productsApi = {
       stock: input.stock,
       stock_min: input.stock_min,
       unit: input.unit,
+      tax_rate: input.tax_rate,
+      season: input.season,
+      tags: toTags(input.tags),
       description: input.description,
       is_active: input.is_active,
       is_kit: input.is_kit,
+      track_stock: input.track_stock,
     });
     if (error) throw error;
   },
@@ -82,9 +95,13 @@ export const productsApi = {
         cost: input.cost ?? null,
         stock_min: input.stock_min,
         unit: input.unit,
+        tax_rate: input.tax_rate,
+        season: input.season,
+        tags: toTags(input.tags),
         description: input.description,
         is_active: input.is_active,
         is_kit: input.is_kit,
+        track_stock: input.track_stock,
       })
       .eq("id", id);
     if (error) throw error;

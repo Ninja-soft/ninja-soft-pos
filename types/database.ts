@@ -847,10 +847,14 @@ export type Database = {
           metadata: Json
           name: string
           price: number
+          season: string | null
           sku: string | null
           stock: number
           stock_min: number | null
+          tags: string[]
+          tax_rate: number
           tenant_id: string
+          track_stock: boolean
           unit: string
           updated_at: string
           updated_by: string | null
@@ -871,10 +875,14 @@ export type Database = {
           metadata?: Json
           name: string
           price: number
+          season?: string | null
           sku?: string | null
           stock?: number
           stock_min?: number | null
+          tags?: string[]
+          tax_rate?: number
           tenant_id?: string
+          track_stock?: boolean
           unit?: string
           updated_at?: string
           updated_by?: string | null
@@ -895,10 +903,14 @@ export type Database = {
           metadata?: Json
           name?: string
           price?: number
+          season?: string | null
           sku?: string | null
           stock?: number
           stock_min?: number | null
+          tags?: string[]
+          tax_rate?: number
           tenant_id?: string
+          track_stock?: boolean
           unit?: string
           updated_at?: string
           updated_by?: string | null

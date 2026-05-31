@@ -42,8 +42,8 @@ export function OperationSettingsCard() {
   const { toast } = useToast();
 
   const { data: ctx } = useQuery({
-    queryKey: ["my-payments-ctx"],
-    queryFn: async (): Promise<{ tenantId: string; canManage: boolean } | null> => {
+    queryKey: ["op-settings-ctx"],
+    queryFn: async (): Promise<{ tenantId: string; role: string } | null> => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -56,10 +56,7 @@ export function OperationSettingsCard() {
         .limit(1)
         .maybeSingle();
       if (!mem) return null;
-      return {
-        tenantId: mem.tenant_id,
-        canManage: ["owner", "manager"].includes(mem.role),
-      };
+      return { tenantId: mem.tenant_id, role: mem.role };
     },
   });
   const tenantId = ctx?.tenantId ?? "";
@@ -141,7 +138,7 @@ export function OperationSettingsCard() {
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
-  if (!ctx || !ctx.canManage) return null;
+  if (!ctx || ctx.role !== "owner") return null;
 
   return (
     <section className="space-y-4">

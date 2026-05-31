@@ -121,7 +121,7 @@ export default function ConfiguracionPage() {
         </nav>
 
         {/* Contenido de la sección */}
-        <div>
+        <div className="min-w-0">
           {section === "apariencia" && (
             <Card>
               <CardContent className="space-y-7 p-6">

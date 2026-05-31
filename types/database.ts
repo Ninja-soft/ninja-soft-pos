@@ -586,6 +586,63 @@ export type Database = {
         }
         Relationships: []
       }
+      mp_payment_intents: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          init_point: string | null
+          mp_payment_id: string | null
+          preference_id: string | null
+          provider_key: string
+          sale_id: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          init_point?: string | null
+          mp_payment_id?: string | null
+          preference_id?: string | null
+          provider_key?: string
+          sale_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          init_point?: string | null
+          mp_payment_id?: string | null
+          preference_id?: string | null
+          provider_key?: string
+          sale_id?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mp_payment_intents_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mp_payment_intents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_providers: {
         Row: {
           is_active: boolean

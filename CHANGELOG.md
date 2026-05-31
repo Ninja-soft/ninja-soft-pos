@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H15 (parcial) — Mercado Pago QR:** conexión por Access Token por tenant (Edge Function `set_payment_secret` + UI "Conexión" en Medios de pago) y **cobro por QR** (Checkout Pro): Edge Functions `mp_create_qr` (preferencia + `mp_payment_intents`) y `mp_webhook` (verifica el pago contra MP, no confía en el body); botón "Cobrar con QR (Mercado Pago)" en el POS con estado en vivo (polling) y cierre de venta al aprobarse. QR del init_point. Falta OAuth, Mercado Point y conciliación.
+
 - **H23 (base) — Scanners USB/Bluetooth:** `useScanner` captura lectores HID (teclado) por velocidad de tipeo + Enter y agrega el producto por barcode/SKU (`productsApi.findByCode`) sin necesidad de la cámara; copy del modal de cámara aclara el uso de lectores USB/BT.
 - **H24 (parcial) — Etiquetas e impresiones:** página `/etiquetas` para imprimir etiquetas por lote (selección de productos + copias, vista previa, `window.print()`). Código de barras **Code 39 sin dependencias** (generador puro `lib/barcode/code39` + componente SVG `Barcode`). Lógica de etiquetas en `lib/labels` con tests. Link en el menú (Catálogo). Balanza (parsing/WebSerial) queda pendiente.
 

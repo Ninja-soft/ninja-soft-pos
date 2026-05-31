@@ -33,8 +33,10 @@ import {
   useOpenShift,
   useDefaultRegister,
   usePosMutations,
+  useMpMethod,
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
+import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { productsApi } from "@/modules/products/api";
 import {
   OpenShiftModal,
@@ -54,6 +56,7 @@ export default function PosPage() {
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
@@ -83,6 +86,8 @@ export default function PosPage() {
   const { open, close, sale } = usePosMutations();
   const { data: myTenant } = useMyTenant();
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
+  const { data: mp } = useMpMethod();
+  const mpReady = Boolean(mp?.enabled && mp?.connected);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
 
@@ -220,7 +225,9 @@ export default function PosPage() {
     }
   }
 
-  async function handleSale(payments: { method: string; amount: number }[]) {
+  async function handleSale(
+    payments: { method: string; amount: number; reference?: string }[],
+  ) {
     try {
       const res = await sale.mutateAsync({
         items: lines.map((l) => ({
@@ -478,6 +485,17 @@ export default function PosPage() {
             >
               {hasShift ? "Cobrar" : "Abrí la caja para vender"}
             </Button>
+            {mpReady && (
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => setQrOpen(true)}
+              >
+                Cobrar con QR (Mercado Pago)
+              </Button>
+            )}
           </div>
         </aside>
         </div>
@@ -501,6 +519,15 @@ export default function PosPage() {
         total={total}
         onConfirm={handleSale}
         loading={sale.isPending}
+      />
+      <QrCheckoutModal
+        open={qrOpen}
+        onOpenChange={setQrOpen}
+        amount={total}
+        onApproved={(reference) => {
+          setQrOpen(false);
+          handleSale([{ method: "qr", amount: total, reference }]);
+        }}
       />
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
       <BarcodeScanner

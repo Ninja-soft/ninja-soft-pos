@@ -369,8 +369,8 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
   - [ ] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado.
 
-- [ ] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
-  - [ ] **H15** — Mercado Pago + **Mercado Point** (QR + tarjeta presencial).
+- [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
+  - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) hechos** (PR #83 + #84): Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook` (estado en vivo por polling + verificación contra MP); botón "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Falta:** OAuth "Conectar con MP", Mercado **Point** (tarjeta presencial) y conciliación.
   - [ ] **H16** — **MODO** vía QR interoperable.
   - [ ] **H17** — **Payway / Prisma**.
   - [ ] **H18** — **Getnet**.

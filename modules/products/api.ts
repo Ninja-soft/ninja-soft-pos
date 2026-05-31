@@ -255,11 +255,31 @@ export const categoriesApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("categories")
-      .insert({ name: input.name })
+      .insert({ name: input.name, parent_id: input.parent_id ?? null })
       .select("*")
       .single();
     if (error) throw error;
     return data as Category;
+  },
+
+  rename: async (id: string, name: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("categories")
+      .update({ name })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  softDelete: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    // Baja lógica de la categoría y de sus sub-categorías.
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("categories")
+      .update({ deleted_at: now })
+      .or(`id.eq.${id},parent_id.eq.${id}`);
+    if (error) throw error;
   },
 };
 

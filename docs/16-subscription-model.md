@@ -11,7 +11,7 @@ Define los planes comerciales, sus límites, los estados de la suscripción y c�
 | **Business** | 10 | 30 | ✅ | ✅ | ✅ | ✅ | ❌ | Prioritario |
 | **Enterprise** | A medida | A medida | ✅ | ✅ | ✅ | ✅ | ✅ | Dedicado |
 
-Precios y condiciones comerciales viven fuera de este documento. Aquí solo el modelo técnico.
+Los precios de lista viven fuera de este documento, pero el modelo debe soportar condiciones comerciales por cliente: plan custom, cuota/precio acordado, descuentos, aumentos programados y límites especiales.
 
 ## 2. Estados de suscripción
 
@@ -85,6 +85,45 @@ subscriptions (
 
 Un tenant tiene una sola suscripción activa a la vez. Cambios de plan generan un nuevo registro en `subscription_history` (auditoría).
 
+### 3.1 Extensión para planes custom y cuotas por cliente
+
+```sql
+tenant_plan_overrides (
+  id, tenant_id, base_plan_id,
+  display_name,                 -- "Pro Heladería Lucas", "Enterprise Franquicia"
+  limits_override jsonb,         -- max_users, max_stores, max_products, etc.
+  modules_override jsonb,        -- flags/módulos incluidos para este cliente
+  support_override jsonb,        -- SLA, canal, ejecutivo asignado
+  price_amount numeric,
+  currency text,                 -- ARS por default
+  billing_cycle text,            -- monthly, yearly, custom
+  valid_from, valid_until,
+  reason,
+  created_by, created_at
+)
+
+subscription_price_changes (
+  id, tenant_id, subscription_id,
+  previous_amount, new_amount,
+  previous_limits jsonb, new_limits jsonb,
+  effective_at,
+  notice_sent_at,
+  accepted_at,
+  status,                       -- scheduled, notified, accepted, applied, cancelled
+  reason,
+  created_by, created_at
+)
+```
+
+Reglas:
+
+- [ ] Un plan custom siempre referencia un plan base para heredar defaults.
+- [ ] Los overrides por cliente ganan sobre el plan base, pero quedan auditados.
+- [ ] Los límites custom pueden aumentar o reducir cuota: usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos y soporte.
+- [ ] Todo aumento de precio/cuota tiene fecha efectiva y motivo.
+- [ ] Si el contrato exige aviso/aceptación, el cambio queda `scheduled` hasta notificación/aceptación.
+- [ ] El owner recibe notificación in-app y email cuando hay cambio de precio, cuota, plan o vencimiento.
+
 ## 4. Estructura de `plans.features`
 
 JSON con límites y banderas concretas:
@@ -156,6 +195,48 @@ Lectura directa de `plan.features.modules.<key>` desde Edge Functions y frontend
 ### 6.3 Cambio efectivo
 - Toma efecto al instante.
 - Facturación: prorrateada al final del período o ajustada en próxima factura (decisión comercial).
+
+### 6.4 Plan específico por cliente
+
+Un plan específico permite vender condiciones especiales sin crear un plan global visible para todos.
+
+Casos:
+
+- [ ] Cliente grande necesita 7 sucursales, 18 usuarios y AFIP, pero no Business completo.
+- [ ] Cliente paga precio promocional por 6 meses.
+- [ ] Cliente tiene módulo gastronómico incluido pero sin API.
+- [ ] Franquicia con límites y soporte propios.
+- [ ] Acuerdo manual con cuota mensual distinta al precio de lista.
+
+Requisitos:
+
+- [ ] Crear desde internal a partir de un plan base.
+- [ ] Nombre visible opcional para cliente.
+- [ ] Nombre interno comercial.
+- [ ] Límites y módulos editables.
+- [ ] Precio, moneda y ciclo de cobro editables.
+- [ ] Vigencia opcional.
+- [ ] Motivo obligatorio.
+- [ ] Historial de cambios.
+- [ ] Notificación automática al owner.
+
+### 6.5 Aumento de cuota/precio a un cliente
+
+Flujo:
+
+1. Staff autorizado crea cambio programado desde internal.
+2. Define nuevo precio/cuota/límites, fecha efectiva, motivo y si requiere aceptación.
+3. El sistema genera notificación in-app + email.
+4. Si requiere aceptación, el owner acepta o contacta soporte.
+5. En `effective_at`, el cambio se aplica y se registra en historial.
+
+Reglas:
+
+- [ ] No se pisa el precio actual sin guardar `previous_amount`.
+- [ ] No se aplica un aumento silencioso sin notificación.
+- [ ] Cambios inmediatos requieren permiso `billing` o `super_admin`.
+- [ ] Todo cambio queda en `subscription_price_changes` y `audit_logs`.
+- [ ] Si el cliente está `suspended` o `cancelled`, el cambio queda pendiente hasta reactivación o se cancela explícitamente.
 
 ## 7. Trial
 
@@ -237,6 +318,9 @@ La consola internal debe concentrar toda la operación de suscripciones sin SQL:
 
 - [ ] Alta de tenant y asignación de plan inicial.
 - [ ] Cambio de plan inmediato.
+- [ ] Creación de plan específico/custom para un tenant.
+- [ ] Edición de cuota/límites/módulos/precio por cliente.
+- [ ] Aumento de precio/cuota inmediato o programado.
 - [ ] Cambio de estado con motivo: `trial`, `active`, `past_due`, `suspended`, `cancelled`.
 - [ ] Extensión o acorte de trial.
 - [ ] Registro de pago manual: fecha, medio, monto, período cubierto y referencia.
@@ -246,12 +330,13 @@ La consola internal debe concentrar toda la operación de suscripciones sin SQL:
 - [ ] Notas comerciales internas.
 - [ ] Historial completo con antes/después, actor, fecha y motivo.
 - [ ] Email/plantilla asociada a cada transición.
+- [ ] Notificación in-app asociada a cada evento comercial relevante.
 
 Ver [`24-internal-ops-panel.md`](./24-internal-ops-panel.md).
 
 ## 14. Comunicación al cliente
 
-Templates de email (a definir en F2):
+Templates de email e in-app notification (a definir en F2):
 - Bienvenida + inicio de trial.
 - 7 días para que termine trial.
 - 1 día para que termine trial.
@@ -259,6 +344,11 @@ Templates de email (a definir en F2):
 - Pago recibido, suscripción activa.
 - Factura del mes.
 - Plan actualizado.
+- Plan custom creado.
+- Cuota/límite actualizado.
+- Aumento de precio programado.
+- Aumento de precio aplicado.
+- Límite de uso al 80/100/110%.
 - Suspensión inminente.
 - Suspensión activa.
 - Reactivación.

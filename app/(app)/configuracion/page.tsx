@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Palette } from "lucide-react";
+import { Palette, Store } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -20,6 +20,12 @@ import {
 } from "@/lib/theme/AppearanceProvider";
 import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
+
+type Section = "apariencia" | "marca";
+const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
+  { key: "apariencia", label: "Apariencia", icon: Palette },
+  { key: "marca", label: "Marca del negocio", icon: Store },
+];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
   "ninja-dark": { bg: "#0a0518", a: "#ff5a2c", b: "#ffd21f" },
@@ -75,7 +81,7 @@ export default function ConfiguracionPage() {
     setBg,
     setPriceAccent,
   } = useAppearance();
-  const [designOpen, setDesignOpen] = useState(false);
+  const [section, setSection] = useState<Section>("apariencia");
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -86,32 +92,35 @@ export default function ConfiguracionPage() {
         guardados en tu cuenta, disponibles en cualquier dispositivo.
       </p>
 
-      {/* Sección colapsable: Diseño */}
-      <Card className="mt-8">
-        <button
-          onClick={() => setDesignOpen((o) => !o)}
-          className="flex w-full items-center gap-3 rounded-lg p-5 text-left transition hover:bg-muted/40"
-        >
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
-            <Palette size={18} />
-          </span>
-          <span className="flex-1">
-            <span className="block font-semibold">Diseño</span>
-            <span className="block text-sm text-muted-foreground">
-              Tema, tipografías y fondo
-            </span>
-          </span>
-          <ChevronDown
-            size={18}
-            className={cn(
-              "text-muted-foreground transition",
-              designOpen ? "" : "-rotate-90",
-            )}
-          />
-        </button>
+      <div className="mt-8 grid gap-6 md:grid-cols-[210px_1fr]">
+        {/* Menú de secciones */}
+        <nav className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+          {SECTIONS.map((s) => {
+            const Icon = s.icon;
+            const active = section === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setSection(s.key)}
+                className={cn(
+                  "flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition md:w-full",
+                  active
+                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon size={17} />
+                {s.label}
+              </button>
+            );
+          })}
+        </nav>
 
-        {designOpen && (
-          <CardContent className="space-y-7 border-t border-border p-6">
+        {/* Contenido de la sección */}
+        <div>
+          {section === "apariencia" && (
+            <Card>
+              <CardContent className="space-y-7 p-6">
             <Field label="Tema">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {THEMES.map((t) => {
@@ -252,12 +261,14 @@ export default function ConfiguracionPage() {
                 })}
               </div>
             </Field>
-          </CardContent>
-        )}
-      </Card>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Marca del negocio (solo owner/manager; el componente se auto-oculta) */}
-      <BrandingCard />
+          {/* Marca del negocio (solo owner/manager; el componente se auto-oculta) */}
+          {section === "marca" && <BrandingCard />}
+        </div>
+      </div>
     </div>
   );
 }

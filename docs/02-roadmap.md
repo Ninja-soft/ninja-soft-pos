@@ -312,12 +312,15 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
 - [ ] **H12 — Suscripciones, billing manual y lifecycle comercial.**
   - [ ] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
   - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
+  - [ ] **Plan específico por cliente:** clonar un plan base, cambiar nombre comercial, límites, módulos, soporte, precio y condiciones sin afectar a otros tenants.
+  - [ ] **Overrides de cuota/límites por cliente:** usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte y límites fiscales.
+  - [ ] **Aumento de cuota/precio a un cliente:** cambio inmediato o programado con fecha efectiva, motivo, aviso previo, aceptación opcional y registro de antes/después.
   - [ ] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo.
   - [ ] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento.
   - [ ] Descuentos comerciales, precio acordado, cupones/manual override y notas internas con vigencia.
   - [ ] Historial de cambios de plan/estado/precio con antes/después, autor, fecha, motivo y fuente.
   - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
-  - [ ] *Criterio:* pasar un tenant de Start trial a Pro activo con vencimiento, pago registrado, módulos activados y email de bienvenida pendiente queda auditado de punta a punta.
+  - [ ] *Criterio:* pasar un tenant de Start trial a un plan custom "Pro Heladería Lucas" activo con vencimiento, pago registrado, cuota aumentada, módulos activados y notificación pendiente queda auditado de punta a punta.
 
 - [ ] **H13 — Emails configurables (HTML + variables).**
   - [ ] **Editor de plantillas HTML** con variables (`{{nombre}}`, `{{negocio}}`, `{{monto}}`, …), preview y **versionado**.
@@ -326,6 +329,16 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] **Logs de envío** (estado, destinatario, plantilla, proveedor) y reintentos.
   - [ ] **Envíos masivos / campañas** a segmentos de tenants/usuarios.
   - [ ] *Criterio:* editar la plantilla "trial por vencer", previsualizar con variables reales y enviarla; el envío queda registrado con su estado.
+
+- [ ] **H13b — Centro de notificaciones por cuenta.**
+  - [ ] Panel de notificaciones dentro de cada tenant: novedades, cambios de plan, vencimientos, pagos, alertas de uso, seguridad, AFIP, mantenimiento y soporte.
+  - [ ] Notificaciones dirigidas por audiencia: owner, manager, cashier, viewer, todos, sucursal específica o usuario específico.
+  - [ ] Estados: no leída, leída, archivada, requiere acción, vencida.
+  - [ ] Severidad: info, éxito, advertencia, crítica, bloqueo.
+  - [ ] Acciones embebidas: pagar, actualizar datos, aceptar cambio de plan, descargar comprobante, ver deuda, renovar, contactar soporte.
+  - [ ] Preferencias por canal: in-app obligatorio para eventos críticos; email/WhatsApp/push futuro configurables por tipo.
+  - [ ] Composer internal para enviar novedades globales o por segmento de clientes.
+  - [ ] *Criterio:* al aumentar cuota/precio de un tenant, el owner ve una notificación in-app con fecha efectiva, motivo, nuevo monto, historial y acción de aceptación/consulta.
 
 ### F8 — Pagos y cobros
 

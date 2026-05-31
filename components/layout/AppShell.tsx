@@ -174,7 +174,7 @@ export function AppShell({
         className="mb-4 flex items-center gap-2.5 px-2 py-2"
       >
         <Isotype className="h-9 w-auto" priority />
-        <WordmarkPos className="h-5 w-auto" priority />
+        <WordmarkPos className="h-7 w-auto" priority />
       </Link>
 
       {NAV.top.map((it) => (

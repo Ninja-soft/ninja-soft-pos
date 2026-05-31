@@ -11,7 +11,7 @@ export default function AuthLayout({
       <div className="ninja-grid pointer-events-none absolute inset-0 opacity-20" />
       <div className="relative z-10 w-full max-w-md">
         <Link href="/" className="mb-8 flex justify-center">
-          <WordmarkPos className="h-9 w-auto" priority />
+          <WordmarkPos className="h-16 w-auto sm:h-20" priority />
         </Link>
         {children}
       </div>

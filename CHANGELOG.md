@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H23 (base) — Scanners USB/Bluetooth:** `useScanner` captura lectores HID (teclado) por velocidad de tipeo + Enter y agrega el producto por barcode/SKU (`productsApi.findByCode`) sin necesidad de la cámara; copy del modal de cámara aclara el uso de lectores USB/BT.
 - **H24 (parcial) — Etiquetas e impresiones:** página `/etiquetas` para imprimir etiquetas por lote (selección de productos + copias, vista previa, `window.print()`). Código de barras **Code 39 sin dependencias** (generador puro `lib/barcode/code39` + componente SVG `Barcode`). Lógica de etiquetas en `lib/labels` con tests. Link en el menú (Catálogo). Balanza (parsing/WebSerial) queda pendiente.
 
 - **TX-1 — Calendario unificado (`react-day-picker`):** componente `DateRangePicker` (rango + presets, locale es) en Reportes; reemplaza los inputs de fecha nativos.

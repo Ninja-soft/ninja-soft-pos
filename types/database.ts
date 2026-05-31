@@ -848,6 +848,50 @@ export type Database = {
         }
         Relationships: []
       }
+      pos_settings: {
+        Row: {
+          allow_negative_stock: boolean
+          blind_close: boolean
+          close_tolerance: number
+          max_discount: Json
+          rounding_multiple: number
+          sku_auto: boolean
+          sku_prefix: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          allow_negative_stock?: boolean
+          blind_close?: boolean
+          close_tolerance?: number
+          max_discount?: Json
+          rounding_multiple?: number
+          sku_auto?: boolean
+          sku_prefix?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          allow_negative_stock?: boolean
+          blind_close?: boolean
+          close_tolerance?: number
+          max_discount?: Json
+          rounding_multiple?: number
+          sku_auto?: boolean
+          sku_prefix?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_images: {
         Row: {
           created_at: string
@@ -1002,6 +1046,7 @@ export type Database = {
       }
       products: {
         Row: {
+          allow_negative: boolean | null
           barcode: string | null
           brand_id: string | null
           category_id: string | null
@@ -1031,6 +1076,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          allow_negative?: boolean | null
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -1060,6 +1106,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          allow_negative?: boolean | null
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -1943,6 +1990,7 @@ export type Database = {
       top_products: {
         Args: { p_limit?: number }
         Returns: {
+          allow_negative: boolean | null
           barcode: string | null
           brand_id: string | null
           category_id: string | null

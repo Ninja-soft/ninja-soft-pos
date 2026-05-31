@@ -89,6 +89,23 @@ export const posApi = {
     };
   },
 
+  // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
+  posSettings: async (): Promise<{
+    maxDiscount: Record<string, number>;
+    rounding: number;
+  } | null> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("pos_settings")
+      .select("max_discount, rounding_multiple")
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      maxDiscount: (data.max_discount as Record<string, number>) ?? {},
+      rounding: Number(data.rounding_multiple) || 0,
+    };
+  },
+
   // Crea la preferencia/QR de cobro y devuelve el init_point.
   createMpQr: async (
     amount: number,

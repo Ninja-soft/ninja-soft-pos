@@ -289,7 +289,7 @@ export function PaymentMethodsCard() {
             >
               <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
                 {/* Logo */}
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-ninjaSm">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden">
                   {PROVIDER_LOGO[p.key] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

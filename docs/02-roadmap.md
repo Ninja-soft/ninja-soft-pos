@@ -476,16 +476,16 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Wizard de devolución/cambio con trazabilidad, reintegro por medio de pago, vale o diferencia a cobrar.
   - [ ] *Criterio:* un cambio por talle vuelve al depósito original; un defectuoso va a merma; ambos quedan auditados.
 
-- [ ] **H30 — Settings operativos del POS.**
-  - [ ] Permitir vender en negativo global y override por producto ("permite venta en cero").
-  - [ ] Requerir cliente para registrar venta.
+- [~] **H30 — Settings operativos del POS.** — *PR1 hecho: tabla `pos_settings` + Configuración → Operación del POS. `create_sale` aplica descuento máximo por rol, redondeo del total y bloqueo de stock negativo. Defaults permisivos (no cambian comportamiento previo). Falta PR2: arqueo ciego, tolerancia de cierre, SKU automático, override de negativo por producto, requerir cliente y señas.*
+  - [x] Permitir vender en negativo global (`pos_settings.allow_negative_stock`); override por producto (`products.allow_negative`) preparado, UI en PR2.
+  - [ ] Requerir cliente para registrar venta. *(necesita selector de cliente en el POS)*
   - [ ] Señas: reservar stock sin descontar hasta cobrar saldo, o descontar al cobrar seña.
-  - [ ] Descuento máximo global por rol/cajero.
-  - [ ] Redondeo del total por múltiplo configurable.
-  - [ ] Arqueo ciego al cerrar caja.
-  - [ ] Tolerancia sin justificación en cierre de caja.
-  - [ ] SKU automático para productos sin código de barras con prefijo configurable.
-  - [ ] *Criterio:* un cashier no puede superar el descuento máximo; el cierre exige motivo si supera la tolerancia.
+  - [x] Descuento máximo global por rol/cajero (validado en `create_sale` + tope en el POS).
+  - [x] Redondeo del total por múltiplo configurable (autoritativo en `create_sale`).
+  - [ ] Arqueo ciego al cerrar caja. *(PR2)*
+  - [ ] Tolerancia sin justificación en cierre de caja. *(PR2)*
+  - [ ] SKU automático para productos sin código de barras con prefijo configurable. *(PR2)*
+  - [~] *Criterio:* un cashier no puede superar el descuento máximo (hecho); el cierre exige motivo si supera la tolerancia (PR2).
 
 - [ ] **H30b — Cierres Z inmutables e historial contable de caja.**
   - [ ] Al cerrar una caja se genera un **Cierre Z**: cierre **contable diario del turno**, registro **inmutable** (no editable ni borrable) con su **snapshot consolidado** del turno.

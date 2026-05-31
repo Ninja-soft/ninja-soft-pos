@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Download, SlidersHorizontal } from "lucide-react";
 import { format, startOfDay, subDays } from "date-fns";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -25,6 +27,7 @@ const REPORTS = [
   { key: "by_category", label: "Por categoría" },
   { key: "by_user", label: "Por cajero" },
   { key: "by_product", label: "Top productos" },
+  { key: "low_stock", label: "Stock bajo" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
 const DEFAULT_VIS: Record<ReportKey, boolean> = {
@@ -33,6 +36,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_category: true,
   by_user: true,
   by_product: true,
+  low_stock: true,
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -150,6 +154,22 @@ export default function ReportesPage() {
     });
   }
 
+  // Stock bajo (no depende del rango: es stock actual).
+  const { data: lowStock = [] } = useQuery({
+    queryKey: ["report-low-stock"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("products")
+        .select("name, stock, stock_min, unit")
+        .is("deleted_at", null)
+        .eq("is_active", true)
+        .gt("stock_min", 0)
+        .order("stock", { ascending: true });
+      return (data ?? []).filter((p) => p.stock <= (p.stock_min ?? 0));
+    },
+  });
+
   return (
     <>
       <div className="mx-auto max-w-6xl px-6 py-8">
@@ -263,6 +283,17 @@ export default function ReportesPage() {
                   r.product,
                   formatCurrency(r.total),
                   formatQty(r.qty),
+                ])}
+              />
+            )}
+            {vis.low_stock && (
+              <ReportTable
+                title="Stock bajo"
+                cols={["Producto", "Stock", "Mínimo"]}
+                rows={lowStock.map((p) => [
+                  p.name,
+                  `${formatQty(p.stock)} ${p.unit}`,
+                  formatQty(p.stock_min ?? 0),
                 ])}
               />
             )}

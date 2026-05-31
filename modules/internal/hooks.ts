@@ -41,5 +41,10 @@ export function useInternalMutations(tenantId: string) {
         internalApi.setFlag(tenantId, vars.flagKey, vars.enabled),
       onSuccess: invalidate,
     }),
+    setIndustry: useMutation({
+      mutationFn: (industry: string) =>
+        internalApi.setIndustry(tenantId, industry),
+      onSuccess: invalidate,
+    }),
   };
 }

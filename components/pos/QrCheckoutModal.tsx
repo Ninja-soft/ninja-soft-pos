@@ -88,6 +88,14 @@ export function QrCheckoutModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Cobrar con QR · Mercado Pago">
       <div className="space-y-4 text-center">
+        <div className="flex items-center justify-center rounded-xl border border-border bg-white px-4 py-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/img/medios_de_pago/mercado_pago_large.webp"
+            alt="Mercado Pago"
+            className="h-8 w-auto object-contain"
+          />
+        </div>
         <div className="text-sm text-muted-foreground">
           Total a cobrar
           <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">

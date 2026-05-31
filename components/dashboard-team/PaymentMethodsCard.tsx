@@ -24,6 +24,31 @@ const KIND_LABELS: Record<string, string> = {
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
 const IMPLEMENTED = new Set(["mercadopago"]);
 
+// Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
+const PROVIDER_LOGO: Record<string, string> = {
+  cash: "/img/medios_de_pago/Cash_cube.webp",
+  transfer: "/img/medios_de_pago/Transferencia_cube.webp",
+  mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
+  mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
+  modo: "/img/medios_de_pago/Modo_cube.webp",
+  payway: "/img/medios_de_pago/payway_cube.webp",
+  getnet: "/img/medios_de_pago/getnet_cube.webp",
+  fiserv: "/img/medios_de_pago/Fiserv_cube.webp",
+  mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
+  pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
+};
+
+// Logo ancho (con texto) para el modal de conexión.
+const PROVIDER_LOGO_LARGE: Record<string, string> = {
+  mercadopago: "/img/medios_de_pago/mercado_pago_large.webp",
+  modo: "/img/medios_de_pago/Modo_large.webp",
+  payway: "/img/medios_de_pago/payway_large.webp",
+  getnet: "/img/medios_de_pago/getnet_large.webp",
+  fiserv: "/img/medios_de_pago/Fiserv_large.webp",
+  mobbex: "/img/medios_de_pago/Mobbex_large.webp",
+  pagos360: "/img/medios_de_pago/Pagos360_large.webp",
+};
+
 type Provider = { key: string; name: string; kind: string; sort: number };
 type Method = {
   provider_key: string;
@@ -215,7 +240,23 @@ export function PaymentMethodsCard() {
                 const m = byKey.get(p.key);
                 return (
                   <tr key={p.key}>
-                    <td className="whitespace-nowrap px-4 py-3 font-medium">{p.name}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-white">
+                          {PROVIDER_LOGO[p.key] ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={PROVIDER_LOGO[p.key]}
+                              alt={p.name}
+                              className="h-full w-full object-contain p-1"
+                            />
+                          ) : (
+                            <CreditCard size={16} className="text-muted-foreground" />
+                          )}
+                        </span>
+                        <span className="font-medium">{p.name}</span>
+                      </div>
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                       {KIND_LABELS[p.kind] ?? p.kind}
                     </td>
@@ -292,6 +333,16 @@ export function PaymentMethodsCard() {
         title={connectingProvider ? `Conectar ${connectingProvider.name}` : "Conectar"}
       >
         <div className="space-y-4">
+          {connectKey && PROVIDER_LOGO_LARGE[connectKey] && (
+            <div className="flex items-center justify-center rounded-xl border border-border bg-white p-5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={PROVIDER_LOGO_LARGE[connectKey]}
+                alt={connectingProvider?.name ?? ""}
+                className="h-10 w-auto object-contain"
+              />
+            </div>
+          )}
           {connectingConnected ? (
             <p className="flex items-center gap-2 text-sm text-emerald-400">
               <Check size={16} /> Tu cuenta de Mercado Pago está conectada.

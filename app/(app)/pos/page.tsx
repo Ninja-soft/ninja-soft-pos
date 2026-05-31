@@ -486,15 +486,22 @@ export default function PosPage() {
               {hasShift ? "Cobrar" : "Abrí la caja para vender"}
             </Button>
             {mpReady && (
-              <Button
-                variant="secondary"
-                size="lg"
-                className="w-full"
+              <button
+                type="button"
                 disabled={!hasShift || lines.length === 0}
                 onClick={() => setQrOpen(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Cobrar con QR (Mercado Pago)
-              </Button>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/mercado_pago_cube.webp"
+                    alt="Mercado Pago"
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </span>
+                Cobrar con QR · Mercado Pago
+              </button>
             )}
           </div>
         </aside>

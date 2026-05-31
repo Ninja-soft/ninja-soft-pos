@@ -1,10 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
+import { createClient } from "@/lib/supabase/client";
 import {
   useInternalTenants,
   useTenantFlags,
@@ -40,6 +44,32 @@ export default function InternalTenantDetail({
   const { setPlan, setStatus, setFlag, setIndustry } = useInternalMutations(
     params.id,
   );
+  const supabase = createClient();
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+
+  // Genera el link de suscripción (preapproval) de Mercado Pago para el tenant.
+  const checkout = useMutation({
+    mutationFn: async () => {
+      const backUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/internal/tenants/${params.id}`
+          : undefined;
+      const { data, error } = await supabase.functions.invoke(
+        "mp_subscription_checkout",
+        { body: { tenant_id: params.id, back_url: backUrl } },
+      );
+      if (error) throw error;
+      const res = data as { init_point?: string; error?: string };
+      if (res?.error || !res?.init_point) throw new Error(res?.error ?? "sin_link");
+      return res.init_point;
+    },
+    onSuccess: (u) => {
+      setCheckoutUrl(u);
+      toast({ title: "Link de cobro generado", variant: "success" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "No se pudo generar", description: e.message, variant: "error" }),
+  });
 
   function wrap(p: Promise<unknown>, ok: string) {
     p.then(() => toast({ title: ok, variant: "success" })).catch((e) =>
@@ -137,6 +167,32 @@ export default function InternalTenantDetail({
           </CardContent>
         </Card>
       </div>
+
+      <Heading className="mt-8" as="h2">
+        Cobro de suscripción
+      </Heading>
+      <Card className="mt-3">
+        <CardContent className="flex flex-wrap items-center gap-4 p-5">
+          <Button disabled={checkout.isPending} onClick={() => checkout.mutate()}>
+            {checkout.isPending ? "Generando…" : "Generar link de cobro (Mercado Pago)"}
+          </Button>
+          {checkoutUrl && (
+            <a
+              href={checkoutUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ninja-flameSoft hover:underline"
+            >
+              <ExternalLink size={15} /> Abrir link de pago
+            </a>
+          )}
+          <p className="w-full text-xs text-muted-foreground">
+            Crea una suscripción mensual en Mercado Pago con la cuenta de NinjaSoft
+            por el plan del negocio. El estado se actualiza solo cuando el cliente
+            paga.
+          </p>
+        </CardContent>
+      </Card>
 
       <Heading className="mt-8" as="h2">
         Feature flags

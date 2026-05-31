@@ -67,9 +67,65 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", tenantId)
     .eq("provider_key", "mercadopago")
     .maybeSingle();
-  const accessToken = (secretRow?.secrets as { access_token?: string } | null)
-    ?.access_token;
+  const sec = (secretRow?.secrets ?? {}) as {
+    access_token?: string;
+    refresh_token?: string | null;
+    expires_at?: string | null;
+    via?: string;
+  };
+  let accessToken = sec.access_token;
   if (!accessToken) return json({ error: "not_connected" }, 400);
+
+  // Refresca el token OAuth si está por vencer (margen 5 min). Los tokens
+  // manuales (sin refresh_token) se usan tal cual.
+  const aboutToExpire =
+    sec.expires_at && Date.parse(sec.expires_at) - Date.now() < 5 * 60 * 1000;
+  if (sec.via === "oauth" && sec.refresh_token && aboutToExpire) {
+    const { data: plat } = await admin
+      .from("platform_secrets")
+      .select("secrets")
+      .eq("key", "mercadopago")
+      .maybeSingle();
+    const ps = (plat?.secrets ?? {}) as {
+      client_id?: string;
+      client_secret?: string;
+    };
+    if (ps.client_id && ps.client_secret) {
+      const r = await fetch("https://api.mercadopago.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          client_id: ps.client_id,
+          client_secret: ps.client_secret,
+          grant_type: "refresh_token",
+          refresh_token: sec.refresh_token,
+        }),
+      });
+      if (r.ok) {
+        const t = (await r.json()) as {
+          access_token?: string;
+          refresh_token?: string;
+          expires_in?: number;
+        };
+        if (t.access_token) {
+          accessToken = t.access_token;
+          const updated = {
+            ...sec,
+            access_token: t.access_token,
+            refresh_token: t.refresh_token ?? sec.refresh_token,
+            expires_at: t.expires_in
+              ? new Date(Date.now() + t.expires_in * 1000).toISOString()
+              : sec.expires_at,
+          };
+          await admin
+            .from("payment_secrets")
+            .update({ secrets: updated })
+            .eq("tenant_id", tenantId)
+            .eq("provider_key", "mercadopago");
+        }
+      }
+    }
+  }
 
   // Intent (pending) → external_reference.
   const { data: intent, error: intErr } = await admin

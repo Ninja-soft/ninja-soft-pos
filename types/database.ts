@@ -226,7 +226,7 @@ export type Database = {
           id?: string
           notes?: string | null
           opened_at?: string
-          opened_by: string
+          opened_by?: string
           opening_amount: number
           status?: string
           tenant_id?: string
@@ -359,6 +359,20 @@ export type Database = {
             columns: ["cash_shift_id"]
             isOneToOne: true
             referencedRelation: "cash_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_z_closures_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_z_closures_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -586,6 +600,35 @@ export type Database = {
         }
         Relationships: []
       }
+      mp_oauth_states: {
+        Row: {
+          created_at: string
+          state: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          state: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          state?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mp_oauth_states_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mp_payment_intents: {
         Row: {
           amount: number
@@ -784,6 +827,24 @@ export type Database = {
           monthly_price_ars?: number
           name?: string
           yearly_price_ars?: number | null
+        }
+        Relationships: []
+      }
+      platform_secrets: {
+        Row: {
+          key: string
+          secrets: Json
+          updated_at: string
+        }
+        Insert: {
+          key: string
+          secrets?: Json
+          updated_at?: string
+        }
+        Update: {
+          key?: string
+          secrets?: Json
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1361,6 +1422,7 @@ export type Database = {
           current_period_end: string | null
           current_period_start: string | null
           id: string
+          mp_preapproval_id: string | null
           plan_id: string
           status: string
           tenant_id: string
@@ -1373,6 +1435,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          mp_preapproval_id?: string | null
           plan_id: string
           status: string
           tenant_id: string
@@ -1385,6 +1448,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          mp_preapproval_id?: string | null
           plan_id?: string
           status?: string
           tenant_id?: string
@@ -1878,7 +1942,41 @@ export type Database = {
       }
       top_products: {
         Args: { p_limit?: number }
-        Returns: Database["public"]["Tables"]["products"]["Row"][]
+        Returns: {
+          barcode: string | null
+          brand_id: string | null
+          category_id: string | null
+          cost: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          is_kit: boolean
+          is_serialized: boolean
+          metadata: Json
+          name: string
+          price: number
+          season: string | null
+          sku: string | null
+          stock: number
+          stock_min: number | null
+          tags: string[]
+          tax_rate: number
+          tenant_id: string
+          track_stock: boolean
+          unit: string
+          updated_at: string
+          updated_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "products"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       void_sale: {
         Args: { p_reason: string; p_sale_id: string }

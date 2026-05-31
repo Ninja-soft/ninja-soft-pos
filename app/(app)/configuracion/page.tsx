@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { CreditCard, Palette, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -276,7 +276,11 @@ export default function ConfiguracionPage() {
           {section === "marca" && <BrandingCard />}
 
           {/* Medios de pago (solo owner/manager; se auto-oculta) */}
-          {section === "pagos" && <PaymentMethodsCard />}
+          {section === "pagos" && (
+            <Suspense fallback={null}>
+              <PaymentMethodsCard />
+            </Suspense>
+          )}
         </div>
       </div>
     </div>

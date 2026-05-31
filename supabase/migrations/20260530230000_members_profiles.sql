@@ -65,3 +65,5 @@ $$;
 
 revoke all on function tenant_members() from public, anon;
 grant execute on function tenant_members() to authenticated;
+-- Nota: la galería de imágenes de producto (product_images + bucket Storage) está
+-- en 20260531000000_product_images.sql.

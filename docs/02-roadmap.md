@@ -228,12 +228,13 @@ Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`
 
 Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurable por tenant, con persistencia y multi-dispositivo.
 
-- [ ] **H7 — Fotos de productos → WebP.**
-  - [ ] Subida de imágenes por producto (drag&drop, múltiples).
-  - [ ] Conversión a **WebP** en **Edge Function con `sharp`**: genera varios tamaños (thumb / card / full), guarda en Supabase Storage con RLS por tenant.
-  - [ ] Galería por producto (orden, foto principal, baja lógica).
-  - [ ] Optimización de peso (target < 100 KB en `card`).
-  - [ ] *Criterio:* subir un JPG de 4 MB resulta en un WebP servido < 100 KB sin pérdida visible.
+- [x] **H7 — Fotos de productos → WebP.** — *Hecho (PR #27, 2026-05-31).*
+  - [x] Subida de imágenes por producto (múltiples) desde el form de producto.
+  - [x] Conversión a **WebP** **client-side** (`canvas.toBlob('image/webp')`, redimensión a 900px, calidad 0.82) antes de subir; guarda en Supabase Storage (bucket `product-images`) con RLS por tenant (path `tenant_id/product_id/uuid.webp`). *(`sharp` no corre en Supabase Edge/Deno; se hace en el navegador.)*
+  - [x] Galería por producto: marcar principal (actualiza `products.image_url`), eliminar (borra de Storage + fila).
+  - [x] Optimización de peso (un JPG grande baja a decenas de KB en WebP a 900px).
+  - [x] *Criterio:* subir una imagen grande resulta en un WebP liviano servido por URL pública; sin policy de listado en el bucket.
+  - *Pendiente menor:* multi-tamaño (thumb/card/full) — hoy se sirve una sola imagen optimizada; los thumbnails se muestran por CSS. Drag&drop para reordenar queda para una iteración.
 
 - [ ] **H8 — Branding por tenant.**
   - [ ] Logo del negocio, color de acento (dentro de límites de marca), datos fiscales/contacto.

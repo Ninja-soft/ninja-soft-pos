@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Sun,
+  UserCog,
   Users,
   Wallet,
   X,
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils/cn";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
+import { ProfileEditModal } from "@/components/account/ProfileEditModal";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   Dropdown,
@@ -100,18 +102,20 @@ function NavLink({
 function UserMenu({
   email,
   onChangePassword,
+  onEditProfile,
   onSignOut,
 }: {
   email: string;
   onChangePassword: () => void;
+  onEditProfile: () => void;
   onSignOut: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
 
-  // Foto + nombre configurados del usuario (su membresía activa).
+  // Perfil de la cuenta (compartido con el panel interno): foto + nombre.
   const { data: me } = useQuery({
-    queryKey: ["my-shell-profile"],
+    queryKey: ["account-profile"],
     queryFn: async () => {
       const supabase = createClient();
       const {
@@ -119,27 +123,25 @@ function UserMenu({
       } = await supabase.auth.getUser();
       if (!user) return null;
       const { data } = await supabase
-        .from("tenant_users")
-        .select("display_name, avatar")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
+        .from("users")
+        .select("full_name, avatar_url")
+        .eq("id", user.id)
         .maybeSingle();
-      return { display_name: data?.display_name ?? null, avatar: data?.avatar ?? null };
+      return { full_name: data?.full_name ?? null, avatar_url: data?.avatar_url ?? null };
     },
   });
-  const name = me?.display_name || email;
+  const name = me?.full_name || email;
 
   return (
     <Dropdown>
       <DropdownTrigger asChild>
         <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-          <Avatar name={name} avatar={me?.avatar} size={32} />
+          <Avatar name={name} avatar={me?.avatar_url} size={32} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">
               {name}
             </span>
-            {me?.display_name && (
+            {me?.full_name && (
               <span className="block truncate text-xs text-muted-foreground">
                 {email}
               </span>
@@ -150,6 +152,9 @@ function UserMenu({
       </DropdownTrigger>
       <DropdownContent align="start" className="w-[232px]">
         <DropdownLabel>Cuenta</DropdownLabel>
+        <DropdownItem onSelect={onEditProfile}>
+          <UserCog size={15} /> Editar mi perfil
+        </DropdownItem>
         <DropdownItem
           onSelect={(e) => {
             e.preventDefault();
@@ -182,6 +187,7 @@ export function AppShell({
   const router = useRouter();
   const [drawer, setDrawer] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [pfOpen, setPfOpen] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({
     Operación: true,
     Catálogo: true,
@@ -293,6 +299,7 @@ export function AppShell({
         <UserMenu
           email={email}
           onChangePassword={() => setPwOpen(true)}
+          onEditProfile={() => setPfOpen(true)}
           onSignOut={signOut}
         />
       </div>
@@ -336,6 +343,7 @@ export function AppShell({
       </div>
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
     </div>
   );
 }

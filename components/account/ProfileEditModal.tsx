@@ -81,7 +81,7 @@ export function ProfileEditModal({
     onSuccess: () => {
       toast({ title: "Perfil actualizado", variant: "success" });
       qc.invalidateQueries({ queryKey: ["internal-shell-profile"] });
-      qc.invalidateQueries({ queryKey: ["my-shell-profile"] });
+      qc.invalidateQueries({ queryKey: ["account-profile"] });
       onOpenChange(false);
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),

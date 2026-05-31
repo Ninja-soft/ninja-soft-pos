@@ -16,6 +16,7 @@ import {
   Package,
   Receipt,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   Sun,
   Users,
@@ -187,6 +188,17 @@ export function AppShell({
     Gestión: true,
   });
 
+  // ¿Es staff NinjaSoft? Para mostrar el acceso al panel interno.
+  const { data: isInternal } = useQuery({
+    queryKey: ["is-internal-shell"],
+    queryFn: async () => {
+      const {
+        data: { user },
+      } = await createClient().auth.getUser();
+      return !!(user?.app_metadata as { is_internal?: boolean } | null)?.is_internal;
+    },
+  });
+
   async function signOut() {
     await createClient().auth.signOut();
     router.push("/login");
@@ -243,7 +255,17 @@ export function AppShell({
         );
       })}
 
-      <div className="mt-auto pt-3">
+      <div className="mt-auto space-y-3 pt-3">
+        {isInternal && (
+          <Link
+            href="/internal/tenants"
+            onClick={() => setDrawer(false)}
+            className="flex items-center gap-2.5 rounded-lg bg-ninja-gradient p-2.5 text-sm font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-105"
+          >
+            <ShieldCheck size={17} />
+            Panel NinjaSoft
+          </Link>
+        )}
         <UserMenu
           email={email}
           onChangePassword={() => setPwOpen(true)}

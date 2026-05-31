@@ -96,23 +96,23 @@ export default async function DashboardPage() {
         )}
 
         {memberships.length > 0 && (
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link href="/pos" className={buttonVariants()}>
+          <div className="-mx-6 mt-6 flex gap-3 overflow-x-auto px-6 pb-2 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Link href="/pos" className={buttonVariants() + " shrink-0"}>
               <ShoppingCart size={16} /> Punto de venta
             </Link>
-            <Link href="/productos" className={buttonVariants({ variant: "secondary" })}>
+            <Link href="/productos" className={buttonVariants({ variant: "secondary" }) + " shrink-0"}>
               <Package size={16} /> Productos
             </Link>
-            <Link href="/ventas" className={buttonVariants({ variant: "secondary" })}>
+            <Link href="/ventas" className={buttonVariants({ variant: "secondary" }) + " shrink-0"}>
               <Receipt size={16} /> Ventas
             </Link>
-            <Link href="/caja" className={buttonVariants({ variant: "secondary" })}>
+            <Link href="/caja" className={buttonVariants({ variant: "secondary" }) + " shrink-0"}>
               <Wallet size={16} /> Caja
             </Link>
-            <Link href="/clientes" className={buttonVariants({ variant: "secondary" })}>
+            <Link href="/clientes" className={buttonVariants({ variant: "secondary" }) + " shrink-0"}>
               <Users size={16} /> Clientes
             </Link>
-            <Link href="/reportes" className={buttonVariants({ variant: "secondary" })}>
+            <Link href="/reportes" className={buttonVariants({ variant: "secondary" }) + " shrink-0"}>
               <BarChart3 size={16} /> Reportes
             </Link>
           </div>

@@ -1,28 +1,64 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype } from "@/components/brand/Logo";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
+import { ImportCustomersModal } from "@/components/customers/ImportCustomersModal";
 import { useCustomers, useCustomerMutations } from "@/modules/customers/hooks";
 import {
   DOC_TYPE_LABELS,
   IVA_LABELS,
 } from "@/modules/customers/schemas";
 import type { Customer } from "@/modules/customers/api";
+import { createClient } from "@/lib/supabase/client";
+import { exportXlsx } from "@/lib/utils/xlsx";
 
 export default function ClientesPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [selected, setSelected] = useState<Customer | null>(null);
   const { data: customers, isLoading } = useCustomers(search);
   const { remove } = useCustomerMutations();
+
+  async function exportBase() {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("customers")
+      .select("name, document_type, document_number, iva_condition, email, phone, address, notes")
+      .is("deleted_at", null)
+      .order("name", { ascending: true });
+    await exportXlsx("clientes", [
+      {
+        name: "Clientes",
+        title: "Base de clientes — NinjaPos",
+        columns: [
+          { header: "name", key: "name" },
+          { header: "document_type", key: "document_type" },
+          { header: "document_number", key: "document_number" },
+          { header: "iva_condition", key: "iva_condition" },
+          { header: "email", key: "email" },
+          { header: "phone", key: "phone" },
+          { header: "address", key: "address" },
+          { header: "notes", key: "notes" },
+        ],
+        rows: (data ?? []).map((c) => ({
+          name: c.name,
+          document_type: c.document_type ?? "",
+          document_number: c.document_number ?? "",
+          iva_condition: c.iva_condition ?? "",
+          email: c.email ?? "",
+          phone: c.phone ?? "",
+          address: c.address ?? "",
+          notes: c.notes ?? "",
+        })),
+      },
+    ]);
+  }
 
   async function onDelete(c: Customer) {
     if (!window.confirm(`¿Eliminar "${c.name}"?`)) return;
@@ -42,14 +78,22 @@ export default function ClientesPage() {
             <Eyebrow>Clientes</Eyebrow>
             <Display className="mt-3 text-3xl md:text-4xl">Clientes</Display>
           </div>
-          <Button
-            onClick={() => {
-              setSelected(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus size={16} /> Nuevo cliente
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={exportBase}>
+              <Download size={16} /> Exportar XLSX
+            </Button>
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <Upload size={16} /> Importar XLSX
+            </Button>
+            <Button
+              onClick={() => {
+                setSelected(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus size={16} /> Nuevo cliente
+            </Button>
+          </div>
         </div>
 
         <div className="relative mt-6 max-w-md">
@@ -139,6 +183,7 @@ export default function ClientesPage() {
         onOpenChange={setFormOpen}
         customer={selected}
       />
+      <ImportCustomersModal open={importOpen} onOpenChange={setImportOpen} />
     </>
   );
 }

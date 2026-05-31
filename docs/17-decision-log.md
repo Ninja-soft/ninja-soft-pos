@@ -495,6 +495,42 @@ Se agrega **F13 — Gastronomía PRO** antes de F9/AFIP. La fase cubre:
 
 ---
 
+## ADR-015 — Panel internal como consola operativa completa
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+NinjaSoft necesita operar suscripciones, tenants, staff, soporte e invitaciones desde un panel propio. El panel internal no debe depender de que el usuario entre primero al POS del cliente ni de acciones manuales en SQL/Supabase.
+
+### Decisión
+
+El panel internal será una consola separada:
+
+- `/internal` redirige a `/internal/tenants`.
+- Si no hay sesión, se usa login con `next=/internal/tenants` para volver directo al panel.
+- Usuarios no internos se redirigen fuera de internal.
+- La consola internal debe cubrir tenants, suscripciones, billing manual, staff NinjaSoft, invitaciones a tenants, feature flags, soporte, impersonation con motivo, auditoría y health.
+- Super-admin puede convertir usuarios existentes en staff y asignar roles/niveles. Roles no privilegiados no pueden modificar staff crítico.
+- Toda acción sensible exige motivo y queda auditada con antes/después.
+
+### Alternativas consideradas
+
+- **Usar el mismo dashboard del tenant:** descartado; mezcla operación de cliente con operación SaaS y hace confuso el acceso de staff.
+- **Gestionar staff desde Supabase Auth manualmente:** descartado; es riesgoso, no auditable para operación diaria y no escala.
+- **Dejar invitaciones solo en el panel del cliente:** insuficiente; soporte/ventas necesita resolver altas y cambios de rol desde internal.
+
+### Consecuencias
+
+- **Positivas:** operación SaaS sin SQL, soporte más rápido, control claro de roles internos y auditoría completa.
+- **Negativas:** mayor superficie de seguridad; requiere MFA, rate limits, confirmaciones fuertes y tests E2E específicos.
+- **Seguimiento:** completar UI de staff/invitaciones/billing en `/internal`, agregar MFA para super-admin y tests de permisos internal.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

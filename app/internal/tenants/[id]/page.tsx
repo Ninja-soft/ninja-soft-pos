@@ -10,6 +10,7 @@ import {
   useTenantFlags,
   useInternalMutations,
 } from "@/modules/internal/hooks";
+import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 
 const PLANS = [
   { key: "start", name: "Start" },
@@ -36,7 +37,9 @@ export default function InternalTenantDetail({
   const { data: tenants } = useInternalTenants();
   const tenant = tenants?.find((t) => t.id === params.id);
   const { data: flags } = useTenantFlags(params.id);
-  const { setPlan, setStatus, setFlag } = useInternalMutations(params.id);
+  const { setPlan, setStatus, setFlag, setIndustry } = useInternalMutations(
+    params.id,
+  );
 
   function wrap(p: Promise<unknown>, ok: string) {
     p.then(() => toast({ title: ok, variant: "success" })).catch((e) =>
@@ -108,6 +111,26 @@ export default function InternalTenantDetail({
               {STATUSES.map((s) => (
                 <option key={s.key} value={s.key} className="bg-ninja-deepViolet">
                   {s.name}
+                </option>
+              ))}
+            </select>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Rubro
+            </label>
+            <select
+              className={selectCls}
+              value={tenant?.industry ?? "otro"}
+              onChange={(e) =>
+                wrap(setIndustry.mutateAsync(e.target.value), "Rubro actualizado")
+              }
+            >
+              {VERTICALS.map((v) => (
+                <option key={v} value={v} className="bg-ninja-deepViolet">
+                  {VERTICAL_LABELS[v]}
                 </option>
               ))}
             </select>

@@ -194,7 +194,7 @@ export type Database = {
           id?: string
           notes?: string | null
           opened_at?: string
-          opened_by?: string
+          opened_by: string
           opening_amount: number
           status?: string
           tenant_id?: string
@@ -407,30 +407,38 @@ export type Database = {
       }
       email_templates: {
         Row: {
-          tenant_id: string
+          enabled: boolean
+          html: string
           key: string
           subject: string
-          html: string
-          enabled: boolean
+          tenant_id: string
           updated_at: string
         }
         Insert: {
-          tenant_id: string
+          enabled?: boolean
+          html?: string
           key: string
           subject?: string
-          html?: string
-          enabled?: boolean
+          tenant_id: string
           updated_at?: string
         }
         Update: {
-          tenant_id?: string
+          enabled?: boolean
+          html?: string
           key?: string
           subject?: string
-          html?: string
-          enabled?: boolean
+          tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feature_flags: {
         Row: {
@@ -455,6 +463,66 @@ export type Database = {
           key?: string
         }
         Relationships: []
+      }
+      payment_providers: {
+        Row: {
+          is_active: boolean
+          key: string
+          kind: string
+          name: string
+          sort: number
+        }
+        Insert: {
+          is_active?: boolean
+          key: string
+          kind: string
+          name: string
+          sort?: number
+        }
+        Update: {
+          is_active?: boolean
+          key?: string
+          kind?: string
+          name?: string
+          sort?: number
+        }
+        Relationships: []
+      }
+      payment_secrets: {
+        Row: {
+          provider_key: string
+          secrets: Json
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          provider_key: string
+          secrets?: Json
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          provider_key?: string
+          secrets?: Json
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_secrets_provider_key_fkey"
+            columns: ["provider_key"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "payment_secrets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
@@ -504,54 +572,6 @@ export type Database = {
           },
         ]
       }
-      payment_providers: {
-        Row: { key: string; name: string; kind: string; sort: number; is_active: boolean }
-        Insert: { key: string; name: string; kind: string; sort?: number; is_active?: boolean }
-        Update: { key?: string; name?: string; kind?: string; sort?: number; is_active?: boolean }
-        Relationships: []
-      }
-      payment_secrets: {
-        Row: { tenant_id: string; provider_key: string; secrets: Json; updated_at: string }
-        Insert: { tenant_id: string; provider_key: string; secrets?: Json; updated_at?: string }
-        Update: { tenant_id?: string; provider_key?: string; secrets?: Json; updated_at?: string }
-        Relationships: []
-      }
-      tenant_payment_methods: {
-        Row: {
-          id: string
-          tenant_id: string
-          provider_key: string
-          enabled: boolean
-          sandbox: boolean
-          surcharge_pct: number
-          config: Json
-          sort: number
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          tenant_id: string
-          provider_key: string
-          enabled?: boolean
-          sandbox?: boolean
-          surcharge_pct?: number
-          config?: Json
-          sort?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          tenant_id?: string
-          provider_key?: string
-          enabled?: boolean
-          sandbox?: boolean
-          surcharge_pct?: number
-          config?: Json
-          sort?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       plans: {
         Row: {
           created_at: string
@@ -587,6 +607,57 @@ export type Database = {
           yearly_price_ars?: number | null
         }
         Relationships: []
+      }
+      product_images: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_primary: boolean
+          path: string
+          product_id: string
+          sort: number
+          tenant_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_primary?: boolean
+          path: string
+          product_id: string
+          sort?: number
+          tenant_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_primary?: boolean
+          path?: string
+          product_id?: string
+          sort?: number
+          tenant_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_images_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
@@ -682,57 +753,6 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      product_images: {
-        Row: {
-          created_at: string
-          deleted_at: string | null
-          id: string
-          is_primary: boolean
-          path: string
-          product_id: string
-          sort: number
-          tenant_id: string
-          url: string
-        }
-        Insert: {
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          is_primary?: boolean
-          path: string
-          product_id: string
-          sort?: number
-          tenant_id?: string
-          url: string
-        }
-        Update: {
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          is_primary?: boolean
-          path?: string
-          product_id?: string
-          sort?: number
-          tenant_id?: string
-          url?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_images_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_images_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1076,16 +1096,82 @@ export type Database = {
           },
         ]
       }
-      system_email_templates: {
-        Row: { key: string; subject: string; html: string; updated_at: string }
-        Insert: { key: string; subject?: string; html?: string; updated_at?: string }
-        Update: { key?: string; subject?: string; html?: string; updated_at?: string }
+      system_email_config: {
+        Row: {
+          from_email: string
+          from_name: string
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          from_email?: string
+          from_name?: string
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          from_email?: string
+          from_name?: string
+          id?: boolean
+          updated_at?: string
+        }
         Relationships: []
       }
-      system_email_config: {
-        Row: { id: boolean; from_name: string; from_email: string; updated_at: string }
-        Insert: { id?: boolean; from_name?: string; from_email?: string; updated_at?: string }
-        Update: { id?: boolean; from_name?: string; from_email?: string; updated_at?: string }
+      system_email_smtp: {
+        Row: {
+          from_email: string
+          from_name: string
+          host: string
+          id: boolean
+          password: string
+          port: number
+          secure: boolean
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          from_email?: string
+          from_name?: string
+          host?: string
+          id?: boolean
+          password?: string
+          port?: number
+          secure?: boolean
+          updated_at?: string
+          username?: string
+        }
+        Update: {
+          from_email?: string
+          from_name?: string
+          host?: string
+          id?: boolean
+          password?: string
+          port?: number
+          secure?: boolean
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      system_email_templates: {
+        Row: {
+          html: string
+          key: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          html?: string
+          key: string
+          subject?: string
+          updated_at?: string
+        }
+        Update: {
+          html?: string
+          key?: string
+          subject?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       system_settings: {
@@ -1198,6 +1284,57 @@ export type Database = {
           },
           {
             foreignKeyName: "tenant_feature_flags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_payment_methods: {
+        Row: {
+          config: Json
+          enabled: boolean
+          id: string
+          provider_key: string
+          sandbox: boolean
+          sort: number
+          surcharge_pct: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          enabled?: boolean
+          id?: string
+          provider_key: string
+          sandbox?: boolean
+          sort?: number
+          surcharge_pct?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          enabled?: boolean
+          id?: string
+          provider_key?: string
+          sandbox?: boolean
+          sort?: number
+          surcharge_pct?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_payment_methods_provider_key_fkey"
+            columns: ["provider_key"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "tenant_payment_methods_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1348,6 +1485,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _assert_valid_industry: {
+        Args: { p_industry: string }
+        Returns: undefined
+      }
       adjust_product_stock: {
         Args: {
           p_delta: number
@@ -1371,21 +1512,25 @@ export type Database = {
         }
         Returns: Json
       }
-      current_tenant_id: { Args: Record<PropertyKey, never>; Returns: string }
-      get_email_smtp: { Args: Record<PropertyKey, never>; Returns: Json }
-      internal_level: { Args: Record<PropertyKey, never>; Returns: string }
+      current_tenant_id: { Args: never; Returns: string }
+      get_email_smtp: { Args: never; Returns: Json }
+      internal_level: { Args: never; Returns: string }
       internal_list_staff: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
-          id: string
-          email: string
-          full_name: string | null
-          internal_level: string | null
           created_at: string
+          email: string
+          full_name: string
+          id: string
+          internal_level: string
         }[]
       }
       internal_set_flag: {
         Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_set_industry: {
+        Args: { p_industry: string; p_tenant_id: string }
         Returns: undefined
       }
       internal_set_plan: {
@@ -1396,15 +1541,19 @@ export type Database = {
         Args: { p_status: string; p_tenant_id: string }
         Returns: undefined
       }
-      is_internal: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_internal: { Args: never; Returns: boolean }
       open_cash_shift: {
         Args: { p_opening_amount: number; p_register_id: string }
         Returns: string
       }
       public_catalog: { Args: { p_slug: string }; Returns: Json }
       sales_report: { Args: { p_from: string; p_to: string }; Returns: Json }
+      set_my_tenant_industry: {
+        Args: { p_industry: string }
+        Returns: undefined
+      }
       tenant_members: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           avatar: string
           display_name: string
@@ -1528,6 +1677,23 @@ export type Enums<
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
 export const Constants = {

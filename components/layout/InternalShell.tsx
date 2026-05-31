@@ -161,8 +161,7 @@ export function InternalShell({
                     {email}
                   </span>
                 )}
-                <span className="mt-1 inline-flex w-fit max-w-full items-center gap-1 truncate rounded-full bg-ninja-flame/12 pl-1.5 pr-2 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
-                  <ShieldCheck size={11} className="shrink-0" />
+                <span className="mt-0.5 block truncate text-[11px] font-medium text-ninja-flameSoft">
                   {level ? LEVEL_LABELS[level] ?? level : "Staff"}
                 </span>
               </span>

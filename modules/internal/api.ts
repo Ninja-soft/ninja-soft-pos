@@ -127,4 +127,13 @@ export const internalApi = {
     });
     if (error) throw error;
   },
+
+  setIndustry: async (tenantId: string, industry: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("internal_set_industry", {
+      p_tenant_id: tenantId,
+      p_industry: industry,
+    });
+    if (error) throw error;
+  },
 };

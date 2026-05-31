@@ -1,4 +1,6 @@
-// Import masivo de productos por CSV (deseable Fase 1, docs/01-mvp.md §4.2).
+// Import masivo de productos. Estándar XLSX (TX-4); se mantiene el parser de
+// grilla para reusarlo. Ver docs/02-roadmap.md TX-4.
+import ExcelJS from "exceljs";
 
 export interface ParsedProduct {
   name: string;
@@ -65,9 +67,32 @@ const txtOrNull = (v: string | undefined): string | null => {
   return t === "" ? null : t;
 };
 
-/** Convierte el texto CSV en filas de producto validadas. */
-export function parseProductsCsv(text: string): ParseResult {
-  const grid = parseCsv(text);
+/** Columnas de la plantilla/export de productos (XLSX). */
+export const PRODUCT_IMPORT_COLUMNS = [
+  { header: "name", key: "name" },
+  { header: "sku", key: "sku" },
+  { header: "barcode", key: "barcode" },
+  { header: "price", key: "price", type: "money" as const },
+  { header: "cost", key: "cost", type: "money" as const },
+  { header: "stock", key: "stock", type: "number" as const },
+  { header: "stock_min", key: "stock_min", type: "number" as const },
+  { header: "unit", key: "unit" },
+  { header: "category", key: "category" },
+];
+export const PRODUCT_TEMPLATE_ROW = {
+  name: "Coca Cola 500ml",
+  sku: "COCA500",
+  barcode: "7790001",
+  price: 800,
+  cost: 500,
+  stock: 24,
+  stock_min: 6,
+  unit: "un",
+  category: "Bebidas",
+};
+
+/** Valida una grilla (header + filas) en filas de producto. */
+function rowsFromGrid(grid: string[][]): ParseResult {
   const errors: string[] = [];
   if (grid.length < 2) {
     return { rows: [], errors: ["El archivo no tiene filas de datos."] };
@@ -90,7 +115,8 @@ export function parseProductsCsv(text: string): ParseResult {
       errors.push(`Fila ${r + 1}: sin nombre, omitida.`);
       continue;
     }
-    const price = numOr(get("price"), -1);
+    const priceRaw = get("price").trim();
+    const price = priceRaw === "" ? -1 : numOr(priceRaw, -1);
     if (price < 0) {
       errors.push(`Fila ${r + 1} (${name}): precio inválido, omitida.`);
       continue;
@@ -108,4 +134,35 @@ export function parseProductsCsv(text: string): ParseResult {
     });
   }
   return { rows, errors };
+}
+
+/** Convierte el texto CSV en filas de producto validadas. */
+export function parseProductsCsv(text: string): ParseResult {
+  return rowsFromGrid(parseCsv(text));
+}
+
+/** Lee un XLSX y devuelve filas de producto validadas. */
+export async function parseProductsXlsx(buffer: ArrayBuffer): Promise<ParseResult> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.worksheets[0];
+  if (!ws) return { rows: [], errors: ["El archivo no tiene hojas."] };
+  const grid: string[][] = [];
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      const v = cell.value;
+      const text =
+        v == null
+          ? ""
+          : typeof v === "object" && "text" in (v as object)
+            ? String((v as { text: unknown }).text ?? "")
+            : typeof v === "object" && "result" in (v as object)
+              ? String((v as { result: unknown }).result ?? "")
+              : String(v);
+      cells.push(text.trim());
+    });
+    grid.push(cells);
+  });
+  return rowsFromGrid(grid);
 }

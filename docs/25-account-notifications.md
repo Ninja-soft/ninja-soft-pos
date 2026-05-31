@@ -2,6 +2,8 @@
 
 Documento de referencia para notificaciones in-app, banners y comunicaciones operativas dentro de cada tenant. Complementa [`16-subscription-model.md`](./16-subscription-model.md), [`24-internal-ops-panel.md`](./24-internal-ops-panel.md) y H13b del roadmap.
 
+También sirve como canal de entrega para sugerencias, tours y nudges del onboarding guiado definido en [`28-school-onboarding.md`](./28-school-onboarding.md).
+
 ## 1. Objetivo
 
 Cada cuenta debe tener un panel claro de novedades y alertas. El cliente no debe enterarse solo por email de cambios importantes: vencimientos, cobros, aumentos, cambios de plan, límites de uso, mantenimiento, AFIP, seguridad y nuevas funciones deben quedar visibles dentro del producto.
@@ -17,6 +19,7 @@ Cada cuenta debe tener un panel claro de novedades y alertas. El cliente no debe
 - [ ] **Seguridad:** nuevo login, cambio de rol, invitación aceptada, password reset, acceso de soporte NinjaSoft.
 - [ ] **Mantenimiento:** ventana programada, incidente activo, servicio recuperado.
 - [ ] **Soporte:** respuesta de soporte, solicitud de datos, cierre de caso.
+- [ ] **Escuela/onboarding:** curso recomendado, tour pendiente, checklist trabado, certificación disponible, laboratorio sugerido.
 
 ## 3. Audiencia
 
@@ -58,6 +61,7 @@ Regla: las notificaciones comerciales y de billing van a `owner` y, opcionalment
 - [ ] WhatsApp futuro.
 - [ ] Push futuro.
 - [ ] Webhook futuro para Enterprise.
+- [ ] Tour/tooltip contextual cuando la notificación sea una sugerencia de aprendizaje.
 
 Regla: eventos críticos siempre generan in-app. Email/WhatsApp son adicionales, no reemplazo.
 
@@ -73,6 +77,8 @@ Regla: eventos críticos siempre generan in-app. Email/WhatsApp son adicionales,
 - [ ] Resolver cola fiscal.
 - [ ] Renovar certificado.
 - [ ] Ver detalle del cambio.
+- [ ] Iniciar curso/tour.
+- [ ] Abrir laboratorio demo.
 
 ## 8. Panel dentro de la cuenta
 

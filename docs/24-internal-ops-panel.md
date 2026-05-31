@@ -154,7 +154,40 @@ Desde internal se debe poder:
 - [ ] Historial de cambios.
 - [ ] Preview de impacto antes de guardar.
 
-## 9.1 Notificaciones internal → tenant
+## 9.1 Motor comercial enterprise
+
+Internal debe poder operar el motor comercial definido en [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md).
+
+- [ ] Crear/editar planes base.
+- [ ] Crear/editar add-ons.
+- [ ] Crear paquetes comerciales por rubro o vertical.
+- [ ] Configurar cuotas y limites por recurso.
+- [ ] Ver uso actual vs cuota por tenant.
+- [ ] Aplicar cargo por excedente, grace period o bloqueo gradual.
+- [ ] Crear reglas de recargo/financiacion globales.
+- [ ] Crear plantillas de configuracion por rubro.
+- [ ] Simular impacto de cambios comerciales sobre tenants afectados.
+- [ ] Programar cambios masivos con preview por tenant.
+- [ ] Excluir tenants con contrato especial.
+- [ ] Enviar notificacion automatica asociada al cambio.
+- [ ] Revertir configuracion publicada con rollback auditado.
+
+## 9.2 Escuela, sugerencias y onboarding
+
+Internal debe permitir configurar la Escuela NinjaSoft y los recorridos definidos en [`28-school-onboarding.md`](./28-school-onboarding.md).
+
+- [ ] Crear cursos, modulos, lecciones y evaluaciones.
+- [ ] Crear tours guiados por pantalla.
+- [ ] Definir audiencia por plan, rubro, rol, tenant, feature flag, estado o provincia.
+- [ ] Definir disparadores: registro, primer login, sin productos, sin caja, error repetido, trial por vencer.
+- [ ] Configurar prioridad, frecuencia, cooldown, expiracion y CTA.
+- [ ] Preview del recorrido como owner, manager, cashier, support o rubro especifico.
+- [ ] Publicar/despublicar sin deploy.
+- [ ] A/B test de recorridos.
+- [ ] Medir finalizacion, abandono, clicks, tickets reducidos y tiempo a primera venta.
+- [ ] Enviar sugerencia puntual a un tenant desde soporte.
+
+## 9.3 Notificaciones internal → tenant
 
 El panel internal debe permitir comunicar cambios a cada cuenta sin depender solo de email.
 

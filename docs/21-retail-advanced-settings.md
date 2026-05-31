@@ -2,6 +2,8 @@
 
 Documento de referencia para F11 del roadmap: medios de pago con recargo, garantías extendidas, devoluciones, cuenta corriente, pedidos de salón, despacho, depósitos, roles retail e importación masiva por Excel.
 
+> Nota: F11 define la base operativa retail. La versión enterprise de recargos, cuotas, reglas, aprobaciones, inventario PRO, compras y offline completo se centraliza en [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md).
+
 ## 1. Principio
 
 Todo dato maestro operativo que un comercio carga en volumen debe poder importarse por Excel con plantilla, validación previa, preview y errores por fila. Nada importante debe requerir SQL manual.
@@ -46,6 +48,7 @@ Cada import debe tener:
 - [ ] Recargo sumado automáticamente al ticket.
 - [ ] Recargo registrado separado del subtotal.
 - [ ] Datos de voucher obligatorios opcionales por configuración: lote, cupón, autorización.
+- [ ] Si hay reglas enterprise activas, el POS usa el valor efectivo del motor comercial y muestra origen de la regla en auditoría.
 
 ## 4. Garantías extendidas
 

@@ -11,7 +11,7 @@ Define los planes comerciales, sus límites, los estados de la suscripción y c�
 | **Business** | 10 | 30 | ✅ | ✅ | ✅ | ✅ | ❌ | Prioritario |
 | **Enterprise** | A medida | A medida | ✅ | ✅ | ✅ | ✅ | ✅ | Dedicado |
 
-Los precios de lista viven fuera de este documento, pero el modelo debe soportar condiciones comerciales por cliente: plan custom, cuota/precio acordado, descuentos, aumentos programados y límites especiales.
+Los precios de lista viven fuera de este documento, pero el modelo debe soportar condiciones comerciales por cliente: plan custom, cuota/precio acordado, add-ons, descuentos, aumentos programados, límites especiales y medición de uso. La especificación enterprise completa vive en [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md).
 
 ## 2. Estados de suscripción
 
@@ -120,9 +120,44 @@ Reglas:
 - [ ] Un plan custom siempre referencia un plan base para heredar defaults.
 - [ ] Los overrides por cliente ganan sobre el plan base, pero quedan auditados.
 - [ ] Los límites custom pueden aumentar o reducir cuota: usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos y soporte.
+- [ ] Los add-ons agregan módulos o capacidad sin crear un plan global nuevo.
+- [ ] Los entitlements efectivos se calculan desde plan base + add-ons + override + feature flags.
+- [ ] El uso se mide con eventos y contadores recalculables para evitar cuotas inconsistentes.
 - [ ] Todo aumento de precio/cuota tiene fecha efectiva y motivo.
 - [ ] Si el contrato exige aviso/aceptación, el cambio queda `scheduled` hasta notificación/aceptación.
 - [ ] El owner recibe notificación in-app y email cuando hay cambio de precio, cuota, plan o vencimiento.
+
+### 3.2 Add-ons y usage metering
+
+Add-ons iniciales:
+
+- [ ] Sucursal adicional.
+- [ ] Caja adicional.
+- [ ] Usuario adicional.
+- [ ] Paquete de ventas mensuales.
+- [ ] AFIP/facturación electrónica.
+- [ ] Gastronomía PRO.
+- [ ] Servicios/agenda.
+- [ ] API/webhooks.
+- [ ] Soporte prioritario.
+
+Uso medible:
+
+- [ ] Usuarios activos.
+- [ ] Sucursales/cajas activas.
+- [ ] Productos/clientes activos.
+- [ ] Ventas/comprobantes por período.
+- [ ] Almacenamiento.
+- [ ] Emails/notificaciones.
+- [ ] API calls/webhooks.
+
+Políticas de exceso:
+
+- [ ] Aviso al 80%.
+- [ ] Aviso fuerte al 100%.
+- [ ] Grace period configurable.
+- [ ] Cargo por excedente si el contrato lo permite.
+- [ ] Bloqueo gradual solo para acciones no críticas.
 
 ## 4. Estructura de `plans.features`
 

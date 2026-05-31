@@ -50,6 +50,8 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [24](./24-internal-ops-panel.md) | **Panel internal NinjaSoft** — suscripciones, staff, invitaciones, soporte, billing y auditoría | Operaciones, soporte, ventas |
 | [25](./25-account-notifications.md) | **Centro de notificaciones** — novedades, cobros, vencimientos, cambios de plan, alertas y acciones | Producto, operaciones |
 | [26](./26-design-structure-control.md) | **Control de diseño y estructura** — gate UI/UX, responsive, accesibilidad y arquitectura frontend | UI, frontend, QA |
+| [27](./27-commercial-configuration-engine.md) | **Motor comercial enterprise** — planes, cuotas, add-ons, recargos, reglas, inventario PRO, offline y API | Producto, backend, operaciones |
+| [28](./28-school-onboarding.md) | **Escuela y onboarding guiado** — cursos, tours, sugerencias, laboratorio y certificaciones configurables desde internal | Producto, soporte, operaciones |
 | [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |
 | [Security reviews](./security-reviews/README.md) | Incidentes, revisiones y hallazgos de seguridad | Seguridad, devs |
 | [Templates](./templates/post-mortem.md) | Plantillas operativas reutilizables | Todos |

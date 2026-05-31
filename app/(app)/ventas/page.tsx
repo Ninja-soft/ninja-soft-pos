@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Ban, Receipt } from "lucide-react";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Ban, Download, Receipt } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype } from "@/components/brand/Logo";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { useSales, useVoidSale } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
+import { exportXlsx } from "@/lib/utils/xlsx";
+
+const SALE_STATUS: Record<string, string> = {
+  completed: "Completada",
+  voided: "Anulada",
+};
 
 export default function VentasPage() {
   const { toast } = useToast();
@@ -21,6 +25,32 @@ export default function VentasPage() {
   function openTicket(id: string) {
     setTicketId(id);
     setTicketOpen(true);
+  }
+
+  async function exportVentas() {
+    await exportXlsx("ventas", [
+      {
+        name: "Ventas",
+        title: "Ventas — NinjaPos",
+        columns: [
+          { header: "N°", key: "number", type: "number", width: 10 },
+          { header: "Fecha", key: "fecha", width: 22 },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Estado", key: "estado", width: 14 },
+        ],
+        rows: (sales ?? []).map((s) => ({
+          number: s.number,
+          fecha: new Date(s.created_at).toLocaleString("es-AR"),
+          total: s.total,
+          estado: SALE_STATUS[s.status] ?? s.status,
+        })),
+        totals: {
+          total: (sales ?? [])
+            .filter((s) => s.status === "completed")
+            .reduce((a, s) => a + s.total, 0),
+        },
+      },
+    ]);
   }
 
   async function onVoid(id: string, number: number) {
@@ -41,11 +71,18 @@ export default function VentasPage() {
   return (
     <>
 <div className="mx-auto max-w-6xl px-6 py-8">
-        <Eyebrow>Operación</Eyebrow>
-        <Display className="mt-3 text-3xl md:text-4xl">Ventas</Display>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Eyebrow>Operación</Eyebrow>
+            <Display className="mt-3 text-3xl md:text-4xl">Ventas</Display>
+          </div>
+          <Button variant="secondary" onClick={exportVentas} disabled={!sales?.length}>
+            <Download size={16} /> Exportar XLSX
+          </Button>
+        </div>
 
-        <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+        <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">#</th>

@@ -121,6 +121,27 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 - [ ] Internal puede enviar novedad a tenant o segmento con audiencia definida.
 - [ ] Lectura, archivo, click y acción completada quedan registrados.
 
+### Motor comercial enterprise
+
+- [ ] Una regla de recargo/cuotas se simula antes de publicar.
+- [ ] El POS muestra total, recargo y detalle antes de cobrar.
+- [ ] Ticket/reporte conservan el desglose aplicado.
+- [ ] Plan custom, add-on y cuota efectiva se resuelven sin modificar el plan base.
+- [ ] Exceso de cuota dispara aviso, grace period, cargo o bloqueo segun politica.
+- [ ] Todo cambio sensible tiene motivo, antes/despues, version y audit log.
+- [ ] Rollback de configuracion crea nueva version y no borra historia.
+- [ ] Offline no duplica ventas, pagos, caja ni stock al sincronizar.
+- [ ] API/webhooks respetan scopes, rate limit y logs por tenant.
+
+### Escuela y onboarding
+
+- [ ] Un tenant nuevo recibe checklist adaptado a rubro, plan y rol.
+- [ ] Un tour se dispara por evento, respeta cooldown y registra vista/finalizacion.
+- [ ] Internal puede publicar/despublicar un recorrido sin deploy.
+- [ ] La ayuda contextual muestra articulos relevantes para pantalla y rol.
+- [ ] El laboratorio demo no afecta caja, stock, pagos ni AFIP real.
+- [ ] Certificaciones se otorgan solo al completar lecciones y flujo practico.
+
 ### Feature flags
 
 - [ ] Activar/desactivar una flag para un tenant se refleja en la sesión siguiente del usuario.

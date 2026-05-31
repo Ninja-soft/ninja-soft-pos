@@ -20,6 +20,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Audit log.** Registro append-only de acciones sensibles (cambios de precio, anulaciones, cambios de rol, accesos críticos). Tabla `audit_logs`.
 
+**Add-on.** Modulo o capacidad adicional contratada sobre un plan base: sucursal extra, API, gastronomia, AFIP, soporte prioritario, almacenamiento o paquete de uso.
+
 ## B
 
 **Baja lógica.** Marcar un registro como eliminado sin borrarlo de la DB. Se hace con `deleted_at timestamp`. Toda tabla operativa la implementa.
@@ -60,6 +62,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Enterprise.** Plan superior, con SLA, integraciones a medida y soporte priorizado. Ver `16-subscription-model.md`.
 
+**Entitlement.** Permiso comercial efectivo que indica si un tenant puede usar una capacidad y bajo que limite. Se calcula desde plan, add-ons, overrides y feature flags.
+
 ## F
 
 **Feature flag.** Switch que activa o desactiva una funcionalidad sin tocar código. Toda diferencia entre planes o rubros pasa por una flag. Ver `07-feature-flags.md`.
@@ -75,6 +79,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **HxN.** Convención para hitos del MVP (`H0`, `H1`, etc.). Ver `01-mvp.md`.
 
 **Homologación AFIP.** Ambiente de prueba de AFIP. Todo tenant que use facturación electrónica debe validar certificados, numeración y comprobantes en homologación antes de pasar a producción.
+
+**Help contextual.** Ayuda que aparece dentro de una pantalla segun modulo, rol, rubro y accion actual.
 
 ## I
 
@@ -92,6 +98,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **KDS (Kitchen Display System).** Pantalla de cocina/barra que muestra comandas en tiempo real, con estados y tiempos de preparación. Ver `23-restaurant-cafe-operations.md`.
 
+**Knowledge base.** Base de conocimiento interna del producto: articulos, videos, guias, errores frecuentes y links a cursos.
+
 ## M
 
 **Manager.** Rol de cliente con acceso a reportes y configuración del tenant. No puede borrar el tenant ni cambiar plan. Ver `06-permissions-roles.md`.
@@ -103,6 +111,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Modificador.** Opción que completa un producto o servicio sin crear otro SKU: sabor de helado, topping, tamaño, extra, profesional o variante simple. Ver `22-simple-commerce-services.md`.
 
 **Modo catálogo chico.** Variante del POS pensada para negocios con pocos productos o servicios. Prioriza botones grandes, favoritos, cantidades rápidas y cobro express por encima de búsqueda/inventario pesado.
+
+**Motor de reglas comerciales.** Sistema declarativo que evalua condiciones y aplica acciones comerciales: precio, descuento, recargo, bloqueo, comision, notificacion o aprobacion.
 
 **Multi-tenant.** Una sola instancia del software sirve a múltiples clientes (tenants) con aislamiento de datos. NinjaSoft usa shared schema + tenant_id + RLS. Ver `08-multi-tenant.md`.
 
@@ -130,6 +140,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Pedido de salón.** Pedido armado por un vendedor antes del cobro. Reserva stock y luego una cajera lo levanta para facturarlo/cobrarlo.
 
+**Practice sandbox.** Laboratorio demo donde un usuario practica flujos sin afectar caja, stock, pagos ni facturacion real.
+
 ## R
 
 **Rate limit.** Límite de cantidad de requests por unidad de tiempo. Aplica a endpoints públicos y a Edge Functions sensibles.
@@ -139,6 +151,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Rubro.** Tipo de negocio del cliente: kiosco, textil, retail, restaurante, cafetería, heladería, estética, servicios, etc. No se hardcodea en código, se expresa con feature flags y plantillas de configuración.
 
 **Recargo de medio de pago.** Incremento automático del total según variante de cobro, por ejemplo tarjeta en cuotas.
+
+**Rule precedence.** Orden con el que se resuelven reglas o configuraciones cuando hay varios niveles aplicables: global, plan, tenant, sucursal, caja, canal, rol, usuario y vigencia.
 
 ## S
 
@@ -152,11 +166,15 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Scanner.** Lector de códigos usado en POS. Puede ser USB HID tipo teclado, Bluetooth o cámara móvil. El POS debe mantener foco, normalizar códigos y evitar lecturas duplicadas. Ver `20-hardware-pos.md`.
 
+**School / Escuela NinjaSoft.** Centro de aprendizaje del producto: cursos, lecciones, recorridos, certificaciones y laboratorio demo.
+
 **Suspensión.** Estado de un tenant que pierde acceso por falta de pago u otra razón. No se borran datos. Se reactiva restaurando el acceso.
 
 **Saldo a favor / vale.** Crédito generado para un cliente en una devolución o cambio. Puede tener vencimiento.
 
 **Notificación in-app.** Mensaje visible dentro de la cuenta del tenant. Puede informar novedades, cobros, vencimientos, cambios de plan, alertas operativas o acciones requeridas.
+
+**Sugerencia / nudge.** Mensaje contextual que empuja una accion: completar onboarding, probar impresora, cargar productos, configurar AFIP o tomar un curso.
 
 ## T
 

@@ -12,7 +12,9 @@ alter table public.users
   check (internal_level in ('support','admin','super_admin'));
 
 create or replace function internal_level()
-returns text language sql stable as $$
+returns text language sql stable
+set search_path = public, pg_temp
+as $$
   select nullif(auth.jwt() -> 'app_metadata' ->> 'internal_level', '');
 $$;
 

@@ -30,7 +30,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
-> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
+> **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
 ---
 
@@ -225,7 +225,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ## Plan ampliado (2026-05-30)
 
-Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F16 → F15 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
+Extensión del roadmap acordada con el equipo humano. Define hitos nuevos (`H7+`) sobre la base del MVP ya funcional. **Orden de ejecución: F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3.** Cada hito cierra con el [corte de control](#cortes-de-control-y-testing-estricto) obligatorio.
 
 ### F6 — Personalización del producto
 
@@ -764,6 +764,52 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Marketplace de apps: integración aprobada, permisos visibles, instalación/desinstalación y health por app.
   - [ ] *Criterio:* un partner recibe webhook de venta, consulta detalle por API y queda auditado por tenant.
 
+### F15 — Escuela NinjaSoft + onboarding guiado configurable
+
+Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela interna, recorridos guiados, checklist por rubro, ayuda contextual y configuración desde internal para cambiar qué se enseña, cuándo y a quién. Ver [`28-school-onboarding.md`](./28-school-onboarding.md).
+
+- [ ] **H69 — Escuela NinjaSoft por módulos.**
+  - [ ] Biblioteca de cursos: primeros pasos, POS, caja, productos, clientes, reportes, hardware, AFIP, retail, servicios, gastronomía, internal para staff.
+  - [ ] Cada lección tiene objetivo, pasos, capturas/video, demo interactiva, errores comunes, checklist y prueba corta.
+  - [ ] Progreso por usuario, rol, tenant y rubro.
+  - [ ] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico.
+
+- [ ] **H70 — Tours y recorridos guiados configurables.**
+  - [ ] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador.
+  - [ ] Pasos con ancla en UI, tooltip, modal, spotlight, tarea, bloqueo opcional o "hacer ahora".
+  - [ ] Versionado de tours, draft/publicado, A/B test y métricas de finalización.
+  - [ ] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro.
+
+- [ ] **H71 — Checklist de activación y health de adopción.**
+  - [ ] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique.
+  - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
+  - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
+  - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
+
+- [ ] **H72 — Ayuda contextual y base de conocimiento.**
+  - [ ] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
+  - [ ] Buscador, etiquetas, contenido relacionado, feedback útil/no útil y sugerencia de artículo desde soporte.
+  - [ ] Modo "mostrarme con mis datos" usando demo segura o datos anonimizados.
+  - [ ] *Criterio:* desde `/pos`, un cajero busca "anular venta" y ve guía exacta para su rol.
+
+- [ ] **H73 — Laboratorio/demo segura.**
+  - [ ] Sandbox por tenant con datos de ejemplo para practicar sin afectar caja/stock/facturación real.
+  - [ ] Reset de demo, escenarios por rubro y ejercicios guiados.
+  - [ ] Separación visual fuerte entre demo y producción.
+  - [ ] *Criterio:* un owner practica una devolución y una comanda sin generar movimientos reales.
+
+- [ ] **H74 — Configuración internal de sugerencias, nudges y comunicaciones de onboarding.**
+  - [ ] Internal crea sugerencias por evento: registro, primer login, sin productos, sin caja abierta, venta fallida, hardware no probado, trial por vencer.
+  - [ ] Audiencia, prioridad, frecuencia, cooldown, expiración, canal, CTA y fallback a soporte.
+  - [ ] No molestar: límite de mensajes por sesión/día y preferencias por tenant.
+  - [ ] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta.
+
+- [ ] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.**
+  - [ ] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno.
+  - [ ] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta.
+  - [ ] Sugerencias automáticas de capacitación según errores reales del tenant.
+  - [ ] *Criterio:* internal ve que un tenant falla en cierres de caja y le recomienda curso + tour de arqueo.
+
 ### F16 — Comercio unificado tipo Napse/TOTVS
 
 Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTOL, Fiscal Flow y Promo) y llevar NinjaSoft a una capa de **comercio unificado** para cadenas, franquicias y retailers que necesitan operar tienda física, e-commerce, marketplaces, pagos, fiscal, promociones, fidelización y devoluciones desde un solo cockpit. Ver [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md).
@@ -837,52 +883,6 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Demos enterprise por vertical: supermercado, moda, farmacia, tienda departamental, franquicia, mayorista.
   - [ ] Dataset demo con miles de productos, múltiples sucursales, e-commerce, promociones, fidelización, devoluciones y pagos conciliados.
   - [ ] *Criterio:* ventas puede mostrar un flujo omnicanal completo tipo cadena retail sin preparar datos manualmente.
-
-### F15 — Escuela NinjaSoft + onboarding guiado configurable
-
-Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela interna, recorridos guiados, checklist por rubro, ayuda contextual y configuración desde internal para cambiar qué se enseña, cuándo y a quién. Ver [`28-school-onboarding.md`](./28-school-onboarding.md).
-
-- [ ] **H69 — Escuela NinjaSoft por módulos.**
-  - [ ] Biblioteca de cursos: primeros pasos, POS, caja, productos, clientes, reportes, hardware, AFIP, retail, servicios, gastronomía, internal para staff.
-  - [ ] Cada lección tiene objetivo, pasos, capturas/video, demo interactiva, errores comunes, checklist y prueba corta.
-  - [ ] Progreso por usuario, rol, tenant y rubro.
-  - [ ] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico.
-
-- [ ] **H70 — Tours y recorridos guiados configurables.**
-  - [ ] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador.
-  - [ ] Pasos con ancla en UI, tooltip, modal, spotlight, tarea, bloqueo opcional o "hacer ahora".
-  - [ ] Versionado de tours, draft/publicado, A/B test y métricas de finalización.
-  - [ ] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro.
-
-- [ ] **H71 — Checklist de activación y health de adopción.**
-  - [ ] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique.
-  - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
-  - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
-  - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
-
-- [ ] **H72 — Ayuda contextual y base de conocimiento.**
-  - [ ] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
-  - [ ] Buscador, etiquetas, contenido relacionado, feedback útil/no útil y sugerencia de artículo desde soporte.
-  - [ ] Modo "mostrarme con mis datos" usando demo segura o datos anonimizados.
-  - [ ] *Criterio:* desde `/pos`, un cajero busca "anular venta" y ve guía exacta para su rol.
-
-- [ ] **H73 — Laboratorio/demo segura.**
-  - [ ] Sandbox por tenant con datos de ejemplo para practicar sin afectar caja/stock/facturación real.
-  - [ ] Reset de demo, escenarios por rubro y ejercicios guiados.
-  - [ ] Separación visual fuerte entre demo y producción.
-  - [ ] *Criterio:* un owner practica una devolución y una comanda sin generar movimientos reales.
-
-- [ ] **H74 — Configuración internal de sugerencias, nudges y comunicaciones de onboarding.**
-  - [ ] Internal crea sugerencias por evento: registro, primer login, sin productos, sin caja abierta, venta fallida, hardware no probado, trial por vencer.
-  - [ ] Audiencia, prioridad, frecuencia, cooldown, expiración, canal, CTA y fallback a soporte.
-  - [ ] No molestar: límite de mensajes por sesión/día y preferencias por tenant.
-  - [ ] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta.
-
-- [ ] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.**
-  - [ ] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno.
-  - [ ] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta.
-  - [ ] Sugerencias automáticas de capacitación según errores reales del tenant.
-  - [ ] *Criterio:* internal ve que un tenant falla en cierres de caja y le recomienda curso + tour de arqueo.
 
 ---
 

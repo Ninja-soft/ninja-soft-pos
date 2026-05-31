@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils/cn";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
-import { ProfileEditModal } from "@/components/account/ProfileEditModal";
+import { MembershipProfileModal } from "@/components/account/MembershipProfileModal";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   Dropdown,
@@ -113,9 +113,9 @@ function UserMenu({
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
 
-  // Perfil de la cuenta (compartido con el panel interno): foto + nombre.
-  const { data: me } = useQuery({
-    queryKey: ["account-profile"],
+  // Perfil del POS = el de la membresía (lo mismo que se ve/edita en Equipo).
+  const { data: me, isLoading: meLoading } = useQuery({
+    queryKey: ["my-membership-profile"],
     queryFn: async () => {
       const supabase = createClient();
       const {
@@ -123,25 +123,30 @@ function UserMenu({
       } = await supabase.auth.getUser();
       if (!user) return null;
       const { data } = await supabase
-        .from("users")
-        .select("full_name, avatar_url")
-        .eq("id", user.id)
+        .from("tenant_users")
+        .select("display_name, avatar")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
         .maybeSingle();
-      return { full_name: data?.full_name ?? null, avatar_url: data?.avatar_url ?? null };
+      return {
+        display_name: data?.display_name ?? null,
+        avatar: data?.avatar ?? null,
+      };
     },
   });
-  const name = me?.full_name || email;
+  const name = me?.display_name || email;
 
   return (
     <Dropdown>
       <DropdownTrigger asChild>
         <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-          <Avatar name={name} avatar={me?.avatar_url} size={32} />
+          <Avatar name={name} avatar={me?.avatar} size={32} loading={meLoading} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">
               {name}
             </span>
-            {me?.full_name && (
+            {me?.display_name && (
               <span className="block truncate text-xs text-muted-foreground">
                 {email}
               </span>
@@ -343,7 +348,7 @@ export function AppShell({
       </div>
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
-      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
     </div>
   );
 }

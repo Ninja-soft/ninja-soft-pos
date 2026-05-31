@@ -64,7 +64,7 @@ export function InternalShell({
   const [pfOpen, setPfOpen] = useState(false);
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
 
-  const { data: me } = useQuery({
+  const { data: me, isLoading: meLoading } = useQuery({
     queryKey: ["internal-shell-profile"],
     queryFn: async () => {
       const supabase = createClient();
@@ -142,7 +142,7 @@ export function InternalShell({
         <Dropdown>
           <DropdownTrigger asChild>
             <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
-              <Avatar name={name} avatar={me?.avatar_url} size={32} />
+              <Avatar name={name} avatar={me?.avatar_url} size={32} loading={meLoading} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">
                   {name}

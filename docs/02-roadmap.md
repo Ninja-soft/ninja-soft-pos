@@ -344,12 +344,12 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
 
 Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectura primero, integraciones por etapas** (un sub-hito por proveedor).
 
-- [ ] **H14 — Arquitectura de pagos (base).**
-  - [ ] Registro de **proveedores de pago** y catálogo de medios.
-  - [ ] Habilitación y **configuración por tenant** (credenciales **encriptadas**, modo sandbox/producción).
-  - [ ] **UI de cobro abstracta** en el POS (un medio → un flujo), **pago mixto** (varios medios en una venta) y conciliación básica.
-  - [ ] Medios manuales reales desde el arranque: **Efectivo**, **Transferencia bancaria**, **Pago mixto**.
-  - [ ] *Criterio:* una venta se cobra con efectivo + transferencia (mixto) y queda conciliada.
+- [~] **H14 — Arquitectura de pagos (base).** — *Base hecha (PR #41): catálogo + config por tenant + secretos. Falta wiring en el POS.*
+  - [x] Registro de **proveedores de pago** (`payment_providers`, catálogo global seedeado con los 10 medios) y config por tenant.
+  - [x] Habilitación y **configuración por tenant** (`tenant_payment_methods`: enabled, recargo %, sandbox; RLS owner/manager). **Secretos** en `payment_secrets` (RLS deny: solo service_role/Edge Functions). UI `PaymentMethodsCard` en `/dashboard-team`.
+  - [ ] **UI de cobro abstracta** en el POS que lea los medios habilitados + aplique recargo; **pago mixto** ya existe en el POS, falta integrarlo con esta config.
+  - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
+  - [ ] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado.
 
 - [ ] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
   - [ ] **H15** — Mercado Pago + **Mercado Point** (QR + tarjeta presencial).

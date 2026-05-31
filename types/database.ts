@@ -477,6 +477,54 @@ export type Database = {
           },
         ]
       }
+      payment_providers: {
+        Row: { key: string; name: string; kind: string; sort: number; is_active: boolean }
+        Insert: { key: string; name: string; kind: string; sort?: number; is_active?: boolean }
+        Update: { key?: string; name?: string; kind?: string; sort?: number; is_active?: boolean }
+        Relationships: []
+      }
+      payment_secrets: {
+        Row: { tenant_id: string; provider_key: string; secrets: Json; updated_at: string }
+        Insert: { tenant_id: string; provider_key: string; secrets?: Json; updated_at?: string }
+        Update: { tenant_id?: string; provider_key?: string; secrets?: Json; updated_at?: string }
+        Relationships: []
+      }
+      tenant_payment_methods: {
+        Row: {
+          id: string
+          tenant_id: string
+          provider_key: string
+          enabled: boolean
+          sandbox: boolean
+          surcharge_pct: number
+          config: Json
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          provider_key: string
+          enabled?: boolean
+          sandbox?: boolean
+          surcharge_pct?: number
+          config?: Json
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          provider_key?: string
+          enabled?: boolean
+          sandbox?: boolean
+          surcharge_pct?: number
+          config?: Json
+          sort?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           created_at: string

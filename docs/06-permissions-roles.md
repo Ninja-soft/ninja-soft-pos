@@ -127,6 +127,9 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Cambiar plan | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
 | Extender trial | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
 | Registrar pago manual | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Crear plan custom por cliente | ✅ | ✅ | ❌ | ⚠️ propuesta | ✅ | ❌ |
+| Aumentar cuota/precio de cliente | ✅ | ⚠️ | ❌ | ⚠️ propuesta | ✅ | ❌ |
+| Enviar notificación a tenant | ✅ | ✅ | ⚠️ soporte | ✅ | ✅ | ⚠️ técnica |
 | Activar/desactivar feature flag global | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Activar/desactivar feature flag por tenant | ✅ | ✅ | ❌ | ⚠️ comercial | ❌ | ✅ |
 | Invitar usuarios a tenant | ✅ | ✅ | ⚠️ soporte | ✅ | ❌ | ❌ |

@@ -24,13 +24,29 @@ export default async function InternalLayout({
     <div className="app-bg min-h-screen text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-6">
-          <Link href="/internal/tenants" className="flex items-center gap-2.5">
-            <Isotype className="h-7 w-auto" priority />
-            <WordmarkPos className="h-5 w-auto" priority />
-            <span className="rounded-md bg-ninja-flame/12 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft">
-              Interno
-            </span>
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link href="/internal/tenants" className="flex items-center gap-2.5">
+              <Isotype className="h-7 w-auto" priority />
+              <WordmarkPos className="h-5 w-auto" priority />
+              <span className="rounded-md bg-ninja-flame/12 px-2 py-0.5 text-xs font-semibold text-ninja-flameSoft">
+                Interno
+              </span>
+            </Link>
+            <nav className="hidden items-center gap-1 sm:flex">
+              <Link
+                href="/internal/tenants"
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Negocios
+              </Link>
+              <Link
+                href="/internal/staff"
+                className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Staff
+              </Link>
+            </nav>
+          </div>
           <ThemeToggle />
         </div>
       </header>

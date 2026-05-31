@@ -611,6 +611,28 @@ Reglas:
 
 ---
 
+## 8.3 Extensión F7/H12-H13b — planes custom y notificaciones
+
+Cuando se complete la consola internal de suscripciones y notificaciones, se agregará un bloque multi-tenant para monetización flexible:
+
+- [ ] `tenant_plan_overrides`: plan específico por cliente con límites, módulos, soporte, precio, moneda, ciclo y vigencia.
+- [ ] `subscription_price_changes`: aumentos/cambios programados con antes/después, fecha efectiva, aviso, aceptación y estado.
+- [ ] `billing_events`: pagos, deuda, vencimientos, recibos internos y eventos de cobranza.
+- [ ] `account_notifications`: notificaciones in-app por tenant.
+- [ ] `account_notification_recipients`: destinatarios por usuario/rol/sucursal y estado de lectura/acción.
+- [ ] `notification_delivery_logs`: trazabilidad de email/WhatsApp/push/webhook cuando aplique.
+
+Reglas:
+
+- [ ] Todo plan custom referencia un plan base global.
+- [ ] Los overrides son por tenant y nunca modifican el plan base.
+- [ ] Aumentos de cuota/precio guardan valor anterior, valor nuevo, fecha efectiva, motivo y actor.
+- [ ] Notificaciones críticas se insertan en la misma transacción lógica que el evento que las dispara.
+- [ ] RLS: cada tenant ve solo sus notificaciones; internal ve todo con auditoría.
+- [ ] Delivery externo de notificaciones se registra, pero el in-app inbox es la fuente mínima garantizada.
+
+---
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

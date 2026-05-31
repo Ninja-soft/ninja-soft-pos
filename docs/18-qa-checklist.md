@@ -101,11 +101,21 @@ Toda PR, antes de pedir review, tiene que pasar este checklist. Sin excepciones.
 - [ ] Entrar directo a `/internal` sin sesión redirige a login y vuelve al panel interno después de autenticar.
 - [ ] Crear un tenant lo deja en estado `trial`.
 - [ ] Cambiar de plan registra el cambio con autor, fecha y motivo.
+- [ ] Crear plan custom para un tenant no modifica el plan base global.
+- [ ] Aumentar cuota/precio exige motivo, fecha efectiva y genera notificación al owner.
 - [ ] Suspender un tenant bloquea login pero no borra datos.
 - [ ] Reactivar un tenant restaura el acceso.
 - [ ] Desde internal se puede invitar usuario a un tenant, reenviar invitación y cambiar rol con auditoría.
 - [ ] Super-admin puede convertir un usuario existente en staff interno; admin/support no pueden.
 - [ ] No se puede quitar el último `super_admin`.
+
+### Notificaciones por cuenta
+
+- [ ] Owner ve campana/inbox con notificaciones no leídas.
+- [ ] Cambio de plan, aumento de cuota, pago pendiente y pago recibido generan notificación in-app.
+- [ ] Notificación crítica requiere acción y no se pierde al cerrar sesión.
+- [ ] Internal puede enviar novedad a tenant o segmento con audiencia definida.
+- [ ] Lectura, archivo, click y acción completada quedan registrados.
 
 ### Feature flags
 

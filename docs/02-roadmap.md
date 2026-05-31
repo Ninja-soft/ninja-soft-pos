@@ -277,7 +277,7 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
 
 Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usuarios, planes y comunicaciones.
 
-- [~] **H11 — Roles de staff NinjaSoft + gestión total de usuarios.** — *Backend hecho (PR #33: niveles + guards + edge fn `staff_admin` con bootstrap); falta UI de staff en `/internal`.*
+- [x] **H11 — Roles de staff NinjaSoft + gestión total de usuarios.** — *Hecho (PR #33 backend + PR #40 UI). Página `/internal/staff`: listar, agregar por email, cambiar nivel y quitar. Bootstrap del primer super_admin desde la propia página.*
   - [x] Tres niveles de staff: **super-admin**, **admin**, **soporte**.
     - *super-admin:* todo (sumar/quitar staff, borrar tenants, facturación, acciones peligrosas).
     - *admin:* gestión de tenants/usuarios/soporte; sin tocar staff ni acciones destructivas.

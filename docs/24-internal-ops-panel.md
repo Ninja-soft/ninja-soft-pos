@@ -75,6 +75,11 @@ Ficha:
 ## 6. Suscripciones y billing
 
 - [ ] Cambiar plan.
+- [ ] Crear plan específico/custom para un tenant a partir de un plan base.
+- [ ] Editar cuota/límites por cliente: usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte.
+- [ ] Editar precio acordado, moneda y ciclo de cobro.
+- [ ] Programar aumento de cuota/precio con fecha efectiva, motivo y aviso automático.
+- [ ] Aplicar aumento inmediato solo con permiso crítico y confirmación fuerte.
 - [ ] Cambiar estado: trial, active, past_due, suspended, cancelled.
 - [ ] Extender trial.
 - [ ] Registrar pago manual.
@@ -84,6 +89,35 @@ Ficha:
 - [ ] Motivo obligatorio en downgrade, suspensión, cancelación o descuento.
 - [ ] Historial de cambios con antes/después.
 - [ ] Email/plantilla pendiente o enviado por cada transición.
+- [ ] Notificación in-app generada para owner/manager cuando cambia plan, cuota, precio, vencimiento o estado.
+
+## 6.1 Planes custom por cliente
+
+- [ ] Clonar plan base: Start, Pro, Business o Enterprise.
+- [ ] Nombre interno y nombre visible para cliente.
+- [ ] Límites custom.
+- [ ] Módulos incluidos/excluidos.
+- [ ] Soporte/SLA custom.
+- [ ] Precio custom.
+- [ ] Vigencia y renovación.
+- [ ] Adjuntar acuerdo/nota comercial.
+- [ ] Comparador antes/después contra plan base.
+- [ ] Validación de límites antes de downgrade.
+- [ ] Notificación automática al owner.
+- [ ] Audit log completo.
+
+## 6.2 Aumentos de cuota, precio y límites
+
+- [ ] Aumento inmediato.
+- [ ] Aumento programado.
+- [ ] Aumento con aceptación requerida.
+- [ ] Aumento por vencimiento de promo.
+- [ ] Aumento por exceso de uso.
+- [ ] Aumento masivo segmentado, pero con preview por tenant antes de aplicar.
+- [ ] Motivo obligatorio.
+- [ ] Vista de impacto: precio anterior, precio nuevo, delta, fecha efectiva y comunicación enviada.
+- [ ] Cancelar/revertir cambio programado.
+- [ ] Generar notificación de aviso, recordatorio y aplicación efectiva.
 
 ## 7. Staff NinjaSoft
 
@@ -119,6 +153,21 @@ Desde internal se debe poder:
 - [ ] Comentario/motivo por override.
 - [ ] Historial de cambios.
 - [ ] Preview de impacto antes de guardar.
+
+## 9.1 Notificaciones internal → tenant
+
+El panel internal debe permitir comunicar cambios a cada cuenta sin depender solo de email.
+
+- [ ] Composer para enviar novedad a un tenant.
+- [ ] Composer para enviar a segmento: plan, rubro, módulo activo, estado, provincia, trial por vencer.
+- [ ] Plantillas para: cambio de plan, aumento de cuota, vencimiento, pago recibido, pago pendiente, nueva feature, mantenimiento, alerta AFIP, alerta de seguridad.
+- [ ] Severidad: info, éxito, advertencia, crítica, bloqueo.
+- [ ] Audiencia: owner, manager, cashier, viewer, todos, usuario específico, sucursal.
+- [ ] Canal: in-app, banner, email, WhatsApp futuro, push futuro.
+- [ ] Programación de envío.
+- [ ] Expiración de notificación.
+- [ ] Acción asociada: pagar, aceptar cambio, ver detalle, contactar soporte, descargar comprobante.
+- [ ] Métricas: enviada, vista, leída, clic, archivada, acción completada.
 
 ## 10. Soporte e impersonation
 

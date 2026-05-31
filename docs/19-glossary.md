@@ -42,6 +42,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **CUIT/CUIL.** Identificadores fiscales argentinos. CUIT para empresas, CUIL para personas. Algunos clientes los exigen en el ticket.
 
+**Cuota / límite de plan.** Capacidad contratada por un tenant: usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento o módulos. Puede venir del plan base o de un override custom.
+
 ## D
 
 **Default_enabled.** Atributo de un feature flag que indica si arranca activa sin override. Ver `07-feature-flags.md`.
@@ -116,6 +118,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Plan.** Categoría comercial del cliente (`start`, `pro`, `business`, `enterprise`). Define límites y feature flags por defecto. Ver `16-subscription-model.md`.
 
+**Plan custom.** Plan específico para un tenant, creado desde un plan base pero con límites, módulos, soporte, precio o condiciones comerciales propias.
+
 **POS.** Point of Sale, punto de venta. Es la pantalla principal del producto: lo que ven cajeros y vendedores.
 
 **PR (Pull Request).** Solicitud de merge en GitHub. Toda PR pasa por el checklist de `18-qa-checklist.md`.
@@ -151,6 +155,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Suspensión.** Estado de un tenant que pierde acceso por falta de pago u otra razón. No se borran datos. Se reactiva restaurando el acceso.
 
 **Saldo a favor / vale.** Crédito generado para un cliente en una devolución o cambio. Puede tener vencimiento.
+
+**Notificación in-app.** Mensaje visible dentro de la cuenta del tenant. Puede informar novedades, cobros, vencimientos, cambios de plan, alertas operativas o acciones requeridas.
 
 ## T
 

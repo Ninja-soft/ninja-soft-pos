@@ -246,16 +246,16 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio:* el logo y los datos del tenant se ven en el ticket sin tocar código.
   - *Pendiente:* condición IVA/provincia/ciudad y selector de rubro; aplicar acento al catálogo (H10).
 
-- [ ] **H9 — Tickets y comprobantes personalizables.**
-  - [ ] Plantillas de ticket configurables: logo, leyendas, QR, redes, pie legal.
-  - [ ] Formatos **58mm / 80mm** (térmica) y **A4** (PDF).
+- [~] **H9 — Tickets y comprobantes personalizables.** — *Base hecha (PR #30); falta A4/PDF, QR y preview por sucursal.*
+  - [x] Plantillas de ticket con logo, datos comerciales y pie configurable (vía branding H8).
+  - [~] Formatos **58mm / 80mm** (térmica) — selector por tenant aplicado al ticket/impresión. **A4 (PDF)** pendiente.
   - [ ] Título del comprobante configurable (ej. "Comprobante no fiscal").
-  - [ ] Texto al pie del ticket configurable.
-  - [ ] Mostrar/ocultar logo.
-  - [ ] Mostrar/ocultar CUIT y datos fiscales.
-  - [ ] Ancho default 80mm configurable por caja.
-  - [ ] Preview en vivo y selección por sucursal.
-  - [ ] *Criterio:* un tenant configura su ticket y lo imprime/descarga sin intervención.
+  - [x] Texto al pie del ticket configurable.
+  - [x] Logo en el ticket (si hay branding).
+  - [x] CUIT y datos fiscales en el ticket (si están cargados).
+  - [x] Ancho 58/80mm configurable (por tenant; por caja queda para multi-caja F4).
+  - [ ] QR, leyendas extra y preview por sucursal.
+  - [~] *Criterio:* un tenant configura su ticket (logo/datos/pie/ancho) y lo imprime; descarga A4 pendiente.
 
 - [ ] **H10 — Catálogo público + variantes.**
   - [ ] Catálogo web por tenant (productos, fotos, precios, stock visible opcional).

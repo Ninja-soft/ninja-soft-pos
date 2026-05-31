@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Segmented } from "@/components/ui/Segmented";
 import { resizeToWebp } from "@/lib/utils/image";
 import { cn } from "@/lib/utils/cn";
 
@@ -25,6 +26,7 @@ type Branding = {
   phone: string | null;
   address: string | null;
   ticket_footer: string | null;
+  ticket_width: string;
 };
 const EMPTY: Branding = {
   logo_path: null,
@@ -35,6 +37,7 @@ const EMPTY: Branding = {
   phone: null,
   address: null,
   ticket_footer: null,
+  ticket_width: "80",
 };
 
 export function BrandingCard({ tenantId }: { tenantId: string }) {
@@ -50,7 +53,7 @@ export function BrandingCard({ tenantId }: { tenantId: string }) {
     queryFn: async () => {
       const { data } = await supabase
         .from("tenant_branding")
-        .select("logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer")
+        .select("logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width")
         .eq("tenant_id", tenantId)
         .maybeSingle();
       setForm({ ...EMPTY, ...(data ?? {}) });
@@ -196,6 +199,20 @@ export function BrandingCard({ tenantId }: { tenantId: string }) {
             value={form.ticket_footer ?? ""}
             onChange={(e) => set("ticket_footer", e.target.value)}
           />
+
+          <div>
+            <span className="mb-2 block text-sm font-medium text-muted-foreground">
+              Ancho de ticket
+            </span>
+            <Segmented
+              value={form.ticket_width}
+              onChange={(v) => set("ticket_width", v)}
+              options={[
+                { value: "80", label: "80 mm" },
+                { value: "58", label: "58 mm" },
+              ]}
+            />
+          </div>
 
           <div className="flex justify-end">
             <Button onClick={() => save.mutate()} disabled={save.isPending}>

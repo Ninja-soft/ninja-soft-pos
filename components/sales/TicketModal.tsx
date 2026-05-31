@@ -15,6 +15,7 @@ type Branding = {
   phone: string | null;
   address: string | null;
   ticket_footer: string | null;
+  ticket_width: string | null;
 };
 
 function useBranding(enabled: boolean) {
@@ -25,7 +26,7 @@ function useBranding(enabled: boolean) {
     queryFn: async (): Promise<Branding | null> => {
       const { data } = await supabase
         .from("tenant_branding")
-        .select("logo_url, legal_name, cuit, phone, address, ticket_footer")
+        .select("logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width")
         .maybeSingle();
       return (data as Branding | null) ?? null;
     },
@@ -57,7 +58,10 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <>
-          <div className="ticket-print rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground">
+          <div
+            className="ticket-print mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground"
+            style={{ width: brand?.ticket_width === "58" ? "58mm" : "80mm" }}
+          >
             <div className="text-center">
               {brand?.logo_url && (
                 // eslint-disable-next-line @next/next/no-img-element

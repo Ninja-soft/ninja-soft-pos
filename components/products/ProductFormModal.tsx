@@ -15,6 +15,7 @@ import {
 } from "@/modules/products/schemas";
 import type { Product } from "@/modules/products/api";
 import { ProductImages } from "@/components/products/ProductImages";
+import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import {
   useCategories,
   useCreateCategory,
@@ -40,10 +41,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<ProductInput>({
     resolver: zodResolver(ProductSchema),
   });
+  const isKit = watch("is_kit");
 
   useEffect(() => {
     if (open) {
@@ -59,6 +62,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         unit: product?.unit ?? "un",
         description: product?.description ?? "",
         is_active: product?.is_active ?? true,
+        is_kit: product?.is_kit ?? false,
       });
     }
   }, [open, product, reset]);
@@ -175,6 +179,27 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           <input type="checkbox" className="accent-ninja-flame" {...register("is_active")} />
           Activo
         </label>
+
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            {...register("is_kit")}
+          />
+          <span>
+            Es un kit / combo
+            <span className="block text-xs text-muted-foreground">
+              No tiene stock propio; al venderse descuenta el stock de sus componentes.
+            </span>
+          </span>
+        </label>
+
+        {isEdit && product && isKit && <KitComponentsEditor kitId={product.id} />}
+        {!isEdit && isKit && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Guardá el combo primero; después podés cargar sus componentes editándolo.
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>

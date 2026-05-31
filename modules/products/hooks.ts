@@ -38,6 +38,23 @@ export function useStockMovements(productId: string | null, enabled: boolean) {
   });
 }
 
+export function useKitComponents(kitId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["products", "kit", kitId],
+    queryFn: () => productsApi.kitComponents(kitId!),
+    enabled: enabled && Boolean(kitId),
+  });
+}
+
+export function useSaveKitComponents(kitId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (components: { componentProductId: string; quantity: number }[]) =>
+      productsApi.saveKitComponents(kitId, components),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["products", "kit", kitId] }),
+  });
+}
+
 export function useProductMutations() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["products"] });

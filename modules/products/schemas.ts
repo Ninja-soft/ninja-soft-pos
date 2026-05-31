@@ -20,6 +20,7 @@ export const ProductSchema = z.object({
   unit: z.string().min(1).max(10).default("un"),
   description: optionalText(500),
   is_active: z.boolean().default(true),
+  is_kit: z.boolean().default(false),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

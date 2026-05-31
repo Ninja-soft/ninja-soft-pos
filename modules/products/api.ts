@@ -12,6 +12,12 @@ export type Product = Tables<"products"> & {
 };
 export type Category = Tables<"categories">;
 export type StockMovement = Tables<"stock_movements">;
+export interface KitComponent {
+  id: string;
+  componentProductId: string;
+  name: string;
+  quantity: number;
+}
 
 export const productsApi = {
   list: async (search?: string): Promise<Product[]> => {
@@ -55,6 +61,7 @@ export const productsApi = {
       unit: input.unit,
       description: input.description,
       is_active: input.is_active,
+      is_kit: input.is_kit,
     });
     if (error) throw error;
   },
@@ -74,9 +81,57 @@ export const productsApi = {
         unit: input.unit,
         description: input.description,
         is_active: input.is_active,
+        is_kit: input.is_kit,
       })
       .eq("id", id);
     if (error) throw error;
+  },
+
+  // Componentes de un kit/combo.
+  kitComponents: async (kitId: string): Promise<KitComponent[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_kit_components")
+      .select("id, component_product_id, quantity, products!product_kit_components_component_product_id_fkey(name)")
+      .eq("kit_product_id", kitId);
+    if (error) throw error;
+    type Row = {
+      id: string;
+      component_product_id: string;
+      quantity: number;
+      products: { name: string } | { name: string }[] | null;
+    };
+    return ((data ?? []) as unknown as Row[]).map((r) => {
+      const p = Array.isArray(r.products) ? r.products[0] : r.products;
+      return {
+        id: r.id,
+        componentProductId: r.component_product_id,
+        name: p?.name ?? "—",
+        quantity: r.quantity,
+      };
+    });
+  },
+
+  // Reemplaza la lista de componentes del kit (borra y vuelve a insertar).
+  saveKitComponents: async (
+    kitId: string,
+    components: { componentProductId: string; quantity: number }[],
+  ): Promise<void> => {
+    const supabase = createClient();
+    const del = await supabase
+      .from("product_kit_components")
+      .delete()
+      .eq("kit_product_id", kitId);
+    if (del.error) throw del.error;
+    if (components.length === 0) return;
+    const ins = await supabase.from("product_kit_components").insert(
+      components.map((c) => ({
+        kit_product_id: kitId,
+        component_product_id: c.componentProductId,
+        quantity: c.quantity,
+      })),
+    );
+    if (ins.error) throw ins.error;
   },
 
   softDelete: async (id: string): Promise<void> => {

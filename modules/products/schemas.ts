@@ -32,6 +32,7 @@ export type ProductOutput = z.output<typeof ProductSchema>;
 
 export const CategorySchema = z.object({
   name: z.string().min(1, "Requerido").max(80),
+  parent_id: z.string().uuid().nullable().optional(),
 });
 export type CategoryInput = z.infer<typeof CategorySchema>;
 

@@ -89,6 +89,26 @@ export function useCreateCategory() {
   });
 }
 
+export function useCategoryMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["categories"] });
+  return {
+    create: useMutation({
+      mutationFn: (input: CategoryInput) => categoriesApi.create(input),
+      onSuccess: invalidate,
+    }),
+    rename: useMutation({
+      mutationFn: (vars: { id: string; name: string }) =>
+        categoriesApi.rename(vars.id, vars.name),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => categoriesApi.softDelete(id),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
 export function useBrands() {
   return useQuery({
     queryKey: ["brands", "list"],

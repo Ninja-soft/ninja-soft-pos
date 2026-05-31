@@ -1,12 +1,10 @@
 // =============================================================================
-// Edge Function: invite_user
-// Alta de un usuario al tenant del dueño/encargado. Ver docs/06-permissions-roles.md.
-//   1. Valida usuario autenticado (JWT) y que sea owner/manager activo del tenant.
-//   2. Si el email no existe, lo invita (auth.admin.inviteUserByEmail) → mail con
-//      enlace para fijar contraseña. Si existe, reutiliza su id.
-//   3. Crea/activa la membresía en tenant_users con el rol pedido.
-//   4. Audita la invitación.
-// service_role solo vive acá (nunca en frontend). docs §3.2.
+// Edge Function: invite_user  (H11b)
+// Alta de un usuario CON LOGIN al tenant del dueño/encargado. Ver docs/06.
+//   1. Valida JWT y que el llamador sea owner/manager activo del tenant.
+//   2. Invita por email (o reusa si ya existe) y crea/activa la membresía con
+//      rol, nombre visible (real o genérico) y avatar.
+//   3. Audita. service_role solo vive acá (nunca en frontend).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -16,7 +14,6 @@ const cors = {
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -34,7 +31,6 @@ Deno.serve(async (req: Request) => {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
   const authHeader = req.headers.get("Authorization") ?? "";
   const userClient = createClient(url, anonKey, {
     global: { headers: { Authorization: authHeader } },
@@ -46,29 +42,30 @@ Deno.serve(async (req: Request) => {
     error: userErr,
   } = await userClient.auth.getUser();
   if (userErr || !user) return json({ error: "unauthorized" }, 401);
-
   const tenantId = (user.app_metadata ?? {}).current_tenant_id as
     | string
     | undefined;
   if (!tenantId) return json({ error: "no_tenant" }, 400);
 
-  let body: { email?: string; role?: string };
+  let body: {
+    email?: string;
+    role?: string;
+    display_name?: string;
+    avatar?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
-
   const email = (body.email ?? "").trim().toLowerCase();
   const role = body.role ?? "";
+  const displayName = (body.display_name ?? "").trim().slice(0, 80) || null;
+  const avatar = (body.avatar ?? "").trim().slice(0, 40) || null;
   if (!EMAIL_RE.test(email)) return json({ error: "invalid_email" }, 400);
   if (!ASSIGNABLE_ROLES.includes(role)) return json({ error: "invalid_role" }, 400);
 
-  const admin = createClient(url, serviceKey, {
-    auth: { persistSession: false },
-  });
-
-  // 1. El llamador debe ser owner/manager activo del tenant.
+  const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: caller } = await admin
     .from("tenant_users")
     .select("role")
@@ -80,14 +77,12 @@ Deno.serve(async (req: Request) => {
     return json({ error: "forbidden" }, 403);
   }
 
-  // 2. Resolver/crear el usuario destino.
   let targetId: string | null = null;
   const { data: existing } = await admin
     .from("users")
     .select("id")
     .eq("email", email)
     .maybeSingle();
-
   if (existing) {
     targetId = existing.id;
   } else {
@@ -100,30 +95,27 @@ Deno.serve(async (req: Request) => {
     targetId = invited.user.id;
   }
 
-  // 3. Crear/activar membresía (idempotente).
-  const { error: muErr } = await admin
-    .from("tenant_users")
-    .upsert(
-      {
-        tenant_id: tenantId,
-        user_id: targetId,
-        role,
-        status: "active",
-        joined_at: new Date().toISOString(),
-      },
-      { onConflict: "tenant_id,user_id" },
-    );
+  const { error: muErr } = await admin.from("tenant_users").upsert(
+    {
+      tenant_id: tenantId,
+      user_id: targetId,
+      role,
+      status: "active",
+      display_name: displayName,
+      avatar,
+      joined_at: new Date().toISOString(),
+    },
+    { onConflict: "tenant_id,user_id" },
+  );
   if (muErr) return json({ error: "membership_failed", detail: muErr.message }, 500);
 
-  // 4. Auditoría.
   await admin.from("audit_logs").insert({
     tenant_id: tenantId,
     actor_user_id: user.id,
     entity_type: "tenant_users",
     entity_id: targetId,
     action: "member_invited",
-    after_data: { email, role },
+    after_data: { email, role, display_name: displayName, avatar },
   });
-
   return json({ user_id: targetId, role, existed: !!existing });
 });

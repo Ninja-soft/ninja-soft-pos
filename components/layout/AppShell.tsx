@@ -188,16 +188,29 @@ export function AppShell({
     Gestión: true,
   });
 
-  // ¿Es staff NinjaSoft? Para mostrar el acceso al panel interno.
-  const { data: isInternal } = useQuery({
-    queryKey: ["is-internal-shell"],
+  // Contexto del usuario: staff NinjaSoft + rol en el tenant (para gatear el menú).
+  const { data: shell } = useQuery({
+    queryKey: ["shell-ctx"],
     queryFn: async () => {
+      const supabase = createClient();
       const {
         data: { user },
-      } = await createClient().auth.getUser();
-      return !!(user?.app_metadata as { is_internal?: boolean } | null)?.is_internal;
+      } = await supabase.auth.getUser();
+      if (!user) return { isInternal: false, role: null as string | null };
+      const isInternal = !!(user.app_metadata as { is_internal?: boolean } | null)
+        ?.is_internal;
+      const { data: mem } = await supabase
+        .from("tenant_users")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      return { isInternal, role: mem?.role ?? null };
     },
   });
+  const isInternal = shell?.isInternal ?? false;
+  const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
 
   async function signOut() {
     await createClient().auth.signOut();
@@ -216,14 +229,16 @@ export function AppShell({
         <WordmarkPos className="h-7 w-auto" priority />
       </Link>
 
-      {NAV.top.map((it) => (
-        <NavLink
-          key={it.href}
-          item={it}
-          active={pathname === it.href}
-          onNavigate={() => setDrawer(false)}
-        />
-      ))}
+      {NAV.top
+        .filter((it) => it.href !== "/dashboard-team" || canOwnerPanel)
+        .map((it) => (
+          <NavLink
+            key={it.href}
+            item={it}
+            active={pathname === it.href}
+            onNavigate={() => setDrawer(false)}
+          />
+        ))}
 
       {NAV.groups.map((g) => {
         const isOpen = open[g.label] ?? true;
@@ -260,10 +275,19 @@ export function AppShell({
           <Link
             href="/internal/tenants"
             onClick={() => setDrawer(false)}
-            className="flex items-center gap-2.5 rounded-lg bg-ninja-gradient p-2.5 text-sm font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-105"
+            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
           >
-            <ShieldCheck size={17} />
-            Panel NinjaSoft
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+              <ShieldCheck size={16} />
+            </span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block text-sm font-semibold text-foreground">
+                Panel NinjaSoft
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Modo interno
+              </span>
+            </span>
           </Link>
         )}
         <UserMenu

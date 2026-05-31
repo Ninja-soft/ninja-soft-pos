@@ -248,6 +248,96 @@ export type Database = {
           },
         ]
       }
+      cash_z_closures: {
+        Row: {
+          cash_in: number
+          cash_out: number
+          cash_shift_id: string
+          closed_at: string
+          closed_by: string | null
+          closing_amount: number
+          created_at: string
+          difference: number
+          discounts_total: number
+          expected_amount: number
+          id: string
+          opened_at: string | null
+          opened_by: string | null
+          opening_amount: number
+          payment_breakdown: Json
+          sales_count: number
+          sales_total: number
+          store_id: string | null
+          tenant_id: string
+          voids_count: number
+          voids_total: number
+          z_number: number
+        }
+        Insert: {
+          cash_in?: number
+          cash_out?: number
+          cash_shift_id: string
+          closed_at?: string
+          closed_by?: string | null
+          closing_amount?: number
+          created_at?: string
+          difference?: number
+          discounts_total?: number
+          expected_amount?: number
+          id?: string
+          opened_at?: string | null
+          opened_by?: string | null
+          opening_amount?: number
+          payment_breakdown?: Json
+          sales_count?: number
+          sales_total?: number
+          store_id?: string | null
+          tenant_id?: string
+          voids_count?: number
+          voids_total?: number
+          z_number: number
+        }
+        Update: {
+          cash_in?: number
+          cash_out?: number
+          cash_shift_id?: string
+          closed_at?: string
+          closed_by?: string | null
+          closing_amount?: number
+          created_at?: string
+          difference?: number
+          discounts_total?: number
+          expected_amount?: number
+          id?: string
+          opened_at?: string | null
+          opened_by?: string | null
+          opening_amount?: number
+          payment_breakdown?: Json
+          sales_count?: number
+          sales_total?: number
+          store_id?: string | null
+          tenant_id?: string
+          voids_count?: number
+          voids_total?: number
+          z_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_z_closures_cash_shift_id_fkey"
+            columns: ["cash_shift_id"]
+            isOneToOne: true
+            referencedRelation: "cash_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_z_closures_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cashier_profiles: {
         Row: {
           avatar: string | null

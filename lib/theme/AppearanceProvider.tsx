@@ -59,7 +59,7 @@ const DEFAULTS = {
   display: "sora",
   price: "inter",
   bg: "dots",
-  priceAccent: "marca",
+  priceAccent: "violeta",
 } as const;
 
 interface AppearanceValue {

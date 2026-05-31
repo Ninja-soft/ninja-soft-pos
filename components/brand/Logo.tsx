@@ -31,15 +31,28 @@ export function WordmarkPos({
   className?: string;
   priority?: boolean;
 }) {
+  // El wordmark tiene "Ninja" en blanco (para fondos oscuros). En temas claros
+  // (ninja-light / ninja-sand) se muestra la versión oscura. Swap por CSS según
+  // data-theme (ver globals.css), sin flash ni JS.
   return (
-    <Image
-      src="/brand/ninjapos-wordmark.webp"
-      alt="NinjaPos"
-      width={367}
-      height={100}
-      priority={priority}
-      className={cn("h-8 w-auto", className)}
-    />
+    <>
+      <Image
+        src="/brand/ninjapos-wordmark.webp"
+        alt="NinjaPos"
+        width={1134}
+        height={321}
+        priority={priority}
+        className={cn("wordmark-on-dark h-8 w-auto", className)}
+      />
+      <Image
+        src="/brand/ninjapos-wordmark-dark.webp"
+        alt="NinjaPos"
+        width={1134}
+        height={321}
+        priority={priority}
+        className={cn("wordmark-on-light h-8 w-auto", className)}
+      />
+    </>
   );
 }
 

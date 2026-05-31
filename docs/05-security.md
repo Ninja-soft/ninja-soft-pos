@@ -208,5 +208,5 @@ En caso de incidente confirmado:
 1. **Contener:** rotar claves comprometidas, deshabilitar accesos sospechosos.
 2. **Evaluar:** revisar logs, determinar alcance.
 3. **Notificar:** clientes afectados en 72hs si hay exposición de datos.
-4. **Documentar:** post-mortem en `docs/security-reviews/` con timeline, causa, remediación.
+4. **Documentar:** post-mortem en [`docs/security-reviews/`](./security-reviews/README.md) con timeline, causa, remediación.
 5. **Prevenir:** acción concreta para que no vuelva a ocurrir.

@@ -93,7 +93,7 @@ Pasos para reproducir y verificar.
 
 ## Checklist
 
-- [ ] Pasa `pnpm lint`, `pnpm type-check`, `pnpm test`.
+- [ ] Pasa `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 - [ ] Tests nuevos o ajustados (si aplica).
 - [ ] Migración con naming versionado (si aplica).
 - [ ] RLS habilitada en tablas nuevas (si aplica).

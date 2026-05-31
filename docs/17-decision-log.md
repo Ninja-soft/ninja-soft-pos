@@ -331,13 +331,13 @@ Con el MVP (H0–H6) funcional y desplegado, el equipo definió extender el alca
 
 ### Decisión
 
-Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**, con orden de ejecución **F6 → F7 → F8 → F3 (AFIP)**. Definiciones clave:
+Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F3**. Definiciones clave:
 
 - **Pagos:** arquitectura extensible primero (registro de proveedores, credenciales encriptadas por tenant, UI de cobro abstracta, pago mixto) y **una integración por etapas** por proveedor: Mercado Pago/Point, MODO (QR interoperable), Payway/Prisma, Getnet, Fiserv/Posnet/Clover, **Mobbex como orquestador opcional**, Pagos360. Medios manuales (efectivo, transferencia, mixto) desde la base.
 - **Staff NinjaSoft:** tres niveles — **super-admin**, **admin**, **soporte** — con matriz de permisos versionada.
 - **Emails:** editor de plantillas HTML + variables con versionado, catálogo de emails del sistema, logs de envío y campañas masivas. Proveedores: **Resend** (transaccional) + **Brevo** (masivos).
 - **Personalización:** fotos de productos → **WebP vía Edge Function con `sharp`** (multi-tamaño en Storage), **branding por tenant**, **tickets/comprobantes personalizables** (58/80mm + A4), **catálogo público + motor de promociones + variantes por rubro**.
-- **AFIP:** sin cambio de alcance (F3 / `15-afip-integration.md`); se ejecuta al final por dependencia de certificados y homologación.
+- **AFIP:** alcance base en F3 / `15-afip-integration.md`; luego robustecido por ADR-011 con cola fiscal, venta offline y gate de homologación → producción. Se ejecuta al final por dependencia de certificados, homologación, tickets y flujos comerciales previos.
 
 Se establece un **corte de control obligatorio** al cierre de cada hito: gate automático (lint, typecheck, tests con cobertura nueva, build, migraciones+types, tests de aislamiento RLS) + gate manual (demo del criterio, auditoría, sin `service_role` en frontend, feature flag si aplica, decision-log/changelog, deploy READY verificado).
 
@@ -353,6 +353,145 @@ Se establece un **corte de control obligatorio** al cierre de cada hito: gate au
 - **Positivas:** alcance y orden claros; criterios de cierre verificables; calidad forzada por los cortes de control.
 - **Negativas:** dos proveedores de email aumentan operación; `sharp` agrega costo de cómputo server. Mobbex puede solapar funciones con integraciones directas (se evalúa por proveedor).
 - **Seguimiento:** crear docs dedicadas (`payments`, `emails`, `branding`) al iniciar cada fase; definir esquema de credenciales encriptadas; sumar suite de aislamiento multi-tenant a CI.
+
+---
+
+## ADR-011 — Hardening pre-piloto, hardware PRO y AFIP robusto
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+Después de ampliar el roadmap con personalización, panel interno, pagos y promociones, aparecieron tres necesidades operativas:
+
+- El MVP funcional necesita una fase explícita de hardening antes de piloto real.
+- El hardware de mostrador (impresoras, scanners, balanzas, cajón, display cliente) tiene suficiente complejidad para ser fase propia.
+- AFIP debe contemplar cola fiscal robusta, venta offline y gate formal de homologación a producción.
+
+### Decisión
+
+Se agrega **F1.5 — Hardening pre-piloto** como fase obligatoria antes de considerar piloto real: build estable, scripts alineados, tests multi-tenant/RLS/permisos, smoke E2E, health check, backup/restore y seed reproducible.
+
+Se agrega **F10 — Hardware y mostrador PRO** antes de promociones y AFIP, con hitos para impresión avanzada, scanners, etiquetas/balanzas, doble pantalla/display cliente y diagnóstico de hardware. La doble pantalla se implementa como ruta dedicada sincronizada (`/customer-display`) porque el navegador no controla monitores como una app nativa.
+
+Se robustece **F3 — AFIP** con cola fiscal, estados operativos, idempotencia fiscal, conciliación contra `FECompUltimoAutorizado`, venta offline con comprobante interno/provisorio y gate de homologación a producción.
+
+### Alternativas consideradas
+
+- **Dejar hardware dentro de F4:** descartado; F4 mezcla multi-sucursal, pagos e integraciones. Hardware necesita criterios de compatibilidad y diagnóstico propios.
+- **Emitir AFIP sin cola fiscal:** descartado; bloquearía ventas cuando AFIP falle y haría frágil la operación.
+- **Doble pantalla nativa desde el inicio:** descartada para MVP web; se prioriza display cliente vía navegador/tablet y se deja hardware serial/USB para etapa posterior.
+
+### Consecuencias
+
+- **Positivas:** el roadmap queda más operable, con checkboxes por entregable y capacidades reales de piloto/mostrador.
+- **Negativas:** F10 agrega dependencia de pruebas con hardware físico y soporte de campo.
+- **Seguimiento:** crear specs técnicas al iniciar F10; medir compatibilidad real de WebUSB/WebSerial/QZ Tray/conector local; sumar tests de cola fiscal e idempotencia antes de AFIP producción.
+
+---
+
+## ADR-012 — Configuración retail avanzada e importación masiva por Excel
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+Al comparar el roadmap con funcionalidades de un POS retail de referencia, aparecieron capacidades necesarias para rubros como electro, muebles, herramientas, indumentaria y retail medio: variantes de medios de pago con recargo, garantías extendidas, devoluciones/cambios con vales, cuenta corriente, pedidos de salón, despacho, depósitos, roles propios e importación masiva.
+
+### Decisión
+
+Se agrega **F11 — Configuración retail avanzada** y una regla transversal **TX-4 — Importaciones masivas XLSX como estándar**.
+
+Todo dato maestro operativo que pueda cargarse en volumen debe ofrecer plantilla Excel, validación previa, preview, confirmación, reporte de errores por fila y auditoría. Esto aplica a productos, clientes, depósitos, stock inicial, listas de precios, medios de pago, garantías, motivos de devolución, grupos de clientes y tipos de entrega.
+
+### Consecuencias
+
+- **Positivas:** el producto queda preparado para carga inicial real de comercios existentes y para operación retail compleja sin SQL.
+- **Negativas:** los imports requieren validadores robustos, reporting por fila y cuidado con reversión/idempotencia.
+- **Seguimiento:** al iniciar F11, definir schemas de importación por entidad y tests con archivos XLSX válidos/invalidos.
+
+---
+
+## ADR-013 — Comercios simples, servicios y cobro rápido
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El roadmap cubría retail pesado, hardware, pagos, promociones y AFIP, pero faltaba una línea clara para negocios con pocos productos o servicios: heladerías, cafeterías simples, panaderías chicas, peluquerías, barberías, estética, lavaderos, talleres livianos y profesionales con turnos.
+
+Estos comercios no compran un POS por inventario complejo; lo compran para cobrar rápido, ordenar agenda, controlar staff/comisiones y empezar sin configuración pesada.
+
+### Decisión
+
+Se agrega **F12 — Comercios simples y servicios** antes de F9/AFIP. La fase cubre:
+
+- Onboarding por rubro con presets listos.
+- Modo catálogo chico con pantalla táctil de botones y cobro express.
+- Modificadores simples para heladería/cafetería: tamaño, sabores, toppings y combos.
+- Agenda para peluquería/estética: profesional, duración, walk-in, seña, no-show y cobro desde turno.
+- Comisiones, propinas y productividad por staff.
+- Clientes livianos, historial, recurrencia, packs de sesiones, membresías y gift cards.
+- Demos/landings por rubro para convertirlo en oportunidad comercial.
+
+### Alternativas consideradas
+
+- **Resolverlo dentro de F5 perfiles por rubro:** insuficiente; F5 queda como marco general, pero estos rubros necesitan pantallas y métricas propias.
+- **Usar solo productos normales con variantes:** descartado para heladería; tamaños/sabores/toppings explotan combinaciones y vuelven lento el cobro.
+- **Poner agenda en backlog:** descartado; peluquería/estética no puede operar bien sin turnos, profesional y comisión.
+
+### Consecuencias
+
+- **Positivas:** amplía mercado hacia negocios chicos de alta repetición, reduce fricción de onboarding y permite demos verticales muy rápidas.
+- **Negativas:** suma otro modo de POS y exige cuidado para no duplicar lógica con retail/restaurante.
+- **Seguimiento:** crear schemas de `service_items`, `appointments`, `service_sessions`, `staff_commissions` al iniciar F12; validar UX con demo de heladería y peluquería.
+
+---
+
+## ADR-014 — Gastronomía PRO: mesas, comandas y cocina
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+Restaurante, cafetería, heladería y rotisería no son variantes menores del POS retail. Necesitan mesas/salones, comandas antes del pago, ruteo por estación, cocina/barra, KDS, cursos, delivery/takeaway y reportes de tiempos. F12 cubre cobro simple y servicios; gastronomía completa requiere fase propia.
+
+### Decisión
+
+Se agrega **F13 — Gastronomía PRO** antes de F9/AFIP. La fase cubre:
+
+- Configuración de tipos de negocio gastronómico y modos de atención.
+- Mesas, salones, estados, mozos, unión/movimiento/división de cuentas.
+- Comandas impresas y ruteo por estación.
+- KDS / pantalla de cocina y barra.
+- Menú gastronómico, modificadores, cursos, alergias y notas.
+- Flujos específicos de cafetería, heladería, mostrador híbrido, delivery/takeaway y despacho.
+- Recetas/escandallo, producción previa, merma y margen por plato.
+- Reservas gastronómicas, waitlist, ocupación y reportes operativos.
+
+### Alternativas consideradas
+
+- **Dejarlo en F5 como perfil restaurante:** insuficiente; F5 define perfiles, pero mesas/comandas/KDS son operación completa.
+- **Meterlo en F10 hardware:** descartado; F10 cubre impresión y periféricos, pero no la lógica de mesa, curso, cocina, delivery ni reportes.
+- **Usar F12 catálogo chico:** solo sirve para cafetería/heladería simple. Cuando hay salón, cocina o despacho, pasa a F13.
+
+### Consecuencias
+
+- **Positivas:** habilita vertical gastronómico vendible y evita que el flujo restaurante quede como parche del POS retail.
+- **Negativas:** agrega complejidad de concurrencia, impresión/KDS, sincronización y auditoría de cambios de pedido.
+- **Seguimiento:** diseñar modelos `dining_tables`, `restaurant_orders`, `kitchen_tickets`, `kitchen_stations`, `recipes`; probar ruteo idempotente de comandas antes de piloto gastronómico.
 
 ---
 

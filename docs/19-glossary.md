@@ -10,6 +10,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **AFIP.** Administración Federal de Ingresos Públicos. Organismo fiscal argentino. La integración para facturación electrónica se documenta en `15-afip-integration.md`.
 
+**Agenda.** Calendario operativo de turnos por profesional, recurso o sucursal. En F12 se usa para peluquerías, estética, barberías y servicios con reserva.
+
 **Agente.** Subagente de Claude Code con instrucciones específicas que vive en `.claude/agents/`. Cada agente tiene un rol (PM, supabase-architect, frontend-pos, etc.).
 
 **Anon key.** Clave pública de Supabase que el frontend usa para conectarse. Por sí sola no rompe RLS: las queries siguen filtradas por las políticas del usuario autenticado.
@@ -34,6 +36,10 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Claude Code.** Herramienta CLI de Anthropic para que un dev trabaje con Claude sobre un repo. Soporta agentes definidos en `.claude/agents/`.
 
+**Cola fiscal.** Cola de comprobantes AFIP pendientes de emisión, reintento, corrección o revisión manual. Permite que la venta no se bloquee aunque AFIP esté caído. Ver `15-afip-integration.md`.
+
+**Comanda.** Orden enviada a cocina, barra, cafetería, heladería o despacho. Puede imprimirse o mostrarse en KDS. No es lo mismo que ticket fiscal.
+
 **CUIT/CUIL.** Identificadores fiscales argentinos. CUIT para empresas, CUIL para personas. Algunos clientes los exigen en el ticket.
 
 ## D
@@ -41,6 +47,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 **Default_enabled.** Atributo de un feature flag que indica si arranca activa sin override. Ver `07-feature-flags.md`.
 
 **Deploy.** Publicación de una versión. En NinjaSoft pasa por Vercel automáticamente cuando se mergea a una rama configurada. Ver `13-deployment.md`.
+
+**Depósito.** Ubicación lógica de stock dentro de una sucursal o entre sucursales: principal, reserva, devolución, merma o tránsito.
 
 **Display cliente.** Segunda pantalla del POS, visible para el comprador. Muestra carrito, total, vuelto, QR de pago y mensajes del negocio. En web se implementa como ruta dedicada sincronizada con la caja. Ver `20-hardware-pos.md`.
 
@@ -54,6 +62,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Feature flag.** Switch que activa o desactiva una funcionalidad sin tocar código. Toda diferencia entre planes o rubros pasa por una flag. Ver `07-feature-flags.md`.
 
+**Fiado / cuenta corriente.** Venta que queda como deuda del cliente para cobrar después. Tiene límite, vencimiento y antigüedad de deuda.
+
 ## G
 
 **Git worktree.** Mecanismo de Git que permite tener varios checkouts del mismo repo en directorios distintos. Cada agente especialista trabaja en su propio worktree para no pisarse con los demás. Ver `workflows/agent-workflow.md`.
@@ -62,21 +72,35 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **HxN.** Convención para hitos del MVP (`H0`, `H1`, etc.). Ver `01-mvp.md`.
 
+**Homologación AFIP.** Ambiente de prueba de AFIP. Todo tenant que use facturación electrónica debe validar certificados, numeración y comprobantes en homologación antes de pasar a producción.
+
 ## I
 
 **Idempotencia.** Propiedad de una operación que da el mismo resultado si se ejecuta una o varias veces. Crítica en pagos, webhooks y Edge Functions.
 
 **Impresora térmica.** Impresora de ticket de 58mm u 80mm usada en mostrador. Puede operar con impresión web básica o con conector ESC/POS cuando se necesita corte, cajón o control fino. Ver `20-hardware-pos.md`.
 
+**Importación masiva XLSX.** Carga de datos maestros desde Excel con plantilla, validación previa, preview, confirmación y reporte de errores por fila.
+
 ## J
 
 **JWT.** JSON Web Token. Token de sesión que emite Supabase Auth. Contiene `sub` (user id) y claims con los que se resuelve el `tenant_id` activo.
+
+## K
+
+**KDS (Kitchen Display System).** Pantalla de cocina/barra que muestra comandas en tiempo real, con estados y tiempos de preparación. Ver `23-restaurant-cafe-operations.md`.
 
 ## M
 
 **Manager.** Rol de cliente con acceso a reportes y configuración del tenant. No puede borrar el tenant ni cambiar plan. Ver `06-permissions-roles.md`.
 
+**Mesa.** Unidad operativa de salón gastronómico. Tiene sector, capacidad, estado, mozo/pedido asociado y puede moverse, unirse, transferirse o cerrarse.
+
 **Migration.** Archivo SQL versionado en `supabase/migrations/`. Naming: `YYYYMMDDHHMMSS_verbo_descripcion.sql`. Habilita RLS en la misma migración que crea la tabla.
+
+**Modificador.** Opción que completa un producto o servicio sin crear otro SKU: sabor de helado, topping, tamaño, extra, profesional o variante simple. Ver `22-simple-commerce-services.md`.
+
+**Modo catálogo chico.** Variante del POS pensada para negocios con pocos productos o servicios. Prioriza botones grandes, favoritos, cantidades rápidas y cobro express por encima de búsqueda/inventario pesado.
 
 **Multi-tenant.** Una sola instancia del software sirve a múltiples clientes (tenants) con aislamiento de datos. NinjaSoft usa shared schema + tenant_id + RLS. Ver `08-multi-tenant.md`.
 
@@ -100,13 +124,17 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Project Manager.** Agente orquestador. Recibe la tarea, decide qué especialistas la pueden hacer en paralelo, presenta un plan antes de ejecutar. Ver `.claude/agents/project-manager.md`.
 
+**Pedido de salón.** Pedido armado por un vendedor antes del cobro. Reserva stock y luego una cajera lo levanta para facturarlo/cobrarlo.
+
 ## R
 
 **Rate limit.** Límite de cantidad de requests por unidad de tiempo. Aplica a endpoints públicos y a Edge Functions sensibles.
 
 **RLS (Row Level Security).** Mecanismo de Postgres para filtrar filas según el usuario autenticado. Es la columna vertebral de la seguridad multi-tenant.
 
-**Rubro.** Tipo de negocio del cliente: kiosco, textil, retail, restaurante. No se hardcodea en código, se expresa con feature flags y plantillas de configuración.
+**Rubro.** Tipo de negocio del cliente: kiosco, textil, retail, restaurante, cafetería, heladería, estética, servicios, etc. No se hardcodea en código, se expresa con feature flags y plantillas de configuración.
+
+**Recargo de medio de pago.** Incremento automático del total según variante de cobro, por ejemplo tarjeta en cuotas.
 
 ## S
 
@@ -114,11 +142,15 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 
 **Service role.** Clave privilegiada de Supabase. Saltea RLS. **Nunca** en frontend. Solo en Edge Functions o backend confiable.
 
+**Servicio.** Ítem vendible que no necesariamente descuenta stock: corte, color, manicura, lavado, reparación, clase o consulta. Puede tener duración, profesional, comisión y agenda.
+
 **SKU.** Stock Keeping Unit. Código interno único de un producto dentro de un tenant. Distinto al código de barras (que puede ser compartido entre tenants si es un EAN estándar).
 
 **Scanner.** Lector de códigos usado en POS. Puede ser USB HID tipo teclado, Bluetooth o cámara móvil. El POS debe mantener foco, normalizar códigos y evitar lecturas duplicadas. Ver `20-hardware-pos.md`.
 
 **Suspensión.** Estado de un tenant que pierde acceso por falta de pago u otra razón. No se borran datos. Se reactiva restaurando el acceso.
+
+**Saldo a favor / vale.** Crédito generado para un cliente en una devolución o cambio. Puede tener vencimiento.
 
 ## T
 
@@ -133,6 +165,8 @@ Términos del producto, del negocio y del stack que usamos en la documentación,
 ## V
 
 **Vercel.** Plataforma de hosting para Next.js. Deploy automático por rama. NinjaSoft tiene 4 environments: local, preview, staging, production. Ver `13-deployment.md`.
+
+**Venta offline.** Venta registrada sin conexión estable. Usa número interno/provisorio, se sincroniza al recuperar conexión y luego entra a la cola fiscal si requiere AFIP.
 
 **Viewer.** Rol de cliente solo lectura. No modifica nada. Útil para contadores externos, auditores, dueños no operativos.
 

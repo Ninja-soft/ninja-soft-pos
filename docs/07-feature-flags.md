@@ -2,6 +2,8 @@
 
 Sistema de activación de funcionalidades por tenant. Permite escalar el producto sin duplicar código, ofrecer features Beta a clientes selectos y desactivar rápidamente algo que rompe.
 
+> Estado actual vs objetivo: la migración MVP implementada hoy usa `feature_flags.key`, `description`, `default_enabled` y overrides por tenant en `tenant_feature_flags`. Las estrategias `rollout_strategy`, `rollout_config`, `plan_features` y `expires_at` de trials quedan como objetivo F11/F2+ para convertir este documento en contrato completo de rollout comercial.
+
 ## 1. Conceptos
 
 | Término | Significado |
@@ -67,6 +69,15 @@ Lista canónica vive en `lib/feature-flags/catalog.ts` y se siembra vía migraci
 | `negative_stock_warning` | `true` | `all` | Avisar al vender producto sin stock. |
 | `force_customer_on_sale` | `false` | `per_tenant` | Obligar a asignar cliente a cada venta. |
 | `dark_mode_only` | `false` | `per_tenant` | Forzar modo oscuro (no dejar elegir light). |
+| `simple_pos_mode` | `false` | `per_tenant` | Activa pantalla de catálogo chico/cobro por botones. |
+| `appointments_enabled` | `false` | `per_plan` | Activa agenda, turnos y cobro desde servicios. |
+| `service_commissions` | `false` | `per_plan` | Activa comisiones, propinas y reportes por profesional. |
+| `sessions_memberships` | `false` | `per_plan` | Activa packs de sesiones, membresías y gift cards simples. |
+| `gastronomy_mode` | `false` | `per_tenant` | Activa salones, mesas, comandas y modos gastronómicos. |
+| `kitchen_display` | `false` | `per_plan` | Activa KDS/pantalla de cocina y barra. |
+| `kitchen_routing` | `false` | `per_plan` | Activa ruteo de comandas por estación/impresora. |
+| `delivery_takeaway` | `false` | `per_plan` | Activa flujo gastronómico de delivery/takeaway y despacho. |
+| `recipes_bom` | `false` | `per_plan` | Activa recetas/escandallo y descuento de insumos. |
 
 ## 5. Estrategias de rollout
 

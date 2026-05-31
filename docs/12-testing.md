@@ -67,6 +67,10 @@ Lista mínima:
 4. Anulación de venta del día.
 5. Alta de producto con stock inicial.
 6. Cambio de plan desde panel interno.
+7. F12 catálogo chico: botones rápidos → modificadores → cobro express.
+8. F12 servicios: crear turno → asignar profesional → cobrar servicio → calcular comisión.
+9. F13 restaurante: abrir mesa → enviar comanda → marcar listo en cocina → dividir cuenta → cobrar.
+10. F13 cafetería/heladería: cobrar mostrador → rutear barra/heladería → marcar pedido listo.
 
 ## 4. Qué NO se testea (a propósito)
 
@@ -120,6 +124,20 @@ it('aplica descuento del 10%', () => {
 
 ## 7. Setup de testing local
 
+### Estado actual de scripts
+
+Hoy `package.json` expone:
+
+```bash
+pnpm test          # Vitest single run
+pnpm test:watch    # Vitest watch
+pnpm lint
+pnpm typecheck
+pnpm build
+```
+
+Scripts objetivo todavía no agregados al repo: `test:e2e`, `test:coverage`, `db:reset` y helpers de fixtures. Hasta que existan, no usarlos en instrucciones operativas.
+
 ```bash
 # 1. Levantar Supabase local
 supabase start
@@ -131,10 +149,7 @@ supabase db reset
 psql "$DATABASE_URL" -f tests/fixtures/seed.sql
 
 # 4. Correr tests
-pnpm test            # Vitest watch
-pnpm test:run        # Vitest single run
-pnpm test:e2e        # Playwright
-pnpm test:coverage   # con cobertura
+pnpm test
 ```
 
 ## 8. CI
@@ -147,15 +162,11 @@ jobs:
     - pnpm install
     - pnpm lint
     - pnpm typecheck
-    - supabase db start
-    - supabase db reset
-    - pnpm test:run
-    - pnpm test:e2e
-  
-  coverage:
-    - pnpm test:coverage
-    - report a Codecov o similar
+    - pnpm test
+    - pnpm build
 ```
+
+Objetivo siguiente: sumar jobs de Supabase local, aislamiento multi-tenant, Playwright E2E y cobertura cuando esos scripts existan en `package.json`.
 
 **Bloqueos automáticos:**
 - Cualquier test falla → bloquea merge.

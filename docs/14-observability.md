@@ -226,7 +226,7 @@ UptimeRobot pinguea cada 5 minutos.
 7. **Prevención.** Acción concreta para que no se repita.
 
 ### 11.2 Template de post-mortem
-Ver `docs/templates/post-mortem.md` (a crear en Fase 1).
+Ver [`docs/templates/post-mortem.md`](./templates/post-mortem.md).
 
 Mínimo:
 - Resumen.

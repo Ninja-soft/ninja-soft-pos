@@ -22,7 +22,9 @@ Permitir impresión configurable por tenant, sucursal y caja.
 - [ ] Ticket térmico 80mm.
 - [ ] Cierre Z en ticket y A4.
 - [ ] Etiquetas de producto.
-- [ ] Comandas/cocina para perfil restaurante.
+- [ ] Comandas/cocina para perfil gastronómico.
+- [ ] Comandas separadas por estación: cocina, barra, cafetería, heladería, parrilla, postres, despacho.
+- [ ] KDS/pantalla de cocina como destino alternativo o complementario de impresión.
 - [ ] Plantillas con logo, datos fiscales, QR, redes y leyendas.
 - [ ] Cantidad de copias por tipo de documento.
 - [ ] Corte de papel y apertura de cajón cuando el hardware lo soporte.
@@ -104,6 +106,7 @@ Debe existir una pantalla `/configuracion/hardware` con:
 
 - [ ] Una venta imprime ticket por el destino configurado.
 - [ ] Si la impresora falla, la venta queda completada y el ticket queda pendiente de reimpresión.
+- [ ] Una comanda gastronómica se rutea a dos estaciones distintas sin duplicar ítems.
 - [ ] Un scanner USB lee 100 códigos seguidos sin duplicar ni perder foco.
 - [ ] La pantalla cliente muestra carrito, total, QR y vuelto en tiempo real.
 - [ ] Soporte puede exportar diagnóstico sin acceder manualmente a la máquina del cliente.

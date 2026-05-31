@@ -13,9 +13,16 @@ describe("Avatar", () => {
     expect(container.textContent).toBe("CA");
   });
 
-  it("muestra el emoji cuando el avatar es un preset", () => {
-    const { container } = render(<Avatar name="Cajero A" avatar="🦊" />);
-    expect(container.textContent).toBe("🦊");
+  it("muestra un icono (svg) cuando el avatar es un preset", () => {
+    const { container } = render(<Avatar name="Cajero A" avatar="cat" />);
+    expect(container.querySelector("svg")).toBeTruthy();
+    expect(container.textContent).toBe("");
+  });
+
+  it("cae a iniciales si el token de avatar no existe", () => {
+    const { container } = render(<Avatar name="Cajero A" avatar="zzz" />);
+    expect(container.querySelector("svg")).toBeNull();
+    expect(container.textContent).toBe("CA");
   });
 
   it("expone un set de presets no vacío", () => {

@@ -156,7 +156,12 @@ export function InternalShell({
                 <span className="block truncate text-sm font-medium text-foreground">
                   {name}
                 </span>
-                <span className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full bg-ninja-flame/12 px-2 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                {name !== email && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {email}
+                  </span>
+                )}
+                <span className="mt-1 inline-flex w-fit max-w-full items-center gap-1 truncate rounded-full bg-ninja-flame/12 pl-1.5 pr-2 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
                   <ShieldCheck size={11} className="shrink-0" />
                   {level ? LEVEL_LABELS[level] ?? level : "Staff"}
                 </span>

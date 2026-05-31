@@ -21,6 +21,13 @@ export function useDefaultRegister() {
   });
 }
 
+export function useMpMethod() {
+  return useQuery({
+    queryKey: ["pos", "mp-method"],
+    queryFn: () => posApi.mpMethod(),
+  });
+}
+
 export function usePosMutations() {
   const qc = useQueryClient();
   const invalidateShift = () =>

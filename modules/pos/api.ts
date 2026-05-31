@@ -75,6 +75,53 @@ export const posApi = {
     return data as number;
   },
 
+  // ¿El tenant tiene Mercado Pago habilitado y conectado?
+  mpMethod: async (): Promise<{ enabled: boolean; connected: boolean }> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("tenant_payment_methods")
+      .select("enabled, config")
+      .eq("provider_key", "mercadopago")
+      .maybeSingle();
+    return {
+      enabled: Boolean(data?.enabled),
+      connected: Boolean((data?.config as { connected?: boolean } | null)?.connected),
+    };
+  },
+
+  // Crea la preferencia/QR de cobro y devuelve el init_point.
+  createMpQr: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_create_qr", {
+      body: { amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  // Estado en vivo del intent (el POS consulta mientras espera el pago).
+  mpIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("mp_payment_intents")
+      .select("status, mp_payment_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return {
+      status: data?.status ?? "pending",
+      mp_payment_id: data?.mp_payment_id ?? null,
+    };
+  },
+
   createSale: async (
     items: SaleItemInput[],
     payments: SalePaymentInput[],

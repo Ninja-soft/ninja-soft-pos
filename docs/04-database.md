@@ -633,6 +633,75 @@ Reglas:
 
 ---
 
+## 8.4 Extensión F14 — motor comercial enterprise
+
+Cuando entre F14, se agregará un bloque de configuración comercial versionada y auditada:
+
+- [ ] `tenant_entitlements`: permisos efectivos por tenant/modulo/recurso.
+- [ ] `tenant_usage_counters`: uso mensual o por periodo para cuotas medibles.
+- [ ] `usage_events`: eventos crudos para reconstruir consumo.
+- [ ] `plan_addons`: catalogo global de add-ons.
+- [ ] `tenant_addons`: add-ons contratados por tenant con vigencia.
+- [ ] `pricing_rules`: reglas comerciales de precio/descuento/recargo.
+- [ ] `surcharge_rules`: variantes por medio, cuotas, canal, sucursal y vigencia.
+- [ ] `commercial_rule_versions`: versiones publicadas/draft/archivadas.
+- [ ] `commercial_change_requests`: solicitudes maker-checker con aprobacion.
+- [ ] `config_templates`: plantillas por rubro/plan.
+- [ ] `config_snapshots`: snapshots para diff y rollback.
+- [ ] `billing_ledger`: cargos, creditos, pagos, deuda y vencimientos de NinjaSoft.
+- [ ] `supplier_accounts`: proveedores y condiciones.
+- [ ] `purchase_orders`: ordenes de compra.
+- [ ] `purchase_order_items`: detalle y recepcion parcial.
+- [ ] `inventory_lots`: lotes y vencimientos.
+- [ ] `inventory_serial_numbers`: numeros de serie y garantia.
+- [ ] `stock_counts`: conteos fisicos/ciclicos.
+- [ ] `offline_operation_queue`: operaciones generadas offline con `client_operation_id`.
+- [ ] `api_clients`: credenciales/scopes de API por tenant.
+- [ ] `webhook_subscriptions`: endpoints externos por evento.
+- [ ] `webhook_delivery_logs`: entregas, reintentos y errores.
+
+Reglas:
+
+- [ ] Configuracion sensible debe tener version, actor, motivo y estado.
+- [ ] Cambios publicados son append-only; rollback crea una nueva version.
+- [ ] `tenant_usage_counters` se puede recalcular desde `usage_events`.
+- [ ] Offline usa idempotencia por tenant + `client_operation_id`.
+- [ ] API/webhooks tienen scopes, rate limit y audit log.
+
+---
+
+## 8.5 Extensión F15 — escuela y onboarding guiado
+
+Cuando entre F15, se agregará un bloque para cursos, tours, sugerencias y certificaciones:
+
+- [ ] `learning_courses`: cursos.
+- [ ] `learning_modules`: modulos dentro de cursos.
+- [ ] `learning_lessons`: lecciones.
+- [ ] `learning_steps`: pasos, recursos y checks.
+- [ ] `learning_assessments`: evaluaciones.
+- [ ] `learning_progress`: progreso por usuario/tenant.
+- [ ] `learning_certifications`: certificaciones disponibles.
+- [ ] `user_certifications`: certificaciones obtenidas.
+- [ ] `guided_tours`: recorridos guiados.
+- [ ] `guided_tour_versions`: version draft/publicada.
+- [ ] `guided_tour_steps`: pasos anclados a UI.
+- [ ] `onboarding_checklists`: checklist por rubro/plan.
+- [ ] `onboarding_tasks`: tareas generadas por tenant.
+- [ ] `onboarding_suggestions`: sugerencias/nudges configurables.
+- [ ] `suggestion_events`: vistas, clicks, pospuestos, completados.
+- [ ] `knowledge_articles`: base de conocimiento contextual.
+- [ ] `practice_sandboxes`: laboratorios demo por tenant.
+
+Reglas:
+
+- [ ] El contenido se segmenta por plan, rubro, rol, pais, feature flag y version de producto.
+- [ ] Los tours publicados son inmutables; editar crea nueva version.
+- [ ] Progreso y certificaciones son por usuario y tenant.
+- [ ] Sugerencias respetan cooldown y maximo por sesion/dia.
+- [ ] El laboratorio nunca emite AFIP real ni altera stock/caja productivos.
+
+---
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

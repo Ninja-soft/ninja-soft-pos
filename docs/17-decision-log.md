@@ -331,7 +331,7 @@ Con el MVP (H0–H6) funcional y desplegado, el equipo definió extender el alca
 
 ### Decisión
 
-Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F3**. Definiciones clave:
+Se agregan al roadmap las fases **F6 (Personalización)**, **F7 (Panel interno PRO + comunicaciones)** y **F8 (Pagos y cobros)**. El orden original era **F6 → F7 → F8 → F3 (AFIP)**, luego actualizado por ADR-011/ADR-012/ADR-013/ADR-014/ADR-018/ADR-019 a **F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F3**. Definiciones clave:
 
 - **Pagos:** arquitectura extensible primero (registro de proveedores, credenciales encriptadas por tenant, UI de cobro abstracta, pago mixto) y **una integración por etapas** por proveedor: Mercado Pago/Point, MODO (QR interoperable), Payway/Prisma, Getnet, Fiserv/Posnet/Clover, **Mobbex como orquestador opcional**, Pagos360. Medios manuales (efectivo, transferencia, mixto) desde la base.
 - **Staff NinjaSoft:** tres niveles — **super-admin**, **admin**, **soporte** — con matriz de permisos versionada.
@@ -596,6 +596,84 @@ El gate valida:
 - **Positivas:** consistencia visual, menos duplicación, menos regresiones responsive y una barra clara para aceptar UI.
 - **Negativas:** cada PR de UI requiere más evidencia y revisión.
 - **Seguimiento:** agregar Playwright screenshots/visual checks cuando el suite E2E esté consolidado.
+
+---
+
+## ADR-018 — Motor comercial enterprise y configuracion centralizada
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El roadmap ya cubria pagos, recargos retail, promociones, planes custom, notificaciones, gastronomia y servicios. Pero varias capacidades clave de un POS de primer nivel seguian dispersas o en backlog: cuotas enterprise, add-ons, medicion de uso, reglas comerciales unificadas, aprobaciones, inventario PRO, compras/proveedores, offline completo, omnicanal y API/webhooks.
+
+### Decisión
+
+Se agrega **F14 — Motor comercial enterprise** y [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md) como especificacion central.
+
+F14 define:
+
+- Jerarquia de configuracion: global, plan, tenant, rubro, sucursal, caja, canal, rol, usuario y vigencia.
+- Planes, cuotas, add-ons, entitlements y usage metering.
+- Recargos, financiacion, tasas, redondeos, service charge, propinas y fees por contexto.
+- Motor de reglas comerciales unificado para precio, descuento, recargo, comision, bloqueo, alerta o sugerencia.
+- Gobierno de cambios con maker-checker, motivo, version, diff y rollback.
+- Inventario PRO, compras, proveedores, lotes, vencimientos, series y reposicion sugerida.
+- Offline-first completo con colas locales, idempotencia y reconciliacion.
+- Omnicanal, API, webhooks, marketplace de apps y BI/AI operativo.
+
+### Alternativas consideradas
+
+- **Mantener estas capacidades en backlog:** descartado; eran brechas directas frente a POS lideres y a comercios grandes.
+- **Repartir reglas en cada modulo:** descartado; duplicaria logica de recargos/promos/comisiones/precios y haria dificil auditar.
+- **Crear planes globales para cada excepcion:** descartado; ensucia el catalogo comercial. Plan custom + add-ons + entitlements es mas mantenible.
+
+### Consecuencias
+
+- **Positivas:** el producto gana una capa enterprise coherente, auditable y simulable; se reducen configuraciones manuales y excepciones invisibles.
+- **Negativas:** requiere una arquitectura cuidadosa de versionado, evaluacion de reglas, performance y permisos.
+- **Seguimiento:** disenar tablas `tenant_entitlements`, `tenant_usage_counters`, `pricing_rules`, `config_snapshots`, `billing_ledger`, `purchase_orders`, `offline_operation_queue`, `api_clients` y `webhook_subscriptions` antes de iniciar F14.
+
+---
+
+## ADR-019 — Escuela NinjaSoft y onboarding guiado configurable
+
+**Fecha:** 2026-05-30
+**Estado:** Accepted
+**Autor:** Codex
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El producto crece hacia muchos rubros y operaciones complejas. Sin educacion dentro del sistema, soporte queda obligado a explicar cada flujo manualmente y los clientes tardan mas en llegar a primera venta, caja cerrada, AFIP configurado o uso correcto de mesas/comandas.
+
+### Decisión
+
+Se agrega **F15 — Escuela NinjaSoft + onboarding guiado configurable** y [`28-school-onboarding.md`](./28-school-onboarding.md).
+
+F15 define:
+
+- Escuela por modulos con cursos, lecciones, pasos, evaluaciones y certificaciones.
+- Tours guiados configurables desde internal por plan, rubro, rol, tenant, feature flag, estado y disparador.
+- Checklist de activacion dinamico por rubro.
+- Ayuda contextual dentro de cada pantalla.
+- Laboratorio/demo segura para practicar sin afectar datos reales.
+- Sugerencias/nudges con frecuencia, cooldown, CTA, metricas y relacion con notificaciones.
+
+### Alternativas consideradas
+
+- **Resolver capacitacion solo con soporte humano:** descartado; no escala y aumenta costo operativo.
+- **Usar solo una base de conocimiento estatica:** insuficiente; no guia al usuario dentro del flujo ni mide adopcion.
+- **Hardcodear tours en frontend:** descartado; operaciones necesita ajustar recorridos sin deploy.
+
+### Consecuencias
+
+- **Positivas:** menor friccion de adopcion, menos tickets repetitivos, onboarding por rubro y certificacion por rol.
+- **Negativas:** exige gobierno de contenido, versionado de tours y cuidado para no saturar al usuario con mensajes.
+- **Seguimiento:** disenar `learning_courses`, `guided_tours`, `onboarding_checklists`, `onboarding_suggestions`, `suggestion_events` y el panel internal de configuracion antes de iniciar F15.
 
 ---
 

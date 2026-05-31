@@ -237,9 +237,14 @@ export default function PosPage() {
         variant: diff === 0 ? "success" : "info",
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : undefined;
       toast({
-        title: "No se pudo cerrar",
-        description: e instanceof Error ? e.message : undefined,
+        title:
+          msg && msg.includes("close_needs_reason")
+            ? "Escribí un motivo: la diferencia supera la tolerancia"
+            : "No se pudo cerrar",
+        description:
+          msg && msg.includes("close_needs_reason") ? undefined : msg,
         variant: "error",
       });
     }

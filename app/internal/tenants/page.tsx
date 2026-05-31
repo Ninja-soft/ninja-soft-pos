@@ -53,13 +53,25 @@ export default function InternalTenantsPage() {
             {tenants?.map((t) => (
               <tr key={t.id} className="transition hover:bg-muted/40">
                 <td className="px-4 py-3">
-                  <Link
-                    href={`/internal/tenants/${t.id}`}
-                    className="font-medium text-foreground hover:text-ninja-flameSoft"
-                  >
-                    {t.name}
-                  </Link>
-                  <div className="text-xs text-muted-foreground">{t.slug}</div>
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted text-xs font-bold text-muted-foreground">
+                      {t.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={t.logoUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        (t.name[0] ?? "?").toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <Link
+                        href={`/internal/tenants/${t.id}`}
+                        className="font-medium text-foreground hover:text-ninja-flameSoft"
+                      >
+                        {t.name}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">{t.slug}</div>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div>{t.ownerName ?? "—"}</div>

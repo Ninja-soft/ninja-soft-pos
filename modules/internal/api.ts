@@ -12,6 +12,7 @@ export interface InternalTenant {
   subStatus: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
+  logoUrl: string | null;
 }
 
 export interface TenantFlag {
@@ -27,7 +28,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email))",
+        "id, name, slug, status, industry, created_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -46,11 +47,15 @@ export const internalApi = {
         role: string;
         users: { full_name: string | null; email: string } | null;
       }[];
+      tenant_branding: { logo_url: string | null } | { logo_url: string | null }[] | null;
     };
     return ((data ?? []) as unknown as Row[]).map((t) => {
       const sub = t.subscriptions?.[0];
       const owner =
         t.tenant_users?.find((x) => x.role === "owner") ?? t.tenant_users?.[0];
+      const brand = Array.isArray(t.tenant_branding)
+        ? t.tenant_branding[0]
+        : t.tenant_branding;
       return {
         id: t.id,
         name: t.name,
@@ -63,6 +68,7 @@ export const internalApi = {
         subStatus: sub?.status ?? null,
         ownerName: owner?.users?.full_name ?? null,
         ownerEmail: owner?.users?.email ?? null,
+        logoUrl: brand?.logo_url ?? null,
       };
     });
   },

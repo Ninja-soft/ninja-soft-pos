@@ -8,6 +8,7 @@ import {
   Building2,
   ChevronDown,
   KeyRound,
+  LayoutDashboard,
   LogOut,
   Mail,
   Menu,
@@ -15,6 +16,7 @@ import {
   ShieldCheck,
   Store,
   Sun,
+  UserCog,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -23,6 +25,7 @@ import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
+import { ProfileEditModal } from "@/components/account/ProfileEditModal";
 import {
   Dropdown,
   DropdownContent,
@@ -33,6 +36,7 @@ import {
 } from "@/components/ui/Dropdown";
 
 const NAV = [
+  { href: "/internal", label: "Inicio", icon: LayoutDashboard },
   { href: "/internal/tenants", label: "Negocios", icon: Building2 },
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },
@@ -57,6 +61,7 @@ export function InternalShell({
   const { theme, toggleTheme } = useTheme();
   const [drawer, setDrawer] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [pfOpen, setPfOpen] = useState(false);
   const isDark = theme === "ninja-dark" || theme === "ninja-noir";
 
   const { data: me } = useQuery({
@@ -97,15 +102,14 @@ export function InternalShell({
           Interno
         </span>
       </Link>
-      <div className="mb-3 px-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-ninja-flame/12 px-2.5 py-1 text-xs font-semibold text-ninja-flameSoft">
-          <ShieldCheck size={13} /> Team NinjaSoft
-        </span>
-      </div>
+      <div className="mb-2" />
 
       {NAV.map((it) => {
         const Icon = it.icon;
-        const active = pathname === it.href || pathname.startsWith(it.href + "/");
+        const active =
+          it.href === "/internal"
+            ? pathname === "/internal"
+            : pathname === it.href || pathname.startsWith(it.href + "/");
         return (
           <Link
             key={it.href}
@@ -124,7 +128,17 @@ export function InternalShell({
         );
       })}
 
-      <div className="mt-auto pt-3">
+      <div className="mt-auto space-y-3 pt-3">
+        <Link
+          href="/dashboard"
+          onClick={() => setDrawer(false)}
+          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
+            <Store size={16} />
+          </span>
+          <span className="text-sm font-medium text-foreground">Volver al POS</span>
+        </Link>
         <Dropdown>
           <DropdownTrigger asChild>
             <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
@@ -133,8 +147,13 @@ export function InternalShell({
                 <span className="block truncate text-sm font-medium text-foreground">
                   {name}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {level ? LEVEL_LABELS[level] ?? level : "Staff"}
+                <span className="mt-0.5 flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ninja-flame/12 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                    <ShieldCheck size={11} /> Team NinjaSoft
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {level ? LEVEL_LABELS[level] ?? level : "Staff"}
+                  </span>
                 </span>
               </span>
               <ChevronDown size={15} className="shrink-0 text-muted-foreground" />
@@ -151,13 +170,11 @@ export function InternalShell({
               {isDark ? <Sun size={15} /> : <Moon size={15} />}
               {isDark ? "Modo claro" : "Modo oscuro"}
             </DropdownItem>
+            <DropdownItem onSelect={() => setPfOpen(true)}>
+              <UserCog size={15} /> Editar mi perfil
+            </DropdownItem>
             <DropdownItem onSelect={() => setPwOpen(true)}>
               <KeyRound size={15} /> Cambiar contraseña
-            </DropdownItem>
-            <DropdownItem asChild>
-              <Link href="/dashboard">
-                <Store size={15} /> Ir al POS
-              </Link>
             </DropdownItem>
             <DropdownSeparator />
             <DropdownItem onSelect={signOut} className="text-destructive">
@@ -206,6 +223,7 @@ export function InternalShell({
       </div>
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
     </div>
   );
 }

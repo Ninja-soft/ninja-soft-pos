@@ -303,7 +303,8 @@ export function PaymentMethodsCard() {
           const isOpen = expanded.has(p.key);
           const info = PROVIDER_INFO[p.key];
           // Medios con grid de planes: el recargo se configura ahí, no en la fila.
-          const hasPlans = (p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key);
+          // Todo medio implementado y no manual (gateway/qr/orquestador).
+          const hasPlans = IMPLEMENTED.has(p.key) && p.kind !== "manual";
           return (
             <Card
               key={p.key}
@@ -371,7 +372,7 @@ export function PaymentMethodsCard() {
                 </div>
 
                 {/* Planes por marca (solo tarjeta/QR conectado) */}
-                {(p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key) && (
+                {hasPlans && (
                   <button
                     onClick={() => setPlansProvider({ key: p.key, name: p.name })}
                     title="Planes por tarjeta y cuotas"
@@ -468,7 +469,7 @@ export function PaymentMethodsCard() {
                         )}
                       </button>
                     )}
-                    {(p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key) && (
+                    {hasPlans && (
                       <button
                         onClick={() => setPlansProvider({ key: p.key, name: p.name })}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
@@ -538,7 +539,14 @@ export function PaymentMethodsCard() {
         onOpenChange={(o) => !o && setConnectKey(null)}
         title={connectingProvider ? `Conectar ${connectingProvider.name}` : "Conectar"}
       >
-        <div className="space-y-4">
+        <form
+          className="space-y-4"
+          autoComplete="off"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          {/* Señuelos anti-autocompletado del navegador. */}
+          <input type="text" name="username" autoComplete="username" className="hidden" />
+          <input type="password" name="password" autoComplete="new-password" className="hidden" />
           {connectKey && PROVIDER_LOGO[connectKey] && (
             <div className="flex items-center justify-center py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -563,7 +571,10 @@ export function PaymentMethodsCard() {
               )}
               <Input
                 label="API Key"
+                name="mobbex_api_key"
                 autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 value={mbApiKey}
                 onChange={(e) => setMbApiKey(e.target.value)}
                 placeholder={connectingConnected ? "•••••• (configurado)" : "Tu API Key"}
@@ -571,7 +582,10 @@ export function PaymentMethodsCard() {
               <Input
                 label="Access Token"
                 type="password"
-                autoComplete="off"
+                name="mobbex_access_token"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
                 value={mbToken}
                 onChange={(e) => setMbToken(e.target.value)}
                 placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Access Token"}
@@ -632,7 +646,10 @@ export function PaymentMethodsCard() {
                   <Input
                     label="Access Token"
                     type="password"
-                    autoComplete="off"
+                    name="mp_access_token"
+                    autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     placeholder={connectingConnected ? "•••••• (ya configurado)" : "APP_USR-..."}
@@ -679,7 +696,7 @@ export function PaymentMethodsCard() {
               Cerrar
             </Button>
           </div>
-        </div>
+        </form>
       </Modal>
 
       {plansProvider && (

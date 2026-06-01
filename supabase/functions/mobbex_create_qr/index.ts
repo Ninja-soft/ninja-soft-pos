@@ -80,6 +80,43 @@ Deno.serve(async (req: Request) => {
 
   const webhook = `${url}/functions/v1/mobbex_webhook?intent=${intent.id}`;
 
+  // Mapeo grid → Mobbex: planes de crédito activos del tenant. Mobbex aplica
+  // las cuotas con su interés en el checkout (a diferencia de MP, que solo
+  // ajusta el precio). NOTA: validar el formato exacto de `installments` contra
+  // la API de Mobbex al probar con credenciales reales.
+  const { data: planRows } = await admin
+    .from("payment_plans")
+    .select("installments, surcharge_pct")
+    .eq("tenant_id", tenantId)
+    .eq("provider_key", "mobbex")
+    .eq("is_active", true)
+    .eq("base", "credito");
+  const seen = new Set<number>();
+  const installments = (planRows ?? [])
+    .filter((p) => {
+      const n = Number(p.installments) || 1;
+      if (n <= 1 || seen.has(n)) return false;
+      seen.add(n);
+      return true;
+    })
+    .map((p) => ({
+      months: Number(p.installments),
+      recharge: Number(p.surcharge_pct) || 0,
+    }))
+    .sort((a, b) => a.months - b.months);
+
+  const body: Record<string, unknown> = {
+    total: Math.round(amount * 100) / 100,
+    currency: "ARS",
+    reference: intent.id,
+    description: title,
+    webhook,
+    return_url: webhook,
+  };
+  if (installments.length > 0) {
+    body.installments = { enabled: true, list: installments };
+  }
+
   // Crea el checkout en Mobbex.
   const res = await fetch("https://api.mobbex.com/p/checkout", {
     method: "POST",
@@ -88,14 +125,7 @@ Deno.serve(async (req: Request) => {
       "x-access-token": sec.access_token,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      total: Math.round(amount * 100) / 100,
-      currency: "ARS",
-      reference: intent.id,
-      description: title,
-      webhook,
-      return_url: webhook,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

@@ -133,11 +133,17 @@ export function QrCheckoutModal({
   }, [open, base]);
 
   // Auto-arranque sin selección:
+  //  - Mobbex maneja las cuotas en su checkout → mandamos el base y los planes
+  //    van a Mobbex desde la Edge Function (no aplicamos recargo de precio acá).
   //  - modo recargo único → aplica el % global y genera el QR
   //  - sin planes activos → genera el QR por el monto base
   useEffect(() => {
     if (!open || loadingAll || startedRef.current) return;
-    if (globalMode) {
+    if (provider === "mobbex") {
+      startedRef.current = true;
+      chosenRef.current = null;
+      startQr(base);
+    } else if (globalMode) {
       startedRef.current = true;
       const sc = round2((base * globalPct) / 100);
       chosenRef.current = sc > 0 ? { label: "Recargo único", surcharge: sc } : null;
@@ -173,8 +179,10 @@ export function QrCheckoutModal({
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
     : "";
 
-  // Pantalla de selección: solo cuando hay planes y no es modo recargo único.
-  const selecting = phase === "select" && !globalMode && (loadingAll || activePlans.length > 0);
+  // Pantalla de selección: solo MP con planes y sin modo recargo único.
+  // Mobbex no la usa (sus cuotas se eligen en el checkout de Mobbex).
+  const selecting =
+    phase === "select" && provider !== "mobbex" && !globalMode && (loadingAll || activePlans.length > 0);
 
   const providerLogo =
     provider === "mobbex"

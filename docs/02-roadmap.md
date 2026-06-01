@@ -463,7 +463,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
 
 - [~] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + planes de garantía extendida + oferta al cobrar (prima como línea). Falta oferta contextual automática (al detectar producto con garantía) y reportes de garantías/comisiones.*
   - [x] Campo "garantía de fábrica" por producto (`warranty_months`).
-  - [x] Planes de garantía extendida por tenant: meses, prima fija y comisión (`warranty_plans`).
+  - [x] Planes de garantía extendida por tenant: meses, prima fija **o % del precio**, comisión y descripción (`warranty_plans`). Configurable completo en **Configuración → Garantías** (y acceso rápido en Productos → Garantías).
   - [x] Oferta al cobrar: en el POS se elige un plan de garantía y la prima entra como línea de la venta.
   - [ ] Oferta contextual automática (al cobrar un producto con garantía declarada) y reportes.
   - [ ] Planes de garantía extendida por tenant/categoría/producto: meses adicionales, prima (% del precio) y comisión del vendedor.

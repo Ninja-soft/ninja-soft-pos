@@ -134,7 +134,12 @@ export function PaymentModal({
   }, [open]);
 
   const wplan = (wplans ?? []).find((p) => p.id === warrantyId) ?? null;
-  const warrantyPrima = wplan ? Number(wplan.price) : 0;
+  // Prima: % del precio (sobre la base) si está cargado, si no la fija.
+  const warrantyPrima = wplan
+    ? Number(wplan.price_pct) > 0
+      ? Math.round(((base * Number(wplan.price_pct)) / 100) * 100) / 100
+      : Number(wplan.price)
+    : 0;
   const plan = (plans ?? []).find((p) => p.id === planId) ?? null;
   const surchargePct = plan ? Number(plan.surcharge_pct) : 0;
   // El recargo aplica sobre mercadería + garantía.

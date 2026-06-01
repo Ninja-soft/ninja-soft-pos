@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { CreditCard, Palette, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { CreditCard, Palette, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -22,15 +22,17 @@ import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
+import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 
-type Section = "apariencia" | "rubro" | "marca" | "pagos" | "operacion";
+type Section = "apariencia" | "rubro" | "marca" | "pagos" | "operacion" | "garantias";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
   { key: "rubro", label: "Rubro del negocio", icon: Tag },
   { key: "marca", label: "Marca del negocio", icon: Store },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
+  { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
 ];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
@@ -286,6 +288,23 @@ export default function ConfiguracionPage() {
 
           {/* Operación del POS (solo owner/manager; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard />}
+
+          {/* Garantías extendidas */}
+          {section === "garantias" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Planes de garantía extendida</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Definí los planes que ofrecés al cobrar (meses, prima fija o % del
+                  precio, comisión del vendedor).
+                </p>
+                <WarrantyPlansManager />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

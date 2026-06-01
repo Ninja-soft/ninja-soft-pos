@@ -319,7 +319,9 @@ export const warrantyPlansApi = {
     label: string;
     months: number;
     price: number;
+    price_pct: number;
     commission_pct: number;
+    description: string | null;
   }): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.from("warranty_plans").insert(v);

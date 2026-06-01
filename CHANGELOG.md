@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H28 — Reporte de garantías y comisiones.** Nuevo bloque "Garantías y comisiones" en Reportes (respeta el período elegido y el toggle de "Personalizar"). Agrupa las líneas de venta "Garantía …" por plan, las cruza con `warranty_plans.commission_pct` y muestra cantidad vendida, total facturado, % y monto de comisión estimada. Incluido en el export XLSX.
 - **H31 — Cuentas por cobrar (vista global + antigüedad).** Nuevo botón "Cuentas por cobrar" en /clientes que abre un reporte de toda la deuda de cuenta corriente por cliente, con buckets de antigüedad (0-30 / 31-60 / 61-90 / +90 días). El cálculo es FIFO: los pagos cancelan primero los cargos más viejos, y lo que sigue impago se ubica en su tramo. Incluye totales por tramo y export XLSX. Solo lectura (los pagos se siguen registrando desde el historial del cliente).
 - **H27 — Planes de pago por marca de tarjeta.** `payment_plans` se extiende con `base` (efectivo/transferencia/débito/crédito/QR/otro), `brand` (Visa/Master/Maestro/Cabal/Amex/Naranja/Diners), `installments` (cuotas) y `code` (slug para deduplicar el seeder). En Configuración → Medios de pago → Planes ahora hay una tabla rica (Plan/Base/Marca/Cuotas/Recargo/Estado) con alta/edición, logos de tarjeta y un botón "Cargar planes AR" que siembra los planes típicos (Débito Visa/Master/Maestro/Cabal, Crédito 1 pago, Cuota Simple 3/6/12, Crédito 3/6/12) salteando los que ya existen.
 

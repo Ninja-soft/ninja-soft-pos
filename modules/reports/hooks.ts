@@ -9,3 +9,10 @@ export function useSalesReport(fromISO: string, toISO: string) {
     queryFn: () => reportsApi.sales(fromISO, toISO),
   });
 }
+
+export function useWarrantyReport(fromISO: string, toISO: string) {
+  return useQuery({
+    queryKey: ["reports", "warranties", fromISO, toISO],
+    queryFn: () => reportsApi.warranties(fromISO, toISO),
+  });
+}

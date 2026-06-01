@@ -461,7 +461,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Configuración de voucher obligatorio para tarjeta: lote, cupón, autorización.
   - [ ] *Criterio:* el cajero elige "Visa 3 cuotas +8%" y el ticket suma el recargo automáticamente.
 
-- [~] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + planes de garantía extendida + oferta al cobrar (prima como línea). Falta oferta contextual automática (al detectar producto con garantía) y reportes de garantías/comisiones.*
+- [~] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + planes de garantía extendida + oferta al cobrar (prima como línea) + reporte de garantías/comisiones. Falta oferta contextual automática (al detectar producto con garantía).*
   - [x] Campo "garantía de fábrica" por producto (`warranty_months`).
   - [x] Planes de garantía extendida por tenant: meses, prima fija **o % del precio**, comisión y descripción (`warranty_plans`). Configurable completo en **Configuración → Garantías** (y acceso rápido en Productos → Garantías).
   - [x] Oferta al cobrar: en el POS se elige un plan de garantía y la prima entra como línea de la venta.
@@ -469,7 +469,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Planes de garantía extendida por tenant/categoría/producto: meses adicionales, prima (% del precio) y comisión del vendedor.
   - [ ] Oferta contextual al cobrar productos con garantía declarada.
   - [ ] Prima agregada al ticket como línea/servicio asociado.
-  - [ ] Reporte de garantías vendidas y comisiones.
+  - [x] Reporte de garantías vendidas y comisiones (Reportes → "Garantías y comisiones": agrupa las líneas "Garantía …" por plan, cruza con `warranty_plans.commission_pct` y muestra cantidad/total/comisión; incluido en el export XLSX).
   - [ ] *Criterio:* al cobrar un producto con garantía de fábrica, el POS ofrece planes aplicables y registra prima/comisión.
 
 - [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas): tablas `sale_returns`/`sale_return_items`, `sale_items.returned_qty` anti doble-devolución, reintegro por efectivo (sale de caja) o vale (`store_credit_movements`). Faltan: redención del vale en el POS, vigencia del vale, catálogo de motivos y "diferencia a cobrar" (cambio).*

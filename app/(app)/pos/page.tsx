@@ -22,7 +22,7 @@ import {
   useProductSerials,
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
-import { useCustomers } from "@/modules/customers/hooks";
+import { useCustomers, useStoreCreditBalance } from "@/modules/customers/hooks";
 import { verticalHas } from "@/lib/verticals/config";
 import {
   useCartStore,
@@ -98,6 +98,7 @@ export default function PosPage() {
   const [custOpen, setCustOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
   const { data: customers } = useCustomers(custSearch);
+  const { data: scBalance } = useStoreCreditBalance(customer?.id);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
 
@@ -646,6 +647,7 @@ export default function PosPage() {
         total={total}
         onConfirm={handleSale}
         loading={sale.isPending}
+        storeCreditBalance={scBalance ?? 0}
       />
       <QrCheckoutModal
         open={qrOpen}

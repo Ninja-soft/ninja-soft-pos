@@ -20,6 +20,16 @@ function payload(input: CustomerOutput) {
 }
 
 export const customersApi = {
+  // Saldo a favor (vale) del cliente = suma de movimientos de store credit.
+  storeCreditBalance: async (customerId: string): Promise<number> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("store_credit_movements")
+      .select("delta")
+      .eq("customer_id", customerId);
+    return (data ?? []).reduce((acc, r) => acc + Number(r.delta || 0), 0);
+  },
+
   list: async (search?: string): Promise<Customer[]> => {
     const supabase = createClient();
     let q = supabase

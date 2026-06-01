@@ -15,6 +15,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H29 — Cobrar con vale (saldo a favor) en el POS:** `payments.method` suma `store_credit`. Si el cliente seleccionado tiene saldo que cubre el total, aparece el medio "Vale (saldo $X)" en el cobro; `create_sale` valida el saldo y lo descuenta (`store_credit_movements`). Cierra el ciclo de devoluciones con vale → uso del vale.
 - **Sección /devoluciones (H29):** página dedicada en el menú (Operación → Devoluciones) para buscar la venta por N° de comprobante/ticket y registrar la devolución/cambio (reusa `ReturnModal`).
 - **Numeración de comprobante personalizable + búsqueda de ventas:** `pos_settings.sale_prefix` + `sale_pad` (Operación del POS) definen cómo se muestra el N° de venta (ej. `NINJA-00042`) sobre el correlativo interno. Se aplica en /ventas, ticket y PDF. /ventas suma un **buscador** por N°/ticket. Helper `formatSaleNumber`/`saleMatchesQuery`.
 - **Roadmap:** se sumaron la sección dedicada de Devoluciones con búsqueda por ticket/ID, la redención del vale en el POS (H29), la numeración de comprobante personalizable por tenant (H9) y el historial del cliente (H31).

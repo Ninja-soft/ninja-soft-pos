@@ -28,6 +28,8 @@ export interface TicketPdfData {
     address?: string | null;
     phone?: string | null;
     ticket_footer?: string | null;
+    ticket_title?: string | null;
+    ticket_legend?: string | null;
   } | null;
 }
 
@@ -49,7 +51,7 @@ export function downloadTicketPdf(data: TicketPdfData): void {
     doc.text(head.join("  ·  "), left, y);
     y += 5;
   }
-  doc.text("Comprobante no fiscal", left, y);
+  doc.text(data.brand?.ticket_title || "Comprobante no fiscal", left, y);
   y += 8;
 
   doc.setDrawColor(200);
@@ -130,6 +132,11 @@ export function downloadTicketPdf(data: TicketPdfData): void {
     y,
     { align: "center" },
   );
+  if (data.brand?.ticket_legend) {
+    y += 5;
+    doc.setFontSize(8).setFont("helvetica", "normal");
+    doc.text(data.brand.ticket_legend, 105, y, { align: "center" });
+  }
 
   doc.save(`comprobante-${data.sale.number}.pdf`);
 }

@@ -249,16 +249,16 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio:* el logo y los datos del tenant se ven en el ticket sin tocar código.
   - *Pendiente:* condición IVA/provincia/ciudad y selector de rubro; aplicar acento al catálogo (H10).
 
-- [~] **H9 — Tickets y comprobantes personalizables.** — *Base hecha (PR #30, #31); falta QR, título configurable y preview por sucursal.*
+- [~] **H9 — Tickets y comprobantes personalizables.** — *Título, leyenda extra y QR del comprobante hechos (branding). Solo falta preview por sucursal (multi-store, F4).*
   - [x] Plantillas de ticket con logo, datos comerciales y pie configurable (vía branding H8).
   - [x] Formatos **58mm / 80mm** (térmica, selector por tenant aplicado al ticket/impresión) y **A4 (PDF)** descargable (`jspdf`, PR #31).
-  - [ ] Título del comprobante configurable (ej. "Comprobante no fiscal").
+  - [x] Título del comprobante configurable (ej. "Comprobante no fiscal") — `tenant_branding.ticket_title`.
   - [x] Texto al pie del ticket configurable.
   - [x] Logo en el ticket (si hay branding).
   - [x] CUIT y datos fiscales en el ticket (si están cargados).
   - [x] Ancho 58/80mm configurable (por tenant; por caja queda para multi-caja F4).
-  - [ ] QR, leyendas extra y preview por sucursal.
-  - [~] *Criterio:* un tenant configura su ticket (logo/datos/pie/ancho) y lo imprime; descarga A4 pendiente.
+  - [x] QR (datos de la venta) y leyenda extra en ticket y PDF (`ticket_show_qr`, `ticket_legend`). Preview por sucursal queda para multi-store (F4).
+  - [x] *Criterio:* un tenant configura su ticket (logo/datos/título/pie/leyenda/QR/ancho), lo imprime y descarga A4.
 
 - [ ] **H9b — Editor visual de ticket (canvas) + envío por email.**
   - [ ] **Editor visual tipo canvas**: el dueño diseña su ticket/comprobante arrastrando bloques (logo, encabezado, datos del negocio, ítems, totales, QR, leyendas, redes, imagen, separadores). Muy personalizable, WYSIWYG.
@@ -519,16 +519,15 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Depósito default por tipo de entrega/devolución.
   - [ ] *Criterio:* se transfiere stock de depósito central a sucursal, queda en tránsito y luego recibido.
 
-- [ ] **H34 — Importación masiva por Excel.**
-  - [ ] Importar productos por XLSX: SKU, barcode, nombre, categoría, precio, costo, stock, garantía, flags.
-  - [ ] Importar clientes por XLSX: nombre, documento, IVA, contacto, domicilio, grupo, límite de deuda.
-  - [ ] Importar depósitos/sucursales por XLSX.
-  - [ ] Importar stock inicial y transferencias por XLSX.
+- [~] **H34 — Importación masiva por Excel.** — *Productos y clientes hechos (parsers `exceljs`, plantilla descargable, preview con errores, import por lote en `/productos` y `/clientes`). Faltan depósitos/stock/listas (dependen de F4) y auditoría/reversión.*
+  - [x] Importar productos por XLSX (parser `parseProductsXlsx` + `ImportProductsModal`).
+  - [x] Importar clientes por XLSX (parser `parseCustomersXlsx` + `ImportCustomersModal`).
+  - [ ] Importar depósitos/sucursales por XLSX. *(depende de F4 multi-depósito)*
+  - [ ] Importar stock inicial y transferencias por XLSX. *(depende de F4)*
   - [ ] Importar listas de precios, medios de pago/planes, garantías extendidas y motivos de devolución por XLSX.
-  - [ ] Plantillas descargables por entidad con columnas obligatorias y ejemplos.
-  - [ ] Preview antes de confirmar: filas válidas, errores, duplicados, warnings.
-  - [ ] Modo dry-run y confirmación final.
-  - [ ] Resultado con archivo de errores descargable.
+  - [x] Plantillas descargables por entidad con columnas obligatorias y ejemplos.
+  - [x] Preview antes de confirmar: filas válidas, errores.
+  - [ ] Modo dry-run formal y archivo de errores descargable. *(el preview ya muestra errores)*
   - [ ] Importaciones auditadas y reversibles cuando sea posible.
   - [ ] *Criterio:* un tenant carga productos, clientes, depósitos y stock inicial desde Excel sin tocar SQL.
 

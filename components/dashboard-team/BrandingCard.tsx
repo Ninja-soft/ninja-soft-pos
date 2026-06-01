@@ -30,6 +30,9 @@ type Branding = {
   address: string | null;
   ticket_footer: string | null;
   ticket_width: string;
+  ticket_title: string | null;
+  ticket_legend: string | null;
+  ticket_show_qr: boolean;
 };
 const EMPTY: Branding = {
   logo_path: null,
@@ -41,9 +44,12 @@ const EMPTY: Branding = {
   address: null,
   ticket_footer: null,
   ticket_width: "80",
+  ticket_title: null,
+  ticket_legend: null,
+  ticket_show_qr: false,
 };
 
-type BrandingRow = { [K in keyof Branding]?: string | null };
+type BrandingRow = { [K in keyof Branding]?: string | boolean | null };
 type Ctx = { tenantId: string; canManage: boolean; branding: BrandingRow } | null;
 
 export function BrandingCard() {
@@ -74,7 +80,7 @@ export function BrandingCard() {
       const { data: b } = await supabase
         .from("tenant_branding")
         .select(
-          "logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width",
+          "logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr",
         )
         .eq("tenant_id", mem.tenant_id)
         .maybeSingle();
@@ -87,15 +93,18 @@ export function BrandingCard() {
     if (!ctx?.canManage) return;
     const b = ctx.branding;
     setForm({
-      logo_path: b.logo_path ?? null,
-      logo_url: b.logo_url ?? null,
-      accent: b.accent ?? EMPTY.accent,
-      legal_name: b.legal_name ?? null,
-      cuit: b.cuit ?? null,
-      phone: b.phone ?? null,
-      address: b.address ?? null,
-      ticket_footer: b.ticket_footer ?? null,
-      ticket_width: b.ticket_width ?? EMPTY.ticket_width,
+      logo_path: (b.logo_path as string | null) ?? null,
+      logo_url: (b.logo_url as string | null) ?? null,
+      accent: (b.accent as string | null) ?? EMPTY.accent,
+      legal_name: (b.legal_name as string | null) ?? null,
+      cuit: (b.cuit as string | null) ?? null,
+      phone: (b.phone as string | null) ?? null,
+      address: (b.address as string | null) ?? null,
+      ticket_footer: (b.ticket_footer as string | null) ?? null,
+      ticket_width: (b.ticket_width as string | null) ?? EMPTY.ticket_width,
+      ticket_title: (b.ticket_title as string | null) ?? null,
+      ticket_legend: (b.ticket_legend as string | null) ?? null,
+      ticket_show_qr: Boolean(b.ticket_show_qr),
     });
   }, [ctx]);
 
@@ -267,6 +276,35 @@ export function BrandingCard() {
             ]}
           />
         </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Título del comprobante"
+            placeholder="Comprobante no fiscal"
+            value={form.ticket_title ?? ""}
+            onChange={(e) => set("ticket_title", e.target.value)}
+          />
+          <Input
+            label="Leyenda extra (pie)"
+            placeholder="Cambios dentro de 30 días con ticket"
+            value={form.ticket_legend ?? ""}
+            onChange={(e) => set("ticket_legend", e.target.value)}
+          />
+        </div>
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            checked={form.ticket_show_qr}
+            onChange={(e) => set("ticket_show_qr", e.target.checked)}
+          />
+          <span>
+            Mostrar QR en el ticket
+            <span className="block text-xs text-muted-foreground">
+              Imprime un QR con los datos de la venta (negocio, número, total, fecha).
+            </span>
+          </span>
+        </label>
 
         <div className="flex justify-end">
           <Button onClick={() => save.mutate()} disabled={save.isPending}>

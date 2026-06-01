@@ -7,6 +7,7 @@ import { Download, FileDown, Plus, Save, Upload, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useProviderPlans, usePaymentPlanMutations } from "@/modules/pos/hooks";
@@ -51,6 +52,7 @@ export function PaymentPlansGridModal({
   // Recargo único del medio + modo (global desactiva los planes).
   const [globalMode, setGlobalMode] = useState(false);
   const [globalPct, setGlobalPct] = useState("0");
+  const [removeCuotaN, setRemoveCuotaN] = useState<number | null>(null);
 
   // Config visual + recargo del medio (tenant_payment_methods)
   const { data: cfg } = useQuery({
@@ -221,7 +223,12 @@ export function PaymentPlansGridModal({
     saveConfig.mutate({ installments: [...installments, n].sort((a, b) => a - b) });
   }
   function removeCuota(n: number) {
+    // Saca la columna y borra los planes de esa cuota en todas las marcas.
     saveConfig.mutate({ installments: installments.filter((x) => x !== n) });
+    for (const b of brands) {
+      if (byKey.get(keyOf("credito", b, n))) m.removeCell.mutate({ base: "credito", brand: b, installments: n });
+    }
+    setRemoveCuotaN(null);
   }
   function toggleBrand(b: string) {
     const next = brands.includes(b) ? brands.filter((x) => x !== b) : [...brands, b];
@@ -370,7 +377,7 @@ export function PaymentPlansGridModal({
                     >
                       {n}c
                       <button
-                        onClick={() => removeCuota(n)}
+                        onClick={() => setRemoveCuotaN(n)}
                         className="text-muted-foreground hover:text-destructive"
                         title={`Quitar ${n} cuotas`}
                       >
@@ -414,6 +421,17 @@ export function PaymentPlansGridModal({
           </div>
         </div>
       </div>
+
+      {/* Confirmar quitar una cuota (borra esa columna en todas las marcas) */}
+      <ConfirmDialog
+        open={removeCuotaN !== null}
+        onOpenChange={(o) => !o && setRemoveCuotaN(null)}
+        title={`Quitar ${removeCuotaN ?? ""} cuotas`}
+        description={`Se quita la columna de ${removeCuotaN ?? ""} cuotas y se borran los recargos cargados en esa cuota para todas las marcas de ${providerName}.`}
+        confirmLabel="Quitar"
+        danger
+        onConfirm={() => removeCuotaN !== null && removeCuota(removeCuotaN)}
+      />
 
       {/* Diálogo: import reemplazar vs agregar */}
       <Modal

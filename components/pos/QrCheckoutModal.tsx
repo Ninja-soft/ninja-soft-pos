@@ -1,52 +1,67 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { posApi } from "@/modules/pos/api";
+import { useProviderPlans } from "@/modules/pos/hooks";
+import { BASE_LABEL } from "@/modules/pos/planConstants";
 import { formatCurrency } from "@/lib/utils/format";
 
-type Phase = "creating" | "waiting" | "approved" | "rejected" | "error";
+type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
 
-// Cobro por QR de Mercado Pago: genera la preferencia, muestra el QR del
-// init_point y espera la aprobación (webhook → estado en vivo por polling).
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Cobro por QR de Mercado Pago: el cajero elige el plan (marca/cuotas) que
+// aplica su recargo, se genera el QR por el total con recargo y se espera la
+// aprobación (webhook → estado en vivo por polling).
 export function QrCheckoutModal({
   open,
   onOpenChange,
-  amount,
+  base,
   onApproved,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  amount: number;
-  onApproved: (reference: string) => void;
+  base: number;
+  onApproved: (reference: string, amount: number, extras: { name: string; amount: number }[]) => void;
 }) {
   const { toast } = useToast();
-  const [phase, setPhase] = useState<Phase>("creating");
+  const [phase, setPhase] = useState<Phase>("select");
+  const [planId, setPlanId] = useState("");
   const [intentId, setIntentId] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState("");
   const firedRef = useRef(false);
 
+  const { data: plans = [] } = useProviderPlans(open ? "mercadopago" : null);
+  const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans]);
+  const plan = activePlans.find((p) => p.id === planId) ?? null;
+  const surcharge = plan ? round2((base * (Number(plan.surcharge_pct) || 0)) / 100) : 0;
+  const amount = round2(base + surcharge);
+
   useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
+    if (open) {
+      setPhase("select");
+      setPlanId("");
+      setIntentId(null);
+      setInitPoint("");
+      firedRef.current = false;
+    }
+  }, [open]);
+
+  function startQr() {
     setPhase("creating");
-    setIntentId(null);
-    setInitPoint("");
-    firedRef.current = false;
     posApi
       .createMpQr(amount, "Venta NinjaPos")
       .then((r) => {
-        if (cancelled) return;
         setIntentId(r.intent_id);
         setInitPoint(r.init_point);
         setPhase("waiting");
       })
       .catch((e) => {
-        if (cancelled) return;
         setPhase("error");
         toast({
           title:
@@ -56,10 +71,7 @@ export function QrCheckoutModal({
           variant: "error",
         });
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, amount, toast]);
+  }
 
   const { data: status } = useQuery({
     queryKey: ["mp-intent", intentId],
@@ -73,16 +85,15 @@ export function QrCheckoutModal({
     if (status.status === "approved") {
       firedRef.current = true;
       setPhase("approved");
-      onApproved(status.mp_payment_id ?? intentId ?? "");
+      const extras = surcharge > 0 && plan ? [{ name: `Recargo ${plan.label}`, amount: surcharge }] : [];
+      onApproved(status.mp_payment_id ?? intentId ?? "", amount, extras);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
     }
-  }, [status, onApproved, intentId]);
+  }, [status, onApproved, intentId, amount, surcharge, plan]);
 
   const qrSrc = initPoint
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
-        initPoint,
-      )}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
     : "";
 
   return (
@@ -96,12 +107,56 @@ export function QrCheckoutModal({
             className="h-12 w-auto object-contain"
           />
         </div>
-        <div className="text-sm text-muted-foreground">
-          Total a cobrar
-          <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">
-            {formatCurrency(amount)}
+
+        {/* Selección de plan + recargo */}
+        {phase === "select" && (
+          <div className="space-y-3 text-left">
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted-foreground">Plan de pago</span>
+              <select
+                value={planId}
+                onChange={(e) => setPlanId(e.target.value)}
+                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+              >
+                <option value="">Sin recargo (1 pago)</option>
+                {activePlans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {BASE_LABEL[p.base ?? "otro"] ?? p.base} {p.label}
+                    {Number(p.surcharge_pct) ? ` · +${p.surcharge_pct}%` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span className="tabular-nums">{formatCurrency(base)}</span>
+              </div>
+              {surcharge > 0 && (
+                <div className="flex justify-between text-ninja-flameSoft">
+                  <span>Recargo {plan?.label}</span>
+                  <span className="tabular-nums">+{formatCurrency(surcharge)}</span>
+                </div>
+              )}
+              <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
+                <span>Total a cobrar</span>
+                <span className="price-hl font-price tabular-nums">{formatCurrency(amount)}</span>
+              </div>
+            </div>
+            <Button className="w-full" onClick={startQr}>
+              Generar QR
+            </Button>
           </div>
-        </div>
+        )}
+
+        {phase !== "select" && (
+          <div className="text-sm text-muted-foreground">
+            Total a cobrar
+            <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">
+              {formatCurrency(amount)}
+            </div>
+          </div>
+        )}
 
         {phase === "creating" && (
           <div className="flex flex-col items-center gap-2 py-8">

@@ -684,10 +684,10 @@ export default function PosPage() {
       <QrCheckoutModal
         open={qrOpen}
         onOpenChange={setQrOpen}
-        amount={total}
-        onApproved={(reference) => {
+        base={total}
+        onApproved={(reference, amount, extras) => {
           setQrOpen(false);
-          handleSale([{ method: "qr", amount: total, reference }]);
+          handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />

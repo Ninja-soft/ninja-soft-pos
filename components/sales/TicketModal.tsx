@@ -17,6 +17,9 @@ type Branding = {
   address: string | null;
   ticket_footer: string | null;
   ticket_width: string | null;
+  ticket_title: string | null;
+  ticket_legend: string | null;
+  ticket_show_qr: boolean | null;
 };
 
 function useBranding(enabled: boolean) {
@@ -27,7 +30,9 @@ function useBranding(enabled: boolean) {
     queryFn: async (): Promise<Branding | null> => {
       const { data } = await supabase
         .from("tenant_branding")
-        .select("logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width")
+        .select(
+          "logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr",
+        )
         .maybeSingle();
       return (data as Branding | null) ?? null;
     },
@@ -82,7 +87,9 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
                   {brand?.phone && <div>{brand.phone}</div>}
                 </div>
               )}
-              <div className="text-xs text-muted-foreground">Ticket no fiscal</div>
+              <div className="text-xs text-muted-foreground">
+                {brand?.ticket_title || "Comprobante no fiscal"}
+              </div>
             </div>
             <div className="my-3 border-t border-dashed border-border" />
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -127,9 +134,30 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
                 ** ANULADA **
               </div>
             )}
+            {brand?.ticket_show_qr && (
+              <div className="mt-4 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+                    `${brand?.legal_name || "NinjaPos"} | Venta #${data.sale.number} | ${formatCurrency(
+                      data.sale.total,
+                    )} | ${new Date(data.sale.created_at).toLocaleString("es-AR")}`,
+                  )}`}
+                  alt="QR del comprobante"
+                  width={110}
+                  height={110}
+                  className="h-[110px] w-[110px]"
+                />
+              </div>
+            )}
             <div className="mt-4 text-center text-xs text-muted-foreground">
               {brand?.ticket_footer || "¡Gracias por su compra!"}
             </div>
+            {brand?.ticket_legend && (
+              <div className="mt-1 text-center text-[10px] leading-tight text-muted-foreground">
+                {brand.ticket_legend}
+              </div>
+            )}
           </div>
 
           <div className="no-print mt-4 flex flex-wrap justify-end gap-2">

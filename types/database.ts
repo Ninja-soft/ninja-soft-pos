@@ -1628,6 +1628,9 @@ export type Database = {
           phone: string | null
           tenant_id: string
           ticket_footer: string | null
+          ticket_legend: string | null
+          ticket_show_qr: boolean
+          ticket_title: string | null
           ticket_width: string
           updated_at: string
         }
@@ -1641,6 +1644,9 @@ export type Database = {
           phone?: string | null
           tenant_id: string
           ticket_footer?: string | null
+          ticket_legend?: string | null
+          ticket_show_qr?: boolean
+          ticket_title?: string | null
           ticket_width?: string
           updated_at?: string
         }
@@ -1654,6 +1660,9 @@ export type Database = {
           phone?: string | null
           tenant_id?: string
           ticket_footer?: string | null
+          ticket_legend?: string | null
+          ticket_show_qr?: boolean
+          ticket_title?: string | null
           ticket_width?: string
           updated_at?: string
         }

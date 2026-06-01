@@ -5,7 +5,7 @@ export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
 
 export interface SalePaymentInput {
-  method: "cash" | "debit" | "credit" | "transfer" | "qr" | "other";
+  method: "cash" | "debit" | "credit" | "transfer" | "qr" | "other" | "store_credit";
   amount: number;
   reference?: string;
 }

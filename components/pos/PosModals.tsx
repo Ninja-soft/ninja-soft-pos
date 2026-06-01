@@ -100,17 +100,30 @@ export function PaymentModal({
   total,
   onConfirm,
   loading,
+  storeCreditBalance = 0,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   total: number;
   onConfirm: (payments: SalePaymentInput[]) => void;
   loading: boolean;
+  storeCreditBalance?: number;
 }) {
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [received, setReceived] = useState(String(total));
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - total) : 0;
+  // El vale solo aparece si el saldo del cliente cubre el total.
+  const canVale = storeCreditBalance >= total && total > 0;
+  const methods = canVale
+    ? [
+        ...METHODS,
+        {
+          value: "store_credit" as const,
+          label: `Vale (saldo ${formatCurrency(storeCreditBalance)})`,
+        },
+      ]
+    : METHODS;
 
   return (
     <Modal
@@ -131,7 +144,7 @@ export function PaymentModal({
             }
             className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           >
-            {METHODS.map((m) => (
+            {methods.map((m) => (
               <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
                 {m.label}
               </option>

@@ -477,7 +477,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
   - [x] **Búsqueda de venta en el histórico** (/ventas): por N° de comprobante / ticket (formato personalizado o correlativo).
   - [x] **Sección dedicada de Devoluciones** (`/devoluciones`): buscar la venta por **ticket / N° de comprobante** y arrancar la devolución desde ahí (reusa ReturnModal).
-  - [ ] **Redención del vale en el POS** (cobrar con saldo a favor del cliente).
+  - [x] **Redención del vale en el POS**: medio de pago "Vale (saldo a favor)" cuando el cliente tiene saldo que cubre el total; `create_sale` valida saldo y descuenta de `store_credit_movements`.
   - [~] *Criterio:* devolución parcial con destino de stock por línea, auditada; sección de devoluciones con búsqueda, redención del vale y cambio con diferencia pendientes.
 
 - [~] **H30 — Settings operativos del POS.** — *Hecho salvo señas (→ H32): tabla `pos_settings` + Configuración → Operación del POS (solo dueño). `create_sale` aplica descuento máximo por rol, redondeo y bloqueo de stock negativo (con override por producto); `close_cash_shift` exige motivo por tolerancia; SKU automático; selector de cliente en el POS + requerir cliente. Defaults permisivos.*

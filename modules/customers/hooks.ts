@@ -15,6 +15,14 @@ export function useCustomers(search: string) {
   });
 }
 
+export function useStoreCreditBalance(customerId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["customers", "store-credit", customerId],
+    enabled: Boolean(customerId),
+    queryFn: () => customersApi.storeCreditBalance(customerId!),
+  });
+}
+
 export function useCustomerMutations() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["customers"] });

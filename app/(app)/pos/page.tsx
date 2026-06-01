@@ -521,8 +521,15 @@ export default function PosPage() {
                 <User size={14} className="shrink-0 text-muted-foreground" />
                 <span className="truncate">{customer ? customer.name : "Consumidor final"}</span>
               </span>
-              <span className="shrink-0 text-xs font-medium text-ninja-flameSoft">
-                {customer ? "Cambiar" : requireCustomer ? "Elegir (obligatorio)" : "Elegir"}
+              <span className="flex shrink-0 items-center gap-2">
+                {customer && (scBalance ?? 0) > 0 && (
+                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                    vale {formatCurrency(scBalance ?? 0)}
+                  </span>
+                )}
+                <span className="text-xs font-medium text-ninja-flameSoft">
+                  {customer ? "Cambiar" : requireCustomer ? "Elegir (obligatorio)" : "Elegir"}
+                </span>
               </span>
             </button>
             <div className="flex items-center justify-between text-sm text-muted-foreground">

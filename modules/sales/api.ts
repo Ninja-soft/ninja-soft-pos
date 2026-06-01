@@ -82,6 +82,25 @@ export const salesApi = {
     if (error) throw error;
   },
 
+  listReturns: async (): Promise<
+    {
+      id: string;
+      number: number;
+      total: number;
+      refund_method: string;
+      reason: string | null;
+      created_at: string;
+    }[]
+  > => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("sale_returns")
+      .select("id, number, total, refund_method, reason, created_at")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    return (data ?? []) as never;
+  },
+
   numberFormat: async (): Promise<{ prefix: string; pad: number }> => {
     const supabase = createClient();
     const { data } = await supabase

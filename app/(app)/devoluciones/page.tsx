@@ -6,7 +6,7 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { ReturnModal } from "@/components/sales/ReturnModal";
 import { ReturnReasonsModal } from "@/components/sales/ReturnReasonsModal";
-import { useSales, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { useSales, useSaleNumberFormat, useReturnsList } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 
@@ -15,6 +15,7 @@ import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 export default function DevolucionesPage() {
   const { data: sales, isLoading } = useSales();
   const { data: numFmt } = useSaleNumberFormat();
+  const { data: returns } = useReturnsList();
   const [search, setSearch] = useState("");
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -99,6 +100,33 @@ export default function DevolucionesPage() {
             </button>
           ))}
         </div>
+        {(returns ?? []).length > 0 && (
+          <div className="mt-8">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              Últimas devoluciones
+            </div>
+            <div className="space-y-1">
+              {(returns ?? []).map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-sm"
+                >
+                  <span className="font-mono font-semibold">Dev #{r.number}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {r.reason || "—"}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {r.refund_method === "store_credit" ? "Vale" : "Efectivo"}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(r.created_at).toLocaleDateString("es-AR")}
+                  </span>
+                  <span className="shrink-0 font-semibold">{formatCurrency(r.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />

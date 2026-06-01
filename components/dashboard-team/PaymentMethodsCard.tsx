@@ -23,7 +23,7 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago"]);
+const IMPLEMENTED = new Set(["mercadopago", "mobbex"]);
 
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
@@ -89,6 +89,18 @@ const PROVIDER_INFO: Record<string, Explain> = {
     ],
     recargo: "Si ponés un %, se suma al total al cobrar con Mercado Pago.",
   },
+  mobbex: {
+    activa:
+      "Habilita el botón Cobrar con QR (Mobbex) en el POS. La plata entra a tu cuenta de Mobbex.",
+    conexion:
+      "Pegá tu API Key y Access Token (Mobbex → Desarrollo → Credenciales). Se guardan cifrados del lado del servidor.",
+    pasos: [
+      "En el POS tocás Cobrar con QR · Mobbex.",
+      "El cliente escanea el QR y paga (tarjeta o saldo).",
+      "Al acreditarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
+  },
 };
 
 type Provider = { key: string; name: string; kind: string; sort: number };
@@ -106,6 +118,8 @@ export function PaymentMethodsCard() {
   const { toast } = useToast();
   const [connectKey, setConnectKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  const [mbApiKey, setMbApiKey] = useState("");
+  const [mbToken, setMbToken] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -215,11 +229,15 @@ export function PaymentMethodsCard() {
     mutationFn: async (vars: {
       provider_key: string;
       token?: string;
+      secrets?: Record<string, string>;
       clear?: boolean;
     }) => {
       const body = vars.clear
         ? { provider_key: vars.provider_key, action: "clear" }
-        : { provider_key: vars.provider_key, secrets: { access_token: vars.token } };
+        : {
+            provider_key: vars.provider_key,
+            secrets: vars.secrets ?? { access_token: vars.token },
+          };
       const { data, error } = await supabase.functions.invoke("set_payment_secret", {
         body,
       });
@@ -329,6 +347,8 @@ export function PaymentMethodsCard() {
                       onClick={() => {
                         setConnectKey(p.key);
                         setToken("");
+                        setMbApiKey("");
+                        setMbToken("");
                         setShowManual(false);
                       }}
                       className={
@@ -427,6 +447,8 @@ export function PaymentMethodsCard() {
                         onClick={() => {
                           setConnectKey(p.key);
                           setToken("");
+                          setMbApiKey("");
+                          setMbToken("");
                           setShowManual(false);
                         }}
                         className={
@@ -527,65 +549,115 @@ export function PaymentMethodsCard() {
               />
             </div>
           )}
-          {connectingConnected ? (
-            <p className="flex items-center gap-2 text-sm text-emerald-400">
-              <Check size={16} /> Tu cuenta de Mercado Pago está conectada.
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Conectá tu cuenta de Mercado Pago para cobrar online. Te lleva a
-              Mercado Pago para autorizar; no tenés que copiar nada.
-            </p>
-          )}
-
-          {/* Opción principal: OAuth en un click. */}
-          <Button
-            className="w-full"
-            disabled={oauthStart.isPending}
-            onClick={() => oauthStart.mutate()}
-          >
-            {oauthStart.isPending
-              ? "Redirigiendo…"
-              : connectingConnected
-                ? "Reconectar con Mercado Pago"
-                : "Conectar con Mercado Pago"}
-          </Button>
-
-          {/* Opción avanzada: pegar Access Token manualmente. */}
-          {showManual ? (
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <p className="text-xs text-muted-foreground">
-                Pegá el <strong>Access Token</strong> de tu cuenta (MP → Tus
-                integraciones → Credenciales). Se guarda cifrado del lado del
-                servidor; nunca se expone al navegador.
-              </p>
+          {connectKey === "mobbex" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                  <Check size={16} /> Mobbex está conectado.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá tus credenciales de Mobbex (Mobbex → Desarrollo →
+                  Credenciales). Se guardan cifradas del lado del servidor.
+                </p>
+              )}
+              <Input
+                label="API Key"
+                autoComplete="off"
+                value={mbApiKey}
+                onChange={(e) => setMbApiKey(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu API Key"}
+              />
               <Input
                 label="Access Token"
                 type="password"
                 autoComplete="off"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (ya configurado)" : "APP_USR-..."}
+                value={mbToken}
+                onChange={(e) => setMbToken(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Access Token"}
               />
               <Button
                 className="w-full"
-                variant="secondary"
-                disabled={connect.isPending || token.trim().length < 8}
+                disabled={
+                  connect.isPending || mbApiKey.trim().length < 6 || mbToken.trim().length < 6
+                }
                 onClick={() =>
-                  connect.mutate({ provider_key: connectKey!, token: token.trim() })
+                  connect.mutate({
+                    provider_key: "mobbex",
+                    secrets: { api_key: mbApiKey.trim(), access_token: mbToken.trim() },
+                  })
                 }
               >
-                {connect.isPending ? "Guardando…" : "Guardar Access Token"}
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar credenciales"
+                    : "Conectar Mobbex"}
               </Button>
-            </div>
+            </>
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowManual(true)}
-              className="text-xs text-muted-foreground underline hover:text-foreground"
-            >
-              o pegá tu Access Token manualmente
-            </button>
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                  <Check size={16} /> Tu cuenta de Mercado Pago está conectada.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Conectá tu cuenta de Mercado Pago para cobrar online. Te lleva a
+                  Mercado Pago para autorizar; no tenés que copiar nada.
+                </p>
+              )}
+
+              {/* Opción principal: OAuth en un click. */}
+              <Button
+                className="w-full"
+                disabled={oauthStart.isPending}
+                onClick={() => oauthStart.mutate()}
+              >
+                {oauthStart.isPending
+                  ? "Redirigiendo…"
+                  : connectingConnected
+                    ? "Reconectar con Mercado Pago"
+                    : "Conectar con Mercado Pago"}
+              </Button>
+
+              {/* Opción avanzada: pegar Access Token manualmente. */}
+              {showManual ? (
+                <div className="space-y-3 rounded-md border border-border p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Pegá el <strong>Access Token</strong> de tu cuenta (MP → Tus
+                    integraciones → Credenciales). Se guarda cifrado del lado del
+                    servidor; nunca se expone al navegador.
+                  </p>
+                  <Input
+                    label="Access Token"
+                    type="password"
+                    autoComplete="off"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder={connectingConnected ? "•••••• (ya configurado)" : "APP_USR-..."}
+                  />
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    disabled={connect.isPending || token.trim().length < 8}
+                    onClick={() =>
+                      connect.mutate({ provider_key: connectKey!, token: token.trim() })
+                    }
+                  >
+                    {connect.isPending ? "Guardando…" : "Guardar Access Token"}
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowManual(true)}
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                >
+                  o pegá tu Access Token manualmente
+                </button>
+              )}
+            </>
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border pt-3">

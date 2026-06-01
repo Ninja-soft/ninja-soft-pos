@@ -261,18 +261,38 @@ export const posApi = {
     return data as number;
   },
 
-  // ¿El tenant tiene Mercado Pago habilitado y conectado?
-  mpMethod: async (): Promise<{ enabled: boolean; connected: boolean }> => {
+  // ¿Un medio (provider) está habilitado y conectado?
+  providerMethod: async (
+    providerKey: string,
+  ): Promise<{ enabled: boolean; connected: boolean }> => {
     const supabase = createClient();
     const { data } = await supabase
       .from("tenant_payment_methods")
       .select("enabled, config")
-      .eq("provider_key", "mercadopago")
+      .eq("provider_key", providerKey)
       .maybeSingle();
     return {
       enabled: Boolean(data?.enabled),
       connected: Boolean((data?.config as { connected?: boolean } | null)?.connected),
     };
+  },
+  mpMethod: async (): Promise<{ enabled: boolean; connected: boolean }> =>
+    posApi.providerMethod("mercadopago"),
+
+  // Crea el checkout/QR de Mobbex y devuelve el init_point (URL para QR).
+  createMobbexQr: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mobbex_create_qr", {
+      body: { amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
   },
 
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.

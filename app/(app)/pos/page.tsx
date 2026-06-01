@@ -34,6 +34,7 @@ import {
   useDefaultRegister,
   usePosMutations,
   useMpMethod,
+  useProviderMethod,
   usePosSettings,
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
@@ -58,6 +59,7 @@ export default function PosPage() {
   const [ticketOpen, setTicketOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [qrMobbexOpen, setQrMobbexOpen] = useState(false);
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
@@ -89,6 +91,8 @@ export default function PosPage() {
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
   const { data: mp } = useMpMethod();
   const mpReady = Boolean(mp?.enabled && mp?.connected);
+  const { data: mobbex } = useProviderMethod("mobbex");
+  const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected);
   const { data: posSettings } = usePosSettings();
   const role = myTenant?.role ?? "cashier";
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
@@ -602,6 +606,24 @@ export default function PosPage() {
                 Cobrar con QR · Mercado Pago
               </button>
             )}
+            {mobbexReady && (
+              <button
+                type="button"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => ensureCustomer() && setQrMobbexOpen(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-ninja-brightViolet/40 bg-ninja-brightViolet/10 px-4 py-3 font-semibold text-ninja-lavender transition hover:bg-ninja-brightViolet/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/Mobbex_cube.webp"
+                    alt="Mobbex"
+                    className="h-full w-full object-contain"
+                  />
+                </span>
+                Cobrar con QR · Mobbex
+              </button>
+            )}
           </div>
         </aside>
         </div>
@@ -687,6 +709,17 @@ export default function PosPage() {
         base={total}
         onApproved={(reference, amount, extras) => {
           setQrOpen(false);
+          handleSale([{ method: "qr", amount, reference }], extras);
+        }}
+      />
+      <QrCheckoutModal
+        open={qrMobbexOpen}
+        onOpenChange={setQrMobbexOpen}
+        base={total}
+        provider="mobbex"
+        providerName="Mobbex"
+        onApproved={(reference, amount, extras) => {
+          setQrMobbexOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />

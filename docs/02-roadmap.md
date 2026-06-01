@@ -503,8 +503,8 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
 
 - [ ] **H31 — Cuenta corriente y grupos de clientes.**
   - [~] **Historial del cliente**: modal en /clientes con saldo a favor (vale), compras y devoluciones (`CustomerHistoryModal`). Falta deuda de cuenta corriente (depende de este hito) y acceso desde el selector del POS.
-  - [ ] Medio de pago "Cuenta corriente" que deja deuda del cliente.
-  - [ ] Límite default de deuda por cliente y override por ficha.
+  - [x] Medio de pago "Cuenta corriente" que deja deuda del cliente (trigger en `payments` → `customer_account_movements`).
+  - [x] Límite de deuda por cliente (`customers.credit_limit`; 0 = sin límite; se valida al cobrar fiado). Deuda visible en el historial del cliente.
   - [ ] Plazo default de pago y buckets de antigüedad en cuentas por cobrar.
   - [~] Grupos de clientes (tabla `customer_groups` + `customers.group_id`; alta inline y selector en la ficha del cliente). Falta usarlos para precios/promos/riesgo.
   - [ ] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento.

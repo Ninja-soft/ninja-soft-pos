@@ -16,6 +16,7 @@ function payload(input: CustomerOutput) {
     address: input.address,
     notes: input.notes,
     is_active: input.is_active,
+    credit_limit: input.credit_limit ?? 0,
     group_id: input.group_id ?? null,
   };
 }
@@ -58,12 +59,14 @@ export const customersApi = {
     customerId: string,
   ): Promise<{
     creditBalance: number;
+    accountDebt: number;
     sales: { id: string; number: number; total: number; status: string; created_at: string }[];
     returns: { id: string; number: number; total: number; refund_method: string; created_at: string }[];
   }> => {
     const supabase = createClient();
-    const [creditRes, salesRes, returnsRes] = await Promise.all([
+    const [creditRes, debtRes, salesRes, returnsRes] = await Promise.all([
       supabase.from("store_credit_movements").select("delta").eq("customer_id", customerId),
+      supabase.from("customer_account_movements").select("delta").eq("customer_id", customerId),
       supabase
         .from("sales")
         .select("id, number, total, status, created_at")
@@ -79,6 +82,7 @@ export const customersApi = {
     ]);
     return {
       creditBalance: (creditRes.data ?? []).reduce((a, r) => a + Number(r.delta || 0), 0),
+      accountDebt: (debtRes.data ?? []).reduce((a, r) => a + Number(r.delta || 0), 0),
       sales: (salesRes.data ?? []) as never,
       returns: (returnsRes.data ?? []) as never,
     };

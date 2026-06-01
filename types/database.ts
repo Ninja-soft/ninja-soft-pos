@@ -855,6 +855,7 @@ export type Database = {
           close_tolerance: number
           max_discount: Json
           require_close_reason: boolean
+          require_customer: boolean
           rounding_multiple: number
           sku_auto: boolean
           sku_prefix: string
@@ -867,6 +868,7 @@ export type Database = {
           close_tolerance?: number
           max_discount?: Json
           require_close_reason?: boolean
+          require_customer?: boolean
           rounding_multiple?: number
           sku_auto?: boolean
           sku_prefix?: string
@@ -879,6 +881,7 @@ export type Database = {
           close_tolerance?: number
           max_discount?: Json
           require_close_reason?: boolean
+          require_customer?: boolean
           rounding_multiple?: number
           sku_auto?: boolean
           sku_prefix?: string

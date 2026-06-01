@@ -93,16 +93,18 @@ export const posApi = {
   posSettings: async (): Promise<{
     maxDiscount: Record<string, number>;
     rounding: number;
+    requireCustomer: boolean;
   } | null> => {
     const supabase = createClient();
     const { data } = await supabase
       .from("pos_settings")
-      .select("max_discount, rounding_multiple")
+      .select("max_discount, rounding_multiple, require_customer")
       .maybeSingle();
     if (!data) return null;
     return {
       maxDiscount: (data.max_discount as Record<string, number>) ?? {},
       rounding: Number(data.rounding_multiple) || 0,
+      requireCustomer: Boolean(data.require_customer),
     };
   },
 
@@ -143,12 +145,14 @@ export const posApi = {
     items: SaleItemInput[],
     payments: SalePaymentInput[],
     discountTotal: number,
+    customerId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
       p_payments: payments as unknown as Json,
       p_discount_total: discountTotal,
+      p_customer_id: customerId ?? undefined,
     });
     if (error) throw error;
     return data as unknown as CreateSaleResult;

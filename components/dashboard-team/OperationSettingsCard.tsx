@@ -9,6 +9,7 @@ import {
   PackageMinus,
   Barcode,
   Lock,
+  UserCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -25,6 +26,7 @@ type Settings = {
   sku_prefix: string;
   require_close_reason: boolean;
   close_tolerance: number;
+  require_customer: boolean;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -68,7 +70,7 @@ export function OperationSettingsCard() {
       const { data } = await supabase
         .from("pos_settings")
         .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance",
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer",
         )
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -81,6 +83,7 @@ export function OperationSettingsCard() {
           sku_prefix: "",
           require_close_reason: false,
           close_tolerance: 0,
+          require_customer: false,
         }
       );
     },
@@ -93,6 +96,7 @@ export function OperationSettingsCard() {
   const [skuPrefix, setSkuPrefix] = useState("");
   const [requireReason, setRequireReason] = useState(false);
   const [tolerance, setTolerance] = useState(0);
+  const [requireCustomer, setRequireCustomer] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -107,6 +111,7 @@ export function OperationSettingsCard() {
     setSkuPrefix(settings.sku_prefix ?? "");
     setRequireReason(settings.require_close_reason ?? false);
     setTolerance(settings.close_tolerance ?? 0);
+    setRequireCustomer(settings.require_customer ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -126,6 +131,7 @@ export function OperationSettingsCard() {
           sku_prefix: skuPrefix.trim(),
           require_close_reason: requireReason,
           close_tolerance: Math.max(0, Number(tolerance) || 0),
+          require_customer: requireCustomer,
         },
         { onConflict: "tenant_id" },
       );
@@ -301,6 +307,25 @@ export function OperationSettingsCard() {
               </span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Requerir cliente */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <UserCheck size={16} className="text-ninja-flameSoft" /> Requerir cliente
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Obliga a elegir un cliente antes de cobrar (no permite “consumidor final”).
+            </p>
+          </div>
+          <Switch
+            checked={requireCustomer}
+            onCheckedChange={setRequireCustomer}
+            label="Requerir cliente"
+          />
         </CardContent>
       </Card>
 

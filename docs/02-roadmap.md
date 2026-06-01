@@ -476,10 +476,10 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Wizard de devolución/cambio con trazabilidad, reintegro por medio de pago, vale o diferencia a cobrar.
   - [ ] *Criterio:* un cambio por talle vuelve al depósito original; un defectuoso va a merma; ambos quedan auditados.
 
-- [~] **H30 — Settings operativos del POS.** — *PR1 + PR2 hechos: tabla `pos_settings` + Configuración → Operación del POS. `create_sale` aplica descuento máximo por rol, redondeo del total y bloqueo de stock negativo; `close_cash_shift` exige motivo por tolerancia; trigger de SKU automático. Defaults permisivos (no cambian comportamiento previo). Falta: override de venta en negativo por producto (UI), requerir cliente y señas.*
+- [~] **H30 — Settings operativos del POS.** — *Hecho salvo señas (→ H32): tabla `pos_settings` + Configuración → Operación del POS (solo dueño). `create_sale` aplica descuento máximo por rol, redondeo y bloqueo de stock negativo (con override por producto); `close_cash_shift` exige motivo por tolerancia; SKU automático; selector de cliente en el POS + requerir cliente. Defaults permisivos.*
   - [x] Permitir vender en negativo global (`pos_settings.allow_negative_stock`); override por producto (`products.allow_negative`) preparado, UI en PR2.
-  - [ ] Requerir cliente para registrar venta. *(necesita selector de cliente en el POS)*
-  - [ ] Señas: reservar stock sin descontar hasta cobrar saldo, o descontar al cobrar seña.
+  - [x] Requerir cliente para registrar venta (selector de cliente en el POS + flag `require_customer`).
+  - [ ] Señas: reservar stock sin descontar hasta cobrar saldo, o descontar al cobrar seña. *(se aborda en H32)*
   - [x] Descuento máximo global por rol/cajero (validado en `create_sale` + tope en el POS).
   - [x] Redondeo del total por múltiplo configurable (autoritativo en `create_sale`).
   - [x] Arqueo ciego al cerrar caja. *(el modal de cierre no muestra el esperado; el cajero cuenta a ciegas)*

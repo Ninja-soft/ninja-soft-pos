@@ -15,6 +15,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Sección /devoluciones (H29):** página dedicada en el menú (Operación → Devoluciones) para buscar la venta por N° de comprobante/ticket y registrar la devolución/cambio (reusa `ReturnModal`).
 - **Numeración de comprobante personalizable + búsqueda de ventas:** `pos_settings.sale_prefix` + `sale_pad` (Operación del POS) definen cómo se muestra el N° de venta (ej. `NINJA-00042`) sobre el correlativo interno. Se aplica en /ventas, ticket y PDF. /ventas suma un **buscador** por N°/ticket. Helper `formatSaleNumber`/`saleMatchesQuery`.
 - **Roadmap:** se sumaron la sección dedicada de Devoluciones con búsqueda por ticket/ID, la redención del vale en el POS (H29), la numeración de comprobante personalizable por tenant (H9) y el historial del cliente (H31).
 - **Categorías hasta 4 niveles:** la gestión de categorías pasa de 2 a **4 niveles** (rubro → sub-rubro → …). `CategoriesModal` rediseñado: árbol con sangría, agregar sub-categoría inline (tocá ↳ en una categoría), contexto del padre al crear. El selector de categoría del producto muestra el árbol completo indentado. Helper `flattenCategories` + `CATEGORY_MAX_DEPTH`.

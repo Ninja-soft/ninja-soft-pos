@@ -15,6 +15,7 @@ import {
   Moon,
   Package,
   Receipt,
+  RotateCcw,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -63,6 +64,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/pos", label: "Punto de venta", icon: ShoppingCart },
         { href: "/caja", label: "Caja", icon: Wallet },
         { href: "/ventas", label: "Ventas", icon: Receipt },
+        { href: "/devoluciones", label: "Devoluciones", icon: RotateCcw },
       ],
     },
     {

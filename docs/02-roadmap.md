@@ -476,7 +476,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] Destinos de stock por línea: vuelve a stock / a revisión / descarte (revisión y descarte no reponen).
   - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
   - [x] **Búsqueda de venta en el histórico** (/ventas): por N° de comprobante / ticket (formato personalizado o correlativo).
-  - [ ] **Sección dedicada de Devoluciones** (`/devoluciones`): buscar la venta por **ticket / N° de comprobante** y arrancar la devolución desde ahí, sin pasar por el listado de ventas.
+  - [x] **Sección dedicada de Devoluciones** (`/devoluciones`): buscar la venta por **ticket / N° de comprobante** y arrancar la devolución desde ahí (reusa ReturnModal).
   - [ ] **Redención del vale en el POS** (cobrar con saldo a favor del cliente).
   - [~] *Criterio:* devolución parcial con destino de stock por línea, auditada; sección de devoluciones con búsqueda, redención del vale y cambio con diferencia pendientes.
 

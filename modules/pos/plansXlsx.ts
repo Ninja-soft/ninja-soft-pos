@@ -56,7 +56,12 @@ export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResu
   });
   if (grid.length < 2) return { rows: [], errors: ["El archivo no tiene filas de datos."] };
 
-  const header = grid[0]!.map((h) => norm(h));
+  // Busca la fila de encabezado (la que tiene "base"); el export trae una fila
+  // de título arriba, así que el header no siempre está en la fila 0.
+  const headerIdx = grid.findIndex((row) => row.map(norm).includes("base"));
+  if (headerIdx < 0) return { rows: [], errors: ['Falta la columna "base".'] };
+
+  const header = grid[headerIdx]!.map((h) => norm(h));
   const col = (...names: string[]) => header.findIndex((h) => names.includes(h));
   const iBase = col("base");
   const iBrand = col("marca", "brand");
@@ -64,12 +69,11 @@ export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResu
   const iRec = col("recargo", "recargo %", "recargo%", "surcharge", "recargo_pct");
 
   const errors: string[] = [];
-  if (iBase < 0) errors.push('Falta la columna "base".');
   if (iCuotas < 0) errors.push('Falta la columna "cuotas".');
   if (errors.length) return { rows: [], errors };
 
   const rows: PlanRow[] = [];
-  for (let r = 1; r < grid.length; r++) {
+  for (let r = headerIdx + 1; r < grid.length; r++) {
     const line = grid[r]!;
     const baseRaw = norm(line[iBase] ?? "");
     if (!baseRaw) continue;

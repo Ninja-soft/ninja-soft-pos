@@ -284,6 +284,8 @@ export function PaymentMethodsCard() {
           const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
           const isOpen = expanded.has(p.key);
           const info = PROVIDER_INFO[p.key];
+          // Medios con grid de planes: el recargo se configura ahí, no en la fila.
+          const hasPlans = (p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key);
           return (
             <Card
               key={p.key}
@@ -359,8 +361,14 @@ export function PaymentMethodsCard() {
                   </button>
                 )}
 
-                {/* Recargo */}
-                <div className="hidden shrink-0 flex-col items-end gap-0.5 md:flex">
+                {/* Recargo (oculto en medios con planes: se configura en el grid) */}
+                <div
+                  className={
+                    hasPlans
+                      ? "hidden"
+                      : "hidden shrink-0 flex-col items-end gap-0.5 md:flex"
+                  }
+                >
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     Recargo %
                   </span>
@@ -481,7 +489,7 @@ export function PaymentMethodsCard() {
                           </ol>
                         </div>
                       )}
-                      {info.recargo && (
+                      {info.recargo && !hasPlans && (
                         <div>
                           <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
                             Recargo

@@ -127,6 +127,12 @@ export function QrCheckoutModal({
                 ))}
               </select>
             </label>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              El plan solo aplica el <strong>recargo</strong> que configuraste. En el QR,
+              <strong> las cuotas las elige el cliente</strong> en su app de Mercado Pago.
+              Para “sin recargo”, usá un plan en 0%. Las cuotas sin interés reales se
+              activan en tu cuenta de Mercado Pago.
+            </p>
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>

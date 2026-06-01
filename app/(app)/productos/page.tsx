@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   Upload,
@@ -21,6 +22,7 @@ import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
+import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
 import { useProducts, useProductMutations } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { createClient } from "@/lib/supabase/client";
@@ -34,6 +36,7 @@ export default function ProductosPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [warrantyOpen, setWarrantyOpen] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const { toast } = useToast();
 
@@ -122,6 +125,9 @@ export default function ProductosPage() {
             </Button>
             <Button variant="secondary" className="shrink-0" onClick={() => setCategoriesOpen(true)}>
               <FolderTree size={16} /> Categorías
+            </Button>
+            <Button variant="secondary" className="shrink-0" onClick={() => setWarrantyOpen(true)}>
+              <ShieldCheck size={16} /> Garantías
             </Button>
             <Button className="shrink-0" onClick={openNew}>
               <Plus size={16} /> Nuevo producto
@@ -259,6 +265,7 @@ export default function ProductosPage() {
       />
       <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} />
       <CategoriesModal open={categoriesOpen} onOpenChange={setCategoriesOpen} />
+      <WarrantyPlansModal open={warrantyOpen} onOpenChange={setWarrantyOpen} />
     </>
   );
 }

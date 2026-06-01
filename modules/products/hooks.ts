@@ -5,8 +5,39 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { brandsApi, categoriesApi, productsApi, serialsApi } from "./api";
+import {
+  brandsApi,
+  categoriesApi,
+  productsApi,
+  serialsApi,
+  warrantyPlansApi,
+} from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
+
+export function useWarrantyPlans(activeOnly = false) {
+  return useQuery({
+    queryKey: ["warranty-plans", activeOnly],
+    queryFn: () => warrantyPlansApi.list(activeOnly),
+  });
+}
+
+export function useWarrantyPlanMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["warranty-plans"] });
+  return {
+    create: useMutation({
+      mutationFn: (v: { label: string; months: number; price: number; commission_pct: number }) =>
+        warrantyPlansApi.create(v),
+      onSuccess: inv,
+    }),
+    setActive: useMutation({
+      mutationFn: (v: { id: string; is_active: boolean }) =>
+        warrantyPlansApi.setActive(v.id, v.is_active),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => warrantyPlansApi.remove(id), onSuccess: inv }),
+  };
+}
 
 export function useProducts(search: string) {
   return useQuery({

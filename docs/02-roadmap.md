@@ -461,8 +461,9 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Configuración de voucher obligatorio para tarjeta: lote, cupón, autorización.
   - [ ] *Criterio:* el cajero elige "Visa 3 cuotas +8%" y el ticket suma el recargo automáticamente.
 
-- [~] **H28 — Garantías extendidas.** — *Base: campo de garantía de fábrica por producto (`products.warranty_months`). Faltan planes de garantía extendida, oferta al cobrar y reportes.*
+- [~] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + catálogo de planes de garantía extendida (tabla `warranty_plans`, gestión en Productos → Garantías). Falta oferta contextual al cobrar, prima como línea y reportes.*
   - [x] Campo "garantía de fábrica" por producto (`warranty_months`).
+  - [x] Planes de garantía extendida por tenant: meses, prima fija y comisión (`warranty_plans`).
   - [ ] Planes de garantía extendida por tenant/categoría/producto: meses adicionales, prima (% del precio) y comisión del vendedor.
   - [ ] Oferta contextual al cobrar productos con garantía declarada.
   - [ ] Prima agregada al ticket como línea/servicio asociado.

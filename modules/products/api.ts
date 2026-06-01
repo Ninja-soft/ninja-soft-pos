@@ -305,6 +305,38 @@ export function flattenCategories(
 // Máxima profundidad permitida (4 niveles: depth 0..3).
 export const CATEGORY_MAX_DEPTH = 3;
 
+export type WarrantyPlan = Tables<"warranty_plans">;
+
+export const warrantyPlansApi = {
+  list: async (activeOnly = false): Promise<WarrantyPlan[]> => {
+    const supabase = createClient();
+    let q = supabase.from("warranty_plans").select("*").order("sort").order("label");
+    if (activeOnly) q = q.eq("is_active", true);
+    const { data } = await q;
+    return (data ?? []) as WarrantyPlan[];
+  },
+  create: async (v: {
+    label: string;
+    months: number;
+    price: number;
+    commission_pct: number;
+  }): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("warranty_plans").insert(v);
+    if (error) throw error;
+  },
+  setActive: async (id: string, is_active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("warranty_plans").update({ is_active }).eq("id", id);
+    if (error) throw error;
+  },
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("warranty_plans").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
 export const categoriesApi = {
   list: async (): Promise<Category[]> => {
     const supabase = createClient();

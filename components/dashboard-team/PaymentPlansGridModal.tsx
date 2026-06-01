@@ -48,7 +48,6 @@ export function PaymentPlansGridModal({
   const fileRef = useRef<HTMLInputElement>(null);
   const [importRows, setImportRows] = useState<PlanRow[] | null>(null);
   const [editBrands, setEditBrands] = useState(false);
-  const [newCuota, setNewCuota] = useState("");
   // Recargo único del medio + modo (global desactiva los planes).
   const [globalMode, setGlobalMode] = useState(false);
   const [globalPct, setGlobalPct] = useState("0");
@@ -217,14 +216,9 @@ export function PaymentPlansGridModal({
     ]);
   }
 
-  function addCuota() {
-    const n = parseInt(newCuota, 10);
-    if (!n || n < 1 || installments.includes(n)) {
-      setNewCuota("");
-      return;
-    }
+  function addCuotaNum(n: number) {
+    if (!n || n < 1 || installments.includes(n)) return;
     saveConfig.mutate({ installments: [...installments, n].sort((a, b) => a - b) });
-    setNewCuota("");
   }
   function removeCuota(n: number) {
     saveConfig.mutate({ installments: installments.filter((x) => x !== n) });
@@ -384,20 +378,6 @@ export function PaymentPlansGridModal({
                       </button>
                     </span>
                   ))}
-                <span className="flex items-center gap-0.5">
-                  <input
-                    type="number"
-                    min="2"
-                    value={newCuota}
-                    onChange={(e) => setNewCuota(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addCuota()}
-                    placeholder="+ cuota"
-                    className="h-7 w-20 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ninja-flameSoft"
-                  />
-                  <button onClick={addCuota} className="text-ninja-flameSoft" title="Agregar cuota">
-                    <Plus size={15} />
-                  </button>
-                </span>
               </div>
             }
           >
@@ -413,6 +393,7 @@ export function PaymentPlansGridModal({
                     onClear={() => clearCell("credito", b, n)}
                   />
                 ))}
+                {!disabled && <AddCuotaCell onAdd={addCuotaNum} />}
               </BrandRow>
             ))}
           </Section>
@@ -506,6 +487,45 @@ function BrandRow({ brand, children }: { brand: string; children: React.ReactNod
   );
 }
 
+// "+" por fila para agregar una cuota nueva (se aplica a todas las filas y se
+// ordena de menor a mayor).
+function AddCuotaCell({ onAdd }: { onAdd: (n: number) => void }) {
+  const [openInput, setOpenInput] = useState(false);
+  const [val, setVal] = useState("");
+  function commit() {
+    const n = parseInt(val, 10);
+    if (n) onAdd(n);
+    setVal("");
+    setOpenInput(false);
+  }
+  return (
+    <div className="flex flex-col items-center justify-end gap-1">
+      <span className="text-[10px] uppercase tracking-wide text-transparent">+</span>
+      {openInput ? (
+        <input
+          autoFocus
+          type="number"
+          min="2"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && commit()}
+          placeholder="cuota"
+          className="h-9 w-[72px] rounded-md border border-ninja-flameSoft bg-background px-2 text-right text-sm outline-none"
+        />
+      ) : (
+        <button
+          onClick={() => setOpenInput(true)}
+          title="Agregar cuota"
+          className="flex h-9 w-9 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition hover:border-ninja-flameSoft hover:text-ninja-flameSoft"
+        >
+          <Plus size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PlanCell({
   plan,
   label,
@@ -556,7 +576,7 @@ function PlanCell({
           onChange={(e) => setVal(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder="—"
+          placeholder=""
           disabled={disabled}
           title={has ? undefined : "Vacío: este plan no se ofrece al cobrar"}
           className={`h-9 w-[72px] rounded-md border bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft ${border}`}

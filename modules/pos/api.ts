@@ -192,6 +192,16 @@ export const paymentPlansApi = {
     const { error } = await supabase.from("payment_plans").update({ is_active }).eq("id", id);
     if (error) throw error;
   },
+  // Activa/desactiva todos los planes de un medio (modo "recargo único" del medio
+  // desactiva los planes para que no se ofrezcan al cobrar).
+  setProviderActive: async (providerKey: string, is_active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .update({ is_active })
+      .eq("provider_key", providerKey);
+    if (error) throw error;
+  },
   remove: async (id: string): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.from("payment_plans").delete().eq("id", id);

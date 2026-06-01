@@ -663,7 +663,8 @@ export default function PosPage() {
       <PaymentModal
         open={paymentModal}
         onOpenChange={setPaymentModal}
-        total={total}
+        base={rawTotal}
+        rounding={rounding}
         onConfirm={handleSale}
         loading={sale.isPending}
         storeCreditBalance={scBalance ?? 0}

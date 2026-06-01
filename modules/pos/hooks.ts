@@ -96,6 +96,9 @@ export function usePosMutations() {
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });
+        // Refresca saldo de vale (si se pagó con store_credit) y ventas/reportes.
+        qc.invalidateQueries({ queryKey: ["customers"] });
+        qc.invalidateQueries({ queryKey: ["sales"] });
       },
     }),
   };

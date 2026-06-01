@@ -82,6 +82,18 @@ export const salesApi = {
     if (error) throw error;
   },
 
+  // Búsqueda server-side de ventas completadas por N° de comprobante (exacto).
+  byNumber: async (n: number): Promise<Sale[]> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("sales")
+      .select("*")
+      .eq("number", n)
+      .eq("status", "completed")
+      .limit(10);
+    return (data ?? []) as Sale[];
+  },
+
   listReturns: async (): Promise<
     {
       id: string;

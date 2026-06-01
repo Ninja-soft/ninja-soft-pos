@@ -9,6 +9,18 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auditoría profunda (16 bugs detectados y corregidos):**
+  - **CRÍTICO:** `stock_movements.tenant_id` era NOT NULL sin default → vender/devolver un producto con control de stock habría fallado. Se agrega el default `current_tenant_id()`.
+  - **Caja:** el efectivo recibido se registraba como monto del pago (incluía el vuelto) → arqueo inflado. Ahora se registra el total de la venta; recibido/vuelto son solo ayuda visual.
+  - **Recargo + redondeo:** el total cobrado podía diferir de `sales.total` con redondeo activo. El POS ahora calcula el total a cobrar con el mismo orden de redondeo que `create_sale`.
+  - **Vale:** se capa el pago con vale al total de la venta (`store_credit_exceeds_total`) para no sobre-consumir saldo; `create_sale` rechaza descuento negativo (`invalid_discount`).
+  - **Devoluciones:** lock pesimista anti doble-devolución concurrente; el reintegro prorratea el descuento global de la venta; `tenant_id` explícito en movimientos de stock; numeración con `unique(tenant_id, number)`.
+  - **Devoluciones (UI):** búsqueda por N° ahora consulta el server (encuentra tickets fuera de las últimas 100); más mensajes de error claros; reset de estado del modal de cobro entre ventas; se refresca el saldo de vale tras cada venta.
+  - **Categorías:** la baja lógica ahora elimina todos los descendientes (hasta 4 niveles), no solo los hijos directos.
+  - **ConfirmDialog:** Enter no dispara doble submit mientras carga.
+
 ### Added
 
 - **H27 — Planes de pago con recargo:** tabla `payment_plans` por tenant (gestión en Configuración → Medios de pago → Planes/recargos). Al cobrar, el cajero elige un plan (ej. "Visa 3 cuotas +8%") y el recargo se suma al total como ítem "Recargo …", visible en el ticket.

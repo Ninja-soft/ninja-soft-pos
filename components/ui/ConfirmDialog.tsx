@@ -53,7 +53,7 @@ export function ConfirmDialog({
             onChange={(e) => setReason(e.target.value)}
             placeholder={reasonPlaceholder}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && canConfirm) onConfirm(reason.trim());
+              if (e.key === "Enter" && canConfirm && !loading) onConfirm(reason.trim());
             }}
           />
         )}

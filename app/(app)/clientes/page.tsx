@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
+import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { CustomerHistoryModal } from "@/components/customers/CustomerHistoryModal";
 import { AccountsReceivableModal } from "@/components/customers/AccountsReceivableModal";
+import { BirthdaysModal } from "@/components/customers/BirthdaysModal";
 import { ImportCustomersModal } from "@/components/customers/ImportCustomersModal";
 import { useCustomers, useCustomerMutations } from "@/modules/customers/hooks";
 import {
@@ -25,6 +26,7 @@ export default function ClientesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [arOpen, setArOpen] = useState(false);
+  const [bdayOpen, setBdayOpen] = useState(false);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [delTarget, setDelTarget] = useState<Customer | null>(null);
@@ -94,6 +96,9 @@ export default function ClientesPage() {
             </Button>
             <Button variant="secondary" className="shrink-0" onClick={() => setArOpen(true)}>
               <Wallet size={16} /> Cuentas por cobrar
+            </Button>
+            <Button variant="secondary" className="shrink-0" onClick={() => setBdayOpen(true)}>
+              <Cake size={16} /> Cumpleaños
             </Button>
             <Button
               className="shrink-0"
@@ -203,6 +208,7 @@ export default function ClientesPage() {
       />
       <ImportCustomersModal open={importOpen} onOpenChange={setImportOpen} />
       <AccountsReceivableModal open={arOpen} onOpenChange={setArOpen} />
+      <BirthdaysModal open={bdayOpen} onOpenChange={setBdayOpen} />
       <CustomerHistoryModal
         open={historyCustomer !== null}
         onOpenChange={(o) => !o && setHistoryCustomer(null)}

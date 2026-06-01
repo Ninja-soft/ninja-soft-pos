@@ -584,7 +584,7 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
 - [ ] **H40 — Clientes livianos y recurrencia.**
   - [ ] Ficha mínima opcional: nombre, teléfono/WhatsApp, cumpleaños, preferencias y notas.
   - [ ] Historial de servicios/productos por cliente.
-  - [ ] Recordatorios por WhatsApp/email: próximo turno, mantenimiento, cumpleaños, promo de regreso.
+  - [~] Recordatorios por WhatsApp/email: próximo turno, mantenimiento, cumpleaños, promo de regreso. *Base: vista "Cumpleaños del mes" en /clientes (`BirthdaysModal`) con selector de mes y links tel/email. Falta el envío automático.*
   - [ ] Recompra rápida: "repetir último servicio" o "repetir pedido frecuente".
   - [ ] *Criterio:* un cliente frecuente se cobra desde su historial en menos de 3 taps.
 

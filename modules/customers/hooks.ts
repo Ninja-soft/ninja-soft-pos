@@ -39,6 +39,13 @@ export function useAccountsReceivable(enabled = true) {
   });
 }
 
+export function useRequiredCustomerFields() {
+  return useQuery({
+    queryKey: ["customers", "required-fields"],
+    queryFn: () => customersApi.requiredFields(),
+  });
+}
+
 export function useCustomerGroups() {
   return useQuery({
     queryKey: ["customer-groups"],

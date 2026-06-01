@@ -572,6 +572,7 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          birth_date: string | null
           created_at: string
           credit_limit: number
           deleted_at: string | null
@@ -591,6 +592,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          birth_date?: string | null
           created_at?: string
           credit_limit?: number
           deleted_at?: string | null
@@ -610,6 +612,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          birth_date?: string | null
           created_at?: string
           credit_limit?: number
           deleted_at?: string | null
@@ -1016,6 +1019,7 @@ export type Database = {
           allow_negative_stock: boolean
           blind_close: boolean
           close_tolerance: number
+          customer_required: Json
           max_discount: Json
           require_close_reason: boolean
           require_customer: boolean
@@ -1031,6 +1035,7 @@ export type Database = {
           allow_negative_stock?: boolean
           blind_close?: boolean
           close_tolerance?: number
+          customer_required?: Json
           max_discount?: Json
           require_close_reason?: boolean
           require_customer?: boolean
@@ -1046,6 +1051,7 @@ export type Database = {
           allow_negative_stock?: boolean
           blind_close?: boolean
           close_tolerance?: number
+          customer_required?: Json
           max_discount?: Json
           require_close_reason?: boolean
           require_customer?: boolean

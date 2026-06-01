@@ -59,6 +59,7 @@ export const CustomerSchema = z
       .transform((v) => (v ? v : null)),
     phone: optional(40),
     address: optional(160),
+    birth_date: optional(10),
     notes: optional(300),
     is_active: z.boolean().default(true),
     credit_limit: z.coerce.number().min(0).default(0),
@@ -91,3 +92,15 @@ export const CustomerSchema = z
 
 export type CustomerInput = z.input<typeof CustomerSchema>;
 export type CustomerOutput = z.output<typeof CustomerSchema>;
+
+// Campos del cliente que el dueño puede marcar como obligatorios (H31).
+export const CUSTOMER_FIELDS = [
+  { key: "document_number", label: "Documento" },
+  { key: "iva_condition", label: "Condición IVA" },
+  { key: "phone", label: "Teléfono" },
+  { key: "email", label: "Email" },
+  { key: "address", label: "Dirección" },
+  { key: "birth_date", label: "Fecha de nacimiento" },
+] as const;
+export type CustomerFieldKey = (typeof CUSTOMER_FIELDS)[number]["key"];
+export type CustomerRequired = Partial<Record<CustomerFieldKey, boolean>>;

@@ -11,7 +11,12 @@ import {
   Lock,
   UserCheck,
   Hash,
+  ClipboardCheck,
 } from "lucide-react";
+import {
+  CUSTOMER_FIELDS,
+  type CustomerRequired,
+} from "@/modules/customers/schemas";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -31,6 +36,7 @@ type Settings = {
   require_customer: boolean;
   sale_prefix: string;
   sale_pad: number;
+  customer_required: CustomerRequired;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -74,7 +80,7 @@ export function OperationSettingsCard() {
       const { data } = await supabase
         .from("pos_settings")
         .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad",
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required",
         )
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -90,6 +96,7 @@ export function OperationSettingsCard() {
           require_customer: false,
           sale_prefix: "",
           sale_pad: 0,
+          customer_required: {},
         }
       );
     },
@@ -105,6 +112,7 @@ export function OperationSettingsCard() {
   const [requireCustomer, setRequireCustomer] = useState(false);
   const [salePrefix, setSalePrefix] = useState("");
   const [salePad, setSalePad] = useState(0);
+  const [customerReq, setCustomerReq] = useState<CustomerRequired>({});
 
   useEffect(() => {
     if (!settings) return;
@@ -122,6 +130,7 @@ export function OperationSettingsCard() {
     setRequireCustomer(settings.require_customer ?? false);
     setSalePrefix(settings.sale_prefix ?? "");
     setSalePad(settings.sale_pad ?? 0);
+    setCustomerReq((settings.customer_required as CustomerRequired) ?? {});
   }, [settings]);
 
   const save = useMutation({
@@ -144,6 +153,7 @@ export function OperationSettingsCard() {
           require_customer: requireCustomer,
           sale_prefix: salePrefix.trim(),
           sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
+          customer_required: customerReq,
         },
         { onConflict: "tenant_id" },
       );
@@ -379,6 +389,36 @@ export function OperationSettingsCard() {
             onCheckedChange={setRequireCustomer}
             label="Requerir cliente"
           />
+        </CardContent>
+      </Card>
+
+      {/* Datos obligatorios del cliente */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <ClipboardCheck size={16} className="text-ninja-flameSoft" /> Datos obligatorios del cliente
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Campos que se exigen al crear o editar un cliente. El nombre siempre
+            es obligatorio. Por defecto no se exige nada.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {CUSTOMER_FIELDS.map((f) => (
+              <label
+                key={f.key}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+              >
+                <span className="text-sm">{f.label}</span>
+                <Switch
+                  checked={Boolean(customerReq[f.key])}
+                  onCheckedChange={(v) =>
+                    setCustomerReq((p) => ({ ...p, [f.key]: v }))
+                  }
+                  label={`Exigir ${f.label}`}
+                />
+              </label>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

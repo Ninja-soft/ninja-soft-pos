@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
-import type { CustomerOutput } from "./schemas";
+import type { CustomerOutput, CustomerRequired } from "./schemas";
 import type { ParsedCustomer } from "./import";
 
 export type Customer = Tables<"customers">;
@@ -14,6 +14,7 @@ function payload(input: CustomerOutput) {
     email: input.email,
     phone: input.phone,
     address: input.address,
+    birth_date: input.birth_date,
     notes: input.notes,
     is_active: input.is_active,
     credit_limit: input.credit_limit ?? 0,
@@ -44,6 +45,16 @@ export const customerGroupsApi = {
 };
 
 export const customersApi = {
+  // Config del tenant: qué campos del cliente son obligatorios (H31).
+  requiredFields: async (): Promise<CustomerRequired> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("pos_settings")
+      .select("customer_required")
+      .maybeSingle();
+    return ((data?.customer_required as CustomerRequired) ?? {}) as CustomerRequired;
+  },
+
   // Saldo a favor (vale) del cliente = suma de movimientos de store credit.
   storeCreditBalance: async (customerId: string): Promise<number> => {
     const supabase = createClient();

@@ -2225,6 +2225,50 @@ export type Database = {
         }
         Relationships: []
       }
+      warranty_plans: {
+        Row: {
+          commission_pct: number
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          months: number
+          price: number
+          sort: number
+          tenant_id: string
+        }
+        Insert: {
+          commission_pct?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          months?: number
+          price?: number
+          sort?: number
+          tenant_id?: string
+        }
+        Update: {
+          commission_pct?: number
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          months?: number
+          price?: number
+          sort?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warranty_plans_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

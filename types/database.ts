@@ -1086,6 +1086,7 @@ export type Database = {
           unit: string
           updated_at: string
           updated_by: string | null
+          warranty_months: number
         }
         Insert: {
           allow_negative?: boolean | null
@@ -1116,6 +1117,7 @@ export type Database = {
           unit?: string
           updated_at?: string
           updated_by?: string | null
+          warranty_months?: number
         }
         Update: {
           allow_negative?: boolean | null
@@ -1146,6 +1148,7 @@ export type Database = {
           unit?: string
           updated_at?: string
           updated_by?: string | null
+          warranty_months?: number
         }
         Relationships: [
           {
@@ -2264,6 +2267,7 @@ export type Database = {
           unit: string
           updated_at: string
           updated_by: string | null
+          warranty_months: number
         }[]
         SetofOptions: {
           from: "*"

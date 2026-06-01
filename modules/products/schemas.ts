@@ -30,6 +30,7 @@ export const ProductSchema = z.object({
   track_stock: z.boolean().default(true),
   // Override de venta en negativo: "inherit" usa el ajuste global del tenant.
   allow_negative: z.enum(["inherit", "yes", "no"]).default("inherit"),
+  warranty_months: z.coerce.number().int().min(0).max(600).default(0),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

@@ -468,13 +468,13 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Reporte de garantías vendidas y comisiones.
   - [ ] *Criterio:* al cobrar un producto con garantía de fábrica, el POS ofrece planes aplicables y registra prima/comisión.
 
-- [ ] **H29 — Devoluciones, cambios y vales.**
-  - [ ] Política de devolución: cajero elige caso a caso, siempre saldo a favor o siempre efectivo.
+- [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas): tablas `sale_returns`/`sale_return_items`, `sale_items.returned_qty` anti doble-devolución, reintegro por efectivo (sale de caja) o vale (`store_credit_movements`). Faltan: redención del vale en el POS, vigencia del vale, catálogo de motivos y "diferencia a cobrar" (cambio).*
+  - [x] Política de devolución: el cajero elige caso a caso reintegro en efectivo o vale.
   - [ ] Vigencia configurable del vale/saldo a favor.
-  - [ ] Motivos configurables con `label`, `code`, orden, estado y destino de stock.
-  - [ ] Destinos de stock: depósito original, depósito de revisión, descarte/merma.
-  - [ ] Wizard de devolución/cambio con trazabilidad, reintegro por medio de pago, vale o diferencia a cobrar.
-  - [ ] *Criterio:* un cambio por talle vuelve al depósito original; un defectuoso va a merma; ambos quedan auditados.
+  - [~] Motivos: por ahora texto libre (catálogo configurable pendiente).
+  - [x] Destinos de stock por línea: vuelve a stock / a revisión / descarte (revisión y descarte no reponen).
+  - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
+  - [~] *Criterio:* devolución parcial con destino de stock por línea, auditada; redención del vale y cambio con diferencia pendientes.
 
 - [~] **H30 — Settings operativos del POS.** — *Hecho salvo señas (→ H32): tabla `pos_settings` + Configuración → Operación del POS (solo dueño). `create_sale` aplica descuento máximo por rol, redondeo y bloqueo de stock negativo (con override por producto); `close_cash_shift` exige motivo por tolerancia; SKU automático; selector de cliente en el POS + requerir cliente. Defaults permisivos.*
   - [x] Permitir vender en negativo global (`pos_settings.allow_negative_stock`); override por producto (`products.allow_negative`) preparado, UI en PR2.

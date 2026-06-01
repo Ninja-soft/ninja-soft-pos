@@ -1187,6 +1187,7 @@ export type Database = {
           product_id: string | null
           product_name: string
           quantity: number
+          returned_qty: number
           sale_id: string
           serial: string | null
           sku: string | null
@@ -1201,6 +1202,7 @@ export type Database = {
           product_id?: string | null
           product_name: string
           quantity: number
+          returned_qty?: number
           sale_id: string
           serial?: string | null
           sku?: string | null
@@ -1215,6 +1217,7 @@ export type Database = {
           product_id?: string | null
           product_name?: string
           quantity?: number
+          returned_qty?: number
           sale_id?: string
           serial?: string | null
           sku?: string | null
@@ -1239,6 +1242,122 @@ export type Database = {
           },
           {
             foreignKeyName: "sale_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_return_items: {
+        Row: {
+          id: string
+          product_id: string | null
+          quantity: number
+          restock: string
+          return_id: string
+          sale_item_id: string
+          subtotal: number
+          unit_price: number
+        }
+        Insert: {
+          id?: string
+          product_id?: string | null
+          quantity: number
+          restock?: string
+          return_id: string
+          sale_item_id: string
+          subtotal: number
+          unit_price: number
+        }
+        Update: {
+          id?: string
+          product_id?: string | null
+          quantity?: number
+          restock?: string
+          return_id?: string
+          sale_item_id?: string
+          subtotal?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_return_items_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "sale_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_return_items_sale_item_id_fkey"
+            columns: ["sale_item_id"]
+            isOneToOne: false
+            referencedRelation: "sale_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sale_returns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string | null
+          id: string
+          number: number
+          reason: string | null
+          refund_method: string
+          sale_id: string
+          tenant_id: string
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          number: number
+          reason?: string | null
+          refund_method: string
+          sale_id: string
+          tenant_id?: string
+          total?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string | null
+          id?: string
+          number?: number
+          reason?: string | null
+          refund_method?: string
+          sale_id?: string
+          tenant_id?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sale_returns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_returns_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_returns_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_returns_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1413,6 +1532,68 @@ export type Database = {
           },
           {
             foreignKeyName: "stock_movements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_credit_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          delta: number
+          id: string
+          reason: string | null
+          sale_return_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          delta: number
+          id?: string
+          reason?: string | null
+          sale_return_id?: string | null
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          delta?: number
+          id?: string
+          reason?: string | null
+          sale_return_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_credit_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_credit_movements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_credit_movements_sale_return_id_fkey"
+            columns: ["sale_return_id"]
+            isOneToOne: false
+            referencedRelation: "sale_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_credit_movements_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1984,6 +2165,15 @@ export type Database = {
         Returns: string
       }
       public_catalog: { Args: { p_slug: string }; Returns: Json }
+      return_sale: {
+        Args: {
+          p_items: Json
+          p_reason?: string
+          p_refund?: string
+          p_sale_id: string
+        }
+        Returns: Json
+      }
       sales_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       set_my_tenant_industry: {
         Args: { p_industry: string }

@@ -111,28 +111,32 @@ export function QrCheckoutModal({
         {/* Selección de plan + recargo */}
         {phase === "select" && (
           <div className="space-y-3 text-left">
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted-foreground">Plan de pago</span>
-              <select
-                value={planId}
-                onChange={(e) => setPlanId(e.target.value)}
-                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-              >
-                <option value="">Sin recargo (1 pago)</option>
-                {activePlans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {BASE_LABEL[p.base ?? "otro"] ?? p.base} {p.label}
-                    {Number(p.surcharge_pct) ? ` · +${p.surcharge_pct}%` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              El plan solo aplica el <strong>recargo</strong> que configuraste. En el QR,
-              <strong> las cuotas las elige el cliente</strong> en su app de Mercado Pago.
-              Para “sin recargo”, usá un plan en 0%. Las cuotas sin interés reales se
-              activan en tu cuenta de Mercado Pago.
-            </p>
+            {activePlans.length > 0 && (
+              <>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-muted-foreground">Plan de pago</span>
+                  <select
+                    value={planId}
+                    onChange={(e) => setPlanId(e.target.value)}
+                    className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                  >
+                    <option value="">Sin recargo (1 pago)</option>
+                    {activePlans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {BASE_LABEL[p.base ?? "otro"] ?? p.base} {p.label}
+                        {Number(p.surcharge_pct) ? ` · +${p.surcharge_pct}%` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  El plan solo aplica el <strong>recargo</strong> que configuraste. En el QR,
+                  <strong> las cuotas las elige el cliente</strong> en su app de Mercado Pago.
+                  Para “sin recargo”, usá un plan en 0%. Las cuotas sin interés reales se
+                  activan en tu cuenta de Mercado Pago.
+                </p>
+              </>
+            )}
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>

@@ -102,6 +102,7 @@ export const productsApi = {
           input.allow_negative === "inherit"
             ? null
             : input.allow_negative === "yes",
+        warranty_months: input.warranty_months,
       })
       .select("*")
       .single();
@@ -135,6 +136,7 @@ export const productsApi = {
           input.allow_negative === "inherit"
             ? null
             : input.allow_negative === "yes",
+        warranty_months: input.warranty_months,
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       })

@@ -88,6 +88,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             : product.allow_negative
               ? "yes"
               : "no",
+        warranty_months: product?.warranty_months ?? 0,
       });
     }
   }, [open, product, reset]);
@@ -245,6 +246,13 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           <Input label="Stock mínimo" type="number" step="0.001" {...register("stock_min")} />
           <Input label="Unidad (un, kg, lt…)" {...register("unit")} />
           <Input label="IVA %" type="number" step="0.5" {...register("tax_rate")} />
+          <Input
+            label="Garantía (meses)"
+            type="number"
+            step="1"
+            min="0"
+            {...register("warranty_months")}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">

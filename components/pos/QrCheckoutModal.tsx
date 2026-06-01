@@ -1,23 +1,31 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
-import { posApi } from "@/modules/pos/api";
+import { posApi, type PaymentPlan } from "@/modules/pos/api";
 import { useProviderPlans } from "@/modules/pos/hooks";
-import { BASE_LABEL } from "@/modules/pos/planConstants";
+import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants";
 import { formatCurrency } from "@/lib/utils/format";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-// Cobro por QR de Mercado Pago: el cajero elige el plan (marca/cuotas) que
-// aplica su recargo, se genera el QR por el total con recargo y se espera la
-// aprobación (webhook → estado en vivo por polling).
+function planText(p: PaymentPlan) {
+  const cuotas =
+    (p.installments ?? 1) > 1 ? `${p.installments} cuotas` : p.base === "credito" ? "1 pago" : "Pago";
+  return `${BASE_LABEL[p.base ?? "otro"] ?? p.base} · ${cuotas}`;
+}
+
+// Cobro por QR de Mercado Pago. Sin planes configurados → genera el QR directo.
+// Con planes → el cajero elige la tarjeta (por logo) y la cuota (por botón, con
+// el total ya calculado). El recargo del plan se suma al monto del QR.
 export function QrCheckoutModal({
   open,
   onOpenChange,
@@ -31,31 +39,33 @@ export function QrCheckoutModal({
 }) {
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
-  const [planId, setPlanId] = useState("");
+  const [brand, setBrand] = useState<string | null>(null);
+  const [amount, setAmount] = useState(base);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState("");
   const firedRef = useRef(false);
+  const startedRef = useRef(false);
+  const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
 
-  const { data: plans = [] } = useProviderPlans(open ? "mercadopago" : null);
+  const { data: plans = [], isLoading } = useProviderPlans(open ? "mercadopago" : null);
   const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans]);
-  const plan = activePlans.find((p) => p.id === planId) ?? null;
-  const surcharge = plan ? round2((base * (Number(plan.surcharge_pct) || 0)) / 100) : 0;
-  const amount = round2(base + surcharge);
+  const brands = useMemo(
+    () => [...new Set(activePlans.map((p) => p.brand).filter(Boolean) as string[])],
+    [activePlans],
+  );
+  const brandPlans = useMemo(
+    () =>
+      activePlans
+        .filter((p) => p.brand === brand)
+        .sort((a, b) => (a.installments ?? 1) - (b.installments ?? 1)),
+    [activePlans, brand],
+  );
 
-  useEffect(() => {
-    if (open) {
-      setPhase("select");
-      setPlanId("");
-      setIntentId(null);
-      setInitPoint("");
-      firedRef.current = false;
-    }
-  }, [open]);
-
-  function startQr() {
+  function startQr(amt: number) {
+    setAmount(amt);
     setPhase("creating");
     posApi
-      .createMpQr(amount, "Venta NinjaPos")
+      .createMpQr(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
         setInitPoint(r.init_point);
@@ -73,6 +83,39 @@ export function QrCheckoutModal({
       });
   }
 
+  function pickPlan(p: PaymentPlan) {
+    const sc = round2((base * (Number(p.surcharge_pct) || 0)) / 100);
+    chosenRef.current = sc > 0 ? { label: p.label, surcharge: sc } : null;
+    startQr(round2(base + sc));
+  }
+  function payNoPlan() {
+    chosenRef.current = null;
+    startQr(base);
+  }
+
+  // Reset al abrir.
+  useEffect(() => {
+    if (!open) return;
+    setPhase("select");
+    setBrand(null);
+    setAmount(base);
+    setIntentId(null);
+    setInitPoint("");
+    firedRef.current = false;
+    startedRef.current = false;
+    chosenRef.current = null;
+  }, [open, base]);
+
+  // Sin planes activos → genera el QR directo (sin pantalla de selección).
+  useEffect(() => {
+    if (!open || isLoading || startedRef.current) return;
+    if (activePlans.length === 0) {
+      startedRef.current = true;
+      startQr(base);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isLoading, activePlans.length]);
+
   const { data: status } = useQuery({
     queryKey: ["mp-intent", intentId],
     queryFn: () => posApi.mpIntentStatus(intentId!),
@@ -85,16 +128,20 @@ export function QrCheckoutModal({
     if (status.status === "approved") {
       firedRef.current = true;
       setPhase("approved");
-      const extras = surcharge > 0 && plan ? [{ name: `Recargo ${plan.label}`, amount: surcharge }] : [];
+      const c = chosenRef.current;
+      const extras = c ? [{ name: `Recargo ${c.label}`, amount: c.surcharge }] : [];
       onApproved(status.mp_payment_id ?? intentId ?? "", amount, extras);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
     }
-  }, [status, onApproved, intentId, amount, surcharge, plan]);
+  }, [status, onApproved, intentId, amount]);
 
   const qrSrc = initPoint
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
     : "";
+
+  // En "select" con planes: si todavía carga, spinner.
+  const selecting = phase === "select" && (isLoading || activePlans.length > 0);
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Cobrar con QR · Mercado Pago">
@@ -108,61 +155,77 @@ export function QrCheckoutModal({
           />
         </div>
 
-        {/* Selección de plan + recargo */}
-        {phase === "select" && (
+        {selecting && (
           <div className="space-y-3 text-left">
-            {activePlans.length > 0 && (
+            {isLoading ? (
+              <div className="flex justify-center py-6">
+                <Spinner size={24} />
+              </div>
+            ) : !brand ? (
               <>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-muted-foreground">Plan de pago</span>
-                  <select
-                    value={planId}
-                    onChange={(e) => setPlanId(e.target.value)}
-                    className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-                  >
-                    <option value="">Sin recargo (1 pago)</option>
-                    {activePlans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {BASE_LABEL[p.base ?? "otro"] ?? p.base} {p.label}
-                        {Number(p.surcharge_pct) ? ` · +${p.surcharge_pct}%` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  El plan solo aplica el <strong>recargo</strong> que configuraste. En el QR,
-                  <strong> las cuotas las elige el cliente</strong> en su app de Mercado Pago.
-                  Para “sin recargo”, usá un plan en 0%. Las cuotas sin interés reales se
-                  activan en tu cuenta de Mercado Pago.
-                </p>
+                <div className="text-sm font-medium">Elegí la tarjeta</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {brands.map((b) => {
+                    const logo = brandLogo(b);
+                    return (
+                      <button
+                        key={b}
+                        onClick={() => setBrand(b)}
+                        className="flex flex-col items-center gap-1 rounded-lg border border-border p-3 transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
+                      >
+                        {logo ? (
+                          <Image src={logo} alt={b} width={48} height={30} className="h-7 w-auto object-contain" />
+                        ) : (
+                          <span className="h-7" />
+                        )}
+                        <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={payNoPlan}
+                  className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground"
+                >
+                  Sin plan · contado ({formatCurrency(base)})
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setBrand(null)}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft size={15} /> {BRAND_LABEL[brand] ?? brand}
+                </button>
+                <div className="text-sm font-medium">Elegí el plan</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {brandPlans.map((p) => {
+                    const sc = round2((base * (Number(p.surcharge_pct) || 0)) / 100);
+                    const total = round2(base + sc);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => pickPlan(p)}
+                        className="flex flex-col items-start gap-0.5 rounded-lg border border-border p-3 text-left transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
+                      >
+                        <span className="text-xs text-muted-foreground">{planText(p)}</span>
+                        <span className="price-hl font-price text-lg font-black tabular-nums">
+                          {formatCurrency(total)}
+                        </span>
+                        {sc > 0 ? (
+                          <span className="text-[11px] text-ninja-flameSoft">
+                            +{p.surcharge_pct}% ({formatCurrency(sc)})
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-emerald-400">sin recargo</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </>
             )}
-            {surcharge > 0 ? (
-              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span className="tabular-nums">{formatCurrency(base)}</span>
-                </div>
-                <div className="flex justify-between text-ninja-flameSoft">
-                  <span>Recargo {plan?.label}</span>
-                  <span className="tabular-nums">+{formatCurrency(surcharge)}</span>
-                </div>
-                <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
-                  <span>Total a cobrar</span>
-                  <span className="price-hl font-price tabular-nums">{formatCurrency(amount)}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Total a cobrar
-                <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">
-                  {formatCurrency(amount)}
-                </div>
-              </div>
-            )}
-            <Button className="w-full" onClick={startQr}>
-              Generar QR
-            </Button>
           </div>
         )}
 
@@ -240,7 +303,7 @@ export function QrCheckoutModal({
           </div>
         )}
 
-        {(phase === "creating" || phase === "waiting") && (
+        {(phase === "creating" || phase === "waiting" || selecting) && (
           <Button variant="ghost" className="w-full" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

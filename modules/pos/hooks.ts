@@ -34,6 +34,13 @@ export function useMpMethod() {
   });
 }
 
+export function useProviderMethod(providerKey: string) {
+  return useQuery({
+    queryKey: ["pos", "provider-method", providerKey],
+    queryFn: () => posApi.providerMethod(providerKey),
+  });
+}
+
 export function usePosSettings() {
   return useQuery({
     queryKey: ["pos", "settings"],

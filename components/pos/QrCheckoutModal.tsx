@@ -24,19 +24,23 @@ function planText(p: PaymentPlan) {
   return `${BASE_LABEL[p.base ?? "otro"] ?? p.base} · ${cuotas}`;
 }
 
-// Cobro por QR de Mercado Pago. Sin planes configurados → genera el QR directo.
-// Con planes → el cajero elige la tarjeta (por logo) y la cuota (por botón, con
-// el total ya calculado). El recargo del plan se suma al monto del QR.
+// Cobro por QR (Mercado Pago / Mobbex). Sin planes configurados → genera el QR
+// directo. Con planes → el cajero elige la tarjeta (por logo) y la cuota (por
+// botón, con el total ya calculado). El recargo del plan se suma al monto.
 export function QrCheckoutModal({
   open,
   onOpenChange,
   base,
   onApproved,
+  provider = "mercadopago",
+  providerName = "Mercado Pago",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   base: number;
   onApproved: (reference: string, amount: number, extras: { name: string; amount: number }[]) => void;
+  provider?: "mercadopago" | "mobbex";
+  providerName?: string;
 }) {
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
@@ -48,17 +52,17 @@ export function QrCheckoutModal({
   const startedRef = useRef(false);
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
 
-  const { data: plans = [], isLoading } = useProviderPlans(open ? "mercadopago" : null);
+  const { data: plans = [], isLoading } = useProviderPlans(open ? provider : null);
   // Config del medio: modo "recargo único" + su %.
   const { data: methodCfg } = useQuery({
-    queryKey: ["mp-method-cfg"],
+    queryKey: ["qr-method-cfg", provider],
     enabled: open,
     queryFn: async () => {
       const supabase = createClient();
       const { data } = await supabase
         .from("tenant_payment_methods")
         .select("config, surcharge_pct")
-        .eq("provider_key", "mercadopago")
+        .eq("provider_key", provider)
         .maybeSingle();
       return {
         mode: ((data?.config as { plan_mode?: string } | null)?.plan_mode ?? "plans") as string,
@@ -85,8 +89,9 @@ export function QrCheckoutModal({
   function startQr(amt: number) {
     setAmount(amt);
     setPhase("creating");
-    posApi
-      .createMpQr(amt, "Venta NinjaPos")
+    const create =
+      provider === "mobbex" ? posApi.createMobbexQr : posApi.createMpQr;
+    create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
         setInitPoint(r.init_point);
@@ -97,7 +102,7 @@ export function QrCheckoutModal({
         toast({
           title:
             e instanceof Error && e.message === "not_connected"
-              ? "Conectá Mercado Pago en Configuración"
+              ? `Conectá ${providerName} en Configuración`
               : "No se pudo generar el QR",
           variant: "error",
         });
@@ -171,16 +176,17 @@ export function QrCheckoutModal({
   // Pantalla de selección: solo cuando hay planes y no es modo recargo único.
   const selecting = phase === "select" && !globalMode && (loadingAll || activePlans.length > 0);
 
+  const providerLogo =
+    provider === "mobbex"
+      ? "/img/medios_de_pago/Mobbex_cube.webp"
+      : "/img/medios_de_pago/mercado_pago_cube.webp";
+
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Cobrar con QR · Mercado Pago">
+    <Modal open={open} onOpenChange={onOpenChange} title={`Cobrar con QR · ${providerName}`}>
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/img/medios_de_pago/mercado_pago_cube.webp"
-            alt="Mercado Pago"
-            className="h-12 w-auto object-contain"
-          />
+          <img src={providerLogo} alt={providerName} className="h-12 w-auto object-contain" />
         </div>
 
         {selecting && (
@@ -286,8 +292,8 @@ export function QrCheckoutModal({
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              El cliente escanea con la app de Mercado Pago. La pantalla se actualiza
-              sola al acreditarse.
+              El cliente escanea el QR para pagar con {providerName}. La pantalla se
+              actualiza sola al acreditarse.
             </p>
             <a
               href={initPoint}

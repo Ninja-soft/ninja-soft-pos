@@ -260,7 +260,7 @@ export default function PosPage() {
 
   async function handleSale(
     payments: { method: string; amount: number; reference?: string }[],
-    surcharge?: { label: string; amount: number },
+    extras?: { name: string; amount: number }[],
   ) {
     try {
       const items = lines.map((l) => ({
@@ -271,15 +271,18 @@ export default function PosPage() {
         unit_price: l.unitPrice,
         discount: l.discount,
       }));
-      // Recargo por plan de pago (H27): entra como ítem "Recargo …".
-      if (surcharge && surcharge.amount > 0) {
-        items.push({
-          product_id: null,
-          name: `Recargo ${surcharge.label}`,
-          quantity: 1,
-          unit_price: surcharge.amount,
-          discount: 0,
-        } as never);
+      // Extras del cobro (recargo H27, garantía extendida H28): cada uno entra
+      // como ítem de venta para que el total y el ticket lo reflejen.
+      for (const ex of extras ?? []) {
+        if (ex.amount > 0) {
+          items.push({
+            product_id: null,
+            name: ex.name,
+            quantity: 1,
+            unit_price: ex.amount,
+            discount: 0,
+          } as never);
+        }
       }
       const res = await sale.mutateAsync({
         items: items as never,

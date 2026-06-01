@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **H27 — Planes de pago por marca de tarjeta.** `payment_plans` se extiende con `base` (efectivo/transferencia/débito/crédito/QR/otro), `brand` (Visa/Master/Maestro/Cabal/Amex/Naranja/Diners), `installments` (cuotas) y `code` (slug para deduplicar el seeder). En Configuración → Medios de pago → Planes ahora hay una tabla rica (Plan/Base/Marca/Cuotas/Recargo/Estado) con alta/edición, logos de tarjeta y un botón "Cargar planes AR" que siembra los planes típicos (Débito Visa/Master/Maestro/Cabal, Crédito 1 pago, Cuota Simple 3/6/12, Crédito 3/6/12) salteando los que ya existen.
+
 ### Fixed
 
 - **Auditoría profunda (16 bugs detectados y corregidos):**

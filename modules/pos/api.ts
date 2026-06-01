@@ -24,6 +24,30 @@ export interface CreateSaleResult {
 }
 
 export type PaymentPlan = Tables<"payment_plans">;
+export interface PaymentPlanInput {
+  label: string;
+  base: string;
+  brand: string | null;
+  installments: number;
+  surcharge_pct: number;
+  sort?: number;
+  code?: string | null;
+}
+
+// Planes típicos de Argentina para el seeder "Cargar planes AR".
+export const TYPICAL_AR_PLANS: (PaymentPlanInput & { code: string })[] = [
+  { code: "debito_visa", label: "Débito Visa", base: "debito", brand: "visa", installments: 1, surcharge_pct: 0, sort: 10 },
+  { code: "debito_master", label: "Débito Mastercard", base: "debito", brand: "master", installments: 1, surcharge_pct: 0, sort: 11 },
+  { code: "debito_maestro", label: "Débito Maestro", base: "debito", brand: "maestro", installments: 1, surcharge_pct: 0, sort: 12 },
+  { code: "debito_cabal", label: "Débito Cabal", base: "debito", brand: "cabal", installments: 1, surcharge_pct: 0, sort: 13 },
+  { code: "credito_1_pago", label: "Crédito 1 pago", base: "credito", brand: null, installments: 1, surcharge_pct: 0, sort: 20 },
+  { code: "cuota_simple_3", label: "Cuota Simple 3", base: "credito", brand: null, installments: 3, surcharge_pct: 0, sort: 21 },
+  { code: "cuota_simple_6", label: "Cuota Simple 6", base: "credito", brand: null, installments: 6, surcharge_pct: 0, sort: 22 },
+  { code: "cuota_simple_12", label: "Cuota Simple 12", base: "credito", brand: null, installments: 12, surcharge_pct: 0, sort: 23 },
+  { code: "credito_3", label: "Crédito 3 cuotas", base: "credito", brand: null, installments: 3, surcharge_pct: 0, sort: 30 },
+  { code: "credito_6", label: "Crédito 6 cuotas", base: "credito", brand: null, installments: 6, surcharge_pct: 0, sort: 31 },
+  { code: "credito_12", label: "Crédito 12 cuotas", base: "credito", brand: null, installments: 12, surcharge_pct: 0, sort: 32 },
+];
 
 export const paymentPlansApi = {
   list: async (activeOnly = true): Promise<PaymentPlan[]> => {
@@ -33,11 +57,45 @@ export const paymentPlansApi = {
     const { data } = await q;
     return (data ?? []) as PaymentPlan[];
   },
-  create: async (label: string, surcharge_pct: number): Promise<void> => {
+  create: async (v: PaymentPlanInput): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
+    const { error } = await supabase.from("payment_plans").insert({
+      label: v.label,
+      base: v.base,
+      brand: v.brand,
+      installments: v.installments,
+      surcharge_pct: v.surcharge_pct,
+      sort: v.sort ?? 0,
+      code: v.code ?? null,
+    });
+    if (error) throw error;
+  },
+  // Inserta los planes AR que falten (ignora los que ya existen por code).
+  seedTypical: async (
+    rows: (PaymentPlanInput & { code: string })[],
+  ): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
       .from("payment_plans")
-      .insert({ label, surcharge_pct });
+      .upsert(
+        rows.map((r) => ({
+          label: r.label,
+          base: r.base,
+          brand: r.brand,
+          installments: r.installments,
+          surcharge_pct: r.surcharge_pct,
+          sort: r.sort ?? 0,
+          code: r.code,
+        })),
+        { onConflict: "tenant_id,code", ignoreDuplicates: true },
+      )
+      .select("id");
+    if (error) throw error;
+    return (data ?? []).length;
+  },
+  update: async (id: string, v: Partial<PaymentPlanInput>): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("payment_plans").update(v).eq("id", id);
     if (error) throw error;
   },
   setActive: async (id: string, is_active: boolean): Promise<void> => {

@@ -791,8 +791,12 @@ export type Database = {
       }
       payment_plans: {
         Row: {
+          base: string
+          brand: string | null
+          code: string | null
           created_at: string
           id: string
+          installments: number
           is_active: boolean
           label: string
           sort: number
@@ -800,8 +804,12 @@ export type Database = {
           tenant_id: string
         }
         Insert: {
+          base?: string
+          brand?: string | null
+          code?: string | null
           created_at?: string
           id?: string
+          installments?: number
           is_active?: boolean
           label: string
           sort?: number
@@ -809,8 +817,12 @@ export type Database = {
           tenant_id?: string
         }
         Update: {
+          base?: string
+          brand?: string | null
+          code?: string | null
           created_at?: string
           id?: string
+          installments?: number
           is_active?: boolean
           label?: string
           sort?: number

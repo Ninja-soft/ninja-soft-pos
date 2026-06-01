@@ -8,6 +8,7 @@ import {
 import {
   posApi,
   paymentPlansApi,
+  type PaymentPlanInput,
   type SaleItemInput,
   type SalePaymentInput,
 } from "./api";
@@ -52,8 +53,16 @@ export function usePaymentPlanMutations() {
   const inv = () => qc.invalidateQueries({ queryKey: ["pos", "payment-plans"] });
   return {
     create: useMutation({
-      mutationFn: (v: { label: string; surcharge_pct: number }) =>
-        paymentPlansApi.create(v.label, v.surcharge_pct),
+      mutationFn: (v: PaymentPlanInput) => paymentPlansApi.create(v),
+      onSuccess: inv,
+    }),
+    update: useMutation({
+      mutationFn: (v: { id: string; patch: Partial<PaymentPlanInput> }) =>
+        paymentPlansApi.update(v.id, v.patch),
+      onSuccess: inv,
+    }),
+    seed: useMutation({
+      mutationFn: paymentPlansApi.seedTypical,
       onSuccess: inv,
     }),
     setActive: useMutation({

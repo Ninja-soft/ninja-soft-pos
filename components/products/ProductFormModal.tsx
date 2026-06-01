@@ -13,7 +13,7 @@ import {
   type ProductInput,
   type ProductOutput,
 } from "@/modules/products/schemas";
-import type { Product } from "@/modules/products/api";
+import { flattenCategories, type Product } from "@/modules/products/api";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
@@ -168,22 +168,11 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             {...register("category_id")}
           >
             <option value="">Sin categoría</option>
-            {(categories ?? [])
-              .filter((c) => !c.parent_id)
-              .map((parent) => (
-                <optgroup key={parent.id} label={parent.name}>
-                  <option value={parent.id} className="bg-ninja-deepViolet">
-                    {parent.name}
-                  </option>
-                  {(categories ?? [])
-                    .filter((c) => c.parent_id === parent.id)
-                    .map((child) => (
-                      <option key={child.id} value={child.id} className="bg-ninja-deepViolet">
-                        {parent.name} › {child.name}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
+            {flattenCategories(categories ?? []).map(({ cat, depth }) => (
+              <option key={cat.id} value={cat.id} className="bg-ninja-deepViolet">
+                {`${"  ".repeat(depth)}${depth > 0 ? "› " : ""}${cat.name}`}
+              </option>
+            ))}
           </select>
           <div className="mt-2 flex gap-2">
             <input

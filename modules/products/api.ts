@@ -274,6 +274,35 @@ export const productsImportApi = {
   },
 };
 
+// Aplana el árbol de categorías (por parent_id) a una lista en orden de árbol
+// con la profundidad de cada una (0 = nivel 1). Reusado en el form y el modal.
+export function flattenCategories(
+  list: Category[],
+): { cat: Category; depth: number }[] {
+  const byParent = new Map<string | null, Category[]>();
+  for (const c of list) {
+    const k = c.parent_id ?? null;
+    const arr = byParent.get(k) ?? [];
+    arr.push(c);
+    byParent.set(k, arr);
+  }
+  const out: { cat: Category; depth: number }[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    const kids = (byParent.get(parent) ?? []).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const c of kids) {
+      out.push({ cat: c, depth });
+      walk(c.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+// Máxima profundidad permitida (4 niveles: depth 0..3).
+export const CATEGORY_MAX_DEPTH = 3;
+
 export const categoriesApi = {
   list: async (): Promise<Category[]> => {
     const supabase = createClient();

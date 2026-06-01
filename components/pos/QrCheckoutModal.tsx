@@ -137,22 +137,29 @@ export function QrCheckoutModal({
                 </p>
               </>
             )}
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span>
-                <span className="tabular-nums">{formatCurrency(base)}</span>
-              </div>
-              {surcharge > 0 && (
+            {surcharge > 0 ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span className="tabular-nums">{formatCurrency(base)}</span>
+                </div>
                 <div className="flex justify-between text-ninja-flameSoft">
                   <span>Recargo {plan?.label}</span>
                   <span className="tabular-nums">+{formatCurrency(surcharge)}</span>
                 </div>
-              )}
-              <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
-                <span>Total a cobrar</span>
-                <span className="price-hl font-price tabular-nums">{formatCurrency(amount)}</span>
+                <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
+                  <span>Total a cobrar</span>
+                  <span className="price-hl font-price tabular-nums">{formatCurrency(amount)}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Total a cobrar
+                <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">
+                  {formatCurrency(amount)}
+                </div>
+              </div>
+            )}
             <Button className="w-full" onClick={startQr}>
               Generar QR
             </Button>

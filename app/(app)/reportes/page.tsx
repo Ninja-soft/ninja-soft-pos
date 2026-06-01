@@ -16,7 +16,7 @@ import {
   DropdownLabel,
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
-import { useSalesReport } from "@/modules/reports/hooks";
+import { useSalesReport, useWarrantyReport } from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
@@ -28,6 +28,7 @@ const REPORTS = [
   { key: "by_user", label: "Por cajero" },
   { key: "by_product", label: "Top productos" },
   { key: "by_customer", label: "Top clientes" },
+  { key: "warranties", label: "Garantías y comisiones" },
   { key: "low_stock", label: "Stock bajo" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
@@ -38,6 +39,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_user: true,
   by_product: true,
   by_customer: true,
+  warranties: true,
   low_stock: true,
 };
 
@@ -64,6 +66,7 @@ export default function ReportesPage() {
   }, [range]);
 
   const { data, isLoading } = useSalesReport(fromISO, toISO);
+  const { data: warranty } = useWarrantyReport(fromISO, toISO);
 
   async function exportReporte() {
     if (!data) return;
@@ -148,6 +151,27 @@ export default function ReportesPage() {
         ],
         rows: data.by_customer,
         totals: { total: data.by_customer.reduce((a, r) => a + r.total, 0) },
+      },
+      {
+        name: "Garantías",
+        columns: [
+          { header: "Garantía", key: "label", width: 26 },
+          { header: "Vendidas", key: "qty", type: "number" },
+          { header: "Total", key: "total", type: "money" },
+          { header: "Comisión %", key: "commission_pct", type: "number" },
+          { header: "Comisión", key: "commission", type: "money" },
+        ],
+        rows: (warranty?.rows ?? []).map((r) => ({
+          label: r.label,
+          qty: r.qty,
+          total: r.total,
+          commission_pct: r.commission_pct,
+          commission: r.commission,
+        })),
+        totals: {
+          total: warranty?.total ?? 0,
+          commission: warranty?.commission ?? 0,
+        },
       },
     ]);
   }
@@ -306,6 +330,19 @@ export default function ReportesPage() {
                   r.customer,
                   formatCurrency(r.total),
                   String(r.count),
+                ])}
+              />
+            )}
+            {vis.warranties && (
+              <ReportTable
+                title="Garantías y comisiones"
+                cols={["Garantía", "Vend.", "Total", "Com.%", "Comisión"]}
+                rows={(warranty?.rows ?? []).map((r) => [
+                  r.label,
+                  String(r.qty),
+                  formatCurrency(r.total),
+                  `${r.commission_pct}%`,
+                  formatCurrency(r.commission),
                 ])}
               />
             )}

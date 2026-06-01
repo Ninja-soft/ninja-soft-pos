@@ -7,6 +7,7 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { ReturnModal } from "@/components/sales/ReturnModal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useSales, useVoidSale } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -24,6 +25,7 @@ export default function VentasPage() {
   const [ticketOpen, setTicketOpen] = useState(false);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<{ id: string; number: number } | null>(null);
 
   function openTicket(id: string) {
     setTicketId(id);
@@ -56,11 +58,12 @@ export default function VentasPage() {
     ]);
   }
 
-  async function onVoid(id: string, number: number) {
-    const reason = window.prompt(`Motivo de anulación de la venta #${number}:`);
-    if (!reason) return;
+  async function onVoid(reason: string) {
+    if (!voidTarget) return;
+    const { id, number } = voidTarget;
     try {
       await voidSale.mutateAsync({ id, reason });
+      setVoidTarget(null);
       toast({ title: `Venta #${number} anulada`, variant: "success" });
     } catch (e) {
       toast({
@@ -153,7 +156,7 @@ export default function VentasPage() {
                       )}
                       {s.status === "completed" && (
                         <button
-                          onClick={() => onVoid(s.id, s.number)}
+                          onClick={() => setVoidTarget({ id: s.id, number: s.number })}
                           title="Anular"
                           className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                         >
@@ -171,6 +174,19 @@ export default function VentasPage() {
 
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
       <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
+      <ConfirmDialog
+        open={voidTarget !== null}
+        onOpenChange={(o) => !o && setVoidTarget(null)}
+        title={`Anular venta #${voidTarget?.number ?? ""}`}
+        description="La venta se marca como anulada y se repone el stock. Esta acción queda auditada."
+        confirmLabel="Anular venta"
+        danger
+        loading={voidSale.isPending}
+        withReason
+        reasonLabel="Motivo de anulación"
+        reasonPlaceholder="Ej. error de carga, pedido del cliente…"
+        onConfirm={onVoid}
+      />
     </>
   );
 }

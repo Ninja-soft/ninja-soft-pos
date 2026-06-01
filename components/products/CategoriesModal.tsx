@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { CornerDownRight, Plus, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useCategories, useCategoryMutations } from "@/modules/products/hooks";
 import {
@@ -26,6 +27,7 @@ export function CategoriesModal({
   const { create, remove } = useCategoryMutations();
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
+  const [delTarget, setDelTarget] = useState<Category | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const flat = useMemo(
@@ -62,15 +64,15 @@ export function CategoriesModal({
     );
   }
 
-  function del(c: Category) {
-    const msg =
-      childrenCount(c.id) > 0
-        ? `Eliminar "${c.name}" y sus sub-categorías?`
-        : `Eliminar "${c.name}"?`;
-    if (!window.confirm(msg)) return;
+  function confirmDelete() {
+    const c = delTarget;
+    if (!c) return;
     if (parentId === c.id) setParentId("");
     remove.mutate(c.id, {
-      onSuccess: () => toast({ title: "Categoría eliminada", variant: "success" }),
+      onSuccess: () => {
+        setDelTarget(null);
+        toast({ title: "Categoría eliminada", variant: "success" });
+      },
       onError: () => toast({ title: "No se pudo eliminar", variant: "error" }),
     });
   }
@@ -81,6 +83,7 @@ export function CategoriesModal({
   }
 
   return (
+    <>
     <Modal open={open} onOpenChange={onOpenChange} title="Categorías" className="max-w-lg">
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">
@@ -167,7 +170,7 @@ export function CategoriesModal({
                     </button>
                   )}
                   <button
-                    onClick={() => del(cat)}
+                    onClick={() => setDelTarget(cat)}
                     title="Eliminar"
                     className="rounded p-1 text-muted-foreground transition hover:text-destructive"
                   >
@@ -180,5 +183,23 @@ export function CategoriesModal({
         </div>
       </div>
     </Modal>
+
+      <ConfirmDialog
+        open={delTarget !== null}
+        onOpenChange={(o) => !o && setDelTarget(null)}
+        title="Eliminar categoría"
+        description={
+          delTarget
+            ? childrenCount(delTarget.id) > 0
+              ? `Se elimina "${delTarget.name}" y sus sub-categorías.`
+              : `Se elimina "${delTarget.name}".`
+            : ""
+        }
+        confirmLabel="Eliminar"
+        danger
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+      />
+    </>
   );
 }

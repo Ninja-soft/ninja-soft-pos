@@ -9,8 +9,13 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Sin alerts del navegador:** se reemplazan `window.confirm`/`window.prompt` por un `ConfirmDialog` (Radix/Modal) con estilo de la app. Anular venta pide el motivo en un diálogo (no en el prompt nativo); eliminar categoría confirma en diálogo.
+
 ### Added
 
+- **Roadmap:** se sumaron la sección dedicada de Devoluciones con búsqueda por ticket/ID, la redención del vale en el POS (H29), la numeración de comprobante personalizable por tenant (H9) y el historial del cliente (H31).
 - **Categorías hasta 4 niveles:** la gestión de categorías pasa de 2 a **4 niveles** (rubro → sub-rubro → …). `CategoriesModal` rediseñado: árbol con sangría, agregar sub-categoría inline (tocá ↳ en una categoría), contexto del padre al crear. El selector de categoría del producto muestra el árbol completo indentado. Helper `flattenCategories` + `CATEGORY_MAX_DEPTH`.
 - **H29 (v1) — Devoluciones y vales:** desde /ventas, acción **Devolución/cambio** sobre una venta completada. `ReturnModal` permite elegir cuánto de cada ítem devolver, el destino del stock (vuelve a stock / revisión / descarte) y el motivo; reintegra por **efectivo** (sale de caja) o emite un **vale** (saldo a favor del cliente, `store_credit_movements`). Backend: tablas `sale_returns`/`sale_return_items`, `sale_items.returned_qty` (anti doble-devolución) y RPC `return_sale`. Pendiente: redención del vale en el POS, vigencia del vale y "diferencia a cobrar" (cambio).
 - **H30 — Selector de cliente + requerir cliente en el POS:** el POS permite elegir un cliente para la venta (busca por nombre/documento) y lo manda en `create_sale`. Nuevo flag `pos_settings.require_customer` (Configuración → Operación del POS): si está activo, bloquea el cobro hasta elegir cliente. Con esto H30 queda completo (salvo señas, que van en H32).

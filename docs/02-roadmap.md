@@ -499,7 +499,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] *Criterio:* al cerrar caja aparece su Z en el historial con el consolidado del turno; se puede reimprimir y exportar, pero no modificar.
 
 - [ ] **H31 — Cuenta corriente y grupos de clientes.**
-  - [ ] **Historial del cliente**: ficha con sus compras, devoluciones, saldo a favor (vale), deuda de cuenta corriente y totales. Accesible desde Clientes y desde el selector de cliente del POS.
+  - [~] **Historial del cliente**: modal en /clientes con saldo a favor (vale), compras y devoluciones (`CustomerHistoryModal`). Falta deuda de cuenta corriente (depende de este hito) y acceso desde el selector del POS.
   - [ ] Medio de pago "Cuenta corriente" que deja deuda del cliente.
   - [ ] Límite default de deuda por cliente y override por ficha.
   - [ ] Plazo default de pago y buckets de antigüedad en cuentas por cobrar.

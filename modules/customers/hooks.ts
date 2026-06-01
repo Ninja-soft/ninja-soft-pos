@@ -39,6 +39,14 @@ export function useAccountsReceivable(enabled = true) {
   });
 }
 
+export function useBirthdays(month: number, enabled = true) {
+  return useQuery({
+    queryKey: ["customers", "birthdays", month],
+    enabled,
+    queryFn: () => customersApi.birthdays(month),
+  });
+}
+
 export function useRequiredCustomerFields() {
   return useQuery({
     queryKey: ["customers", "required-fields"],

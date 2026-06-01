@@ -55,6 +55,30 @@ export const customersApi = {
     return ((data?.customer_required as CustomerRequired) ?? {}) as CustomerRequired;
   },
 
+  // Cumpleaños del mes (H40 base): clientes con fecha de nacimiento cuyo mes
+  // coincide con `month` (0-11). Ordenados por día. Solo lectura.
+  birthdays: async (
+    month: number,
+  ): Promise<{ id: string; name: string; phone: string | null; email: string | null; birth_date: string; day: number }[]> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("customers")
+      .select("id, name, phone, email, birth_date")
+      .is("deleted_at", null)
+      .not("birth_date", "is", null);
+    return (data ?? [])
+      .filter((c) => c.birth_date && new Date(c.birth_date + "T00:00:00").getMonth() === month)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        birth_date: c.birth_date as string,
+        day: new Date((c.birth_date as string) + "T00:00:00").getDate(),
+      }))
+      .sort((a, b) => a.day - b.day);
+  },
+
   // Saldo a favor (vale) del cliente = suma de movimientos de store credit.
   storeCreditBalance: async (customerId: string): Promise<number> => {
     const supabase = createClient();

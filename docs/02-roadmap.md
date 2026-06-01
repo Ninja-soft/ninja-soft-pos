@@ -258,7 +258,7 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] CUIT y datos fiscales en el ticket (si están cargados).
   - [x] Ancho 58/80mm configurable (por tenant; por caja queda para multi-caja F4).
   - [x] QR (datos de la venta) y leyenda extra en ticket y PDF (`ticket_show_qr`, `ticket_legend`). Preview por sucursal queda para multi-store (F4).
-  - [ ] **Numeración del comprobante personalizable por tenant**: prefijo y formato configurable (ej. iniciales + correlativo, padding) sobre el N° único por tienda. El correlativo interno se mantiene; cambia cómo se muestra/busca.
+  - [x] **Numeración del comprobante personalizable por tenant**: prefijo + padding (`pos_settings.sale_prefix`/`sale_pad`) sobre el correlativo único por tienda. Se aplica en /ventas, ticket y PDF; configurable en Operación del POS. El correlativo interno se mantiene.
   - [x] *Criterio:* un tenant configura su ticket (logo/datos/título/pie/leyenda/QR/ancho), lo imprime y descarga A4.
 
 - [ ] **H9b — Editor visual de ticket (canvas) + envío por email.**
@@ -475,6 +475,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [~] Motivos: por ahora texto libre (catálogo configurable pendiente).
   - [x] Destinos de stock por línea: vuelve a stock / a revisión / descarte (revisión y descarte no reponen).
   - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
+  - [x] **Búsqueda de venta en el histórico** (/ventas): por N° de comprobante / ticket (formato personalizado o correlativo).
   - [ ] **Sección dedicada de Devoluciones** (`/devoluciones`): buscar la venta por **ticket / N° de comprobante** y arrancar la devolución desde ahí, sin pasar por el listado de ventas.
   - [ ] **Redención del vale en el POS** (cobrar con saldo a favor del cliente).
   - [~] *Criterio:* devolución parcial con destino de stock por línea, auditada; sección de devoluciones con búsqueda, redención del vale y cambio con diferencia pendientes.

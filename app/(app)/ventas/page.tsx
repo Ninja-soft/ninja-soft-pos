@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Download, Receipt, RotateCcw } from "lucide-react";
+import { Ban, Download, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { ReturnModal } from "@/components/sales/ReturnModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { useSales, useVoidSale } from "@/modules/sales/hooks";
+import { useSales, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
+import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 
 const SALE_STATUS: Record<string, string> = {
@@ -20,7 +21,10 @@ const SALE_STATUS: Record<string, string> = {
 export default function VentasPage() {
   const { toast } = useToast();
   const { data: sales, isLoading } = useSales();
+  const { data: numFmt } = useSaleNumberFormat();
   const voidSale = useVoidSale();
+  const [search, setSearch] = useState("");
+  const visible = (sales ?? []).filter((s) => saleMatchesQuery(s.number, numFmt, search));
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [returnId, setReturnId] = useState<string | null>(null);
@@ -87,6 +91,19 @@ export default function VentasPage() {
           </Button>
         </div>
 
+        <div className="relative mt-5 max-w-sm">
+          <Search
+            size={16}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por N° de comprobante o ticket…"
+            className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          />
+        </div>
+
         <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
@@ -106,16 +123,16 @@ export default function VentasPage() {
                   </td>
                 </tr>
               )}
-              {!isLoading && sales?.length === 0 && (
+              {!isLoading && visible.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    No hay ventas registradas.
+                    {search ? "Sin resultados para la búsqueda." : "No hay ventas registradas."}
                   </td>
                 </tr>
               )}
-              {sales?.map((s) => (
+              {visible.map((s) => (
                 <tr key={s.id} className="transition hover:bg-muted/40">
-                  <td className="px-4 py-3 font-mono">{s.number}</td>
+                  <td className="px-4 py-3 font-mono">{formatSaleNumber(s.number, numFmt)}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {new Date(s.created_at).toLocaleString("es-AR")}
                   </td>

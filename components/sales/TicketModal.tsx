@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
-import { useSaleDetail } from "@/modules/sales/hooks";
+import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 
 type Branding = {
@@ -57,6 +58,7 @@ interface Props {
 export function TicketModal({ open, onOpenChange, saleId }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
   const { data: brand } = useBranding(open);
+  const { data: numFmt } = useSaleNumberFormat();
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Ticket" className="max-w-sm">
@@ -93,7 +95,7 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
             </div>
             <div className="my-3 border-t border-dashed border-border" />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Venta #{data.sale.number}</span>
+              <span>Comprobante {formatSaleNumber(data.sale.number, numFmt)}</span>
               <span>{new Date(data.sale.created_at).toLocaleString("es-AR")}</span>
             </div>
             <div className="my-3 border-t border-dashed border-border" />
@@ -139,7 +141,10 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
-                    `${brand?.legal_name || "NinjaPos"} | Venta #${data.sale.number} | ${formatCurrency(
+                    `${brand?.legal_name || "NinjaPos"} | ${formatSaleNumber(
+                      data.sale.number,
+                      numFmt,
+                    )} | ${formatCurrency(
                       data.sale.total,
                     )} | ${new Date(data.sale.created_at).toLocaleString("es-AR")}`,
                   )}`}
@@ -172,6 +177,7 @@ export function TicketModal({ open, onOpenChange, saleId }: Props) {
                   items: data.items,
                   payments: data.payments,
                   brand: brand ?? null,
+                  numberLabel: formatSaleNumber(data.sale.number, numFmt),
                 })
               }
             >

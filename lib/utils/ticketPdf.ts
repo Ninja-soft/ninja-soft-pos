@@ -22,6 +22,7 @@ export interface TicketPdfData {
   };
   items: { product_name: string; quantity: number; subtotal: number }[];
   payments: { method: string; amount: number }[];
+  numberLabel?: string;
   brand?: {
     legal_name?: string | null;
     cuit?: string | null;
@@ -59,7 +60,7 @@ export function downloadTicketPdf(data: TicketPdfData): void {
   y += 7;
 
   doc.setFontSize(10).setFont("helvetica", "bold");
-  doc.text(`Venta #${data.sale.number}`, left, y);
+  doc.text(`Comprobante ${data.numberLabel ?? "#" + data.sale.number}`, left, y);
   doc.text(
     new Date(data.sale.created_at).toLocaleString("es-AR"),
     190,

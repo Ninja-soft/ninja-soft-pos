@@ -857,6 +857,8 @@ export type Database = {
           require_close_reason: boolean
           require_customer: boolean
           rounding_multiple: number
+          sale_pad: number
+          sale_prefix: string
           sku_auto: boolean
           sku_prefix: string
           tenant_id: string
@@ -870,6 +872,8 @@ export type Database = {
           require_close_reason?: boolean
           require_customer?: boolean
           rounding_multiple?: number
+          sale_pad?: number
+          sale_prefix?: string
           sku_auto?: boolean
           sku_prefix?: string
           tenant_id: string
@@ -883,6 +887,8 @@ export type Database = {
           require_close_reason?: boolean
           require_customer?: boolean
           rounding_multiple?: number
+          sale_pad?: number
+          sale_prefix?: string
           sku_auto?: boolean
           sku_prefix?: string
           tenant_id?: string

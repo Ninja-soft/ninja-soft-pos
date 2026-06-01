@@ -137,17 +137,31 @@ export function PaymentPlansGridModal({
   for (const p of plans) byKey.set(keyOf(p.base ?? "otro", p.brand, p.installments ?? 1), p);
 
   function setCell(base: string, brand: string | null, n: number, pct: number) {
-    m.setCell.mutate({
-      provider_key: providerKey,
-      base,
-      brand,
-      installments: n,
-      surcharge_pct: pct,
-      label: planLabel(base, brand, n),
-    });
+    m.setCell.mutate(
+      {
+        provider_key: providerKey,
+        base,
+        brand,
+        installments: n,
+        surcharge_pct: pct,
+        label: planLabel(base, brand, n),
+      },
+      {
+        onSuccess: () => toast({ title: "Recargo guardado", variant: "success" }),
+        onError: (e) =>
+          toast({
+            title: "No se pudo guardar el recargo",
+            description: e instanceof Error ? e.message : undefined,
+            variant: "error",
+          }),
+      },
+    );
   }
   function clearCell(base: string, brand: string | null, n: number) {
-    m.removeCell.mutate({ base, brand, installments: n });
+    m.removeCell.mutate(
+      { base, brand, installments: n },
+      { onError: () => toast({ title: "No se pudo quitar", variant: "error" }) },
+    );
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {

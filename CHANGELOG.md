@@ -23,6 +23,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H31 — Cobro de deuda:** desde el historial del cliente se registran pagos de la deuda de cuenta corriente (reduce el saldo deudor).
 - **H31 — Cuenta corriente (fiado):** medio de pago "Cuenta corriente" en el POS (cuando hay cliente). La venta fiada genera deuda (`customer_account_movements`) vía trigger en `payments`, validando el límite del cliente (`customers.credit_limit`, 0 = sin límite). La deuda y el saldo a favor se ven en el historial del cliente. Límite editable en la ficha del cliente.
 - **H28 — Garantía extendida configurable + oferta al cobrar:** **Configuración → Garantías** (sección dedicada) gestiona los planes de forma completa: nombre, meses, **prima fija o % del precio**, comisión del vendedor y descripción (tabla `warranty_plans`; mismo gestor accesible en Productos → Garantías). En el POS, al cobrar se elige un plan y la prima (fija o %) entra como línea de la venta.
 - **H31 (base) — Grupos de clientes:** tabla `customer_groups` + `customers.group_id`. En la ficha del cliente se elige el grupo (mayorista, VIP, etc.) o se crea uno inline. Base para precios/promos/segmentación.

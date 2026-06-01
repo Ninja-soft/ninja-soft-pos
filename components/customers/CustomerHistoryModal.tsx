@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { useToast } from "@/components/ui/Toast";
 import { useCustomerHistory } from "@/modules/customers/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
-import type { Customer } from "@/modules/customers/api";
+import { customersApi, type Customer } from "@/modules/customers/api";
 
 const SALE_STATUS: Record<string, string> = {
   completed: "Completada",
@@ -25,6 +30,19 @@ export function CustomerHistoryModal({
 }) {
   const { data, isLoading } = useCustomerHistory(open ? customer?.id : null);
   const { data: numFmt } = useSaleNumberFormat();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [payAmount, setPayAmount] = useState("");
+
+  const payDebt = useMutation({
+    mutationFn: () => customersApi.payDebt(customer!.id, Number(payAmount) || 0),
+    onSuccess: () => {
+      setPayAmount("");
+      qc.invalidateQueries({ queryKey: ["customers", "history", customer?.id] });
+      toast({ title: "Pago registrado", variant: "success" });
+    },
+    onError: () => toast({ title: "No se pudo registrar el pago", variant: "error" }),
+  });
 
   return (
     <Modal
@@ -64,6 +82,32 @@ export function CustomerHistoryModal({
               </div>
             </div>
           </div>
+
+          {data.accountDebt > 0 && (
+            <div className="flex items-end gap-2 rounded-lg border border-border p-3">
+              <label className="flex-1 text-xs text-muted-foreground">
+                Registrar pago de deuda
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder={formatCurrency(data.accountDebt)}
+                  className="mt-1"
+                />
+              </label>
+              <Button
+                disabled={
+                  payDebt.isPending ||
+                  !(Number(payAmount) > 0)
+                }
+                onClick={() => payDebt.mutate()}
+              >
+                {payDebt.isPending ? "Registrando…" : "Cobrar deuda"}
+              </Button>
+            </div>
+          )}
 
           {/* Compras */}
           <div>

@@ -505,7 +505,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [~] **Historial del cliente**: modal en /clientes con saldo a favor (vale), compras y devoluciones (`CustomerHistoryModal`). Falta deuda de cuenta corriente (depende de este hito) y acceso desde el selector del POS.
   - [x] Medio de pago "Cuenta corriente" que deja deuda del cliente (trigger en `payments` → `customer_account_movements`).
   - [x] Límite de deuda por cliente (`customers.credit_limit`; 0 = sin límite; se valida al cobrar fiado). Deuda visible en el historial del cliente.
-  - [ ] Plazo default de pago y buckets de antigüedad en cuentas por cobrar.
+  - [~] Cuentas por cobrar: registrar pagos de deuda desde el historial del cliente (reduce la deuda). Falta plazo de pago, buckets de antigüedad y vista global de CxC.
   - [~] Grupos de clientes (tabla `customer_groups` + `customers.group_id`; alta inline y selector en la ficha del cliente). Falta usarlos para precios/promos/riesgo.
   - [ ] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento.
   - [ ] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar.

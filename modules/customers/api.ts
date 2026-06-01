@@ -54,6 +54,15 @@ export const customersApi = {
     return (data ?? []).reduce((acc, r) => acc + Number(r.delta || 0), 0);
   },
 
+  // Registra un pago de deuda de cuenta corriente (reduce la deuda).
+  payDebt: async (customerId: string, amount: number): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("customer_account_movements")
+      .insert({ customer_id: customerId, delta: -Math.abs(amount), reason: "Pago de deuda" });
+    if (error) throw error;
+  },
+
   // Historial del cliente: saldo a favor + ventas + devoluciones.
   history: async (
     customerId: string,

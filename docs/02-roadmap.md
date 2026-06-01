@@ -472,7 +472,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
 - [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas): tablas `sale_returns`/`sale_return_items`, `sale_items.returned_qty` anti doble-devolución, reintegro por efectivo (sale de caja) o vale (`store_credit_movements`). Faltan: redención del vale en el POS, vigencia del vale, catálogo de motivos y "diferencia a cobrar" (cambio).*
   - [x] Política de devolución: el cajero elige caso a caso reintegro en efectivo o vale.
   - [ ] Vigencia configurable del vale/saldo a favor.
-  - [~] Motivos: por ahora texto libre (catálogo configurable pendiente).
+  - [x] Motivos configurables (tabla `return_reasons`, gestión owner/manager desde /devoluciones → Motivos; dropdown en la devolución + "Otro").
   - [x] Destinos de stock por línea: vuelve a stock / a revisión / descarte (revisión y descarte no reponen).
   - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
   - [x] **Búsqueda de venta en el histórico** (/ventas): por N° de comprobante / ticket (formato personalizado o correlativo).

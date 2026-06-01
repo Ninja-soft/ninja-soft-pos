@@ -8,6 +8,35 @@ export interface ReturnItemInput {
 }
 
 export type Sale = Tables<"sales">;
+export type ReturnReason = Tables<"return_reasons">;
+
+export const returnReasonsApi = {
+  list: async (activeOnly = true): Promise<ReturnReason[]> => {
+    const supabase = createClient();
+    let q = supabase.from("return_reasons").select("*").order("sort").order("label");
+    if (activeOnly) q = q.eq("is_active", true);
+    const { data } = await q;
+    return (data ?? []) as ReturnReason[];
+  },
+  create: async (label: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("return_reasons").insert({ label });
+    if (error) throw error;
+  },
+  setActive: async (id: string, is_active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("return_reasons")
+      .update({ is_active })
+      .eq("id", id);
+    if (error) throw error;
+  },
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("return_reasons").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
 export type SaleItem = Tables<"sale_items">;
 export type Payment = Tables<"payments">;
 

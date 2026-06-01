@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Search } from "lucide-react";
+import { RotateCcw, Search, Tags } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Button } from "@/components/ui/Button";
 import { ReturnModal } from "@/components/sales/ReturnModal";
+import { ReturnReasonsModal } from "@/components/sales/ReturnReasonsModal";
 import { useSales, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
@@ -16,6 +18,7 @@ export default function DevolucionesPage() {
   const [search, setSearch] = useState("");
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [reasonsOpen, setReasonsOpen] = useState(false);
 
   const completed = (sales ?? []).filter((s) => s.status === "completed");
   const results = search.trim()
@@ -30,8 +33,15 @@ export default function DevolucionesPage() {
   return (
     <>
       <div className="mx-auto max-w-3xl px-6 py-8">
-        <Eyebrow>Operación</Eyebrow>
-        <Display className="mt-3 text-3xl md:text-4xl">Devoluciones</Display>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Eyebrow>Operación</Eyebrow>
+            <Display className="mt-3 text-3xl md:text-4xl">Devoluciones</Display>
+          </div>
+          <Button variant="secondary" className="mt-2 shrink-0" onClick={() => setReasonsOpen(true)}>
+            <Tags size={16} /> Motivos
+          </Button>
+        </div>
         <p className="mt-2 text-muted-foreground">
           Buscá la venta por su <strong>N° de comprobante o ticket</strong> y registrá
           la devolución o el cambio.
@@ -92,6 +102,7 @@ export default function DevolucionesPage() {
       </div>
 
       <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
+      <ReturnReasonsModal open={reasonsOpen} onOpenChange={setReasonsOpen} />
     </>
   );
 }

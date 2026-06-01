@@ -23,6 +23,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H31 (base) — Grupos de clientes:** tabla `customer_groups` + `customers.group_id`. En la ficha del cliente se elige el grupo (mayorista, VIP, etc.) o se crea uno inline. Base para precios/promos/segmentación.
 - **H27 — Planes de pago con recargo:** tabla `payment_plans` por tenant (gestión en Configuración → Medios de pago → Planes/recargos). Al cobrar, el cajero elige un plan (ej. "Visa 3 cuotas +8%") y el recargo se suma al total como ítem "Recargo …", visible en el ticket.
 - **H28 (base) — Garantía de fábrica por producto:** campo `warranty_months` en la ficha de producto (meses de garantía, 0 = sin garantía). Base para planes de garantía extendida.
 - **H29 — Catálogo de motivos de devolución:** tabla `return_reasons` por tenant (gestión owner/manager desde /devoluciones → Motivos). La devolución elige el motivo de un dropdown (+ "Otro" libre) en vez de texto suelto.

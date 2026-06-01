@@ -56,7 +56,14 @@ export function usePosMutations() {
         items: SaleItemInput[];
         payments: SalePaymentInput[];
         discountTotal: number;
-      }) => posApi.createSale(vars.items, vars.payments, vars.discountTotal),
+        customerId?: string | null;
+      }) =>
+        posApi.createSale(
+          vars.items,
+          vars.payments,
+          vars.discountTotal,
+          vars.customerId,
+        ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });
       },

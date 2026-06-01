@@ -9,6 +9,7 @@ import {
   ScanBarcode,
   Search,
   Star,
+  User,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +22,7 @@ import {
   useProductSerials,
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
+import { useCustomers } from "@/modules/customers/hooks";
 import { verticalHas } from "@/lib/verticals/config";
 import {
   useCartStore,
@@ -91,6 +93,11 @@ export default function PosPage() {
   const role = myTenant?.role ?? "cashier";
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
   const rounding = posSettings?.rounding ?? 0;
+  const requireCustomer = posSettings?.requireCustomer ?? false;
+  const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
+  const [custOpen, setCustOpen] = useState(false);
+  const [custSearch, setCustSearch] = useState("");
+  const { data: customers } = useCustomers(custSearch);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
 
@@ -265,9 +272,11 @@ export default function PosPage() {
         })),
         payments: payments as never,
         discountTotal,
+        customerId: customer?.id ?? null,
       });
       setPaymentModal(false);
       clear();
+      setCustomer(null);
       toast({
         title: `Venta #${res.number} registrada`,
         description: `Total ${formatCurrency(res.total)}`,
@@ -282,6 +291,16 @@ export default function PosPage() {
         variant: "error",
       });
     }
+  }
+
+  // Si el negocio exige cliente, bloquea el cobro hasta elegir uno.
+  function ensureCustomer(): boolean {
+    if (requireCustomer && !customer) {
+      toast({ title: "Elegí un cliente para esta venta", variant: "error" });
+      setCustOpen(true);
+      return false;
+    }
+    return true;
   }
 
   return (
@@ -487,6 +506,24 @@ export default function PosPage() {
           </div>
 
           <div className="mt-3 space-y-2 border-t border-border pt-3">
+            {/* Cliente de la venta */}
+            <button
+              type="button"
+              onClick={() => setCustOpen(true)}
+              className={
+                requireCustomer && !customer
+                  ? "flex w-full items-center justify-between rounded-lg border border-ninja-flameSoft/50 bg-ninja-flame/5 px-3 py-2 text-sm"
+                  : "flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
+              }
+            >
+              <span className="flex items-center gap-2 truncate">
+                <User size={14} className="shrink-0 text-muted-foreground" />
+                <span className="truncate">{customer ? customer.name : "Consumidor final"}</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium text-ninja-flameSoft">
+                {customer ? "Cambiar" : requireCustomer ? "Elegir (obligatorio)" : "Elegir"}
+              </span>
+            </button>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
@@ -512,7 +549,7 @@ export default function PosPage() {
               size="lg"
               className="w-full"
               disabled={!hasShift || lines.length === 0}
-              onClick={() => setPaymentModal(true)}
+              onClick={() => ensureCustomer() && setPaymentModal(true)}
             >
               {hasShift ? "Cobrar" : "Abrí la caja para vender"}
             </Button>
@@ -520,7 +557,7 @@ export default function PosPage() {
               <button
                 type="button"
                 disabled={!hasShift || lines.length === 0}
-                onClick={() => setQrOpen(true)}
+                onClick={() => ensureCustomer() && setQrOpen(true)}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
@@ -538,6 +575,58 @@ export default function PosPage() {
         </aside>
         </div>
       </div>
+
+      <Modal open={custOpen} onOpenChange={setCustOpen} title="Cliente de la venta">
+        <div className="space-y-3">
+          <Input
+            placeholder="Buscar por nombre, documento…"
+            value={custSearch}
+            onChange={(e) => setCustSearch(e.target.value)}
+            autoFocus
+          />
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setCustomer(null);
+                setCustOpen(false);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
+            >
+              <span>Consumidor final</span>
+              {!customer && <span className="text-xs text-emerald-400">Actual</span>}
+            </button>
+            {customers?.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => {
+                  setCustomer({ id: c.id, name: c.name });
+                  setCustOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{c.name}</span>
+                  {(c.document_number || c.phone) && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {c.document_number ?? c.phone}
+                    </span>
+                  )}
+                </span>
+                {customer?.id === c.id && (
+                  <span className="text-xs text-emerald-400">Actual</span>
+                )}
+              </button>
+            ))}
+            {customers?.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Sin clientes. Cargalos en la sección Clientes.
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <OpenShiftModal
         open={openShiftModal}

@@ -54,6 +54,93 @@ export const customersApi = {
     return (data ?? []).reduce((acc, r) => acc + Number(r.delta || 0), 0);
   },
 
+  // Cuentas por cobrar: deuda por cliente con buckets de antigüedad (FIFO).
+  // Los pagos cancelan los cargos más viejos primero; lo que queda se ubica en
+  // el tramo según su antigüedad (0-30 / 31-60 / 61-90 / +90 días).
+  accountsReceivable: async (): Promise<{
+    rows: {
+      customer_id: string;
+      name: string;
+      total: number;
+      b0_30: number;
+      b31_60: number;
+      b61_90: number;
+      b90plus: number;
+    }[];
+    totals: { total: number; b0_30: number; b31_60: number; b61_90: number; b90plus: number };
+  }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("customer_account_movements")
+      .select("customer_id, delta, created_at, customers(name)")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+
+    type Row = {
+      customer_id: string;
+      delta: number;
+      created_at: string;
+      customers: { name: string } | null;
+    };
+    const byCustomer = new Map<
+      string,
+      { name: string; charges: { amount: number; date: number }[] }
+    >();
+
+    for (const m of (data ?? []) as unknown as Row[]) {
+      if (!m.customer_id) continue;
+      const entry =
+        byCustomer.get(m.customer_id) ??
+        { name: m.customers?.name ?? "—", charges: [] };
+      if (!byCustomer.has(m.customer_id)) byCustomer.set(m.customer_id, entry);
+      const delta = Number(m.delta) || 0;
+      if (delta > 0) {
+        entry.charges.push({ amount: delta, date: new Date(m.created_at).getTime() });
+      } else if (delta < 0) {
+        // pago: cancela cargos más viejos primero
+        let pay = -delta;
+        while (pay > 0 && entry.charges.length > 0) {
+          const head = entry.charges[0]!;
+          if (head.amount <= pay) {
+            pay -= head.amount;
+            entry.charges.shift();
+          } else {
+            head.amount -= pay;
+            pay = 0;
+          }
+        }
+      }
+    }
+
+    const now = Date.now();
+    const DAY = 86_400_000;
+    const totals = { total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
+    const rows = [...byCustomer.entries()]
+      .map(([customer_id, e]) => {
+        const r = { customer_id, name: e.name, total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
+        for (const c of e.charges) {
+          const days = (now - c.date) / DAY;
+          r.total += c.amount;
+          if (days <= 30) r.b0_30 += c.amount;
+          else if (days <= 60) r.b31_60 += c.amount;
+          else if (days <= 90) r.b61_90 += c.amount;
+          else r.b90plus += c.amount;
+        }
+        return r;
+      })
+      .filter((r) => r.total > 0.009)
+      .sort((a, b) => b.total - a.total);
+
+    for (const r of rows) {
+      totals.total += r.total;
+      totals.b0_30 += r.b0_30;
+      totals.b31_60 += r.b31_60;
+      totals.b61_90 += r.b61_90;
+      totals.b90plus += r.b90plus;
+    }
+    return { rows, totals };
+  },
+
   // Registra un pago de deuda de cuenta corriente (reduce la deuda).
   payDebt: async (customerId: string, amount: number): Promise<void> => {
     const supabase = createClient();

@@ -31,6 +31,14 @@ export function useCustomerHistory(customerId: string | null | undefined) {
   });
 }
 
+export function useAccountsReceivable(enabled = true) {
+  return useQuery({
+    queryKey: ["customers", "accounts-receivable"],
+    enabled,
+    queryFn: () => customersApi.accountsReceivable(),
+  });
+}
+
 export function useCustomerGroups() {
   return useQuery({
     queryKey: ["customer-groups"],

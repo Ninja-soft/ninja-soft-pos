@@ -29,22 +29,21 @@ export const DEFAULT_INSTALLMENTS = [1, 3, 6, 12];
 // Marcas que existen en débito (las de crédito son todas).
 export const DEBIT_BRANDS = new Set(["visa", "master", "maestro", "cabal"]);
 
-// Logo de la marca según base (débito/crédito). null si no hay archivo.
-export function brandLogo(brand: string | null, base: string): string | null {
+// Logo de la marca. Usamos la variante "crédito" (limpia, solo logo) para todas
+// las bases; la sección ya indica Débito/Crédito. Evita los SVG de débito con
+// fondo blanco y subtítulo que se veían recortados.
+export function brandLogo(brand: string | null): string | null {
   if (!brand) return null;
-  const isDebit = base === "debito";
-  const map: Record<string, { credito?: string; debito?: string }> = {
-    visa: { credito: "visa_credito", debito: "visa_debito" },
-    master: { credito: "martercard_credito", debito: "mastercard_debito" },
-    maestro: { debito: "maestro_debito" },
-    cabal: { credito: "cabal_credito", debito: "cabal_debito" },
-    amex: { credito: "amex_credito" },
-    naranja: { credito: "naranja_credito" },
-    diners: { credito: "dinners_credito" },
+  const files: Record<string, string> = {
+    visa: "visa_credito",
+    master: "martercard_credito",
+    maestro: "maestro_debito",
+    cabal: "cabal_credito",
+    amex: "amex_credito",
+    naranja: "naranja_credito",
+    diners: "dinners_credito",
   };
-  const m = map[brand];
-  if (!m) return null;
-  const file = (isDebit ? m.debito : m.credito) ?? m.credito ?? m.debito;
+  const file = files[brand];
   return file ? `/img/medios_de_pago/cards/${file}.svg` : null;
 }
 

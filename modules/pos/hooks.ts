@@ -99,6 +99,11 @@ export function usePaymentPlanMutations(providerKey: string) {
         paymentPlansApi.setActive(v.id, v.is_active),
       onSuccess: inv,
     }),
+    setProviderActive: useMutation({
+      mutationFn: (active: boolean) =>
+        paymentPlansApi.setProviderActive(providerKey, active),
+      onSuccess: inv,
+    }),
     remove: useMutation({ mutationFn: (id: string) => paymentPlansApi.remove(id), onSuccess: inv }),
   };
 }

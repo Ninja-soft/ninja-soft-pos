@@ -3,13 +3,14 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Plus, Sparkles, Upload, X } from "lucide-react";
+import { Download, FileDown, Plus, Save, Upload, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useProviderPlans, usePaymentPlanMutations } from "@/modules/pos/hooks";
-import { TYPICAL_AR_PLANS, type PaymentPlan } from "@/modules/pos/api";
+import { type PaymentPlan } from "@/modules/pos/api";
 import {
   ALL_BRANDS,
   BRAND_LABEL,
@@ -22,7 +23,7 @@ import {
 import { parsePlansXlsx, type PlanRow } from "@/modules/pos/plansXlsx";
 import { exportXlsx } from "@/lib/utils/xlsx";
 
-type MethodConfig = { installments?: number[]; brands?: string[] };
+type MethodConfig = { installments?: number[]; brands?: string[]; plan_mode?: "global" | "plans" };
 
 function keyOf(base: string, brand: string | null, n: number) {
   return `${base}|${brand ?? ""}|${n}`;
@@ -49,20 +50,32 @@ export function PaymentPlansGridModal({
   const [editCuotas, setEditCuotas] = useState(false);
   const [editBrands, setEditBrands] = useState(false);
   const [newCuota, setNewCuota] = useState("");
+  // Recargo único del medio + modo (global desactiva los planes).
+  const [globalMode, setGlobalMode] = useState(false);
+  const [globalPct, setGlobalPct] = useState("0");
 
-  // Config visual del medio (qué cuotas / qué marcas) en tenant_payment_methods.config
+  // Config visual + recargo del medio (tenant_payment_methods)
   const { data: cfg } = useQuery({
     queryKey: ["method-config", providerKey],
     enabled: open,
-    queryFn: async (): Promise<MethodConfig> => {
+    queryFn: async (): Promise<{ config: MethodConfig; surcharge: number }> => {
       const { data } = await supabase
         .from("tenant_payment_methods")
-        .select("config")
+        .select("config, surcharge_pct")
         .eq("provider_key", providerKey)
         .maybeSingle();
-      return ((data?.config as MethodConfig) ?? {}) as MethodConfig;
+      return {
+        config: (data?.config as MethodConfig) ?? {},
+        surcharge: Number(data?.surcharge_pct) || 0,
+      };
     },
   });
+
+  useEffect(() => {
+    if (!cfg) return;
+    setGlobalMode(cfg.config.plan_mode === "global");
+    setGlobalPct(String(cfg.surcharge ?? 0));
+  }, [cfg]);
 
   const saveConfig = useMutation({
     mutationFn: async (patch: MethodConfig) => {
@@ -82,9 +95,40 @@ export function PaymentPlansGridModal({
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
+  // Guardar: persiste recargo único + modo y activa/desactiva los planes del medio.
+  const saveAll = useMutation({
+    mutationFn: async () => {
+      const { data: row } = await supabase
+        .from("tenant_payment_methods")
+        .select("config")
+        .eq("provider_key", providerKey)
+        .maybeSingle();
+      const cur = (row?.config as Record<string, unknown>) ?? {};
+      const { error } = await supabase
+        .from("tenant_payment_methods")
+        .update({
+          surcharge_pct: Number(globalPct) || 0,
+          config: { ...cur, plan_mode: globalMode ? "global" : "plans" },
+        })
+        .eq("provider_key", providerKey);
+      if (error) throw error;
+      // Modo global → planes inactivos (no se ofrecen). Modo planes → activos.
+      await m.setProviderActive.mutateAsync(!globalMode);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["method-config", providerKey] });
+      qc.invalidateQueries({ queryKey: ["tenant-payment-methods"] });
+      toast({ title: "Guardado", variant: "success" });
+      onOpenChange(false);
+    },
+    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+  });
+
   const installments =
-    cfg?.installments && cfg.installments.length ? cfg.installments : DEFAULT_INSTALLMENTS;
-  const brands = cfg?.brands && cfg.brands.length ? cfg.brands : ALL_BRANDS;
+    cfg?.config.installments && cfg.config.installments.length
+      ? cfg.config.installments
+      : DEFAULT_INSTALLMENTS;
+  const brands = cfg?.config.brands && cfg.config.brands.length ? cfg.config.brands : ALL_BRANDS;
 
   const byKey = new Map<string, PaymentPlan>();
   for (const p of plans) byKey.set(keyOf(p.base ?? "otro", p.brand, p.installments ?? 1), p);
@@ -101,19 +145,6 @@ export function PaymentPlansGridModal({
   }
   function clearCell(base: string, brand: string | null, n: number) {
     m.removeCell.mutate({ base, brand, installments: n });
-  }
-
-  function seedAr() {
-    const existing = new Set(plans.map((p) => p.code).filter(Boolean));
-    const missing = TYPICAL_AR_PLANS.filter((p) => !existing.has(p.code ?? null));
-    if (missing.length === 0) {
-      toast({ title: "Ya están los planes AR", variant: "info" });
-      return;
-    }
-    m.seed.mutate(missing, {
-      onSuccess: () => toast({ title: "Planes AR cargados", variant: "success" }),
-      onError: () => toast({ title: "No se pudo cargar", variant: "error" }),
-    });
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -163,6 +194,27 @@ export function PaymentPlansGridModal({
     ]);
   }
 
+  // Plantilla vacía con ejemplos para que el usuario sume filas y recargos.
+  async function downloadTemplate() {
+    await exportXlsx(`plantilla-planes-${providerKey}`, [
+      {
+        name: "Planes",
+        title: "Plantilla de planes — completá y reimportá",
+        columns: [
+          { header: "base", key: "base", width: 14 },
+          { header: "marca", key: "marca", width: 14 },
+          { header: "cuotas", key: "cuotas", type: "number" },
+          { header: "recargo", key: "recargo", type: "number" },
+        ],
+        rows: [
+          { base: "debito", marca: "visa", cuotas: 1, recargo: 0 },
+          { base: "credito", marca: "visa", cuotas: 3, recargo: 8 },
+          { base: "credito", marca: "master", cuotas: 6, recargo: 15 },
+        ],
+      },
+    ]);
+  }
+
   function addCuota() {
     const n = parseInt(newCuota, 10);
     if (!n || n < 1 || installments.includes(n)) {
@@ -181,6 +233,7 @@ export function PaymentPlansGridModal({
   }
 
   const debitBrands = brands.filter((b) => DEBIT_BRANDS.has(b));
+  const disabled = globalMode;
 
   return (
     <Modal
@@ -191,43 +244,69 @@ export function PaymentPlansGridModal({
     >
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Cargá el recargo por marca y cuotas. Una celda vacía = ese plan no se
-          ofrece. Al cobrar con {providerName}, el cajero elige el plan y el
-          recargo se suma al total.
+          Cargá el recargo por marca y cuotas. Celda vacía = ese plan no se ofrece.
+          Al cobrar con {providerName}, el cajero elige el plan y el recargo se suma
+          al total.
         </p>
 
+        {/* Recargo único del medio */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold">Recargo único del medio</div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Aplicá un solo recargo a todo {providerName}. Si lo activás, se
+                desactivan los planes por marca/cuota.
+              </p>
+            </div>
+            <Switch checked={globalMode} onCheckedChange={setGlobalMode} label="Usar recargo único" />
+          </div>
+          {globalMode && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Recargo</span>
+              <span className="relative">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={globalPct}
+                  onChange={(e) => setGlobalPct(e.target.value)}
+                  className="h-9 w-24 rounded-md border border-input bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft"
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  %
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Toolbar */}
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={seedAr} loading={m.seed.isPending}>
-            <Sparkles size={14} /> Cargar planes AR
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
             <Upload size={14} /> Importar XLSX
           </Button>
-          <Button variant="secondary" size="sm" onClick={exportPlans} disabled={plans.length === 0}>
-            <Download size={14} /> Exportar XLSX
+          <Button variant="secondary" size="sm" onClick={downloadTemplate}>
+            <FileDown size={14} /> Plantilla
           </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx"
-            className="hidden"
-            onChange={onFile}
-          />
+          <Button variant="secondary" size="sm" onClick={exportPlans} disabled={plans.length === 0}>
+            <Download size={14} /> Exportar
+          </Button>
+          <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={onFile} />
           <span className="flex-1" />
           <Button
             variant={editBrands ? "primary" : "ghost"}
             size="sm"
             onClick={() => setEditBrands((v) => !v)}
           >
-            Elegir marcas
+            Marcas
           </Button>
           <Button
             variant={editCuotas ? "primary" : "ghost"}
             size="sm"
             onClick={() => setEditCuotas((v) => !v)}
           >
-            Editar cuotas
+            Cuotas
           </Button>
         </div>
 
@@ -277,7 +356,7 @@ export function PaymentPlansGridModal({
                 onChange={(e) => setNewCuota(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addCuota()}
                 placeholder="+ cuotas"
-                className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+                className="h-8 w-24 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
               />
               <button onClick={addCuota} className="text-ninja-flameSoft" title="Agregar">
                 <Plus size={16} />
@@ -286,38 +365,56 @@ export function PaymentPlansGridModal({
           </div>
         )}
 
-        {/* Débito */}
-        {debitBrands.length > 0 && (
-          <Section title="Débito">
-            {debitBrands.map((b) => (
-              <BrandRow key={`d-${b}`} brand={b} base="debito">
-                <PlanCell
-                  plan={byKey.get(keyOf("debito", b, 1))}
-                  label="Pago"
-                  onSet={(pct) => setCell("debito", b, 1, pct)}
-                  onClear={() => clearCell("debito", b, 1)}
-                />
+        {/* Grid (se atenúa en modo recargo único) */}
+        <div className={disabled ? "pointer-events-none space-y-4 opacity-40" : "space-y-4"}>
+          {debitBrands.length > 0 && (
+            <Section title="Débito">
+              {debitBrands.map((b) => (
+                <BrandRow key={`d-${b}`} brand={b}>
+                  <PlanCell
+                    plan={byKey.get(keyOf("debito", b, 1))}
+                    label="Pago"
+                    disabled={disabled}
+                    onSet={(pct) => setCell("debito", b, 1, pct)}
+                    onClear={() => clearCell("debito", b, 1)}
+                  />
+                </BrandRow>
+              ))}
+            </Section>
+          )}
+
+          <Section title="Crédito">
+            {brands.map((b) => (
+              <BrandRow key={`c-${b}`} brand={b}>
+                {installments.map((n) => (
+                  <PlanCell
+                    key={n}
+                    plan={byKey.get(keyOf("credito", b, n))}
+                    label={n === 1 ? "1 pago" : `${n} cuotas`}
+                    disabled={disabled}
+                    onSet={(pct) => setCell("credito", b, n, pct)}
+                    onClear={() => clearCell("credito", b, n)}
+                  />
+                ))}
               </BrandRow>
             ))}
           </Section>
-        )}
+        </div>
 
-        {/* Crédito */}
-        <Section title="Crédito">
-          {brands.map((b) => (
-            <BrandRow key={`c-${b}`} brand={b} base="credito">
-              {installments.map((n) => (
-                <PlanCell
-                  key={n}
-                  plan={byKey.get(keyOf("credito", b, n))}
-                  label={n === 1 ? "1 pago" : `${n}c`}
-                  onSet={(pct) => setCell("credito", b, n, pct)}
-                  onClear={() => clearCell("credito", b, n)}
-                />
-              ))}
-            </BrandRow>
-          ))}
-        </Section>
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+          <span className="text-xs text-muted-foreground">
+            Los recargos por celda se guardan al instante.
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+            <Button onClick={() => saveAll.mutate()} loading={saveAll.isPending}>
+              <Save size={15} /> Guardar
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Diálogo: import reemplazar vs agregar */}
@@ -333,10 +430,7 @@ export function PaymentPlansGridModal({
             querés hacer con los planes de {providerName}?
           </p>
           <div className="flex flex-col gap-2">
-            <Button
-              onClick={() => runImport("replace")}
-              loading={m.replaceProvider.isPending}
-            >
+            <Button onClick={() => runImport("replace")} loading={m.replaceProvider.isPending}>
               Reemplazar todos
             </Button>
             <Button
@@ -367,27 +461,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function BrandRow({
-  brand,
-  base,
-  children,
-}: {
-  brand: string;
-  base: string;
-  children: React.ReactNode;
-}) {
-  const logo = brandLogo(brand, base);
+function BrandRow({ brand, children }: { brand: string; children: React.ReactNode }) {
+  const logo = brandLogo(brand);
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2">
-      <span className="flex w-28 shrink-0 items-center gap-2">
-        {logo ? (
-          <Image src={logo} alt={brand} width={40} height={26} className="h-6 w-auto object-contain" />
-        ) : (
-          <span className="h-6 w-10" />
-        )}
-        <span className="text-sm font-medium">{BRAND_LABEL[brand] ?? brand}</span>
-      </span>
-      <span className="flex flex-wrap gap-2">{children}</span>
+    <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+      <div className="flex w-36 shrink-0 items-center gap-2.5">
+        <span className="flex h-7 w-11 shrink-0 items-center justify-center">
+          {logo && (
+            <Image src={logo} alt={brand} width={44} height={28} className="h-7 w-auto object-contain" />
+          )}
+        </span>
+        <span className="text-sm font-medium leading-tight">{BRAND_LABEL[brand] ?? brand}</span>
+      </div>
+      <div className="flex flex-1 flex-wrap gap-3">{children}</div>
     </div>
   );
 }
@@ -395,11 +481,13 @@ function BrandRow({
 function PlanCell({
   plan,
   label,
+  disabled,
   onSet,
   onClear,
 }: {
   plan: PaymentPlan | undefined;
   label: string;
+  disabled?: boolean;
   onSet: (pct: number) => void;
   onClear: () => void;
 }) {
@@ -420,25 +508,26 @@ function PlanCell({
   }
 
   return (
-    <span className="flex flex-col items-center">
+    <div className="flex flex-col items-center gap-1">
       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="relative flex items-center">
+      <span className="relative">
         <input
           value={val}
           onChange={(e) => setVal(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder="—"
+          placeholder="0"
+          disabled={disabled}
           className={
             plan
-              ? "h-9 w-16 rounded-md border border-ninja-flameSoft/50 bg-ninja-flame/5 px-2 text-right text-sm outline-none focus:border-ninja-flameSoft"
-              : "h-9 w-16 rounded-md border border-input bg-background px-2 text-right text-sm text-muted-foreground outline-none focus:border-ninja-flameSoft"
+              ? "h-9 w-[72px] rounded-md border border-ninja-flameSoft/50 bg-ninja-flame/5 px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft"
+              : "h-9 w-[72px] rounded-md border border-input bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft"
           }
         />
-        <span className="pointer-events-none absolute right-1.5 text-xs text-muted-foreground">
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
           %
         </span>
       </span>
-    </span>
+    </div>
   );
 }

@@ -10,7 +10,9 @@ import {
   Barcode,
   Lock,
   UserCheck,
+  Hash,
 } from "lucide-react";
+import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -27,6 +29,8 @@ type Settings = {
   require_close_reason: boolean;
   close_tolerance: number;
   require_customer: boolean;
+  sale_prefix: string;
+  sale_pad: number;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -70,7 +74,7 @@ export function OperationSettingsCard() {
       const { data } = await supabase
         .from("pos_settings")
         .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer",
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad",
         )
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -84,6 +88,8 @@ export function OperationSettingsCard() {
           require_close_reason: false,
           close_tolerance: 0,
           require_customer: false,
+          sale_prefix: "",
+          sale_pad: 0,
         }
       );
     },
@@ -97,6 +103,8 @@ export function OperationSettingsCard() {
   const [requireReason, setRequireReason] = useState(false);
   const [tolerance, setTolerance] = useState(0);
   const [requireCustomer, setRequireCustomer] = useState(false);
+  const [salePrefix, setSalePrefix] = useState("");
+  const [salePad, setSalePad] = useState(0);
 
   useEffect(() => {
     if (!settings) return;
@@ -112,6 +120,8 @@ export function OperationSettingsCard() {
     setRequireReason(settings.require_close_reason ?? false);
     setTolerance(settings.close_tolerance ?? 0);
     setRequireCustomer(settings.require_customer ?? false);
+    setSalePrefix(settings.sale_prefix ?? "");
+    setSalePad(settings.sale_pad ?? 0);
   }, [settings]);
 
   const save = useMutation({
@@ -132,6 +142,8 @@ export function OperationSettingsCard() {
           require_close_reason: requireReason,
           close_tolerance: Math.max(0, Number(tolerance) || 0),
           require_customer: requireCustomer,
+          sale_prefix: salePrefix.trim(),
+          sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
         },
         { onConflict: "tenant_id" },
       );
@@ -307,6 +319,47 @@ export function OperationSettingsCard() {
               </span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Numeración del comprobante */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <Hash size={16} className="text-ninja-flameSoft" /> Numeración del comprobante
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Personalizá cómo se ve el N° de venta. El correlativo interno no cambia.
+          </p>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="mb-1 block text-muted-foreground">Prefijo</span>
+              <input
+                value={salePrefix}
+                onChange={(e) => setSalePrefix(e.target.value)}
+                placeholder="Ej. NINJA-"
+                maxLength={12}
+                className="h-9 w-40 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-muted-foreground">Ceros (padding)</span>
+              <input
+                type="number"
+                min={0}
+                max={12}
+                value={salePad}
+                onChange={(e) => setSalePad(Number(e.target.value) || 0)}
+                className={numCls}
+              />
+            </label>
+            <span className="text-sm text-muted-foreground">
+              Vista previa:{" "}
+              <span className="font-mono font-semibold text-foreground">
+                {formatSaleNumber(42, { prefix: salePrefix, pad: salePad })}
+              </span>
+            </span>
+          </div>
         </CardContent>
       </Card>
 

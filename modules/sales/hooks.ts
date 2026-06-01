@@ -11,6 +11,13 @@ export function useSales() {
   return useQuery({ queryKey: ["sales", "list"], queryFn: () => salesApi.list() });
 }
 
+export function useSaleNumberFormat() {
+  return useQuery({
+    queryKey: ["sales", "number-format"],
+    queryFn: () => salesApi.numberFormat(),
+  });
+}
+
 export function useSaleDetail(id: string | null, enabled: boolean) {
   return useQuery({
     queryKey: ["sales", "detail", id],

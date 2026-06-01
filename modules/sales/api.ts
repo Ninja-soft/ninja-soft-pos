@@ -53,6 +53,18 @@ export const salesApi = {
     if (error) throw error;
   },
 
+  numberFormat: async (): Promise<{ prefix: string; pad: number }> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("pos_settings")
+      .select("sale_prefix, sale_pad")
+      .maybeSingle();
+    return {
+      prefix: (data?.sale_prefix as string) ?? "",
+      pad: Number(data?.sale_pad) || 0,
+    };
+  },
+
   return: async (
     saleId: string,
     items: ReturnItemInput[],

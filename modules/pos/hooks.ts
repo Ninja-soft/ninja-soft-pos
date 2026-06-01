@@ -5,7 +5,12 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { posApi, type SaleItemInput, type SalePaymentInput } from "./api";
+import {
+  posApi,
+  paymentPlansApi,
+  type SaleItemInput,
+  type SalePaymentInput,
+} from "./api";
 
 export function useOpenShift() {
   return useQuery({
@@ -33,6 +38,31 @@ export function usePosSettings() {
     queryKey: ["pos", "settings"],
     queryFn: () => posApi.posSettings(),
   });
+}
+
+export function usePaymentPlans(activeOnly = true) {
+  return useQuery({
+    queryKey: ["pos", "payment-plans", activeOnly],
+    queryFn: () => paymentPlansApi.list(activeOnly),
+  });
+}
+
+export function usePaymentPlanMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["pos", "payment-plans"] });
+  return {
+    create: useMutation({
+      mutationFn: (v: { label: string; surcharge_pct: number }) =>
+        paymentPlansApi.create(v.label, v.surcharge_pct),
+      onSuccess: inv,
+    }),
+    setActive: useMutation({
+      mutationFn: (v: { id: string; is_active: boolean }) =>
+        paymentPlansApi.setActive(v.id, v.is_active),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => paymentPlansApi.remove(id), onSuccess: inv }),
+  };
 }
 
 export function usePosMutations() {

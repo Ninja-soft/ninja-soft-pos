@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H27 — Planes de pago con recargo:** tabla `payment_plans` por tenant (gestión en Configuración → Medios de pago → Planes/recargos). Al cobrar, el cajero elige un plan (ej. "Visa 3 cuotas +8%") y el recargo se suma al total como ítem "Recargo …", visible en el ticket.
 - **H28 (base) — Garantía de fábrica por producto:** campo `warranty_months` en la ficha de producto (meses de garantía, 0 = sin garantía). Base para planes de garantía extendida.
 - **H29 — Catálogo de motivos de devolución:** tabla `return_reasons` por tenant (gestión owner/manager desde /devoluciones → Motivos). La devolución elige el motivo de un dropdown (+ "Otro" libre) en vez de texto suelto.
 - **Historial del cliente (H31, parcial):** en /clientes, acción Historial (`CustomerHistoryModal`) con el **saldo a favor (vale)**, las **compras** y las **devoluciones** del cliente. Eliminar cliente ahora usa `ConfirmDialog` (sin `window.confirm`).

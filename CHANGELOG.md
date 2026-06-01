@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **Historial del cliente (H31, parcial):** en /clientes, acción Historial (`CustomerHistoryModal`) con el **saldo a favor (vale)**, las **compras** y las **devoluciones** del cliente. Eliminar cliente ahora usa `ConfirmDialog` (sin `window.confirm`).
+
 ### Changed
 
 - **Sin alerts del navegador:** se reemplazan `window.confirm`/`window.prompt` por un `ConfirmDialog` (Radix/Modal) con estilo de la app. Anular venta pide el motivo en un diálogo (no en el prompt nativo); eliminar categoría confirma en diálogo.

@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Clock, Download, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
+import { CustomerHistoryModal } from "@/components/customers/CustomerHistoryModal";
 import { ImportCustomersModal } from "@/components/customers/ImportCustomersModal";
 import { useCustomers, useCustomerMutations } from "@/modules/customers/hooks";
 import {
@@ -22,6 +24,8 @@ export default function ClientesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
+  const [delTarget, setDelTarget] = useState<Customer | null>(null);
   const { data: customers, isLoading } = useCustomers(search);
   const { remove } = useCustomerMutations();
 
@@ -60,10 +64,11 @@ export default function ClientesPage() {
     ]);
   }
 
-  async function onDelete(c: Customer) {
-    if (!window.confirm(`¿Eliminar "${c.name}"?`)) return;
+  async function confirmDelete() {
+    if (!delTarget) return;
     try {
-      await remove.mutateAsync(c.id);
+      await remove.mutateAsync(delTarget.id);
+      setDelTarget(null);
       toast({ title: "Cliente eliminado", variant: "success" });
     } catch {
       toast({ title: "No se pudo eliminar", variant: "error" });
@@ -154,6 +159,13 @@ export default function ClientesPage() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <button
+                        onClick={() => setHistoryCustomer(c)}
+                        title="Historial"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                      >
+                        <Clock size={16} />
+                      </button>
+                      <button
                         onClick={() => {
                           setSelected(c);
                           setFormOpen(true);
@@ -164,7 +176,7 @@ export default function ClientesPage() {
                         <Pencil size={16} />
                       </button>
                       <button
-                        onClick={() => onDelete(c)}
+                        onClick={() => setDelTarget(c)}
                         title="Eliminar"
                         className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
                       >
@@ -185,6 +197,21 @@ export default function ClientesPage() {
         customer={selected}
       />
       <ImportCustomersModal open={importOpen} onOpenChange={setImportOpen} />
+      <CustomerHistoryModal
+        open={historyCustomer !== null}
+        onOpenChange={(o) => !o && setHistoryCustomer(null)}
+        customer={historyCustomer}
+      />
+      <ConfirmDialog
+        open={delTarget !== null}
+        onOpenChange={(o) => !o && setDelTarget(null)}
+        title="Eliminar cliente"
+        description={delTarget ? `Se elimina "${delTarget.name}".` : ""}
+        confirmLabel="Eliminar"
+        danger
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }

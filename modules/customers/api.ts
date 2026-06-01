@@ -30,6 +30,37 @@ export const customersApi = {
     return (data ?? []).reduce((acc, r) => acc + Number(r.delta || 0), 0);
   },
 
+  // Historial del cliente: saldo a favor + ventas + devoluciones.
+  history: async (
+    customerId: string,
+  ): Promise<{
+    creditBalance: number;
+    sales: { id: string; number: number; total: number; status: string; created_at: string }[];
+    returns: { id: string; number: number; total: number; refund_method: string; created_at: string }[];
+  }> => {
+    const supabase = createClient();
+    const [creditRes, salesRes, returnsRes] = await Promise.all([
+      supabase.from("store_credit_movements").select("delta").eq("customer_id", customerId),
+      supabase
+        .from("sales")
+        .select("id, number, total, status, created_at")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      supabase
+        .from("sale_returns")
+        .select("id, number, total, refund_method, created_at")
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
+    return {
+      creditBalance: (creditRes.data ?? []).reduce((a, r) => a + Number(r.delta || 0), 0),
+      sales: (salesRes.data ?? []) as never,
+      returns: (returnsRes.data ?? []) as never,
+    };
+  },
+
   list: async (search?: string): Promise<Customer[]> => {
     const supabase = createClient();
     let q = supabase

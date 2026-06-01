@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Download, Receipt } from "lucide-react";
+import { Ban, Download, Receipt, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { TicketModal } from "@/components/sales/TicketModal";
+import { ReturnModal } from "@/components/sales/ReturnModal";
 import { useSales, useVoidSale } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -21,6 +22,8 @@ export default function VentasPage() {
   const voidSale = useVoidSale();
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
+  const [returnId, setReturnId] = useState<string | null>(null);
+  const [returnOpen, setReturnOpen] = useState(false);
 
   function openTicket(id: string) {
     setTicketId(id);
@@ -138,6 +141,18 @@ export default function VentasPage() {
                       </button>
                       {s.status === "completed" && (
                         <button
+                          onClick={() => {
+                            setReturnId(s.id);
+                            setReturnOpen(true);
+                          }}
+                          title="Devolución / cambio"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                        >
+                          <RotateCcw size={16} />
+                        </button>
+                      )}
+                      {s.status === "completed" && (
+                        <button
                           onClick={() => onVoid(s.id, s.number)}
                           title="Anular"
                           className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
@@ -155,6 +170,7 @@ export default function VentasPage() {
       </div>
 
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+      <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
     </>
   );
 }

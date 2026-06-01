@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { salesApi } from "./api";
+import { salesApi, type ReturnItemInput } from "./api";
 
 export function useSales() {
   return useQuery({ queryKey: ["sales", "list"], queryFn: () => salesApi.list() });
@@ -24,6 +24,22 @@ export function useVoidSale() {
   return useMutation({
     mutationFn: (vars: { id: string; reason: string }) =>
       salesApi.void(vars.id, vars.reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+export function useReturnSale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      saleId: string;
+      items: ReturnItemInput[];
+      reason: string;
+      refund: "cash" | "store_credit";
+    }) => salesApi.return(vars.saleId, vars.items, vars.reason, vars.refund),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sales"] });
       qc.invalidateQueries({ queryKey: ["products"] });

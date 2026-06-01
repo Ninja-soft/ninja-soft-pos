@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
-import type { Tables } from "@/types/database";
+import type { Json, Tables } from "@/types/database";
+
+export interface ReturnItemInput {
+  sale_item_id: string;
+  quantity: number;
+  restock: "stock" | "review" | "discard";
+}
 
 export type Sale = Tables<"sales">;
 export type SaleItem = Tables<"sale_items">;
@@ -45,5 +51,22 @@ export const salesApi = {
       p_reason: reason,
     });
     if (error) throw error;
+  },
+
+  return: async (
+    saleId: string,
+    items: ReturnItemInput[],
+    reason: string,
+    refund: "cash" | "store_credit",
+  ): Promise<{ return_id: string; number: number; total: number }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("return_sale", {
+      p_sale_id: saleId,
+      p_items: items as unknown as Json,
+      p_reason: reason || undefined,
+      p_refund: refund,
+    });
+    if (error) throw error;
+    return data as unknown as { return_id: string; number: number; total: number };
   },
 };

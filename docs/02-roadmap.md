@@ -507,7 +507,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] Límite de deuda por cliente (`customers.credit_limit`; 0 = sin límite; se valida al cobrar fiado). Deuda visible en el historial del cliente.
   - [~] Cuentas por cobrar: registrar pagos de deuda desde el historial del cliente (reduce la deuda) + **vista global de CxC** en /clientes (`AccountsReceivableModal`) con buckets de antigüedad 0-30/31-60/61-90/+90 días (FIFO: los pagos cancelan los cargos más viejos) y export XLSX. Falta plazo/vencimiento por venta fiada.
   - [~] Grupos de clientes (tabla `customer_groups` + `customers.group_id`; alta inline y selector en la ficha del cliente). Falta usarlos para precios/promos/riesgo.
-  - [ ] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento.
+  - [x] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento. Configurable por el dueño en Operación del POS (`pos_settings.customer_required`); se exige en la ficha del cliente (alta/edición) con marca " *" y bloqueo de guardado. Se agregó `customers.birth_date` (fecha de nacimiento). Default: nada obligatorio salvo el nombre.
   - [ ] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar.
 
 - [ ] **H32 — Pedidos de salón, reservas y despacho.**

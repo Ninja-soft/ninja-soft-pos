@@ -15,11 +15,16 @@ import {
   DOC_TYPE_LABELS,
   IVA_CONDITIONS,
   IVA_LABELS,
+  type CustomerFieldKey,
   type CustomerInput,
   type CustomerOutput,
 } from "@/modules/customers/schemas";
 import { customerGroupsApi, type Customer } from "@/modules/customers/api";
-import { useCustomerMutations, useCustomerGroups } from "@/modules/customers/hooks";
+import {
+  useCustomerMutations,
+  useCustomerGroups,
+  useRequiredCustomerFields,
+} from "@/modules/customers/hooks";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -37,6 +42,7 @@ export function CustomerFormModal({
   const { toast } = useToast();
   const { create, update } = useCustomerMutations();
   const { data: groups } = useCustomerGroups();
+  const { data: required } = useRequiredCustomerFields();
   const qc = useQueryClient();
   const [newGroup, setNewGroup] = useState("");
   const {
@@ -44,8 +50,13 @@ export function CustomerFormModal({
     handleSubmit,
     reset,
     setValue,
+    setError,
     formState: { errors },
   } = useForm<CustomerInput>({ resolver: zodResolver(CustomerSchema) });
+
+  const req = required ?? {};
+  // Marca " *" en el label si el campo es obligatorio para este tenant.
+  const star = (key: CustomerFieldKey) => (req[key] ? " *" : "");
 
   const createGroup = useMutation({
     mutationFn: (name: string) => customerGroupsApi.create(name),
@@ -67,6 +78,7 @@ export function CustomerFormModal({
         email: customer?.email ?? "",
         phone: customer?.phone ?? "",
         address: customer?.address ?? "",
+        birth_date: (customer?.birth_date as string | null) ?? "",
         notes: customer?.notes ?? "",
         is_active: customer?.is_active ?? true,
         credit_limit: customer?.credit_limit ?? 0,
@@ -76,6 +88,26 @@ export function CustomerFormModal({
   }, [open, customer, reset]);
 
   async function onSubmit(values: CustomerInput) {
+    // Validación de campos obligatorios configurados por el tenant.
+    const checks: { key: CustomerFieldKey; val: unknown }[] = [
+      { key: "document_number", val: values.document_number },
+      { key: "iva_condition", val: values.iva_condition },
+      { key: "phone", val: values.phone },
+      { key: "email", val: values.email },
+      { key: "address", val: values.address },
+      { key: "birth_date", val: values.birth_date },
+    ];
+    let missing = false;
+    for (const c of checks) {
+      if (req[c.key] && !String(c.val ?? "").trim()) {
+        setError(c.key as keyof CustomerInput, { message: "Requerido" });
+        missing = true;
+      }
+    }
+    if (missing) {
+      toast({ title: "Completá los campos obligatorios", variant: "error" });
+      return;
+    }
     const parsed = values as unknown as CustomerOutput;
     try {
       if (isEdit && customer) {
@@ -119,15 +151,18 @@ export function CustomerFormModal({
             </select>
           </div>
           <Input
-            label="Número"
+            label={`Número${star("document_number")}`}
             error={errors.document_number?.message}
             {...register("document_number")}
           />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-muted-foreground">
-            Condición IVA
+            Condición IVA{star("iva_condition")}
           </label>
+          {errors.iva_condition?.message && (
+            <p className="mb-1 text-xs text-destructive">{errors.iva_condition.message}</p>
+          )}
           <select className={selectCls} {...register("iva_condition")}>
             <option value="">—</option>
             {IVA_CONDITIONS.map((c) => (
@@ -138,10 +173,29 @@ export function CustomerFormModal({
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Email" type="email" error={errors.email?.message} {...register("email")} />
-          <Input label="Teléfono" {...register("phone")} />
+          <Input
+            label={`Email${star("email")}`}
+            type="email"
+            error={errors.email?.message}
+            {...register("email")}
+          />
+          <Input
+            label={`Teléfono${star("phone")}`}
+            error={errors.phone?.message}
+            {...register("phone")}
+          />
         </div>
-        <Input label="Dirección" {...register("address")} />
+        <Input
+          label={`Dirección${star("address")}`}
+          error={errors.address?.message}
+          {...register("address")}
+        />
+        <Input
+          label={`Fecha de nacimiento${star("birth_date")}`}
+          type="date"
+          error={errors.birth_date?.message}
+          {...register("birth_date")}
+        />
         <Input label="Notas" {...register("notes")} />
         <Input
           label="Límite de cuenta corriente ($, 0 = sin límite)"

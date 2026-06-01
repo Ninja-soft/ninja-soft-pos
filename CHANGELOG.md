@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **H27 — Cobro por QR rápido + recargo único.** El modal de QR de Mercado Pago: sin planes genera el QR directo; con planes el cajero elige tarjeta por logo y plan por botón (cada botón muestra el total ya calculado). Si el medio está en modo "recargo único", el QR aplica ese % global automáticamente. El recargo se registra como ítem de la venta.
 - **H27 — Planes de pago ahora viven dentro de cada medio conectado.** `payment_plans` suma `provider_key`: cada plan pertenece a un medio (Mercado Pago, etc.). El botón global "Planes / recargos" se reemplaza por un botón **Planes** en cada medio de tarjeta/QR conectado, que abre un **grid visual**: secciones Débito y Crédito, una fila por marca con su logo, y celdas de recargo % por cuota (celda vacía = ese plan no se ofrece). Las marcas y las columnas de cuotas son configurables por medio (se guardan en `tenant_payment_methods.config`). Incluye import/export XLSX (al importar pregunta si reemplazar todos o agregar/actualizar) + descarga de plantilla con ejemplos. El modal trae un toggle de **recargo único del medio**: al activarlo se desactivan los planes por marca/cuota (se ofrece un solo recargo). Botón **Guardar** (las celdas igual se guardan al instante). Mejoras estéticas: logos de marca limpios (variante sin fondo), labels sin recorte, celdas de % prolijas.
 
 ### Added

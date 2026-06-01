@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils/format";
 import type { SalePaymentInput } from "@/modules/pos/api";
-import { usePaymentPlans } from "@/modules/pos/hooks";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 
 const METHODS: { value: SalePaymentInput["method"]; label: string }[] = [
@@ -118,10 +117,8 @@ export function PaymentModal({
   storeCreditBalance?: number;
   hasCustomer?: boolean;
 }) {
-  const { data: plans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
-  const [planId, setPlanId] = useState("");
   const [warrantyId, setWarrantyId] = useState("");
   const [received, setReceived] = useState("");
 
@@ -129,7 +126,6 @@ export function PaymentModal({
   useEffect(() => {
     if (open) {
       setMethod("cash");
-      setPlanId("");
       setWarrantyId("");
       setReceived("");
     }
@@ -142,16 +138,11 @@ export function PaymentModal({
       ? Math.round(((base * Number(wplan.price_pct)) / 100) * 100) / 100
       : Number(wplan.price)
     : 0;
-  const plan = (plans ?? []).find((p) => p.id === planId) ?? null;
-  const surchargePct = plan ? Number(plan.surcharge_pct) : 0;
-  // El recargo aplica sobre mercadería + garantía.
-  const surcharge =
-    Math.round((((base + warrantyPrima) * surchargePct) / 100) * 100) / 100;
-  // payTotal con el MISMO orden de redondeo que create_sale (redondea el total
-  // con recargo + garantía incluidos). Así lo cobrado coincide con sales.total.
+  // payTotal con el MISMO orden de redondeo que create_sale. El recargo por
+  // plan/cuota se aplica solo en el cobro con QR (Mercado Pago), no acá.
   const applyRound = (x: number) =>
     rounding > 0 ? Math.round(x / rounding) * rounding : x;
-  const payTotal = applyRound(base + warrantyPrima + surcharge);
+  const payTotal = applyRound(base + warrantyPrima);
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
 
@@ -197,27 +188,6 @@ export function PaymentModal({
           </select>
         </div>
 
-        {(plans ?? []).length > 0 && (
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Plan / recargo
-            </label>
-            <select
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-            >
-              <option value="">Sin recargo</option>
-              {(plans ?? []).map((p) => (
-                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
-                  {p.label}
-                  {Number(p.surcharge_pct) ? ` (+${p.surcharge_pct}%)` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {(wplans ?? []).length > 0 && (
           <div>
             <label className="mb-2 block text-sm font-medium text-muted-foreground">
@@ -238,20 +208,12 @@ export function PaymentModal({
           </div>
         )}
 
-        {(surcharge > 0 || warrantyPrima > 0) && (
+        {warrantyPrima > 0 && (
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-            {warrantyPrima > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Garantía {wplan?.label}</span>
-                <span>+{formatCurrency(warrantyPrima)}</span>
-              </div>
-            )}
-            {surcharge > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Recargo {plan?.label}</span>
-                <span>+{formatCurrency(surcharge)}</span>
-              </div>
-            )}
+            <div className="flex justify-between text-muted-foreground">
+              <span>Garantía {wplan?.label}</span>
+              <span>+{formatCurrency(warrantyPrima)}</span>
+            </div>
             <div className="mt-1 flex justify-between font-semibold">
               <span>Total a cobrar</span>
               <span>{formatCurrency(payTotal)}</span>
@@ -292,14 +254,9 @@ export function PaymentModal({
                     amount: payTotal,
                   },
                 ],
-                [
-                  ...(warrantyPrima > 0 && wplan
-                    ? [{ name: `Garantía ${wplan.label}`, amount: warrantyPrima }]
-                    : []),
-                  ...(surcharge > 0 && plan
-                    ? [{ name: `Recargo ${plan.label}`, amount: surcharge }]
-                    : []),
-                ],
+                warrantyPrima > 0 && wplan
+                  ? [{ name: `Garantía ${wplan.label}`, amount: warrantyPrima }]
+                  : [],
               )
             }
           >

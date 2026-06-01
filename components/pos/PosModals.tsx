@@ -104,6 +104,7 @@ export function PaymentModal({
   onConfirm,
   loading,
   storeCreditBalance = 0,
+  hasCustomer = false,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -115,6 +116,7 @@ export function PaymentModal({
   ) => void;
   loading: boolean;
   storeCreditBalance?: number;
+  hasCustomer?: boolean;
 }) {
   const { data: plans } = usePaymentPlans(true);
   const { data: wplans } = useWarrantyPlans(true);
@@ -155,15 +157,20 @@ export function PaymentModal({
 
   // El vale solo aparece si el saldo del cliente cubre el total a cobrar.
   const canVale = storeCreditBalance >= payTotal && payTotal > 0;
-  const methods = canVale
-    ? [
-        ...METHODS,
-        {
-          value: "store_credit" as const,
-          label: `Vale (saldo ${formatCurrency(storeCreditBalance)})`,
-        },
-      ]
-    : METHODS;
+  const methods = [
+    ...METHODS,
+    ...(canVale
+      ? [
+          {
+            value: "store_credit" as const,
+            label: `Vale (saldo ${formatCurrency(storeCreditBalance)})`,
+          },
+        ]
+      : []),
+    ...(hasCustomer
+      ? [{ value: "account" as const, label: "Cuenta corriente (fiado)" }]
+      : []),
+  ];
 
   return (
     <Modal

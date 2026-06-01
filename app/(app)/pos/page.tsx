@@ -301,9 +301,17 @@ export default function PosPage() {
       setTicketId(res.sale_id);
       setTicketOpen(true);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      const title = msg.includes("credit_limit_exceeded")
+        ? "Supera el límite de cuenta corriente del cliente"
+        : msg.includes("account_needs_customer")
+          ? "La cuenta corriente necesita un cliente"
+          : msg.includes("insufficient_store_credit")
+            ? "El cliente no tiene saldo de vale suficiente"
+            : "No se pudo cobrar";
       toast({
-        title: "No se pudo cobrar",
-        description: e instanceof Error ? e.message : undefined,
+        title,
+        description: title === "No se pudo cobrar" ? msg || undefined : undefined,
         variant: "error",
       });
     }
@@ -671,6 +679,7 @@ export default function PosPage() {
         onConfirm={handleSale}
         loading={sale.isPending}
         storeCreditBalance={scBalance ?? 0}
+        hasCustomer={customer !== null}
       />
       <QrCheckoutModal
         open={qrOpen}

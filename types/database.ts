@@ -479,6 +479,61 @@ export type Database = {
           },
         ]
       }
+      customer_account_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          delta: number
+          id: string
+          reason: string | null
+          sale_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          delta: number
+          id?: string
+          reason?: string | null
+          sale_id?: string | null
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          delta?: number
+          id?: string
+          reason?: string | null
+          sale_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_account_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_account_movements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_account_movements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_groups: {
         Row: {
           created_at: string
@@ -518,6 +573,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          credit_limit: number
           deleted_at: string | null
           document_number: string | null
           document_type: string | null
@@ -536,6 +592,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          credit_limit?: number
           deleted_at?: string | null
           document_number?: string | null
           document_type?: string | null
@@ -554,6 +611,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          credit_limit?: number
           deleted_at?: string | null
           document_number?: string | null
           document_type?: string | null

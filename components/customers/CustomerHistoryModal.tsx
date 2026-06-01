@@ -37,18 +37,32 @@ export function CustomerHistoryModal({
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
       ) : (
         <div className="space-y-5">
-          {/* Saldo a favor */}
-          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
-            <span className="text-sm text-muted-foreground">Saldo a favor (vale)</span>
-            <span
-              className={
-                data.creditBalance > 0
-                  ? "font-price text-xl font-black tabular-nums text-emerald-400"
-                  : "font-price text-xl font-black tabular-nums text-foreground"
-              }
-            >
-              {formatCurrency(data.creditBalance)}
-            </span>
+          {/* Saldo a favor + deuda */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+              <div className="text-xs text-muted-foreground">Saldo a favor (vale)</div>
+              <div
+                className={
+                  data.creditBalance > 0
+                    ? "font-price text-lg font-black tabular-nums text-emerald-400"
+                    : "font-price text-lg font-black tabular-nums text-foreground"
+                }
+              >
+                {formatCurrency(data.creditBalance)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+              <div className="text-xs text-muted-foreground">Deuda (cuenta corriente)</div>
+              <div
+                className={
+                  data.accountDebt > 0
+                    ? "font-price text-lg font-black tabular-nums text-red-400"
+                    : "font-price text-lg font-black tabular-nums text-foreground"
+                }
+              >
+                {formatCurrency(data.accountDebt)}
+              </div>
+            </div>
           </div>
 
           {/* Compras */}

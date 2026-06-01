@@ -69,6 +69,7 @@ export function CustomerFormModal({
         address: customer?.address ?? "",
         notes: customer?.notes ?? "",
         is_active: customer?.is_active ?? true,
+        credit_limit: customer?.credit_limit ?? 0,
         group_id: (customer?.group_id as string | null) ?? "",
       });
     }
@@ -142,6 +143,13 @@ export function CustomerFormModal({
         </div>
         <Input label="Dirección" {...register("address")} />
         <Input label="Notas" {...register("notes")} />
+        <Input
+          label="Límite de cuenta corriente ($, 0 = sin límite)"
+          type="number"
+          step="0.01"
+          min="0"
+          {...register("credit_limit")}
+        />
         <div>
           <label className="mb-2 block text-sm font-medium text-muted-foreground">
             Grupo

@@ -265,12 +265,30 @@ export function PaymentPlansGridModal({
           Al cobrar con {providerName}, el cajero elige el plan y el recargo se suma
           al total.
         </p>
-        <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-xs leading-relaxed text-muted-foreground">
-          Estos valores solo aplican un <strong>recargo de precio</strong>. En el cobro por
-          QR, <strong>las cuotas las elige el cliente</strong> en su app de Mercado Pago: el
-          QR no las fija. Para “sin recargo”, dejá la celda en <strong>0</strong> (queda
-          verde). Las cuotas sin interés reales se activan en tu cuenta de Mercado Pago.
-        </div>
+        {providerKey === "mobbex" ? (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
+            En Mobbex estos planes <strong>sí se aplican en el checkout</strong>: se envían
+            a Mobbex en cada cobro y el cliente paga en esas cuotas con el interés que
+            cargás acá. Dejá la celda en <strong>0</strong> para cuota sin recargo.
+          </div>
+        ) : (
+          <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-xs leading-relaxed text-muted-foreground">
+            En Mercado Pago el plan <strong>solo aumenta el precio base</strong>: el QR no
+            fija las cuotas, las elige el cliente. Tenés que controlar que pague en las
+            cuotas acordadas. Para que el interés se cobre automáticamente en las cuotas,
+            configurá la financiación en Mercado Pago:{" "}
+            <strong>Tu negocio → Costos → Cuotas</strong> (
+            <a
+              href="https://www.mercadopago.com.ar/costs-section/installments"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ninja-flameSoft underline"
+            >
+              mercadopago.com.ar/costs-section/installments
+            </a>
+            ). Dejá la celda en <strong>0</strong> para sin recargo.
+          </div>
+        )}
 
         {/* Recargo único del medio */}
         <div className="rounded-lg border border-border bg-muted/30 p-4">

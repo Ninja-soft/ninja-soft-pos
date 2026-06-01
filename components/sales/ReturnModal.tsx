@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -118,17 +119,18 @@ export function ReturnModal({
                         {formatCurrency(it.quantity > 0 ? it.subtotal / it.quantity : it.unit_price)} c/u
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <button
                         type="button"
-                        className="rounded-md border border-border p-1 disabled:opacity-40"
-                        disabled={available <= 0}
+                        aria-label="Quitar uno"
+                        className="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                        disabled={(l?.qty ?? 0) <= 0}
                         onClick={() => setQty(it.id, (l?.qty ?? 0) - 1, available)}
                       >
-                        −
+                        <Minus size={15} />
                       </button>
                       <input
-                        className="h-8 w-14 rounded-md border border-input bg-background px-1 text-center text-sm outline-none focus:border-ninja-flameSoft"
+                        className="h-8 w-12 rounded-md border border-input bg-background px-1 text-center text-sm tabular-nums outline-none focus:border-ninja-flameSoft"
                         type="number"
                         min={0}
                         max={available}
@@ -137,11 +139,12 @@ export function ReturnModal({
                       />
                       <button
                         type="button"
-                        className="rounded-md border border-border p-1 disabled:opacity-40"
-                        disabled={available <= 0}
+                        aria-label="Agregar uno"
+                        className="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                        disabled={(l?.qty ?? 0) >= available}
                         onClick={() => setQty(it.id, (l?.qty ?? 0) + 1, available)}
                       >
-                        +
+                        <Plus size={15} />
                       </button>
                     </div>
                   </div>

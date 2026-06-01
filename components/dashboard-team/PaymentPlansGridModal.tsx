@@ -365,6 +365,24 @@ export function PaymentPlansGridModal({
           </div>
         )}
 
+        {/* Leyenda */}
+        {!disabled && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded border border-dashed border-border" /> Vacío = no se ofrece
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded border border-emerald-500/70" /> 0% sin recargo
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded border border-ninja-flameSoft/70" /> recargo
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded border border-red-500/70" /> descuento (negativo)
+            </span>
+          </div>
+        )}
+
         {/* Grid (se atenúa en modo recargo único) */}
         <div className={disabled ? "pointer-events-none space-y-4 opacity-40" : "space-y-4"}>
           {debitBrands.length > 0 && (
@@ -507,6 +525,18 @@ function PlanCell({
     if (!plan || pct !== Number(plan.surcharge_pct)) onSet(pct);
   }
 
+  // Color del borde: vacío = punteado (no se ofrece) · 0% verde · + naranja · − rojo.
+  const t = val.trim();
+  const num = Number(t.replace(",", "."));
+  const has = t !== "" && Number.isFinite(num);
+  const border = !has
+    ? "border-dashed border-border"
+    : num === 0
+      ? "border-emerald-500/70"
+      : num > 0
+        ? "border-ninja-flameSoft/70"
+        : "border-red-500/70";
+
   return (
     <div className="flex flex-col items-center gap-1">
       <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
@@ -516,13 +546,10 @@ function PlanCell({
           onChange={(e) => setVal(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder="0"
+          placeholder="—"
           disabled={disabled}
-          className={
-            plan
-              ? "h-9 w-[72px] rounded-md border border-ninja-flameSoft/50 bg-ninja-flame/5 px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft"
-              : "h-9 w-[72px] rounded-md border border-input bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft"
-          }
+          title={has ? undefined : "Vacío: este plan no se ofrece al cobrar"}
+          className={`h-9 w-[72px] rounded-md border bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft ${border}`}
         />
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
           %

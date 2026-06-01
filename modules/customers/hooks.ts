@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { customersApi } from "./api";
+import { customersApi, customerGroupsApi } from "./api";
 import type { CustomerOutput } from "./schemas";
 
 export function useCustomers(search: string) {
@@ -28,6 +28,13 @@ export function useCustomerHistory(customerId: string | null | undefined) {
     queryKey: ["customers", "history", customerId],
     enabled: Boolean(customerId),
     queryFn: () => customersApi.history(customerId!),
+  });
+}
+
+export function useCustomerGroups() {
+  return useQuery({
+    queryKey: ["customer-groups"],
+    queryFn: () => customerGroupsApi.list(true),
   });
 }
 

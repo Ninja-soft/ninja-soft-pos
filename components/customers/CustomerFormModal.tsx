@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -16,8 +18,8 @@ import {
   type CustomerInput,
   type CustomerOutput,
 } from "@/modules/customers/schemas";
-import type { Customer } from "@/modules/customers/api";
-import { useCustomerMutations } from "@/modules/customers/hooks";
+import { customerGroupsApi, type Customer } from "@/modules/customers/api";
+import { useCustomerMutations, useCustomerGroups } from "@/modules/customers/hooks";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -34,12 +36,26 @@ export function CustomerFormModal({
   const isEdit = Boolean(customer);
   const { toast } = useToast();
   const { create, update } = useCustomerMutations();
+  const { data: groups } = useCustomerGroups();
+  const qc = useQueryClient();
+  const [newGroup, setNewGroup] = useState("");
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<CustomerInput>({ resolver: zodResolver(CustomerSchema) });
+
+  const createGroup = useMutation({
+    mutationFn: (name: string) => customerGroupsApi.create(name),
+    onSuccess: (g) => {
+      qc.invalidateQueries({ queryKey: ["customer-groups"] });
+      setValue("group_id", g.id);
+      setNewGroup("");
+    },
+    onError: () => toast({ title: "No se pudo crear el grupo", variant: "error" }),
+  });
 
   useEffect(() => {
     if (open) {
@@ -53,6 +69,7 @@ export function CustomerFormModal({
         address: customer?.address ?? "",
         notes: customer?.notes ?? "",
         is_active: customer?.is_active ?? true,
+        group_id: (customer?.group_id as string | null) ?? "",
       });
     }
   }, [open, customer, reset]);
@@ -125,6 +142,36 @@ export function CustomerFormModal({
         </div>
         <Input label="Dirección" {...register("address")} />
         <Input label="Notas" {...register("notes")} />
+        <div>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Grupo
+          </label>
+          <select className={selectCls} {...register("group_id")}>
+            <option value="">Sin grupo</option>
+            {(groups ?? []).map((g) => (
+              <option key={g.id} value={g.id} className="bg-ninja-deepViolet">
+                {g.name}
+              </option>
+            ))}
+          </select>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newGroup}
+              onChange={(e) => setNewGroup(e.target.value)}
+              placeholder="Nuevo grupo (ej. Mayorista, VIP)"
+              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ninja-flameSoft"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={newGroup.trim().length < 1 || createGroup.isPending}
+              onClick={() => createGroup.mutate(newGroup.trim())}
+            >
+              <Plus size={14} /> Crear
+            </Button>
+          </div>
+        </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar

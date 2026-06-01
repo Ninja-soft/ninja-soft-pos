@@ -16,8 +16,31 @@ function payload(input: CustomerOutput) {
     address: input.address,
     notes: input.notes,
     is_active: input.is_active,
+    group_id: input.group_id ?? null,
   };
 }
+
+export type CustomerGroup = Tables<"customer_groups">;
+
+export const customerGroupsApi = {
+  list: async (activeOnly = true): Promise<CustomerGroup[]> => {
+    const supabase = createClient();
+    let q = supabase.from("customer_groups").select("*").order("sort").order("name");
+    if (activeOnly) q = q.eq("is_active", true);
+    const { data } = await q;
+    return (data ?? []) as CustomerGroup[];
+  },
+  create: async (name: string): Promise<CustomerGroup> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("customer_groups")
+      .insert({ name })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data as CustomerGroup;
+  },
+};
 
 export const customersApi = {
   // Saldo a favor (vale) del cliente = suma de movimientos de store credit.

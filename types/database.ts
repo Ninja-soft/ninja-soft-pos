@@ -479,6 +479,41 @@ export type Database = {
           },
         ]
       }
+      customer_groups: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sort: number
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort?: number
+          tenant_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort?: number
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_groups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -487,6 +522,7 @@ export type Database = {
           document_number: string | null
           document_type: string | null
           email: string | null
+          group_id: string | null
           id: string
           is_active: boolean
           iva_condition: string | null
@@ -504,6 +540,7 @@ export type Database = {
           document_number?: string | null
           document_type?: string | null
           email?: string | null
+          group_id?: string | null
           id?: string
           is_active?: boolean
           iva_condition?: string | null
@@ -521,6 +558,7 @@ export type Database = {
           document_number?: string | null
           document_type?: string | null
           email?: string | null
+          group_id?: string | null
           id?: string
           is_active?: boolean
           iva_condition?: string | null
@@ -532,6 +570,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "customers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "customer_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "customers_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1576,7 +1621,7 @@ export type Database = {
           reason: string
           reference_id?: string | null
           store_id?: string | null
-          tenant_id: string
+          tenant_id?: string
         }
         Update: {
           created_at?: string

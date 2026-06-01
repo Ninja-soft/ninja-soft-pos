@@ -503,7 +503,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Medio de pago "Cuenta corriente" que deja deuda del cliente.
   - [ ] Límite default de deuda por cliente y override por ficha.
   - [ ] Plazo default de pago y buckets de antigüedad en cuentas por cobrar.
-  - [ ] Grupos de clientes para precios, promociones, riesgo, mayorista/VIP.
+  - [~] Grupos de clientes (tabla `customer_groups` + `customers.group_id`; alta inline y selector en la ficha del cliente). Falta usarlos para precios/promos/riesgo.
   - [ ] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento.
   - [ ] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar.
 

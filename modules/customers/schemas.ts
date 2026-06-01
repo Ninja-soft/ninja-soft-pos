@@ -61,6 +61,13 @@ export const CustomerSchema = z
     address: optional(160),
     notes: optional(300),
     is_active: z.boolean().default(true),
+    group_id: z
+      .string()
+      .uuid()
+      .or(z.literal(""))
+      .nullable()
+      .optional()
+      .transform((v) => (v ? v : null)),
   })
   .refine(
     (d) =>

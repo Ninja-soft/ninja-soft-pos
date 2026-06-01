@@ -46,6 +46,12 @@ export function Modal({
               )}
             </div>
           )}
+          {/* Descripción accesible siempre presente (evita warning de Radix). */}
+          {!description && (
+            <Dialog.Description className="sr-only">
+              {title ?? "Diálogo"}
+            </Dialog.Description>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
           <Dialog.Close
             className="absolute right-3 top-3 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

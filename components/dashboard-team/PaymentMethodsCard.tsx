@@ -349,11 +349,11 @@ export function PaymentMethodsCard() {
                 </div>
 
                 {/* Planes por marca (solo tarjeta/QR conectado) */}
-                {(p.kind === "gateway" || p.kind === "qr") && connected && (
+                {(p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key) && (
                   <button
                     onClick={() => setPlansProvider({ key: p.key, name: p.name })}
                     title="Planes por tarjeta y cuotas"
-                    className="hidden shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-ninja-flameSoft hover:text-ninja-flameSoft sm:inline-flex"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/20"
                   >
                     <Percent size={13} /> Planes
                   </button>
@@ -438,7 +438,7 @@ export function PaymentMethodsCard() {
                         )}
                       </button>
                     )}
-                    {(p.kind === "gateway" || p.kind === "qr") && connected && (
+                    {(p.kind === "gateway" || p.kind === "qr") && IMPLEMENTED.has(p.key) && (
                       <button
                         onClick={() => setPlansProvider({ key: p.key, name: p.name })}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"

@@ -37,6 +37,13 @@ export function ReturnModal({
   const [reasonChoice, setReasonChoice] = useState("");
   const [reasonOther, setReasonOther] = useState("");
   const [refund, setRefund] = useState<"cash" | "store_credit">("cash");
+  const [result, setResult] = useState<{
+    number: number;
+    total: number;
+    refund: "cash" | "store_credit";
+    reason: string;
+    items: { name: string; qty: number; subtotal: number }[];
+  } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -44,6 +51,7 @@ export function ReturnModal({
       setReasonChoice("");
       setReasonOther("");
       setRefund("cash");
+      setResult(null);
     }
   }, [open, saleId]);
 
@@ -84,17 +92,17 @@ export function ReturnModal({
       toast({ title: "Elegí al menos un ítem a devolver", variant: "error" });
       return;
     }
+    const snapshot = data.items
+      .filter((it) => (lines[it.id]?.qty ?? 0) > 0)
+      .map((it) => {
+        const qty = lines[it.id]?.qty ?? 0;
+        const unit = it.quantity > 0 ? it.subtotal / it.quantity : it.unit_price;
+        return { name: it.product_name, qty, subtotal: unit * qty };
+      });
     try {
       const res = await ret.mutateAsync({ saleId, items, reason: finalReason, refund });
-      toast({
-        title: `Devolución #${res.number} registrada`,
-        description:
-          refund === "cash"
-            ? `Reintegro en efectivo ${formatCurrency(res.total)}`
-            : `Vale por ${formatCurrency(res.total)} al cliente`,
-        variant: "success",
-      });
-      onOpenChange(false);
+      toast({ title: `Devolución #${res.number} registrada`, variant: "success" });
+      setResult({ number: res.number, total: res.total, refund, reason: finalReason, items: snapshot });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       toast({
@@ -112,6 +120,46 @@ export function ReturnModal({
     <Modal open={open} onOpenChange={onOpenChange} title="Devolución / cambio" className="max-w-lg">
       {!data ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+      ) : result ? (
+        <div className="space-y-4">
+          <div className="ticket-print mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm">
+            <div className="text-center font-display text-base font-bold">
+              Comprobante de devolución
+            </div>
+            <div className="mt-1 text-center text-xs text-muted-foreground">
+              Dev #{result.number} · {new Date().toLocaleString("es-AR")}
+            </div>
+            <div className="my-3 border-t border-dashed border-border" />
+            <ul className="space-y-1">
+              {result.items.map((it, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span className="truncate">
+                    {it.qty}× {it.name}
+                  </span>
+                  <span>{formatCurrency(it.subtotal)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="my-3 border-t border-dashed border-border" />
+            <div className="flex justify-between font-bold">
+              <span>TOTAL DEVUELTO</span>
+              <span>{formatCurrency(result.total)}</span>
+            </div>
+            <div className="mt-1 flex justify-between text-xs">
+              <span>Reintegro</span>
+              <span>{result.refund === "store_credit" ? "Vale (saldo a favor)" : "Efectivo"}</span>
+            </div>
+            {result.reason && (
+              <div className="mt-2 text-xs text-muted-foreground">Motivo: {result.reason}</div>
+            )}
+          </div>
+          <div className="no-print flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+            <Button onClick={() => window.print()}>Imprimir</Button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           <div className="space-y-2">

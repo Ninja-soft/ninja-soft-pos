@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { useSaleDetail, useReturnSale } from "@/modules/sales/hooks";
+import { useSaleDetail, useReturnSale, useReturnReasons } from "@/modules/sales/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 type Restock = "stock" | "review" | "discard";
@@ -31,18 +31,27 @@ export function ReturnModal({
 }) {
   const { toast } = useToast();
   const { data } = useSaleDetail(saleId, open);
+  const { data: reasons } = useReturnReasons(true);
   const ret = useReturnSale();
   const [lines, setLines] = useState<Record<string, Line>>({});
-  const [reason, setReason] = useState("");
+  const [reasonChoice, setReasonChoice] = useState("");
+  const [reasonOther, setReasonOther] = useState("");
   const [refund, setRefund] = useState<"cash" | "store_credit">("cash");
 
   useEffect(() => {
     if (open) {
       setLines({});
-      setReason("");
+      setReasonChoice("");
+      setReasonOther("");
       setRefund("cash");
     }
   }, [open, saleId]);
+
+  const hasReasons = (reasons ?? []).length > 0;
+  const finalReason =
+    !hasReasons || reasonChoice === "__other__"
+      ? reasonOther.trim()
+      : (reasons ?? []).find((r) => r.id === reasonChoice)?.label ?? "";
 
   const hasCustomer = Boolean(data?.sale.customer_id);
 
@@ -76,7 +85,7 @@ export function ReturnModal({
       return;
     }
     try {
-      const res = await ret.mutateAsync({ saleId, items, reason, refund });
+      const res = await ret.mutateAsync({ saleId, items, reason: finalReason, refund });
       toast({
         title: `Devolución #${res.number} registrada`,
         description:
@@ -166,12 +175,39 @@ export function ReturnModal({
             })}
           </div>
 
-          <Input
-            label="Motivo"
-            placeholder="Falla, cambio de talle, arrepentimiento…"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
+          <div>
+            <span className="mb-1 block text-sm font-medium text-muted-foreground">Motivo</span>
+            {hasReasons ? (
+              <div className="space-y-2">
+                <select
+                  value={reasonChoice}
+                  onChange={(e) => setReasonChoice(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+                >
+                  <option value="">Elegí un motivo…</option>
+                  {(reasons ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                  <option value="__other__">Otro (especificar)</option>
+                </select>
+                {reasonChoice === "__other__" && (
+                  <Input
+                    placeholder="Especificá el motivo"
+                    value={reasonOther}
+                    onChange={(e) => setReasonOther(e.target.value)}
+                  />
+                )}
+              </div>
+            ) : (
+              <Input
+                placeholder="Falla, cambio de talle, arrepentimiento…"
+                value={reasonOther}
+                onChange={(e) => setReasonOther(e.target.value)}
+              />
+            )}
+          </div>
 
           <div>
             <span className="mb-1 block text-sm font-medium text-muted-foreground">Reintegro</span>

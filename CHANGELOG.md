@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H29 — Catálogo de motivos de devolución:** tabla `return_reasons` por tenant (gestión owner/manager desde /devoluciones → Motivos). La devolución elige el motivo de un dropdown (+ "Otro" libre) en vez de texto suelto.
 - **Historial del cliente (H31, parcial):** en /clientes, acción Historial (`CustomerHistoryModal`) con el **saldo a favor (vale)**, las **compras** y las **devoluciones** del cliente. Eliminar cliente ahora usa `ConfirmDialog` (sin `window.confirm`).
 
 ### Changed

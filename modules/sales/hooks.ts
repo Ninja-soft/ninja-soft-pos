@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { salesApi, type ReturnItemInput } from "./api";
+import { salesApi, returnReasonsApi, type ReturnItemInput } from "./api";
 
 export function useSales() {
   return useQuery({ queryKey: ["sales", "list"], queryFn: () => salesApi.list() });
@@ -36,6 +36,27 @@ export function useVoidSale() {
       qc.invalidateQueries({ queryKey: ["products"] });
     },
   });
+}
+
+export function useReturnReasons(activeOnly = true) {
+  return useQuery({
+    queryKey: ["return-reasons", activeOnly],
+    queryFn: () => returnReasonsApi.list(activeOnly),
+  });
+}
+
+export function useReturnReasonMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["return-reasons"] });
+  return {
+    create: useMutation({ mutationFn: (label: string) => returnReasonsApi.create(label), onSuccess: inv }),
+    setActive: useMutation({
+      mutationFn: (v: { id: string; is_active: boolean }) =>
+        returnReasonsApi.setActive(v.id, v.is_active),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => returnReasonsApi.remove(id), onSuccess: inv }),
+  };
 }
 
 export function useReturnSale() {

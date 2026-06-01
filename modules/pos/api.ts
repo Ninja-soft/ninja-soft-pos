@@ -23,6 +23,35 @@ export interface CreateSaleResult {
   total: number;
 }
 
+export type PaymentPlan = Tables<"payment_plans">;
+
+export const paymentPlansApi = {
+  list: async (activeOnly = true): Promise<PaymentPlan[]> => {
+    const supabase = createClient();
+    let q = supabase.from("payment_plans").select("*").order("sort").order("label");
+    if (activeOnly) q = q.eq("is_active", true);
+    const { data } = await q;
+    return (data ?? []) as PaymentPlan[];
+  },
+  create: async (label: string, surcharge_pct: number): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .insert({ label, surcharge_pct });
+    if (error) throw error;
+  },
+  setActive: async (id: string, is_active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("payment_plans").update({ is_active }).eq("id", id);
+    if (error) throw error;
+  },
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("payment_plans").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
 export const posApi = {
   defaultRegister: async (): Promise<CashRegister | null> => {
     const supabase = createClient();

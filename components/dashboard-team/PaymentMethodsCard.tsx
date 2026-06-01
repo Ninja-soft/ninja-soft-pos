@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Link2, Check, Clock, ChevronDown } from "lucide-react";
+import { CreditCard, Link2, Check, Clock, ChevronDown, Percent } from "lucide-react";
+import { PaymentPlansModal } from "@/components/dashboard-team/PaymentPlansModal";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui/Card";
@@ -106,6 +107,7 @@ export function PaymentMethodsCard() {
   const [connectKey, setConnectKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const [plansOpen, setPlansOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggleExpand = (key: string) =>
@@ -265,9 +267,14 @@ export function PaymentMethodsCard() {
 
   return (
     <section>
-      <Heading as="h2" className="flex items-center gap-2 text-base">
-        <CreditCard size={18} /> Medios de pago
-      </Heading>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Heading as="h2" className="flex items-center gap-2 text-base">
+          <CreditCard size={18} /> Medios de pago
+        </Heading>
+        <Button variant="secondary" size="sm" onClick={() => setPlansOpen(true)}>
+          <Percent size={14} /> Planes / recargos
+        </Button>
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Activá los medios que aceptás y su recargo. Tocá la flecha{" "}
         <ChevronDown size={13} className="inline align-middle" /> de cada medio para
@@ -578,6 +585,8 @@ export function PaymentMethodsCard() {
           </div>
         </div>
       </Modal>
+
+      <PaymentPlansModal open={plansOpen} onOpenChange={setPlansOpen} />
     </section>
   );
 }

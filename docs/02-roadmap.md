@@ -453,11 +453,11 @@ Alcance robustecido: ver [F3](#f3--integración-afip-y-producción) y [`15-afip-
 
 Objetivo: cubrir configuraciones de retail profesional inspiradas en POS líderes: formas de pago con recargos, garantías extendidas, devoluciones/cambios, cuenta corriente, pedidos de salón, despacho, depósitos, roles propios e importación masiva por Excel.
 
-- [ ] **H27 — Medios de pago configurables + recargos.**
-  - [ ] Alta de medios de pago visibles al cobrar: efectivo, transferencia, débito, crédito, QR, cuenta corriente, otros.
-  - [ ] Variantes por medio con recargo/descuento automático: ejemplo "Visa 3 cuotas +8%".
+- [~] **H27 — Medios de pago configurables + recargos.** — *Planes con recargo % hechos (tabla `payment_plans`, gestión en Medios de pago → Planes/recargos; el cajero elige el plan al cobrar y el recargo se agrega como ítem). Faltan: planes de financiación por tarjeta/marca/cuotas con vigencia, voucher de tarjeta y "cuenta corriente" como medio (H31).*
+  - [x] Medios de pago visibles al cobrar (efectivo, transferencia, débito, crédito, QR, vale).
+  - [x] Variantes con recargo automático: "Visa 3 cuotas +8%" (`payment_plans.surcharge_pct`).
   - [ ] Planes de financiación AR por tarjeta/marca/cuotas con vigencia.
-  - [ ] Recargo agregado al total del ticket y registrado separado del subtotal.
+  - [x] Recargo agregado al total del ticket (entra como ítem "Recargo …").
   - [ ] Configuración de voucher obligatorio para tarjeta: lote, cupón, autorización.
   - [ ] *Criterio:* el cajero elige "Visa 3 cuotas +8%" y el ticket suma el recargo automáticamente.
 

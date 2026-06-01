@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils/format";
 import type { SalePaymentInput } from "@/modules/pos/api";
+import { usePaymentPlans } from "@/modules/pos/hooks";
 
 const METHODS: { value: SalePaymentInput["method"]; label: string }[] = [
   { value: "cash", label: "Efectivo" },
@@ -105,16 +106,27 @@ export function PaymentModal({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   total: number;
-  onConfirm: (payments: SalePaymentInput[]) => void;
+  onConfirm: (
+    payments: SalePaymentInput[],
+    surcharge?: { label: string; amount: number },
+  ) => void;
   loading: boolean;
   storeCreditBalance?: number;
 }) {
+  const { data: plans } = usePaymentPlans(true);
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
+  const [planId, setPlanId] = useState("");
   const [received, setReceived] = useState(String(total));
+
+  const plan = (plans ?? []).find((p) => p.id === planId) ?? null;
+  const surchargePct = plan ? Number(plan.surcharge_pct) : 0;
+  const surcharge = Math.round(((total * surchargePct) / 100) * 100) / 100;
+  const payTotal = total + surcharge;
   const receivedNum = Number(received) || 0;
-  const change = method === "cash" ? Math.max(0, receivedNum - total) : 0;
-  // El vale solo aparece si el saldo del cliente cubre el total.
-  const canVale = storeCreditBalance >= total && total > 0;
+  const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
+
+  // El vale solo aparece si el saldo del cliente cubre el total a cobrar.
+  const canVale = storeCreditBalance >= payTotal && payTotal > 0;
   const methods = canVale
     ? [
         ...METHODS,
@@ -130,7 +142,7 @@ export function PaymentModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Cobrar"
-      description={`Total: ${formatCurrency(total)}`}
+      description={`Total: ${formatCurrency(payTotal)}`}
     >
       <div className="space-y-4">
         <div>
@@ -139,9 +151,7 @@ export function PaymentModal({
           </label>
           <select
             value={method}
-            onChange={(e) =>
-              setMethod(e.target.value as SalePaymentInput["method"])
-            }
+            onChange={(e) => setMethod(e.target.value as SalePaymentInput["method"])}
             className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           >
             {methods.map((m) => (
@@ -151,6 +161,41 @@ export function PaymentModal({
             ))}
           </select>
         </div>
+
+        {(plans ?? []).length > 0 && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Plan / recargo
+            </label>
+            <select
+              value={planId}
+              onChange={(e) => setPlanId(e.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            >
+              <option value="">Sin recargo</option>
+              {(plans ?? []).map((p) => (
+                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                  {p.label}
+                  {Number(p.surcharge_pct) ? ` (+${p.surcharge_pct}%)` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {surcharge > 0 && (
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Recargo {plan?.label}</span>
+              <span>+{formatCurrency(surcharge)}</span>
+            </div>
+            <div className="mt-1 flex justify-between font-semibold">
+              <span>Total a cobrar</span>
+              <span>{formatCurrency(payTotal)}</span>
+            </div>
+          </div>
+        )}
+
         {method === "cash" && (
           <>
             <Input
@@ -175,12 +220,17 @@ export function PaymentModal({
           <Button
             loading={loading}
             onClick={() =>
-              onConfirm([
-                {
-                  method,
-                  amount: method === "cash" ? Math.max(receivedNum, total) : total,
-                },
-              ])
+              onConfirm(
+                [
+                  {
+                    method,
+                    amount: method === "cash" ? Math.max(receivedNum, payTotal) : payTotal,
+                  },
+                ],
+                surcharge > 0 && plan
+                  ? { label: plan.label, amount: surcharge }
+                  : undefined,
+              )
             }
           >
             Confirmar venta

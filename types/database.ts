@@ -2229,33 +2229,39 @@ export type Database = {
         Row: {
           commission_pct: number
           created_at: string
+          description: string | null
           id: string
           is_active: boolean
           label: string
           months: number
           price: number
+          price_pct: number
           sort: number
           tenant_id: string
         }
         Insert: {
           commission_pct?: number
           created_at?: string
+          description?: string | null
           id?: string
           is_active?: boolean
           label: string
           months?: number
           price?: number
+          price_pct?: number
           sort?: number
           tenant_id?: string
         }
         Update: {
           commission_pct?: number
           created_at?: string
+          description?: string | null
           id?: string
           is_active?: boolean
           label?: string
           months?: number
           price?: number
+          price_pct?: number
           sort?: number
           tenant_id?: string
         }

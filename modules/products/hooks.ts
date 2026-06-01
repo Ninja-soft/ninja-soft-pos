@@ -26,8 +26,14 @@ export function useWarrantyPlanMutations() {
   const inv = () => qc.invalidateQueries({ queryKey: ["warranty-plans"] });
   return {
     create: useMutation({
-      mutationFn: (v: { label: string; months: number; price: number; commission_pct: number }) =>
-        warrantyPlansApi.create(v),
+      mutationFn: (v: {
+        label: string;
+        months: number;
+        price: number;
+        price_pct: number;
+        commission_pct: number;
+        description: string | null;
+      }) => warrantyPlansApi.create(v),
       onSuccess: inv,
     }),
     setActive: useMutation({

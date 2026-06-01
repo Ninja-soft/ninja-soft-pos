@@ -23,7 +23,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
-- **H28 — Planes de garantía extendida + oferta al cobrar:** tabla `warranty_plans` (meses extra, prima fija, comisión) gestionable desde Productos → Garantías. En el POS, al cobrar se puede elegir un plan de garantía y la prima entra como línea de la venta (ticket y total la reflejan).
+- **H28 — Garantía extendida configurable + oferta al cobrar:** **Configuración → Garantías** (sección dedicada) gestiona los planes de forma completa: nombre, meses, **prima fija o % del precio**, comisión del vendedor y descripción (tabla `warranty_plans`; mismo gestor accesible en Productos → Garantías). En el POS, al cobrar se elige un plan y la prima (fija o %) entra como línea de la venta.
 - **H31 (base) — Grupos de clientes:** tabla `customer_groups` + `customers.group_id`. En la ficha del cliente se elige el grupo (mayorista, VIP, etc.) o se crea uno inline. Base para precios/promos/segmentación.
 - **H27 — Planes de pago con recargo:** tabla `payment_plans` por tenant (gestión en Configuración → Medios de pago → Planes/recargos). Al cobrar, el cajero elige un plan (ej. "Visa 3 cuotas +8%") y el recargo se suma al total como ítem "Recargo …", visible en el ticket.
 - **H28 (base) — Garantía de fábrica por producto:** campo `warranty_months` en la ficha de producto (meses de garantía, 0 = sin garantía). Base para planes de garantía extendida.

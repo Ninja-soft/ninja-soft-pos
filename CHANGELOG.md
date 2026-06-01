@@ -16,6 +16,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Productos — filtro por categoría.** En /productos, junto al buscador, un selector "Todas las categorías" para filtrar el listado por categoría (server-side). Útil para catálogos grandes.
 - **H40 (base) — Cumpleaños del mes.** Nuevo botón "Cumpleaños" en /clientes que abre un listado de los clientes que cumplen años, con selector de mes (default: mes actual), ordenados por día y con accesos rápidos a teléfono/email para campañas de retención. Usa `customers.birth_date`. Solo lectura, sin cambios de esquema.
 - **H31 — Datos obligatorios del cliente + fecha de nacimiento.** El dueño puede marcar en Operación del POS qué campos del cliente son obligatorios (documento, condición IVA, teléfono, email, dirección, fecha de nacimiento). Se exigen en la ficha del cliente (alta/edición) con marca " *" y bloqueo de guardado si faltan. Nuevo campo `customers.birth_date`. Default conservador: solo el nombre es obligatorio (no cambia el comportamiento de los tenants existentes). Config en `pos_settings.customer_required` (jsonb).
 - **H28 — Reporte de garantías y comisiones.** Nuevo bloque "Garantías y comisiones" en Reportes (respeta el período elegido y el toggle de "Personalizar"). Agrupa las líneas de venta "Garantía …" por plan, las cruza con `warranty_plans.commission_pct` y muestra cantidad vendida, total facturado, % y monto de comisión estimada. Incluido en el export XLSX.

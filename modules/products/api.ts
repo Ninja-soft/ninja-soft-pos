@@ -30,7 +30,7 @@ function toTags(v: string | null | undefined): string[] {
 }
 
 export const productsApi = {
-  list: async (search?: string): Promise<Product[]> => {
+  list: async (search?: string, categoryId?: string | null): Promise<Product[]> => {
     const supabase = createClient();
     let q = supabase
       .from("products")
@@ -42,6 +42,7 @@ export const productsApi = {
       const s = search.trim();
       q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`);
     }
+    if (categoryId) q = q.eq("category_id", categoryId);
     const { data, error } = await q;
     if (error) throw error;
     return (data ?? []) as unknown as Product[];

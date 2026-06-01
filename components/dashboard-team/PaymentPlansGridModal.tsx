@@ -251,6 +251,12 @@ export function PaymentPlansGridModal({
           Al cobrar con {providerName}, el cajero elige el plan y el recargo se suma
           al total.
         </p>
+        <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-xs leading-relaxed text-muted-foreground">
+          Estos valores solo aplican un <strong>recargo de precio</strong>. En el cobro por
+          QR, <strong>las cuotas las elige el cliente</strong> en su app de Mercado Pago: el
+          QR no las fija. Para “sin recargo”, dejá la celda en <strong>0</strong> (queda
+          verde). Las cuotas sin interés reales se activan en tu cuenta de Mercado Pago.
+        </div>
 
         {/* Recargo único del medio */}
         <div className="rounded-lg border border-border bg-muted/30 p-4">

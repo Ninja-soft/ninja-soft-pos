@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { posApi, type PaymentPlan } from "@/modules/pos/api";
 import { useProviderPlans } from "@/modules/pos/hooks";
 import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants";
+import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
@@ -48,6 +49,26 @@ export function QrCheckoutModal({
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
 
   const { data: plans = [], isLoading } = useProviderPlans(open ? "mercadopago" : null);
+  // Config del medio: modo "recargo único" + su %.
+  const { data: methodCfg } = useQuery({
+    queryKey: ["mp-method-cfg"],
+    enabled: open,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("tenant_payment_methods")
+        .select("config, surcharge_pct")
+        .eq("provider_key", "mercadopago")
+        .maybeSingle();
+      return {
+        mode: ((data?.config as { plan_mode?: string } | null)?.plan_mode ?? "plans") as string,
+        pct: Number(data?.surcharge_pct) || 0,
+      };
+    },
+  });
+  const globalMode = methodCfg?.mode === "global";
+  const globalPct = methodCfg?.pct ?? 0;
+  const loadingAll = isLoading || methodCfg === undefined;
   const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans]);
   const brands = useMemo(
     () => [...new Set(activePlans.map((p) => p.brand).filter(Boolean) as string[])],
@@ -106,15 +127,22 @@ export function QrCheckoutModal({
     chosenRef.current = null;
   }, [open, base]);
 
-  // Sin planes activos → genera el QR directo (sin pantalla de selección).
+  // Auto-arranque sin selección:
+  //  - modo recargo único → aplica el % global y genera el QR
+  //  - sin planes activos → genera el QR por el monto base
   useEffect(() => {
-    if (!open || isLoading || startedRef.current) return;
-    if (activePlans.length === 0) {
+    if (!open || loadingAll || startedRef.current) return;
+    if (globalMode) {
+      startedRef.current = true;
+      const sc = round2((base * globalPct) / 100);
+      chosenRef.current = sc > 0 ? { label: "Recargo único", surcharge: sc } : null;
+      startQr(round2(base + sc));
+    } else if (activePlans.length === 0) {
       startedRef.current = true;
       startQr(base);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isLoading, activePlans.length]);
+  }, [open, loadingAll, globalMode, globalPct, activePlans.length]);
 
   const { data: status } = useQuery({
     queryKey: ["mp-intent", intentId],
@@ -140,8 +168,8 @@ export function QrCheckoutModal({
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
     : "";
 
-  // En "select" con planes: si todavía carga, spinner.
-  const selecting = phase === "select" && (isLoading || activePlans.length > 0);
+  // Pantalla de selección: solo cuando hay planes y no es modo recargo único.
+  const selecting = phase === "select" && !globalMode && (loadingAll || activePlans.length > 0);
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Cobrar con QR · Mercado Pago">
@@ -157,7 +185,7 @@ export function QrCheckoutModal({
 
         {selecting && (
           <div className="space-y-3 text-left">
-            {isLoading ? (
+            {loadingAll ? (
               <div className="flex justify-center py-6">
                 <Spinner size={24} />
               </div>

@@ -45,10 +45,10 @@ export function useWarrantyPlanMutations() {
   };
 }
 
-export function useProducts(search: string) {
+export function useProducts(search: string, categoryId?: string | null) {
   return useQuery({
-    queryKey: ["products", "list", search],
-    queryFn: () => productsApi.list(search),
+    queryKey: ["products", "list", search, categoryId ?? null],
+    queryFn: () => productsApi.list(search, categoryId),
   });
 }
 

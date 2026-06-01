@@ -23,7 +23,7 @@ import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
-import { useProducts, useProductMutations } from "@/modules/products/hooks";
+import { useProducts, useProductMutations, useCategories } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -37,10 +37,15 @@ export default function ProductosPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
+  const [categoryId, setCategoryId] = useState("");
   const [selected, setSelected] = useState<Product | null>(null);
   const { toast } = useToast();
 
-  const { data: products, isLoading, isError, refetch } = useProducts(search);
+  const { data: categories } = useCategories();
+  const { data: products, isLoading, isError, refetch } = useProducts(
+    search,
+    categoryId || null,
+  );
   const { remove } = useProductMutations();
 
   function openNew() {
@@ -135,17 +140,31 @@ export default function ProductosPage() {
           </div>
         </div>
 
-        <div className="relative mt-6 max-w-md">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, SKU o código…"
-            className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-          />
+        <div className="mt-6 flex flex-wrap gap-2">
+          <div className="relative min-w-0 flex-1 sm:max-w-md">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre, SKU o código…"
+              className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            />
+          </div>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="h-11 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          >
+            <option value="">Todas las categorías</option>
+            {(categories ?? []).map((c) => (
+              <option key={c.id} value={c.id} className="bg-ninja-deepViolet">
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">

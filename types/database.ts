@@ -834,6 +834,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "payment_plans_provider_key_fkey"
+            columns: ["provider_key"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["key"]
+          },
+          {
             foreignKeyName: "payment_plans_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false

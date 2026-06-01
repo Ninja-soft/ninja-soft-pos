@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Link2, Check, Clock, ChevronDown, Percent } from "lucide-react";
-import { PaymentPlansModal } from "@/components/dashboard-team/PaymentPlansModal";
+import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui/Card";
@@ -107,7 +107,7 @@ export function PaymentMethodsCard() {
   const [connectKey, setConnectKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [showManual, setShowManual] = useState(false);
-  const [plansOpen, setPlansOpen] = useState(false);
+  const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggleExpand = (key: string) =>
@@ -271,9 +271,6 @@ export function PaymentMethodsCard() {
         <Heading as="h2" className="flex items-center gap-2 text-base">
           <CreditCard size={18} /> Medios de pago
         </Heading>
-        <Button variant="secondary" size="sm" onClick={() => setPlansOpen(true)}>
-          <Percent size={14} /> Planes / recargos
-        </Button>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Activá los medios que aceptás y su recargo. Tocá la flecha{" "}
@@ -350,6 +347,17 @@ export function PaymentMethodsCard() {
                     </button>
                   )}
                 </div>
+
+                {/* Planes por marca (solo tarjeta/QR conectado) */}
+                {(p.kind === "gateway" || p.kind === "qr") && connected && (
+                  <button
+                    onClick={() => setPlansProvider({ key: p.key, name: p.name })}
+                    title="Planes por tarjeta y cuotas"
+                    className="hidden shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-ninja-flameSoft hover:text-ninja-flameSoft sm:inline-flex"
+                  >
+                    <Percent size={13} /> Planes
+                  </button>
+                )}
 
                 {/* Recargo */}
                 <div className="hidden shrink-0 flex-col items-end gap-0.5 md:flex">
@@ -428,6 +436,14 @@ export function PaymentMethodsCard() {
                             <Link2 size={13} /> Conectar
                           </>
                         )}
+                      </button>
+                    )}
+                    {(p.kind === "gateway" || p.kind === "qr") && connected && (
+                      <button
+                        onClick={() => setPlansProvider({ key: p.key, name: p.name })}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
+                      >
+                        <Percent size={13} /> Planes por tarjeta
                       </button>
                     )}
                   </div>
@@ -586,7 +602,14 @@ export function PaymentMethodsCard() {
         </div>
       </Modal>
 
-      <PaymentPlansModal open={plansOpen} onOpenChange={setPlansOpen} />
+      {plansProvider && (
+        <PaymentPlansGridModal
+          open={plansProvider !== null}
+          onOpenChange={(o) => !o && setPlansProvider(null)}
+          providerKey={plansProvider.key}
+          providerName={plansProvider.name}
+        />
+      )}
     </section>
   );
 }

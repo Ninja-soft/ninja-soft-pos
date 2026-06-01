@@ -25,6 +25,7 @@ export interface CreateSaleResult {
 
 export type PaymentPlan = Tables<"payment_plans">;
 export interface PaymentPlanInput {
+  provider_key: string;
   label: string;
   base: string;
   brand: string | null;
@@ -34,70 +35,158 @@ export interface PaymentPlanInput {
   code?: string | null;
 }
 
-// Planes típicos de Argentina para el seeder "Cargar planes AR".
-export const TYPICAL_AR_PLANS: (PaymentPlanInput & { code: string })[] = [
+// Code estable por combinación (base+marca+cuotas). Permite upsert/dedupe de
+// celdas del grid y del import XLSX dentro de un mismo medio.
+export function planCode(base: string, brand: string | null, installments: number): string {
+  return `${base}_${brand ?? "na"}_${installments}c`;
+}
+
+// Plantilla de planes típicos AR (sin provider; se inyecta al sembrar).
+export const TYPICAL_AR_PLANS: Omit<PaymentPlanInput, "provider_key">[] = [
   { code: "debito_visa", label: "Débito Visa", base: "debito", brand: "visa", installments: 1, surcharge_pct: 0, sort: 10 },
   { code: "debito_master", label: "Débito Mastercard", base: "debito", brand: "master", installments: 1, surcharge_pct: 0, sort: 11 },
   { code: "debito_maestro", label: "Débito Maestro", base: "debito", brand: "maestro", installments: 1, surcharge_pct: 0, sort: 12 },
   { code: "debito_cabal", label: "Débito Cabal", base: "debito", brand: "cabal", installments: 1, surcharge_pct: 0, sort: 13 },
-  { code: "credito_1_pago", label: "Crédito 1 pago", base: "credito", brand: null, installments: 1, surcharge_pct: 0, sort: 20 },
-  { code: "cuota_simple_3", label: "Cuota Simple 3", base: "credito", brand: null, installments: 3, surcharge_pct: 0, sort: 21 },
-  { code: "cuota_simple_6", label: "Cuota Simple 6", base: "credito", brand: null, installments: 6, surcharge_pct: 0, sort: 22 },
-  { code: "cuota_simple_12", label: "Cuota Simple 12", base: "credito", brand: null, installments: 12, surcharge_pct: 0, sort: 23 },
-  { code: "credito_3", label: "Crédito 3 cuotas", base: "credito", brand: null, installments: 3, surcharge_pct: 0, sort: 30 },
-  { code: "credito_6", label: "Crédito 6 cuotas", base: "credito", brand: null, installments: 6, surcharge_pct: 0, sort: 31 },
-  { code: "credito_12", label: "Crédito 12 cuotas", base: "credito", brand: null, installments: 12, surcharge_pct: 0, sort: 32 },
+  { code: "credito_visa_1", label: "Crédito Visa 1 pago", base: "credito", brand: "visa", installments: 1, surcharge_pct: 0, sort: 20 },
+  { code: "credito_visa_3", label: "Crédito Visa 3 cuotas", base: "credito", brand: "visa", installments: 3, surcharge_pct: 0, sort: 21 },
+  { code: "credito_visa_6", label: "Crédito Visa 6 cuotas", base: "credito", brand: "visa", installments: 6, surcharge_pct: 0, sort: 22 },
+  { code: "credito_master_1", label: "Crédito Mastercard 1 pago", base: "credito", brand: "master", installments: 1, surcharge_pct: 0, sort: 30 },
+  { code: "credito_master_3", label: "Crédito Mastercard 3 cuotas", base: "credito", brand: "master", installments: 3, surcharge_pct: 0, sort: 31 },
+  { code: "credito_master_6", label: "Crédito Mastercard 6 cuotas", base: "credito", brand: "master", installments: 6, surcharge_pct: 0, sort: 32 },
 ];
 
+function planRow(v: PaymentPlanInput) {
+  return {
+    provider_key: v.provider_key,
+    label: v.label,
+    base: v.base,
+    brand: v.brand,
+    installments: v.installments,
+    surcharge_pct: v.surcharge_pct,
+    sort: v.sort ?? 0,
+    code: v.code ?? planCode(v.base, v.brand, v.installments),
+  };
+}
+
 export const paymentPlansApi = {
-  list: async (activeOnly = true): Promise<PaymentPlan[]> => {
+  // Planes de un medio (provider). activeOnly false en el editor.
+  listByProvider: async (
+    providerKey: string,
+    activeOnly = false,
+  ): Promise<PaymentPlan[]> => {
     const supabase = createClient();
-    let q = supabase.from("payment_plans").select("*").order("sort").order("label");
+    let q = supabase
+      .from("payment_plans")
+      .select("*")
+      .eq("provider_key", providerKey)
+      .order("sort")
+      .order("label");
     if (activeOnly) q = q.eq("is_active", true);
     const { data } = await q;
     return (data ?? []) as PaymentPlan[];
   },
+
+  // Todos los planes activos (para el POS al cobrar).
+  listActive: async (): Promise<PaymentPlan[]> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("payment_plans")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort")
+      .order("label");
+    return (data ?? []) as PaymentPlan[];
+  },
+
   create: async (v: PaymentPlanInput): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("payment_plans").insert({
-      label: v.label,
-      base: v.base,
-      brand: v.brand,
-      installments: v.installments,
-      surcharge_pct: v.surcharge_pct,
-      sort: v.sort ?? 0,
-      code: v.code ?? null,
-    });
+    const { error } = await supabase.from("payment_plans").insert(planRow(v));
     if (error) throw error;
   },
-  // Inserta los planes AR que falten (ignora los que ya existen por code).
-  seedTypical: async (
-    rows: (PaymentPlanInput & { code: string })[],
-  ): Promise<number> => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("payment_plans")
-      .upsert(
-        rows.map((r) => ({
-          label: r.label,
-          base: r.base,
-          brand: r.brand,
-          installments: r.installments,
-          surcharge_pct: r.surcharge_pct,
-          sort: r.sort ?? 0,
-          code: r.code,
-        })),
-        { onConflict: "tenant_id,code", ignoreDuplicates: true },
-      )
-      .select("id");
-    if (error) throw error;
-    return (data ?? []).length;
-  },
+
   update: async (id: string, v: Partial<PaymentPlanInput>): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.from("payment_plans").update(v).eq("id", id);
     if (error) throw error;
   },
+
+  // Celda del grid: crea o actualiza el plan (provider+base+marca+cuotas).
+  setCell: async (v: PaymentPlanInput): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .upsert(planRow(v), { onConflict: "tenant_id,provider_key,code" });
+    if (error) throw error;
+  },
+
+  // Borra la celda (combinación) de un medio.
+  removeCell: async (
+    providerKey: string,
+    base: string,
+    brand: string | null,
+    installments: number,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .delete()
+      .eq("provider_key", providerKey)
+      .eq("code", planCode(base, brand, installments));
+    if (error) throw error;
+  },
+
+  // Siembra los planes AR que falten en el medio (no pisa los existentes).
+  seedTypical: async (
+    providerKey: string,
+    rows: Omit<PaymentPlanInput, "provider_key">[],
+  ): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("payment_plans")
+      .upsert(
+        rows.map((r) => planRow({ ...r, provider_key: providerKey })),
+        { onConflict: "tenant_id,provider_key,code", ignoreDuplicates: true },
+      )
+      .select("id");
+    if (error) throw error;
+    return (data ?? []).length;
+  },
+
+  // Import XLSX: agrega/actualiza (upsert por code) sin borrar el resto.
+  bulkUpsert: async (
+    providerKey: string,
+    rows: Omit<PaymentPlanInput, "provider_key">[],
+  ): Promise<number> => {
+    if (rows.length === 0) return 0;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .upsert(rows.map((r) => planRow({ ...r, provider_key: providerKey })), {
+        onConflict: "tenant_id,provider_key,code",
+      });
+    if (error) throw error;
+    return rows.length;
+  },
+
+  // Import XLSX: reemplaza todos los planes del medio por los del archivo.
+  replaceProvider: async (
+    providerKey: string,
+    rows: Omit<PaymentPlanInput, "provider_key">[],
+  ): Promise<number> => {
+    const supabase = createClient();
+    const { error: delErr } = await supabase
+      .from("payment_plans")
+      .delete()
+      .eq("provider_key", providerKey);
+    if (delErr) throw delErr;
+    if (rows.length === 0) return 0;
+    const { error } = await supabase
+      .from("payment_plans")
+      .insert(rows.map((r) => planRow({ ...r, provider_key: providerKey })));
+    if (error) throw error;
+    return rows.length;
+  },
+
   setActive: async (id: string, is_active: boolean): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.from("payment_plans").update({ is_active }).eq("id", id);

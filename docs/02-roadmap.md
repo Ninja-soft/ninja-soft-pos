@@ -453,7 +453,7 @@ Alcance robustecido: ver [F3](#f3--integración-afip-y-producción) y [`15-afip-
 
 Objetivo: cubrir configuraciones de retail profesional inspiradas en POS líderes: formas de pago con recargos, garantías extendidas, devoluciones/cambios, cuenta corriente, pedidos de salón, despacho, depósitos, roles propios e importación masiva por Excel.
 
-- [~] **H27 — Medios de pago configurables + recargos.** — *Planes con recargo % por base/marca/cuotas hechos (tabla `payment_plans` con `base`/`brand`/`installments`/`code`; gestión en Medios de pago → Planes con tabla LABEL/BASE/MARCA/CUOTAS/RECARGO/ESTADO, alta/edición, logos de tarjeta y seeder "Cargar planes AR"; el cajero elige el plan al cobrar y el recargo entra como ítem). Faltan: vigencia por plan y voucher de tarjeta.*
+- [~] **H27 — Medios de pago configurables + recargos.** — *Planes con recargo % por base/marca/cuotas, **scopeados a cada medio conectado** (`payment_plans.provider_key`). En Configuración → Medios de pago, cada medio de tarjeta/QR conectado (ej. Mercado Pago) tiene su botón **Planes** que abre un grid visual: secciones Débito/Crédito, una fila por marca con su logo, celdas de recargo % por cuota (vacía = no se ofrece). Marcas y cuotas configurables por medio (`tenant_payment_methods.config`). Seeder "Cargar planes AR" + import/export XLSX (import pregunta reemplazar/agregar). Al cobrar, el plan elegido reemplaza el recargo global del medio. Faltan: vigencia por plan y voucher de tarjeta.*
   - [x] Medios de pago visibles al cobrar (efectivo, transferencia, débito, crédito, QR, vale).
   - [x] Variantes con recargo automático: "Visa 3 cuotas +8%" (`payment_plans.surcharge_pct`).
   - [ ] Planes de financiación AR por tarjeta/marca/cuotas con vigencia.

@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **H27 — Planes de pago ahora viven dentro de cada medio conectado.** `payment_plans` suma `provider_key`: cada plan pertenece a un medio (Mercado Pago, etc.). El botón global "Planes / recargos" se reemplaza por un botón **Planes** en cada medio de tarjeta/QR conectado, que abre un **grid visual**: secciones Débito y Crédito, una fila por marca con su logo, y celdas de recargo % por cuota (celda vacía = ese plan no se ofrece). Las marcas y las columnas de cuotas son configurables por medio (se guardan en `tenant_payment_methods.config`). Incluye seeder "Cargar planes AR" e import/export XLSX (al importar pregunta si reemplazar todos o agregar/actualizar). Al cobrar, el plan elegido reemplaza el recargo global del medio.
+
 ### Added
 
 - **H28 — Reporte de garantías y comisiones.** Nuevo bloque "Garantías y comisiones" en Reportes (respeta el período elegido y el toggle de "Personalizar"). Agrupa las líneas de venta "Garantía …" por plan, las cruza con `warranty_plans.commission_pct` y muestra cantidad vendida, total facturado, % y monto de comisión estimada. Incluido en el export XLSX.

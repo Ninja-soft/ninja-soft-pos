@@ -41,17 +41,38 @@ export function usePosSettings() {
   });
 }
 
-export function usePaymentPlans(activeOnly = true) {
+// Planes activos de todos los medios (POS al cobrar).
+export function usePaymentPlans() {
   return useQuery({
-    queryKey: ["pos", "payment-plans", activeOnly],
-    queryFn: () => paymentPlansApi.list(activeOnly),
+    queryKey: ["pos", "payment-plans", "active"],
+    queryFn: () => paymentPlansApi.listActive(),
   });
 }
 
-export function usePaymentPlanMutations() {
+// Planes de un medio concreto (editor de Configuración).
+export function useProviderPlans(providerKey: string | null) {
+  return useQuery({
+    queryKey: ["pos", "payment-plans", "provider", providerKey],
+    enabled: Boolean(providerKey),
+    queryFn: () => paymentPlansApi.listByProvider(providerKey!),
+  });
+}
+
+type SeedRows = Omit<PaymentPlanInput, "provider_key">[];
+
+export function usePaymentPlanMutations(providerKey: string) {
   const qc = useQueryClient();
   const inv = () => qc.invalidateQueries({ queryKey: ["pos", "payment-plans"] });
   return {
+    setCell: useMutation({
+      mutationFn: (v: PaymentPlanInput) => paymentPlansApi.setCell(v),
+      onSuccess: inv,
+    }),
+    removeCell: useMutation({
+      mutationFn: (v: { base: string; brand: string | null; installments: number }) =>
+        paymentPlansApi.removeCell(providerKey, v.base, v.brand, v.installments),
+      onSuccess: inv,
+    }),
     create: useMutation({
       mutationFn: (v: PaymentPlanInput) => paymentPlansApi.create(v),
       onSuccess: inv,
@@ -62,7 +83,15 @@ export function usePaymentPlanMutations() {
       onSuccess: inv,
     }),
     seed: useMutation({
-      mutationFn: paymentPlansApi.seedTypical,
+      mutationFn: (rows: SeedRows) => paymentPlansApi.seedTypical(providerKey, rows),
+      onSuccess: inv,
+    }),
+    bulkUpsert: useMutation({
+      mutationFn: (rows: SeedRows) => paymentPlansApi.bulkUpsert(providerKey, rows),
+      onSuccess: inv,
+    }),
+    replaceProvider: useMutation({
+      mutationFn: (rows: SeedRows) => paymentPlansApi.replaceProvider(providerKey, rows),
       onSuccess: inv,
     }),
     setActive: useMutation({

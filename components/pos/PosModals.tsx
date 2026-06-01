@@ -118,7 +118,7 @@ export function PaymentModal({
   storeCreditBalance?: number;
   hasCustomer?: boolean;
 }) {
-  const { data: plans } = usePaymentPlans(true);
+  const { data: plans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [planId, setPlanId] = useState("");

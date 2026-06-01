@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -98,14 +98,16 @@ export function CloseShiftModal({
 export function PaymentModal({
   open,
   onOpenChange,
-  total,
+  base,
+  rounding = 0,
   onConfirm,
   loading,
   storeCreditBalance = 0,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  total: number;
+  base: number; // subtotal - descuento, SIN redondear
+  rounding?: number;
   onConfirm: (
     payments: SalePaymentInput[],
     surcharge?: { label: string; amount: number },
@@ -116,12 +118,25 @@ export function PaymentModal({
   const { data: plans } = usePaymentPlans(true);
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [planId, setPlanId] = useState("");
-  const [received, setReceived] = useState(String(total));
+  const [received, setReceived] = useState("");
+
+  // Reset al abrir (el modal queda montado entre ventas).
+  useEffect(() => {
+    if (open) {
+      setMethod("cash");
+      setPlanId("");
+      setReceived("");
+    }
+  }, [open]);
 
   const plan = (plans ?? []).find((p) => p.id === planId) ?? null;
   const surchargePct = plan ? Number(plan.surcharge_pct) : 0;
-  const surcharge = Math.round(((total * surchargePct) / 100) * 100) / 100;
-  const payTotal = total + surcharge;
+  const surcharge = Math.round(((base * surchargePct) / 100) * 100) / 100;
+  // payTotal con el MISMO orden de redondeo que create_sale (redondea el total
+  // con recargo incluido). Así lo cobrado coincide con sales.total.
+  const applyRound = (x: number) =>
+    rounding > 0 ? Math.round(x / rounding) * rounding : x;
+  const payTotal = applyRound(base + surcharge);
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
 
@@ -223,8 +238,10 @@ export function PaymentModal({
               onConfirm(
                 [
                   {
+                    // El monto registrado es el de la venta (payTotal); el
+                    // efectivo recibido y el vuelto son solo ayuda visual.
                     method,
-                    amount: method === "cash" ? Math.max(receivedNum, payTotal) : payTotal,
+                    amount: payTotal,
                   },
                 ],
                 surcharge > 0 && plan

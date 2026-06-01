@@ -339,12 +339,32 @@ export const categoriesApi = {
 
   softDelete: async (id: string): Promise<void> => {
     const supabase = createClient();
-    // Baja lógica de la categoría y de sus sub-categorías.
     const now = new Date().toISOString();
+    // Baja lógica recursiva: la categoría y TODOS sus descendientes (hasta 4
+    // niveles). El .or de hijos directos dejaba nietos/bisnietos huérfanos.
+    const { data: all } = await supabase
+      .from("categories")
+      .select("id, parent_id")
+      .is("deleted_at", null);
+    const childrenOf = new Map<string, string[]>();
+    for (const c of all ?? []) {
+      const p = (c as { parent_id: string | null }).parent_id;
+      if (!p) continue;
+      const arr = childrenOf.get(p) ?? [];
+      arr.push((c as { id: string }).id);
+      childrenOf.set(p, arr);
+    }
+    const ids: string[] = [];
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      ids.push(cur);
+      for (const child of childrenOf.get(cur) ?? []) stack.push(child);
+    }
     const { error } = await supabase
       .from("categories")
       .update({ deleted_at: now })
-      .or(`id.eq.${id},parent_id.eq.${id}`);
+      .in("id", ids);
     if (error) throw error;
   },
 };

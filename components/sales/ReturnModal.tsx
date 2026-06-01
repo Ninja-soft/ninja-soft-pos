@@ -105,12 +105,17 @@ export function ReturnModal({
       setResult({ number: res.number, total: res.total, refund, reason: finalReason, items: snapshot });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
+      const map: Record<string, string> = {
+        no_open_shift: "Abrí la caja para reintegrar en efectivo",
+        store_credit_needs_customer: "El vale necesita un cliente en la venta",
+        sale_not_returnable: "La venta ya no es devolvible (fue anulada)",
+        qty_exceeds: "La cantidad supera lo disponible; refrescá e intentá de nuevo",
+        empty_return: "Elegí al menos un ítem a devolver",
+        item_not_found: "Un ítem ya no existe; refrescá e intentá de nuevo",
+      };
+      const key = Object.keys(map).find((k) => msg.includes(k));
       toast({
-        title: msg.includes("no_open_shift")
-          ? "Abrí la caja para reintegrar en efectivo"
-          : msg.includes("store_credit_needs_customer")
-            ? "El vale necesita un cliente en la venta"
-            : "No se pudo registrar la devolución",
+        title: (key && map[key]) || "No se pudo registrar la devolución",
         variant: "error",
       });
     }

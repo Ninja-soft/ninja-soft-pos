@@ -6,7 +6,12 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { ReturnModal } from "@/components/sales/ReturnModal";
 import { ReturnReasonsModal } from "@/components/sales/ReturnReasonsModal";
-import { useSales, useSaleNumberFormat, useReturnsList } from "@/modules/sales/hooks";
+import {
+  useSales,
+  useSaleNumberFormat,
+  useReturnsList,
+  useSalesByNumber,
+} from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 
@@ -22,8 +27,19 @@ export default function DevolucionesPage() {
   const [reasonsOpen, setReasonsOpen] = useState(false);
 
   const completed = (sales ?? []).filter((s) => s.status === "completed");
+  // Búsqueda por N° exacto en el server (encuentra tickets fuera de las últimas 100).
+  const digits = search.replace(/\D/g, "");
+  const searchNum = search.trim() && digits ? Number(digits) : null;
+  const { data: byNumber } = useSalesByNumber(searchNum);
   const results = search.trim()
-    ? completed.filter((s) => saleMatchesQuery(s.number, numFmt, search))
+    ? Array.from(
+        new Map(
+          [
+            ...completed.filter((s) => saleMatchesQuery(s.number, numFmt, search)),
+            ...((byNumber ?? []).filter((s) => s.status === "completed")),
+          ].map((s) => [s.id, s]),
+        ).values(),
+      )
     : completed.slice(0, 8);
 
   function openReturn(id: string) {

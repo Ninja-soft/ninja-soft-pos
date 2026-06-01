@@ -47,7 +47,6 @@ export function PaymentPlansGridModal({
   const m = usePaymentPlanMutations(providerKey);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importRows, setImportRows] = useState<PlanRow[] | null>(null);
-  const [editCuotas, setEditCuotas] = useState(false);
   const [editBrands, setEditBrands] = useState(false);
   const [newCuota, setNewCuota] = useState("");
   // Recargo único del medio + modo (global desactiva los planes).
@@ -124,10 +123,13 @@ export function PaymentPlansGridModal({
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
-  const installments =
+  const installments = (
     cfg?.config.installments && cfg.config.installments.length
       ? cfg.config.installments
-      : DEFAULT_INSTALLMENTS;
+      : DEFAULT_INSTALLMENTS
+  )
+    .slice()
+    .sort((a, b) => a - b);
   const brands = cfg?.config.brands && cfg.config.brands.length ? cfg.config.brands : ALL_BRANDS;
 
   const byKey = new Map<string, PaymentPlan>();
@@ -301,13 +303,6 @@ export function PaymentPlansGridModal({
           >
             Marcas
           </Button>
-          <Button
-            variant={editCuotas ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setEditCuotas((v) => !v)}
-          >
-            Cuotas
-          </Button>
         </div>
 
         {/* Editor de marcas */}
@@ -329,39 +324,6 @@ export function PaymentPlansGridModal({
                 </button>
               );
             })}
-          </div>
-        )}
-
-        {/* Editor de cuotas */}
-        {editCuotas && (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3">
-            {installments
-              .filter((n) => n > 1)
-              .map((n) => (
-                <span
-                  key={n}
-                  className="flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs"
-                >
-                  {n} cuotas
-                  <button onClick={() => removeCuota(n)} className="text-muted-foreground hover:text-destructive">
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-            <span className="flex items-center gap-1">
-              <input
-                type="number"
-                min="2"
-                value={newCuota}
-                onChange={(e) => setNewCuota(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addCuota()}
-                placeholder="+ cuotas"
-                className="h-8 w-24 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
-              />
-              <button onClick={addCuota} className="text-ninja-flameSoft" title="Agregar">
-                <Plus size={16} />
-              </button>
-            </span>
           </div>
         )}
 
@@ -401,7 +363,44 @@ export function PaymentPlansGridModal({
             </Section>
           )}
 
-          <Section title="Crédito">
+          <Section
+            title="Crédito"
+            action={
+              <div className="flex flex-wrap items-center gap-1.5">
+                {installments
+                  .filter((n) => n > 1)
+                  .map((n) => (
+                    <span
+                      key={n}
+                      className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]"
+                    >
+                      {n}c
+                      <button
+                        onClick={() => removeCuota(n)}
+                        className="text-muted-foreground hover:text-destructive"
+                        title={`Quitar ${n} cuotas`}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                <span className="flex items-center gap-0.5">
+                  <input
+                    type="number"
+                    min="2"
+                    value={newCuota}
+                    onChange={(e) => setNewCuota(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addCuota()}
+                    placeholder="+ cuota"
+                    className="h-7 w-20 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ninja-flameSoft"
+                  />
+                  <button onClick={addCuota} className="text-ninja-flameSoft" title="Agregar cuota">
+                    <Plus size={15} />
+                  </button>
+                </span>
+              </div>
+            }
+          >
             {brands.map((b) => (
               <BrandRow key={`c-${b}`} brand={b}>
                 {installments.map((n) => (
@@ -468,11 +467,22 @@ export function PaymentPlansGridModal({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  action,
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
   return (
     <div>
-      <div className="mb-2 text-xs font-bold uppercase tracking-wide text-ninja-flameSoft">
-        {title}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-wide text-ninja-flameSoft">
+          {title}
+        </div>
+        {action}
       </div>
       <div className="space-y-2">{children}</div>
     </div>

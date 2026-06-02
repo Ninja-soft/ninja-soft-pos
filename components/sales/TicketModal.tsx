@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { FileDown, Printer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
@@ -45,12 +46,27 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   saleId: string | null;
+  autoPrint?: boolean;
 }
 
-export function TicketModal({ open, onOpenChange, saleId }: Props) {
+export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
   const { data: brand } = useBranding(open);
   const { data: numFmt } = useSaleNumberFormat();
+  const printedRef = useRef(false);
+
+  // Auto-imprimir al abrir (preferencia del POS), una sola vez por apertura.
+  useEffect(() => {
+    if (!open) {
+      printedRef.current = false;
+      return;
+    }
+    if (autoPrint && data && !printedRef.current) {
+      printedRef.current = true;
+      const t = setTimeout(() => window.print(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [open, autoPrint, data]);
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Ticket" className="max-w-sm">

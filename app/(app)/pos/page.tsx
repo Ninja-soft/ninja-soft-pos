@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -60,6 +61,14 @@ export default function PosPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrMobbexOpen, setQrMobbexOpen] = useState(false);
+  // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
+  const [autoPrint, setAutoPrint] = useState(false);
+  useEffect(() => {
+    setAutoPrint(localStorage.getItem("pos_auto_print") === "1");
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("pos_auto_print", autoPrint ? "1" : "0");
+  }, [autoPrint]);
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
@@ -624,6 +633,14 @@ export default function PosPage() {
                 Cobrar con QR · Mobbex
               </button>
             )}
+            <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+              <span>Imprimir ticket al cobrar</span>
+              <Switch
+                checked={autoPrint}
+                onCheckedChange={setAutoPrint}
+                label="Imprimir ticket al cobrar"
+              />
+            </label>
           </div>
         </aside>
         </div>
@@ -723,7 +740,12 @@ export default function PosPage() {
           handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />
-      <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+      <TicketModal
+        open={ticketOpen}
+        onOpenChange={setTicketOpen}
+        saleId={ticketId}
+        autoPrint={autoPrint}
+      />
       <BarcodeScanner
         open={scanOpen}
         onOpenChange={setScanOpen}

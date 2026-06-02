@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Etiquetas de medios de pago — vale y cuenta corriente.** El ticket, la caja, los reportes y los cierres Z ahora muestran "Vale" y "Cuenta corriente" en vez de la key cruda (`store_credit`/`account`). Una sola fuente compartida (`lib/utils/paymentMethods.ts`).
+
 ### Changed
 
 - **H27 — Cobro por QR rápido + recargo único.** El modal de QR de Mercado Pago: sin planes genera el QR directo; con planes el cajero elige tarjeta por logo y plan por botón (cada botón muestra el total ya calculado). Si el medio está en modo "recargo único", el QR aplica ese % global automáticamente. El recargo se registra como ítem de la venta.

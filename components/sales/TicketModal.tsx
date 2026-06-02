@@ -9,6 +9,7 @@ import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
+import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 
 type Branding = {
   logo_url: string | null;
@@ -39,15 +40,6 @@ function useBranding(enabled: boolean) {
     },
   });
 }
-
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Efectivo",
-  debit: "Débito",
-  credit: "Crédito",
-  transfer: "Transferencia",
-  qr: "QR",
-  other: "Otro",
-};
 
 interface Props {
   open: boolean;

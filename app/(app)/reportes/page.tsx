@@ -20,6 +20,7 @@ import { useSalesReport, useWarrantyReport } from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
+import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 
 const REPORTS = [
   { key: "by_day", label: "Por día" },
@@ -41,15 +42,6 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_customer: true,
   warranties: true,
   low_stock: true,
-};
-
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Efectivo",
-  debit: "Débito",
-  credit: "Crédito",
-  transfer: "Transferencia",
-  qr: "QR",
-  other: "Otro",
 };
 
 export default function ReportesPage() {

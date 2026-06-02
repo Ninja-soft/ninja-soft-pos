@@ -23,7 +23,12 @@ import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
-import { useProducts, useProductMutations, useCategories } from "@/modules/products/hooks";
+import {
+  useProducts,
+  useProductMutations,
+  useCategories,
+  useBrands,
+} from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -38,13 +43,16 @@ export default function ProductosPage() {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
+  const [brandId, setBrandId] = useState("");
   const [selected, setSelected] = useState<Product | null>(null);
   const { toast } = useToast();
 
   const { data: categories } = useCategories();
+  const { data: brands } = useBrands();
   const { data: products, isLoading, isError, refetch } = useProducts(
     search,
     categoryId || null,
+    brandId || null,
   );
   const { remove } = useProductMutations();
 
@@ -162,6 +170,18 @@ export default function ProductosPage() {
             {(categories ?? []).map((c) => (
               <option key={c.id} value={c.id} className="bg-ninja-deepViolet">
                 {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={brandId}
+            onChange={(e) => setBrandId(e.target.value)}
+            className="h-11 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          >
+            <option value="">Todas las marcas</option>
+            {(brands ?? []).map((b) => (
+              <option key={b.id} value={b.id} className="bg-ninja-deepViolet">
+                {b.name}
               </option>
             ))}
           </select>

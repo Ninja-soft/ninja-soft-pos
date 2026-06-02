@@ -24,7 +24,10 @@ export default function VentasPage() {
   const { data: numFmt } = useSaleNumberFormat();
   const voidSale = useVoidSale();
   const [search, setSearch] = useState("");
-  const visible = (sales ?? []).filter((s) => saleMatchesQuery(s.number, numFmt, search));
+  const [statusFilter, setStatusFilter] = useState("");
+  const visible = (sales ?? [])
+    .filter((s) => saleMatchesQuery(s.number, numFmt, search))
+    .filter((s) => !statusFilter || s.status === statusFilter);
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [returnId, setReturnId] = useState<string | null>(null);
@@ -91,17 +94,28 @@ export default function VentasPage() {
           </Button>
         </div>
 
-        <div className="relative mt-5 max-w-sm">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por N° de comprobante o ticket…"
-            className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-          />
+        <div className="mt-5 flex flex-wrap gap-2">
+          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por N° de comprobante o ticket…"
+              className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          >
+            <option value="">Todos los estados</option>
+            <option value="completed">Completadas</option>
+            <option value="voided">Anuladas</option>
+          </select>
         </div>
 
         <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">

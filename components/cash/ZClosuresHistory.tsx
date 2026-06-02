@@ -9,16 +9,8 @@ import { useZClosures } from "@/modules/cash/hooks";
 import type { ZClosure } from "@/modules/cash/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { format } from "date-fns";
-
-const METHOD_LABELS: Record<string, string> = {
-  cash: "Efectivo",
-  debit: "Débito",
-  credit: "Crédito",
-  transfer: "Transferencia",
-  qr: "QR",
-  other: "Otro",
-};
 
 function fdate(s: string | null): string {
   if (!s) return "—";

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, SlidersHorizontal } from "lucide-react";
-import { format, startOfDay, subDays } from "date-fns";
+import { format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
@@ -208,6 +208,36 @@ export default function ReportesPage() {
           <div className="flex shrink-0 flex-col gap-1">
             <label className="text-xs text-muted-foreground">Período</label>
             <DateRangePicker value={range} onChange={setRange} />
+          </div>
+          <div className="flex shrink-0 flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Rápido</label>
+            <div className="flex gap-1">
+              {(
+                [
+                  { label: "Hoy", days: 0 },
+                  { label: "7 días", days: 6 },
+                  { label: "30 días", days: 29 },
+                  { label: "Mes", month: true },
+                ] as const
+              ).map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() =>
+                    setRange({
+                      from:
+                        "month" in p
+                          ? startOfMonth(new Date())
+                          : startOfDay(subDays(new Date(), p.days)),
+                      to: startOfDay(new Date()),
+                    })
+                  }
+                  className="rounded-md border border-input bg-background px-2.5 py-2 text-xs text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
           </div>
           <Button variant="secondary" className="shrink-0" onClick={exportReporte} disabled={!data}>
             <Download size={16} /> Exportar XLSX

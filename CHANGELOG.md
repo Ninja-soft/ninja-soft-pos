@@ -20,6 +20,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Tests — utils de pagos/comprobante.** Nuevos tests unitarios para `saleNumber` (formato + búsqueda), `planConstants` (planLabel/brandLogo) y `paymentMethods` (etiquetas). 60 tests en total.
 - **Health endpoint `/api/health`.** `GET /api/health` devuelve `status/version/env/time` para monitoreo y CI. No toca DB ni expone secretos.
 - **H22 — Ticket: mostrar/ocultar logo.** Toggle en Configuración → Marca para imprimir o no el logo en el ticket (`tenant_branding.ticket_show_logo`, default sí). Ahorra tinta en impresoras térmicas.
 - **Reportes — presets de período.** Botones rápidos Hoy / 7 días / 30 días / Mes junto al selector de fechas.

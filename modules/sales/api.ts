@@ -8,6 +8,7 @@ export interface ReturnItemInput {
 }
 
 export type Sale = Tables<"sales">;
+export type SaleRow = Sale & { customers: { name: string } | null };
 export type ReturnReason = Tables<"return_reasons">;
 
 export const returnReasonsApi = {
@@ -47,15 +48,15 @@ export interface SaleDetail {
 }
 
 export const salesApi = {
-  list: async (): Promise<Sale[]> => {
+  list: async (): Promise<SaleRow[]> => {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("sales")
-      .select("*")
+      .select("*, customers(name)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) throw error;
-    return (data ?? []) as Sale[];
+    return (data ?? []) as unknown as SaleRow[];
   },
 
   get: async (id: string): Promise<SaleDetail> => {

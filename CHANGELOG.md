@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Security
+
+- **Funciones de trigger fuera del RPC público.** Se revocó `EXECUTE` (anon/authenticated/public) en `payment_account_charge` y `products_auto_sku` (funciones de trigger que el linter de Supabase exponía como RPC `SECURITY DEFINER`). Los triggers siguen funcionando; ya no se pueden invocar vía `/rest/v1/rpc`.
+
 ### Fixed
 
 - **Etiquetas de medios de pago — vale y cuenta corriente.** El ticket, la caja, los reportes y los cierres Z ahora muestran "Vale" y "Cuenta corriente" en vez de la key cruda (`store_credit`/`account`). Una sola fuente compartida (`lib/utils/paymentMethods.ts`).

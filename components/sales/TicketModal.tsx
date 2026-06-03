@@ -23,6 +23,7 @@ type Branding = {
   ticket_title: string | null;
   ticket_legend: string | null;
   ticket_show_qr: boolean | null;
+  ticket_show_logo: boolean | null;
 };
 
 function useBranding(enabled: boolean) {
@@ -34,7 +35,7 @@ function useBranding(enabled: boolean) {
       const { data } = await supabase
         .from("tenant_branding")
         .select(
-          "logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr",
+          "logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo",
         )
         .maybeSingle();
       return (data as Branding | null) ?? null;
@@ -79,7 +80,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
             style={{ width: brand?.ticket_width === "58" ? "58mm" : "80mm" }}
           >
             <div className="text-center">
-              {brand?.logo_url && (
+              {brand?.logo_url && brand?.ticket_show_logo !== false && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={brand.logo_url}

@@ -20,6 +20,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H22 — Ticket: mostrar/ocultar logo.** Toggle en Configuración → Marca para imprimir o no el logo en el ticket (`tenant_branding.ticket_show_logo`, default sí). Ahorra tinta en impresoras térmicas.
 - **Reportes — presets de período.** Botones rápidos Hoy / 7 días / 30 días / Mes junto al selector de fechas.
 - **Ventas — filtro por estado + buscar por cliente.** En /ventas, selector "Todos los estados / Completadas / Anuladas"; el buscador también encuentra por nombre de cliente; nueva columna Cliente (y en el export XLSX).
 - **POS — imprimir ticket al cobrar (auto).** Toggle por dispositivo (localStorage) en el panel de cobro: al confirmar la venta, abre el ticket y dispara la impresión automáticamente. Default apagado (no cambia el flujo actual). Útil para kiosco con impresora térmica.

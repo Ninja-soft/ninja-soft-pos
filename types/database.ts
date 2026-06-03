@@ -2026,6 +2026,7 @@ export type Database = {
           tenant_id: string
           ticket_footer: string | null
           ticket_legend: string | null
+          ticket_show_logo: boolean
           ticket_show_qr: boolean
           ticket_title: string | null
           ticket_width: string
@@ -2042,6 +2043,7 @@ export type Database = {
           tenant_id: string
           ticket_footer?: string | null
           ticket_legend?: string | null
+          ticket_show_logo?: boolean
           ticket_show_qr?: boolean
           ticket_title?: string | null
           ticket_width?: string
@@ -2058,6 +2060,7 @@ export type Database = {
           tenant_id?: string
           ticket_footer?: string | null
           ticket_legend?: string | null
+          ticket_show_logo?: boolean
           ticket_show_qr?: boolean
           ticket_title?: string | null
           ticket_width?: string

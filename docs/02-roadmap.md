@@ -87,7 +87,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] Tests de permisos por rol: owner, manager, cashier, viewer.
 - [ ] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte.
 - [ ] Idempotencia documentada para venta/anulación antes de integrar pagos externos.
-- [ ] Health endpoint básico (`/api/health`) y checklist de monitoreo manual.
+- [~] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *Endpoint listo (`GET /api/health` → status/version/env/time, sin DB ni secretos). Falta el checklist de monitoreo.*
 - [ ] Backup/restore de Supabase probado en staging o entorno descartable.
 - [ ] Seed/demo reproducible para ventas, productos, clientes y caja.
 

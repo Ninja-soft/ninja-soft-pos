@@ -33,6 +33,7 @@ type Branding = {
   ticket_title: string | null;
   ticket_legend: string | null;
   ticket_show_qr: boolean;
+  ticket_show_logo: boolean;
 };
 const EMPTY: Branding = {
   logo_path: null,
@@ -47,6 +48,7 @@ const EMPTY: Branding = {
   ticket_title: null,
   ticket_legend: null,
   ticket_show_qr: false,
+  ticket_show_logo: true,
 };
 
 type BrandingRow = { [K in keyof Branding]?: string | boolean | null };
@@ -80,7 +82,7 @@ export function BrandingCard() {
       const { data: b } = await supabase
         .from("tenant_branding")
         .select(
-          "logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr",
+          "logo_path, logo_url, accent, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo",
         )
         .eq("tenant_id", mem.tenant_id)
         .maybeSingle();
@@ -105,6 +107,7 @@ export function BrandingCard() {
       ticket_title: (b.ticket_title as string | null) ?? null,
       ticket_legend: (b.ticket_legend as string | null) ?? null,
       ticket_show_qr: Boolean(b.ticket_show_qr),
+      ticket_show_logo: b.ticket_show_logo == null ? true : Boolean(b.ticket_show_logo),
     });
   }, [ctx]);
 
@@ -302,6 +305,20 @@ export function BrandingCard() {
             Mostrar QR en el ticket
             <span className="block text-xs text-muted-foreground">
               Imprime un QR con los datos de la venta (negocio, número, total, fecha).
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            checked={form.ticket_show_logo}
+            onChange={(e) => set("ticket_show_logo", e.target.checked)}
+          />
+          <span>
+            Mostrar logo en el ticket
+            <span className="block text-xs text-muted-foreground">
+              Si lo desactivás, el ticket no imprime el logo (ahorra tinta en térmica).
             </span>
           </span>
         </label>

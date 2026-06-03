@@ -286,6 +286,10 @@ export default function ReportesPage() {
           </Card>
         </div>
 
+        {!isLoading && vis.by_day && (data?.by_day?.length ?? 0) > 0 && (
+          <DayBars data={data!.by_day} />
+        )}
+
         {isLoading ? (
           <p className="mt-8 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : (
@@ -383,6 +387,37 @@ export default function ReportesPage() {
         )}
       </div>
     </>
+  );
+}
+
+// Mini-gráfico de barras de ventas por día (CSS puro, sin dependencias).
+function DayBars({ data }: { data: { day: string; total: number; count: number }[] }) {
+  const max = Math.max(1, ...data.map((d) => d.total));
+  return (
+    <div className="mt-8 rounded-lg border border-border bg-card p-5">
+      <div className="mb-3 font-display font-bold">Ventas por día</div>
+      <div className="flex items-end gap-2 overflow-x-auto pb-1" style={{ height: 160 }}>
+        {data.map((d) => {
+          const h = Math.round((d.total / max) * 130) + 2;
+          const [, mm, dd] = d.day.split("-");
+          return (
+            <div key={d.day} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
+              <span className="text-[10px] tabular-nums text-muted-foreground">
+                {d.total > 0 ? Math.round(d.total / 1000) + "k" : ""}
+              </span>
+              <div
+                className="w-full rounded-t bg-ninja-gradient"
+                style={{ height: h }}
+                title={`${d.day}: ${formatCurrency(d.total)} · ${d.count} ventas`}
+              />
+              <span className="text-[10px] text-muted-foreground">
+                {dd && mm ? `${dd}/${mm}` : d.day}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

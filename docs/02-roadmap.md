@@ -40,7 +40,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 
 ### Entregables
 - [ ] Repositorio en GitHub con estructura definitiva.
-- [ ] CI/CD: GitHub Actions corriendo lint, typecheck, tests, build.
+- [x] CI/CD: GitHub Actions corriendo lint, typecheck, tests, build (`.github/workflows/ci.yml`).
 - [ ] Vercel conectado: production en `main`, previews por rama.
 - [ ] Supabase: proyecto local + staging + production, con migraciones versionadas.
 - [ ] Documentación viva (`docs/`, `CLAUDE.md`, agentes en `.claude/agents/`).

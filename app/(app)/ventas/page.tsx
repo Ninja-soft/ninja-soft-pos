@@ -25,8 +25,13 @@ export default function VentasPage() {
   const voidSale = useVoidSale();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const q = search.trim().toLowerCase();
   const visible = (sales ?? [])
-    .filter((s) => saleMatchesQuery(s.number, numFmt, search))
+    .filter(
+      (s) =>
+        saleMatchesQuery(s.number, numFmt, search) ||
+        (q.length > 0 && (s.customers?.name ?? "").toLowerCase().includes(q)),
+    )
     .filter((s) => !statusFilter || s.status === statusFilter);
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -47,12 +52,14 @@ export default function VentasPage() {
         columns: [
           { header: "N°", key: "number", type: "number", width: 10 },
           { header: "Fecha", key: "fecha", width: 22 },
+          { header: "Cliente", key: "cliente", width: 24 },
           { header: "Total", key: "total", type: "money" },
           { header: "Estado", key: "estado", width: 14 },
         ],
         rows: (sales ?? []).map((s) => ({
           number: s.number,
           fecha: new Date(s.created_at).toLocaleString("es-AR"),
+          cliente: s.customers?.name ?? "",
           total: s.total,
           estado: SALE_STATUS[s.status] ?? s.status,
         })),
@@ -103,7 +110,7 @@ export default function VentasPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por N° de comprobante o ticket…"
+              placeholder="Buscar por N°, ticket o cliente…"
               className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
             />
           </div>
@@ -124,6 +131,7 @@ export default function VentasPage() {
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3 text-right">Total</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
@@ -132,14 +140,14 @@ export default function VentasPage() {
             <tbody className="divide-y divide-border text-foreground">
               {isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!isLoading && visible.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                     {search ? "Sin resultados para la búsqueda." : "No hay ventas registradas."}
                   </td>
                 </tr>
@@ -149,6 +157,9 @@ export default function VentasPage() {
                   <td className="px-4 py-3 font-mono">{formatSaleNumber(s.number, numFmt)}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {new Date(s.created_at).toLocaleString("es-AR")}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {s.customers?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold">
                     {formatCurrency(s.total)}

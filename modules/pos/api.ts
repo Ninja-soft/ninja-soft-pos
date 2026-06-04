@@ -23,6 +23,17 @@ export interface CreateSaleResult {
   total: number;
 }
 
+export interface QrIntentRow {
+  id: string;
+  provider_key: string;
+  amount: number;
+  status: string;
+  mp_payment_id: string | null;
+  created_at: string;
+  saleNumber: number | null;
+  saleStatus: string | null;
+}
+
 export type PaymentPlan = Tables<"payment_plans">;
 export interface PaymentPlanInput {
   provider_key: string;
@@ -345,6 +356,82 @@ export const posApi = {
       status: data?.status ?? "pending",
       mp_payment_id: data?.mp_payment_id ?? null,
     };
+  },
+
+  // Conciliación: intents de cobro QR (MP + Mobbex) cruzados con la venta que
+  // los referenció (payments.reference = intent.id). Un intent "approved" sin
+  // venta = plata cobrada sin ticket → hay que revisarlo.
+  listQrIntents: async (range?: {
+    from?: Date;
+    to?: Date;
+  }): Promise<QrIntentRow[]> => {
+    const supabase = createClient();
+    let q = supabase
+      .from("mp_payment_intents")
+      .select(
+        "id, provider_key, amount, status, mp_payment_id, sale_id, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(range?.from || range?.to ? 1000 : 200);
+    if (range?.from) q = q.gte("created_at", range.from.toISOString());
+    if (range?.to) {
+      const end = new Date(range.to);
+      end.setHours(23, 59, 59, 999);
+      q = q.lte("created_at", end.toISOString());
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    const intents = data ?? [];
+    if (intents.length === 0) return [];
+
+    // Venta vinculada: por payments.reference (el POS guarda el intent id) o
+    // por intent.sale_id si está seteado.
+    const ids = intents.map((i) => i.id);
+    const { data: pays } = await supabase
+      .from("payments")
+      .select("reference, sale_id, sales(number, status)")
+      .eq("method", "qr")
+      .in("reference", ids);
+    type PayRow = {
+      reference: string | null;
+      sale_id: string;
+      sales: { number: number; status: string } | null;
+    };
+    const byRef = new Map<string, PayRow>();
+    for (const p of (pays ?? []) as unknown as PayRow[]) {
+      if (p.reference) byRef.set(p.reference, p);
+    }
+
+    // sale_id directo (fallback) → buscar números de esas ventas.
+    const directSaleIds = intents
+      .filter((i) => i.sale_id && !byRef.has(i.id))
+      .map((i) => i.sale_id as string);
+    const directSales = new Map<string, { number: number; status: string }>();
+    if (directSaleIds.length > 0) {
+      const { data: sales } = await supabase
+        .from("sales")
+        .select("id, number, status")
+        .in("id", directSaleIds);
+      for (const s of sales ?? []) {
+        directSales.set(s.id, { number: s.number, status: s.status });
+      }
+    }
+
+    return intents.map((i) => {
+      const viaPay = byRef.get(i.id);
+      const viaDirect = i.sale_id ? directSales.get(i.sale_id) : undefined;
+      const sale = viaPay?.sales ?? viaDirect ?? null;
+      return {
+        id: i.id,
+        provider_key: i.provider_key ?? "mercadopago",
+        amount: Number(i.amount),
+        status: i.status,
+        mp_payment_id: i.mp_payment_id,
+        created_at: i.created_at,
+        saleNumber: sale?.number ?? null,
+        saleStatus: sale?.status ?? null,
+      };
+    });
   },
 
   createSale: async (

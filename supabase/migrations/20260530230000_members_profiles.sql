@@ -33,6 +33,13 @@ create policy cashier_profiles_select on cashier_profiles
   for select
   using (tenant_id = current_tenant_id() or is_internal());
 
+-- Cambia el tipo de retorno respecto de 20260530220000 (suma display_name y
+-- avatar): hace falta drop previo porque "create or replace" no puede cambiar
+-- el row type. (Fix de replay 2026-06-04: en el remoto ya está aplicada con
+-- este resultado; este drop solo repara la reproducción en DBs frescas —
+-- local/staging/CI. Detectado por el job `rls` de CI.)
+drop function if exists tenant_members();
+
 create or replace function tenant_members()
 returns table (
   user_id      uuid,

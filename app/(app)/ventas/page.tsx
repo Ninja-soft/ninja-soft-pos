@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Download, Receipt, RotateCcw, Search } from "lucide-react";
+import { Ban, Download, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { ReturnModal } from "@/components/sales/ReturnModal";
+import { QrIntentsModal } from "@/components/sales/QrIntentsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useSales, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
@@ -42,6 +43,7 @@ export default function VentasPage() {
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<{ id: string; number: number } | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   function openTicket(id: string) {
     setTicketId(id);
@@ -100,9 +102,14 @@ export default function VentasPage() {
             <Eyebrow>Operación</Eyebrow>
             <Display className="mt-3 text-3xl md:text-4xl">Ventas</Display>
           </div>
-          <Button variant="secondary" onClick={exportVentas} disabled={!sales?.length}>
-            <Download size={16} /> Exportar XLSX
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setQrOpen(true)}>
+              <QrCode size={16} /> Cobros QR
+            </Button>
+            <Button variant="secondary" onClick={exportVentas} disabled={!sales?.length}>
+              <Download size={16} /> Exportar XLSX
+            </Button>
+          </div>
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
@@ -230,6 +237,7 @@ export default function VentasPage() {
 
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
       <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
+      <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />
       <ConfirmDialog
         open={voidTarget !== null}
         onOpenChange={(o) => !o && setVoidTarget(null)}

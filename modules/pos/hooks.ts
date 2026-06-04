@@ -48,6 +48,22 @@ export function usePosSettings() {
   });
 }
 
+export function useQrIntents(
+  range: { from?: Date; to?: Date } | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [
+      "pos",
+      "qr-intents",
+      range?.from?.toISOString() ?? null,
+      range?.to?.toISOString() ?? null,
+    ],
+    queryFn: () => posApi.listQrIntents(range),
+    enabled,
+  });
+}
+
 // Planes activos de todos los medios (POS al cobrar).
 export function usePaymentPlans() {
   return useQuery({

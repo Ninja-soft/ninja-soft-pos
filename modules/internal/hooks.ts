@@ -22,6 +22,22 @@ export function useTenantHealth() {
   });
 }
 
+export function useInternalUsers() {
+  return useQuery({
+    queryKey: ["internal", "users"],
+    queryFn: () => internalApi.listUsers(),
+  });
+}
+
+export function useSetUserActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { userId: string; active: boolean }) =>
+      internalApi.setUserActive(vars.userId, vars.active),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["internal", "users"] }),
+  });
+}
+
 export function useTenantNotes(tenantId: string) {
   return useQuery({
     queryKey: ["internal", "notes", tenantId],

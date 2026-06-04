@@ -104,7 +104,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ### Entregables
 - [~] **Panel interno** (rutas protegidas para staff NinjaSoft): — *Base hecha: `/internal/tenants` + detalle, `/internal/staff`, `/internal/pagos`, `/internal/emails`. Guard `is_internal`.*
-  - [~] Listado de tenants con filtros (estado, plan, última actividad). *Listado + búsqueda (nombre/slug/dueño) + filtros por estado de suscripción y plan hechos. Falta "última actividad" (requiere métrica de salud).*
+  - [x] Listado de tenants con filtros (estado, plan, última actividad). — *Búsqueda (nombre/slug/dueño), filtros por estado de suscripción y plan, y columna "Últ. actividad" (último login o última venta, vía `internal_tenant_health()`).*
   - [ ] Alta y baja de tenants. *(el alta hoy es self-service vía onboarding; falta alta/baja desde internal)*
   - [x] Cambio de plan en caliente. — *Detalle del tenant: select de plan → RPC `internal_set_plan`.*
   - [x] Activación / desactivación de feature flags por tenant. — *Toggles en el detalle del tenant → RPC `internal_set_flag`.*
@@ -115,7 +115,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Suspensión por falta de pago (manual en esta fase). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`).*
 - [ ] **Sistema de soporte interno:**
   - [ ] Notas internas por tenant.
-  - [ ] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores).
+  - [~] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores). *KPIs en el detalle del tenant: último login, última venta, ventas 7 días (cantidad + total) y usuarios activos — RPC `internal_tenant_health()` (SECURITY DEFINER, guard `is_internal`, devuelve solo agregados). Errores quedan para observabilidad (F4/Sentry).*
 
 ### Criterios de cierre
 - [ ] NinjaSoft puede dar de alta un cliente nuevo en < 5 minutos sin tocar SQL. *(el alta es self-service; falta el flujo desde internal)*

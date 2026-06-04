@@ -14,6 +14,14 @@ export function useInternalTenants() {
   });
 }
 
+export function useTenantHealth() {
+  return useQuery({
+    queryKey: ["internal", "tenant-health"],
+    queryFn: () => internalApi.tenantHealth(),
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useInternalAudit(filters: AuditFilters) {
   return useQuery({
     queryKey: ["internal", "audit", filters],

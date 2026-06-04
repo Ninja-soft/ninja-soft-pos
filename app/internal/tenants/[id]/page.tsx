@@ -13,8 +13,10 @@ import {
   useInternalTenants,
   useTenantFlags,
   useInternalMutations,
+  useTenantHealth,
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
+import { formatCurrency, formatRelative } from "@/lib/utils/format";
 
 const PLANS = [
   { key: "start", name: "Start" },
@@ -41,6 +43,8 @@ export default function InternalTenantDetail({
   const { data: tenants } = useInternalTenants();
   const tenant = tenants?.find((t) => t.id === params.id);
   const { data: flags } = useTenantFlags(params.id);
+  const { data: healthMap } = useTenantHealth();
+  const health = healthMap?.get(params.id);
   const { setPlan, setStatus, setFlag, setIndustry } = useInternalMutations(
     params.id,
   );
@@ -166,6 +170,45 @@ export default function InternalTenantDetail({
             </select>
           </CardContent>
         </Card>
+      </div>
+
+      <Heading className="mt-8" as="h2">
+        Salud operativa
+      </Heading>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          {
+            label: "Último login",
+            value: formatRelative(health?.last_login_at),
+          },
+          {
+            label: "Última venta",
+            value: formatRelative(health?.last_sale_at),
+          },
+          {
+            label: "Ventas (7 días)",
+            value: health ? String(health.sales_7d_count) : "…",
+            sub: health ? formatCurrency(health.sales_7d_total) : undefined,
+          },
+          {
+            label: "Usuarios activos",
+            value: health ? String(health.active_users) : "…",
+          },
+        ].map((kpi) => (
+          <Card key={kpi.label}>
+            <CardContent className="p-5">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                {kpi.label}
+              </div>
+              <div className="mt-1.5 text-xl font-semibold text-foreground">
+                {kpi.value}
+              </div>
+              {kpi.sub && (
+                <div className="text-sm text-muted-foreground">{kpi.sub}</div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Heading className="mt-8" as="h2">

@@ -53,7 +53,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22+: supabase-js v2.106 necesita WebSocket nativo (Node 20 no lo trae).
+          node-version: 22
           cache: pnpm
 
       - uses: supabase/setup-cli@v1

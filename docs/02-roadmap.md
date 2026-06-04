@@ -39,18 +39,18 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 **Duración:** 2 semanas. **Objetivo:** dejar el proyecto listo para que cualquier agente o persona pueda contribuir sin pedir contexto.
 
 ### Entregables
-- [ ] Repositorio en GitHub con estructura definitiva.
+- [x] Repositorio en GitHub con estructura definitiva. — *`Ninja-soft/ninja-soft-pos`, 150+ PRs mergeados.*
 - [x] CI/CD: GitHub Actions corriendo lint, typecheck, tests, build (`.github/workflows/ci.yml`).
-- [ ] Vercel conectado: production en `main`, previews por rama.
-- [ ] Supabase: proyecto local + staging + production, con migraciones versionadas.
-- [ ] Documentación viva (`docs/`, `CLAUDE.md`, agentes en `.claude/agents/`).
-- [ ] Sistema de diseño base: tokens, primitives (Button, Input, Card, etc.).
-- [ ] Auth funcional con Supabase + selección de tenant.
+- [x] Vercel conectado: production en `main` (deploy automático al mergear), previews por rama.
+- [~] Supabase: production con migraciones versionadas (`supabase/migrations/`, aplicadas vía MCP) + local con Docker (`pnpm db:start`). *Falta entorno staging.*
+- [x] Documentación viva (`docs/`, `CLAUDE.md`, agentes en `.claude/agents/`).
+- [x] Sistema de diseño base: tokens (tema `ninja-dark` en Tailwind) y primitives en `components/ui/` (Button, Input, Card, Modal, Toast, Avatar…).
+- [x] Auth funcional con Supabase + selección de tenant.
 
 ### Criterios de cierre
-- [ ] Un dev nuevo puede clonar, instalar y levantar el proyecto en < 30 min siguiendo `00-getting-started.md`.
-- [ ] El PM puede invocar a cualquier agente y este encuentra su archivo en `.claude/agents/`.
-- [ ] `pnpm test` pasa con al menos un test por capa (component, hook, edge function).
+- [~] Un dev nuevo puede clonar, instalar y levantar el proyecto en < 30 min siguiendo `00-getting-started.md`. *La guía existe; falta validarla con un dev real.*
+- [x] El PM puede invocar a cualquier agente y este encuentra su archivo en `.claude/agents/`.
+- [~] `pnpm test` pasa con al menos un test por capa (component, hook, edge function). *15 archivos: 2 de componentes + 13 unit/dominio; faltan tests de hooks y de Edge Functions.*
 
 ---
 
@@ -103,23 +103,23 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 **Duración:** 4–6 semanas. **Objetivo:** NinjaSoft puede operar el SaaS sin tocar SQL: alta de clientes, cambios de plan, activación de features.
 
 ### Entregables
-- [ ] **Panel interno** (rutas protegidas para staff NinjaSoft):
-  - [ ] Listado de tenants con filtros (estado, plan, última actividad).
-  - [ ] Alta y baja de tenants.
-  - [ ] Cambio de plan en caliente.
-  - [ ] Activación / desactivación de feature flags por tenant.
-  - [ ] Vista de auditoría administrativa.
-- [ ] **Modelo de suscripciones** completo:
-  - [ ] Estados: `trial`, `active`, `suspended`, `cancelled`.
-  - [ ] Trial automático de 14 días al alta.
-  - [ ] Suspensión por falta de pago (manual en esta fase).
+- [~] **Panel interno** (rutas protegidas para staff NinjaSoft): — *Base hecha: `/internal/tenants` + detalle, `/internal/staff`, `/internal/pagos`, `/internal/emails`. Guard `is_internal`.*
+  - [~] Listado de tenants con filtros (estado, plan, última actividad). *Listado hecho (`app/internal/tenants`); faltan filtros y búsqueda.*
+  - [ ] Alta y baja de tenants. *(el alta hoy es self-service vía onboarding; falta alta/baja desde internal)*
+  - [x] Cambio de plan en caliente. — *Detalle del tenant: select de plan → RPC `internal_set_plan`.*
+  - [x] Activación / desactivación de feature flags por tenant. — *Toggles en el detalle del tenant → RPC `internal_set_flag`.*
+  - [ ] Vista de auditoría administrativa. *(la tabla `audit_logs` existe; falta el viewer en internal)*
+- [x] **Modelo de suscripciones** completo:
+  - [x] Estados: `trial`, `active`, `past_due`, `suspended`, `cancelled` (migración `saas_catalog`).
+  - [x] Trial automático de 14 días al alta (Edge Function `create_tenant` setea `trial_ends_at`).
+  - [x] Suspensión por falta de pago (manual en esta fase). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`).*
 - [ ] **Sistema de soporte interno:**
   - [ ] Notas internas por tenant.
   - [ ] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores).
 
 ### Criterios de cierre
-- [ ] NinjaSoft puede dar de alta un cliente nuevo en < 5 minutos sin tocar SQL.
-- [ ] Cambiar un cliente de Start a Pro toma una sola acción y aplica de inmediato.
+- [ ] NinjaSoft puede dar de alta un cliente nuevo en < 5 minutos sin tocar SQL. *(el alta es self-service; falta el flujo desde internal)*
+- [x] Cambiar un cliente de Start a Pro toma una sola acción y aplica de inmediato.
 - [ ] Toda acción administrativa queda en `audit_logs`.
 
 ---

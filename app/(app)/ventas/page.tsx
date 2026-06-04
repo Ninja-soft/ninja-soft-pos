@@ -12,6 +12,7 @@ import { useSales, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hook
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 
 const SALE_STATUS: Record<string, string> = {
   completed: "Completada",
@@ -20,7 +21,10 @@ const SALE_STATUS: Record<string, string> = {
 
 export default function VentasPage() {
   const { toast } = useToast();
-  const { data: sales, isLoading } = useSales();
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
+  const { data: sales, isLoading } = useSales(
+    range?.from ? { from: range.from, to: range.to ?? range.from } : undefined,
+  );
   const { data: numFmt } = useSaleNumberFormat();
   const voidSale = useVoidSale();
   const [search, setSearch] = useState("");
@@ -114,6 +118,16 @@ export default function VentasPage() {
               className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
             />
           </div>
+          <DateRangePicker value={range} onChange={setRange} className="h-10" />
+          {range?.from && (
+            <button
+              onClick={() => setRange(undefined)}
+              className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              title="Quitar filtro de fechas (vuelve a las últimas 100)"
+            >
+              ✕ Fechas
+            </button>
+          )}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}

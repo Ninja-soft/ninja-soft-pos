@@ -7,8 +7,16 @@ import {
 } from "@tanstack/react-query";
 import { salesApi, returnReasonsApi, type ReturnItemInput } from "./api";
 
-export function useSales() {
-  return useQuery({ queryKey: ["sales", "list"], queryFn: () => salesApi.list() });
+export function useSales(range?: { from?: Date; to?: Date }) {
+  return useQuery({
+    queryKey: [
+      "sales",
+      "list",
+      range?.from?.toISOString() ?? null,
+      range?.to?.toISOString() ?? null,
+    ],
+    queryFn: () => salesApi.list(range),
+  });
 }
 
 export function useSalesByNumber(n: number | null) {

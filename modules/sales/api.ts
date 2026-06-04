@@ -48,13 +48,21 @@ export interface SaleDetail {
 }
 
 export const salesApi = {
-  list: async (): Promise<SaleRow[]> => {
+  list: async (range?: { from?: Date; to?: Date }): Promise<SaleRow[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let q = supabase
       .from("sales")
       .select("*, customers(name)")
       .order("created_at", { ascending: false })
-      .limit(100);
+      // Sin rango: últimas 100. Con rango: tope alto para cubrir el período.
+      .limit(range?.from || range?.to ? 1000 : 100);
+    if (range?.from) q = q.gte("created_at", range.from.toISOString());
+    if (range?.to) {
+      const end = new Date(range.to);
+      end.setHours(23, 59, 59, 999);
+      q = q.lte("created_at", end.toISOString());
+    }
+    const { data, error } = await q;
     if (error) throw error;
     return (data ?? []) as unknown as SaleRow[];
   },

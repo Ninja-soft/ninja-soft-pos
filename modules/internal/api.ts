@@ -31,6 +31,16 @@ export interface TenantHealth {
   sales_7d_total: number;
 }
 
+export interface TenantNote {
+  id: string;
+  tenant_id: string;
+  author_user_id: string | null;
+  body: string;
+  created_at: string;
+  authorName: string | null;
+  authorEmail: string | null;
+}
+
 export interface AuditFilters {
   tenantId?: string | null;
   entityType?: string | null;
@@ -172,6 +182,63 @@ export const internalApi = {
       });
     }
     return map;
+  },
+
+  listNotes: async (tenantId: string): Promise<TenantNote[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("tenant_notes")
+      .select("id, tenant_id, author_user_id, body, created_at")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const rows = data ?? [];
+    const authorIds = Array.from(
+      new Set(rows.map((r) => r.author_user_id).filter(Boolean)),
+    ) as string[];
+    const authors = new Map<string, { name: string | null; email: string }>();
+    if (authorIds.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, full_name, email")
+        .in("id", authorIds);
+      for (const u of users ?? []) {
+        authors.set(u.id, { name: u.full_name, email: u.email });
+      }
+    }
+    return rows.map((r) => ({
+      ...r,
+      authorName: r.author_user_id
+        ? authors.get(r.author_user_id)?.name ?? null
+        : null,
+      authorEmail: r.author_user_id
+        ? authors.get(r.author_user_id)?.email ?? null
+        : null,
+    }));
+  },
+
+  addNote: async (tenantId: string, body: string): Promise<void> => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("no_session");
+    const { error } = await supabase.from("tenant_notes").insert({
+      tenant_id: tenantId,
+      author_user_id: user.id,
+      body: body.trim(),
+    });
+    if (error) throw error;
+  },
+
+  deleteNote: async (noteId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tenant_notes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", noteId);
+    if (error) throw error;
   },
 
   listAudit: async (filters: AuditFilters): Promise<AuditEntry[]> => {

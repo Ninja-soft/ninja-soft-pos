@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
@@ -14,6 +14,8 @@ import {
   useTenantFlags,
   useInternalMutations,
   useTenantHealth,
+  useTenantNotes,
+  useTenantNoteMutations,
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
@@ -45,6 +47,9 @@ export default function InternalTenantDetail({
   const { data: flags } = useTenantFlags(params.id);
   const { data: healthMap } = useTenantHealth();
   const health = healthMap?.get(params.id);
+  const { data: notes } = useTenantNotes(params.id);
+  const noteMut = useTenantNoteMutations(params.id);
+  const [noteBody, setNoteBody] = useState("");
   const { setPlan, setStatus, setFlag, setIndustry } = useInternalMutations(
     params.id,
   );
@@ -234,6 +239,71 @@ export default function InternalTenantDetail({
             por el plan del negocio. El estado se actualiza solo cuando el cliente
             paga.
           </p>
+        </CardContent>
+      </Card>
+
+      <Heading className="mt-8" as="h2">
+        Notas internas
+      </Heading>
+      <Card className="mt-3">
+        <CardContent className="p-5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const body = noteBody.trim();
+              if (!body) return;
+              wrap(
+                noteMut.add.mutateAsync(body).then(() => setNoteBody("")),
+                "Nota agregada",
+              );
+            }}
+            className="flex flex-col gap-2 sm:flex-row"
+          >
+            <textarea
+              value={noteBody}
+              onChange={(e) => setNoteBody(e.target.value)}
+              placeholder="Nota de soporte (solo visible para staff NinjaSoft)…"
+              rows={2}
+              className="min-h-[44px] flex-1 rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            />
+            <Button
+              type="submit"
+              disabled={noteMut.add.isPending || !noteBody.trim()}
+              className="sm:self-end"
+            >
+              {noteMut.add.isPending ? "Guardando…" : "Agregar"}
+            </Button>
+          </form>
+
+          <ul className="mt-4 divide-y divide-border">
+            {notes?.length === 0 && (
+              <li className="py-3 text-sm text-muted-foreground">
+                Sin notas todavía.
+              </li>
+            )}
+            {notes?.map((n) => (
+              <li key={n.id} className="flex items-start gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">
+                    {n.body}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {n.authorName ?? n.authorEmail ?? "Staff"} ·{" "}
+                    {formatRelative(n.created_at)}
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    wrap(noteMut.remove.mutateAsync(n.id), "Nota eliminada")
+                  }
+                  title="Eliminar nota"
+                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 

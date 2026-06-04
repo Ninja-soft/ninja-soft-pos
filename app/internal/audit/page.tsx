@@ -2,7 +2,12 @@
 
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { format } from "date-fns";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import {
+  DateRangePicker,
+  type DateRange,
+} from "@/components/ui/DateRangePicker";
 import {
   useAuditEntityTypes,
   useInternalAudit,
@@ -27,8 +32,7 @@ export default function InternalAuditPage() {
   const [tenantId, setTenantId] = useState("");
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const { data: tenants } = useInternalTenants();
@@ -37,8 +41,12 @@ export default function InternalAuditPage() {
     tenantId: tenantId || null,
     entityType: entityType || null,
     action: action || null,
-    from: from || null,
-    to: to || null,
+    from: range?.from ? format(range.from, "yyyy-MM-dd") : null,
+    to: range?.to
+      ? format(range.to, "yyyy-MM-dd")
+      : range?.from
+        ? format(range.from, "yyyy-MM-dd")
+        : null,
   });
 
   const tenantName = (id: string | null) =>
@@ -93,21 +101,16 @@ export default function InternalAuditPage() {
             className="h-10 w-40 rounded-lg border border-input bg-background pl-8 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
           />
         </div>
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          className={selectCls}
-          aria-label="Desde"
-        />
-        <span className="text-xs text-muted-foreground">a</span>
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          className={selectCls}
-          aria-label="Hasta"
-        />
+        <DateRangePicker value={range} onChange={setRange} className="h-10" />
+        {range?.from && (
+          <button
+            onClick={() => setRange(undefined)}
+            className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            title="Quitar filtro de fechas"
+          >
+            ✕ Fechas
+          </button>
+        )}
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">

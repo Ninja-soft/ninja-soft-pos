@@ -918,23 +918,23 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
 
 Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de forma continua en todo el producto. No son una fase con fin: son estándar del proyecto.
 
-- [ ] **TX-1 — Calendario unificado con react-day-picker.**
-  - [ ] Librería: **react-day-picker (v9)** + **Radix Popover** (patrón shadcn), estilado con Tailwind/cva como el resto del sistema. Locale **español (es)** vía date-fns. *(Se descartó flatpickr por ser JS vanilla y chocar con el stack React/Radix; ver ADR.)*
-  - [ ] **Un solo calendario**, con **selección de rango** (desde/hasta) donde aplique (reportes, promociones, suscripciones, filtros).
-  - [ ] Presets rápidos (hoy, ayer, últimos 7/30 días, este mes, mes pasado).
-  - [ ] Componente reutilizable `DateRangePicker` único; nada de inputs de fecha sueltos.
-  - [ ] *Criterio:* en reportes se elige "últimos 30 días" o un rango con un calendario en español; mismo componente en todos lados.
+- [x] **TX-1 — Calendario unificado con react-day-picker.**
+  - [x] Librería: **react-day-picker (v9)** + **Radix Popover** (patrón shadcn), estilado con Tailwind/cva como el resto del sistema. Locale **español (es)** vía date-fns. *(Se descartó flatpickr por ser JS vanilla y chocar con el stack React/Radix; ver ADR.)*
+  - [x] **Un solo calendario**, con **selección de rango** (desde/hasta) donde aplique (reportes, ventas, auditoría interna; promociones/suscripciones cuando existan).
+  - [x] Presets rápidos (hoy, ayer, últimos 7/30 días, este mes, mes pasado).
+  - [x] Componente reutilizable `DateRangePicker` único (`components/ui/DateRangePicker.tsx`); adoptado en /reportes, /ventas y /internal/audit.
+  - [x] *Criterio:* en reportes se elige "últimos 30 días" o un rango con un calendario en español; mismo componente en todos lados.
 
-- [ ] **TX-2 — Exportaciones en XLSX con diseño (reemplazo de CSV).**
-  - [ ] Eliminar CSV como formato de export. Usar **XLSX con diseño**: encabezados con color de marca, filas alternadas, **fila de totales**, formato de moneda/fecha, **filtros (autofilter)** y **paneles congelados** (freeze header).
-  - [ ] Aplicar a reportes de ventas, caja, stock, clientes, promociones; nombre de archivo con tenant + rango.
-  - [ ] Helper único `exportXlsx()` reutilizable; respeta el branding del tenant (TX se apoya en F6/H8).
-  - [ ] *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
+- [x] **TX-2 — Exportaciones en XLSX con diseño (reemplazo de CSV).**
+  - [x] Eliminar CSV como formato de export. Usar **XLSX con diseño**: encabezados con color de marca, filas alternadas, **fila de totales**, formato de moneda/fecha, **filtros (autofilter)** y **paneles congelados** (freeze header). *(`lib/utils/xlsx.ts`)*
+  - [x] Aplicado a ventas, reportes, caja/cierres, stock/productos, clientes, CxC, garantías; nombre de archivo con fecha. *(promociones cuando exista F9)*
+  - [x] Helper único `exportXlsx()` reutilizable.
+  - [x] *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
 
-- [~] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).** — *Productos hecho (PR #37); clientes y demás entidades pendientes.*
-  - [~] **Productos y clientes se importan SIEMPRE en XLSX**: **productos ✅** (se eliminó el modal CSV, ahora `ImportProductsModal` XLSX). Clientes y resto (depósitos, stock, listas, medios, garantías, motivos) pendientes.
-  - [x] **Descargar plantilla de muestra XLSX** (productos: hoja de datos + ejemplo + hoja "Ayuda").
-  - [x] **Exportar toda la base** en XLSX (productos: botón "Exportar XLSX" en `/productos`). Clientes pendiente.
+- [~] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).** — *Productos y clientes hechos; depósitos/stock/listas dependen de F4/F11.*
+  - [~] **Productos y clientes se importan SIEMPRE en XLSX**: **productos ✅** (`ImportProductsModal`) y **clientes ✅** (`ImportCustomersModal`). Resto (depósitos, stock, listas, medios, garantías, motivos) pendiente.
+  - [x] **Descargar plantilla de muestra XLSX** (productos y clientes: hoja de datos + ejemplo + ayuda). *(Planes de pago también: plantilla por medio en el grid H27.)*
+  - [x] **Exportar toda la base** en XLSX (productos y clientes, botón "Exportar XLSX" en cada página).
   - [ ] Toda importación: validación previa, preview, dry-run, confirmación, reporte de errores por fila y auditoría. Sin imports silenciosos.
   - [ ] Helper único de import (parse XLSX con `exceljs`) + reuso del `exportXlsx` (TX-2) para plantillas y export de base.
   - [ ] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.

@@ -29,6 +29,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **F2 — Auditoría en el panel interno + filtros de tenants.** Nueva página `/internal/audit`: bitácora administrativa global (últimos 200 registros de `audit_logs`) con filtros por negocio, entidad, acción y rango de fechas; cada fila expande motivo y before/after en JSON. Solo lectura (la tabla es append-only) y protegida por `is_internal` (RLS existente, sin cambios de DB). Además, `/internal/tenants` suma búsqueda (nombre/slug/dueño) y filtros por estado de suscripción y plan, con contador de resultados; el badge de estado ahora muestra el estado de la suscripción (consistente con el detalle).
 - **Tests — utils de pagos/comprobante.** Nuevos tests unitarios para `saleNumber` (formato + búsqueda), `planConstants` (planLabel/brandLogo) y `paymentMethods` (etiquetas). 60 tests en total.
 - **Health endpoint `/api/health`.** `GET /api/health` devuelve `status/version/env/time` para monitoreo y CI. No toca DB ni expone secretos.
 - **H22 — Ticket: mostrar/ocultar logo.** Toggle en Configuración → Marca para imprimir o no el logo en el ticket (`tenant_branding.ticket_show_logo`, default sí). Ahorra tinta en impresoras térmicas.

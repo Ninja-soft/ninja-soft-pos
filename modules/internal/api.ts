@@ -22,6 +22,29 @@ export interface TenantFlag {
   enabled: boolean | null; // override por tenant (null = sin override)
 }
 
+export interface AuditFilters {
+  tenantId?: string | null;
+  entityType?: string | null;
+  action?: string | null;
+  from?: string | null; // ISO date
+  to?: string | null; // ISO date
+}
+
+export interface AuditEntry {
+  id: string;
+  tenant_id: string | null;
+  actor_user_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  action: string;
+  before_data: unknown;
+  after_data: unknown;
+  reason: string | null;
+  created_at: string;
+  actorName: string | null;
+  actorEmail: string | null;
+}
+
 export const internalApi = {
   listTenants: async (): Promise<InternalTenant[]> => {
     const supabase = createClient();
@@ -126,6 +149,57 @@ export const internalApi = {
       p_enabled: enabled,
     });
     if (error) throw error;
+  },
+
+  listAudit: async (filters: AuditFilters): Promise<AuditEntry[]> => {
+    const supabase = createClient();
+    let q = supabase
+      .from("audit_logs")
+      .select(
+        "id, tenant_id, actor_user_id, entity_type, entity_id, action, before_data, after_data, reason, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (filters.tenantId) q = q.eq("tenant_id", filters.tenantId);
+    if (filters.entityType) q = q.eq("entity_type", filters.entityType);
+    if (filters.action) q = q.ilike("action", `%${filters.action}%`);
+    if (filters.from) q = q.gte("created_at", filters.from);
+    if (filters.to) q = q.lte("created_at", `${filters.to}T23:59:59.999Z`);
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data ?? [];
+
+    // Resolver nombres de actores (sin FK dura en audit_logs).
+    const actorIds = Array.from(
+      new Set(rows.map((r) => r.actor_user_id).filter(Boolean)),
+    ) as string[];
+    const actors = new Map<string, { name: string | null; email: string }>();
+    if (actorIds.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, full_name, email")
+        .in("id", actorIds);
+      for (const u of users ?? []) {
+        actors.set(u.id, { name: u.full_name, email: u.email });
+      }
+    }
+    return rows.map((r) => ({
+      ...r,
+      actorName: r.actor_user_id ? actors.get(r.actor_user_id)?.name ?? null : null,
+      actorEmail: r.actor_user_id ? actors.get(r.actor_user_id)?.email ?? null : null,
+    }));
+  },
+
+  auditEntityTypes: async (): Promise<string[]> => {
+    const supabase = createClient();
+    // Tipos de entidad presentes (sobre los últimos 1000 registros).
+    const { data, error } = await supabase
+      .from("audit_logs")
+      .select("entity_type")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (error) throw error;
+    return Array.from(new Set((data ?? []).map((r) => r.entity_type))).sort();
   },
 
   setIndustry: async (tenantId: string, industry: string): Promise<void> => {

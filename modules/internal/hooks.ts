@@ -5,12 +5,27 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { internalApi } from "./api";
+import { internalApi, type AuditFilters } from "./api";
 
 export function useInternalTenants() {
   return useQuery({
     queryKey: ["internal", "tenants"],
     queryFn: () => internalApi.listTenants(),
+  });
+}
+
+export function useInternalAudit(filters: AuditFilters) {
+  return useQuery({
+    queryKey: ["internal", "audit", filters],
+    queryFn: () => internalApi.listAudit(filters),
+  });
+}
+
+export function useAuditEntityTypes() {
+  return useQuery({
+    queryKey: ["internal", "audit-entity-types"],
+    queryFn: () => internalApi.auditEntityTypes(),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

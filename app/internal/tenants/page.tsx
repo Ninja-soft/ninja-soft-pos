@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useInternalTenants } from "@/modules/internal/hooks";
 
@@ -14,6 +16,32 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function InternalTenantsPage() {
   const { data: tenants, isLoading } = useInternalTenants();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [plan, setPlan] = useState("");
+
+  const plans = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of tenants ?? []) {
+      if (t.planKey && t.planName) map.set(t.planKey, t.planName);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [tenants]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (tenants ?? []).filter((t) => {
+      if (status && (t.subStatus ?? t.status) !== status) return false;
+      if (plan && t.planKey !== plan) return false;
+      if (!q) return true;
+      return [t.name, t.slug, t.ownerName, t.ownerEmail]
+        .filter(Boolean)
+        .some((v) => (v as string).toLowerCase().includes(q));
+    });
+  }, [tenants, search, status, plan]);
+
+  const selectCls =
+    "h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft";
 
   return (
     <>
@@ -24,7 +52,51 @@ export default function InternalTenantsPage() {
         suscripción.
       </p>
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-xs">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, slug o dueño…"
+            className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          />
+        </div>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className={selectCls}
+        >
+          <option value="">Todos los estados</option>
+          {Object.entries(STATUS_LABELS).map(([k, label]) => (
+            <option key={k} value={k} className="bg-ninja-deepViolet">
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={plan}
+          onChange={(e) => setPlan(e.target.value)}
+          className={selectCls}
+        >
+          <option value="">Todos los planes</option>
+          {plans.map(([key, name]) => (
+            <option key={key} value={key} className="bg-ninja-deepViolet">
+              {name}
+            </option>
+          ))}
+        </select>
+        {!isLoading && (
+          <span className="text-xs text-muted-foreground">
+            {filtered.length} de {tenants?.length ?? 0}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
@@ -43,14 +115,16 @@ export default function InternalTenantsPage() {
                 </td>
               </tr>
             )}
-            {!isLoading && tenants?.length === 0 && (
+            {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                  No hay tenants.
+                  {tenants?.length === 0
+                    ? "No hay tenants."
+                    : "Sin resultados para los filtros elegidos."}
                 </td>
               </tr>
             )}
-            {tenants?.map((t) => (
+            {filtered.map((t) => (
               <tr key={t.id} className="transition hover:bg-muted/40">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -80,7 +154,7 @@ export default function InternalTenantsPage() {
                 <td className="px-4 py-3 text-muted-foreground">{t.planName ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
-                    {STATUS_LABELS[t.status] ?? t.status}
+                    {STATUS_LABELS[t.subStatus ?? t.status] ?? t.subStatus ?? t.status}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">

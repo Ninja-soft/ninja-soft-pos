@@ -133,12 +133,15 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Activar/desactivar feature flag global | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Activar/desactivar feature flag por tenant | ✅ | ✅ | ❌ | ⚠️ comercial | ❌ | ✅ |
 | Invitar usuarios a tenant | ✅ | ✅ | ⚠️ soporte | ✅ | ❌ | ❌ |
+| Suspender/reactivar cuenta de usuario | ✅ | ✅ (no staff) | ❌ | ❌ | ❌ | ❌ |
 | Convertir usuario en staff interno | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Cambiar rol interno | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Ver audit_logs cross-tenant | ✅ | ✅ | ✅ | ⚠️ comercial | ✅ | ✅ |
 | Modificar `system_settings` | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
 
 ⚠️ en internos significa "requiere registro de motivo en audit_logs".
+
+**Implementado (H11):** la Edge Function `staff_admin` aplica esta matriz para `set_level` (solo `super_admin`, con bootstrap del primero y protección del último super admin) y `set_active` (suspender/reactivar cuentas: `admin`+; a un staff solo lo toca un `super_admin`; nadie se suspende a sí mismo). Ambas acciones auditan en `audit_logs` (`staff_level_set`, `user_suspended`/`user_reactivated`). La suspensión es un ban en `auth` (espejo visible en `users.suspended_at`). UI: `/internal/staff` y `/internal/usuarios`.
 
 ## 6. Convención de nombres de permisos
 

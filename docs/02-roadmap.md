@@ -299,9 +299,9 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
     - *super-admin:* todo (sumar/quitar staff, borrar tenants, facturación, acciones peligrosas).
     - *admin:* gestión de tenants/usuarios/soporte; sin tocar staff ni acciones destructivas.
     - *soporte:* solo-lectura + acciones limitadas (notas, ver salud, reset de contraseña).
-  - [ ] Gestión total de usuarios (staff): ver todos, **pausar/suspender/reactivar**, cambiar roles, **sumar poderes**, y **sumar usuarios como staff NinjaSoft** (con su nivel).
-  - [ ] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md).
-  - [ ] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff.
+  - [x] Gestión total de usuarios (staff): ver todos, **pausar/suspender/reactivar**, cambiar roles, **sumar poderes**, y **sumar usuarios como staff NinjaSoft** (con su nivel). — *Página `/internal/usuarios`: todas las cuentas con membresías por negocio (tenant + rol), búsqueda, filtro "solo suspendidos", suspender/reactivar (ban en auth + espejo `users.suspended_at`). Guards en `staff_admin`: `admin`+ suspende; a un staff solo lo toca un `super_admin`; nadie se suspende a sí mismo. Sumar staff/cambiar nivel sigue en `/internal/staff`.*
+  - [x] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md). — *`staff_level_set`, `user_suspended`/`user_reactivated` auditados; matriz actualizada con la fila de suspensión y el estado de implementación.*
+  - [x] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff. — *Enforced en `staff_admin` (set_level solo super; set_active sobre staff solo super).*
 
 - [ ] **H11c — Consola internal completa + login independiente.**
   - [x] Entrar directo a `/internal` redirige a `/internal/tenants`; si no hay sesión, login conserva destino interno (`/login?next=/internal/tenants`).

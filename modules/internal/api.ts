@@ -31,6 +31,16 @@ export interface TenantHealth {
   sales_7d_total: number;
 }
 
+export interface InternalUser {
+  id: string;
+  email: string;
+  full_name: string | null;
+  internal_level: string | null;
+  suspended_at: string | null;
+  created_at: string;
+  memberships: { tenantName: string; role: string; status: string }[];
+}
+
 export interface TenantNote {
   id: string;
   tenant_id: string;
@@ -182,6 +192,47 @@ export const internalApi = {
       });
     }
     return map;
+  },
+
+  listUsers: async (): Promise<InternalUser[]> => {
+    const supabase = createClient();
+    const [usersRes, memberRes] = await Promise.all([
+      supabase
+        .from("users")
+        .select("id, email, full_name, internal_level, suspended_at, created_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("tenant_users")
+        .select("user_id, role, status, tenants(name)"),
+    ]);
+    if (usersRes.error) throw usersRes.error;
+    type MemRow = {
+      user_id: string;
+      role: string;
+      status: string;
+      tenants: { name: string } | null;
+    };
+    const byUser = new Map<string, InternalUser["memberships"]>();
+    for (const m of (memberRes.data ?? []) as unknown as MemRow[]) {
+      if (!m.tenants?.name) continue;
+      const list = byUser.get(m.user_id) ?? [];
+      list.push({ tenantName: m.tenants.name, role: m.role, status: m.status });
+      byUser.set(m.user_id, list);
+    }
+    return (usersRes.data ?? []).map((u) => ({
+      ...u,
+      memberships: byUser.get(u.id) ?? [],
+    }));
+  },
+
+  setUserActive: async (userId: string, active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("staff_admin", {
+      body: { action: "set_active", user_id: userId, active },
+    });
+    if (error) throw error;
+    const res = data as { ok?: boolean; error?: string };
+    if (!res?.ok) throw new Error(res?.error ?? "error");
   },
 
   listNotes: async (tenantId: string): Promise<TenantNote[]> => {

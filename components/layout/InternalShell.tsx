@@ -14,6 +14,7 @@ import {
   Mail,
   Menu,
   Moon,
+  ScrollText,
   ShieldCheck,
   Store,
   Sun,
@@ -42,6 +43,7 @@ const NAV = [
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },
   { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
+  { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",

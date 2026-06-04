@@ -104,11 +104,11 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 ### Entregables
 - [~] **Panel interno** (rutas protegidas para staff NinjaSoft): — *Base hecha: `/internal/tenants` + detalle, `/internal/staff`, `/internal/pagos`, `/internal/emails`. Guard `is_internal`.*
-  - [~] Listado de tenants con filtros (estado, plan, última actividad). *Listado hecho (`app/internal/tenants`); faltan filtros y búsqueda.*
+  - [~] Listado de tenants con filtros (estado, plan, última actividad). *Listado + búsqueda (nombre/slug/dueño) + filtros por estado de suscripción y plan hechos. Falta "última actividad" (requiere métrica de salud).*
   - [ ] Alta y baja de tenants. *(el alta hoy es self-service vía onboarding; falta alta/baja desde internal)*
   - [x] Cambio de plan en caliente. — *Detalle del tenant: select de plan → RPC `internal_set_plan`.*
   - [x] Activación / desactivación de feature flags por tenant. — *Toggles en el detalle del tenant → RPC `internal_set_flag`.*
-  - [ ] Vista de auditoría administrativa. *(la tabla `audit_logs` existe; falta el viewer en internal)*
+  - [x] Vista de auditoría administrativa. — *`/internal/audit`: últimos 200 registros de `audit_logs` con filtros (negocio, entidad, acción, rango de fechas) y detalle expandible (motivo + before/after JSON). Solo lectura, guard `is_internal` por RLS.*
 - [x] **Modelo de suscripciones** completo:
   - [x] Estados: `trial`, `active`, `past_due`, `suspended`, `cancelled` (migración `saas_catalog`).
   - [x] Trial automático de 14 días al alta (Edge Function `create_tenant` setea `trial_ends_at`).

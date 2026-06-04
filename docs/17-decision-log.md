@@ -754,6 +754,135 @@ Implementar un generador **Code 39** propio, sin dependencias (`lib/barcode/code
 
 ---
 
+## ADR-022 — Patrón de policies RLS: initplan y sin `FOR ALL`
+
+**Fecha:** 2026-06-04
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Lucas Ponzoni (autorización explícita para aplicar en producción)
+
+### Contexto
+
+Los advisors de performance de Supabase (primera corrida) reportaron 13 policies con `auth_rls_initplan` (funciones `auth.uid()`/`current_tenant_id()`/`is_internal()` re-evaluadas **por fila**) y 40 `multiple_permissive_policies` (8 policies `*_write` declaradas `FOR ALL` que solapaban SELECT con su `*_select`, duplicando evaluación en cada lectura).
+
+### Decisión
+
+Patrón obligatorio para **toda policy nueva o reescrita**:
+
+1. Las funciones de contexto se envuelven en subquery escalar: `(select auth.uid())`, `(select current_tenant_id())`, `(select is_internal())` — Postgres las evalúa una vez por query (initplan) en vez de una vez por fila.
+2. **No usar `FOR ALL`** cuando existe una policy de SELECT separada: las policies de escritura se dividen en `for insert` / `for update` / `for delete` con el mismo predicado.
+
+Aplicado retroactivamente en `20260604121000_perf_rls_initplan` (mismas reglas de acceso, verificadas contra `pg_policies` antes y después).
+
+### Alternativas consideradas
+
+- **Dejar las policies como estaban:** funcionaban, pero el costo por fila crece con el volumen de datos; barato arreglarlo ahora.
+- **Función helper `is_tenant_admin()`:** menos repetición, pero suma una función SECURITY DEFINER más que mantener; se prefirió SQL inline explícito.
+
+### Consecuencias
+
+- **Positivas:** advisors de performance en cero; lecturas sobre tablas con RLS escalan mejor.
+- **Negativas:** policies más verbosas (3 por tabla en vez de 1 `FOR ALL`).
+- **Seguimiento:** el job `rls` de CI (ADR-023) valida que las reglas de acceso se mantienen.
+
+---
+
+## ADR-023 — Suite RLS de integración en CI + replay de migraciones como gate
+
+**Fecha:** 2026-06-04
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Corrida autónoma (orden de Lucas Ponzoni)
+
+### Contexto
+
+F1.5 exigía tests de aislamiento multi-tenant y de RLS, inexistentes hasta hoy. Además, nadie había intentado nunca reproducir el historial de migraciones en una DB fresca: las migraciones se aplicaban solo al remoto vía MCP.
+
+### Decisión
+
+1. Suite de integración `tests/integration/rls.test.ts`: crea dos tenants con datos cruzados y usuarios reales (JWTs de verdad, no mocks) y verifica aislamiento de lectura/escritura en productos, clientes, ventas, caja y audit_logs; `payment_secrets` deny-all; `tenant_notes` solo staff; permisos owner vs cashier. Sin las env `SUPABASE_TEST_*`, la suite se salta (dev local sin Docker sigue verde).
+2. Job `rls` en CI: `supabase start` (stack local del runner con **todas** las migraciones aplicadas, vía `supabase/config.toml` nuevo) + `pnpm test:rls`. Node 22 (supabase-js v2.106 exige WebSocket nativo).
+3. **El replay completo del historial de migraciones pasa a ser gate de CI.** Regla derivada: si un archivo histórico rompe el replay, se permite editarlo *solo* para repararlo (drop previo, rename de timestamp) — nunca para cambiar su efecto; el remoto no se ve afectado porque ya las tiene aplicadas.
+
+### Resultado de la primera corrida (justifica la decisión)
+
+- `tenant_members()` cambiaba su row type con `create or replace` (prohibido) → replay roto.
+- Dos migraciones compartían timestamp `20260531120000` → PK duplicada en `schema_migrations`.
+- **9 migraciones aplicadas en producción nunca se habían commiteado** (`tenant_branding`, `public_catalog`, `ticket_width`, `staff_levels_backward_compat`, `sales_report_by_product/customer`, `harden_internal_level`, `user_avatars_bucket`, `product_images_no_listing`). Se recuperaron byte a byte de `supabase_migrations.schema_migrations.statements` del remoto. Hasta este fix, levantar staging o local con `pnpm db:reset` era imposible.
+
+### Alternativas consideradas
+
+- **Tests de policies por snapshot de `pg_policies`:** frágil y no prueba comportamiento real con JWTs.
+- **Correr la suite contra producción:** descartado; crea y borra tenants/usuarios.
+- **pgTAP:** válido, pero la suite en Vitest reusa el stack del repo y el mismo cliente supabase-js que usa la app.
+
+### Consecuencias
+
+- **Positivas:** toda PR valida aislamiento multi-tenant y replay de migraciones; staging/local levantables por primera vez; tres deudas ocultas saneadas.
+- **Negativas:** +2-3 min por corrida de CI; las migraciones nuevas aplicadas vía MCP **deben** commitearse en el mismo PR o CI rompe (esto es deliberado).
+- **Seguimiento:** sumar tests de roles manager/viewer; evaluar smoke E2E (Playwright) sobre el mismo stack local.
+
+---
+
+## ADR-024 — Mobbex como segunda pasarela QR (validada en producción)
+
+**Fecha:** 2026-06-04
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Lucas Ponzoni ("avanza con mobbex")
+
+### Contexto
+
+Mercado Pago QR no puede fijar cuotas: el cliente las elige en su app y el plan del grid solo aumenta el precio base. Se necesitaba una pasarela donde las cuotas configuradas en NinjaPos se apliquen de verdad en el checkout. Del ranking de integrabilidad (Mobbex > Pagos360 > MODO/Nave > Payway/Getnet/Fiserv), Mobbex ganó por API REST simple, credenciales directas (API Key + Access Token) y checkout hosted.
+
+### Decisión
+
+Integrar **Mobbex** (kind `orchestrator`) como segunda pasarela de cobro QR: Edge Functions `mobbex_create_qr` (checkout hosted → URL → QR, con los planes de crédito del grid mapeados al payload `installments`) y `mobbex_webhook` (status 200=approved; 1/2/3/100/201=pending; resto=rejected). Reusa `payment_secrets` y `mp_payment_intents` (columna `provider_key`).
+
+**Validada con cuenta real el 2026-06-04:** transacción de punta a punta exitosa, cuotas del grid aplicadas en el checkout de Mobbex al primer intento (el formato `installments` no necesitó ajustes).
+
+### Alternativas consideradas
+
+- **MP Checkout API/Bricks para fijar cuotas:** requiere tarjeta tipeada (PCI) — no sirve para mostrador.
+- **MP Point:** fija cuotas pero exige hardware; queda como ítem propio (H15).
+- **Pagos360/MODO primero:** más fricción de integración; Mobbex era el camino más corto a cuotas reales.
+
+### Consecuencias
+
+- **Positivas:** NinjaPos cobra por dos pasarelas reales; las cuotas+interés del grid H27 son ejecutables, no solo informativas.
+- **Negativas:** dos proveedores que conciliar (mitigado por ADR-025); comisión de Mobbex sobre cada cobro.
+- **Seguimiento:** conciliación contra liquidaciones de Mobbex cuando haya volumen; evaluar Mobbex como orquestador de otros adquirentes (su rol natural).
+
+---
+
+## ADR-025 — Conciliación de cobros QR vía `payments.reference`
+
+**Fecha:** 2026-06-04
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Lucas Ponzoni ("continua con 1")
+
+### Contexto
+
+Un cobro QR aprobado puede quedar sin venta registrada (el cajero cierra el modal antes de confirmar, se cae la conexión): plata cobrada sin ticket, invisible hasta el arqueo. Hacía falta cruzar los intents (`mp_payment_intents`, MP + Mobbex) con las ventas.
+
+### Decisión
+
+Conciliación **read-only** en el cliente: el POS ya guarda el `intent_id` en `payments.reference` al registrar la venta, así que el cruce es `payments.reference = intent.id` (con `intent.sale_id` como fallback). Modal "Cobros QR" en /ventas con la señal clave **"aprobado sin venta"** resaltada, filtros, total aprobado y export XLSX con el ID de pago del proveedor. Sin cambios de esquema ni de `create_sale`.
+
+### Alternativas consideradas
+
+- **Setear `intent.sale_id` desde `create_sale`:** más directo, pero toca el RPC crítico (congelado salvo OK explícito) y exige pasarle contexto del intent; el cruce por referencia ya es confiable.
+- **Conciliación server-side (vista/función):** innecesario al volumen actual; si crece, se materializa.
+
+### Consecuencias
+
+- **Positivas:** los cobros huérfanos se detectan en segundos; cierre del criterio "conciliación" básico de H15/H20.
+- **Negativas:** matching depende de que el POS siga guardando el intent en `reference` (convención, no constraint).
+- **Seguimiento:** al tocar `create_sale` por otros motivos, evaluar setear `intent.sale_id` transaccionalmente y conciliar contra liquidaciones del proveedor.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

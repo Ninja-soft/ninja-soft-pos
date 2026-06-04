@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Performance
 
+- **RLS optimizada — initplan + policies divididas.** Las 13 policies que el advisor marcaba con `auth_rls_initplan` ahora envuelven `auth.uid()`/`current_tenant_id()`/`is_internal()` en `(select fn())`: Postgres las evalúa una vez por query en vez de una vez por fila. Además, las 8 policies `*_write` que eran `FOR ALL` (y solapaban SELECT con su `*_select`, lint `multiple_permissive_policies`) se dividen en insert/update/delete con el mismo predicado. **Mismas reglas de acceso** — verificadas contra `pg_policies` antes y después. Advisors de performance quedan en cero (solo `unused_index`, esperado en DB joven).
 - **Índices para 34 foreign keys sin cubrir.** El advisor de performance de Supabase reportaba 34 FKs sin índice (`unindexed_foreign_keys`): joins y deletes en cascada escaneaban tablas completas. Nueva migración `perf_fk_indexes` crea los 34 índices (`sales.customer_id`, `sale_items.tenant_id`, `stock_movements.store_id`, `payment_plans.provider_key`, etc.). Cambio aditivo, sin impacto funcional.
 
 ### Security

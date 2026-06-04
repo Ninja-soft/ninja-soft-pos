@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Performance
+
+- **Índices para 34 foreign keys sin cubrir.** El advisor de performance de Supabase reportaba 34 FKs sin índice (`unindexed_foreign_keys`): joins y deletes en cascada escaneaban tablas completas. Nueva migración `perf_fk_indexes` crea los 34 índices (`sales.customer_id`, `sale_items.tenant_id`, `stock_movements.store_id`, `payment_plans.provider_key`, etc.). Cambio aditivo, sin impacto funcional.
+
 ### Security
 
 - **Funciones de trigger fuera del RPC público.** Se revocó `EXECUTE` (anon/authenticated/public) en `payment_account_charge` y `products_auto_sku` (funciones de trigger que el linter de Supabase exponía como RPC `SECURITY DEFINER`). Los triggers siguen funcionando; ya no se pueden invocar vía `/rest/v1/rpc`.

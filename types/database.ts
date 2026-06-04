@@ -2425,6 +2425,17 @@ export type Database = {
         Args: { p_status: string; p_tenant_id: string }
         Returns: undefined
       }
+      internal_tenant_health: {
+        Args: never
+        Returns: {
+          active_users: number
+          last_login_at: string
+          last_sale_at: string
+          sales_7d_count: number
+          sales_7d_total: number
+          tenant_id: string
+        }[]
+      }
       is_internal: { Args: never; Returns: boolean }
       open_cash_shift: {
         Args: { p_opening_amount: number; p_register_id: string }

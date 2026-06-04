@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
-import { useInternalTenants } from "@/modules/internal/hooks";
+import { useInternalTenants, useTenantHealth } from "@/modules/internal/hooks";
+import { formatRelative } from "@/lib/utils/format";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Trial",
@@ -16,6 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function InternalTenantsPage() {
   const { data: tenants, isLoading } = useInternalTenants();
+  const { data: health } = useTenantHealth();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [plan, setPlan] = useState("");
@@ -97,27 +99,28 @@ export default function InternalTenantsPage() {
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[840px] text-sm">
           <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Negocio</th>
               <th className="px-4 py-3">Dueño</th>
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Últ. actividad</th>
               <th className="px-4 py-3">Alta</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border text-foreground">
             {isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   Cargando…
                 </td>
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   {tenants?.length === 0
                     ? "No hay tenants."
                     : "Sin resultados para los filtros elegidos."}
@@ -156,6 +159,17 @@ export default function InternalTenantsPage() {
                   <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
                     {STATUS_LABELS[t.subStatus ?? t.status] ?? t.subStatus ?? t.status}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                  {(() => {
+                    const h = health?.get(t.id);
+                    const ts = [h?.last_login_at, h?.last_sale_at]
+                      .filter(Boolean)
+                      .map((d) => new Date(d as string).getTime());
+                    return ts.length > 0
+                      ? formatRelative(new Date(Math.max(...ts)))
+                      : "—";
+                  })()}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {new Date(t.created_at).toLocaleDateString("es-AR")}

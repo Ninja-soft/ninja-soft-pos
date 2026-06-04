@@ -22,6 +22,15 @@ export interface TenantFlag {
   enabled: boolean | null; // override por tenant (null = sin override)
 }
 
+export interface TenantHealth {
+  tenant_id: string;
+  active_users: number;
+  last_login_at: string | null;
+  last_sale_at: string | null;
+  sales_7d_count: number;
+  sales_7d_total: number;
+}
+
 export interface AuditFilters {
   tenantId?: string | null;
   entityType?: string | null;
@@ -149,6 +158,20 @@ export const internalApi = {
       p_enabled: enabled,
     });
     if (error) throw error;
+  },
+
+  tenantHealth: async (): Promise<Map<string, TenantHealth>> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("internal_tenant_health");
+    if (error) throw error;
+    const map = new Map<string, TenantHealth>();
+    for (const row of (data ?? []) as unknown as TenantHealth[]) {
+      map.set(row.tenant_id, {
+        ...row,
+        sales_7d_total: Number(row.sales_7d_total ?? 0),
+      });
+    }
+    return map;
   },
 
   listAudit: async (filters: AuditFilters): Promise<AuditEntry[]> => {

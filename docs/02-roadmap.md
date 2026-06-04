@@ -80,11 +80,11 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 **Duración:** 2–3 semanas. **Objetivo:** convertir el MVP funcional en un piloto confiable, medible y recuperable.
 
 ### Entregables
-- [ ] `pnpm build` estable y reproducible en local/CI.
-- [ ] Scripts documentados y alineados con `package.json`.
-- [ ] Suite de aislamiento multi-tenant con dos tenants y datos cruzados conocidos.
-- [ ] Tests de RLS para tablas críticas: productos, ventas, caja, clientes, audit logs.
-- [ ] Tests de permisos por rol: owner, manager, cashier, viewer.
+- [x] `pnpm build` estable y reproducible en local/CI. — *CI corre lint/typecheck/test/build en cada PR.*
+- [x] Scripts documentados y alineados con `package.json`. — *`db:start`, `db:reset`, `test:rls` agregados; coinciden con los comandos de bolsillo de CLAUDE.md.*
+- [x] Suite de aislamiento multi-tenant con dos tenants y datos cruzados conocidos. — *`tests/integration/rls.test.ts`: crea tenant A/B + owner/cashier, productos y clientes cruzados; corre contra Supabase local (job `rls` de CI con `supabase start` + migraciones reales). Sin las env de test, la suite se salta.*
+- [x] Tests de RLS para tablas críticas: productos, ventas, caja, clientes, audit logs. — *Lectura y escritura cross-tenant bloqueadas; además `payment_secrets` (deny-all) y `tenant_notes` (solo staff).*
+- [~] Tests de permisos por rol: owner, manager, cashier, viewer. *Owner vs cashier cubierto (payment_plans, pos_settings); manager y viewer pendientes.*
 - [ ] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte.
 - [ ] Idempotencia documentada para venta/anulación antes de integrar pagos externos.
 - [~] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *Endpoint listo (`GET /api/health` → status/version/env/time, sin DB ni secretos). Falta el checklist de monitoreo.*
@@ -92,8 +92,8 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] Seed/demo reproducible para ventas, productos, clientes y caja.
 
 ### Criterios de cierre
-- [ ] El gate automático pasa completo: lint, typecheck, test y build.
-- [ ] Dos tenants operan en paralelo sin fuga de datos validada por test.
+- [x] El gate automático pasa completo: lint, typecheck, test y build. — *Job `quality` de CI.*
+- [x] Dos tenants operan en paralelo sin fuga de datos validada por test. — *Job `rls` de CI.*
 - [ ] Una demo de piloto corre de punta a punta sin tocar SQL manualmente.
 
 ---

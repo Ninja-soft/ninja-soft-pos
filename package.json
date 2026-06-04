@@ -14,7 +14,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rls": "vitest run tests/integration/rls.test.ts",
     "format": "prettier --write .",
+    "db:start": "supabase start",
+    "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --project-id hrkditzrsavehnhngakb > types/database.ts"
   },
   "dependencies": {

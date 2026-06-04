@@ -40,3 +40,36 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  # Suite de aislamiento multi-tenant + RLS (F1.5) contra un Supabase local
+  # real con todas las migraciones aplicadas. Si esto falla, hay fuga entre
+  # tenants o una policy rota: no mergear.
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Supabase local (aplica migraciones)
+        run: supabase start
+
+      - name: RLS / aislamiento multi-tenant
+        run: |
+          eval "$(supabase status -o env | sed 's/^/export /')"
+          export SUPABASE_TEST_URL="$API_URL"
+          export SUPABASE_TEST_ANON_KEY="$ANON_KEY"
+          export SUPABASE_TEST_SERVICE_KEY="$SERVICE_ROLE_KEY"
+          pnpm test:rls

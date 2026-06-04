@@ -22,6 +22,29 @@ export function useTenantHealth() {
   });
 }
 
+export function useTenantNotes(tenantId: string) {
+  return useQuery({
+    queryKey: ["internal", "notes", tenantId],
+    queryFn: () => internalApi.listNotes(tenantId),
+  });
+}
+
+export function useTenantNoteMutations(tenantId: string) {
+  const qc = useQueryClient();
+  const inv = () =>
+    qc.invalidateQueries({ queryKey: ["internal", "notes", tenantId] });
+  return {
+    add: useMutation({
+      mutationFn: (body: string) => internalApi.addNote(tenantId, body),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (noteId: string) => internalApi.deleteNote(noteId),
+      onSuccess: inv,
+    }),
+  };
+}
+
 export function useInternalAudit(filters: AuditFilters) {
   return useQuery({
     queryKey: ["internal", "audit", filters],

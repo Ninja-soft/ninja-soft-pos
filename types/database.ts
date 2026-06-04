@@ -2125,6 +2125,41 @@ export type Database = {
           },
         ]
       }
+      tenant_notes: {
+        Row: {
+          author_user_id: string | null
+          body: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          author_user_id?: string | null
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          author_user_id?: string | null
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_notes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_payment_methods: {
         Row: {
           config: Json

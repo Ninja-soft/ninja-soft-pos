@@ -113,8 +113,8 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Estados: `trial`, `active`, `past_due`, `suspended`, `cancelled` (migración `saas_catalog`).
   - [x] Trial automático de 14 días al alta (Edge Function `create_tenant` setea `trial_ends_at`).
   - [x] Suspensión por falta de pago (manual en esta fase). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`).*
-- [ ] **Sistema de soporte interno:**
-  - [ ] Notas internas por tenant.
+- [~] **Sistema de soporte interno:**
+  - [x] Notas internas por tenant. — *Tabla `tenant_notes` (RLS solo `is_internal`, baja lógica) + card "Notas internas" en el detalle del tenant: agregar, listar con autor y fecha relativa, eliminar. Invisibles para los usuarios del tenant.*
   - [~] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores). *KPIs en el detalle del tenant: último login, última venta, ventas 7 días (cantidad + total) y usuarios activos — RPC `internal_tenant_health()` (SECURITY DEFINER, guard `is_internal`, devuelve solo agregados). Errores quedan para observabilidad (F4/Sentry).*
 
 ### Criterios de cierre

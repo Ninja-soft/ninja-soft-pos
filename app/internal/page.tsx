@@ -1,38 +1,123 @@
 import Link from "next/link";
-import { Building2, CreditCard, Mail, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  ClipboardList,
+  CreditCard,
+  Mail,
+  ShieldCheck,
+  TrendingUp,
+  UserCog,
+  Users,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Eyebrow, Display, Heading } from "@/components/ui/Typography";
+import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
+import { TenantSearchTable } from "@/components/internal/TenantSearchTable";
+import { formatCurrency } from "@/lib/utils/format";
 
-const STATUS_LABELS: Record<string, string> = {
-  trial: "Prueba",
-  active: "Activa",
-  past_due: "Pago pendiente",
-  suspended: "Suspendida",
-  cancelled: "Cancelada",
+const STATUS_COLOR: Record<string, string> = {
+  trial: "text-yellow-400",
+  active: "text-emerald-400",
+  past_due: "text-orange-400",
+  suspended: "text-red-400",
+  cancelled: "text-muted-foreground",
+};
+
+const PLAN_ORDER = ["start", "pro", "business", "enterprise"];
+const PLAN_COLOR: Record<string, string> = {
+  start: "bg-muted text-muted-foreground",
+  pro: "bg-ninja-flameSoft/10 text-ninja-flameSoft",
+  business: "bg-ninja-violet/10 text-ninja-violet",
+  enterprise: "bg-ninja-gold/10 text-ninja-gold",
 };
 
 export default async function InternalHomePage() {
   const supabase = createClient();
 
-  const { data: tenants } = await supabase
-    .from("tenants")
-    .select("name, slug, status, created_at")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-  const { count: staffCount } = await supabase
-    .from("users")
-    .select("id", { count: "exact", head: true })
-    .not("internal_level", "is", null);
+  const [{ data: rawTenants }, { count: staffCount }] = await Promise.all([
+    supabase
+      .from("tenants")
+      .select(
+        "id, name, slug, status, created_at, subscriptions(status, billing_cycle, plans(key, name, monthly_price_ars))",
+      )
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .not("internal_level", "is", null),
+  ]);
 
-  const list = tenants ?? [];
+  type SubRow = {
+    status: string;
+    billing_cycle: string;
+    plans: { key: string; name: string; monthly_price_ars: number } | null;
+  };
+  type TenantRaw = {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    created_at: string;
+    subscriptions: SubRow | SubRow[] | null;
+  };
+
+  const list = (rawTenants ?? []) as TenantRaw[];
+
+  function sub(t: TenantRaw): SubRow | null {
+    if (!t.subscriptions) return null;
+    return Array.isArray(t.subscriptions) ? t.subscriptions[0] ?? null : t.subscriptions;
+  }
+
+  // ── Status counts ────────────────────────────────────────────────────────
   const by = (s: string) => list.filter((t) => t.status === s).length;
-  const metrics = [
-    { label: "Negocios", value: list.length },
-    { label: "En prueba", value: by("trial") },
-    { label: "Activas", value: by("active") },
-    { label: "Suspendidas", value: by("suspended") },
-  ];
+  const total = list.length;
+  const nTrial = by("trial");
+  const nActive = by("active");
+  const nPastDue = by("past_due");
+  const nSuspended = by("suspended");
+  const nCancelled = by("cancelled");
+  const nProblemas = nPastDue + nSuspended;
+
+  // ── Conversión trial→paid ────────────────────────────────────────────────
+  const convBase = nActive + nCancelled;
+  const convRate = convBase > 0 ? Math.round((nActive / convBase) * 100) : null;
+
+  // ── Nuevos registros ─────────────────────────────────────────────────────
+  const now = new Date();
+  const d7 = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const d30 = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const new7 = list.filter((t) => t.created_at >= d7).length;
+  const new30 = list.filter((t) => t.created_at >= d30).length;
+
+  // ── MRR ─────────────────────────────────────────────────────────────────
+  const mrr = list.reduce((acc, t) => {
+    const s = sub(t);
+    if (s?.status === "active") {
+      const price = s.plans?.monthly_price_ars ?? 0;
+      return acc + (s.billing_cycle === "yearly" ? price * 0.9 : price);
+    }
+    return acc;
+  }, 0);
+
+  // ── Plan breakdown ───────────────────────────────────────────────────────
+  const planCount: Record<string, number> = {};
+  list.forEach((t) => {
+    const key = sub(t)?.plans?.key ?? "sin_plan";
+    planCount[key] = (planCount[key] ?? 0) + 1;
+  });
+
+  // ── Tabla ────────────────────────────────────────────────────────────────
+  const tableRows = list.map((t) => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    status: t.status,
+    created_at: t.created_at,
+    plan_name: sub(t)?.plans?.name ?? null,
+  }));
 
   return (
     <>
@@ -42,82 +127,155 @@ export default async function InternalHomePage() {
         Operá el SaaS: negocios, suscripciones, staff y comunicaciones.
       </p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {metrics.map((m) => (
-          <Card key={m.label}>
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">{m.label}</p>
-              <p className="mt-1 font-display text-3xl font-black">{m.value}</p>
-            </CardContent>
-          </Card>
+      {/* ── KPIs principales ── */}
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Total negocios" value={total} icon={<Building2 size={18} />} />
+        <KpiCard
+          label="En prueba"
+          value={nTrial}
+          icon={<TrendingUp size={18} />}
+          color="text-yellow-400"
+        />
+        <KpiCard
+          label="Activos"
+          value={nActive}
+          icon={<BarChart3 size={18} />}
+          color="text-emerald-400"
+        />
+        <KpiCard
+          label="Con problemas"
+          value={nProblemas}
+          icon={<AlertTriangle size={18} />}
+          color={nProblemas > 0 ? "text-orange-400" : undefined}
+          sub={nProblemas > 0 ? `${nPastDue} pago pend. · ${nSuspended} susp.` : undefined}
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard
+          label="Nuevos (7 días)"
+          value={new7}
+          icon={<TrendingUp size={18} />}
+          color="text-ninja-flameSoft"
+        />
+        <KpiCard
+          label="Nuevos (30 días)"
+          value={new30}
+          icon={<TrendingUp size={18} />}
+        />
+        <KpiCard
+          label="Conversión trial→paid"
+          value={convRate !== null ? `${convRate}%` : "—"}
+          icon={<BarChart3 size={18} />}
+          color={convRate !== null && convRate >= 50 ? "text-emerald-400" : "text-orange-400"}
+          sub={`${nActive} activos · ${nCancelled} cancelados`}
+        />
+        <KpiCard
+          label="MRR estimado"
+          value={mrr > 0 ? formatCurrency(mrr) : "—"}
+          icon={<CreditCard size={18} />}
+          color="text-ninja-flameSoft"
+          sub={mrr === 0 ? "Precios en $0 (placeholder)" : undefined}
+        />
+      </div>
+
+      {/* ── Breakdown por plan ── */}
+      {Object.keys(planCount).length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {PLAN_ORDER.map((key) =>
+            planCount[key] ? (
+              <span
+                key={key}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${PLAN_COLOR[key] ?? "bg-muted text-muted-foreground"}`}
+              >
+                {key.charAt(0).toUpperCase() + key.slice(1)}: {planCount[key]}
+              </span>
+            ) : null,
+          )}
+          {planCount["sin_plan"] ? (
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+              Sin plan: {planCount["sin_plan"]}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {/* ── Quick links ── */}
+      <div className="mt-6 flex flex-wrap gap-2">
+        {(
+          [
+            ["/internal/tenants", <Building2 key="b" size={15} />, `Negocios (${total})`],
+            ["/internal/usuarios", <Users key="u" size={15} />, "Usuarios"],
+            ["/internal/staff", <ShieldCheck key="s" size={15} />, `Staff (${staffCount ?? 0})`],
+            ["/internal/audit", <ClipboardList key="a" size={15} />, "Auditoría"],
+            ["/internal/pagos", <CreditCard key="p" size={15} />, "Pagos"],
+            ["/internal/emails", <Mail key="m" size={15} />, "Emails"],
+          ] as const
+        ).map(([href, icon, label]) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+          >
+            {icon} {label}
+          </Link>
         ))}
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Link
-          href="/internal/tenants"
-          className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
-        >
-          <Building2 size={16} /> Negocios
-        </Link>
-        <Link
-          href="/internal/staff"
-          className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
-        >
-          <ShieldCheck size={16} /> Staff ({staffCount ?? 0})
-        </Link>
-        <Link
-          href="/internal/emails"
-          className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
-        >
-          <Mail size={16} /> Emails
-        </Link>
-      </div>
+      {/* ── Alertas ── */}
+      {nProblemas > 0 && (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-orange-400/30 bg-orange-400/5 p-4 text-sm text-orange-300">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <div>
+            <span className="font-semibold">
+              {nProblemas} negocio{nProblemas > 1 ? "s" : ""} con problemas de facturación.
+            </span>{" "}
+            {nPastDue > 0 && `${nPastDue} con pago pendiente. `}
+            {nSuspended > 0 && `${nSuspended} suspendido${nSuspended > 1 ? "s" : ""}. `}
+            <Link href="/internal/tenants" className="underline hover:text-orange-200">
+              Ver negocios
+            </Link>
+          </div>
+        </div>
+      )}
 
-      <Heading as="h2" className="mt-8 flex items-center gap-2 text-base">
-        <CreditCard size={18} /> Últimos negocios
-      </Heading>
-      <Card className="mt-3">
-        <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[480px] text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Negocio</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Alta</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {list.slice(0, 8).map((t) => (
-                <tr key={t.slug}>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/internal/tenants`}
-                      className="font-medium hover:text-ninja-flameSoft"
-                    >
-                      {t.name}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">{t.slug}</div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {STATUS_LABELS[t.status] ?? t.status}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(t.created_at).toLocaleDateString("es-AR")}
-                  </td>
-                </tr>
-              ))}
-              {list.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-muted-foreground">
-                    Todavía no hay negocios.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {/* ── Tabla de negocios con búsqueda ── */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-center gap-2">
+          <UserCog size={16} className="text-muted-foreground" />
+          <h2 className="font-display text-base font-bold">Negocios</h2>
+        </div>
+        <TenantSearchTable tenants={tableRows} />
+      </div>
     </>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  icon,
+  color,
+  sub,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  color?: string;
+  sub?: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          {icon}
+          <span className="text-xs">{label}</span>
+        </div>
+        <p className={`mt-1 font-display text-2xl font-black ${color ?? "text-foreground"}`}>
+          {value}
+        </p>
+        {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+      </CardContent>
+    </Card>
   );
 }

@@ -315,6 +315,7 @@ export default function InternalTenantDetail({
           tenantId={params.id}
           trialEndsAt={tenant?.trial_ends_at ?? null}
           subStatus={tenant?.subStatus ?? null}
+          planKey={tenant?.planKey ?? null}
         />
       </div>
 

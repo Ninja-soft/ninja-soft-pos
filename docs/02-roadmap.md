@@ -327,14 +327,14 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] *Criterio:* el dueño crea "Cajero A" sin email con avatar preset y PIN; luego lo renombra y lo suspende; un cajero no puede editar a otros.
   - *Pendiente menor:* el PIN se hashea con SHA-256 (uso de baja seguridad); migrar a bcrypt cuando se implemente el fichaje en el POS (F12).
 
-- [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base implementada y aplicada en remoto (2026-06-04): billing_records + extensión de trial (migraciones `billing_records` + `extend_trial_audit_fix`).*
+- [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base (2026-06-04) + lifecycle del trial y cobranza (2026-06-05): billing_records, extensión/acortar/desenlace de trial con motivo, próximo vencimiento y deuda estimada. Quedan plan custom, overrides, descuentos e historial/automatizaciones.*
   - [ ] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
   - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
   - [ ] **Plan específico por cliente:** clonar un plan base, cambiar nombre comercial, límites, módulos, soporte, precio y condiciones sin afectar a otros tenants.
   - [ ] **Overrides de cuota/límites por cliente:** usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte y límites fiscales.
   - [ ] **Aumento de cuota/precio a un cliente:** cambio inmediato o programado con fecha efectiva, motivo, aviso previo, aceptación opcional y registro de antes/después.
-  - [~] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo. — *Extender (+7/14/30/60/90 días) hecho vía RPC `internal_extend_trial`, auditado; falta acortar/convertir/perdido/motivo.*
-  - [~] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento. — *Registrar pago + medio + período + referencia + notas hecho (`billing_records`, append-only); falta deuda y próximo vencimiento.*
+  - [x] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo. — *Completo (2026-06-05): extender (+7/14/30/60/90), "Fijar fin…" a fecha exacta (acortar/terminar — RPC `internal_set_trial_end`), "Convertir a pago" y "Marcar perdido" con motivo (RPC `internal_trial_outcome` → active/cancelled). Auditado con before/after + reason; migración `trial_lifecycle` aplicada en remoto.*
+  - [x] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento. — *Completo (2026-06-05): a la base (`billing_records` append-only) se suma el bloque de cobranza en la card Facturación: próximo vencimiento = último `period_end`; si quedó en el pasado, "Vencido hace N días" + deuda estimada (meses vencidos × precio mensual del plan).*
   - [ ] Descuentos comerciales, precio acordado, cupones/manual override y notas internas con vigencia.
   - [ ] Historial de cambios de plan/estado/precio con antes/después, autor, fecha, motivo y fuente.
   - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.

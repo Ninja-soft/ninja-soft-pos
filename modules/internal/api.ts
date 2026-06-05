@@ -499,4 +499,51 @@ export const internalApi = {
       throw new Error(res?.error ?? "link_failed");
     return { actionLink: res.action_link, ownerEmail: res.owner_email ?? "" };
   },
+
+  // Fija la fecha exacta de fin del trial (acortar / terminar ya / extender).
+  setTrialEnd: async (
+    tenantId: string,
+    endsAt: string,
+    reason?: string | null,
+  ): Promise<string> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc("internal_set_trial_end", {
+      p_tenant_id: tenantId,
+      p_ends_at: endsAt,
+      p_reason: reason ?? null,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  // Desenlace del trial: convertir a pago o marcar perdido, con motivo.
+  trialOutcome: async (
+    tenantId: string,
+    outcome: "converted" | "lost",
+    reason?: string | null,
+  ): Promise<void> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("internal_trial_outcome", {
+      p_tenant_id: tenantId,
+      p_outcome: outcome,
+      p_reason: reason ?? null,
+    });
+    if (error) throw error;
+  },
+
+  // Precio mensual por plan (para estimar deuda en la card de facturación).
+  planPrices: async (): Promise<Map<string, number>> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("plans")
+      .select("key, monthly_price_ars");
+    if (error) throw error;
+    const map = new Map<string, number>();
+    for (const p of data ?? []) {
+      map.set(p.key, Number(p.monthly_price_ars ?? 0));
+    }
+    return map;
+  },
 };

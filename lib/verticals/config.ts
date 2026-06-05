@@ -7,6 +7,12 @@ export const VERTICALS = [
   "textil",
   "retail",
   "restaurante",
+  "heladeria",
+  "cafeteria",
+  "panaderia",
+  "peluqueria",
+  "estetica",
+  "servicios",
   "pyme",
   "otro",
 ] as const;
@@ -18,6 +24,12 @@ export const VERTICAL_LABELS: Record<Vertical, string> = {
   textil: "Textil / indumentaria",
   retail: "Retail",
   restaurante: "Restaurante",
+  heladeria: "Heladería",
+  cafeteria: "Cafetería / take away",
+  panaderia: "Panadería / rotisería",
+  peluqueria: "Peluquería / barbería",
+  estetica: "Estética / uñas / spa",
+  servicios: "Servicios profesionales",
   pyme: "Pyme",
   otro: "Otro",
 };
@@ -27,6 +39,12 @@ export const VERTICAL_DESCRIPTIONS: Record<Vertical, string> = {
   textil: "Productos con variantes de talle y color.",
   retail: "Tienda general con categorías y stock simple.",
   restaurante: "Mesas, comandas y división de cuenta.",
+  heladeria: "Botones por sabor/tamaño, venta rápida, sin stock complejo.",
+  cafeteria: "Cobro rápido con nombre del cliente y butones de bebidas/comidas.",
+  panaderia: "Catálogo chico por botones, venta por peso opcional.",
+  peluqueria: "Servicios por botones, comisiones y agenda básica.",
+  estetica: "Servicios y productos de reventa, sin stock complejo.",
+  servicios: "Servicios profesionales, sin control de stock.",
   pyme: "Configuración general para pequeñas empresas.",
   otro: "Sin adaptaciones específicas de rubro.",
 };
@@ -40,12 +58,18 @@ export type VerticalFeature =
   | "tables"; // mesas / comandas
 
 export const VERTICAL_FEATURES: Record<Vertical, VerticalFeature[]> = {
-  kiosco: ["quickSale", "byWeight", "combos"],
-  textil: ["variants"],
-  retail: [],
-  restaurante: ["tables", "combos"],
-  pyme: [],
-  otro: [],
+  kiosco:     ["quickSale", "byWeight", "combos"],
+  textil:     ["variants"],
+  retail:     [],
+  restaurante:["tables", "combos"],
+  heladeria:  ["quickSale", "byWeight", "combos"],
+  cafeteria:  ["quickSale", "combos"],
+  panaderia:  ["quickSale", "byWeight"],
+  peluqueria: ["quickSale"],
+  estetica:   ["quickSale"],
+  servicios:  ["quickSale"],
+  pyme:       [],
+  otro:       [],
 };
 
 export function isVertical(value: string | null | undefined): value is Vertical {

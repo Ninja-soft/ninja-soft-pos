@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Copy, ExternalLink, ShieldAlert, Trash2 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,8 @@ import {
   useTenantHealth,
   useTenantNotes,
   useTenantNoteMutations,
+  useImpersonateTenant,
+  useInternalAudit,
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
@@ -37,6 +39,15 @@ const STATUSES = [
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-AR", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function InternalTenantDetail({
   params,
 }: {
@@ -56,6 +67,27 @@ export default function InternalTenantDetail({
   );
   const supabase = createClient();
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+
+  // Nivel del staff actual (para mostrar/ocultar impersonation).
+  const { data: myUser } = useQuery({
+    queryKey: ["my-user"],
+    queryFn: () => createClient().auth.getUser().then((r) => r.data.user),
+    staleTime: 5 * 60 * 1000,
+  });
+  const myLevel =
+    (myUser?.app_metadata as { internal_level?: string } | undefined)
+      ?.internal_level ?? null;
+  const canImpersonate = myLevel === "super_admin" || myLevel === "admin";
+
+  // Impersonation.
+  const impersonate = useImpersonateTenant();
+  const [impersonateResult, setImpersonateResult] = useState<{
+    actionLink: string;
+    ownerEmail: string;
+  } | null>(null);
+
+  // Audit log del tenant (últimas 30 acciones).
+  const { data: auditEntries } = useInternalAudit({ tenantId: params.id });
 
   // Genera el link de suscripción (preapproval) de Mercado Pago para el tenant.
   const checkout = useMutation({
@@ -91,6 +123,12 @@ export default function InternalTenantDetail({
     );
   }
 
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text).then(() =>
+      toast({ title: "Copiado al portapapeles", variant: "success" }),
+    );
+  }
+
   return (
     <>
       <Link
@@ -114,6 +152,35 @@ export default function InternalTenantDetail({
         })()}
       </div>
       <p className="mt-1.5 text-sm text-muted-foreground">{tenant?.slug}</p>
+
+      {/* ── Ficha 360: info básica ───────────────────────────────────────── */}
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+        {tenant?.ownerEmail && (
+          <span>
+            <span className="font-medium text-foreground">
+              {tenant.ownerName ?? tenant.ownerEmail}
+            </span>
+            {tenant.ownerName && (
+              <span className="ml-1 opacity-60">{tenant.ownerEmail}</span>
+            )}
+          </span>
+        )}
+        <span>Alta: {fmtDate(tenant?.created_at)}</span>
+        {tenant?.trial_ends_at && (
+          <span>
+            Trial hasta:{" "}
+            <span
+              className={
+                new Date(tenant.trial_ends_at) < new Date()
+                  ? "font-medium text-destructive"
+                  : "font-medium text-foreground"
+              }
+            >
+              {fmtDate(tenant.trial_ends_at)}
+            </span>
+          </span>
+        )}
+      </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Card>
@@ -251,6 +318,78 @@ export default function InternalTenantDetail({
         />
       </div>
 
+      {/* ── Impersonation (solo admin / super_admin) ─────────────────────── */}
+      {canImpersonate && (
+        <>
+          <Heading className="mt-8" as="h2">
+            Acceder como este negocio
+          </Heading>
+          <Card className="mt-3">
+            <CardContent className="p-5">
+              <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+                <ShieldAlert size={16} className="mt-0.5 shrink-0" />
+                <span>
+                  Esto genera un magic link de un solo uso para el dueño del negocio.{" "}
+                  <strong>Abrilo en una ventana de incógnito</strong> para no cerrar
+                  tu sesión de staff.
+                </span>
+              </div>
+
+              {!impersonateResult ? (
+                <Button
+                  disabled={impersonate.isPending}
+                  onClick={() =>
+                    impersonate.mutate(params.id, {
+                      onSuccess: (res) => setImpersonateResult(res),
+                      onError: (e) =>
+                        toast({
+                          title: "Error al generar link",
+                          description: e instanceof Error ? e.message : undefined,
+                          variant: "error",
+                        }),
+                    })
+                  }
+                >
+                  {impersonate.isPending ? "Generando…" : "Generar magic link"}
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Link generado para{" "}
+                    <span className="font-medium text-foreground">
+                      {impersonateResult.ownerEmail}
+                    </span>
+                    . Expira en ~1 hora.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={impersonateResult.actionLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-3 py-2 text-sm font-medium text-ninja-flameSoft transition hover:bg-ninja-flame/20"
+                    >
+                      <ExternalLink size={14} /> Abrir en nueva pestaña
+                    </a>
+                    <button
+                      onClick={() => copyToClipboard(impersonateResult.actionLink)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    >
+                      <Copy size={14} /> Copiar link
+                    </button>
+                    <button
+                      onClick={() => setImpersonateResult(null)}
+                      className="text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      Generar nuevo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
       <Heading className="mt-8" as="h2">
         Notas internas
       </Heading>
@@ -363,6 +502,39 @@ export default function InternalTenantDetail({
               );
             })}
           </ul>
+        </CardContent>
+      </Card>
+
+      {/* ── Ficha 360: actividad reciente ────────────────────────────────── */}
+      <Heading className="mt-8" as="h2">
+        Actividad reciente
+      </Heading>
+      <Card className="mt-3">
+        <CardContent className="p-0">
+          {!auditEntries || auditEntries.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-muted-foreground">
+              Sin registros de actividad.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {auditEntries.slice(0, 30).map((entry) => (
+                <li key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                    {entry.entity_type}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {entry.action.replace(/_/g, " ")}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {entry.actorName ?? entry.actorEmail ?? "sistema"}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelative(entry.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </>

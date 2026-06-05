@@ -277,7 +277,7 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] *Criterio (base):* un tenant con productos activos publica su catálogo en `/c/<slug>` sin tocar código.
   - *Nota:* el motor de promociones se trata aparte y a fondo en **[F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro)**.
 
-- [ ] **H10b — Catálogo PRO: ficha de producto completa, marcas y categorías.**
+- [~] **H10b — Catálogo PRO: ficha de producto completa, marcas y categorías.** — *Mayormente hecho. Gestión de marcas completada (2026-06-04). Ver detalle.*
   - [ ] **Form de alta/edición de producto rico** (mejor que la competencia: una sola pantalla, todo opcional, defaults inteligentes): nombre, **EAN/código de barras**, **SKU interno** (auto-generado al guardar si no se carga, con prefijo configurable — gancha con H30), precio de venta, costo, **categoría**, **marca**, **IVA %**, **unidad de medida**.
   - [ ] **Subida de fotos opcional con conversión a WebP** en el propio alta (no solo en edición): arrastrar/elegir imagen → WebP liviano client-side → galería; también admite **URL de imagen**. (Reusa H7.)
   - [ ] **Datos adicionales plegables:** descripción larga (para ticket/catálogo), **tags** (lista separada por coma, para filtros y promos), **temporada** (ej. "Verano 2026"), **garantía de fábrica en meses** (gancha con H28: imprime en ticket y habilita garantía extendida).
@@ -303,8 +303,9 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md). — *`staff_level_set`, `user_suspended`/`user_reactivated` auditados; matriz actualizada con la fila de suspensión y el estado de implementación.*
   - [x] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff. — *Enforced en `staff_admin` (set_level solo super; set_active sobre staff solo super).*
 
-- [ ] **H11c — Consola internal completa + login independiente.**
+- [~] **H11c — Consola internal completa + login independiente.** — *KPIs SaaS + buscador de tenants implementados (2026-06-04). Faltan: pantalla diferenciada de acceso, buscador global multi-campo, ficha 360, impersonation.*
   - [x] Entrar directo a `/internal` redirige a `/internal/tenants`; si no hay sesión, login conserva destino interno (`/login?next=/internal/tenants`).
+  - [x] Dashboard con 8 KPIs SaaS (total, trial, activos, con problemas, nuevos 7/30d, conversión, MRR), breakdown por plan, alerta de negocios con problemas, quick links y tabla con buscador. Componente `TenantSearchTable`.
   - [ ] Pantalla de acceso interno con copy y layout diferenciado de POS/tenant.
   - [ ] Dashboard internal con KPIs SaaS: MRR, ARR, trials, activos, past_due, suspendidos, churn, conversión trial→paid, tickets de soporte y alertas.
   - [ ] Buscador global por tenant, CUIT, email owner, teléfono, slug, plan, estado, feature flag y fecha de alta.
@@ -326,14 +327,14 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] *Criterio:* el dueño crea "Cajero A" sin email con avatar preset y PIN; luego lo renombra y lo suspende; un cajero no puede editar a otros.
   - *Pendiente menor:* el PIN se hashea con SHA-256 (uso de baja seguridad); migrar a bcrypt cuando se implemente el fichaje en el POS (F12).
 
-- [ ] **H12 — Suscripciones, billing manual y lifecycle comercial.**
+- [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base implementada y aplicada en remoto (2026-06-04): billing_records + extensión de trial (migraciones `billing_records` + `extend_trial_audit_fix`).*
   - [ ] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
   - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
   - [ ] **Plan específico por cliente:** clonar un plan base, cambiar nombre comercial, límites, módulos, soporte, precio y condiciones sin afectar a otros tenants.
   - [ ] **Overrides de cuota/límites por cliente:** usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte y límites fiscales.
   - [ ] **Aumento de cuota/precio a un cliente:** cambio inmediato o programado con fecha efectiva, motivo, aviso previo, aceptación opcional y registro de antes/después.
-  - [ ] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo.
-  - [ ] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento.
+  - [~] Trial configurable: extender trial, acortarlo, convertir a paid, marcar como perdido, registrar motivo. — *Extender (+7/14/30/60/90 días) hecho vía RPC `internal_extend_trial`, auditado; falta acortar/convertir/perdido/motivo.*
+  - [~] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento. — *Registrar pago + medio + período + referencia + notas hecho (`billing_records`, append-only); falta deuda y próximo vencimiento.*
   - [ ] Descuentos comerciales, precio acordado, cupones/manual override y notas internas con vigencia.
   - [ ] Historial de cambios de plan/estado/precio con antes/después, autor, fecha, motivo y fuente.
   - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
@@ -363,12 +364,12 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
 
 Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectura primero, integraciones por etapas** (un sub-hito por proveedor).
 
-- [~] **H14 — Arquitectura de pagos (base).** — *Base hecha (PR #41): catálogo + config por tenant + secretos. Falta wiring en el POS.*
+- [x] **H14 — Arquitectura de pagos (base).** — *UI de cobro abstracta completada (2026-06-04).*
   - [x] Registro de **proveedores de pago** (`payment_providers`, catálogo global seedeado con los 10 medios) y config por tenant.
   - [x] Habilitación y **configuración por tenant** (`tenant_payment_methods`: enabled, recargo %, sandbox; RLS owner/manager). **Secretos** en `payment_secrets` (RLS deny: solo service_role/Edge Functions). UI `PaymentMethodsCard` en `/dashboard-team`.
-  - [ ] **UI de cobro abstracta** en el POS que lea los medios habilitados + aplique recargo; **pago mixto** ya existe en el POS, falta integrarlo con esta config.
+  - [x] **UI de cobro abstracta** en el POS: `PaymentModal` lee `tenant_payment_methods.enabled` y muestra solo los medios del tenant (fallback a todos si no hay config). Selector de planes activos para débito/crédito con recargo. Recargo global del medio si `surcharge_pct > 0`. Hook `useEnabledPaymentMethods()`.
   - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
-  - [ ] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado.
+  - [x] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado. ✓
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
   - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) + OAuth "Conectar con MP" hechos**: Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook`, `mp_oauth_start`, `mp_oauth_callback` (`state` anti-CSRF, refresh de token); botón "Conectar con Mercado Pago" (un click) y "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Billing de suscripciones**: credenciales de plataforma en `platform_secrets` editables desde `/internal/pagos` (`set_platform_secret`), `mp_subscription_checkout` (preapproval) + `mp_billing_webhook`; "Generar link de cobro" en el detalle del tenant. **Conciliación básica hecha** (modal "Cobros QR" en /ventas: intents cruzados con sus ventas, alerta de "aprobado sin venta", filtros + export XLSX). **Falta:** Mercado **Point** (tarjeta presencial).

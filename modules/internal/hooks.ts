@@ -148,6 +148,8 @@ export function useBillingRecords(tenantId: string) {
 export function useBillingMutations(tenantId: string) {
   const qc = useQueryClient();
   const inv = () => qc.invalidateQueries({ queryKey: ["internal", "billing", tenantId] });
+  const invTenants = () =>
+    qc.invalidateQueries({ queryKey: ["internal", "tenants"] });
   return {
     add: useMutation({
       mutationFn: (input: BillingRecordInput) => internalApi.addBillingRecord(input),
@@ -155,7 +157,25 @@ export function useBillingMutations(tenantId: string) {
     }),
     extendTrial: useMutation({
       mutationFn: (days: number) => internalApi.extendTrial(tenantId, days),
-      onSuccess: () => qc.invalidateQueries({ queryKey: ["internal", "tenants"] }),
+      onSuccess: invTenants,
+    }),
+    setTrialEnd: useMutation({
+      mutationFn: (vars: { endsAt: string; reason?: string | null }) =>
+        internalApi.setTrialEnd(tenantId, vars.endsAt, vars.reason),
+      onSuccess: invTenants,
+    }),
+    trialOutcome: useMutation({
+      mutationFn: (vars: { outcome: "converted" | "lost"; reason?: string | null }) =>
+        internalApi.trialOutcome(tenantId, vars.outcome, vars.reason),
+      onSuccess: invTenants,
     }),
   };
+}
+
+export function usePlanPrices() {
+  return useQuery({
+    queryKey: ["internal", "plan-prices"],
+    queryFn: () => internalApi.planPrices(),
+    staleTime: 5 * 60 * 1000,
+  });
 }

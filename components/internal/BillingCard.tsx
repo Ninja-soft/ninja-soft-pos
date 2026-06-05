@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarDays, Clock, Plus, ReceiptText } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Plus,
+  ReceiptText,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { useBillingRecords, useBillingMutations } from "@/modules/internal/hooks";
+import {
+  useBillingRecords,
+  useBillingMutations,
+  usePlanPrices,
+} from "@/modules/internal/hooks";
 import type { BillingRecord } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -20,16 +31,21 @@ const MEDIUM_LABELS: Record<string, string> = {
 
 const EXTEND_OPTIONS = [7, 14, 30, 60, 90];
 
+type TrialAction = "converted" | "lost" | "set_end";
+
 interface Props {
   tenantId: string;
   trialEndsAt: string | null;
   subStatus: string | null;
+  planKey: string | null;
 }
 
-export function BillingCard({ tenantId, trialEndsAt, subStatus }: Props) {
+export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props) {
   const { toast } = useToast();
   const { data: records, isLoading } = useBillingRecords(tenantId);
-  const { add, extendTrial } = useBillingMutations(tenantId);
+  const { add, extendTrial, setTrialEnd, trialOutcome } =
+    useBillingMutations(tenantId);
+  const { data: planPrices } = usePlanPrices();
   const [addOpen, setAddOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [medium, setMedium] = useState<string>("bank_transfer");
@@ -37,10 +53,33 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus }: Props) {
   const [periodEnd, setPeriodEnd] = useState("");
   const [receiptRef, setReceiptRef] = useState("");
   const [notes, setNotes] = useState("");
+  const [action, setAction] = useState<TrialAction | null>(null);
+  const [actionDate, setActionDate] = useState("");
+  const [actionReason, setActionReason] = useState("");
 
   const isTrial = subStatus === "trial";
   const trialDate = trialEndsAt ? new Date(trialEndsAt) : null;
   const trialExpired = trialDate && trialDate < new Date();
+
+  // Cobertura: último period_end registrado → próximo vencimiento. Si quedó
+  // en el pasado, hay deuda (estimada con el precio mensual del plan).
+  const coveredUntil = useMemo(() => {
+    const ends = (records ?? [])
+      .map((r) => r.period_end)
+      .filter(Boolean) as string[];
+    if (ends.length === 0) return null;
+    return ends.reduce((a, b) => (a > b ? a : b));
+  }, [records]);
+  const monthlyPrice = planKey ? planPrices?.get(planKey) ?? null : null;
+  const overdueDays = useMemo(() => {
+    if (!coveredUntil) return 0;
+    const end = new Date(`${coveredUntil}T23:59:59`);
+    return Math.max(0, Math.floor((Date.now() - end.getTime()) / 86_400_000));
+  }, [coveredUntil]);
+  const estimatedDebt =
+    overdueDays > 0 && monthlyPrice
+      ? Math.ceil(overdueDays / 30) * monthlyPrice
+      : null;
 
   async function handleAdd() {
     const amt = Number(amount);
@@ -92,6 +131,58 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus }: Props) {
     }
   }
 
+  function openAction(a: TrialAction) {
+    setActionDate(new Date().toISOString().slice(0, 10));
+    setActionReason("");
+    setAction(a);
+  }
+
+  async function handleAction() {
+    if (!action) return;
+    try {
+      if (action === "set_end") {
+        if (!actionDate) {
+          toast({ title: "Elegí la fecha de fin", variant: "error" });
+          return;
+        }
+        const newEnd = await setTrialEnd.mutateAsync({
+          endsAt: new Date(`${actionDate}T23:59:59`).toISOString(),
+          reason: actionReason || null,
+        });
+        toast({
+          title: "Fin del trial actualizado",
+          description: `Nuevo vencimiento: ${new Date(newEnd).toLocaleDateString("es-AR")}`,
+          variant: "success",
+        });
+      } else {
+        await trialOutcome.mutateAsync({
+          outcome: action,
+          reason: actionReason || null,
+        });
+        toast({
+          title:
+            action === "converted"
+              ? "Convertido a pago (suscripción activa)"
+              : "Trial marcado como perdido",
+          variant: "success",
+        });
+      }
+      setAction(null);
+    } catch (e) {
+      toast({
+        title: "No se pudo aplicar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  const ACTION_TITLES: Record<TrialAction, string> = {
+    converted: "Convertir a pago",
+    lost: "Marcar trial como perdido",
+    set_end: "Fijar fin del trial",
+  };
+
   return (
     <>
       <Card>
@@ -130,8 +221,71 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus }: Props) {
                     +{d}d
                   </button>
                 ))}
+                <button
+                  disabled={setTrialEnd.isPending}
+                  onClick={() => openAction("set_end")}
+                  className="rounded border border-yellow-400/40 bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
+                >
+                  Fijar fin…
+                </button>
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                <span className="text-xs opacity-70">Desenlace:</span>
+                <button
+                  disabled={trialOutcome.isPending}
+                  onClick={() => openAction("converted")}
+                  className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                >
+                  Convertir a pago
+                </button>
+                <button
+                  disabled={trialOutcome.isPending}
+                  onClick={() => openAction("lost")}
+                  className="rounded border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs font-medium text-red-300 transition hover:bg-red-400/20 disabled:opacity-50"
+                >
+                  Marcar perdido
+                </button>
               </div>
             </div>
+          )}
+
+          {/* Estado de cobranza (próximo vencimiento / deuda estimada) */}
+          {!isTrial && coveredUntil && (
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                overdueDays > 0
+                  ? "border-red-400/30 bg-red-400/5 text-red-300"
+                  : "border-emerald-400/30 bg-emerald-400/5 text-emerald-300"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                {overdueDays > 0 ? (
+                  <>
+                    <AlertTriangle size={14} /> Vencido hace {overdueDays} día
+                    {overdueDays === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={14} /> Cubierto
+                  </>
+                )}
+              </div>
+              <div className="mt-0.5 text-xs opacity-80">
+                {overdueDays > 0 ? "Venció" : "Próximo vencimiento"} el{" "}
+                {new Date(`${coveredUntil}T00:00:00`).toLocaleDateString("es-AR")}
+                {estimatedDebt != null && (
+                  <span className="ml-2 font-semibold">
+                    Deuda estimada: {formatCurrency(estimatedDebt)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          {!isTrial && !coveredUntil && (records ?? []).length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Los pagos registrados no tienen período: cargá &ldquo;Período
+              hasta&rdquo; para calcular el próximo vencimiento.
+            </p>
           )}
 
           {/* Billing records */}
@@ -239,6 +393,57 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus }: Props) {
             </Button>
             <Button loading={add.isPending} onClick={handleAdd}>
               Registrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={action !== null}
+        onOpenChange={(o) => !o && setAction(null)}
+        title={action ? ACTION_TITLES[action] : ""}
+        className="max-w-sm"
+      >
+        <div className="space-y-3">
+          {action === "converted" && (
+            <p className="text-sm text-muted-foreground">
+              Termina el trial ahora y deja la suscripción <b>activa</b>.
+              Registrá el pago aparte con &ldquo;Registrar pago&rdquo;.
+            </p>
+          )}
+          {action === "lost" && (
+            <p className="text-sm text-muted-foreground">
+              Termina el trial y deja la suscripción <b>cancelada</b>. Queda
+              auditado con el motivo.
+            </p>
+          )}
+          {action === "set_end" && (
+            <Input
+              label="Nueva fecha de fin"
+              type="date"
+              value={actionDate}
+              onChange={(e) => setActionDate(e.target.value)}
+            />
+          )}
+          <Input
+            label={action === "lost" ? "Motivo (recomendado)" : "Motivo (opcional)"}
+            placeholder={
+              action === "lost"
+                ? "No respondió / eligió competencia / precio…"
+                : "Acuerdo comercial, seguimiento…"
+            }
+            value={actionReason}
+            onChange={(e) => setActionReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setAction(null)}>
+              Cancelar
+            </Button>
+            <Button
+              loading={setTrialEnd.isPending || trialOutcome.isPending}
+              onClick={handleAction}
+            >
+              Confirmar
             </Button>
           </div>
         </div>

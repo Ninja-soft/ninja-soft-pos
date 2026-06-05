@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { internalApi, type AuditFilters } from "./api";
+import { internalApi, type AuditFilters, type BillingRecordInput } from "./api";
 
 export function useInternalTenants() {
   return useQuery({
@@ -107,6 +107,30 @@ export function useInternalMutations(tenantId: string) {
       mutationFn: (industry: string) =>
         internalApi.setIndustry(tenantId, industry),
       onSuccess: invalidate,
+    }),
+  };
+}
+
+// ── H12 — Billing ─────────────────────────────────────────────────────────
+
+export function useBillingRecords(tenantId: string) {
+  return useQuery({
+    queryKey: ["internal", "billing", tenantId],
+    queryFn: () => internalApi.listBillingRecords(tenantId),
+  });
+}
+
+export function useBillingMutations(tenantId: string) {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["internal", "billing", tenantId] });
+  return {
+    add: useMutation({
+      mutationFn: (input: BillingRecordInput) => internalApi.addBillingRecord(input),
+      onSuccess: inv,
+    }),
+    extendTrial: useMutation({
+      mutationFn: (days: number) => internalApi.extendTrial(tenantId, days),
+      onSuccess: () => qc.invalidateQueries({ queryKey: ["internal", "tenants"] }),
     }),
   };
 }

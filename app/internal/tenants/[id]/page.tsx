@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, Trash2 } from "lucide-react";
+import { BillingCard } from "@/components/internal/BillingCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
@@ -241,6 +242,14 @@ export default function InternalTenantDetail({
           </p>
         </CardContent>
       </Card>
+
+      <div className="mt-8">
+        <BillingCard
+          tenantId={params.id}
+          trialEndsAt={tenant?.trial_ends_at ?? null}
+          subStatus={tenant?.subStatus ?? null}
+        />
+      </div>
 
       <Heading className="mt-8" as="h2">
         Notas internas

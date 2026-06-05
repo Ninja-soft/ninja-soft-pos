@@ -7,6 +7,7 @@ export interface InternalTenant {
   status: string;
   industry: string | null;
   created_at: string;
+  trial_ends_at: string | null;
   planKey: string | null;
   planName: string | null;
   subStatus: string | null;
@@ -51,6 +52,30 @@ export interface TenantNote {
   authorEmail: string | null;
 }
 
+export interface BillingRecord {
+  id: string;
+  tenant_id: string;
+  amount: number;
+  currency: string;
+  medium: string;
+  period_start: string | null;
+  period_end: string | null;
+  receipt_ref: string | null;
+  notes: string | null;
+  recorded_by: string | null;
+  created_at: string;
+}
+
+export interface BillingRecordInput {
+  tenant_id: string;
+  amount: number;
+  medium: string;
+  period_start?: string | null;
+  period_end?: string | null;
+  receipt_ref?: string | null;
+  notes?: string | null;
+}
+
 export interface AuditFilters {
   tenantId?: string | null;
   entityType?: string | null;
@@ -80,7 +105,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url)",
+        "id, name, slug, status, industry, created_at, trial_ends_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -91,6 +116,7 @@ export const internalApi = {
       status: string;
       industry: string | null;
       created_at: string;
+      trial_ends_at: string | null;
       subscriptions: {
         status: string;
         plans: { key: string; name: string } | null;
@@ -115,6 +141,7 @@ export const internalApi = {
         status: t.status,
         industry: t.industry,
         created_at: t.created_at,
+        trial_ends_at: t.trial_ends_at ?? null,
         planKey: sub?.plans?.key ?? null,
         planName: sub?.plans?.name ?? null,
         subStatus: sub?.status ?? null,
@@ -350,5 +377,43 @@ export const internalApi = {
       p_industry: industry,
     });
     if (error) throw error;
+  },
+
+  // ── H12 — Billing records ─────────────────────────────────────────────────
+
+  listBillingRecords: async (tenantId: string): Promise<BillingRecord[]> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("billing_records")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as BillingRecord[];
+  },
+
+  addBillingRecord: async (input: BillingRecordInput): Promise<void> => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("billing_records").insert({
+      ...input,
+      recorded_by: user?.id ?? null,
+    });
+    if (error) throw error;
+  },
+
+  extendTrial: async (tenantId: string, days: number): Promise<string> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc("internal_extend_trial", {
+      p_tenant_id: tenantId,
+      p_days: days,
+    });
+    if (error) throw error;
+    return data as string;
   },
 };

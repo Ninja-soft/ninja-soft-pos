@@ -14,6 +14,19 @@ export interface InternalTenant {
   ownerName: string | null;
   ownerEmail: string | null;
   logoUrl: string | null;
+  cuit: string | null;
+  phone: string | null;
+}
+
+export interface FeatureFlagCatalogItem {
+  key: string;
+  description: string | null;
+  defaultEnabled: boolean;
+}
+
+export interface FlagOverrides {
+  defaultEnabled: boolean;
+  overrides: Map<string, boolean>; // tenant_id → enabled
 }
 
 export interface TenantFlag {
@@ -105,7 +118,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, trial_ends_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url)",
+        "id, name, slug, status, industry, created_at, trial_ends_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url, cuit, phone)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -125,7 +138,10 @@ export const internalApi = {
         role: string;
         users: { full_name: string | null; email: string } | null;
       }[];
-      tenant_branding: { logo_url: string | null } | { logo_url: string | null }[] | null;
+      tenant_branding:
+        | { logo_url: string | null; cuit: string | null; phone: string | null }
+        | { logo_url: string | null; cuit: string | null; phone: string | null }[]
+        | null;
     };
     return ((data ?? []) as unknown as Row[]).map((t) => {
       const sub = t.subscriptions?.[0];
@@ -148,8 +164,53 @@ export const internalApi = {
         ownerName: owner?.users?.full_name ?? null,
         ownerEmail: owner?.users?.email ?? null,
         logoUrl: brand?.logo_url ?? null,
+        cuit: brand?.cuit ?? null,
+        phone: brand?.phone ?? null,
       };
     });
+  },
+
+  // Catálogo global de feature flags (para el filtro del buscador interno).
+  featureFlagsCatalog: async (): Promise<FeatureFlagCatalogItem[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("feature_flags")
+      .select("key, description, default_enabled")
+      .order("key");
+    if (error) throw error;
+    return (data ?? []).map((f) => ({
+      key: f.key,
+      description: f.description,
+      defaultEnabled: f.default_enabled,
+    }));
+  },
+
+  // Overrides por tenant de un flag puntual: enabled efectivo =
+  // overrides.get(tenant_id) ?? defaultEnabled.
+  flagOverrides: async (flagKey: string): Promise<FlagOverrides> => {
+    const supabase = createClient();
+    const [flagRes, ovRes] = await Promise.all([
+      supabase
+        .from("feature_flags")
+        .select("default_enabled")
+        .eq("key", flagKey)
+        .maybeSingle(),
+      supabase
+        .from("tenant_feature_flags")
+        .select("tenant_id, enabled, feature_flags!inner(key)")
+        .eq("feature_flags.key", flagKey),
+    ]);
+    if (flagRes.error) throw flagRes.error;
+    if (ovRes.error) throw ovRes.error;
+    const overrides = new Map<string, boolean>();
+    type OvRow = { tenant_id: string; enabled: boolean };
+    for (const o of (ovRes.data ?? []) as unknown as OvRow[]) {
+      overrides.set(o.tenant_id, o.enabled);
+    }
+    return {
+      defaultEnabled: flagRes.data?.default_enabled ?? false,
+      overrides,
+    };
   },
 
   tenantFlags: async (tenantId: string): Promise<TenantFlag[]> => {

@@ -14,6 +14,22 @@ export function useInternalTenants() {
   });
 }
 
+export function useFeatureFlagsCatalog() {
+  return useQuery({
+    queryKey: ["internal", "flags-catalog"],
+    queryFn: () => internalApi.featureFlagsCatalog(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useFlagOverrides(flagKey: string | null) {
+  return useQuery({
+    queryKey: ["internal", "flag-overrides", flagKey],
+    queryFn: () => internalApi.flagOverrides(flagKey as string),
+    enabled: Boolean(flagKey),
+  });
+}
+
 export function useTenantHealth() {
   return useQuery({
     queryKey: ["internal", "tenant-health"],

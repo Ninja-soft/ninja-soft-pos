@@ -21,6 +21,7 @@ import {
   useProducts,
   useTopProducts,
   useProductSerials,
+  useCategories,
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useCustomers, useStoreCreditBalance } from "@/modules/customers/hooks";
@@ -92,7 +93,9 @@ export default function PosPage() {
     serialProduct !== null,
   );
 
-  const { data: products } = useProducts(search);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const { data: products } = useProducts(search, categoryFilter);
+  const { data: categories } = useCategories();
   const { data: shift } = useOpenShift();
   const { data: register } = useDefaultRegister();
   const { open, close, sale } = usePosMutations();
@@ -384,7 +387,7 @@ export default function PosPage() {
             />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setCategoryFilter(null); }}
               placeholder="Buscar producto por nombre, SKU o código…"
               autoFocus
               className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-12 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
@@ -410,7 +413,36 @@ export default function PosPage() {
               <Banknote size={16} /> Venta rápida (monto libre)
             </Button>
           )}
-          {showFrequent && topProducts && topProducts.length > 0 && (
+          {/* Tabs de categoría (H36 — modo quick buttons) */}
+          {quickSale && !search.trim() && (categories ?? []).length > 0 && (
+            <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <button
+                onClick={() => setCategoryFilter(null)}
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  categoryFilter === null
+                    ? "bg-ninja-flame text-white"
+                    : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                Todos
+              </button>
+              {(categories ?? []).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategoryFilter(c.id === categoryFilter ? null : c.id)}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                    categoryFilter === c.id
+                      ? "bg-ninja-flame text-white"
+                      : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {showFrequent && !categoryFilter && topProducts && topProducts.length > 0 && (
             <div className="mt-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <Star size={13} className="text-ninja-flameSoft" /> Frecuentes
@@ -442,8 +474,15 @@ export default function PosPage() {
                 ))}
               </div>
               <div className="mt-5 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Todos los productos
+                {categoryFilter
+                  ? (categories ?? []).find((c) => c.id === categoryFilter)?.name ?? "Productos"
+                  : "Todos los productos"}
               </div>
+            </div>
+          )}
+          {!showFrequent && categoryFilter && (
+            <div className="mt-2 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {(categories ?? []).find((c) => c.id === categoryFilter)?.name ?? "Categoría"}
             </div>
           )}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

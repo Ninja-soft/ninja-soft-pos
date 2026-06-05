@@ -306,6 +306,24 @@ export const posApi = {
     return data as { intent_id: string; init_point: string };
   },
 
+  // Medios de pago habilitados por el tenant (H14).
+  // Retorna filas de tenant_payment_methods donde enabled=true.
+  enabledMethods: async (): Promise<
+    Array<{ provider_key: string; surcharge_pct: number; config: Record<string, unknown> }>
+  > => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("tenant_payment_methods")
+      .select("provider_key, surcharge_pct, config")
+      .eq("enabled", true)
+      .order("sort");
+    return (data ?? []) as Array<{
+      provider_key: string;
+      surcharge_pct: number;
+      config: Record<string, unknown>;
+    }>;
+  },
+
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   posSettings: async (): Promise<{
     maxDiscount: Record<string, number>;

@@ -48,6 +48,15 @@ export function usePosSettings() {
   });
 }
 
+// Medios habilitados por el tenant para el modal de cobro (H14).
+export function useEnabledPaymentMethods() {
+  return useQuery({
+    queryKey: ["pos", "enabled-payment-methods"],
+    queryFn: () => posApi.enabledMethods(),
+    staleTime: 60_000,
+  });
+}
+
 export function useQrIntents(
   range: { from?: Date; to?: Date } | undefined,
   enabled: boolean,

@@ -27,28 +27,45 @@ export function Isotype({
 export function WordmarkPos({
   className,
   priority,
+  variant = "auto",
 }: {
   className?: string;
   priority?: boolean;
+  /**
+   * "auto": swap por CSS según data-theme (versión dark-mode en temas oscuros,
+   * light-mode en temas claros), sin flash ni JS.
+   * "dark": siempre la versión para fondo oscuro, ignora el tema seleccionado
+   * (p. ej. login, cuyo fondo es siempre void).
+   */
+  variant?: "auto" | "dark";
 }) {
-  // El wordmark tiene "Ninja" en blanco (para fondos oscuros). En temas claros
-  // (ninja-light / ninja-sand) se muestra la versión oscura. Swap por CSS según
-  // data-theme (ver globals.css), sin flash ni JS.
-  return (
-    <>
+  if (variant === "dark") {
+    return (
       <Image
         src="/brand/ninjapos-wordmark.webp"
         alt="NinjaPos"
         width={1134}
         height={321}
         priority={priority}
+        className={cn("h-8 w-auto", className)}
+      />
+    );
+  }
+  return (
+    <>
+      <Image
+        src="/brand/ninjapos-logo-dark-mode.webp"
+        alt="NinjaPos"
+        width={1071}
+        height={253}
+        priority={priority}
         className={cn("wordmark-on-dark h-8 w-auto", className)}
       />
       <Image
-        src="/brand/ninjapos-wordmark-dark.webp"
+        src="/brand/ninjapos-logo-light-mode.webp"
         alt="NinjaPos"
-        width={1134}
-        height={321}
+        width={1071}
+        height={253}
         priority={priority}
         className={cn("wordmark-on-light h-8 w-auto", className)}
       />

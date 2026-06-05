@@ -158,7 +158,14 @@ function UserMenu({
         <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
           <Avatar name={name} avatar={me?.avatar} size={32} loading={meLoading} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">
+            <span
+              className={cn(
+                "block truncate text-sm font-medium text-foreground",
+                // Nombre y apellido siempre capitalizados; no aplica si se
+                // muestra el email como fallback.
+                name !== email && "capitalize",
+              )}
+            >
               {name}
             </span>
             {name !== email && (

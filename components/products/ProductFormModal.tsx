@@ -246,28 +246,36 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           <Input label="Stock mínimo" type="number" step="0.001" {...register("stock_min")} />
           <Input label="Unidad (un, kg, lt…)" {...register("unit")} />
           <Input label="IVA %" type="number" step="0.5" {...register("tax_rate")} />
-          <Input
-            label="Garantía (meses)"
-            type="number"
-            step="1"
-            min="0"
-            {...register("warranty_months")}
-          />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Temporada" placeholder="Verano 2026" {...register("season")} />
-          <Input label="Tags (separados por coma)" placeholder="oferta, premium" {...register("tags")} />
-        </div>
-
-        {!active && (
-          <Input
-            label="URL de imagen (opcional)"
-            placeholder="https://…"
-            {...register("image_url")}
-          />
-        )}
-        <Input label="Descripción" {...register("description")} />
+        {/* Datos adicionales plegables (H10b): todo opcional, colapsado por
+            defecto para que el alta rápida sea una sola pantalla corta. */}
+        <details className="rounded-lg border border-border bg-muted/20 [&[open]>summary]:border-b [&[open]>summary]:border-border">
+          <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground">
+            Datos adicionales (descripción, tags, temporada, garantía)
+          </summary>
+          <div className="space-y-3 p-3">
+            <Input label="Descripción" {...register("description")} />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Temporada" placeholder="Verano 2026" {...register("season")} />
+              <Input label="Tags (separados por coma)" placeholder="oferta, premium" {...register("tags")} />
+            </div>
+            <Input
+              label="Garantía de fábrica (meses)"
+              type="number"
+              step="1"
+              min="0"
+              {...register("warranty_months")}
+            />
+            {!active && (
+              <Input
+                label="URL de imagen (opcional)"
+                placeholder="https://…"
+                {...register("image_url")}
+              />
+            )}
+          </div>
+        </details>
 
         {active && (
           <ProductImages productId={active.id} tenantId={active.tenant_id} />

@@ -257,58 +257,63 @@ export function AppShell({
   }
 
   const nav = (
-    <nav className="flex h-full flex-col gap-1 p-3">
+    <nav className="flex h-full flex-col p-3">
+      {/* Logo fijo arriba — fuera del área scrolleable */}
       <Link
         href="/dashboard"
         onClick={() => setDrawer(false)}
-        className="mb-4 flex items-center gap-2.5 px-2 py-2"
+        className="mb-3 flex shrink-0 items-center gap-2.5 px-2 py-2"
       >
         <Isotype className="h-9 w-auto" priority />
         <WordmarkPos className="h-7 w-auto" priority />
       </Link>
 
-      {NAV.top
-        .filter((it) => it.href !== "/dashboard-team" || canOwnerPanel)
-        .map((it) => (
-          <NavLink
-            key={it.href}
-            item={it}
-            active={pathname === it.href}
-            onNavigate={() => setDrawer(false)}
-          />
-        ))}
+      {/* Navegación scrolleable */}
+      <div className="-mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+        {NAV.top
+          .filter((it) => it.href !== "/dashboard-team" || canOwnerPanel)
+          .map((it) => (
+            <NavLink
+              key={it.href}
+              item={it}
+              active={pathname === it.href}
+              onNavigate={() => setDrawer(false)}
+            />
+          ))}
 
-      {NAV.groups.map((g) => {
-        const isOpen = open[g.label] ?? true;
-        return (
-          <div key={g.label} className="mt-3">
-            <button
-              onClick={() => setOpen((s) => ({ ...s, [g.label]: !isOpen }))}
-              className="flex w-full items-center justify-between rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition hover:text-foreground"
-            >
-              {g.label}
-              <ChevronDown
-                size={14}
-                className={cn("transition", isOpen ? "" : "-rotate-90")}
-              />
-            </button>
-            {isOpen && (
-              <div className="mt-1 space-y-1">
-                {g.items.map((it) => (
-                  <NavLink
-                    key={it.href}
-                    item={it}
-                    active={pathname === it.href}
-                    onNavigate={() => setDrawer(false)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+        {NAV.groups.map((g) => {
+          const isOpen = open[g.label] ?? true;
+          return (
+            <div key={g.label} className="pt-3">
+              <button
+                onClick={() => setOpen((s) => ({ ...s, [g.label]: !isOpen }))}
+                className="flex w-full items-center justify-between rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition hover:text-foreground"
+              >
+                {g.label}
+                <ChevronDown
+                  size={14}
+                  className={cn("transition", isOpen ? "" : "-rotate-90")}
+                />
+              </button>
+              {isOpen && (
+                <div className="mt-1 space-y-1">
+                  {g.items.map((it) => (
+                    <NavLink
+                      key={it.href}
+                      item={it}
+                      active={pathname === it.href}
+                      onNavigate={() => setDrawer(false)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-      <div className="mt-auto space-y-3 pt-3">
+      {/* Pie fijo: panel interno + usuario */}
+      <div className="mt-3 shrink-0 space-y-3 border-t border-border pt-3">
         {isInternal && (
           <Link
             href="/internal/tenants"

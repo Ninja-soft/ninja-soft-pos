@@ -248,6 +248,29 @@
     radial-gradient(circle at 72% 86%, rgba(255, 210, 31, 0.06), transparent 28%);
 }
 
+/* ============================================================
+   Scrollbar fina tematizada — sidebar y paneles con overflow.
+   Chrome/Firefox: propiedades estándar; Safari: pseudos webkit.
+   ============================================================ */
+.slim-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.slim-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.slim-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.slim-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+.slim-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: var(--muted-foreground);
+}
+
 /* Ticket no fiscal: al imprimir, solo se ve el ticket. */
 @media print {
   body * {

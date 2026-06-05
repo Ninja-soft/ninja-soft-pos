@@ -269,7 +269,7 @@ export function AppShell({
       </Link>
 
       {/* Navegación scrolleable */}
-      <div className="-mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+      <div className="slim-scrollbar -mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
         {NAV.top
           .filter((it) => it.href !== "/dashboard-team" || canOwnerPanel)
           .map((it) => (
@@ -377,7 +377,7 @@ export function AppShell({
           <Isotype className="h-6 w-auto" />
         </header>
 
-        <main className="app-bg min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />

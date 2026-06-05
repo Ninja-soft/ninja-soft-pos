@@ -88,6 +88,11 @@ export default function InternalTenantDetail({
 
   // Audit log del tenant (últimas 30 acciones).
   const { data: auditEntries } = useInternalAudit({ tenantId: params.id });
+  const [auditTab, setAuditTab] = useState<"all" | "billing">("all");
+  const BILLING_TYPES = new Set(["subscription", "trial", "billing_record", "billing", "impersonation"]);
+  const visibleAudit = auditTab === "billing"
+    ? (auditEntries ?? []).filter((e) => BILLING_TYPES.has(e.entity_type))
+    : (auditEntries ?? []);
 
   // Genera el link de suscripción (preapproval) de Mercado Pago para el tenant.
   const checkout = useMutation({
@@ -511,14 +516,30 @@ export default function InternalTenantDetail({
         Actividad reciente
       </Heading>
       <Card className="mt-3">
+        {/* tabs */}
+        <div className="flex border-b border-border px-4">
+          {(["all", "billing"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setAuditTab(tab)}
+              className={
+                auditTab === tab
+                  ? "border-b-2 border-ninja-flameSoft pb-2.5 pt-3 text-sm font-medium text-ninja-flameSoft"
+                  : "pb-2.5 pt-3 text-sm text-muted-foreground transition hover:text-foreground mr-4"
+              }
+            >
+              {tab === "all" ? "Todo" : "Plan & facturación"}
+            </button>
+          ))}
+        </div>
         <CardContent className="p-0">
-          {!auditEntries || auditEntries.length === 0 ? (
+          {visibleAudit.length === 0 ? (
             <p className="px-4 py-4 text-sm text-muted-foreground">
               Sin registros de actividad.
             </p>
           ) : (
             <ul className="divide-y divide-border">
-              {auditEntries.slice(0, 30).map((entry) => (
+              {visibleAudit.slice(0, 30).map((entry) => (
                 <li key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
                   <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                     {entry.entity_type}

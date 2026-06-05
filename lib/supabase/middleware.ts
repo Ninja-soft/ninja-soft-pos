@@ -4,7 +4,14 @@ import type { Database } from "@/types/database";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/recover", "/reset-password"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/login-internal",
+  "/signup",
+  "/recover",
+  "/reset-password",
+];
 
 // Refresca la sesión y aplica redirecciones de auth. Ver docs/05-security.md §3.
 export async function updateSession(request: NextRequest) {
@@ -43,11 +50,20 @@ export async function updateSession(request: NextRequest) {
   // Sin sesión en ruta protegida → login.
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    // Rutas del panel interno van al login dedicado.
+    url.pathname = pathname.startsWith("/internal") ? "/login-internal" : "/login";
     return NextResponse.redirect(url);
   }
 
-  // Con sesión en página de auth → dashboard.
+  // Con sesión en /login-internal → si es interno va al panel, si no al dashboard.
+  if (user && pathname === "/login-internal") {
+    const meta = user.app_metadata as { is_internal?: boolean } | null;
+    const url = request.nextUrl.clone();
+    url.pathname = meta?.is_internal ? "/internal/tenants" : "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // Con sesión en páginas de auth regulares → dashboard.
   if (user && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

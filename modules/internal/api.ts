@@ -477,4 +477,26 @@ export const internalApi = {
     if (error) throw error;
     return data as string;
   },
+
+  // ── H11c — Impersonation ──────────────────────────────────────────────────
+
+  generateImpersonateLink: async (
+    tenantId: string,
+  ): Promise<{ actionLink: string; ownerEmail: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke(
+      "internal_impersonate",
+      { body: { tenant_id: tenantId } },
+    );
+    if (error) throw error;
+    const res = data as {
+      ok?: boolean;
+      action_link?: string;
+      owner_email?: string;
+      error?: string;
+    };
+    if (!res?.ok || !res.action_link)
+      throw new Error(res?.error ?? "link_failed");
+    return { actionLink: res.action_link, ownerEmail: res.owner_email ?? "" };
+  },
 };

@@ -19,9 +19,6 @@ import {
 } from "@/components/ui/Card";
 import { Accent, Eyebrow } from "@/components/ui/Typography";
 
-// H11c — Acceso al panel interno con copy y layout diferenciados del login de
-// clientes: sin registro, con aviso de auditoría. La layout de /internal sigue
-// validando is_internal (si no, manda al POS).
 export default function LoginInternalPage() {
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -37,6 +34,14 @@ export default function LoginInternalPage() {
     const { error } = await supabase.auth.signInWithPassword(values);
     if (error) {
       setServerError("Email o contraseña incorrectos.");
+      return;
+    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.app_metadata?.is_internal !== true) {
+      await supabase.auth.signOut();
+      setServerError("Esta cuenta no tiene acceso al panel interno de NinjaSoft.");
       return;
     }
     router.push("/internal/tenants");

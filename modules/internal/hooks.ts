@@ -127,6 +127,15 @@ export function useInternalMutations(tenantId: string) {
   };
 }
 
+// ── H11c — Impersonation ──────────────────────────────────────────────────
+
+export function useImpersonateTenant() {
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      internalApi.generateImpersonateLink(tenantId),
+  });
+}
+
 // ── H12 — Billing ─────────────────────────────────────────────────────────
 
 export function useBillingRecords(tenantId: string) {

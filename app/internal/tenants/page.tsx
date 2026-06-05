@@ -2,9 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
-import { useInternalTenants, useTenantHealth } from "@/modules/internal/hooks";
+import {
+  DateRangePicker,
+  type DateRange,
+} from "@/components/ui/DateRangePicker";
+import {
+  useFeatureFlagsCatalog,
+  useFlagOverrides,
+  useInternalTenants,
+  useTenantHealth,
+} from "@/modules/internal/hooks";
 import { formatRelative } from "@/lib/utils/format";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -21,6 +30,10 @@ export default function InternalTenantsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [plan, setPlan] = useState("");
+  const [flag, setFlag] = useState("");
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
+  const { data: flagsCatalog } = useFeatureFlagsCatalog();
+  const { data: flagOverrides } = useFlagOverrides(flag || null);
 
   const plans = useMemo(() => {
     const map = new Map<string, string>();
@@ -32,15 +45,39 @@ export default function InternalTenantsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // CUIT/teléfono se comparan solo por dígitos (ignora guiones y espacios).
+    const qDigits = q.replace(/\D/g, "");
     return (tenants ?? []).filter((t) => {
       if (status && (t.subStatus ?? t.status) !== status) return false;
       if (plan && t.planKey !== plan) return false;
+      if (flag) {
+        // Flag efectivo del tenant: override si existe, si no el default.
+        if (!flagOverrides) return false; // cargando overrides
+        const enabled =
+          flagOverrides.overrides.get(t.id) ?? flagOverrides.defaultEnabled;
+        if (!enabled) return false;
+      }
+      if (range?.from) {
+        const created = new Date(t.created_at);
+        if (created < range.from) return false;
+        if (range.to) {
+          const end = new Date(range.to);
+          end.setHours(23, 59, 59, 999);
+          if (created > end) return false;
+        }
+      }
       if (!q) return true;
-      return [t.name, t.slug, t.ownerName, t.ownerEmail]
+      const textMatch = [t.name, t.slug, t.ownerName, t.ownerEmail]
         .filter(Boolean)
         .some((v) => (v as string).toLowerCase().includes(q));
+      const digitsMatch =
+        qDigits.length >= 4 &&
+        [t.cuit, t.phone]
+          .filter(Boolean)
+          .some((v) => (v as string).replace(/\D/g, "").includes(qDigits));
+      return textMatch || digitsMatch;
     });
-  }, [tenants, search, status, plan]);
+  }, [tenants, search, status, plan, flag, flagOverrides, range]);
 
   const selectCls =
     "h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft";
@@ -63,7 +100,7 @@ export default function InternalTenantsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, slug o dueño…"
+            placeholder="Nombre, slug, dueño, email, CUIT o teléfono…"
             className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
           />
         </div>
@@ -91,6 +128,32 @@ export default function InternalTenantsPage() {
             </option>
           ))}
         </select>
+        <select
+          value={flag}
+          onChange={(e) => setFlag(e.target.value)}
+          className={selectCls}
+          title="Solo negocios con el feature flag activo (override o default)"
+        >
+          <option value="">Todos los flags</option>
+          {(flagsCatalog ?? []).map((f) => (
+            <option key={f.key} value={f.key} className="bg-ninja-deepViolet">
+              {f.key}
+            </option>
+          ))}
+        </select>
+        <DateRangePicker value={range} onChange={setRange} className="h-10" />
+        {(range?.from || flag) && (
+          <button
+            onClick={() => {
+              setRange(undefined);
+              setFlag("");
+            }}
+            className="inline-flex h-10 items-center gap-1 rounded-lg border border-border px-2.5 text-xs text-muted-foreground transition hover:text-foreground"
+            title="Limpiar flag y fechas"
+          >
+            <X size={13} /> Limpiar
+          </button>
+        )}
         {!isLoading && (
           <span className="text-xs text-muted-foreground">
             {filtered.length} de {tenants?.length ?? 0}

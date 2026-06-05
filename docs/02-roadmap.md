@@ -303,12 +303,12 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md). — *`staff_level_set`, `user_suspended`/`user_reactivated` auditados; matriz actualizada con la fila de suspensión y el estado de implementación.*
   - [x] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff. — *Enforced en `staff_admin` (set_level solo super; set_active sobre staff solo super).*
 
-- [~] **H11c — Consola internal completa + login independiente.** — *KPIs SaaS + buscador de tenants implementados (2026-06-04). Faltan: pantalla diferenciada de acceso, buscador global multi-campo, ficha 360, impersonation.*
+- [~] **H11c — Consola internal completa + login independiente.** — *KPIs SaaS + buscador de tenants (2026-06-04); login interno diferenciado + buscador global multi-campo (2026-06-05). Faltan: ficha 360, gestión de miembros desde internal, impersonation.*
   - [x] Entrar directo a `/internal` redirige a `/internal/tenants`; si no hay sesión, login conserva destino interno (`/login?next=/internal/tenants`).
   - [x] Dashboard con 8 KPIs SaaS (total, trial, activos, con problemas, nuevos 7/30d, conversión, MRR), breakdown por plan, alerta de negocios con problemas, quick links y tabla con buscador. Componente `TenantSearchTable`.
-  - [ ] Pantalla de acceso interno con copy y layout diferenciado de POS/tenant.
-  - [ ] Dashboard internal con KPIs SaaS: MRR, ARR, trials, activos, past_due, suspendidos, churn, conversión trial→paid, tickets de soporte y alertas.
-  - [ ] Buscador global por tenant, CUIT, email owner, teléfono, slug, plan, estado, feature flag y fecha de alta.
+  - [x] Pantalla de acceso interno con copy y layout diferenciado de POS/tenant. — *`/login-internal` (2026-06-05): card propia "Staff NinjaSoft / Panel interno" con aviso de auditoría, sin registro, link cruzado al login de clientes; al entrar va a `/internal/tenants`.*
+  - [ ] Dashboard internal con KPIs SaaS: MRR, ARR, trials, activos, past_due, suspendidos, churn, conversión trial→paid, tickets de soporte y alertas. *(8 KPIs + breakdown por plan ya en `/internal`; ARR/churn/tickets pendientes.)*
+  - [x] Buscador global por tenant, CUIT, email owner, teléfono, slug, plan, estado, feature flag y fecha de alta. — *`/internal/tenants` (2026-06-05): el texto matchea nombre/slug/dueño/email, y CUIT/teléfono por dígitos; filtros de estado, plan, feature flag (efectivo: override o default) y rango de fecha de alta (DateRangePicker).*
   - [ ] Ficha 360 del tenant: datos legales/comerciales, owners, usuarios, sucursales, cajas, ventas, módulos activos, flags, salud, últimos errores y actividad.
   - [ ] Desde internal se puede invitar usuarios al tenant, reenviar invitación, cambiar rol, suspender/reactivar miembro y resetear acceso con motivo.
   - [ ] Desde internal se puede convertir un usuario existente en staff NinjaSoft y asignarle rol/nivel interno según permiso.

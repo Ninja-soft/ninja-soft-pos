@@ -188,3 +188,19 @@ export function useCreateBrand() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["brands"] }),
   });
 }
+
+export function useBrandMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["brands"] });
+  return {
+    update: useMutation({
+      mutationFn: ({ id, name }: { id: string; name: string }) =>
+        brandsApi.update(id, name),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => brandsApi.remove(id),
+      onSuccess: inv,
+    }),
+  };
+}

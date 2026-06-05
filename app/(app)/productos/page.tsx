@@ -11,16 +11,19 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Tag,
   Trash2,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
+import { BrandsModal } from "@/components/products/BrandsModal";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
 import {
@@ -40,11 +43,13 @@ export default function ProductosPage() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [brandsOpen, setBrandsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [selected, setSelected] = useState<Product | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const { toast } = useToast();
 
   const { data: categories } = useCategories();
@@ -112,12 +117,18 @@ export default function ProductosPage() {
   }
 
   async function onDelete(p: Product) {
-    if (!window.confirm(`¿Eliminar "${p.name}"? (baja lógica)`)) return;
+    setDeleteTarget(p);
+  }
+
+  async function confirmDelete(_reason?: string) {
+    if (!deleteTarget) return;
     try {
-      await remove.mutateAsync(p.id);
+      await remove.mutateAsync(deleteTarget.id);
       toast({ title: "Producto eliminado", variant: "success" });
     } catch {
       toast({ title: "No se pudo eliminar", variant: "error" });
+    } finally {
+      setDeleteTarget(null);
     }
   }
 
@@ -138,6 +149,9 @@ export default function ProductosPage() {
             </Button>
             <Button variant="secondary" className="shrink-0" onClick={() => setCategoriesOpen(true)}>
               <FolderTree size={16} /> Categorías
+            </Button>
+            <Button variant="secondary" className="shrink-0" onClick={() => setBrandsOpen(true)}>
+              <Tag size={16} /> Marcas
             </Button>
             <Button variant="secondary" className="shrink-0" onClick={() => setWarrantyOpen(true)}>
               <ShieldCheck size={16} /> Garantías
@@ -303,8 +317,19 @@ export default function ProductosPage() {
         product={selected}
       />
       <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} />
+      <BrandsModal open={brandsOpen} onOpenChange={setBrandsOpen} />
       <CategoriesModal open={categoriesOpen} onOpenChange={setCategoriesOpen} />
       <WarrantyPlansModal open={warrantyOpen} onOpenChange={setWarrantyOpen} />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title="Eliminar producto"
+        description={`¿Eliminar "${deleteTarget?.name}"? Esta es una baja lógica (se puede recuperar).`}
+        confirmLabel="Eliminar"
+        danger
+        loading={remove.isPending}
+        onConfirm={() => confirmDelete()}
+      />
     </>
   );
 }

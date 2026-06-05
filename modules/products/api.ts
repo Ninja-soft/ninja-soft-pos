@@ -473,4 +473,19 @@ export const brandsApi = {
     if (error) throw error;
     return data as Brand;
   },
+
+  update: async (id: string, name: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("brands").update({ name }).eq("id", id);
+    if (error) throw error;
+  },
+
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("brands")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+  },
 };

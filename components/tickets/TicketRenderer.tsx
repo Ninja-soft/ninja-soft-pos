@@ -10,12 +10,12 @@ import type { SampleTicketData } from "@/lib/tickets/sample";
 
 export type TicketData = SampleTicketData;
 
-const alignCls = (a?: Align) =>
+export const alignCls = (a?: Align) =>
   a === "left" ? "text-left" : a === "right" ? "text-right" : "text-center";
-const sizeCls = (s?: TextSize) =>
+export const sizeCls = (s?: TextSize) =>
   s === "sm" ? "text-[10px]" : s === "lg" ? "text-base" : "text-xs";
 
-function Barcode({ value }: { value: string }) {
+export function Barcode({ value }: { value: string }) {
   let segs;
   try {
     segs = code39Segments(value, 3);

@@ -28,13 +28,14 @@ export const ticketTemplatesApi = {
 
   getDefault: async (kind: TemplateKind): Promise<TicketTemplate | null> => {
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("ticket_templates")
       .select("*")
       .eq("kind", kind)
       .eq("is_default", true)
       .is("deleted_at", null)
       .maybeSingle();
+    if (error) throw error;
     return (data as TicketTemplate | null) ?? null;
   },
 
@@ -52,7 +53,6 @@ export const ticketTemplatesApi = {
   update: async (id: string, input: Partial<TemplateInput>): Promise<void> => {
     const supabase = createClient();
     const patch: Record<string, unknown> = { ...input };
-    if (input.content) patch.content = input.content;
     const { error } = await supabase
       .from("ticket_templates")
       .update(patch as never)

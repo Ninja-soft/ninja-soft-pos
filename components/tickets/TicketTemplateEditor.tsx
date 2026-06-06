@@ -929,7 +929,9 @@ function CanvasPreview({
           .filter((el) => el.type !== "items")
           .map((el) => {
             const isSel = selected === el.id;
-            const top = hasItems && el.y >= (splitY as number) ? el.y : el.y;
+            // Overlay aproximado: usa el y crudo (la zona inferior real queda
+            // desplazada por el alto variable de la tabla de ítems).
+            const top = el.y;
             return (
               <div
                 key={el.id}

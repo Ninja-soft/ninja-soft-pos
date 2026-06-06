@@ -90,3 +90,17 @@ describe("TemplateRenderer", () => {
     expect(screen.getByText("Mi Kiosco SRL")).toBeDefined();
   });
 });
+
+describe("TemplateRenderer — canvas vacío", () => {
+  it("canvas sin elementos cae al fallback de bloques", () => {
+    render(
+      <TemplateRenderer
+        template={tpl("canvas", { canvas: { elements: [], height: 200 } })}
+        fallbackBlocks={fallback}
+        data={data}
+      />,
+    );
+    // El fallback de bloques default muestra TOTAL.
+    expect(screen.getByText("TOTAL")).toBeDefined();
+  });
+});

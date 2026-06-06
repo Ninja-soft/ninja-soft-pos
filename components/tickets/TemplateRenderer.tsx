@@ -60,7 +60,8 @@ export function TemplateRenderer({
     c &&
     "canvas" in c &&
     c.canvas &&
-    Array.isArray(c.canvas.elements)
+    Array.isArray(c.canvas.elements) &&
+    c.canvas.elements.length
   ) {
     return (
       <CanvasTicketRenderer

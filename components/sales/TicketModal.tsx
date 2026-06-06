@@ -13,8 +13,9 @@ import { useDefaultTemplate, useTicketBranding } from "@/modules/tickets/hooks";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 import { downloadA4FromNode } from "@/lib/tickets/exportPng";
-import { defaultSaleBlocks, type BlocksContent } from "@/lib/tickets/blocks";
-import { TicketRenderer, type TicketData } from "@/components/tickets/TicketRenderer";
+import { defaultSaleBlocks } from "@/lib/tickets/blocks";
+import { type TicketData } from "@/components/tickets/TicketRenderer";
+import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 
 interface Props {
   open: boolean;
@@ -96,18 +97,16 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
     return () => clearTimeout(t);
   }, [open, data, autoEmailEnabled, qc]);
 
-  // Bloques: gana la plantilla default; si no hay, replica el ticket clásico
-  // respetando los flags viejos del branding.
-  const blocks = useMemo(() => {
-    const fromTpl =
-      tpl?.mode === "blocks" ? (tpl.content as unknown as BlocksContent | null)?.blocks : null;
-    if (fromTpl?.length) return fromTpl;
+  // Fallback de bloques (legacy-compat): si no hay plantilla, replica el ticket
+  // clásico respetando los flags viejos del branding. El despacho por modo lo
+  // resuelve TemplateRenderer.
+  const fallbackBlocks = useMemo(() => {
     return defaultSaleBlocks().filter((b) => {
       if (b.type === "qr") return brand?.ticket_show_qr === true;
       if (b.type === "logo") return brand?.ticket_show_logo !== false;
       return true;
     });
-  }, [tpl, brand]);
+  }, [brand]);
 
   const ticketData: TicketData | null = data
     ? {
@@ -168,11 +167,11 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
       ) : (
         <>
           <div ref={ticketRef}>
-            <TicketRenderer
-              blocks={blocks}
+            <TemplateRenderer
+              template={tpl ?? null}
+              fallbackBlocks={fallbackBlocks}
               data={ticketData}
-              paper={paper}
-              showNinjaLogo={Boolean(tpl?.show_ninjasoft_logo)}
+              paperOverride={paper}
               className="ticket-print"
             />
           </div>

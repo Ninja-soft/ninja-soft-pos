@@ -64,7 +64,7 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     pagos_html: pagosHtml,
     pie: esc(brand?.ticket_footer || "¡Gracias por su compra!"),
     leyenda: esc(brand?.ticket_legend || ""),
-    qr_url: qrUrl,
+    qr_url: esc(qrUrl),
     anulada: sale.status === "voided" ? "ANULADA" : "",
   };
 }

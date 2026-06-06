@@ -79,6 +79,20 @@ describe("HtmlTicketRenderer", () => {
     expect(container.innerHTML).not.toContain("<script>");
     expect(container.innerHTML).not.toContain("onerror");
   });
+
+  it("bloquea URIs javascript:/data: en src y href (regresión DOMPurify)", () => {
+    const evil = `<a href="javascript:alert(1)">link</a><img src="data:text/html,<script>alert(1)</script>" /><img src="javascript:alert(2)" />`;
+    const { container } = render(
+      <HtmlTicketRenderer
+        html={evil}
+        data={sampleTicketData(brand)}
+        paper="80"
+        showNinjaLogo={false}
+      />,
+    );
+    expect(container.innerHTML).not.toContain("javascript:");
+    expect(container.innerHTML).not.toContain("data:text/html");
+  });
 });
 
 describe("HTML_STARTER_TEMPLATES", () => {

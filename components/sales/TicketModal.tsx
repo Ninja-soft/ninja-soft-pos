@@ -128,7 +128,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
           subtotal: it.subtotal,
         })),
         payments: data.payments.map((p) => ({ id: p.id, method: p.method, amount: p.amount })),
-        customer: null,
+        customer: data.sale.customers
+          ? { name: data.sale.customers.name, email: data.sale.customers.email }
+          : null,
         brand: brand ?? null,
       }
     : null;

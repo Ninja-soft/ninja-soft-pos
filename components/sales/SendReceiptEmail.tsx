@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Mail } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
@@ -57,8 +57,11 @@ export function SendReceiptEmail({
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [save, setSave] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   async function handleSend() {
+    // Guard sincrónico anti doble-click (busy via estado llega un render tarde).
+    if (busyRef.current) return;
     const to = email.trim();
     if (!EMAIL_RE.test(to)) {
       toast({ title: "Email inválido", variant: "error" });
@@ -69,6 +72,7 @@ export function SendReceiptEmail({
       toast({ title: "No se pudo generar el comprobante", variant: "error" });
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     try {
       await sendReceiptEmail(saleId, to, node);
@@ -95,6 +99,7 @@ export function SendReceiptEmail({
       const msg = e instanceof Error ? e.message : "send_failed";
       toast({ title: mapError(msg), variant: "error" });
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }

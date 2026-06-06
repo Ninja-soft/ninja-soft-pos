@@ -46,7 +46,11 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   footer: "Pie",
 };
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+// IDs cortos para bloques dentro de una plantilla (no son claves de DB).
+const uid = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
 
 export function newBlock(type: BlockType): TicketBlock {
   const id = uid();

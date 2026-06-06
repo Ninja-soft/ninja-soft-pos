@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileDown, Printer } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { SendReceiptEmail, sendReceiptEmail } from "@/components/sales/SendReceiptEmail";
 import { useDefaultTemplate, useTicketBranding } from "@/modules/tickets/hooks";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
@@ -26,9 +29,25 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data: tpl } = useDefaultTemplate("sale", open);
   const { data: numFmt } = useSaleNumberFormat();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const ticketRef = useRef<HTMLDivElement>(null);
   const printedRef = useRef(false);
+  const emailedRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
+
+  // Preferencia del POS: enviar comprobante por email automáticamente.
+  const { data: autoEmailEnabled } = useQuery({
+    queryKey: ["pos-settings", "auto-email-receipt"],
+    enabled: open,
+    queryFn: async (): Promise<boolean> => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("pos_settings")
+        .select("auto_email_receipt")
+        .maybeSingle();
+      return Boolean(data?.auto_email_receipt);
+    },
+  });
 
   // Auto-imprimir al abrir (preferencia del POS), una sola vez por apertura.
   useEffect(() => {
@@ -42,6 +61,40 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
       return () => clearTimeout(t);
     }
   }, [open, autoPrint, data]);
+
+  // Auto-envío del comprobante por email (preferencia del POS), una sola vez
+  // por apertura. Nunca debe bloquear ni molestar el flujo de venta: ante
+  // cualquier fallo, solo console.warn.
+  useEffect(() => {
+    if (!open) {
+      emailedRef.current = false;
+      return;
+    }
+    const to = data?.sale.customers?.email;
+    if (
+      !data ||
+      emailedRef.current ||
+      !autoEmailEnabled ||
+      data.sale.receipt_emailed_at ||
+      !to ||
+      data.sale.status !== "completed"
+    ) {
+      return;
+    }
+    emailedRef.current = true;
+    const saleId = data.sale.id;
+    const t = setTimeout(() => {
+      const node = ticketRef.current;
+      if (!node) return;
+      sendReceiptEmail(saleId, to, node)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["sales", "detail", saleId] });
+          qc.invalidateQueries({ queryKey: ["sales", "list"] });
+        })
+        .catch((e) => console.warn("auto-email comprobante falló:", e));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [open, data, autoEmailEnabled, qc]);
 
   // Bloques: gana la plantilla default; si no hay, replica el ticket clásico
   // respetando los flags viejos del branding.
@@ -122,16 +175,26 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
             />
           </div>
 
-          <div className="no-print mt-4 flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-            <Button variant="secondary" onClick={handleA4} disabled={downloading}>
-              <FileDown size={16} /> A4 (PDF)
-            </Button>
-            <Button onClick={() => window.print()}>
-              <Printer size={16} /> Imprimir
-            </Button>
+          <div className="no-print mt-4 space-y-3">
+            <SendReceiptEmail
+              saleId={data.sale.id}
+              getTicketNode={() => ticketRef.current}
+              defaultEmail={data.sale.customers?.email ?? null}
+              customerId={data.sale.customer_id}
+              sentTo={data.sale.receipt_email_to}
+              sentAt={data.sale.receipt_emailed_at}
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="secondary" onClick={() => onOpenChange(false)}>
+                Cerrar
+              </Button>
+              <Button variant="secondary" onClick={handleA4} disabled={downloading}>
+                <FileDown size={16} /> A4 (PDF)
+              </Button>
+              <Button onClick={() => window.print()}>
+                <Printer size={16} /> Imprimir
+              </Button>
+            </div>
           </div>
         </>
       )}

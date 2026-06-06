@@ -41,8 +41,12 @@ export const returnReasonsApi = {
 export type SaleItem = Tables<"sale_items">;
 export type Payment = Tables<"payments">;
 
+export type SaleWithCustomer = Sale & {
+  customers: { name: string; email: string | null } | null;
+};
+
 export interface SaleDetail {
-  sale: Sale;
+  sale: SaleWithCustomer;
   items: SaleItem[];
   payments: Payment[];
 }
@@ -70,13 +74,13 @@ export const salesApi = {
   get: async (id: string): Promise<SaleDetail> => {
     const supabase = createClient();
     const [saleRes, itemsRes, paymentsRes] = await Promise.all([
-      supabase.from("sales").select("*").eq("id", id).single(),
+      supabase.from("sales").select("*, customers(name, email)").eq("id", id).single(),
       supabase.from("sale_items").select("*").eq("sale_id", id),
       supabase.from("payments").select("*").eq("sale_id", id),
     ]);
     if (saleRes.error) throw saleRes.error;
     return {
-      sale: saleRes.data as Sale,
+      sale: saleRes.data as unknown as SaleWithCustomer,
       items: (itemsRes.data ?? []) as SaleItem[],
       payments: (paymentsRes.data ?? []) as Payment[],
     };

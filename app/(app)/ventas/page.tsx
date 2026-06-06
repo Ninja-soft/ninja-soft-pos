@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Ban, Download, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
+import { Ban, Download, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
@@ -186,15 +186,22 @@ export default function VentasPage() {
                     {formatCurrency(s.total)}
                   </td>
                   <td className="px-4 py-3">
-                    {s.status === "voided" ? (
-                      <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300">
-                        Anulada
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-                        Completada
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1.5">
+                      {s.status === "voided" ? (
+                        <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+                          Anulada
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                          Completada
+                        </span>
+                      )}
+                      {s.receipt_emailed_at && (
+                        <span title="Email enviado" className="inline-flex text-muted-foreground">
+                          <Mail size={14} aria-label="Email enviado" />
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">

@@ -12,6 +12,7 @@ import {
   UserCheck,
   Hash,
   ClipboardCheck,
+  Mail,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -37,6 +38,7 @@ type Settings = {
   sale_prefix: string;
   sale_pad: number;
   customer_required: CustomerRequired;
+  auto_email_receipt: boolean;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -80,7 +82,7 @@ export function OperationSettingsCard() {
       const { data } = await supabase
         .from("pos_settings")
         .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required",
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required, auto_email_receipt",
         )
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -97,6 +99,7 @@ export function OperationSettingsCard() {
           sale_prefix: "",
           sale_pad: 0,
           customer_required: {},
+          auto_email_receipt: false,
         }
       );
     },
@@ -113,6 +116,7 @@ export function OperationSettingsCard() {
   const [salePrefix, setSalePrefix] = useState("");
   const [salePad, setSalePad] = useState(0);
   const [customerReq, setCustomerReq] = useState<CustomerRequired>({});
+  const [autoEmailReceipt, setAutoEmailReceipt] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -131,6 +135,7 @@ export function OperationSettingsCard() {
     setSalePrefix(settings.sale_prefix ?? "");
     setSalePad(settings.sale_pad ?? 0);
     setCustomerReq((settings.customer_required as CustomerRequired) ?? {});
+    setAutoEmailReceipt(settings.auto_email_receipt ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -154,6 +159,7 @@ export function OperationSettingsCard() {
           sale_prefix: salePrefix.trim(),
           sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
           customer_required: customerReq,
+          auto_email_receipt: autoEmailReceipt,
         },
         { onConflict: "tenant_id" },
       );
@@ -388,6 +394,26 @@ export function OperationSettingsCard() {
             checked={requireCustomer}
             onCheckedChange={setRequireCustomer}
             label="Requerir cliente"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Comprobante por email automático */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Mail size={16} className="text-ninja-flameSoft" /> Comprobante por email automático
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Al completar una venta, envía el comprobante por email si el cliente
+              tiene un email cargado en su ficha.
+            </p>
+          </div>
+          <Switch
+            checked={autoEmailReceipt}
+            onCheckedChange={setAutoEmailReceipt}
+            label="Enviar comprobante por email automáticamente (si el cliente tiene email)"
           />
         </CardContent>
       </Card>

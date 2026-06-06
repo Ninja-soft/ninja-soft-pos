@@ -118,6 +118,7 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
     const { admin } = ctx;
     if (!admin) return;
     for (const t of [ctx.tenantA, ctx.tenantB].filter(Boolean)) {
+      await admin.from("ticket_templates").delete().eq("tenant_id", t);
       await admin.from("payment_plans").delete().eq("tenant_id", t);
       await admin.from("audit_logs").delete().eq("tenant_id", t);
       await admin.from("customers").delete().eq("tenant_id", t);
@@ -303,6 +304,51 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
 
     const { data } = await ctx.ownerA.from("tenant_notes").select("id");
     expect(data ?? []).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // ticket_templates (H9b): lectura = miembros del tenant; escritura = owner/manager
+  // ---------------------------------------------------------------------------
+
+  it("ticket_templates: el owner crea una plantilla en su tenant", async () => {
+    const { error } = await ctx.ownerA.from("ticket_templates").insert({
+      tenant_id: ctx.tenantA,
+      name: `Test ${STAMP}`,
+    });
+    expect(error).toBeNull();
+  });
+
+  it("ticket_templates: el cashier no puede crear plantillas", async () => {
+    const { error } = await ctx.cashierA.from("ticket_templates").insert({
+      tenant_id: ctx.tenantA,
+      name: `Cashier ${STAMP}`,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("ticket_templates: el cashier puede leer las plantillas de su tenant", async () => {
+    const { data, error } = await ctx.cashierA
+      .from("ticket_templates")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("ticket_templates: el owner B no ve las plantillas del tenant A", async () => {
+    const { data: cross } = await ctx.ownerB
+      .from("ticket_templates")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(cross).toEqual([]);
+  });
+
+  it("ticket_templates: el owner A no puede insertar en el tenant ajeno", async () => {
+    const { error } = await ctx.ownerA.from("ticket_templates").insert({
+      tenant_id: ctx.tenantB,
+      name: `Intruso ${STAMP}`,
+    });
+    expect(error).not.toBeNull();
   });
 });
 

@@ -59,6 +59,63 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_records: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          medium: string
+          notes: string | null
+          period_end: string | null
+          period_start: string | null
+          receipt_ref: string | null
+          recorded_by: string | null
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          id?: string
+          medium: string
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          receipt_ref?: string | null
+          recorded_by?: string | null
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          medium?: string
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          receipt_ref?: string | null
+          recorded_by?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_records_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_records_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           created_at: string
@@ -1017,6 +1074,7 @@ export type Database = {
       pos_settings: {
         Row: {
           allow_negative_stock: boolean
+          auto_email_receipt: boolean
           blind_close: boolean
           close_tolerance: number
           customer_required: Json
@@ -1033,6 +1091,7 @@ export type Database = {
         }
         Insert: {
           allow_negative_stock?: boolean
+          auto_email_receipt?: boolean
           blind_close?: boolean
           close_tolerance?: number
           customer_required?: Json
@@ -1049,6 +1108,7 @@ export type Database = {
         }
         Update: {
           allow_negative_stock?: boolean
+          auto_email_receipt?: boolean
           blind_close?: boolean
           close_tolerance?: number
           customer_required?: Json
@@ -1588,6 +1648,8 @@ export type Database = {
           id: string
           notes: string | null
           number: number
+          receipt_email_to: string | null
+          receipt_emailed_at: string | null
           status: string
           store_id: string
           subtotal: number
@@ -1608,6 +1670,8 @@ export type Database = {
           id?: string
           notes?: string | null
           number: number
+          receipt_email_to?: string | null
+          receipt_emailed_at?: string | null
           status?: string
           store_id: string
           subtotal: number
@@ -1628,6 +1692,8 @@ export type Database = {
           id?: string
           notes?: string | null
           number?: number
+          receipt_email_to?: string | null
+          receipt_emailed_at?: string | null
           status?: string
           store_id?: string
           subtotal?: number
@@ -2310,6 +2376,59 @@ export type Database = {
         }
         Relationships: []
       }
+      ticket_templates: {
+        Row: {
+          content: Json
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_default: boolean
+          kind: string
+          mode: string
+          name: string
+          paper: string
+          show_ninjasoft_logo: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          kind?: string
+          mode?: string
+          name: string
+          paper?: string
+          show_ninjasoft_logo?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          kind?: string
+          mode?: string
+          name?: string
+          paper?: string
+          show_ninjasoft_logo?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           avatar_url: string | null
@@ -2436,6 +2555,10 @@ export type Database = {
       }
       current_tenant_id: { Args: never; Returns: string }
       get_email_smtp: { Args: never; Returns: Json }
+      internal_extend_trial: {
+        Args: { p_days: number; p_tenant_id: string }
+        Returns: string
+      }
       internal_level: { Args: never; Returns: string }
       internal_list_staff: {
         Args: never
@@ -2463,6 +2586,10 @@ export type Database = {
         Args: { p_status: string; p_tenant_id: string }
         Returns: undefined
       }
+      internal_set_trial_end: {
+        Args: { p_ends_at: string; p_reason?: string; p_tenant_id: string }
+        Returns: string
+      }
       internal_tenant_health: {
         Args: never
         Returns: {
@@ -2473,6 +2600,10 @@ export type Database = {
           sales_7d_total: number
           tenant_id: string
         }[]
+      }
+      internal_trial_outcome: {
+        Args: { p_outcome: string; p_reason?: string; p_tenant_id: string }
+        Returns: undefined
       }
       is_internal: { Args: never; Returns: boolean }
       open_cash_shift: {

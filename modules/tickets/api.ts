@@ -1,16 +1,17 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
-import type { BlocksContent } from "@/lib/tickets/blocks";
+import type { TemplateContent } from "@/lib/tickets/blocks";
 
 export type TicketTemplate = Tables<"ticket_templates">;
 export type TemplateKind = "sale" | "promo" | "gift";
+export type TemplateMode = "blocks" | "canvas" | "html";
 
 export interface TemplateInput {
   name: string;
   kind: TemplateKind;
-  mode: "blocks";
+  mode: TemplateMode;
   paper: "58" | "80" | "a4";
-  content: BlocksContent;
+  content: TemplateContent;
   show_ninjasoft_logo: boolean;
 }
 

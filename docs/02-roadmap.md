@@ -269,16 +269,16 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] **Numeración del comprobante personalizable por tenant**: prefijo + padding (`pos_settings.sale_prefix`/`sale_pad`) sobre el correlativo único por tienda. Se aplica en /ventas, ticket y PDF; configurable en Operación del POS. El correlativo interno se mantiene.
   - [x] *Criterio:* un tenant configura su ticket (logo/datos/título/pie/leyenda/QR/ancho), lo imprime y descarga A4.
 
-- [~] **H9b — Editor visual de ticket multi-modo + envío por email.** — *PR1 hecho (2026-06-06): infra + editor de bloques + email. Spec: [`superpowers/specs/2026-06-06-h9b-ticket-designer-design.md`](superpowers/specs/2026-06-06-h9b-ticket-designer-design.md). Faltan modos canvas y HTML (PR2).*
+- [x] **H9b — Editor visual de ticket multi-modo + envío por email.** — *Completo (2026-06-06): PR1 infra + bloques + email; PR2 modos canvas y HTML. Spec: [`superpowers/specs/2026-06-06-h9b-ticket-designer-design.md`](superpowers/specs/2026-06-06-h9b-ticket-designer-design.md).*
   - [x] **Editor visual por bloques**: el dueño diseña su ticket/comprobante con bloques reordenables (logo, datos del negocio, título, datos de venta, cliente, ítems, totales, medios de pago, QR, código de barras, texto libre, imagen, separador, pie) con opciones por bloque y preview en vivo. WYSIWYG. — *Configuración → Tickets, `TicketTemplateEditor`.*
   - [x] Plantillas guardables por tenant y por tipo (`sale`/`promo`/`gift`; papel 58/80/A4), default por tipo, duplicar/eliminar. Preview en vivo con venta de muestra. — *Tabla `ticket_templates` + `TicketTemplatesCard`.*
   - [x] Render a imagen/PDF desde el diseño para imprimir, descargar y adjuntar. — *`TicketRenderer` único (térmica vía `ticket-print`, A4 vía html2canvas + jsPDF, PNG para email).*
   - [x] **Logo NinjaSoft al pie opcional** por plantilla (`show_ninjasoft_logo`), aplica en los 3 modos.
   - [x] **Envío del comprobante por email al cliente** con el diseño elegido; registro de envío (`receipt_email_to/At` + `audit_logs`) y reenvío desde /ventas. — *Edge Function `send_receipt_email` (SMTP del sistema H13).*
   - [x] Botón "Enviar por email" en el ticket de una venta (usa el email del cliente o lo pide al momento, con opción de guardarlo en la ficha); **envío automático** opcional si el cliente tiene email (`pos_settings.auto_email_receipt`).
-  - [ ] **Modo canvas libre (XY tipo Canva)**: elementos con posición/tamaño libres; la tabla de ítems es elemento de flujo (alto elástico). Ideal promos/gift. *(PR2)*
-  - [ ] **Modo HTML avanzado** con variables `{{…}}` y **5 plantillas precargadas** (Clásico 80mm, Compacto 58mm, A4 factura, Volante promo, Gift card). *(PR2)*
-  - [x] *Criterio (bloques):* el dueño diseña su ticket en el editor, lo guarda como default, y al cobrar puede enviarlo por email al cliente con ese diseño. ✓
+  - [x] **Modo canvas libre (XY tipo Canva)**: elementos con posición/tamaño libres, drag con puntero + coordenadas numéricas; la tabla de ítems es elemento de flujo (alto elástico). Ideal promos/gift. — *PR2, `CanvasTicketRenderer` + editor canvas.*
+  - [x] **Modo HTML avanzado** con variables `{{…}}` (18 vars, click-para-copiar) y **5 plantillas precargadas** (Clásico 80mm, Compacto 58mm, A4 factura, Volante promo, Gift card); sanitizado DOMPurify. — *PR2, `HtmlTicketRenderer`.*
+  - [x] *Criterio:* el dueño diseña su ticket en cualquiera de los 3 modos, lo guarda como default, y al cobrar puede imprimirlo, bajarlo en A4 y enviarlo por email al cliente con ese diseño. ✓
 
 - [~] **H10 — Catálogo público + variantes.** — *Catálogo público base hecho (PR #32); variantes y listas por canal pendientes.*
   - [x] Catálogo web público por tenant en `/c/<slug>` (RPC `public_catalog` SECURITY DEFINER, anónimo; solo tenants activos y productos activos). Muestra logo/branding, fotos, precios y categorías.

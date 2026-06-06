@@ -15,8 +15,8 @@ import {
   useSetDefaultTemplate,
   useTicketTemplates,
 } from "@/modules/tickets/hooks";
-import { defaultSaleBlocks, type BlocksContent } from "@/lib/tickets/blocks";
-import type { TemplateKind, TicketTemplate } from "@/modules/tickets/api";
+import { defaultSaleBlocks, type TemplateContent } from "@/lib/tickets/blocks";
+import type { TemplateKind, TemplateMode, TicketTemplate } from "@/modules/tickets/api";
 import { TicketTemplateEditor } from "@/components/tickets/TicketTemplateEditor";
 
 const KIND_LABELS: Record<TemplateKind, string> = {
@@ -25,6 +25,11 @@ const KIND_LABELS: Record<TemplateKind, string> = {
   gift: "Gift",
 };
 const PAPER_LABELS: Record<string, string> = { "58": "58 mm", "80": "80 mm", a4: "A4" };
+const MODE_LABELS: Record<TemplateMode, string> = {
+  blocks: "Bloques",
+  canvas: "Canvas",
+  html: "HTML",
+};
 
 function useTenantId() {
   const supabase = createClient();
@@ -76,9 +81,9 @@ export function TicketTemplatesCard() {
         input: {
           name: `${t.name} (copia)`,
           kind: t.kind as TemplateKind,
-          mode: "blocks",
+          mode: (t.mode as TemplateMode) ?? "blocks",
           paper: t.paper as "58" | "80" | "a4",
-          content: (t.content as unknown as BlocksContent) ?? { blocks: defaultSaleBlocks() },
+          content: (t.content as unknown as TemplateContent) ?? { blocks: defaultSaleBlocks() },
           show_ninjasoft_logo: Boolean(t.show_ninjasoft_logo),
         },
       },
@@ -149,6 +154,9 @@ export function TicketTemplatesCard() {
                     Default
                   </span>
                 )}
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  {MODE_LABELS[t.mode as TemplateMode] ?? t.mode}
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {KIND_LABELS[t.kind as TemplateKind] ?? t.kind} ·{" "}
                   {PAPER_LABELS[t.paper] ?? t.paper}

@@ -90,7 +90,12 @@ Deno.serve(async (req: Request) => {
     .select("legal_name")
     .eq("tenant_id", sale.tenant_id)
     .maybeSingle();
-  const name = brand?.legal_name || "NinjaSoft POS";
+  // Sin caracteres de control: legal_name viaja en headers SMTP (From/Subject);
+  // CR/LF permitirían inyectar headers (denomailer no los filtra).
+  const name = (brand?.legal_name || "NinjaSoft POS")
+    // deno-lint-ignore no-control-regex
+    .replace(/[\x00-\x1f\x7f]+/g, " ")
+    .trim() || "NinjaSoft POS";
   const safeName = escapeHtml(name);
 
   const client = new SMTPClient({

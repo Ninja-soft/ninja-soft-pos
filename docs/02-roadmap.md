@@ -210,7 +210,15 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [ ] Vigencia por fecha/horario.
   - [ ] Combinables o exclusivas.
 - [ ] **Marketplace de integraciones:**
-  - [ ] Mercado Libre (publicación y sincronización de stock).
+  - [ ] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06)*
+    - [ ] **Conexión por tenant**: OAuth "Conectar con Mercado Libre" (un click, mismo patrón que MP en H15); tokens y refresh en tabla de secretos con RLS deny-all (solo Edge Functions), renovación automática.
+    - [ ] **Publicar desde el POS**: crear/editar publicaciones ML desde la ficha del producto — título, precio, fotos (reusa WebP de H7), categoría ML sugerida y atributos obligatorios. Vincular productos existentes con publicaciones ya creadas (matcheo por SKU/EAN de H10b).
+    - [ ] **Gestor de publicaciones**: pantalla dedicada con listado y estado (activa, pausada, sin stock, con problemas), pausar/reactivar, edición rápida de precio/stock y métricas básicas (visitas, preguntas pendientes).
+    - [ ] **Sincronización de stock y precio**: venta en mostrador descuenta stock de la publicación; cambio de precio/stock en el POS impacta en ML. Lista de precios por canal (gancha con H10: mostrador vs. ML con margen propio).
+    - [ ] **Ventas de ML dentro del POS**: las órdenes de ML entran por webhook/notificaciones como ventas del canal "Mercado Libre" — descuentan stock, aparecen en /ventas y reportes con comisión ML y costo de envío visibles por venta.
+    - [ ] **Conciliación**: cobros de ML (vía Mercado Pago) cruzados con sus órdenes; divergencias de stock detectadas con resolución manual (gancha con cockpit H84).
+    - [ ] **Preguntas y mensajería** de compradores: bandeja básica para responder desde el POS *(etapa 2)*.
+    - [ ] *Criterio:* el dueño conecta su cuenta ML, publica un producto del catálogo con foto y precio propio del canal, una venta en ML descuenta stock y aparece en /ventas con su comisión, y una venta en mostrador baja el stock de la publicación sin tocar ML a mano.
   - [ ] Tienda Nube.
   - [ ] WhatsApp Business para notificaciones.
 - [ ] **API pública** con OAuth para clientes Enterprise.

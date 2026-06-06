@@ -22,15 +22,20 @@ function Barcode({ value }: { value: string }) {
   } catch {
     return null;
   }
-  const total = segs.reduce((a, s) => a + s.width, 0);
-  let x = 0;
+  // Posición x precomputada por segmento (offset acumulado).
+  const positioned = segs.reduce<{ x: number; rects: { x: number; width: number; on: boolean }[] }>(
+    (acc, s) => {
+      acc.rects.push({ x: acc.x, width: s.width, on: s.on });
+      acc.x += s.width;
+      return acc;
+    },
+    { x: 0, rects: [] },
+  );
   return (
-    <svg viewBox={`0 0 ${total} 40`} className="mx-auto h-10 w-full max-w-[60mm]" preserveAspectRatio="none">
-      {segs.map((s, i) => {
-        const r = s.on ? <rect key={i} x={x} y={0} width={s.width} height={40} fill="black" /> : null;
-        x += s.width;
-        return r;
-      })}
+    <svg viewBox={`0 0 ${positioned.x} 40`} className="mx-auto h-10 w-full max-w-[60mm]" preserveAspectRatio="none">
+      {positioned.rects.map((r, i) =>
+        r.on ? <rect key={i} x={r.x} y={0} width={r.width} height={40} fill="black" /> : null,
+      )}
     </svg>
   );
 }

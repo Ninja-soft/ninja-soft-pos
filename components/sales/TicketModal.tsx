@@ -2,46 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { FileDown, Printer } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { useTicketBranding } from "@/modules/tickets/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
-
-type Branding = {
-  logo_url: string | null;
-  legal_name: string | null;
-  cuit: string | null;
-  phone: string | null;
-  address: string | null;
-  ticket_footer: string | null;
-  ticket_width: string | null;
-  ticket_title: string | null;
-  ticket_legend: string | null;
-  ticket_show_qr: boolean | null;
-  ticket_show_logo: boolean | null;
-};
-
-function useBranding(enabled: boolean) {
-  const supabase = createClient();
-  return useQuery({
-    queryKey: ["ticket-branding"],
-    enabled,
-    queryFn: async (): Promise<Branding | null> => {
-      const { data } = await supabase
-        .from("tenant_branding")
-        .select(
-          "logo_url, legal_name, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo",
-        )
-        .maybeSingle();
-      return (data as Branding | null) ?? null;
-    },
-  });
-}
 
 interface Props {
   open: boolean;
@@ -52,7 +20,7 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
-  const { data: brand } = useBranding(open);
+  const { data: brand } = useTicketBranding(open);
   const { data: numFmt } = useSaleNumberFormat();
   const printedRef = useRef(false);
 

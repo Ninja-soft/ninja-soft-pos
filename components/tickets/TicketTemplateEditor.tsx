@@ -123,7 +123,10 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
       setBlocks(defaultSaleBlocks());
     }
     setExpanded(null);
-  }, [open, template]);
+    // Solo open/id: una nueva referencia de la misma plantilla (refetch de la
+    // lista) no debe pisar la edición en curso.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, template?.id]);
 
   function move(index: number, dir: -1 | 1) {
     setBlocks((prev) => {

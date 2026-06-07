@@ -6,6 +6,7 @@ import {
   ClipboardList,
   CreditCard,
   Mail,
+  Minus,
   ShieldCheck,
   TrendingUp,
   UserCog,
@@ -182,14 +183,14 @@ export default async function InternalHomePage() {
         />
         <KpiCard
           label="Conversión trial→paid"
-          value={convRate !== null ? `${convRate}%` : "—"}
+          value={convRate !== null ? `${convRate}%` : null}
           icon={<BarChart3 size={18} />}
           color={convRate !== null && convRate >= 50 ? "text-emerald-400" : "text-orange-400"}
           sub={`${nActive} activos · ${nCancelled} cancelados`}
         />
         <KpiCard
           label="Churn 30d"
-          value={churnRate !== null ? `${churnRate}%` : "—"}
+          value={churnRate !== null ? `${churnRate}%` : null}
           icon={<TrendingUp size={18} />}
           color={churnRate !== null && churnRate > 0 ? "text-red-400" : "text-emerald-400"}
           sub={`${cancelled30d} baja${cancelled30d === 1 ? "" : "s"} · 30d`}
@@ -197,14 +198,14 @@ export default async function InternalHomePage() {
         />
         <KpiCard
           label="MRR estimado"
-          value={mrr > 0 ? formatCurrency(mrr) : "—"}
+          value={mrr > 0 ? formatCurrency(mrr) : null}
           icon={<CreditCard size={18} />}
           color="text-ninja-flameSoft"
-          sub={mrr === 0 ? "Precios en $0 (placeholder)" : undefined}
+          sub={mrr === 0 ? "Sin ingresos registrados" : undefined}
         />
         <KpiCard
           label="ARR estimado"
-          value={arr > 0 ? formatCurrency(arr) : "—"}
+          value={arr > 0 ? formatCurrency(arr) : null}
           icon={<CreditCard size={18} />}
           color="text-ninja-violet"
           sub={arr > 0 ? "MRR × 12" : undefined}
@@ -292,12 +293,14 @@ function KpiCard({
   title,
 }: {
   label: string;
-  value: string | number;
+  // null = sin datos / no disponible → se muestra un estado "n/d" con ícono.
+  value: string | number | null;
   icon: React.ReactNode;
   color?: string;
   sub?: string;
   title?: string;
 }) {
+  const noData = value === null;
   return (
     <Card>
       <CardContent className="p-4" title={title}>
@@ -305,9 +308,20 @@ function KpiCard({
           {icon}
           <span className="text-xs">{label}</span>
         </div>
-        <p className={`mt-1 font-display text-2xl font-black ${color ?? "text-foreground"}`}>
-          {value}
-        </p>
+        {noData ? (
+          <p className="mt-1 inline-flex items-center gap-1.5 font-display text-2xl font-black text-muted-foreground/60">
+            <Minus size={20} className="text-muted-foreground/50" aria-hidden />
+            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+              n/d
+            </span>
+          </p>
+        ) : (
+          <p
+            className={`mt-1 font-display text-2xl font-black ${color ?? "text-foreground"}`}
+          >
+            {value}
+          </p>
+        )}
         {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
       </CardContent>
     </Card>

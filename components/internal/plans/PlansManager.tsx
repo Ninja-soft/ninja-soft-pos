@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Star } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Heading, Money } from "@/components/ui/Typography";
 import { usePlansWithCounts } from "@/modules/internal/hooks";
 import type { PlanWithCount } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
-import { PlanIcon } from "./planIcons";
 import { PlanEditorModal } from "./PlanEditorModal";
+import { PlanBadge } from "./PlanBadge";
 
 function StatusChip({ active }: { active: boolean }) {
   return (
@@ -81,17 +81,24 @@ export function PlansManager() {
                   <tr key={p.id} className="transition hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
-                          <PlanIcon iconKey={p.icon} size={16} />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground">
-                            {p.name}
-                          </div>
-                          <div className="font-price text-xs uppercase tracking-wide text-muted-foreground">
-                            {p.key}
-                          </div>
-                        </div>
+                        <PlanBadge
+                          plan={{
+                            name: p.name,
+                            secondaryName: p.secondaryName,
+                            imageUrl: p.imageUrl,
+                            icon: p.icon,
+                          }}
+                          size="sm"
+                        />
+                        {p.isRecommended && (
+                          <span
+                            title="Plan recomendado"
+                            className="inline-flex items-center gap-1 rounded-full border border-ninja-gold/40 bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold"
+                          >
+                            <Star size={11} className="fill-ninja-gold" />
+                            Recomendado
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">

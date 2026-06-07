@@ -167,8 +167,11 @@ export interface PlanWithCount {
   id: string;
   key: string;
   name: string;
+  secondaryName: string | null;
   description: string | null;
   icon: string | null;
+  imageUrl: string | null;
+  isRecommended: boolean;
   monthlyPrice: number;
   trialDays: number;
   sort: number;
@@ -182,8 +185,11 @@ export interface SavePlanInput {
   id: string | null;
   key: string | null;
   name: string;
+  secondaryName: string;
   description: string;
   icon: string;
+  imageUrl: string;
+  isRecommended: boolean;
   monthlyPrice: number;
   trialDays: number;
   limits: PlanLimits;
@@ -867,8 +873,10 @@ export const internalApi = {
     const [plansRes, subsRes] = await Promise.all([
       supabase
         .from("plans")
+        // secondary_name/image_url/is_recommended no están aún en los types
+        // generados (regen pendiente): el select string igual los trae.
         .select(
-          "id, key, name, description, icon, monthly_price_ars, trial_days, sort, is_active, limits",
+          "id, key, name, secondary_name, description, icon, image_url, is_recommended, monthly_price_ars, trial_days, sort, is_active, limits",
         )
         .is("tenant_id", null)
         .order("sort"),
@@ -883,12 +891,30 @@ export const internalApi = {
     for (const s of subsRes.data ?? []) {
       counts.set(s.plan_id, (counts.get(s.plan_id) ?? 0) + 1);
     }
-    return (plansRes.data ?? []).map((p) => ({
+    type PlanRow = {
+      id: string;
+      key: string;
+      name: string;
+      secondary_name: string | null;
+      description: string | null;
+      icon: string | null;
+      image_url: string | null;
+      is_recommended: boolean | null;
+      monthly_price_ars: number | null;
+      trial_days: number | null;
+      sort: number | null;
+      is_active: boolean;
+      limits: PlanLimits | null;
+    };
+    return ((plansRes.data ?? []) as unknown as PlanRow[]).map((p) => ({
       id: p.id,
       key: p.key,
       name: p.name,
+      secondaryName: p.secondary_name ?? null,
       description: p.description,
       icon: p.icon,
+      imageUrl: p.image_url ?? null,
+      isRecommended: p.is_recommended ?? false,
       monthlyPrice: Number(p.monthly_price_ars ?? 0),
       trialDays: p.trial_days ?? 0,
       sort: p.sort ?? 0,
@@ -900,17 +926,29 @@ export const internalApi = {
 
   savePlan: async (input: SavePlanInput): Promise<string> => {
     const supabase = createClient();
-    const { data, error } = await supabase.rpc("internal_save_plan", {
-      p_id: input.id as unknown as string,
-      p_key: input.key as unknown as string,
+    // Se pasan los 12 params nombrados para que PostgREST resuelva la sobrecarga
+    // nueva (12 args) y no la antigua (9). secondary_name/image_url/is_recommended
+    // aún no están en los types generados (regen pendiente): el objeto se arma
+    // como Record y se castea a la firma esperada por rpc() (la vieja de 9 args).
+    const args: Record<string, unknown> = {
+      p_id: input.id,
+      p_key: input.key,
       p_name: input.name,
       p_description: input.description,
       p_icon: input.icon,
       p_monthly_price: input.monthlyPrice,
       p_trial_days: input.trialDays,
-      p_limits: input.limits as unknown as Record<string, never>,
+      p_limits: input.limits,
       p_is_active: input.isActive,
-    });
+      p_secondary_name: input.secondaryName || null,
+      p_image_url: input.imageUrl || null,
+      p_is_recommended: input.isRecommended,
+    };
+    const { data, error } = await supabase.rpc(
+      "internal_save_plan",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      args as any,
+    );
     if (error) throw error;
     return data as string;
   },

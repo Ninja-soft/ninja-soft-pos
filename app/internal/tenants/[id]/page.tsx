@@ -495,21 +495,23 @@ export default function InternalTenantDetail({
         Actividad reciente
       </Heading>
       <Card className="mt-3">
-        {/* tabs */}
-        <div className="flex border-b border-border px-4">
-          {(["all", "billing"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setAuditTab(tab)}
-              className={
-                auditTab === tab
-                  ? "border-b-2 border-ninja-flameSoft pb-2.5 pt-3 text-sm font-medium text-ninja-flameSoft"
-                  : "pb-2.5 pt-3 text-sm text-muted-foreground transition hover:text-foreground mr-4"
-              }
-            >
-              {tab === "all" ? "Todo" : "Plan & facturación"}
-            </button>
-          ))}
+        {/* tabs (segmentado) */}
+        <div className="border-b border-border p-3">
+          <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+            {(["all", "billing"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setAuditTab(tab)}
+                className={
+                  auditTab === tab
+                    ? "rounded-md bg-ninja-flame/15 px-3 py-1.5 text-sm font-semibold text-ninja-flameSoft transition"
+                    : "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:text-foreground"
+                }
+              >
+                {tab === "all" ? "Todo" : "Plan & facturación"}
+              </button>
+            ))}
+          </div>
         </div>
         <CardContent className="p-0">
           {visibleAudit.length === 0 ? (

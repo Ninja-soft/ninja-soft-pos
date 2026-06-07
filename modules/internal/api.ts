@@ -171,7 +171,8 @@ export function isDiscountActive(
   d: Pick<TenantDiscount, "valid_from" | "valid_until">,
   today: Date = new Date(),
 ): boolean {
-  const t = today.toISOString().slice(0, 10);
+  // Fecha LOCAL (no UTC): los descuentos son fechas de calendario del negocio.
+  const t = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   if (d.valid_from > t) return false;
   if (d.valid_until && d.valid_until < t) return false;
   return true;

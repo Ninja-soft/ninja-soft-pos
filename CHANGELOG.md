@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H11c — KPIs ARR y churn en `/internal` (F7).** El dashboard interno suma **ARR estimado** (MRR × 12) y **Churn 30d** (cancelaciones de los últimos 30 días sobre la base activa + canceladas, con tooltip aclarando la aproximación vía `subscriptions.updated_at`). Además el **MRR ahora incluye `past_due`** (antes solo `active`) y queda documentado que suma el precio del plan propio de cada suscripción (los planes custom ya entraban bien). Grid reflowado a 2 filas de 5.
+
 - **H34 — Auditoría de imports (F11).** Cada importación masiva por Excel de productos o clientes deja su entrada en `audit_logs` (acción `imported`, total de filas) — best-effort: un fallo de auditoría no bloquea el import. Reversión queda pendiente en el hito.
 
 - **H23 — Scanner PRO: perfil, beep, anti-duplicado y diagnóstico (F10).** Configuración → **Escáner**: perfil del lector por tenant (`pos_settings`): **prefijo/sufijo** a limpiar (lectores que agregan caracteres), **beep de confirmación** (WebAudio, on por default en el POS) y **ventana anti-duplicado** configurable (default 1500ms — chau lecturas dobles). **Pantalla de diagnóstico**: probás el lector sin enfocar nada y ves cada captura con código, crudo, largo, duración, gap promedio entre caracteres, **formato inferido** (EAN-13/EAN-8/UPC-A/QR-URL/alfanumérico) y marca de duplicado. `useScanner` v2 retro-compatible + `inferFormat()` testeado. Perfil por caja queda gancho a F4 multi-caja.

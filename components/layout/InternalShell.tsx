@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Store,
   Sun,
+  Tag,
   UserCog,
   Users,
   X,
@@ -46,6 +47,7 @@ const NAV = [
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },
   { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
+  { href: "/internal/planes", label: "Planes", icon: Tag },
   { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];

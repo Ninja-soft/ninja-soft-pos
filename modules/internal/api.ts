@@ -147,6 +147,91 @@ export interface TenantPlanDetail {
   isCustom: boolean;
   basePlanKey: string | null;
   overrides: PlanLimitNumbers;
+  isLifetime: boolean;
+}
+
+// ── Fase C — Creador dinámico de planes ─────────────────────────────────────
+
+// Catálogo de features (legible por cualquier autenticado).
+export interface Feature {
+  key: string;
+  label: string;
+  description: string | null;
+  grupo: string;
+  is_basic: boolean;
+  sort: number;
+}
+
+// Plan global con su conteo de suscriptos activos (para la tabla).
+export interface PlanWithCount {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  monthlyPrice: number;
+  trialDays: number;
+  sort: number;
+  isActive: boolean;
+  limits: PlanLimits;
+  subscriberCount: number;
+}
+
+// Payload para internal_save_plan (id null = crear).
+export interface SavePlanInput {
+  id: string | null;
+  key: string | null;
+  name: string;
+  description: string;
+  icon: string;
+  monthlyPrice: number;
+  trialDays: number;
+  limits: PlanLimits;
+  isActive: boolean;
+}
+
+// Addon contratable (catálogo global activo).
+export interface PlanAddon {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  monthlyPrice: number;
+  isActive: boolean;
+}
+
+// Código de invitación.
+export type InviteKind = "lifetime" | "trial_days";
+
+export interface InviteCode {
+  id: string;
+  code: string;
+  kind: InviteKind;
+  plan_key: string;
+  trial_days: number | null;
+  max_uses: number | null;
+  used_count: number;
+  valid_from: string | null;
+  valid_until: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface InviteCodeInput {
+  code: string;
+  kind: InviteKind;
+  plan_key: string;
+  trial_days: number | null;
+  max_uses: number | null;
+  valid_from: string | null;
+  valid_until: string | null;
+}
+
+export interface GrantAccessInput {
+  planKey: string;
+  lifetime: boolean;
+  freeDays: number | null;
+  reason: string;
 }
 
 export interface TenantDiscount {
@@ -675,7 +760,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("subscriptions")
       .select(
-        "limit_overrides, plans(id, key, name, monthly_price_ars, limits, tenant_id, base_plan_key)",
+        "limit_overrides, is_lifetime, plans(id, key, name, monthly_price_ars, limits, tenant_id, base_plan_key)",
       )
       .eq("tenant_id", tenantId)
       .maybeSingle();
@@ -683,6 +768,7 @@ export const internalApi = {
     if (!data) return null;
     type Row = {
       limit_overrides: PlanLimitNumbers | null;
+      is_lifetime: boolean | null;
       plans: {
         id: string;
         key: string;
@@ -704,6 +790,7 @@ export const internalApi = {
       isCustom: row.plans.tenant_id !== null,
       basePlanKey: row.plans.base_plan_key,
       overrides: (row.limit_overrides ?? {}) as PlanLimitNumbers,
+      isLifetime: row.is_lifetime ?? false,
     };
   },
 
@@ -759,6 +846,187 @@ export const internalApi = {
     });
     if (error) throw error;
     return (data ?? {}) as PlanLimitNumbers;
+  },
+
+  // ── Fase C — Features, planes globales, addons, códigos, accesos ──────────
+
+  // Catálogo de features agrupadas (legible por cualquier autenticado).
+  features: async (): Promise<Feature[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("features")
+      .select("key, label, description, grupo, is_basic, sort")
+      .order("sort");
+    if (error) throw error;
+    return (data ?? []) as Feature[];
+  },
+
+  // Planes globales (tenant_id null) + conteo de suscriptos activos por plan.
+  listPlansWithCounts: async (): Promise<PlanWithCount[]> => {
+    const supabase = createClient();
+    const [plansRes, subsRes] = await Promise.all([
+      supabase
+        .from("plans")
+        .select(
+          "id, key, name, description, icon, monthly_price_ars, trial_days, sort, is_active, limits",
+        )
+        .is("tenant_id", null)
+        .order("sort"),
+      supabase
+        .from("subscriptions")
+        .select("plan_id, status")
+        .in("status", ["trial", "active", "past_due"]),
+    ]);
+    if (plansRes.error) throw plansRes.error;
+    if (subsRes.error) throw subsRes.error;
+    const counts = new Map<string, number>();
+    for (const s of subsRes.data ?? []) {
+      counts.set(s.plan_id, (counts.get(s.plan_id) ?? 0) + 1);
+    }
+    return (plansRes.data ?? []).map((p) => ({
+      id: p.id,
+      key: p.key,
+      name: p.name,
+      description: p.description,
+      icon: p.icon,
+      monthlyPrice: Number(p.monthly_price_ars ?? 0),
+      trialDays: p.trial_days ?? 0,
+      sort: p.sort ?? 0,
+      isActive: p.is_active,
+      limits: (p.limits ?? {}) as PlanLimits,
+      subscriberCount: counts.get(p.id) ?? 0,
+    }));
+  },
+
+  savePlan: async (input: SavePlanInput): Promise<string> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("internal_save_plan", {
+      p_id: input.id as unknown as string,
+      p_key: input.key as unknown as string,
+      p_name: input.name,
+      p_description: input.description,
+      p_icon: input.icon,
+      p_monthly_price: input.monthlyPrice,
+      p_trial_days: input.trialDays,
+      p_limits: input.limits as unknown as Record<string, never>,
+      p_is_active: input.isActive,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  // Addons contratables (catálogo global activo).
+  planAddons: async (): Promise<PlanAddon[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("plan_addons")
+      .select("id, key, label, description, monthly_price_ars, is_active")
+      .eq("is_active", true)
+      .order("monthly_price_ars");
+    if (error) throw error;
+    return (data ?? []).map((a) => ({
+      id: a.id,
+      key: a.key,
+      label: a.label,
+      description: a.description,
+      monthlyPrice: Number(a.monthly_price_ars ?? 0),
+      isActive: a.is_active,
+    }));
+  },
+
+  // Addons activos de un tenant (set de keys con status active).
+  tenantAddons: async (tenantId: string): Promise<Set<string>> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("subscription_addons")
+      .select("addon_key, status")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active");
+    if (error) throw error;
+    return new Set((data ?? []).map((r) => r.addon_key));
+  },
+
+  setAddon: async (
+    tenantId: string,
+    addonKey: string,
+    active: boolean,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("internal_set_addon", {
+      p_tenant_id: tenantId,
+      p_addon_key: addonKey,
+      p_active: active,
+    });
+    if (error) throw error;
+  },
+
+  grantAccess: async (
+    tenantId: string,
+    input: GrantAccessInput,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("internal_grant_access", {
+      p_tenant_id: tenantId,
+      p_plan_key: input.planKey,
+      p_lifetime: input.lifetime,
+      p_free_days: (input.freeDays ?? undefined) as number | undefined,
+      p_reason: input.reason || undefined,
+    });
+    if (error) throw error;
+  },
+
+  // ── Fase C — Códigos de invitación (CRUD directo, RLS internal) ───────────
+
+  listInviteCodes: async (): Promise<InviteCode[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("invite_codes")
+      .select(
+        "id, code, kind, plan_key, trial_days, max_uses, used_count, valid_from, valid_until, is_active, created_at",
+      )
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as unknown as InviteCode[]).map((c) => ({
+      ...c,
+      kind: c.kind as InviteKind,
+    }));
+  },
+
+  createInviteCode: async (input: InviteCodeInput): Promise<void> => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error } = await supabase.from("invite_codes").insert({
+      code: input.code,
+      kind: input.kind,
+      plan_key: input.plan_key,
+      trial_days: input.trial_days,
+      max_uses: input.max_uses,
+      valid_from: input.valid_from,
+      valid_until: input.valid_until,
+      created_by: user?.id ?? null,
+    });
+    if (error) throw error;
+  },
+
+  setInviteCodeActive: async (id: string, active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("invite_codes")
+      .update({ is_active: active })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  deleteInviteCode: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("invite_codes")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
   },
 
   listDiscounts: async (tenantId: string): Promise<TenantDiscount[]> => {

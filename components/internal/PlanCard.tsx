@@ -1,17 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Pencil, SlidersHorizontal } from "lucide-react";
+import {
+  Sparkles,
+  Pencil,
+  SlidersHorizontal,
+  Infinity as InfinityIcon,
+  Gift,
+  Crown,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import {
   useGlobalPlans,
   useTenantPlanDetail,
   usePlanMutations,
   useInternalMutations,
+  usePlanAddons,
+  useTenantAddons,
+  useSetAddon,
 } from "@/modules/internal/hooks";
 import {
   LIMIT_KEYS,
@@ -40,10 +51,21 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
   const { data: detail, isLoading } = useTenantPlanDetail(tenantId);
   const { data: globalPlans } = useGlobalPlans();
   const { setPlan } = useInternalMutations(tenantId);
-  const { clone, update, setOverride } = usePlanMutations(tenantId);
+  const { clone, update, setOverride, grantAccess } = usePlanMutations(tenantId);
+  const { data: addons } = usePlanAddons();
+  const { data: tenantAddons } = useTenantAddons(tenantId);
+  const setAddon = useSetAddon(tenantId);
 
   const [cloneOpen, setCloneOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+
+  // Grant access (vitalicio / regalar días).
+  const [lifetimeOpen, setLifetimeOpen] = useState(false);
+  const [giftOpen, setGiftOpen] = useState(false);
+  const [lifetimeConfirm, setLifetimeConfirm] = useState(false);
+  const [grantPlan, setGrantPlan] = useState("");
+  const [grantReason, setGrantReason] = useState("");
+  const [giftDays, setGiftDays] = useState("30");
 
   // Estado del modal clonar.
   const [cloneName, setCloneName] = useState("");
@@ -102,6 +124,89 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
     });
     setEditReason("");
     setEditOpen(true);
+  }
+
+  function openLifetime() {
+    setGrantPlan(globalPlans?.[0]?.key ?? detail?.planKey ?? "");
+    setGrantReason("");
+    setLifetimeOpen(true);
+  }
+
+  function openGift() {
+    setGrantPlan(globalPlans?.[0]?.key ?? detail?.planKey ?? "");
+    setGrantReason("");
+    setGiftDays("30");
+    setGiftOpen(true);
+  }
+
+  async function handleGrantLifetime() {
+    if (!grantReason.trim()) {
+      toast({ title: "Ingresá un motivo", variant: "error" });
+      return;
+    }
+    try {
+      await grantAccess.mutateAsync({
+        planKey: grantPlan,
+        lifetime: true,
+        freeDays: null,
+        reason: grantReason.trim(),
+      });
+      toast({ title: "Acceso vitalicio otorgado", variant: "success" });
+      setLifetimeConfirm(false);
+      setLifetimeOpen(false);
+    } catch (e) {
+      toast({
+        title: "No se pudo otorgar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleGiftDays() {
+    const days = Number(giftDays);
+    if (!Number.isFinite(days) || days <= 0) {
+      toast({ title: "Días inválidos", variant: "error" });
+      return;
+    }
+    if (!grantReason.trim()) {
+      toast({ title: "Ingresá un motivo", variant: "error" });
+      return;
+    }
+    try {
+      await grantAccess.mutateAsync({
+        planKey: grantPlan,
+        lifetime: false,
+        freeDays: days,
+        reason: grantReason.trim(),
+      });
+      toast({ title: `${days} días regalados`, variant: "success" });
+      setGiftOpen(false);
+    } catch (e) {
+      toast({
+        title: "No se pudo regalar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  function toggleAddon(key: string, active: boolean) {
+    setAddon
+      .mutateAsync({ addonKey: key, active })
+      .then(() =>
+        toast({
+          title: active ? "Addon activado" : "Addon desactivado",
+          variant: "success",
+        }),
+      )
+      .catch((e) =>
+        toast({
+          title: "Error",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "error",
+        }),
+      );
   }
 
   async function handleClone() {
@@ -229,6 +334,11 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                     Custom{detail.basePlanKey ? ` (base ${detail.basePlanKey})` : ""}
                   </span>
                 )}
+                {detail.isLifetime && (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                    <InfinityIcon size={12} /> Vitalicio
+                  </span>
+                )}
               </div>
               <div className="mt-0.5 text-sm text-muted-foreground">
                 {formatCurrency(detail.monthlyPrice)}/mes
@@ -245,6 +355,12 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                   <Pencil size={14} /> Editar plan
                 </Button>
               )}
+              <Button size="sm" variant="secondary" onClick={openLifetime}>
+                <Crown size={14} /> Acceso vitalicio…
+              </Button>
+              <Button size="sm" variant="secondary" onClick={openGift}>
+                <Gift size={14} /> Regalar días…
+              </Button>
             </div>
           </div>
 
@@ -388,6 +504,54 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               })}
             </div>
           </div>
+
+          {/* Addons contratables (toggle por tenant) */}
+          {(addons?.length ?? 0) > 0 && (
+            <div>
+              <div className="mb-2 text-sm font-medium text-muted-foreground">
+                Addons
+              </div>
+              <div className="space-y-2">
+                {(addons ?? []).map((a) => {
+                  const enabled = tenantAddons?.has(a.key) ?? false;
+                  return (
+                    <div
+                      key={a.key}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground">
+                          {a.label}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatCurrency(a.monthlyPrice)}/mes
+                          {a.description ? ` · ${a.description}` : ""}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleAddon(a.key, !enabled)}
+                        disabled={setAddon.isPending}
+                        aria-label={`Toggle ${a.label}`}
+                        className={
+                          enabled
+                            ? "h-6 w-11 shrink-0 rounded-full bg-ninja-flame px-0.5 transition disabled:opacity-60"
+                            : "h-6 w-11 shrink-0 rounded-full bg-muted px-0.5 transition disabled:opacity-60"
+                        }
+                      >
+                        <span
+                          className={
+                            enabled
+                              ? "block h-5 w-5 translate-x-5 rounded-full bg-white transition"
+                              : "block h-5 w-5 translate-x-0 rounded-full bg-white transition"
+                          }
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -473,6 +637,121 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
             </Button>
             <Button loading={update.isPending} onClick={handleUpdate}>
               Guardar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: acceso vitalicio */}
+      <Modal
+        open={lifetimeOpen}
+        onOpenChange={setLifetimeOpen}
+        title="Acceso vitalicio"
+        className="max-w-sm"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Marca la suscripción como <b>vitalicia</b>: queda activa sin
+            vencimiento y el motor de cobros la saltea. Es un regalo permanente.
+          </p>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Plan
+            </label>
+            <select
+              className={selectCls}
+              value={grantPlan}
+              onChange={(e) => setGrantPlan(e.target.value)}
+            >
+              {(globalPlans ?? []).map((p) => (
+                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input
+            label="Motivo"
+            value={grantReason}
+            onChange={(e) => setGrantReason(e.target.value)}
+            placeholder="Ej. socio fundador, acuerdo comercial…"
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setLifetimeOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (!grantReason.trim()) {
+                  toast({ title: "Ingresá un motivo", variant: "error" });
+                  return;
+                }
+                setLifetimeConfirm(true);
+              }}
+            >
+              Otorgar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={lifetimeConfirm}
+        onOpenChange={setLifetimeConfirm}
+        title="¿Otorgar acceso vitalicio?"
+        description="El negocio dejará de pagar para siempre por este plan. Esta acción queda auditada."
+        confirmLabel="Sí, otorgar vitalicio"
+        danger
+        loading={grantAccess.isPending}
+        onConfirm={() => void handleGrantLifetime()}
+      />
+
+      {/* Modal: regalar días */}
+      <Modal
+        open={giftOpen}
+        onOpenChange={setGiftOpen}
+        title="Regalar días"
+        className="max-w-sm"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Extiende la prueba del plan elegido por la cantidad de días indicada.
+          </p>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Plan
+            </label>
+            <select
+              className={selectCls}
+              value={grantPlan}
+              onChange={(e) => setGrantPlan(e.target.value)}
+            >
+              {(globalPlans ?? []).map((p) => (
+                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input
+            label="Días"
+            type="number"
+            min="1"
+            value={giftDays}
+            onChange={(e) => setGiftDays(e.target.value)}
+          />
+          <Input
+            label="Motivo"
+            value={grantReason}
+            onChange={(e) => setGrantReason(e.target.value)}
+            placeholder="Ej. compensación por incidente…"
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setGiftOpen(false)}>
+              Cancelar
+            </Button>
+            <Button loading={grantAccess.isPending} onClick={handleGiftDays}>
+              Regalar
             </Button>
           </div>
         </div>

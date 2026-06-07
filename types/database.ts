@@ -766,6 +766,33 @@ export type Database = {
         }
         Relationships: []
       }
+      features: {
+        Row: {
+          description: string | null
+          grupo: string
+          is_basic: boolean
+          key: string
+          label: string
+          sort: number
+        }
+        Insert: {
+          description?: string | null
+          grupo?: string
+          is_basic?: boolean
+          key: string
+          label: string
+          sort?: number
+        }
+        Update: {
+          description?: string | null
+          grupo?: string
+          is_basic?: boolean
+          key?: string
+          label?: string
+          sort?: number
+        }
+        Relationships: []
+      }
       invite_codes: {
         Row: {
           code: string
@@ -1194,44 +1221,83 @@ export type Database = {
           },
         ]
       }
+      plan_addons: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          monthly_price_ars: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          monthly_price_ars?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          monthly_price_ars?: number
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           base_plan_key: string | null
           created_at: string
           description: string | null
+          icon: string | null
           id: string
           is_active: boolean
           key: string
           limits: Json
           monthly_price_ars: number
           name: string
+          sort: number
           tenant_id: string | null
+          trial_days: number
           yearly_price_ars: number | null
         }
         Insert: {
           base_plan_key?: string | null
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean
           key: string
           limits?: Json
           monthly_price_ars: number
           name: string
+          sort?: number
           tenant_id?: string | null
+          trial_days?: number
           yearly_price_ars?: number | null
         }
         Update: {
           base_plan_key?: string | null
           created_at?: string
           description?: string | null
+          icon?: string | null
           id?: string
           is_active?: boolean
           key?: string
           limits?: Json
           monthly_price_ars?: number
           name?: string
+          sort?: number
           tenant_id?: string | null
+          trial_days?: number
           yearly_price_ars?: number | null
         }
         Relationships: [
@@ -2328,6 +2394,44 @@ export type Database = {
           },
         ]
       }
+      subscription_addons: {
+        Row: {
+          addon_key: string
+          created_at: string
+          id: string
+          provider_ref: string | null
+          source: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          addon_key: string
+          created_at?: string
+          id?: string
+          provider_ref?: string | null
+          source?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          addon_key?: string
+          created_at?: string
+          id?: string
+          provider_ref?: string | null
+          source?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_addons_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           billing_cycle: string
@@ -3169,6 +3273,24 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      internal_save_plan: {
+        Args: {
+          p_description: string
+          p_icon: string
+          p_id: string
+          p_is_active: boolean
+          p_key: string
+          p_limits: Json
+          p_monthly_price: number
+          p_name: string
+          p_trial_days: number
+        }
+        Returns: string
+      }
+      internal_set_addon: {
+        Args: { p_active: boolean; p_addon_key: string; p_tenant_id: string }
+        Returns: undefined
       }
       internal_set_flag: {
         Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }

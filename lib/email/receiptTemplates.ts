@@ -20,7 +20,7 @@ export const NINJA_LOGO_DARK_URL =
 export const NINJA_LOGO_URL =
   "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordmark.webp";
 export const FOOTER_TEXT = "Enviado con NinjaPos";
-export const ATTACH_NOTE = "Tu comprobante va adjunto a este email.";
+export const ATTACH_NOTE = "Tu comprobante va adjunto en PDF a este email.";
 
 // Footer contrastado: fondo oscuro (#09051C ninja void) con el wordmark
 // dark-mode de NinjaPos + texto tenue. `bg` se sobreescribe en el diseño dark

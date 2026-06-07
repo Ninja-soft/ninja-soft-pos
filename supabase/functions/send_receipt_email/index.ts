@@ -1,8 +1,10 @@
 // =============================================================================
-// Edge Function: send_receipt_email — envía el comprobante de una venta (PNG)
-// por email al cliente. Guard: miembro activo del tenant de la venta.
-// SMTP del NEGOCIO (tenant_email_smtp, ver Configuración → Email). H9b PR3.
+// Edge Function: send_receipt_email — envía el comprobante de una venta como
+// PDF adjunto (factura.pdf) por email al cliente. Guard: miembro activo del
+// tenant de la venta. Proveedor del NEGOCIO (tenant_email_smtp, ver
+// Configuración → Email): SMTP (nodemailer) o Resend (API key). H9b PR3.
 // Cuerpo HTML con branding del tenant (logo/accent/legal_name).
+// El asunto incluye día + hora local (AR) para que Gmail NO agrupe el hilo.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 // @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
@@ -20,7 +22,58 @@ const json = (b: unknown, s = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PNG_PREFIX = "data:image/png;base64,";
+// base64 estándar (lo que manda jsPDF.output("datauristring") sin el prefijo
+// data:). Validación laxa: charset base64 + padding.
+const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+
+// Sello "DD/MM HH:mm" en hora de Argentina para el asunto: con esto el subject
+// nunca se repite y Gmail no agrupa cada comprobante en el mismo hilo.
+const stampAr = (d = new Date()): string => {
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
+};
+
+// Carrera contra timeout para el POST a Resend (mismo patrón que el SMTP).
+async function sendViaResend(
+  apiKey: string,
+  fromName: string,
+  fromEmail: string,
+  args: { to: string; subject: string; html: string; text: string; pdfBase64: string; pdfName: string },
+): Promise<void> {
+  const from = `${fromName.replace(/"/g, "")} <${fromEmail}>`;
+  const res = await withTimeout(
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+        text: args.text,
+        attachments: [{ filename: args.pdfName, content: args.pdfBase64 }],
+      }),
+    }),
+    25000,
+    "resend",
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`resend_${res.status}: ${detail.slice(0, 300)}`);
+  }
+}
+
 // Escapa datos provistos por el tenant (legal_name) antes de interpolar en HTML.
 const escapeHtml = (s: string) =>
   s
@@ -62,7 +115,7 @@ const NINJA_LOGO_URL = "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordma
 // Wordmark dark-mode de NinjaPos (texto "pos" blanco → solo sobre fondo oscuro).
 const NINJA_LOGO_DARK_URL = "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp";
 const FOOTER_TEXT = "Enviado con NinjaPos";
-const ATTACH_NOTE = "Tu comprobante va adjunto a este email.";
+const ATTACH_NOTE = "Tu comprobante va adjunto en PDF a este email.";
 
 // Footer contrastado: fondo oscuro (#09051C ninja void) con el wordmark
 // dark-mode de NinjaPos + texto tenue. En el diseño dark (tarjeta ya oscura) se
@@ -172,7 +225,7 @@ Deno.serve(async (req: Request) => {
   } = await userClient.auth.getUser();
   if (error || !user) return json({ error: "unauthorized" }, 401);
 
-  let b: { sale_id?: string; to?: string; png?: string };
+  let b: { sale_id?: string; to?: string; pdf?: string };
   try {
     b = await req.json();
   } catch {
@@ -180,13 +233,13 @@ Deno.serve(async (req: Request) => {
   }
   const saleId = String(b.sale_id ?? "").trim();
   const to = String(b.to ?? "").trim().toLowerCase();
-  const png = String(b.png ?? "");
+  // PDF en base64 crudo (sin prefijo data:). El cliente lo genera con jsPDF.
+  const pdfBase64 = String(b.pdf ?? "").trim();
   if (!saleId) return json({ error: "missing_sale_id" }, 400);
   if (!EMAIL_RE.test(to)) return json({ error: "invalid_to" }, 400);
-  if (!png.startsWith(PNG_PREFIX)) return json({ error: "invalid_png" }, 400);
-  const base64 = png.slice(PNG_PREFIX.length);
-  // ~2 MB de imagen (base64 agrega ~33%).
-  if (base64.length > 2_800_000) return json({ error: "png_too_large" }, 413);
+  if (!pdfBase64 || !BASE64_RE.test(pdfBase64)) return json({ error: "invalid_pdf" }, 400);
+  // ~3 MB de PDF (base64 agrega ~33%).
+  if (pdfBase64.length > 4_000_000) return json({ error: "pdf_too_large" }, 413);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: sale } = await admin
@@ -209,7 +262,15 @@ Deno.serve(async (req: Request) => {
     .select("*")
     .eq("tenant_id", sale.tenant_id)
     .maybeSingle();
-  if (!cfg?.host || !cfg?.from_email)
+  // Proveedor del negocio: 'resend' (API key) o 'smtp' (default). Cada uno tiene
+  // su propio requisito mínimo; sin eso, pedimos configurar el email.
+  const provider = String(cfg?.provider ?? "smtp");
+  const resendKey = String(cfg?.resend_api_key ?? "");
+  const providerReady =
+    provider === "resend"
+      ? !!resendKey && !!cfg?.from_email
+      : !!cfg?.host && !!cfg?.from_email;
+  if (!providerReady)
     return json(
       {
         error: "tenant_smtp_not_configured",
@@ -249,22 +310,11 @@ Deno.serve(async (req: Request) => {
   const buildBody = EMAIL_BODY_TEMPLATES[bodyKey] ?? EMAIL_BODY_TEMPLATES.brand;
   const html = buildBody({ accent, logoHtml, safeName, safeBodyText });
 
-  // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
-  // (nodemailer lo negocia solo sobre conexión plana si el server lo ofrece).
-  const smtpPort = cfg.port || 587;
-  const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: smtpPort,
-    secure: smtpTls, // true para 465 (TLS directo); false para 587 (STARTTLS automático)
-    auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  });
+  // Asunto con sello día+hora (AR): único por envío → Gmail no agrupa el hilo.
+  const subject = `Tu comprobante de ${name} — ${stampAr()}`;
+  const pdfName = `factura-${sale.number}.pdf`;
 
   // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
-  const subject = `Tu comprobante de ${name}`;
   let logId: string | null = null;
   try {
     const { data: logRow } = await admin
@@ -284,31 +334,59 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    await withTimeout(
-      transporter.sendMail({
-        from: `"${name.replace(/"/g, "")}" <${cfg.from_email}>`,
+    if (provider === "resend") {
+      // Resend: adjunta el PDF (content base64). Sin socket que cerrar.
+      await sendViaResend(resendKey, name, cfg.from_email, {
         to,
         subject,
-        text: bodyTextRaw,
         html,
-        attachments: [
-          {
-            filename: `comprobante-${sale.number}.png`,
-            content: base64,
-            encoding: "base64",
-            contentType: "image/png",
-          },
-        ],
-      }),
-      25000,
-      "smtp_send",
-    );
-  } catch (e) {
-    try {
-      transporter.close();
-    } catch (_) {
-      /* noop */
+        text: bodyTextRaw,
+        pdfBase64,
+        pdfName,
+      });
+    } else {
+      // SMTP (nodemailer). Hardening de puerto/TLS: 465 = SSL directo (forzar
+      // tls); 587 = STARTTLS (nodemailer lo negocia solo si el server lo ofrece).
+      const smtpPort = cfg.port || 587;
+      const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
+      const transporter = nodemailer.createTransport({
+        host: cfg.host,
+        port: smtpPort,
+        secure: smtpTls,
+        auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+      });
+      try {
+        await withTimeout(
+          transporter.sendMail({
+            from: `"${name.replace(/"/g, "")}" <${cfg.from_email}>`,
+            to,
+            subject,
+            text: bodyTextRaw,
+            html,
+            attachments: [
+              {
+                filename: pdfName,
+                content: pdfBase64,
+                encoding: "base64",
+                contentType: "application/pdf",
+              },
+            ],
+          }),
+          25000,
+          "smtp_send",
+        );
+      } finally {
+        try {
+          transporter.close();
+        } catch (_) {
+          /* noop */
+        }
+      }
     }
+  } catch (e) {
     if (logId) {
       try {
         await admin
@@ -326,11 +404,6 @@ Deno.serve(async (req: Request) => {
       { error: "send_failed", detail: e instanceof Error ? e.message : String(e) },
       502,
     );
-  }
-  try {
-    transporter.close();
-  } catch (_) {
-    /* noop */
   }
   if (logId) {
     try {

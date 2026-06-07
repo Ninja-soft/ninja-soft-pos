@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Eye, Mail } from "lucide-react";
+import { AlertCircle, Check, Eye, Mail, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -14,6 +14,9 @@ import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
+
+// Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
+type EmailMethod = "smtp" | "resend";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
@@ -195,6 +198,8 @@ export function TenantEmailCard() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  // Método de envío del negocio: SMTP (cuenta de correo) o Resend (API privada).
+  const [method, setMethod] = useState<EmailMethod>("smtp");
   const [provider, setProvider] = useState<ProviderKey>("gmail");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [host, setHost] = useState("smtp.gmail.com");
@@ -204,6 +209,10 @@ export function TenantEmailCard() {
   const [fromName, setFromName] = useState("");
   const [password, setPassword] = useState("");
   const [hasPassword, setHasPassword] = useState(false);
+  // API key de Resend. Solo se manda si el usuario la (re)escribe; nunca llega
+  // desde el server (has_resend_key indica si ya hay una guardada).
+  const [resendKey, setResendKey] = useState("");
+  const [hasResendKey, setHasResendKey] = useState(false);
   const [bodyText, setBodyText] = useState("");
   const [bodyTemplate, setBodyTemplate] = useState<BodyTemplateKey>("brand");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -226,6 +235,7 @@ export function TenantEmailCard() {
   useEffect(() => {
     if (!status?.allowed) return;
     const cfgHost = String(status.host ?? "");
+    setMethod(status.provider === "resend" ? "resend" : "smtp");
     setHost(cfgHost || "smtp.gmail.com");
     setPort(String(status.port ?? "587"));
     setSecure(!!status.secure);
@@ -237,6 +247,7 @@ export function TenantEmailCard() {
       (BODY_TEMPLATES.some((t) => t.key === tmpl) ? tmpl : "brand") as BodyTemplateKey,
     );
     setHasPassword(!!status.has_password);
+    setHasResendKey(!!status.has_resend_key);
     setProvider(cfgHost ? inferProvider(cfgHost) : "gmail");
   }, [status]);
 
@@ -254,11 +265,15 @@ export function TenantEmailCard() {
     mutationFn: async (test: boolean): Promise<SmtpResult> => {
       const { data, error } = await supabase.functions.invoke("set_tenant_smtp", {
         body: {
-          host: host.trim(),
+          provider: method,
+          // En Resend no usamos SMTP: mandamos placeholders válidos para el
+          // server (host vacío, puerto por defecto) y la API key aparte.
+          host: method === "smtp" ? host.trim() : "",
           port: Number(port) || 587,
-          secure,
-          username: email.trim(),
-          password: password || undefined,
+          secure: method === "smtp" ? secure : false,
+          username: method === "smtp" ? email.trim() : "",
+          password: method === "smtp" ? password || undefined : undefined,
+          resend_api_key: method === "resend" ? resendKey.trim() || undefined : undefined,
           from_name: fromName.trim(),
           from_email: email.trim(),
           body_text: bodyText.trim() || undefined,
@@ -279,6 +294,7 @@ export function TenantEmailCard() {
         if (res.error === "test_failed") {
           qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
           setPassword("");
+          setResendKey("");
         }
         return;
       }
@@ -288,6 +304,7 @@ export function TenantEmailCard() {
         variant: "success",
       });
       setPassword("");
+      setResendKey("");
       qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
     },
     onError: () => {
@@ -325,7 +342,10 @@ export function TenantEmailCard() {
   // Estado persistido (server) para el chip. El estado del formulario
   // (formReady) habilita los botones de guardar.
   const configured = status.configured;
-  const formReady = Boolean(host.trim() && email.trim());
+  const formReady =
+    method === "resend"
+      ? Boolean(email.trim() && (resendKey.trim() || hasResendKey))
+      : Boolean(host.trim() && email.trim());
   const saving = save.isPending;
 
   return (
@@ -357,96 +377,117 @@ export function TenantEmailCard() {
           )}
         </div>
 
-        {/* Paso 1 — Proveedor */}
-        <Step n={1} title="Elegí tu proveedor de email">
-          <div className="grid grid-cols-3 gap-2">
-            {PROVIDERS.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => pickProvider(p.key)}
-                className={cn(
-                  "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
-                  provider === p.key
-                    ? "border-ninja-flame ring-2 ring-ninja-flame/30 text-foreground"
-                    : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
+        {/* Paso 1 — Método de envío (cuenta de correo vs API) */}
+        <Step n={1} title="Elegí cómo enviar los emails">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <MethodCard
+              active={method === "smtp"}
+              onClick={() => setMethod("smtp")}
+              title="Mi cuenta de correo"
+              desc="Gmail, Outlook u otro (SMTP)"
+            />
+            <MethodCard
+              active={method === "resend"}
+              onClick={() => setMethod("resend")}
+              title="Resend (API)"
+              desc="Servicio de envío por API"
+            />
           </div>
 
-          {provider === "outlook" && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo
-              soporta.
-            </p>
-          )}
-
-          {provider === "otro" ? (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Servidor SMTP"
-                placeholder="smtp.tudominio.com"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-              />
-              <Input
-                label="Puerto"
-                inputMode="numeric"
-                placeholder="587"
-                value={port}
-                onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))}
-              />
-              <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
-                <input
-                  type="checkbox"
-                  className="accent-ninja-flame"
-                  checked={secure}
-                  onChange={(e) => setSecure(e.target.checked)}
-                />
-                Conexión segura (SSL/TLS, normalmente puerto 465)
-              </label>
-            </div>
-          ) : (
-            <Disclosure
-              className="mt-3"
-              title="Avanzado (servidor y puerto)"
-              open={showAdvanced}
-              onOpenChange={setShowAdvanced}
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  label="Servidor SMTP"
-                  value={host}
-                  onChange={(e) => setHost(e.target.value)}
-                />
-                <Input
-                  label="Puerto"
-                  inputMode="numeric"
-                  value={port}
-                  onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))}
-                />
-                <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    className="accent-ninja-flame"
-                    checked={secure}
-                    onChange={(e) => setSecure(e.target.checked)}
-                  />
-                  Conexión segura (SSL/TLS)
-                </label>
+          {method === "smtp" ? (
+            <>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {PROVIDERS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => pickProvider(p.key)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                      provider === p.key
+                        ? "border-ninja-flame ring-2 ring-ninja-flame/30 text-foreground"
+                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
-            </Disclosure>
+
+              {provider === "outlook" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo
+                  soporta.
+                </p>
+              )}
+
+              {provider === "otro" ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Servidor SMTP"
+                    placeholder="smtp.tudominio.com"
+                    value={host}
+                    onChange={(e) => setHost(e.target.value)}
+                  />
+                  <Input
+                    label="Puerto"
+                    inputMode="numeric"
+                    placeholder="587"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))}
+                  />
+                  <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      className="accent-ninja-flame"
+                      checked={secure}
+                      onChange={(e) => setSecure(e.target.checked)}
+                    />
+                    Conexión segura (SSL/TLS, normalmente puerto 465)
+                  </label>
+                </div>
+              ) : (
+                <Disclosure
+                  className="mt-3"
+                  title="Avanzado (servidor y puerto)"
+                  open={showAdvanced}
+                  onOpenChange={setShowAdvanced}
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      label="Servidor SMTP"
+                      value={host}
+                      onChange={(e) => setHost(e.target.value)}
+                    />
+                    <Input
+                      label="Puerto"
+                      inputMode="numeric"
+                      value={port}
+                      onChange={(e) => setPort(e.target.value.replace(/\D/g, ""))}
+                    />
+                    <label className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
+                      <input
+                        type="checkbox"
+                        className="accent-ninja-flame"
+                        checked={secure}
+                        onChange={(e) => setSecure(e.target.checked)}
+                      />
+                      Conexión segura (SSL/TLS)
+                    </label>
+                  </div>
+                </Disclosure>
+              )}
+            </>
+          ) : (
+            <ResendGuide />
           )}
         </Step>
 
-        {/* Paso 2 — Cuenta */}
-        <Step n={2} title="Tu cuenta de email">
+        {/* Paso 2 — Cuenta / credenciales */}
+        <Step n={2} title={method === "resend" ? "Tu remitente y API key" : "Tu cuenta de email"}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
-              label="Tu email"
+              label={method === "resend" ? "Email remitente" : "Tu email"}
               type="email"
               autoComplete="off"
               placeholder="negocio@gmail.com"
@@ -460,46 +501,74 @@ export function TenantEmailCard() {
               onChange={(e) => setFromName(e.target.value)}
             />
           </div>
-          <Input
-            label="Contraseña"
-            type="password"
-            autoComplete="new-password"
-            data-1p-ignore
-            data-lpignore="true"
-            placeholder={
-              hasPassword
-                ? "•••••• (guardada • dejá vacío para mantener)"
-                : "Contraseña de aplicación"
-            }
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
 
-          {provider === "gmail" && (
-            <Disclosure variant="help" title="¿Cómo consigo la contraseña de aplicación de Gmail?">
-              <ol className="space-y-1.5">
-                {[
-                  "Activá la verificación en 2 pasos en tu cuenta de Google.",
-                  "Entrá a Contraseñas de aplicaciones y creá una nueva.",
-                  "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
-                ].map((step, i) => (
-                  <li key={i} className="flex gap-2.5 text-muted-foreground">
-                    <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
-                      {i + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ol>
-              <a
-                href="https://myaccount.google.com/apppasswords"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-block text-xs font-medium text-ninja-flameSoft hover:underline"
-              >
-                Abrir Contraseñas de aplicaciones de Google →
-              </a>
-            </Disclosure>
+          {method === "resend" ? (
+            <>
+              <Input
+                label="API key de Resend"
+                type="password"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                placeholder={
+                  hasResendKey
+                    ? "•••••• (guardada • dejá vacío para mantener)"
+                    : "re_xxxxxxxxxxxxxxxxxxxxxxxx"
+                }
+                value={resendKey}
+                onChange={(e) => setResendKey(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Con Resend, el email remitente debe ser de un dominio verificado
+                en tu cuenta (o usá <code>onboarding@resend.dev</code> para
+                probar). Tu API key se guarda de forma segura y no se vuelve a
+                mostrar.
+              </p>
+            </>
+          ) : (
+            <>
+              <Input
+                label="Contraseña"
+                type="password"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                placeholder={
+                  hasPassword
+                    ? "•••••• (guardada • dejá vacío para mantener)"
+                    : "Contraseña de aplicación"
+                }
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+
+              {provider === "gmail" && (
+                <Disclosure variant="help" title="¿Cómo consigo la contraseña de aplicación de Gmail?">
+                  <ol className="space-y-1.5">
+                    {[
+                      "Activá la verificación en 2 pasos en tu cuenta de Google.",
+                      "Entrá a Contraseñas de aplicaciones y creá una nueva.",
+                      "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2.5 text-muted-foreground">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                          {i + 1}
+                        </span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-xs font-medium text-ninja-flameSoft hover:underline"
+                  >
+                    Abrir Contraseñas de aplicaciones de Google →
+                  </a>
+                </Disclosure>
+              )}
+            </>
           )}
         </Step>
 
@@ -668,6 +737,101 @@ function Step({
         <span className="text-sm font-semibold text-foreground">{title}</span>
       </div>
       <div className="space-y-3 pl-[34px]">{children}</div>
+    </div>
+  );
+}
+
+// Tarjeta seleccionable del método de envío (SMTP vs Resend).
+function MethodCard({
+  active,
+  onClick,
+  title,
+  desc,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
+        active
+          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+          : "border-border hover:border-ninja-flameSoft/40",
+      )}
+    >
+      <span
+        className={cn(
+          "text-sm font-semibold",
+          active ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {title}
+      </span>
+      <span className="text-xs text-muted-foreground">{desc}</span>
+    </button>
+  );
+}
+
+// Guía simple de Resend: qué es, cómo crear la cuenta y de dónde sacar la
+// API key. Tono guiado (pasos numerados) + links a la web de Resend.
+function ResendGuide() {
+  const steps = [
+    "Creá una cuenta gratuita en resend.com (te alcanza para empezar).",
+    "En el panel, entrá a “API Keys” y tocá “Create API Key”.",
+    "Copiá la clave (empieza con re_) y pegala abajo. Se muestra una sola vez.",
+  ];
+  return (
+    <div className="mt-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/5 p-3.5">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
+          <Zap size={15} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            ¿Qué es Resend?
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            Es un servicio que envía tus emails por API (no necesitás tu propio
+            servidor SMTP). Es rápido, confiable y tiene un plan gratuito para
+            arrancar. Solo te pedimos una API key.
+          </p>
+        </div>
+      </div>
+
+      <ol className="mt-3 space-y-1.5">
+        {steps.map((step, i) => (
+          <li key={i} className="flex gap-2.5 text-xs text-muted-foreground">
+            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+              {i + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        <a
+          href="https://resend.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-medium text-ninja-flameSoft hover:underline"
+        >
+          Abrir resend.com →
+        </a>
+        <a
+          href="https://resend.com/api-keys"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-medium text-ninja-flameSoft hover:underline"
+        >
+          Ir a mis API Keys →
+        </a>
+      </div>
     </div>
   );
 }

@@ -96,3 +96,10 @@ supabase/functions/ai_assistant     + components/ai/AssistantBubble.tsx
 migrations: features, plan columns, plan_addons, subscription_addons,
             dunning (fn + pg_cron + dunning_events), iva_condition, ai_usage
 ```
+
+
+## Extensión (pedido 2026-06-07): vitalicios y códigos de invitación
+
+- **Acceso vitalicio / días gratis desde internal**: RPC `internal_grant_access(tenant, plan_key, lifetime, free_days, reason)` — vitalicio = suscripción `active` + `is_lifetime` (el dunning lo saltea) sin vencimiento; días gratis = trial extendido del plan elegido. UI en la ficha del tenant (card Plan): botones "Acceso vitalicio…" y "Regalar días…". Auditado.
+- **Códigos de invitación** (`invite_codes`): kind `lifetime` o `trial_days` + plan, vigencia desde/hasta, cupo de usos (`max_uses`/`used_count`), activar/desactivar, baja lógica. Admin en /internal/planes (sección Códigos). Redención en el registro (campo "¿Tenés un código?" colapsable) vía `redeem_invite_code(code, tenant)` — solo el owner del tenant recién creado, con validaciones server-side y auditoría.
+

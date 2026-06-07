@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -10,11 +10,12 @@ import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils/cn";
+import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
 const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean }[] = [
-  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "587", secure: false },
+  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true },
   { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false },
   { key: "otro", label: "Otro", host: "", port: "587", secure: false },
 ];
@@ -34,6 +35,9 @@ function mapError(error: string, detail?: string): string {
     case "invalid_from_email":
       return "El email no es válido.";
     case "test_failed":
+      if (detail && /timeout/i.test(detail)) {
+        return "El servidor SMTP no respondió (timeout). Verificá host/puerto/SSL.";
+      }
       return detail
         ? `No se pudo enviar: ${detail}`
         : "No se pudo enviar el email de prueba.";
@@ -45,25 +49,105 @@ function mapError(error: string, detail?: string): string {
       return "Tu sesión expiró. Volvé a iniciar sesión.";
     case "save_failed":
       return "No se pudo guardar la configuración.";
+    case "internal":
+      return "Error interno del servidor de envío. Probá de nuevo.";
     default:
+      if (detail && /timeout/i.test(detail)) {
+        return "El servidor SMTP no respondió (timeout). Verificá host/puerto/SSL.";
+      }
       return "No se pudo guardar. Revisá los datos e intentá de nuevo.";
   }
 }
 
-type SmtpCfg = {
-  host?: string;
-  port?: number;
-  secure?: boolean;
-  username?: string;
-  from_name?: string;
-  from_email?: string;
-  body_text?: string | null;
-  has_password?: boolean;
-};
-
 type SmtpResult =
   | { ok: true; tested?: boolean }
   | { error: string; detail?: string };
+
+// Diseños del cuerpo del email del comprobante (H9b PR5). Las claves coinciden
+// con EMAIL_BODY_TEMPLATES en send_receipt_email; el preview de acá replica el
+// look de cada diseño con divs simples (no es el HTML real, solo orientativo).
+type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
+const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = [
+  { key: "brand", label: "Marca", desc: "Usa el color de tu marca" },
+  { key: "clean", label: "Limpio", desc: "Blanco y aireado" },
+  { key: "dark", label: "Oscuro", desc: "Fondo oscuro elegante" },
+  { key: "warm", label: "Cálido", desc: "Tonos naranjas amables" },
+  { key: "minimal", label: "Mínimo", desc: "Sólo lo esencial" },
+];
+const SAMPLE_BODY = "¡Gracias por tu compra!";
+
+// Mini-preview estático de cada diseño. `accent` es el color de marca del tenant
+// (solo lo usa el diseño "brand"; el resto trae su propia paleta).
+function DesignPreview({ k, accent }: { k: BodyTemplateKey; accent: string }) {
+  const logo = (
+    <div className="text-[7px] font-bold tracking-tight" style={{ lineHeight: 1 }}>
+      NinjaSoft
+    </div>
+  );
+  if (k === "brand") {
+    return (
+      <div className="overflow-hidden rounded-sm border border-neutral-200 bg-white">
+        <div className="px-1.5 py-2 text-center text-white" style={{ background: accent }}>
+          {logo}
+        </div>
+        <div className="space-y-0.5 px-1.5 py-2">
+          <div className="text-[6px] text-neutral-700">{SAMPLE_BODY}</div>
+          <div className="h-0.5 w-3/4 rounded bg-neutral-200" />
+        </div>
+        <div className="bg-neutral-100 py-1 text-center text-[5px] text-neutral-400">NinjaSoft POS</div>
+      </div>
+    );
+  }
+  if (k === "clean") {
+    return (
+      <div className="overflow-hidden rounded-sm border border-neutral-200 bg-white">
+        <div className="h-[3px]" style={{ background: accent }} />
+        <div className="space-y-1 px-1.5 py-2 text-center text-neutral-800">
+          {logo}
+          <div className="text-[6px] text-neutral-600">{SAMPLE_BODY}</div>
+        </div>
+        <div className="bg-neutral-50 py-1 text-center text-[5px] text-neutral-400">NinjaSoft POS</div>
+      </div>
+    );
+  }
+  if (k === "dark") {
+    return (
+      <div className="overflow-hidden rounded-sm border border-neutral-700" style={{ background: "#111827" }}>
+        <div className="space-y-1 px-1.5 py-2 text-center text-white">
+          {logo}
+          <div className="mx-auto h-[2px] w-4 rounded" style={{ background: accent }} />
+          <div className="text-[6px] text-neutral-300">{SAMPLE_BODY}</div>
+        </div>
+        <div className="py-1 text-center text-[5px] text-neutral-500" style={{ background: "#1f2937" }}>
+          NinjaSoft POS
+        </div>
+      </div>
+    );
+  }
+  if (k === "warm") {
+    return (
+      <div className="overflow-hidden rounded-sm border border-orange-200" style={{ background: "#fff7ed" }}>
+        <div className="px-1.5 py-2 text-center text-white" style={{ background: accent }}>
+          {logo}
+        </div>
+        <div className="px-1.5 py-2 text-[6px]" style={{ color: "#7c2d12" }}>
+          {SAMPLE_BODY}
+        </div>
+        <div className="py-1 text-center text-[5px]" style={{ background: "#ffedd5", color: "#b45309" }}>
+          NinjaSoft POS
+        </div>
+      </div>
+    );
+  }
+  // minimal
+  return (
+    <div className="rounded-sm border border-neutral-200 bg-white px-1.5 py-1.5">
+      <div className="border-b border-neutral-200 pb-1 text-neutral-800">{logo}</div>
+      <div className="py-1.5 text-[6px] text-neutral-600">{SAMPLE_BODY}</div>
+      <div className="border-t border-neutral-200 pt-1 text-[5px] text-neutral-400">NinjaSoft POS</div>
+    </div>
+  );
+}
 
 export function TenantEmailCard() {
   const supabase = createClient();
@@ -80,32 +164,37 @@ export function TenantEmailCard() {
   const [password, setPassword] = useState("");
   const [hasPassword, setHasPassword] = useState(false);
   const [bodyText, setBodyText] = useState("");
+  const [bodyTemplate, setBodyTemplate] = useState<BodyTemplateKey>("brand");
   const [result, setResult] = useState<
     { kind: "ok"; tested: boolean; to?: string } | { kind: "error"; msg: string } | null
   >(null);
 
-  // get_tenant_smtp devuelve null si no es owner/manager → no se renderiza la config.
-  const { data: cfg, isLoading } = useQuery<SmtpCfg | null>({
-    queryKey: ["tenant-smtp"],
-    queryFn: async (): Promise<SmtpCfg | null> => {
-      const { data } = await supabase.rpc("get_tenant_smtp");
-      return (data as SmtpCfg | null) ?? null;
-    },
-  });
+  // get_tenant_smtp: allowed:false → no es owner/manager; allowed:true →
+  // owner (con configured true/false y los campos del SMTP en el mismo objeto).
+  const { data: status, isLoading } = useTenantSmtpStatus();
+  const { data: branding } = useTicketBranding();
+  // Accent de marca para el preview del diseño "brand"; fallback gris oscuro.
+  const accent = /^#[0-9a-fA-F]{6}$/.test(String(branding?.accent ?? ""))
+    ? String(branding!.accent)
+    : "#111827";
 
-  // Hidratar campos desde la config guardada.
+  // Hidratar campos desde la config guardada (anidada en el mismo payload).
   useEffect(() => {
-    if (!cfg) return;
-    const cfgHost = String(cfg.host ?? "");
+    if (!status?.allowed) return;
+    const cfgHost = String(status.host ?? "");
     setHost(cfgHost || "smtp.gmail.com");
-    setPort(String(cfg.port ?? "587"));
-    setSecure(!!cfg.secure);
-    setEmail(String(cfg.from_email ?? cfg.username ?? ""));
-    setFromName(String(cfg.from_name ?? ""));
-    setBodyText(String(cfg.body_text ?? ""));
-    setHasPassword(!!cfg.has_password);
+    setPort(String(status.port ?? "587"));
+    setSecure(!!status.secure);
+    setEmail(String(status.from_email ?? status.username ?? ""));
+    setFromName(String(status.from_name ?? ""));
+    setBodyText(String(status.body_text ?? ""));
+    const tmpl = String(status.body_template ?? "brand");
+    setBodyTemplate(
+      (BODY_TEMPLATES.some((t) => t.key === tmpl) ? tmpl : "brand") as BodyTemplateKey,
+    );
+    setHasPassword(!!status.has_password);
     setProvider(cfgHost ? inferProvider(cfgHost) : "gmail");
-  }, [cfg]);
+  }, [status]);
 
   function pickProvider(key: ProviderKey) {
     setProvider(key);
@@ -129,6 +218,7 @@ export function TenantEmailCard() {
           from_name: fromName.trim(),
           from_email: email.trim(),
           body_text: bodyText.trim() || undefined,
+          body_template: bodyTemplate,
           test,
           test_to: test ? email.trim() : undefined,
         },
@@ -143,7 +233,7 @@ export function TenantEmailCard() {
         toast({ title: msg, variant: "error" });
         // Aun con test_failed la config queda guardada en el server.
         if (res.error === "test_failed") {
-          qc.invalidateQueries({ queryKey: ["tenant-smtp"] });
+          qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
           setPassword("");
         }
         return;
@@ -154,7 +244,7 @@ export function TenantEmailCard() {
         variant: "success",
       });
       setPassword("");
-      qc.invalidateQueries({ queryKey: ["tenant-smtp"] });
+      qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
     },
     onError: () => {
       const msg = "No se pudo guardar. Revisá tu conexión e intentá de nuevo.";
@@ -165,8 +255,8 @@ export function TenantEmailCard() {
 
   if (isLoading) return null;
 
-  // No owner/manager: RPC devuelve null.
-  if (!cfg) {
+  // No owner/manager: allowed:false.
+  if (!status?.allowed) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -188,7 +278,10 @@ export function TenantEmailCard() {
     );
   }
 
-  const configured = Boolean(host.trim() && email.trim());
+  // Estado persistido (server) para el chip. El estado del formulario
+  // (formReady) habilita los botones de guardar.
+  const configured = status.configured;
+  const formReady = Boolean(host.trim() && email.trim());
   const saving = save.isPending;
 
   return (
@@ -239,6 +332,13 @@ export function TenantEmailCard() {
               </button>
             ))}
           </div>
+
+          {provider === "outlook" && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo
+              soporta.
+            </p>
+          )}
 
           {provider === "otro" ? (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -379,6 +479,38 @@ export function TenantEmailCard() {
             />
           </div>
 
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Diseño del email
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {BODY_TEMPLATES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setBodyTemplate(t.key)}
+                  title={t.desc}
+                  className={cn(
+                    "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
+                    bodyTemplate === t.key
+                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                      : "border-border hover:border-ninja-flameSoft/40",
+                  )}
+                >
+                  <DesignPreview k={t.key} accent={accent} />
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      bodyTemplate === t.key ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {t.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {result && (
             <div
               className={cn(
@@ -406,12 +538,12 @@ export function TenantEmailCard() {
           <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="secondary"
-              disabled={saving || !configured}
+              disabled={saving || !formReady}
               onClick={() => save.mutate(false)}
             >
               {saving ? "Guardando…" : "Guardar"}
             </Button>
-            <Button disabled={saving || !configured} onClick={() => save.mutate(true)}>
+            <Button disabled={saving || !formReady} onClick={() => save.mutate(true)}>
               {saving ? "Enviando…" : "Guardar y enviar prueba"}
             </Button>
           </div>

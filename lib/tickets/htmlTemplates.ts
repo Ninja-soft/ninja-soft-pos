@@ -53,15 +53,15 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
     paper: "58",
     kind: "sale",
     html: `<div style="font-family:monospace;font-size:10px;color:#000;line-height:1.35">
-  <div style="text-align:center;font-weight:bold;font-size:12px">{{negocio}}</div>
+  <div style="text-align:center;font-weight:bold;font-size:13px;color:#2563eb;letter-spacing:1px">{{negocio}}</div>
   <div style="display:flex;justify-content:space-between;font-size:9px;color:#444">
     <span>{{numero}}</span>
     <span>{{fecha}}</span>
   </div>
-  <div style="border-top:1px dashed #999;margin:4px 0"></div>
+  <div style="border-top:2px solid #2563eb;margin:4px 0"></div>
   <table style="width:100%;border-collapse:collapse">{{items_html}}</table>
-  <div style="border-top:1px dashed #999;margin:4px 0"></div>
-  <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0">{{total}}</div>
+  <div style="border-top:1px dashed #93c5fd;margin:4px 0"></div>
+  <div style="text-align:center;font-weight:bold;font-size:16px;margin:4px 0;color:#2563eb">{{total}}</div>
   <div style="text-align:center;color:#c00;font-weight:bold">{{anulada}}</div>
   <div style="text-align:center;font-size:9px;margin-top:4px">{{pie}}</div>
 </div>`,
@@ -72,15 +72,15 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
     paper: "a4",
     kind: "sale",
     html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1a1a1a;line-height:1.5">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #e2e2e2;padding-bottom:12px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #047857;padding-bottom:12px">
     <div>
-      <div style="font-size:20px;font-weight:bold">{{negocio}}</div>
+      <div style="font-size:20px;font-weight:bold;color:#047857">{{negocio}}</div>
       <div style="color:#555;font-size:12px">CUIT {{cuit}}</div>
       <div style="color:#555;font-size:12px">{{direccion}}</div>
       <div style="color:#555;font-size:12px">{{telefono}}</div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:14px;font-weight:bold;letter-spacing:1px">COMPROBANTE NO FISCAL</div>
+      <div style="font-size:14px;font-weight:bold;letter-spacing:1px;color:#047857">COMPROBANTE NO FISCAL</div>
       <div style="color:#555">N° {{numero}}</div>
       <div style="color:#555">{{fecha}}</div>
       <div style="color:#555">Cliente: {{cliente}}</div>
@@ -99,7 +99,7 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
     <table style="border-collapse:collapse;min-width:240px">
       <tr><td style="padding:2px 0">Subtotal</td><td style="text-align:right">{{subtotal}}</td></tr>
       <tr><td style="padding:2px 0">Descuento</td><td style="text-align:right">{{descuento}}</td></tr>
-      <tr style="border-top:1px solid #ccc;font-weight:bold;font-size:16px">
+      <tr style="border-top:2px solid #047857;font-weight:bold;font-size:16px;color:#047857">
         <td style="padding:6px 0">TOTAL</td><td style="text-align:right">{{total}}</td>
       </tr>
     </table>

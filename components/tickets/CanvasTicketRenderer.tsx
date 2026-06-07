@@ -1,10 +1,11 @@
 "use client";
 
-// H9b PR2 — Render del modo canvas: elementos con posición libre (XY).
+// H9b PR2/PR5 — Render del modo canvas: elementos con posición libre (XY en px).
 // El elemento "items" es de flujo: divide el lienzo en zona superior fija,
 // tabla de ítems de alto variable, y zona inferior desplazada. Spec H9b.
 import { formatCurrency, formatQty } from "@/lib/utils/format";
-import type { CanvasContent, CanvasElement } from "@/lib/tickets/blocks";
+import { CANVAS_WIDTH, styleProps, type CanvasContent, type CanvasElement } from "@/lib/tickets/blocks";
+import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { Barcode, alignCls, sizeCls } from "@/components/tickets/TicketRenderer";
 
@@ -16,80 +17,89 @@ interface Props {
   className?: string;
 }
 
-export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, className }: Props) {
-  const { sale, items, brand } = data;
-  const width = paper === "58" ? "58mm" : paper === "80" ? "80mm" : "210mm";
-
-  const { elements, height } = content;
-  const itemsEl = elements.find((e) => e.type === "items");
-  const splitY = itemsEl?.y ?? null;
-
-  // Render de un elemento posicionado absolutamente dentro de su zona.
-  // `topPx` es la coordenada Y relativa a la zona donde vive el elemento.
-  const renderEl = (el: CanvasElement, topPx: number) => {
-    const boxStyle = { left: `${el.x}%`, top: `${topPx}px`, width: `${el.w}%` } as const;
-
-    switch (el.type) {
-      case "text":
-        return (
-          <div
-            key={el.id}
-            className={`absolute ${alignCls(el.align)} ${sizeCls(el.size)} ${el.bold ? "font-bold" : ""} whitespace-pre-wrap`}
-            style={boxStyle}
-          >
-            {el.text}
-          </div>
-        );
-      case "image":
-        return el.url ? (
-          <div key={el.id} className={`absolute ${alignCls(el.align)}`} style={boxStyle}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={el.url} alt="" className="w-full" />
-          </div>
-        ) : null;
-      case "logo":
-        return brand?.logo_url ? (
-          <div key={el.id} className="absolute flex justify-center" style={boxStyle}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={brand.logo_url} alt="" className="h-12 w-auto object-contain" />
-          </div>
-        ) : null;
-      case "qr":
-        return (
-          <div key={el.id} className="absolute flex justify-center" style={boxStyle}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
-                `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
-              )}`}
-              alt="QR del comprobante"
-              width={110}
-              height={110}
-              className="h-[110px] w-[110px]"
-            />
-          </div>
-        );
-      case "barcode":
-        return (
-          <div key={el.id} className="absolute" style={boxStyle}>
-            <Barcode value={String(sale.number)} />
-          </div>
-        );
-      case "separator":
-        return (
-          <div
-            key={el.id}
-            className="absolute border-t border-dashed border-border"
-            style={boxStyle}
+/**
+ * Visual de un único elemento del canvas (sin posición: ocupa el 100% de su
+ * caja contenedora). Lo comparten el renderer (caja absoluta) y el editor
+ * (caja react-rnd), de modo que arrastrar/redimensionar muestre exactamente lo
+ * que se imprime. Devuelve null cuando no hay nada para mostrar (img vacía).
+ */
+export function CanvasElementView({
+  el,
+  data,
+}: {
+  el: CanvasElement;
+  data: TicketData;
+}) {
+  const { sale, brand } = data;
+  switch (el.type) {
+    case "text":
+      return (
+        <div
+          className={`h-full w-full ${alignCls(el.align)} ${sizeCls(el.size)} ${el.bold ? "font-bold" : ""} whitespace-pre-wrap`}
+          style={styleProps(el)}
+        >
+          {el.text}
+        </div>
+      );
+    case "image":
+      return el.url ? (
+        <div className={`flex h-full w-full ${imgJustify(el.align)} items-center`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={el.url} alt="" className="h-full w-full object-contain" />
+        </div>
+      ) : null;
+    case "logo":
+      return brand?.logo_url ? (
+        <div className="flex h-full w-full items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={brand.logo_url} alt="" className="h-full w-full object-contain" />
+        </div>
+      ) : null;
+    case "qr":
+      return (
+        <div className="flex h-full w-full items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+              `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
+            )}`}
+            alt="QR del comprobante"
+            className="h-full w-full object-contain"
           />
-        );
-      default:
-        return null;
+        </div>
+      );
+    case "barcode":
+      return (
+        <div className="flex h-full w-full items-center">
+          <Barcode value={String(sale.number)} />
+        </div>
+      );
+    case "separator": {
+      const hex = el.color && /^#[0-9a-fA-F]{6}$/.test(el.color) ? el.color : undefined;
+      return (
+        <div className="flex h-full w-full items-center">
+          <div
+            className={`w-full border-t border-dashed ${hex ? "" : "border-neutral-400"}`}
+            style={hex ? { borderTopColor: hex } : undefined}
+          />
+        </div>
+      );
     }
-  };
+    default:
+      return null;
+  }
+}
 
-  // Tabla de ítems en flujo normal: lista + fila TOTAL en negrita.
-  const itemsTable = (
+function imgJustify(a?: CanvasElement["align"]) {
+  return a === "left" ? "justify-start" : a === "right" ? "justify-end" : "justify-center";
+}
+
+/**
+ * Tabla de ítems de flujo (alto variable). Compartida por renderer y editor.
+ */
+export function CanvasItemsTable({ data }: { data: TicketData }) {
+  const { sale, items } = data;
+  return (
     <div>
       <ul className="space-y-1">
         {items.map((it) => (
@@ -107,8 +117,38 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
       </div>
     </div>
   );
+}
 
-  // Sin elemento items: una sola zona absoluta del alto total del lienzo.
+export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, className }: Props) {
+  const { sale } = data;
+  const width = CANVAS_WIDTH[paper];
+
+  const upgraded = upgradeCanvas(content, paper);
+  const { elements, height } = upgraded;
+  const itemsEl = elements.find((e) => e.type === "items");
+  const splitY = itemsEl?.y ?? null;
+
+  // Caja absoluta del elemento dentro de su zona. `topPx` es la Y relativa a la
+  // zona donde vive el elemento.
+  const renderEl = (el: CanvasElement, topPx: number) => {
+    const view = <CanvasElementView el={el} data={data} />;
+    if (!view) return null;
+    return (
+      <div
+        key={el.id}
+        className="absolute"
+        style={{
+          left: `${el.x}px`,
+          top: `${topPx}px`,
+          width: `${el.w}px`,
+          height: el.h !== undefined ? `${el.h}px` : undefined,
+        }}
+      >
+        {view}
+      </div>
+    );
+  };
+
   const hasItems = splitY !== null;
   const topZoneH = hasItems ? splitY : height;
   const bottomZoneH = hasItems ? Math.max(0, height - splitY) : 0;
@@ -118,20 +158,20 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
 
   return (
     <div
-      className={`mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground ${className ?? ""}`}
-      style={{ width, maxWidth: "100%" }}
+      className={`mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ${className ?? ""}`}
+      style={{ width: `${width}px`, maxWidth: "100%" }}
     >
       {/* Zona superior: anclada (alto fijo = items.y, o todo el lienzo si no hay items). */}
-      <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "visible" }}>
+      <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "hidden" }}>
         {topEls.map((el) => renderEl(el, el.y))}
       </div>
 
       {hasItems && (
         <>
           {/* Tabla de ítems: flujo normal, alto variable según N ítems. */}
-          {itemsTable}
+          <CanvasItemsTable data={data} />
           {/* Zona inferior: empujada por la tabla; Y relativa a items.y. */}
-          <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "visible" }}>
+          <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "hidden" }}>
             {bottomEls.map((el) => renderEl(el, el.y - splitY))}
           </div>
         </>

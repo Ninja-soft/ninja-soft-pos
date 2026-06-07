@@ -28,9 +28,109 @@ const escapeHtml = (s: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+// Carrera contra un timeout: si la promesa SMTP no resuelve a tiempo, rechaza.
+// Evita que un socket colgado mate al worker (deployment_id:null / 503).
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label}_timeout`)), ms)),
+  ]);
+}
+
+// --- Diseños del cuerpo del email del comprobante (H9b PR5) ---------------
+// Cada diseño recibe el contexto ya escapado y devuelve el HTML completo. Solo
+// estilos inline (los clientes de email descartan <style>/clases). Todos muestran
+// el logo (tenant o NinjaSoft de fallback) y cierran con "Enviado con NinjaSoft POS".
+const NINJA_LOGO_URL = "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordmark.webp";
+const FOOTER_TEXT = "Enviado con NinjaSoft POS";
+const ATTACH_NOTE = "Tu comprobante va adjunto a este email.";
+
+interface BodyCtx {
+  accent: string;
+  logoHtml: string;
+  safeName: string;
+  safeBodyText: string;
+}
+
+type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
+
+const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
+  // 1) brand — header con el accent del tenant + logo/nombre, footer gris.
+  brand: ({ accent, logoHtml, safeName, safeBodyText }) =>
+    `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+  <div style="background:${accent};padding:20px;text-align:center">
+    ${logoHtml}
+    <div style="color:#ffffff;font-size:16px;font-weight:bold;margin-top:8px">${safeName}</div>
+  </div>
+  <div style="padding:24px;color:#111827">
+    <p style="white-space:pre-wrap;margin:0 0 12px">${safeBodyText}</p>
+    <p style="color:#6b7280;font-size:12px;margin:0">${ATTACH_NOTE}</p>
+  </div>
+  <div style="background:#f9fafb;padding:12px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+</div>`,
+
+  // 2) clean — blanco, borde superior accent 4px, logo centrado, mucho aire.
+  clean: ({ accent, logoHtml, safeName, safeBodyText }) =>
+    `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #eef0f3;border-top:4px solid ${accent};border-radius:10px;overflow:hidden">
+  <div style="padding:36px 32px;text-align:center">
+    ${logoHtml}
+    <div style="color:#111827;font-size:17px;font-weight:600;margin-top:14px">${safeName}</div>
+  </div>
+  <div style="padding:0 32px 36px;color:#374151;text-align:center;line-height:1.6">
+    <p style="white-space:pre-wrap;margin:0 0 16px;font-size:15px">${safeBodyText}</p>
+    <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
+  </div>
+  <div style="background:#f7f8fa;padding:16px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+</div>`,
+
+  // 3) dark — tarjeta oscura, texto claro, divisor accent.
+  dark: ({ accent, logoHtml, safeName, safeBodyText }) =>
+    `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;background:#111827;border-radius:14px;overflow:hidden">
+  <div style="padding:28px 24px 20px;text-align:center">
+    ${logoHtml}
+    <div style="color:#ffffff;font-size:17px;font-weight:bold;margin-top:10px">${safeName}</div>
+    <div style="height:3px;width:48px;background:${accent};border-radius:99px;margin:16px auto 0"></div>
+  </div>
+  <div style="padding:8px 28px 28px;color:#e5e7eb;line-height:1.6">
+    <p style="white-space:pre-wrap;margin:0 0 14px;font-size:15px">${safeBodyText}</p>
+    <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
+  </div>
+  <div style="background:#1f2937;padding:14px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+</div>`,
+
+  // 4) warm — fondo cálido, header naranja (accent si está seteado), redondeado.
+  warm: ({ accent, logoHtml, safeName, safeBodyText }) =>
+    `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:500px;margin:0 auto;background:#fff7ed;border-radius:16px;overflow:hidden;border:1px solid #fed7aa">
+  <div style="background:${accent};padding:24px;text-align:center;border-radius:16px 16px 0 0">
+    ${logoHtml}
+    <div style="color:#ffffff;font-size:17px;font-weight:bold;margin-top:8px">${safeName}</div>
+  </div>
+  <div style="padding:26px 28px;color:#7c2d12;line-height:1.6">
+    <p style="white-space:pre-wrap;margin:0 0 14px;font-size:15px">${safeBodyText}</p>
+    <p style="color:#c2693e;font-size:12px;margin:0">${ATTACH_NOTE}</p>
+  </div>
+  <div style="background:#ffedd5;padding:14px;text-align:center;color:#b45309;font-size:11px">${FOOTER_TEXT}</div>
+</div>`,
+
+  // 5) minimal — sin bloque header; logo chico arriba-izquierda, separadores finos.
+  minimal: ({ logoHtml, safeName, safeBodyText }) =>
+    `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;padding:8px 4px;color:#111827">
+  <div style="padding:4px 4px 14px;border-bottom:1px solid #ececec">
+    ${logoHtml}
+  </div>
+  <div style="padding:18px 4px;line-height:1.6">
+    <div style="font-size:13px;font-weight:600;color:#111827;margin-bottom:8px">${safeName}</div>
+    <p style="white-space:pre-wrap;margin:0 0 12px;font-size:14px;color:#374151">${safeBodyText}</p>
+    <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
+  </div>
+  <div style="padding:12px 4px 4px;border-top:1px solid #ececec;color:#b0b4ba;font-size:10px">${FOOTER_TEXT}</div>
+</div>`,
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  try {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -108,49 +208,59 @@ Deno.serve(async (req: Request) => {
     : "#111827";
   const logoUrl = String(brand?.logo_url ?? "").trim();
   const safeLogo = escapeHtml(logoUrl); // escapa comillas para el atributo src
+  // Logo del tenant si tiene; si no, el wordmark de NinjaSoft (URL absoluta).
+  const logoHtml = logoUrl
+    ? `<img src="${safeLogo}" alt="${safeName}" style="max-height:48px;display:inline-block">`
+    : `<img src="${NINJA_LOGO_URL}" alt="NinjaSoft" style="max-height:32px;display:inline-block">`;
   const bodyTextRaw =
     String(cfg.body_text ?? "").trim() ||
     "¡Gracias por tu compra! Te enviamos tu comprobante.";
   const safeBodyText = escapeHtml(bodyTextRaw);
-  const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-  <div style="background:${accent};padding:20px;text-align:center">
-    ${logoUrl ? `<img src="${safeLogo}" alt="" style="max-height:48px">` : `<strong style="color:#fff;font-size:18px">${safeName}</strong>`}
-  </div>
-  <div style="padding:24px;color:#111">
-    <p style="white-space:pre-wrap">${safeBodyText}</p>
-    <p style="color:#6b7280;font-size:12px">Tu comprobante va adjunto a este email.</p>
-  </div>
-  <div style="background:#f9fafb;padding:12px;text-align:center;color:#9ca3af;font-size:11px">Enviado con NinjaSoft POS</div>
-</div>`;
+  // Diseño elegido por el tenant (fallback 'brand' para claves desconocidas).
+  const bodyKey = String(cfg.body_template ?? "brand") as BodyTemplateKey;
+  const buildBody = EMAIL_BODY_TEMPLATES[bodyKey] ?? EMAIL_BODY_TEMPLATES.brand;
+  const html = buildBody({ accent, logoHtml, safeName, safeBodyText });
 
+  // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
+  // (denomailer lo negocia solo sobre conexión plana si el server lo ofrece).
+  const smtpPort = cfg.port || 587;
+  const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
   const client = new SMTPClient({
     connection: {
       hostname: cfg.host,
-      port: cfg.port || 587,
-      tls: !!cfg.secure,
+      port: smtpPort,
+      tls: smtpTls,
       auth: cfg.username ? { username: cfg.username, password: cfg.password } : undefined,
     },
   });
   try {
-    await client.send({
-      from: `${name} <${cfg.from_email}>`,
-      to,
-      subject: `Tu comprobante de ${name}`,
-      content: bodyTextRaw,
-      html,
-      attachments: [
-        {
-          filename: `comprobante-${sale.number}.png`,
-          content: base64,
-          encoding: "base64",
-          contentType: "image/png",
-        },
-      ],
-    });
-    await client.close();
+    await withTimeout(
+      client.send({
+        from: `${name} <${cfg.from_email}>`,
+        to,
+        subject: `Tu comprobante de ${name}`,
+        content: bodyTextRaw,
+        html,
+        attachments: [
+          {
+            filename: `comprobante-${sale.number}.png`,
+            content: base64,
+            encoding: "base64",
+            contentType: "image/png",
+          },
+        ],
+      }),
+      20000,
+      "smtp_send",
+    );
+    try {
+      await withTimeout(client.close(), 3000, "smtp_close");
+    } catch (_) {
+      /* noop */
+    }
   } catch (e) {
     try {
-      await client.close();
+      await withTimeout(client.close(), 3000, "smtp_close");
     } catch (_) {
       /* noop */
     }
@@ -172,4 +282,7 @@ Deno.serve(async (req: Request) => {
     after_data: { to },
   });
   return json({ ok: true });
+  } catch (e) {
+    return json({ error: "internal", detail: String(e) }, 500);
+  }
 });

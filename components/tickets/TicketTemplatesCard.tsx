@@ -14,6 +14,7 @@ import {
   useCreateTemplate,
   useRemoveTemplate,
   useSetActiveTemplate,
+  useTenantSmtpStatus,
   useTicketTemplates,
 } from "@/modules/tickets/hooks";
 import { defaultSaleBlocks, type TemplateContent } from "@/lib/tickets/blocks";
@@ -67,6 +68,7 @@ export function TicketTemplatesCard() {
   const setActive = useSetActiveTemplate();
   const clearActive = useClearActiveTemplate();
   const remove = useRemoveTemplate();
+  const { data: smtp } = useTenantSmtpStatus();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<TicketTemplate | null>(null);
@@ -119,14 +121,24 @@ export function TicketTemplatesCard() {
         onError: () => toast({ title: "No se pudo desactivar", variant: "error" }),
       });
     } else {
+      // Al activar Email sin SMTP configurado: igual se activa, pero avisamos
+      // que falta configurar el email del negocio para poder enviar. Quien
+      // gestiona plantillas es owner/manager → `configured` es confiable acá.
+      const warnNoSmtp = destination === "email" && smtp != null && !smtp.configured;
       setActive.mutate(
         { id: t.id, destination },
         {
           onSuccess: () =>
-            toast({
-              title: `Activado para ${DEST_LABELS[destination]}`,
-              variant: "success",
-            }),
+            warnNoSmtp
+              ? toast({
+                  title:
+                    "Activado. Falta configurar el email del negocio en Configuración → Email para poder enviar.",
+                  variant: "info",
+                })
+              : toast({
+                  title: `Activado para ${DEST_LABELS[destination]}`,
+                  variant: "success",
+                }),
           onError: () => toast({ title: "No se pudo activar", variant: "error" }),
         },
       );

@@ -6,6 +6,7 @@ import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { code39Segments } from "@/lib/barcode/code39";
 import type { Align, TextSize, TicketBlock } from "@/lib/tickets/blocks";
+import { styleProps } from "@/lib/tickets/blocks";
 import type { SampleTicketData } from "@/lib/tickets/sample";
 
 export type TicketData = SampleTicketData;
@@ -75,7 +76,11 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
         );
       case "title":
         return (
-          <div key={b.id} className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} text-muted-foreground`}>
+          <div
+            key={b.id}
+            className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} text-muted-foreground`}
+            style={styleProps(b)}
+          >
             {b.text || brand?.ticket_title || "Comprobante no fiscal"}
           </div>
         );
@@ -153,7 +158,11 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
         return <div key={b.id}><Barcode value={String(sale.number)} /></div>;
       case "text":
         return (
-          <div key={b.id} className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} whitespace-pre-wrap`}>
+          <div
+            key={b.id}
+            className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} whitespace-pre-wrap`}
+            style={styleProps(b)}
+          >
             {b.text}
           </div>
         );
@@ -164,12 +173,25 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
             <img src={b.url} alt="" style={{ width: `${b.widthPct ?? 100}%` }} className="inline-block" />
           </div>
         ) : null;
-      case "separator":
-        return <div key={b.id} className="my-3 border-t border-dashed border-border" />;
+      case "separator": {
+        // Default sin props: dashed con color del tema (cero cambio visual).
+        if (!b.style && !b.color) {
+          return <div key={b.id} className="my-3 border-t border-dashed border-border" />;
+        }
+        const hex = b.color && /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : undefined;
+        const st = b.style ?? "dashed";
+        return (
+          <div
+            key={b.id}
+            className={`my-3 ${st === "double" ? "border-t-[3px]" : "border-t"} ${hex ? "" : "border-border"}`}
+            style={{ borderTopStyle: st, borderTopColor: hex }}
+          />
+        );
+      }
       case "footer":
         return (
-          <div key={b.id} className="text-center">
-            <div className="text-xs text-muted-foreground">{b.text || brand?.ticket_footer || "¡Gracias por su compra!"}</div>
+          <div key={b.id} className="text-center" style={styleProps(b)}>
+            <div className="text-xs text-muted-foreground" style={styleProps(b)}>{b.text || brand?.ticket_footer || "¡Gracias por su compra!"}</div>
             {brand?.ticket_legend && (
               <div className="mt-1 text-[10px] leading-tight text-muted-foreground">{brand.ticket_legend}</div>
             )}

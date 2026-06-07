@@ -5,12 +5,18 @@ import { CANVAS_WIDTH } from "@/lib/tickets/blocks";
 
 const KINDS = ["sale", "promo", "gift"];
 const PAPERS = ["58", "80", "a4"];
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 describe("BLOCK_STARTER_TEMPLATES", () => {
   it("tiene 5 entradas con claves únicas", () => {
     expect(BLOCK_STARTER_TEMPLATES).toHaveLength(5);
     const keys = BLOCK_STARTER_TEMPLATES.map((t) => t.key);
     expect(new Set(keys).size).toBe(5);
+  });
+
+  it("expone las claves rediseñadas (clasico/moderno/elegante/promo/gift)", () => {
+    const keys = BLOCK_STARTER_TEMPLATES.map((t) => t.key).sort();
+    expect(keys).toEqual(["clasico", "elegante", "gift", "moderno", "promo"]);
   });
 
   it("kind y paper válidos en cada entrada", () => {
@@ -27,6 +33,22 @@ describe("BLOCK_STARTER_TEMPLATES", () => {
       expect(new Set(ids).size, `${t.key} tiene ids duplicados`).toBe(ids.length);
     }
   });
+
+  it("todo color/bg/separador presente es un hex válido", () => {
+    for (const t of BLOCK_STARTER_TEMPLATES) {
+      for (const b of t.blocks) {
+        if ("color" in b && b.color) expect(b.color, `${t.key}/${b.type} color`).toMatch(HEX);
+        if ("bg" in b && b.bg) expect(b.bg, `${t.key}/${b.type} bg`).toMatch(HEX);
+      }
+    }
+  });
+
+  it("al menos un modelo aporta identidad visual (color/bg)", () => {
+    const withColor = BLOCK_STARTER_TEMPLATES.filter((t) =>
+      t.blocks.some((b) => ("color" in b && b.color) || ("bg" in b && b.bg)),
+    );
+    expect(withColor.length).toBeGreaterThanOrEqual(4);
+  });
 });
 
 describe("CANVAS_STARTER_TEMPLATES", () => {
@@ -34,6 +56,20 @@ describe("CANVAS_STARTER_TEMPLATES", () => {
     expect(CANVAS_STARTER_TEMPLATES).toHaveLength(5);
     const keys = CANVAS_STARTER_TEMPLATES.map((t) => t.key);
     expect(new Set(keys).size).toBe(5);
+  });
+
+  it("expone las claves rediseñadas", () => {
+    const keys = CANVAS_STARTER_TEMPLATES.map((t) => t.key).sort();
+    expect(keys).toEqual(["cartel-a4", "clasico", "gift-card", "moderno-dark", "promo-flyer"]);
+  });
+
+  it("todo color/bg presente en elementos es un hex válido", () => {
+    for (const t of CANVAS_STARTER_TEMPLATES) {
+      for (const el of t.canvas.elements) {
+        if (el.color) expect(el.color, `${t.key}/${el.type} color`).toMatch(HEX);
+        if (el.bg) expect(el.bg, `${t.key}/${el.type} bg`).toMatch(HEX);
+      }
+    }
   });
 
   it("kind y paper válidos en cada entrada", () => {

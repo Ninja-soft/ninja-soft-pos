@@ -26,6 +26,7 @@ import { TicketRenderer } from "@/components/tickets/TicketRenderer";
 import {
   CanvasElementView,
   CanvasItemsTable,
+  CanvasTicketRenderer,
 } from "@/components/tickets/CanvasTicketRenderer";
 import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
 import { ImageCropModal } from "@/components/tickets/ImageCropModal";
@@ -52,7 +53,7 @@ import { HTML_STARTER_TEMPLATES } from "@/lib/tickets/htmlTemplates";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
 import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
 import { HTML_TEMPLATE_VARS } from "@/lib/tickets/htmlVars";
-import { sampleTicketData } from "@/lib/tickets/sample";
+import { sampleTicketData, type SampleBrand } from "@/lib/tickets/sample";
 import {
   useCreateTemplate,
   useTicketBranding,
@@ -329,6 +330,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
       ) : step === "starter" ? (
         <StarterChooser
           mode={mode}
+          brand={brand ?? null}
           onPick={(s) => {
             setKind(s.kind);
             setPaper(s.paper);
@@ -510,12 +512,43 @@ function starterPicks(mode: TemplateMode): StarterPick[] {
   return BLOCK_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "blocks" as const }));
 }
 
+// Escala de la miniatura por papel: el contenido se renderiza a su ancho real
+// (58/80 mm ≈ 219/302 px, A4 ≈ 794 px) y se reduce para entrar en el marco.
+// width = 100/escala % para que ocupe todo el ancho del marco antes de escalar.
+const THUMB_SCALE: Record<Paper, number> = { "58": 0.42, "80": 0.32, a4: 0.16 };
+
+function StarterThumb({ pick, brand }: { pick: StarterPick; brand: SampleBrand | null }) {
+  const data = useMemo(() => sampleTicketData(brand), [brand]);
+  const scale = THUMB_SCALE[pick.paper as Paper] ?? 0.32;
+  const widthPct = `${Math.round((1 / scale) * 100)}%`;
+  return (
+    <div className="h-40 w-full overflow-hidden rounded-lg border border-border bg-white">
+      <div
+        className="pointer-events-none origin-top-left"
+        style={{ transform: `scale(${scale})`, width: widthPct }}
+      >
+        {pick.mode === "blocks" && (
+          <TicketRenderer blocks={pick.blocks} data={data} paper={pick.paper} showNinjaLogo={false} />
+        )}
+        {pick.mode === "canvas" && (
+          <CanvasTicketRenderer content={pick.canvas} data={data} paper={pick.paper} showNinjaLogo={false} />
+        )}
+        {pick.mode === "html" && (
+          <HtmlTicketRenderer html={pick.html} data={data} paper={pick.paper} showNinjaLogo={false} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StarterChooser({
   mode,
+  brand,
   onPick,
   onScratch,
 }: {
   mode: TemplateMode;
+  brand: SampleBrand | null;
   onPick: (s: StarterPick) => void;
   onScratch: () => void;
 }) {
@@ -523,19 +556,20 @@ function StarterChooser({
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Elegí un modelo de inicio o empezá desde cero.
+        Elegí un modelo de inicio o empezá desde cero. Tocá una miniatura para usarla.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
         {picks.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => onPick(t)}
-            className="flex flex-col items-start gap-1.5 rounded-xl border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+            className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-3 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
           >
+            <StarterThumb pick={t} brand={brand} />
             <span className="font-medium text-foreground">{t.name}</span>
             <span className="text-xs text-muted-foreground">{t.description}</span>
-            <span className="mt-1 flex flex-wrap gap-1.5">
+            <span className="mt-auto flex flex-wrap gap-1.5 pt-1">
               <Chip>{KIND_LABEL[t.kind]}</Chip>
               <Chip>{paperLabel(t.paper)}</Chip>
             </span>
@@ -544,8 +578,11 @@ function StarterChooser({
         <button
           type="button"
           onClick={onScratch}
-          className="flex flex-col items-start gap-1 rounded-xl border border-dashed border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+          className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-card p-3 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
         >
+          <span className="grid h-40 w-full place-items-center rounded-lg border border-dashed border-border bg-muted/20 text-xs text-muted-foreground">
+            Lienzo en blanco
+          </span>
           <span className="font-medium text-foreground">Desde cero</span>
           <span className="text-xs text-muted-foreground">Un esqueleto mínimo para arrancar.</span>
         </button>

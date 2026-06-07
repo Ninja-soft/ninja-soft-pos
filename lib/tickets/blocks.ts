@@ -1,16 +1,26 @@
 // H9b — Modelo de bloques del ticket. El content JSONB de ticket_templates
 // (mode: blocks) es { blocks: TicketBlock[] }. Ver spec 2026-06-06-h9b.
+import type { CSSProperties } from "react";
+
 export type Align = "left" | "center" | "right";
 export type TextSize = "sm" | "md" | "lg";
+export type FontFamily = "mono" | "sans" | "serif";
 
 interface Base {
   id: string;
   hidden?: boolean;
 }
+// Estilo visual opcional para bloques de texto (title/text/footer). Todo
+// opcional → cero cambio visual cuando no se setea. color/bg son hex (#rrggbb).
+export interface TextStyle {
+  color?: string;
+  bg?: string;
+  font?: FontFamily;
+}
 export type TicketBlock =
   | (Base & { type: "logo" })
   | (Base & { type: "business"; showLegalName?: boolean; showCuit?: boolean; showAddress?: boolean; showPhone?: boolean })
-  | (Base & { type: "title"; text?: string; align?: Align; size?: TextSize; bold?: boolean })
+  | (Base & TextStyle & { type: "title"; text?: string; align?: Align; size?: TextSize; bold?: boolean })
   | (Base & { type: "saleInfo"; showNumber?: boolean; showDate?: boolean })
   | (Base & { type: "customer" })
   | (Base & { type: "items"; showUnitPrice?: boolean })
@@ -18,12 +28,35 @@ export type TicketBlock =
   | (Base & { type: "payments" })
   | (Base & { type: "qr" })
   | (Base & { type: "barcode" })
-  | (Base & { type: "text"; text: string; align?: Align; size?: TextSize; bold?: boolean })
+  | (Base & TextStyle & { type: "text"; text: string; align?: Align; size?: TextSize; bold?: boolean })
   | (Base & { type: "image"; url: string; widthPct?: number; align?: Align })
-  | (Base & { type: "separator" })
-  | (Base & { type: "footer"; text?: string });
+  | (Base & { type: "separator"; style?: "dashed" | "solid" | "double"; color?: string })
+  | (Base & TextStyle & { type: "footer"; text?: string });
 
 export type BlockType = TicketBlock["type"];
+
+// --- Helpers de estilo visual (compartidos por los renderers) ---
+const HEX = /^#[0-9a-fA-F]{6}$/;
+export const FONT_STACK: Record<FontFamily, string> = {
+  mono: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  sans: "system-ui, -apple-system, Segoe UI, sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+};
+
+// Construye el style inline para color/bg/font/fontSize, ignorando hex inválidos.
+export function styleProps(s: {
+  color?: string;
+  bg?: string;
+  font?: FontFamily;
+  fontSize?: number;
+}): CSSProperties {
+  const out: CSSProperties = {};
+  if (s.color && HEX.test(s.color)) out.color = s.color;
+  if (s.bg && HEX.test(s.bg)) out.backgroundColor = s.bg;
+  if (s.font) out.fontFamily = FONT_STACK[s.font];
+  if (typeof s.fontSize === "number" && s.fontSize > 0) out.fontSize = `${s.fontSize}px`;
+  return out;
+}
 
 export interface BlocksContent {
   blocks: TicketBlock[];
@@ -97,6 +130,11 @@ export interface CanvasElement {
   size?: TextSize;     // text
   bold?: boolean;      // text
   align?: Align;       // text/image dentro de su caja
+  // Estilo visual opcional (cero cambio cuando ausente). color/bg hex (#rrggbb).
+  color?: string;
+  bg?: string;
+  font?: FontFamily;
+  fontSize?: number;   // px — pisa `size` cuando está presente
 }
 
 export interface CanvasContent {

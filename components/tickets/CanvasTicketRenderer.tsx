@@ -4,7 +4,7 @@
 // El elemento "items" es de flujo: divide el lienzo en zona superior fija,
 // tabla de ítems de alto variable, y zona inferior desplazada. Spec H9b.
 import { formatCurrency, formatQty } from "@/lib/utils/format";
-import { CANVAS_WIDTH, type CanvasContent, type CanvasElement } from "@/lib/tickets/blocks";
+import { CANVAS_WIDTH, styleProps, type CanvasContent, type CanvasElement } from "@/lib/tickets/blocks";
 import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { Barcode, alignCls, sizeCls } from "@/components/tickets/TicketRenderer";
@@ -36,6 +36,7 @@ export function CanvasElementView({
       return (
         <div
           className={`h-full w-full ${alignCls(el.align)} ${sizeCls(el.size)} ${el.bold ? "font-bold" : ""} whitespace-pre-wrap`}
+          style={styleProps(el)}
         >
           {el.text}
         </div>
@@ -73,12 +74,17 @@ export function CanvasElementView({
           <Barcode value={String(sale.number)} />
         </div>
       );
-    case "separator":
+    case "separator": {
+      const hex = el.color && /^#[0-9a-fA-F]{6}$/.test(el.color) ? el.color : undefined;
       return (
         <div className="flex h-full w-full items-center">
-          <div className="w-full border-t border-dashed border-border" />
+          <div
+            className={`w-full border-t border-dashed ${hex ? "" : "border-border"}`}
+            style={hex ? { borderTopColor: hex } : undefined}
+          />
         </div>
       );
+    }
     default:
       return null;
   }

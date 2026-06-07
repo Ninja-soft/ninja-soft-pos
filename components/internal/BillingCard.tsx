@@ -8,19 +8,55 @@ import {
   Clock,
   Plus,
   ReceiptText,
+  Tag,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Segmented } from "@/components/ui/Segmented";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import {
   useBillingRecords,
   useBillingMutations,
   usePlanPrices,
+  useTenantDiscounts,
+  useDiscountMutations,
 } from "@/modules/internal/hooks";
-import type { BillingRecord } from "@/modules/internal/api";
+import {
+  effectiveMonthlyPrice,
+  type BillingRecord,
+  type TenantDiscount,
+} from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
+
+function discountLabel(d: TenantDiscount): string {
+  return d.kind === "percent"
+    ? `-${d.value}%`
+    : `-${formatCurrency(d.value)}`;
+}
+
+function discountState(
+  d: TenantDiscount,
+): { label: string; cls: string } {
+  const today = new Date().toISOString().slice(0, 10);
+  if (d.valid_from > today)
+    return {
+      label: "Programado",
+      cls: "bg-sky-400/15 text-sky-300",
+    };
+  if (d.valid_until && d.valid_until < today)
+    return {
+      label: "Vencido",
+      cls: "bg-muted text-muted-foreground",
+    };
+  return {
+    label: "Vigente",
+    cls: "bg-emerald-400/15 text-emerald-300",
+  };
+}
 
 const MEDIUM_LABELS: Record<string, string> = {
   mp: "Mercado Pago",
@@ -46,7 +82,19 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
   const { add, extendTrial, setTrialEnd, trialOutcome } =
     useBillingMutations(tenantId);
   const { data: planPrices } = usePlanPrices();
+  const { data: discounts } = useTenantDiscounts(tenantId);
+  const discountMut = useDiscountMutations(tenantId);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Descuentos comerciales.
+  const [discKind, setDiscKind] = useState<"percent" | "fixed">("percent");
+  const [discValue, setDiscValue] = useState("");
+  const [discReason, setDiscReason] = useState("");
+  const [discFrom, setDiscFrom] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [discUntil, setDiscUntil] = useState("");
+  const [removeId, setRemoveId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [medium, setMedium] = useState<string>("bank_transfer");
   const [periodStart, setPeriodStart] = useState("");
@@ -70,7 +118,17 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
     if (ends.length === 0) return null;
     return ends.reduce((a, b) => (a > b ? a : b));
   }, [records]);
-  const monthlyPrice = planKey ? planPrices?.get(planKey) ?? null : null;
+  const basePrice = planKey ? planPrices?.get(planKey) ?? null : null;
+  // Precio efectivo = precio del plan − descuentos vigentes (percent y luego fixed).
+  const effectivePrice = useMemo(() => {
+    if (basePrice == null) return null;
+    return effectiveMonthlyPrice(basePrice, discounts ?? []);
+  }, [basePrice, discounts]);
+  const isDiscounted =
+    basePrice != null &&
+    effectivePrice != null &&
+    effectivePrice < basePrice;
+  const monthlyPrice = effectivePrice;
   const overdueDays = useMemo(() => {
     if (!coveredUntil) return 0;
     const end = new Date(`${coveredUntil}T23:59:59`);
@@ -108,6 +166,56 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
     } catch (e) {
       toast({
         title: "No se pudo registrar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleAddDiscount() {
+    const val = Number(discValue);
+    if (!Number.isFinite(val) || val <= 0) {
+      toast({ title: "Ingresá un valor válido", variant: "error" });
+      return;
+    }
+    if (discKind === "percent" && val > 100) {
+      toast({ title: "El porcentaje no puede superar 100", variant: "error" });
+      return;
+    }
+    if (discUntil && discUntil < discFrom) {
+      toast({ title: "La vigencia hasta es anterior al desde", variant: "error" });
+      return;
+    }
+    try {
+      await discountMut.add.mutateAsync({
+        kind: discKind,
+        value: val,
+        reason: discReason.trim() || null,
+        valid_from: discFrom,
+        valid_until: discUntil || null,
+      });
+      toast({ title: "Descuento agregado", variant: "success" });
+      setDiscValue("");
+      setDiscReason("");
+      setDiscUntil("");
+    } catch (e) {
+      toast({
+        title: "No se pudo agregar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  async function handleRemoveDiscount() {
+    if (!removeId) return;
+    try {
+      await discountMut.remove.mutateAsync(removeId);
+      toast({ title: "Descuento dado de baja", variant: "success" });
+      setRemoveId(null);
+    } catch (e) {
+      toast({
+        title: "No se pudo dar de baja",
         description: e instanceof Error ? e.message : undefined,
         variant: "error",
       });
@@ -288,6 +396,21 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
             </p>
           )}
 
+          {/* Precio mensual efectivo (plan − descuentos vigentes) */}
+          {basePrice != null && (
+            <div className="text-xs text-muted-foreground">
+              Precio efectivo:{" "}
+              {isDiscounted && (
+                <span className="mr-1 line-through opacity-60">
+                  {formatCurrency(basePrice)}
+                </span>
+              )}
+              <span className="font-semibold text-foreground">
+                {formatCurrency(effectivePrice ?? basePrice)}/mes
+              </span>
+            </div>
+          )}
+
           {/* Billing records */}
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -328,8 +451,124 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
               ))}
             </div>
           )}
+
+          {/* ── Descuentos comerciales ──────────────────────────────────── */}
+          <div className="border-t border-border pt-4">
+            <h4 className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+              <Tag size={14} /> Descuentos comerciales
+            </h4>
+
+            {(discounts ?? []).length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Sin descuentos cargados.
+              </p>
+            ) : (
+              <div className="mt-2 divide-y divide-border">
+                {(discounts ?? []).map((d) => {
+                  const st = discountState(d);
+                  return (
+                    <div
+                      key={d.id}
+                      className="flex items-start justify-between gap-3 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-foreground">
+                            {discountLabel(d)}
+                          </span>
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-xs font-medium ${st.cls}`}
+                          >
+                            {st.label}
+                          </span>
+                        </div>
+                        {d.reason && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {d.reason}
+                          </div>
+                        )}
+                        <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                          <CalendarDays size={11} />
+                          {d.valid_from}
+                          {d.valid_until ? ` → ${d.valid_until}` : " → sin fin"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setRemoveId(d.id)}
+                        title="Dar de baja"
+                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Form de alta */}
+            <div className="mt-3 space-y-2 rounded-lg border border-border p-3">
+              <Segmented
+                value={discKind}
+                onChange={(v) => setDiscKind(v)}
+                options={[
+                  { value: "percent", label: "Porcentaje" },
+                  { value: "fixed", label: "Monto fijo" },
+                ]}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label={discKind === "percent" ? "Porcentaje (%)" : "Monto (ARS)"}
+                  type="number"
+                  min="0"
+                  step={discKind === "percent" ? "1" : "0.01"}
+                  value={discValue}
+                  onChange={(e) => setDiscValue(e.target.value)}
+                />
+                <Input
+                  label="Motivo"
+                  value={discReason}
+                  onChange={(e) => setDiscReason(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="Vigente desde"
+                  type="date"
+                  value={discFrom}
+                  onChange={(e) => setDiscFrom(e.target.value)}
+                />
+                <Input
+                  label="Hasta (opcional)"
+                  type="date"
+                  value={discUntil}
+                  onChange={(e) => setDiscUntil(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  loading={discountMut.add.isPending}
+                  onClick={handleAddDiscount}
+                >
+                  <Plus size={14} /> Agregar descuento
+                </Button>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={removeId !== null}
+        onOpenChange={(o) => !o && setRemoveId(null)}
+        title="Dar de baja descuento"
+        description="El descuento dejará de aplicarse al precio efectivo. Queda registrado (baja lógica)."
+        confirmLabel="Dar de baja"
+        danger
+        loading={discountMut.remove.isPending}
+        onConfirm={handleRemoveDiscount}
+      />
 
       <Modal
         open={addOpen}

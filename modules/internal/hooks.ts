@@ -5,7 +5,13 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { internalApi, type AuditFilters, type BillingRecordInput } from "./api";
+import {
+  internalApi,
+  type AuditFilters,
+  type BillingRecordInput,
+  type DiscountInput,
+  type PlanLimits,
+} from "./api";
 
 export function useInternalTenants() {
   return useQuery({
@@ -178,4 +184,101 @@ export function usePlanPrices() {
     queryFn: () => internalApi.planPrices(),
     staleTime: 5 * 60 * 1000,
   });
+}
+
+// ── H12b — Planes custom, overrides y descuentos ────────────────────────────
+
+export function useGlobalPlans() {
+  return useQuery({
+    queryKey: ["internal", "global-plans"],
+    queryFn: () => internalApi.globalPlans(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useTenantPlanDetail(tenantId: string) {
+  return useQuery({
+    queryKey: ["internal", "plan-detail", tenantId],
+    queryFn: () => internalApi.tenantPlanDetail(tenantId),
+  });
+}
+
+export function usePlanMutations(tenantId: string) {
+  const qc = useQueryClient();
+  const inv = () => {
+    qc.invalidateQueries({ queryKey: ["internal", "plan-detail", tenantId] });
+    qc.invalidateQueries({ queryKey: ["internal", "tenants"] });
+    qc.invalidateQueries({ queryKey: ["internal", "plan-prices"] });
+  };
+  return {
+    clone: useMutation({
+      mutationFn: (vars: {
+        basePlanKey: string;
+        name: string;
+        monthlyPrice: number;
+      }) =>
+        internalApi.clonePlan(
+          tenantId,
+          vars.basePlanKey,
+          vars.name,
+          vars.monthlyPrice,
+        ),
+      onSuccess: inv,
+    }),
+    update: useMutation({
+      mutationFn: (vars: {
+        planId: string;
+        name: string;
+        monthlyPrice: number;
+        limits: PlanLimits;
+        reason?: string | null;
+      }) =>
+        internalApi.updateCustomPlan(
+          vars.planId,
+          vars.name,
+          vars.monthlyPrice,
+          vars.limits,
+          vars.reason,
+        ),
+      onSuccess: inv,
+    }),
+    setOverride: useMutation({
+      mutationFn: (vars: {
+        key: string;
+        value: number | null;
+        reason?: string | null;
+      }) =>
+        internalApi.setLimitOverride(
+          tenantId,
+          vars.key,
+          vars.value,
+          vars.reason,
+        ),
+      onSuccess: inv,
+    }),
+  };
+}
+
+export function useTenantDiscounts(tenantId: string) {
+  return useQuery({
+    queryKey: ["internal", "discounts", tenantId],
+    queryFn: () => internalApi.listDiscounts(tenantId),
+  });
+}
+
+export function useDiscountMutations(tenantId: string) {
+  const qc = useQueryClient();
+  const inv = () =>
+    qc.invalidateQueries({ queryKey: ["internal", "discounts", tenantId] });
+  return {
+    add: useMutation({
+      mutationFn: (input: DiscountInput) =>
+        internalApi.addDiscount(tenantId, input),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => internalApi.removeDiscount(id),
+      onSuccess: inv,
+    }),
+  };
 }

@@ -112,6 +112,89 @@ export interface AuditEntry {
   actorEmail: string | null;
 }
 
+// ── H12b — Planes custom, overrides y descuentos ───────────────────────────
+
+// Las 4 claves numéricas de límite que la UI edita.
+export const LIMIT_KEYS = [
+  "max_stores",
+  "max_users",
+  "max_products",
+  "max_sales_per_month",
+] as const;
+export type LimitKey = (typeof LIMIT_KEYS)[number];
+
+export type PlanLimitNumbers = Partial<Record<LimitKey, number>> &
+  Record<string, number>;
+
+// Forma de plans.limits: { limits: {...}, modules: {...}, support: {...} }.
+export interface PlanLimits {
+  limits?: PlanLimitNumbers;
+  modules?: Record<string, unknown>;
+  support?: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+export interface TenantPlanDetail {
+  planId: string;
+  planKey: string;
+  name: string;
+  monthlyPrice: number;
+  limits: PlanLimits;
+  isCustom: boolean;
+  basePlanKey: string | null;
+  overrides: PlanLimitNumbers;
+}
+
+export interface TenantDiscount {
+  id: string;
+  tenant_id: string;
+  kind: "percent" | "fixed";
+  value: number;
+  reason: string | null;
+  valid_from: string;
+  valid_until: string | null;
+  created_at: string;
+  created_by: string | null;
+  deleted_at: string | null;
+}
+
+export interface DiscountInput {
+  kind: "percent" | "fixed";
+  value: number;
+  reason?: string | null;
+  valid_from: string;
+  valid_until?: string | null;
+}
+
+// Un descuento está vigente si valid_from <= hoy <= (valid_until ?? ∞).
+export function isDiscountActive(
+  d: Pick<TenantDiscount, "valid_from" | "valid_until">,
+  today: Date = new Date(),
+): boolean {
+  const t = today.toISOString().slice(0, 10);
+  if (d.valid_from > t) return false;
+  if (d.valid_until && d.valid_until < t) return false;
+  return true;
+}
+
+// Precio mensual efectivo: se aplican primero los descuentos percent (sobre el
+// precio), luego se restan los fixed. Se trunca en 0.
+export function effectiveMonthlyPrice(
+  basePrice: number,
+  discounts: Pick<TenantDiscount, "kind" | "value" | "valid_from" | "valid_until">[],
+  today: Date = new Date(),
+): number {
+  const active = discounts.filter((d) => isDiscountActive(d, today));
+  let price = basePrice;
+  for (const d of active) {
+    if (d.kind === "percent") price -= price * (d.value / 100);
+  }
+  for (const d of active) {
+    if (d.kind === "fixed") price -= d.value;
+  }
+  return Math.max(0, price);
+}
+
 export const internalApi = {
   listTenants: async (): Promise<InternalTenant[]> => {
     const supabase = createClient();
@@ -538,12 +621,166 @@ export const internalApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("plans")
-      .select("key, monthly_price_ars");
+      .select("key, monthly_price_ars")
+      .is("tenant_id", null);
     if (error) throw error;
     const map = new Map<string, number>();
     for (const p of data ?? []) {
       map.set(p.key, Number(p.monthly_price_ars ?? 0));
     }
     return map;
+  },
+
+  // ── H12b — Planes custom + overrides + descuentos ─────────────────────────
+
+  // Catálogo de planes globales (tenant_id null) para el selector.
+  globalPlans: async (): Promise<{ key: string; name: string }[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("plans")
+      .select("key, name")
+      .is("tenant_id", null)
+      .eq("is_active", true)
+      .order("monthly_price_ars");
+    if (error) throw error;
+    return (data ?? []).map((p) => ({ key: p.key, name: p.name }));
+  },
+
+  // Detalle del plan actual del tenant + overrides de límites (de la sub).
+  tenantPlanDetail: async (tenantId: string): Promise<TenantPlanDetail | null> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select(
+        "limit_overrides, plans(id, key, name, monthly_price_ars, limits, tenant_id, base_plan_key)",
+      )
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    type Row = {
+      limit_overrides: PlanLimitNumbers | null;
+      plans: {
+        id: string;
+        key: string;
+        name: string;
+        monthly_price_ars: number;
+        limits: PlanLimits | null;
+        tenant_id: string | null;
+        base_plan_key: string | null;
+      } | null;
+    };
+    const row = data as unknown as Row;
+    if (!row.plans) return null;
+    return {
+      planId: row.plans.id,
+      planKey: row.plans.key,
+      name: row.plans.name,
+      monthlyPrice: Number(row.plans.monthly_price_ars ?? 0),
+      limits: row.plans.limits ?? {},
+      isCustom: row.plans.tenant_id !== null,
+      basePlanKey: row.plans.base_plan_key,
+      overrides: (row.limit_overrides ?? {}) as PlanLimitNumbers,
+    };
+  },
+
+  clonePlan: async (
+    tenantId: string,
+    basePlanKey: string,
+    name: string,
+    monthlyPrice: number,
+  ): Promise<string> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("internal_clone_plan", {
+      p_tenant_id: tenantId,
+      p_base_plan_key: basePlanKey,
+      p_name: name,
+      p_monthly_price: monthlyPrice,
+    });
+    if (error) throw error;
+    return data as string;
+  },
+
+  updateCustomPlan: async (
+    planId: string,
+    name: string,
+    monthlyPrice: number,
+    limits: PlanLimits,
+    reason?: string | null,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("internal_update_custom_plan", {
+      p_plan_id: planId,
+      p_name: name,
+      p_monthly_price: monthlyPrice,
+      p_limits: limits as unknown as Record<string, never>,
+      p_reason: reason ?? undefined,
+    });
+    if (error) throw error;
+  },
+
+  // value null → quita el override. Devuelve el objeto overrides actualizado.
+  setLimitOverride: async (
+    tenantId: string,
+    key: string,
+    value: number | null,
+    reason?: string | null,
+  ): Promise<PlanLimitNumbers> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("internal_set_limit_override", {
+      p_tenant_id: tenantId,
+      p_key: key,
+      // El backend acepta null para quitar el override; los types lo tipan number.
+      p_value: value as number,
+      p_reason: reason ?? undefined,
+    });
+    if (error) throw error;
+    return (data ?? {}) as PlanLimitNumbers;
+  },
+
+  listDiscounts: async (tenantId: string): Promise<TenantDiscount[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("tenant_discounts")
+      .select(
+        "id, tenant_id, kind, value, reason, valid_from, valid_until, created_at, created_by, deleted_at",
+      )
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .order("valid_from", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as TenantDiscount[]).map((d) => ({
+      ...d,
+      value: Number(d.value),
+    }));
+  },
+
+  addDiscount: async (
+    tenantId: string,
+    input: DiscountInput,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error } = await supabase.from("tenant_discounts").insert({
+      tenant_id: tenantId,
+      kind: input.kind,
+      value: input.value,
+      reason: input.reason ?? null,
+      valid_from: input.valid_from,
+      valid_until: input.valid_until ?? null,
+      created_by: user?.id ?? null,
+    });
+    if (error) throw error;
+  },
+
+  removeDiscount: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tenant_discounts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
   },
 };

@@ -96,10 +96,21 @@ describe("HtmlTicketRenderer", () => {
 });
 
 describe("HTML_STARTER_TEMPLATES", () => {
-  it("tiene 8 entradas con claves únicas", () => {
-    expect(HTML_STARTER_TEMPLATES).toHaveLength(8);
+  it("tiene 9 entradas con claves únicas", () => {
+    expect(HTML_STARTER_TEMPLATES).toHaveLength(9);
     const keys = HTML_STARTER_TEMPLATES.map((t) => t.key);
-    expect(new Set(keys).size).toBe(8);
+    expect(new Set(keys).size).toBe(9);
+  });
+
+  it("incluye la plantilla A4 de factura legal AR", () => {
+    const legal = HTML_STARTER_TEMPLATES.find((t) => t.key === "a4-factura-legal");
+    expect(legal, "falta la plantilla a4-factura-legal").toBeTruthy();
+    expect(legal!.paper).toBe("a4");
+    expect(legal!.kind).toBe("sale");
+    // Estructura fiscal mínima: letra de comprobante, CAE y tabla de ítems fiscal.
+    expect(legal!.html).toContain("{{comprobante_letra}}");
+    expect(legal!.html).toContain("{{cae}}");
+    expect(legal!.html).toContain("{{items_fiscal_html}}");
   });
 
   it("todas las {{var}} usadas existen en HTML_TEMPLATE_VARS", () => {

@@ -280,4 +280,120 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
   <div style="text-align:center;margin-top:4px">{{pie}}</div>
 </div>`,
   },
+  {
+    // A4 con la estructura de una factura legal argentina (A/B/C). La app aún no
+    // integra facturación electrónica (AFIP/ARCA): la letra rinde "X" (no fiscal)
+    // y CAE / vto CAE / IIBB / inicio de actividades / doc. del receptor llegan
+    // como "—" desde htmlVars hasta que exista la integración. La maqueta queda
+    // lista para poblarse sin inventar datos.
+    key: "a4-factura-legal",
+    name: "Factura (legal AR)",
+    paper: "a4",
+    kind: "sale",
+    html: `<div style="font-family:'Times New Roman',Georgia,serif;font-size:12px;color:#111;line-height:1.4;border:1px solid #111">
+  <!-- Encabezado: emisor | letra | comprobante -->
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <tr>
+      <td style="width:43%;vertical-align:top;padding:14px 16px;border-right:1px solid #111">
+        <img src="{{logo_url}}" alt="" style="max-height:46px;object-fit:contain;margin-bottom:6px" />
+        <div style="font-size:18px;font-weight:bold;letter-spacing:.3px">{{negocio}}</div>
+        <div style="color:#333;margin-top:4px">{{direccion}}</div>
+        <div style="color:#333">Tel.: {{telefono}}</div>
+        <div style="color:#333;margin-top:6px;font-style:italic">{{condicion_iva}}</div>
+      </td>
+      <td style="width:14%;vertical-align:top;text-align:center;border-right:1px solid #111;position:relative;padding:0">
+        <div style="border:2px solid #111;width:52px;height:52px;margin:8px auto 2px;line-height:50px;font-size:34px;font-weight:bold">{{comprobante_letra}}</div>
+        <div style="font-size:9px;color:#333;letter-spacing:.5px">COD. {{comprobante_cod}}</div>
+      </td>
+      <td style="width:43%;vertical-align:top;padding:14px 16px">
+        <div style="font-size:17px;font-weight:bold;text-transform:uppercase;letter-spacing:.5px">{{comprobante_tipo}}</div>
+        <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:12px">
+          <tr><td style="padding:1px 0;color:#333">Pto. Venta:</td><td style="text-align:right;font-weight:bold">{{punto_venta}}</td></tr>
+          <tr><td style="padding:1px 0;color:#333">Comp. Nro:</td><td style="text-align:right;font-weight:bold">{{comprobante_nro}}</td></tr>
+          <tr><td style="padding:1px 0;color:#333">Fecha:</td><td style="text-align:right">{{fecha}}</td></tr>
+        </table>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px;color:#333">
+          <tr><td style="padding:1px 0">CUIT:</td><td style="text-align:right">{{cuit}}</td></tr>
+          <tr><td style="padding:1px 0">Ingresos Brutos:</td><td style="text-align:right">{{ingresos_brutos}}</td></tr>
+          <tr><td style="padding:1px 0">Inicio de actividades:</td><td style="text-align:right">{{inicio_actividades}}</td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  <div style="border-top:1px solid #111;background:#f3f3f3;text-align:center;font-size:10px;letter-spacing:3px;color:#444;padding:2px 0">ORIGINAL</div>
+
+  <!-- Receptor -->
+  <table style="width:100%;border-collapse:collapse;border-top:1px solid #111;table-layout:fixed">
+    <tr>
+      <td style="padding:8px 16px;vertical-align:top">
+        <div><span style="color:#333">Cliente:</span> <strong>{{cliente}}</strong></div>
+        <div style="margin-top:2px"><span style="color:#333">CUIT / DNI:</span> {{cliente_doc}}</div>
+      </td>
+      <td style="padding:8px 16px;vertical-align:top">
+        <div><span style="color:#333">Condición frente al IVA:</span> {{cliente_iva}}</div>
+        <div style="margin-top:2px"><span style="color:#333">Domicilio:</span> —</div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Detalle -->
+  <table style="width:100%;border-collapse:collapse;border-top:1px solid #111">
+    <thead>
+      <tr style="background:#f3f3f3;font-size:11px;text-transform:uppercase;letter-spacing:.3px">
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #111;width:9%">Código</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid #111">Descripción</th>
+        <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #111;width:9%">Cant.</th>
+        <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #111;width:15%">P. Unit.</th>
+        <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #111;width:9%">% IVA</th>
+        <th style="padding:6px 8px;text-align:right;border-bottom:1px solid #111;width:16%">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>{{items_fiscal_html}}</tbody>
+  </table>
+
+  <!-- Totales -->
+  <table style="width:100%;border-collapse:collapse;margin-top:10px">
+    <tr>
+      <td style="width:55%"></td>
+      <td style="width:45%;padding:0 16px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <tr><td style="padding:2px 0;color:#333">Importe neto gravado:</td><td style="text-align:right">{{neto_gravado}}</td></tr>
+          <tr><td style="padding:2px 0;color:#333">IVA:</td><td style="text-align:right">{{iva_total}}</td></tr>
+          <tr><td style="padding:2px 0;color:#333">Descuento:</td><td style="text-align:right">{{descuento}}</td></tr>
+          <tr style="border-top:2px solid #111;font-size:16px;font-weight:bold">
+            <td style="padding:6px 0">TOTAL:</td><td style="text-align:right">{{total}}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Medios de pago -->
+  <div style="padding:0 16px;margin-top:8px">
+    <div style="font-size:11px;color:#333;text-transform:uppercase;letter-spacing:.3px">Medios de pago</div>
+    <table style="width:100%;max-width:300px;border-collapse:collapse;font-size:12px">{{pagos_html}}</table>
+  </div>
+
+  <div style="text-align:center;color:#c00;font-weight:bold;margin-top:8px">{{anulada}}</div>
+
+  <!-- Pie fiscal: CAE + vto + código de barras AFIP -->
+  <table style="width:100%;border-collapse:collapse;border-top:1px solid #111;margin-top:12px">
+    <tr>
+      <td style="width:62%;vertical-align:top;padding:10px 16px">
+        <!-- Código de barras AFIP (Interleaved 2of5). Placeholder visual hasta
+             integrar AFIP/ARCA: sin CAE no se puede generar el dígito real. -->
+        <div style="height:44px;background:repeating-linear-gradient(90deg,#111 0,#111 1px,#fff 1px,#fff 2px,#111 2px,#111 4px,#fff 4px,#fff 5px,#111 5px,#111 6px,#fff 6px,#fff 9px)"></div>
+        <div style="font-family:'Courier New',monospace;font-size:11px;letter-spacing:2px;margin-top:3px">{{cuit}} {{comprobante_cod}} {{punto_venta}} {{cae}}</div>
+      </td>
+      <td style="width:38%;vertical-align:top;text-align:right;padding:10px 16px">
+        <div style="font-size:13px;font-weight:bold">CAE N°: {{cae}}</div>
+        <div style="font-size:13px;font-weight:bold;margin-top:2px">Vto. de CAE: {{cae_vto}}</div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="border-top:1px solid #111;padding:8px 16px;font-size:9px;color:#666;line-height:1.45">${FISCAL_LINE}</div>
+  <div style="text-align:center;font-size:11px;color:#444;padding:0 16px 10px">{{pie}} · {{leyenda}}</div>
+</div>`,
+  },
 ];

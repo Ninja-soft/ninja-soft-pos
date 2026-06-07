@@ -454,9 +454,40 @@ function matchesOrigin(email: SystemEmail, origin: OriginFilter): boolean {
 }
 
 function SystemEmailsLog() {
+  const supabase = createClient();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const { data: emails = [], isLoading, isFetching, refetch } = useSystemEmails();
   const [origin, setOrigin] = useState<OriginFilter>("todos");
   const [tenantQuery, setTenantQuery] = useState("");
+
+  // Despacha los emails del sistema en cola (estado 'pending'). El motor de
+  // dunning solo encola; el envío real ocurre acá (o por automatización futura).
+  const processPending = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("process_pending_emails", {
+        body: {},
+      });
+      if (error) throw error;
+      return data as { processed: number; sent: number; failed: number };
+    },
+    onSuccess: (d) => {
+      toast({
+        title:
+          d.processed === 0
+            ? "No hay envíos pendientes"
+            : `Procesados ${d.processed}: ${d.sent} enviados, ${d.failed} con error`,
+        variant: d.failed > 0 ? "error" : "success",
+      });
+      qc.invalidateQueries({ queryKey: ["internal", "system-emails"] });
+    },
+    onError: (e) =>
+      toast({
+        title: "No se pudieron procesar",
+        description: e instanceof Error ? e.message : "Revisá la configuración SMTP.",
+        variant: "error",
+      }),
+  });
 
   const filtered = emails.filter((e) => {
     if (!matchesOrigin(e, origin)) return false;
@@ -501,6 +532,13 @@ function SystemEmailsLog() {
             <Mail size={16} /> Bitácora de envíos
           </div>
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => processPending.mutate()}
+              disabled={processPending.isPending}
+            >
+              <Send size={15} /> Procesar pendientes
+            </Button>
             <Button
               variant="secondary"
               size="sm"

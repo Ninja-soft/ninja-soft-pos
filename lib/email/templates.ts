@@ -67,6 +67,55 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml:
       "<p>Tu cuenta fue suspendida por falta de pago. Regularizá para reactivarla.</p>",
   },
+  // --- Fase E — motor de cobros (dunning) -----------------------------------
+  // Estos defaults son INFORMATIVOS: el cron arma su propio HTML branded por
+  // cada email. Existen acá para que staff pueda customizar copy/asunto a
+  // futuro desde /internal/emails (overrides en system_email_templates).
+  {
+    key: "payment_failed",
+    label: "Problema con el cobro",
+    description: "Cobro no confirmado: la suscripción pasa a vencida.",
+    variables: [...BASE_VARS],
+    defaultSubject: "Hubo un problema con tu cobro",
+    defaultHtml:
+      "<p>No pudimos confirmar el pago de tu suscripción. Revisá tu medio de pago en Mercado Pago para no perder acceso.</p>",
+  },
+  {
+    key: "suspended_dunning",
+    label: "Suspensión por mora",
+    description: "Suspensión automática tras superar los días de gracia.",
+    variables: [...BASE_VARS],
+    defaultSubject: "Tu cuenta de {{negocio}} fue suspendida",
+    defaultHtml:
+      "<p>Suspendimos tu cuenta por falta de pago. Regularizá tu suscripción para reactivarla.</p>",
+  },
+  {
+    key: "payment_reminder",
+    label: "Recordatorio de renovación",
+    description: "Aviso de renovación próxima de la suscripción.",
+    variables: [...BASE_VARS, "vence"],
+    defaultSubject: "Tu suscripción se renueva pronto",
+    defaultHtml:
+      "<p>Tu suscripción se renueva el {{vence}}. El cobro es automático por Mercado Pago; verificá que tu medio de pago esté activo.</p>",
+  },
+  {
+    key: "trial_expired",
+    label: "Prueba vencida",
+    description: "La prueba terminó sin conversión: la cuenta queda pausada.",
+    variables: [...BASE_VARS],
+    defaultSubject: "Tu prueba de {{negocio}} terminó",
+    defaultHtml:
+      "<p>Tu período de prueba terminó y pausamos tu cuenta. Activá un plan cuando quieras para retomar donde lo dejaste.</p>",
+  },
+  {
+    key: "price_increase",
+    label: "Actualización de tarifa",
+    description: "Aviso de aumento de precio a los suscriptos del plan.",
+    variables: [...BASE_VARS, "precio_anterior", "precio_nuevo"],
+    defaultSubject: "Actualización de tarifa de tu plan",
+    defaultHtml:
+      "<p>Tu tarifa pasa de {{precio_anterior}} a {{precio_nuevo}} por mes a partir de tu próximo ciclo de facturación.</p>",
+  },
 ];
 
 /** Reemplaza {{variable}} por su valor; si falta, deja el placeholder. */

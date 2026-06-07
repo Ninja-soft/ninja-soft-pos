@@ -247,12 +247,33 @@ Deno.serve(async (req: Request) => {
     greetingTimeout: 10000,
     socketTimeout: 20000,
   });
+
+  // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
+  const subject = `Tu comprobante de ${name}`;
+  let logId: string | null = null;
+  try {
+    const { data: logRow } = await admin
+      .from("system_emails")
+      .insert({
+        tenant_id: sale.tenant_id,
+        recipient: to,
+        subject,
+        kind: "receipt",
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    logId = logRow?.id ?? null;
+  } catch (_) {
+    /* noop */
+  }
+
   try {
     await withTimeout(
       transporter.sendMail({
         from: `"${name.replace(/"/g, "")}" <${cfg.from_email}>`,
         to,
-        subject: `Tu comprobante de ${name}`,
+        subject,
         text: bodyTextRaw,
         html,
         attachments: [
@@ -273,6 +294,19 @@ Deno.serve(async (req: Request) => {
     } catch (_) {
       /* noop */
     }
+    if (logId) {
+      try {
+        await admin
+          .from("system_emails")
+          .update({
+            status: "failed",
+            error_message: String(e).slice(0, 500),
+          })
+          .eq("id", logId);
+      } catch (_) {
+        /* noop */
+      }
+    }
     return json(
       { error: "send_failed", detail: e instanceof Error ? e.message : String(e) },
       502,
@@ -282,6 +316,16 @@ Deno.serve(async (req: Request) => {
     transporter.close();
   } catch (_) {
     /* noop */
+  }
+  if (logId) {
+    try {
+      await admin
+        .from("system_emails")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", logId);
+    } catch (_) {
+      /* noop */
+    }
   }
   await admin
     .from("sales")

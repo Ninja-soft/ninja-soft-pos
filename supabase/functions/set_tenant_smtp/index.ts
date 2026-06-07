@@ -171,12 +171,32 @@ Deno.serve(async (req: Request) => {
       greetingTimeout: 10000,
       socketTimeout: 20000,
     });
+    // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
+    const testSubject = "Prueba de email del negocio";
+    let logId: string | null = null;
+    try {
+      const { data: logRow } = await admin
+        .from("system_emails")
+        .insert({
+          tenant_id: tenantId,
+          recipient: testTo,
+          subject: testSubject,
+          kind: "smtp_test",
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      logId = logRow?.id ?? null;
+    } catch (_) {
+      /* noop */
+    }
+
     try {
       await withTimeout(
         transporter.sendMail({
           from: `"${fromName.replace(/"/g, "")}" <${cfg.from_email}>`,
           to: testTo,
-          subject: "Prueba de email del negocio",
+          subject: testSubject,
           text:
             "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración SMTP funciona.",
         }),
@@ -189,6 +209,19 @@ Deno.serve(async (req: Request) => {
       } catch (_) {
         /* noop */
       }
+      if (logId) {
+        try {
+          await admin
+            .from("system_emails")
+            .update({
+              status: "failed",
+              error_message: String(e).slice(0, 500),
+            })
+            .eq("id", logId);
+        } catch (_) {
+          /* noop */
+        }
+      }
       return json({
         error: "test_failed",
         detail: e instanceof Error ? e.message : String(e),
@@ -198,6 +231,16 @@ Deno.serve(async (req: Request) => {
       transporter.close();
     } catch (_) {
       /* noop */
+    }
+    if (logId) {
+      try {
+        await admin
+          .from("system_emails")
+          .update({ status: "sent", sent_at: new Date().toISOString() })
+          .eq("id", logId);
+      } catch (_) {
+        /* noop */
+      }
     }
     return json({ ok: true, tested: true });
   }

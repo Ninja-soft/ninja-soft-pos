@@ -279,6 +279,15 @@ export function useSendNotification() {
   });
 }
 
+// ── Bitácora de envíos de email ─────────────────────────────────────────────
+
+export function useSystemEmails() {
+  return useQuery({
+    queryKey: ["internal", "system-emails"],
+    queryFn: () => internalApi.listSystemEmails(),
+  });
+}
+
 export function useTenantDiscounts(tenantId: string) {
   return useQuery({
     queryKey: ["internal", "discounts", tenantId],

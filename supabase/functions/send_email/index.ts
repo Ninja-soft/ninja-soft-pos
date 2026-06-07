@@ -68,6 +68,26 @@ Deno.serve(async (req: Request) => {
       auth: cfg.username ? { username: cfg.username, password: cfg.password } : undefined,
     },
   });
+
+  // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
+  let logId: string | null = null;
+  try {
+    const { data: logRow } = await admin
+      .from("system_emails")
+      .insert({
+        tenant_id: null,
+        recipient: to,
+        subject,
+        kind: "system",
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    logId = logRow?.id ?? null;
+  } catch (_) {
+    /* noop */
+  }
+
   try {
     await client.send({
       from: `${cfg.from_name || "NinjaPos"} <${cfg.from_email}>`,
@@ -83,10 +103,33 @@ Deno.serve(async (req: Request) => {
     } catch (_) {
       /* noop */
     }
+    if (logId) {
+      try {
+        await admin
+          .from("system_emails")
+          .update({
+            status: "failed",
+            error_message: String(e).slice(0, 500),
+          })
+          .eq("id", logId);
+      } catch (_) {
+        /* noop */
+      }
+    }
     return json(
       { error: "send_failed", detail: e instanceof Error ? e.message : String(e) },
       502,
     );
+  }
+  if (logId) {
+    try {
+      await admin
+        .from("system_emails")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", logId);
+    } catch (_) {
+      /* noop */
+    }
   }
   await admin.from("audit_logs").insert({
     tenant_id: null,

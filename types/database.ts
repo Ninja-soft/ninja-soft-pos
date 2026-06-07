@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -707,6 +707,38 @@ export type Database = {
           },
         ]
       }
+      dunning_events: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          period_key: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          period_key: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          period_key?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dunning_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_templates: {
         Row: {
           enabled: boolean
@@ -1324,6 +1356,27 @@ export type Database = {
         Update: {
           key?: string
           secrets?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          grace_days: number
+          id: boolean
+          reminder_days: number
+          updated_at: string
+        }
+        Insert: {
+          grace_days?: number
+          id?: boolean
+          reminder_days?: number
+          updated_at?: string
+        }
+        Update: {
+          grace_days?: number
+          id?: boolean
+          reminder_days?: number
           updated_at?: string
         }
         Relationships: []
@@ -2577,6 +2630,7 @@ export type Database = {
         Row: {
           created_at: string
           error_message: string | null
+          html_content: string | null
           id: string
           kind: string
           recipient: string
@@ -2588,6 +2642,7 @@ export type Database = {
         Insert: {
           created_at?: string
           error_message?: string | null
+          html_content?: string | null
           id?: string
           kind?: string
           recipient: string
@@ -2599,6 +2654,7 @@ export type Database = {
         Update: {
           created_at?: string
           error_message?: string | null
+          html_content?: string | null
           id?: string
           kind?: string
           recipient?: string
@@ -3198,6 +3254,10 @@ export type Database = {
         Args: { p_industry: string }
         Returns: undefined
       }
+      _dunning_email_html: {
+        Args: { p_body: string; p_tenant: string; p_title: string }
+        Returns: string
+      }
       adjust_product_stock: {
         Args: {
           p_delta: number
@@ -3368,6 +3428,7 @@ export type Database = {
         }
         Returns: Json
       }
+      run_saas_dunning: { Args: never; Returns: Json }
       sales_report: { Args: { p_from: string; p_to: string }; Returns: Json }
       set_my_tenant_industry: {
         Args: { p_industry: string }

@@ -79,7 +79,7 @@ export function CanvasElementView({
       return (
         <div className="flex h-full w-full items-center">
           <div
-            className={`w-full border-t border-dashed ${hex ? "" : "border-border"}`}
+            className={`w-full border-t border-dashed ${hex ? "" : "border-neutral-400"}`}
             style={hex ? { borderTopColor: hex } : undefined}
           />
         </div>
@@ -158,11 +158,11 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
 
   return (
     <div
-      className={`mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground ${className ?? ""}`}
+      className={`mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ${className ?? ""}`}
       style={{ width: `${width}px`, maxWidth: "100%" }}
     >
       {/* Zona superior: anclada (alto fijo = items.y, o todo el lienzo si no hay items). */}
-      <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "visible" }}>
+      <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "hidden" }}>
         {topEls.map((el) => renderEl(el, el.y))}
       </div>
 
@@ -171,7 +171,7 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
           {/* Tabla de ítems: flujo normal, alto variable según N ítems. */}
           <CanvasItemsTable data={data} />
           {/* Zona inferior: empujada por la tabla; Y relativa a items.y. */}
-          <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "visible" }}>
+          <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "hidden" }}>
             {bottomEls.map((el) => renderEl(el, el.y - splitY))}
           </div>
         </>

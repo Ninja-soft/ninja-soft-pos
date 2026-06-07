@@ -2,6 +2,7 @@
 export interface SampleBrand {
   logo_url: string | null;
   legal_name: string | null;
+  accent?: string | null;
   cuit: string | null;
   phone: string | null;
   address: string | null;

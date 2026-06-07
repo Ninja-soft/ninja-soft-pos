@@ -83,6 +83,14 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_from_email" }, 400);
   }
 
+  // Diseño del cuerpo del email del comprobante (H9b PR5). Valida contra las 5
+  // claves conocidas; cualquier otra cosa cae a 'brand'.
+  const BODY_TEMPLATE_KEYS = ["brand", "clean", "dark", "warm", "minimal"];
+  const bodyTemplateRaw = String(b.body_template ?? "brand").trim();
+  const bodyTemplate = BODY_TEMPLATE_KEYS.includes(bodyTemplateRaw)
+    ? bodyTemplateRaw
+    : "brand";
+
   const patch: Record<string, unknown> = {
     tenant_id: tenantId,
     host: String(b.host ?? "").trim(),
@@ -92,6 +100,7 @@ Deno.serve(async (req: Request) => {
     from_name: String(b.from_name ?? "").trim().slice(0, 80),
     from_email: fromEmail,
     body_text: String(b.body_text ?? "").trim().slice(0, 2000),
+    body_template: bodyTemplate,
     updated_at: new Date().toISOString(),
   };
 

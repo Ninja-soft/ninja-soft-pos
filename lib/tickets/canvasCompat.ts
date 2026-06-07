@@ -21,16 +21,48 @@ export function upgradeCanvas(
   canvas: Canvas,
   paper: "58" | "80" | "a4",
 ): Canvas {
-  if (!isLegacyV1(canvas)) return canvas;
+  if (!isLegacyV1(canvas)) return clampCanvas(canvas, paper);
 
   const width = CANVAS_WIDTH[paper];
+  return clampCanvas(
+    {
+      ...canvas,
+      elements: canvas.elements.map((e) => ({
+        ...e,
+        x: Math.round((e.x / 100) * width),
+        w: Math.round((e.w / 100) * width),
+        // y se mantiene (ya estaba en px en v1), h queda auto (undefined).
+      })),
+    },
+    paper,
+  );
+}
+
+/**
+ * Mantiene cada elemento dentro del papel (ancho fijo CANVAS_WIDTH[paper]) para
+ * que nada se pinte fuera de la hoja blanca:
+ *  - x ∈ [0, width-24]; y ≥ 0; w ≤ width (mínimo 24).
+ *  - el lienzo crece (height) para contener el elemento más bajo (maxY + 40),
+ *    sin reducir el alto explícito ya guardado.
+ * El elemento "items" no se acota en x/w (marca el punto de corte de flujo).
+ */
+export function clampCanvas(canvas: Canvas, paper: "58" | "80" | "a4"): Canvas {
+  const width = CANVAS_WIDTH[paper];
+  let maxY = 0;
+  const elements = canvas.elements.map((e) => {
+    const y = Math.max(0, Math.round(e.y));
+    if (e.type === "items") {
+      maxY = Math.max(maxY, y);
+      return { ...e, y, x: 0, w: width };
+    }
+    const w = Math.min(Math.max(24, Math.round(e.w)), width);
+    const x = Math.min(Math.max(0, Math.round(e.x)), Math.max(0, width - 24));
+    const bottom = y + (typeof e.h === "number" ? e.h : 24);
+    maxY = Math.max(maxY, bottom);
+    return { ...e, x, y, w };
+  });
   return {
-    ...canvas,
-    elements: canvas.elements.map((e) => ({
-      ...e,
-      x: Math.round((e.x / 100) * width),
-      w: Math.round((e.w / 100) * width),
-      // y se mantiene (ya estaba en px en v1), h queda auto (undefined).
-    })),
+    elements,
+    height: Math.max(canvas.height || 0, maxY + 40, 120),
   };
 }

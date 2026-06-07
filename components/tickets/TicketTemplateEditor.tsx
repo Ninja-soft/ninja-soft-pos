@@ -1125,7 +1125,7 @@ function CanvasPreview({
           patch(el.id, changes);
         }}
         className={cn(
-          "rounded outline-dashed outline-1 outline-offset-1 outline-border transition hover:outline-ninja-flameSoft/60",
+          "rounded outline-dashed outline-1 outline-offset-1 outline-neutral-300 transition hover:outline-ninja-flameSoft/60",
           isSel && "outline-ninja-flameSoft outline-2",
         )}
         style={{ cursor: "move" }}
@@ -1164,40 +1164,42 @@ function CanvasPreview({
   }
 
   return (
-    <div
-      className="mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground ticket-print"
-      style={{ width: `${width}px`, maxWidth: "100%" }}
-    >
-      {/* Zona superior: alto fijo (= items.y, o todo el lienzo si no hay items). */}
-      <div style={{ position: "relative", height: `${topZoneH}px` }}>
-        {topEls.map((el) => (
-          <ElementBox key={el.id} el={el} zoneY={el.y} yBase={0} />
-        ))}
-        {hasItems && <ItemsBox />}
-      </div>
-
-      {hasItems && (
-        <>
-          {/* Tabla de ítems de muestra (no interactiva). */}
-          <CanvasItemsTable data={data} />
-          {/* Zona inferior: Y relativa a items.y. */}
-          <div style={{ position: "relative", height: `${bottomZoneH}px` }}>
-            {bottomEls.map((el) => (
-              <ElementBox key={el.id} el={el} zoneY={el.y - splitY} yBase={splitY} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {data.sale.status === "voided" && (
-        <div className="mt-3 text-center text-xs font-bold text-red-500">** ANULADA **</div>
-      )}
-      {showNinja && (
-        <div className="mt-3 flex justify-center opacity-70">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
+    <div className="rounded-xl bg-muted/30 p-4">
+      <div
+        className="mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ticket-print"
+        style={{ width: `${width}px`, maxWidth: "100%" }}
+      >
+        {/* Zona superior: alto fijo (= items.y, o todo el lienzo si no hay items). */}
+        <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "hidden" }}>
+          {topEls.map((el) => (
+            <ElementBox key={el.id} el={el} zoneY={el.y} yBase={0} />
+          ))}
+          {hasItems && <ItemsBox />}
         </div>
-      )}
+
+        {hasItems && (
+          <>
+            {/* Tabla de ítems de muestra (no interactiva). */}
+            <CanvasItemsTable data={data} />
+            {/* Zona inferior: Y relativa a items.y. */}
+            <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "hidden" }}>
+              {bottomEls.map((el) => (
+                <ElementBox key={el.id} el={el} zoneY={el.y - splitY} yBase={splitY} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {data.sale.status === "voided" && (
+          <div className="mt-3 text-center text-xs font-bold text-red-500">** ANULADA **</div>
+        )}
+        {showNinja && (
+          <div className="mt-3 flex justify-center opacity-70">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

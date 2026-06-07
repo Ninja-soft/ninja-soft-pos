@@ -75,78 +75,115 @@ const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = 
   { key: "minimal", label: "Mínimo", desc: "Sólo lo esencial" },
 ];
 const SAMPLE_BODY = "¡Gracias por tu compra!";
+const FOOTER_LABEL = "Enviado con NinjaSoft POS";
+// Wordmark de NinjaSoft para el fallback (sin logo del tenant). Mismo asset que
+// usa el email real (NINJA_LOGO_URL en send_receipt_email).
+const NINJA_WORDMARK = "/brand/ninjasoft-wordmark.webp";
 
-// Mini-preview estático de cada diseño. `accent` es el color de marca del tenant
-// (solo lo usa el diseño "brand"; el resto trae su propia paleta).
-function DesignPreview({ k, accent }: { k: BodyTemplateKey; accent: string }) {
-  const logo = (
-    <div className="text-[7px] font-bold tracking-tight" style={{ lineHeight: 1 }}>
-      NinjaSoft
-    </div>
-  );
-  if (k === "brand") {
-    return (
-      <div className="overflow-hidden rounded-sm border border-neutral-200 bg-white">
-        <div className="px-1.5 py-2 text-center text-white" style={{ background: accent }}>
-          {logo}
-        </div>
-        <div className="space-y-0.5 px-1.5 py-2">
-          <div className="text-[6px] text-neutral-700">{SAMPLE_BODY}</div>
-          <div className="h-0.5 w-3/4 rounded bg-neutral-200" />
-        </div>
-        <div className="bg-neutral-100 py-1 text-center text-[5px] text-neutral-400">NinjaSoft POS</div>
-      </div>
-    );
-  }
-  if (k === "clean") {
-    return (
-      <div className="overflow-hidden rounded-sm border border-neutral-200 bg-white">
-        <div className="h-[3px]" style={{ background: accent }} />
-        <div className="space-y-1 px-1.5 py-2 text-center text-neutral-800">
-          {logo}
-          <div className="text-[6px] text-neutral-600">{SAMPLE_BODY}</div>
-        </div>
-        <div className="bg-neutral-50 py-1 text-center text-[5px] text-neutral-400">NinjaSoft POS</div>
-      </div>
-    );
-  }
-  if (k === "dark") {
-    return (
-      <div className="overflow-hidden rounded-sm border border-neutral-700" style={{ background: "#111827" }}>
-        <div className="space-y-1 px-1.5 py-2 text-center text-white">
-          {logo}
-          <div className="mx-auto h-[2px] w-4 rounded" style={{ background: accent }} />
-          <div className="text-[6px] text-neutral-300">{SAMPLE_BODY}</div>
-        </div>
-        <div className="py-1 text-center text-[5px] text-neutral-500" style={{ background: "#1f2937" }}>
-          NinjaSoft POS
-        </div>
-      </div>
-    );
-  }
-  if (k === "warm") {
-    return (
-      <div className="overflow-hidden rounded-sm border border-orange-200" style={{ background: "#fff7ed" }}>
-        <div className="px-1.5 py-2 text-center text-white" style={{ background: accent }}>
-          {logo}
-        </div>
-        <div className="px-1.5 py-2 text-[6px]" style={{ color: "#7c2d12" }}>
-          {SAMPLE_BODY}
-        </div>
-        <div className="py-1 text-center text-[5px]" style={{ background: "#ffedd5", color: "#b45309" }}>
-          NinjaSoft POS
-        </div>
-      </div>
-    );
-  }
-  // minimal
+// Logo del preview: el del tenant si tiene; si no, el wordmark de NinjaSoft.
+// `dark` = sobre fondo oscuro (el wordmark se ve igual; usamos el mismo asset).
+// eslint-disable-next-line @next/next/no-img-element
+function PreviewLogo({ logoUrl, h }: { logoUrl: string | null; h: number }) {
+  const src = logoUrl || NINJA_WORDMARK;
   return (
-    <div className="rounded-sm border border-neutral-200 bg-white px-1.5 py-1.5">
-      <div className="border-b border-neutral-200 pb-1 text-neutral-800">{logo}</div>
-      <div className="py-1.5 text-[6px] text-neutral-600">{SAMPLE_BODY}</div>
-      <div className="border-t border-neutral-200 pt-1 text-[5px] text-neutral-400">NinjaSoft POS</div>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      style={{ height: h, maxWidth: "70%", objectFit: "contain", display: "inline-block" }}
+    />
   );
+}
+
+// Mini-preview de cada diseño. SIEMPRE visible: marco de altura fija (h-28) con
+// contenido escalado, datos de muestra independientes de la config guardada.
+// `accent` es el color de marca del tenant; `logoUrl` es su logo (o null → wordmark).
+function DesignPreview({
+  k,
+  accent,
+  logoUrl,
+}: {
+  k: BodyTemplateKey;
+  accent: string;
+  logoUrl: string | null;
+}) {
+  const inner = (() => {
+    if (k === "brand") {
+      return (
+        <div className="flex h-full flex-col overflow-hidden rounded border border-neutral-200 bg-white">
+          <div className="flex flex-col items-center gap-1 px-2 py-2.5" style={{ background: accent }}>
+            <PreviewLogo logoUrl={logoUrl} h={16} />
+            <div className="text-[8px] font-bold text-white">Mi Negocio</div>
+          </div>
+          <div className="flex-1 space-y-1 px-2 py-2">
+            <div className="text-[8px] text-neutral-700">{SAMPLE_BODY}</div>
+            <div className="h-1 w-3/4 rounded bg-neutral-200" />
+            <div className="h-1 w-1/2 rounded bg-neutral-200" />
+          </div>
+          <div className="bg-neutral-100 py-1 text-center text-[7px] text-neutral-400">{FOOTER_LABEL}</div>
+        </div>
+      );
+    }
+    if (k === "clean") {
+      return (
+        <div className="flex h-full flex-col overflow-hidden rounded border border-neutral-200 bg-white">
+          <div className="h-1" style={{ background: accent }} />
+          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 px-2 py-2 text-center">
+            <PreviewLogo logoUrl={logoUrl} h={16} />
+            <div className="text-[8px] font-semibold text-neutral-800">Mi Negocio</div>
+            <div className="text-[7px] text-neutral-500">{SAMPLE_BODY}</div>
+          </div>
+          <div className="bg-neutral-50 py-1 text-center text-[7px] text-neutral-400">{FOOTER_LABEL}</div>
+        </div>
+      );
+    }
+    if (k === "dark") {
+      return (
+        <div className="flex h-full flex-col overflow-hidden rounded border border-neutral-700" style={{ background: "#111827" }}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-center">
+            <PreviewLogo logoUrl={logoUrl} h={16} />
+            <div className="text-[8px] font-bold text-white">Mi Negocio</div>
+            <div className="h-[2px] w-5 rounded" style={{ background: accent }} />
+            <div className="text-[7px] text-neutral-300">{SAMPLE_BODY}</div>
+          </div>
+          <div className="py-1 text-center text-[7px] text-neutral-500" style={{ background: "#1f2937" }}>
+            {FOOTER_LABEL}
+          </div>
+        </div>
+      );
+    }
+    if (k === "warm") {
+      return (
+        <div className="flex h-full flex-col overflow-hidden rounded border border-orange-200" style={{ background: "#fff7ed" }}>
+          <div className="flex flex-col items-center gap-1 px-2 py-2.5" style={{ background: accent }}>
+            <PreviewLogo logoUrl={logoUrl} h={16} />
+            <div className="text-[8px] font-bold text-white">Mi Negocio</div>
+          </div>
+          <div className="flex-1 px-2 py-2 text-[8px]" style={{ color: "#7c2d12" }}>
+            {SAMPLE_BODY}
+          </div>
+          <div className="py-1 text-center text-[7px]" style={{ background: "#ffedd5", color: "#b45309" }}>
+            {FOOTER_LABEL}
+          </div>
+        </div>
+      );
+    }
+    // minimal
+    return (
+      <div className="flex h-full flex-col rounded border border-neutral-200 bg-white px-2 py-2">
+        <div className="border-b border-neutral-200 pb-1">
+          <PreviewLogo logoUrl={logoUrl} h={14} />
+        </div>
+        <div className="flex-1 py-1.5">
+          <div className="text-[8px] font-semibold text-neutral-800">Mi Negocio</div>
+          <div className="text-[7px] text-neutral-500">{SAMPLE_BODY}</div>
+        </div>
+        <div className="border-t border-neutral-200 pt-1 text-[7px] text-neutral-400">{FOOTER_LABEL}</div>
+      </div>
+    );
+  })();
+
+  return <div className="h-28 w-full">{inner}</div>;
 }
 
 export function TenantEmailCard() {
@@ -177,6 +214,8 @@ export function TenantEmailCard() {
   const accent = /^#[0-9a-fA-F]{6}$/.test(String(branding?.accent ?? ""))
     ? String(branding!.accent)
     : "#111827";
+  // Logo del tenant para los previews; null → se usa el wordmark de NinjaSoft.
+  const logoUrl = String(branding?.logo_url ?? "").trim() || null;
 
   // Hidratar campos desde la config guardada (anidada en el mismo payload).
   useEffect(() => {
@@ -497,7 +536,7 @@ export function TenantEmailCard() {
                       : "border-border hover:border-ninja-flameSoft/40",
                   )}
                 >
-                  <DesignPreview k={t.key} accent={accent} />
+                  <DesignPreview k={t.key} accent={accent} logoUrl={logoUrl} />
                   <span
                     className={cn(
                       "text-xs font-medium",

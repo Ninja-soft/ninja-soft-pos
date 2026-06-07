@@ -52,6 +52,7 @@ import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import { HTML_STARTER_TEMPLATES } from "@/lib/tickets/htmlTemplates";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
 import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
+import { buildMyBrandBlocks, buildMyBrandCanvas } from "@/lib/tickets/myBrand";
 import { HTML_TEMPLATE_VARS } from "@/lib/tickets/htmlVars";
 import { sampleTicketData, type SampleBrand } from "@/lib/tickets/sample";
 import {
@@ -184,7 +185,9 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
   const [name, setName] = useState("Mi ticket");
   const [kind, setKind] = useState<TemplateKind>("sale");
   const [paper, setPaper] = useState<Paper>("80");
-  const [showNinja, setShowNinja] = useState(false);
+  // Footer NinjaSoft: opcional pero por defecto ENCENDIDO en la UI (feedback
+  // PR6). El default de DB sigue siendo false → filas viejas no se afectan.
+  const [showNinja, setShowNinja] = useState(true);
 
   // Estado por modo.
   const [blocks, setBlocks] = useState<TicketBlock[]>(() => defaultSaleBlocks());
@@ -238,7 +241,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
       setName("Mi ticket");
       setKind("sale");
       setPaper("80");
-      setShowNinja(false);
+      setShowNinja(true);
       setBlocks(defaultSaleBlocks());
       setHtml(MINIMAL_HTML);
       setElements([]);
@@ -340,6 +343,8 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
               setElements(s.canvas.elements);
               setCanvasHeight(s.canvas.height);
             }
+            // Toda elección enciende el footer NinjaSoft por defecto (PR6).
+            setShowNinja(true);
             setStep("editor");
           }}
           onScratch={() => {
@@ -349,6 +354,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
               setElements([]);
               setCanvasHeight(300);
             }
+            setShowNinja(true);
             setStep("editor");
           }}
         />
@@ -500,16 +506,46 @@ function paperLabel(p: Paper) {
   return p === "a4" ? "A4" : `${p} mm`;
 }
 
-function starterPicks(mode: TemplateMode): StarterPick[] {
-  if (mode === "html")
-    return HTML_STARTER_TEMPLATES.map((t) => ({
+// "Mi marca" SIEMPRE va primero (PR6): se sintetiza con el branding del negocio
+// (logo + color de acento). En blocks/canvas se arma con los builders de
+// myBrand; en html se marca como "Mi marca" la plantilla más brand-driven
+// (clásico, que usa logo + datos del negocio) sin duplicarla.
+const MY_BRAND_DESC =
+  "Adaptado a tu marca: tu logo, tus colores y QR. Siempre disponible.";
+
+function starterPicks(mode: TemplateMode, brand: SampleBrand | null): StarterPick[] {
+  if (mode === "html") {
+    return HTML_STARTER_TEMPLATES.map((t, i) => ({
       ...t,
       mode: "html" as const,
-      description: `Plantilla HTML ${paperLabel(t.paper)}.`,
+      // La primera (más brand-driven: logo + datos del negocio) se rotula
+      // "Mi marca" sin duplicarla.
+      name: i === 0 ? "Mi marca" : t.name,
+      description: i === 0 ? MY_BRAND_DESC : `Plantilla HTML ${paperLabel(t.paper)}.`,
     }));
-  if (mode === "canvas")
-    return CANVAS_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "canvas" as const }));
-  return BLOCK_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "blocks" as const }));
+  }
+  if (mode === "canvas") {
+    const myBrand: StarterPick = {
+      mode: "canvas",
+      key: "mi-marca",
+      name: "Mi marca",
+      description: MY_BRAND_DESC,
+      paper: "80",
+      kind: "sale",
+      canvas: buildMyBrandCanvas(brand),
+    };
+    return [myBrand, ...CANVAS_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "canvas" as const }))];
+  }
+  const myBrand: StarterPick = {
+    mode: "blocks",
+    key: "mi-marca",
+    name: "Mi marca",
+    description: MY_BRAND_DESC,
+    paper: "80",
+    kind: "sale",
+    blocks: buildMyBrandBlocks(brand),
+  };
+  return [myBrand, ...BLOCK_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "blocks" as const }))];
 }
 
 // Escala de la miniatura por papel: el contenido se renderiza a su ancho real
@@ -552,7 +588,7 @@ function StarterChooser({
   onPick: (s: StarterPick) => void;
   onScratch: () => void;
 }) {
-  const picks = starterPicks(mode);
+  const picks = starterPicks(mode, brand);
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
@@ -845,6 +881,14 @@ function CanvasRow({
   return (
     <div className={cn("rounded-lg border border-border", expanded && "ring-1 ring-ninja-flameSoft")}>
       <div className="flex items-center gap-1 px-2 py-1.5">
+        {/* Punto de color: flame cuando el elemento está seleccionado (PR6). */}
+        <span
+          aria-hidden
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full transition",
+            expanded ? "bg-ninja-flame" : "bg-muted-foreground/40",
+          )}
+        />
         <span className="min-w-0 flex-1 truncate text-sm">{CANVAS_ELEMENT_LABELS[el.type]}</span>
         <IconBtn title="Ajustes" onClick={onToggleExpand} active={expanded}>
           <SlidersHorizontal size={15} />
@@ -1047,6 +1091,19 @@ function NumField({
 // Tamaños mínimos de la caja react-rnd.
 const RND_MIN_W = 24;
 const RND_MIN_H = 16;
+// Snap-to-grid de 4px al arrastrar/redimensionar (PR6 usabilidad).
+const GRID = 4;
+// Manija de tamaño grande y visible (cuadrado flame de 12px).
+const RESIZE_HANDLE_STYLE: React.CSSProperties = {
+  width: 12,
+  height: 12,
+  right: -6,
+  bottom: -6,
+  borderRadius: 3,
+  background: "#FF4B22",
+  border: "2px solid #fff",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+};
 
 // Tipos cuyo alto es intrínseco a su contenido (resize vertical genera h).
 function elementSupportsHeight(type: CanvasElementType) {
@@ -1105,7 +1162,12 @@ function CanvasPreview({
         position={{ x: el.x, y: zoneY }}
         minWidth={RND_MIN_W}
         minHeight={RND_MIN_H}
+        // Snap a la grilla de 4px al arrastrar/redimensionar (PR6 usabilidad).
+        dragGrid={[GRID, GRID]}
+        resizeGrid={[GRID, GRID]}
         enableResizing={{ right: true, bottom: true, bottomRight: true }}
+        // Manija de tamaño grande y visible (cuadrado flame de 12px).
+        resizeHandleStyles={{ bottomRight: RESIZE_HANDLE_STYLE }}
         onDragStart={() => setSelected(el.id)}
         onDragStop={(_e, d) => {
           patch(el.id, { x: Math.round(d.x), y: Math.round(d.y) + yBase });
@@ -1165,6 +1227,10 @@ function CanvasPreview({
 
   return (
     <div className="rounded-xl bg-muted/30 p-4">
+      {/* Barra de ayuda del canvas (PR6 usabilidad). */}
+      <p className="no-print mb-3 rounded-lg border border-border bg-card px-3 py-1.5 text-center text-xs text-muted-foreground">
+        Arrastrá para mover · esquina para tamaño · clic para editar
+      </p>
       <div
         className="mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ticket-print"
         style={{ width: `${width}px`, maxWidth: "100%" }}

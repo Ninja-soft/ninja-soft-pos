@@ -1,11 +1,12 @@
-// H9b PR4/PR5 — Modelos precargados para el modo "blocks" del ticket.
-// Cada entrada arma su lista de bloques con newBlock(type) + overrides, y le
-// imprime una identidad visual propia (tipografía + color + separadores) para
-// que al elegirla en el picker "se entienda" qué pinta tiene. PR5-2.
+// H9b PR4/PR5/PR6 — Modelos precargados para el modo "blocks" del ticket.
+// Cada entrada arma su lista de bloques con newBlock(type) + overrides y le
+// imprime la IDENTIDAD VISUAL DE NINJAPOS (paleta ninja: void/violet oscuros,
+// flame naranja, dorado), para que reflejen la marca y no se vean "feas".
+// Feedback de usuario (PR6): los diseños precargados deben tener la esencia
+// NinjaPos; toda venta debe mostrar logo + QR.
 // Espeja la forma de HTML_STARTER_TEMPLATES (ver lib/tickets/htmlTemplates.ts).
 
 import {
-  defaultSaleBlocks,
   newBlock,
   type BlockType,
   type TicketBlock,
@@ -20,6 +21,18 @@ export interface BlockStarterTemplate {
   blocks: TicketBlock[];
 }
 
+// Paleta NinjaPos (ver tailwind.config.ts → colors.ninja).
+const NINJA = {
+  flame: "#FF4B22",
+  flameSoft: "#FF6A1A",
+  gold: "#FFD21F",
+  void: "#09051C",
+  deepViolet: "#140D35",
+  midViolet: "#2B1A67",
+  softWhite: "#F7F7FF",
+  lavender: "#B8AEDC",
+} as const;
+
 // newBlock(type) + overrides, preservando el tipo de cada variante del bloque.
 function mk<T extends BlockType>(
   type: T,
@@ -30,92 +43,125 @@ function mk<T extends BlockType>(
 
 export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
   {
-    // Térmico tradicional de kiosco: mono, sobrio, separadores dashed (como hoy).
+    // Térmico NinjaPos: mono prolijo, título flame, separadores flame.
+    // Venta → logo + QR siempre presentes.
     key: "clasico",
-    name: "Clásico",
-    description: "Térmico clásico de kiosco: mono, sobrio, separadores punteados.",
-    paper: "80",
-    kind: "sale",
-    blocks: defaultSaleBlocks(),
-  },
-  {
-    // Limpio y moderno: sans, título bold grande, separadores solid finos grises,
-    // totales destacados.
-    key: "moderno",
-    name: "Moderno",
-    description: "Limpio y moderno: tipografía sans, título grande, líneas finas.",
+    name: "Clásico Ninja",
+    description: "Térmico prolijo con título flame y QR. La base de NinjaPos.",
     paper: "80",
     kind: "sale",
     blocks: [
       mk("logo"),
-      mk("title", { text: "TICKET", size: "lg", bold: true, font: "sans", color: "#111827" }),
-      mk("business", { showLegalName: true, showCuit: false, showAddress: true, showPhone: true }),
-      mk("separator", { style: "solid", color: "#6b7280" }),
+      mk("business", { showLegalName: true, showCuit: true, showAddress: true, showPhone: true }),
+      mk("title", { text: "", size: "lg", bold: true, font: "mono", color: NINJA.flame }),
+      mk("separator", { style: "dashed", color: NINJA.flame }),
       mk("saleInfo"),
-      mk("separator", { style: "solid", color: "#6b7280" }),
+      mk("separator", { style: "dashed", color: NINJA.flame }),
       mk("items", { showUnitPrice: true }),
-      mk("separator", { style: "solid", color: "#6b7280" }),
+      mk("separator", { style: "dashed", color: NINJA.flame }),
       mk("totals"),
       mk("payments"),
-      mk("separator", { style: "solid", color: "#6b7280" }),
-      mk("footer", { text: "¡Gracias por tu compra!", font: "sans", color: "#111827" }),
+      mk("separator", { style: "dashed", color: NINJA.flame }),
+      mk("qr"),
+      mk("footer", { text: "¡Gracias por tu compra!", font: "mono", color: NINJA.flame }),
     ],
   },
   {
-    // Elegante A4: serif, encabezado con título grande gris oscuro, separadores
-    // double, footer serif chico (aire de itálica).
+    // Moderno oscuro: encabezado void con título flame, separadores dorados.
+    // Venta → logo + QR.
+    key: "moderno",
+    name: "Moderno oscuro",
+    description: "Encabezado oscuro NinjaPos, título flame y detalles dorados.",
+    paper: "80",
+    kind: "sale",
+    blocks: [
+      mk("logo"),
+      mk("title", {
+        text: "TICKET",
+        size: "lg",
+        bold: true,
+        font: "sans",
+        bg: NINJA.void,
+        color: NINJA.flameSoft,
+      }),
+      mk("business", { showLegalName: true, showCuit: false, showAddress: true, showPhone: true }),
+      mk("separator", { style: "solid", color: NINJA.gold }),
+      mk("saleInfo"),
+      mk("separator", { style: "solid", color: NINJA.gold }),
+      mk("items", { showUnitPrice: true }),
+      mk("separator", { style: "solid", color: NINJA.gold }),
+      mk("totals"),
+      mk("payments"),
+      mk("separator", { style: "solid", color: NINJA.gold }),
+      mk("qr"),
+      mk("footer", {
+        text: "¡Gracias por tu compra!",
+        font: "sans",
+        bg: NINJA.void,
+        color: NINJA.flameSoft,
+      }),
+    ],
+  },
+  {
+    // Elegante A4: serif, encabezado violeta profundo, filetes dorados dobles.
+    // Venta → logo + QR.
     key: "elegante",
-    name: "Elegante",
-    description: "Comprobante A4 serif con encabezado grande y filetes dobles.",
+    name: "Elegante A4",
+    description: "Comprobante A4 serif violeta profundo con filetes dorados.",
     paper: "a4",
     kind: "sale",
     blocks: [
       mk("logo"),
-      mk("title", { text: "Comprobante", size: "lg", bold: true, font: "serif", color: "#1f2937" }),
+      mk("title", {
+        text: "Comprobante",
+        size: "lg",
+        bold: true,
+        font: "serif",
+        bg: NINJA.deepViolet,
+        color: NINJA.gold,
+      }),
       mk("business", { showLegalName: true, showCuit: true, showAddress: true, showPhone: true }),
-      mk("separator", { style: "double", color: "#1f2937" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
       mk("saleInfo"),
       mk("customer"),
-      mk("separator", { style: "double", color: "#1f2937" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
       mk("items", { showUnitPrice: true }),
-      mk("separator", { style: "double", color: "#1f2937" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
       mk("totals"),
       mk("payments"),
       mk("qr"),
-      mk("separator", { style: "double", color: "#1f2937" }),
-      mk("footer", { text: "Gracias por su preferencia", font: "serif", color: "#1f2937" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
+      mk("footer", { text: "Gracias por su preferencia", font: "serif", color: NINJA.midViolet }),
     ],
   },
   {
-    // Volante promo vibrante: título XL rojo, bloque de texto destacado en amarillo,
-    // imagen y pie bold.
+    // Volante promo NinjaPos: título flame gigante, bloque destacado dorado.
     key: "promo",
-    name: "Volante promo",
-    description: "Flyer vibrante: título rojo gigante y bloque destacado en amarillo.",
+    name: "Volante Ninja",
+    description: "Flyer vibrante: título flame gigante y bloque destacado dorado.",
     paper: "80",
     kind: "promo",
     blocks: [
-      mk("title", { text: "¡PROMO!", size: "lg", bold: true, font: "sans", color: "#dc2626" }),
+      mk("title", { text: "¡PROMO!", size: "lg", bold: true, font: "sans", color: NINJA.flame }),
       mk("text", {
         text: "2x1 todos los miércoles",
         size: "md",
         bold: true,
         font: "sans",
-        bg: "#fef3c7",
-        color: "#92400e",
+        bg: NINJA.gold,
+        color: NINJA.void,
       }),
       mk("image", { url: "", widthPct: 100 }),
-      mk("separator", { style: "solid", color: "#dc2626" }),
+      mk("separator", { style: "solid", color: NINJA.flame }),
       mk("business", { showLegalName: true, showCuit: false, showAddress: false, showPhone: true }),
-      mk("footer", { text: "¡Te esperamos!", font: "sans", color: "#dc2626" }),
+      mk("footer", { text: "¡Te esperamos!", font: "sans", color: NINJA.flame }),
     ],
   },
   {
-    // Gift card oscura: bloques de texto fondo negro + texto claro, título dorado,
-    // líneas Para/De, separador double dorado.
+    // Gift card NinjaPos: panel void, título dorado serif, líneas Para/De.
     key: "gift",
-    name: "Gift card",
-    description: "Vale de regalo oscuro con título dorado y datos para completar.",
+    name: "Gift card Ninja",
+    description: "Vale oscuro NinjaPos con título dorado y datos para completar.",
     paper: "80",
     kind: "gift",
     blocks: [
@@ -124,27 +170,27 @@ export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
         size: "lg",
         bold: true,
         font: "serif",
-        color: "#d4af37",
-        bg: "#111827",
+        color: NINJA.gold,
+        bg: NINJA.void,
       }),
       mk("text", {
         text: "Monto: $ ________",
         size: "md",
         bold: true,
-        bg: "#111827",
-        color: "#f9fafb",
+        bg: NINJA.void,
+        color: NINJA.softWhite,
       }),
-      mk("separator", { style: "double", color: "#d4af37" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
       mk("text", {
         text: "Para: ____________\nDe: ____________",
         size: "md",
         align: "left",
-        bg: "#111827",
-        color: "#f9fafb",
+        bg: NINJA.void,
+        color: NINJA.softWhite,
       }),
-      mk("separator", { style: "double", color: "#d4af37" }),
+      mk("separator", { style: "double", color: NINJA.gold }),
       mk("business", { showLegalName: true, showCuit: false, showAddress: false, showPhone: false }),
-      mk("footer", { text: "Válido presentando este vale", font: "serif", color: "#d4af37" }),
+      mk("footer", { text: "Válido presentando este vale", font: "serif", color: NINJA.gold }),
     ],
   },
 ];

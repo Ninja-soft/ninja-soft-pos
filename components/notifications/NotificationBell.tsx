@@ -146,7 +146,7 @@ function NotificationItem({
   );
 }
 
-export function NotificationBell() {
+export function NotificationBell({ floating = false }: { floating?: boolean }) {
   const [open, setOpen] = useState(false);
   const { data: items } = useNotifications();
   const { markRead, markAllRead, archive, ack } = useNotificationActions();
@@ -165,7 +165,12 @@ export function NotificationBell() {
         <button
           type="button"
           aria-label="Notificaciones"
-          className="relative grid h-9 w-9 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          className={cn(
+            "relative grid place-items-center border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground",
+            floating
+              ? "h-10 w-10 rounded-full shadow-ninjaSoft"
+              : "h-9 w-9 rounded-lg",
+          )}
         >
           <Bell size={18} />
           {unread > 0 && (

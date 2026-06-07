@@ -11,6 +11,12 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **H9b (PR6) — Identidad NinjaPos en tickets + "Mi marca" + fixes de feedback (F6).** **Starters rediseñados** con la paleta real de marca (flame `#FF4B22`, gold `#FFD21F`, violetas oscuros) en bloques y canvas; **todos los modelos de venta incluyen logo + QR**. **Starter "Mi marca"** siempre primero en el picker (bloques/canvas sintetizados en el momento con tu logo y color de acento — fallback flame; en HTML el clásico brand-aware se etiqueta Mi marca). **Footer NinjaSoft default ON** al crear cualquier modelo. **Canvas más manejable**: barra de ayuda, handle de resize grande (flame, 12px), snap a grilla de 4px y punto de selección en la lista. **Email**: las 5 mini-previews de diseños ahora se ven de verdad (marco fijo, contenido legible, tu logo o el wordmark NinjaSoft) — verificado que los 5 cuerpos reales usan tu logo (fallback NinjaSoft) y cierran con "Enviado con NinjaSoft POS". **Campana de notificaciones** reposicionada: flotante arriba a la derecha del contenido en desktop. Roadmap: **H88 — Asistente IA como addon** (chat embebido con Claude, configura tickets, guía y consultas; gateado por plan).
+
+### Fixed
+
+- **Worker SMTP moría en 503 pese al try/catch.** denomailer rechaza promesas internas de conexión fuera del `await` del handler y Deno termina el worker (`deployment_id: null`). Handlers globales de `unhandledrejection`/`error` con `preventDefault` en `set_tenant_smtp` y `send_receipt_email` (v4/v5 deployadas) — ahora todo error SMTP responde JSON con el motivo.
+
 - **H11c — KPIs ARR y churn en `/internal` (F7).** El dashboard interno suma **ARR estimado** (MRR × 12) y **Churn 30d** (cancelaciones de los últimos 30 días sobre la base activa + canceladas, con tooltip aclarando la aproximación vía `subscriptions.updated_at`). Además el **MRR ahora incluye `past_due`** (antes solo `active`) y queda documentado que suma el precio del plan propio de cada suscripción (los planes custom ya entraban bien). Grid reflowado a 2 filas de 5.
 
 - **H34 — Auditoría de imports (F11).** Cada importación masiva por Excel de productos o clientes deja su entrada en `audit_logs` (acción `imported`, total de filas) — best-effort: un fallo de auditoría no bloquea el import. Reversión queda pendiente en el hito.

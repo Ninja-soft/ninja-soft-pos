@@ -21,6 +21,18 @@ const json = (b: unknown, s = 200) =>
   });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// denomailer dispara promesas internas (conexión) que pueden rechazar fuera
+// de nuestro await: sin esto, Deno mata el worker (503, deployment_id null) y
+// ningún try/catch del handler lo evita. Capturamos a nivel global.
+addEventListener("unhandledrejection", (e) => {
+  console.error("unhandledrejection:", (e as PromiseRejectionEvent).reason);
+  (e as PromiseRejectionEvent).preventDefault();
+});
+addEventListener("error", (e) => {
+  console.error("uncaught error:", (e as ErrorEvent).message);
+  (e as ErrorEvent).preventDefault();
+});
+
 // Carrera contra un timeout: si la promesa SMTP no resuelve a tiempo, rechaza.
 // Evita que un socket colgado mate al worker (deployment_id:null / 503).
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {

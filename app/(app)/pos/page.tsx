@@ -43,6 +43,8 @@ import { useScanner } from "@/modules/pos/useScanner";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { productsApi, variantLabel } from "@/modules/products/api";
+import { useMostradorPricing } from "@/modules/prices/hooks";
+import { resolvePrice } from "@/lib/prices/resolve";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -133,8 +135,27 @@ export default function PosPage() {
   const addVariant = useCartStore((s) => s.addVariant);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
 
+  // Lista de precios 'mostrador' activa (si existe): el precio unitario al
+  // agregar al carrito se resuelve contra esta lista. Sin lista → precio base.
+  const { data: mostrador } = useMostradorPricing();
+  // basePrice = price_override de la variante (si aplica) ya resuelto por el
+  // caller. Devuelve el precio efectivo de mostrador.
+  function priceFor(
+    productId: string,
+    variantId: string | null,
+    basePrice: number,
+  ): number {
+    return resolvePrice(
+      basePrice,
+      productId,
+      variantId,
+      mostrador?.list ?? null,
+      mostrador?.items ?? [],
+    );
+  }
+
   // Click en un producto: serializado abre picker de serial; por peso (kg) abre
-  // modal de peso; si no, lo agrega directo.
+  // modal de peso; si no, lo agrega directo (precio resuelto por la lista mostrador).
   function pickProduct(p: {
     id: string;
     name: string;
@@ -151,10 +172,15 @@ export default function PosPage() {
       setSerialChoice("");
       setSerialOther("");
     } else if (p.unit === "kg") {
-      setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setWeighProduct({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: priceFor(p.id, null, p.price),
+      });
       setWeighGrams("");
     } else {
-      addProduct(p);
+      addProduct({ ...p, price: priceFor(p.id, null, p.price) });
     }
   }
 
@@ -166,7 +192,10 @@ export default function PosPage() {
       toast({ title: "Elegí o ingresá un N° de serie", variant: "error" });
       return;
     }
-    addSerialized(serialProduct, serial);
+    addSerialized(
+      { ...serialProduct, price: priceFor(serialProduct.id, null, serialProduct.price) },
+      serial,
+    );
     setSerialProduct(null);
     setSerialChoice("");
     setSerialOther("");
@@ -228,12 +257,14 @@ export default function PosPage() {
       if (res) {
         const { product: p, variant } = res;
         if (variant) {
-          // Barcode/SKU de variante: agrega directo, sin abrir el picker.
+          // Barcode/SKU de variante: agrega directo, sin abrir el picker. El
+          // precio base de la variante (override o padre) se resuelve por la
+          // lista mostrador.
           addVariant({
             id: p.id,
             name: p.name,
             sku: variant.sku ?? p.sku,
-            price: variant.price_override ?? p.price,
+            price: priceFor(p.id, variant.id, variant.price_override ?? p.price),
             variantId: variant.id,
             variantLabel: variantLabel(variant),
           });
@@ -846,7 +877,7 @@ export default function PosPage() {
             id: variantProduct.id,
             name: variantProduct.name,
             sku: variantProduct.sku,
-            price,
+            price: priceFor(variantProduct.id, variantId, price),
             variantId,
             variantLabel: label,
           });

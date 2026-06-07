@@ -12,6 +12,8 @@ export interface CartLine {
   discount: number; // descuento por línea (monto)
   unit: string; // 'un' por defecto; 'kg' = ítem por peso
   serial?: string | null; // N° de serie (producto serializado)
+  variantId?: string | null; // variante (producto con has_variants)
+  variantLabel?: string; // ej. "M / Rojo" para mostrar en el carrito
 }
 
 interface CartState {
@@ -23,6 +25,14 @@ interface CartState {
     sku: string | null;
     price: number;
     unit?: string;
+  }) => void;
+  addVariant: (p: {
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+    variantId: string;
+    variantLabel: string;
   }) => void;
   addWeighed: (
     p: { id: string; name: string; sku: string | null; price: number },
@@ -45,11 +55,15 @@ export const useCartStore = create<CartState>((set) => ({
   discountTotal: 0,
   addProduct: (p) =>
     set((state) => {
-      const existing = state.lines.find((l) => l.productId === p.id);
+      // Línea sin variante: identidad por producto. No fusiona con líneas de
+      // variante del mismo producto (esas llevan variantId).
+      const existing = state.lines.find(
+        (l) => l.productId === p.id && !l.variantId && l.unit !== "kg" && !l.serial,
+      );
       if (existing) {
         return {
           lines: state.lines.map((l) =>
-            l.productId === p.id ? { ...l, quantity: l.quantity + 1 } : l,
+            l.lineId === existing.lineId ? { ...l, quantity: l.quantity + 1 } : l,
           ),
         };
       }
@@ -65,6 +79,38 @@ export const useCartStore = create<CartState>((set) => ({
             quantity: 1,
             discount: 0,
             unit: p.unit ?? "un",
+          },
+        ],
+      };
+    }),
+  addVariant: (p) =>
+    set((state) => {
+      // Identidad de línea por producto + variante: dos variantes distintas del
+      // mismo producto son dos líneas separadas.
+      const existing = state.lines.find(
+        (l) => l.productId === p.id && l.variantId === p.variantId,
+      );
+      if (existing) {
+        return {
+          lines: state.lines.map((l) =>
+            l.lineId === existing.lineId ? { ...l, quantity: l.quantity + 1 } : l,
+          ),
+        };
+      }
+      return {
+        lines: [
+          ...state.lines,
+          {
+            lineId: crypto.randomUUID(),
+            productId: p.id,
+            name: p.name,
+            sku: p.sku,
+            unitPrice: p.price,
+            quantity: 1,
+            discount: 0,
+            unit: "un",
+            variantId: p.variantId,
+            variantLabel: p.variantLabel,
           },
         ],
       };

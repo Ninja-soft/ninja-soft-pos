@@ -13,6 +13,7 @@ export interface SaleItemInput {
   product_id: string | null; // null = ítem de monto libre (venta rápida)
   name?: string; // nombre del ítem libre (cuando product_id es null)
   serial?: string; // N° de serie (producto serializado)
+  variant_id?: string | null; // variante (producto con has_variants)
   quantity: number;
   unit_price: number;
   discount: number;

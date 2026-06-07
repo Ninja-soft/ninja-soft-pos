@@ -53,12 +53,43 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
-  // Busca un producto por código de barras o SKU exacto (para escaneo).
-  findByCode: async (code: string): Promise<Product | null> => {
+  // Busca por código de barras o SKU exacto (para escaneo). Matchea primero
+  // contra variantes (barcode/sku propios) y, si no, contra productos. Cuando
+  // matchea una variante devuelve el producto padre + la variante.
+  findByCode: async (
+    code: string,
+  ): Promise<{ product: Product; variant?: ProductVariant } | null> => {
     const c = code.trim();
     // Solo códigos simples: evita romper el filtro .or() y inyección.
     if (!/^[A-Za-z0-9._\-]+$/.test(c)) return null;
     const supabase = createClient();
+
+    // 1) Variante por barcode/sku (activa) → trae el producto padre.
+    const { data: variant, error: vErr } = await supabase
+      .from("product_variants")
+      .select("*")
+      .is("deleted_at", null)
+      .or(`barcode.eq.${c},sku.eq.${c}`)
+      .limit(1)
+      .maybeSingle();
+    if (vErr) throw vErr;
+    if (variant) {
+      const { data: parent, error: pErr } = await supabase
+        .from("products")
+        .select("*, categories(name)")
+        .eq("id", (variant as ProductVariant).product_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (parent) {
+        return {
+          product: parent as unknown as Product,
+          variant: variant as unknown as ProductVariant,
+        };
+      }
+    }
+
+    // 2) Producto por barcode/sku.
     const { data, error } = await supabase
       .from("products")
       .select("*, categories(name)")
@@ -67,7 +98,8 @@ export const productsApi = {
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    return (data ?? null) as unknown as Product | null;
+    if (!data) return null;
+    return { product: data as unknown as Product };
   },
 
   // Productos más vendidos (frecuentes) para la venta rápida del kiosco.
@@ -412,6 +444,19 @@ export const categoriesApi = {
 };
 
 export type ProductVariant = Tables<"product_variants">;
+
+// Etiqueta corta de la variante para el carrito/ticket: "M / Rojo" (o solo "M").
+export function variantLabel(v: Pick<ProductVariant, "option1" | "option2">): string {
+  return v.option2 ? `${v.option1} / ${v.option2}` : v.option1;
+}
+
+// Precio efectivo de una variante: override propio o precio base del padre.
+export function variantPrice(
+  v: Pick<ProductVariant, "price_override">,
+  basePrice: number,
+): number {
+  return v.price_override ?? basePrice;
+}
 
 // Fila editable de variante en el form. id ausente = alta nueva.
 export interface VariantRow {

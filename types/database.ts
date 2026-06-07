@@ -1133,6 +1133,112 @@ export type Database = {
           },
         ]
       }
+      price_list_items: {
+        Row: {
+          created_at: string
+          id: string
+          price: number
+          price_list_id: string
+          product_id: string
+          tenant_id: string
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price: number
+          price_list_id: string
+          product_id: string
+          tenant_id: string
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price?: number
+          price_list_id?: string
+          product_id?: string
+          tenant_id?: string
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_list_items_price_list_id_fkey"
+            columns: ["price_list_id"]
+            isOneToOne: false
+            referencedRelation: "price_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_list_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_list_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "price_list_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_lists: {
+        Row: {
+          adjustment_pct: number | null
+          channel: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          adjustment_pct?: number | null
+          channel?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          adjustment_pct?: number | null
+          channel?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_lists_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_images: {
         Row: {
           created_at: string
@@ -1285,6 +1391,66 @@ export type Database = {
           },
         ]
       }
+      product_variants: {
+        Row: {
+          barcode: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          option1: string
+          option2: string | null
+          price_override: number | null
+          product_id: string
+          sku: string | null
+          stock: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          barcode?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          option1: string
+          option2?: string | null
+          price_override?: number | null
+          product_id: string
+          sku?: string | null
+          stock?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          option1?: string
+          option2?: string | null
+          price_override?: number | null
+          product_id?: string
+          sku?: string | null
+          stock?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           allow_negative: boolean | null
@@ -1296,6 +1462,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          has_variants: boolean
           id: string
           image_url: string | null
           is_active: boolean
@@ -1315,6 +1482,7 @@ export type Database = {
           unit: string
           updated_at: string
           updated_by: string | null
+          variant_axes: Json | null
           warranty_months: number
         }
         Insert: {
@@ -1327,6 +1495,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          has_variants?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -1346,6 +1515,7 @@ export type Database = {
           unit?: string
           updated_at?: string
           updated_by?: string | null
+          variant_axes?: Json | null
           warranty_months?: number
         }
         Update: {
@@ -1358,6 +1528,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          has_variants?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -1377,6 +1548,7 @@ export type Database = {
           unit?: string
           updated_at?: string
           updated_by?: string | null
+          variant_axes?: Json | null
           warranty_months?: number
         }
         Relationships: [
@@ -1467,6 +1639,7 @@ export type Database = {
           subtotal: number
           tenant_id: string
           unit_price: number
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1482,6 +1655,7 @@ export type Database = {
           subtotal: number
           tenant_id?: string
           unit_price: number
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1497,6 +1671,7 @@ export type Database = {
           subtotal?: number
           tenant_id?: string
           unit_price?: number
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -1518,6 +1693,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sale_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -1762,6 +1944,7 @@ export type Database = {
           reference_id: string | null
           store_id: string | null
           tenant_id: string
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1774,6 +1957,7 @@ export type Database = {
           reference_id?: string | null
           store_id?: string | null
           tenant_id?: string
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1786,6 +1970,7 @@ export type Database = {
           reference_id?: string | null
           store_id?: string | null
           tenant_id?: string
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -1814,6 +1999,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -2142,6 +2334,53 @@ export type Database = {
           },
         ]
       }
+      tenant_email_smtp: {
+        Row: {
+          body_text: string | null
+          from_email: string
+          from_name: string
+          host: string
+          password: string
+          port: number
+          secure: boolean
+          tenant_id: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          body_text?: string | null
+          from_email?: string
+          from_name?: string
+          host?: string
+          password?: string
+          port?: number
+          secure?: boolean
+          tenant_id: string
+          updated_at?: string
+          username?: string
+        }
+        Update: {
+          body_text?: string | null
+          from_email?: string
+          from_name?: string
+          host?: string
+          password?: string
+          port?: number
+          secure?: boolean
+          tenant_id?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_email_smtp_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_feature_flags: {
         Row: {
           configured_at: string
@@ -2381,12 +2620,14 @@ export type Database = {
           content: Json
           created_at: string
           deleted_at: string | null
+          email_active: boolean
           id: string
           is_default: boolean
           kind: string
           mode: string
           name: string
           paper: string
+          print_active: boolean
           show_ninjasoft_logo: boolean
           tenant_id: string
           updated_at: string
@@ -2395,12 +2636,14 @@ export type Database = {
           content?: Json
           created_at?: string
           deleted_at?: string | null
+          email_active?: boolean
           id?: string
           is_default?: boolean
           kind?: string
           mode?: string
           name: string
           paper?: string
+          print_active?: boolean
           show_ninjasoft_logo?: boolean
           tenant_id: string
           updated_at?: string
@@ -2409,12 +2652,14 @@ export type Database = {
           content?: Json
           created_at?: string
           deleted_at?: string | null
+          email_active?: boolean
           id?: string
           is_default?: boolean
           kind?: string
           mode?: string
           name?: string
           paper?: string
+          print_active?: boolean
           show_ninjasoft_logo?: boolean
           tenant_id?: string
           updated_at?: string
@@ -2555,6 +2800,7 @@ export type Database = {
       }
       current_tenant_id: { Args: never; Returns: string }
       get_email_smtp: { Args: never; Returns: Json }
+      get_tenant_smtp: { Args: never; Returns: Json }
       internal_extend_trial: {
         Args: { p_days: number; p_tenant_id: string }
         Returns: string
@@ -2650,6 +2896,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          has_variants: boolean
           id: string
           image_url: string | null
           is_active: boolean
@@ -2669,6 +2916,7 @@ export type Database = {
           unit: string
           updated_at: string
           updated_by: string | null
+          variant_axes: Json | null
           warranty_months: number
         }[]
         SetofOptions: {

@@ -3378,6 +3378,7 @@ export type Database = {
       ai_available: { Args: never; Returns: boolean }
       ai_monthly_usage: { Args: never; Returns: number }
       ai_public_config: { Args: never; Returns: Json }
+      cancel_addon: { Args: { p_addon_key: string }; Returns: undefined }
       close_cash_shift: {
         Args: { p_closing_amount: number; p_notes?: string; p_shift_id: string }
         Returns: number
@@ -3447,20 +3448,38 @@ export type Database = {
         }
         Returns: string
       }
-      internal_save_plan: {
-        Args: {
-          p_description: string
-          p_icon: string
-          p_id: string
-          p_is_active: boolean
-          p_key: string
-          p_limits: Json
-          p_monthly_price: number
-          p_name: string
-          p_trial_days: number
-        }
-        Returns: string
-      }
+      internal_save_plan:
+        | {
+            Args: {
+              p_description: string
+              p_icon: string
+              p_id: string
+              p_is_active: boolean
+              p_key: string
+              p_limits: Json
+              p_monthly_price: number
+              p_name: string
+              p_trial_days: number
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_description: string
+              p_icon: string
+              p_id: string
+              p_image_url?: string
+              p_is_active: boolean
+              p_is_recommended?: boolean
+              p_key: string
+              p_limits: Json
+              p_monthly_price: number
+              p_name: string
+              p_secondary_name?: string
+              p_trial_days: number
+            }
+            Returns: string
+          }
       internal_set_addon: {
         Args: { p_active: boolean; p_addon_key: string; p_tenant_id: string }
         Returns: undefined
@@ -3520,17 +3539,22 @@ export type Database = {
         Returns: undefined
       }
       is_internal: { Args: never; Returns: boolean }
+      is_tenant_manager: { Args: never; Returns: boolean }
+      is_tenant_owner: { Args: never; Returns: boolean }
+      my_subscription: { Args: never; Returns: Json }
       onboarding_status: { Args: never; Returns: Json }
       open_cash_shift: {
         Args: { p_opening_amount: number; p_register_id: string }
         Returns: string
       }
       public_catalog: { Args: { p_slug: string }; Returns: Json }
+      public_plans: { Args: never; Returns: Json }
       purge_system_emails: { Args: never; Returns: undefined }
       redeem_invite_code: {
         Args: { p_code: string; p_tenant_id: string }
         Returns: Json
       }
+      request_plan_change: { Args: { p_plan_key: string }; Returns: undefined }
       return_sale: {
         Args: {
           p_items: Json
@@ -3542,6 +3566,10 @@ export type Database = {
       }
       run_saas_dunning: { Args: never; Returns: Json }
       sales_report: { Args: { p_from: string; p_to: string }; Returns: Json }
+      set_cancel_at_period_end: {
+        Args: { p_cancel: boolean }
+        Returns: undefined
+      }
       set_my_tenant_industry: {
         Args: { p_industry: string }
         Returns: undefined

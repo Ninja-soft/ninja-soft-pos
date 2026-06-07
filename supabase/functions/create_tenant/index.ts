@@ -35,7 +35,28 @@ function slugify(name: string): string {
   );
 }
 
-const INDUSTRIES = ["kiosco", "textil", "retail", "restaurante", "pyme", "otro"];
+// Rubros soportados (deben coincidir con lib/verticals/config.ts en el front).
+const INDUSTRIES = [
+  "kiosco",
+  "textil",
+  "retail",
+  "restaurante",
+  "heladeria",
+  "cafeteria",
+  "panaderia",
+  "peluqueria",
+  "estetica",
+  "servicios",
+  "pyme",
+  "otro",
+];
+
+const IVA_CONDITIONS = [
+  "monotributo",
+  "responsable_inscripto",
+  "exento",
+  "consumidor_final",
+];
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -57,7 +78,13 @@ Deno.serve(async (req: Request) => {
   } = await userClient.auth.getUser();
   if (userErr || !user) return json({ error: "unauthorized" }, 401);
 
-  let body: { name?: string; industry?: string };
+  let body: {
+    name?: string;
+    industry?: string;
+    cuit?: string;
+    legal_name?: string;
+    iva_condition?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -71,6 +98,19 @@ Deno.serve(async (req: Request) => {
   if (name.length < 2 || name.length > 120) {
     return json({ error: "invalid_name" }, 400);
   }
+
+  // Datos fiscales (opcionales). Se persisten en tenant_branding tras crear el
+  // tenant. Validamos acá para no escribir basura con service_role.
+  const cuitRaw = (body.cuit ?? "").replace(/\D/g, "");
+  const cuit = cuitRaw.length === 11 ? cuitRaw : null;
+  if (cuitRaw.length > 0 && cuit === null) {
+    return json({ error: "invalid_cuit" }, 400);
+  }
+  const legalName = (body.legal_name ?? "").trim().slice(0, 200) || null;
+  const ivaCondition = IVA_CONDITIONS.includes(body.iva_condition ?? "")
+    ? body.iva_condition!
+    : null;
+  const hasFiscal = cuit !== null || legalName !== null || ivaCondition !== null;
 
   const admin = createClient(url, serviceKey, {
     auth: { persistSession: false },
@@ -140,6 +180,20 @@ Deno.serve(async (req: Request) => {
       store_id: store.id,
       name: "Caja 1",
     });
+  }
+
+  // 3c. Datos fiscales opcionales → tenant_branding (con service_role, así no
+  // dependemos de que el JWT ya tenga current_tenant_id para pasar la RLS).
+  if (hasFiscal) {
+    await admin.from("tenant_branding").upsert(
+      {
+        tenant_id: tenant.id,
+        cuit,
+        legal_name: legalName,
+        iva_condition: ivaCondition,
+      },
+      { onConflict: "tenant_id" },
+    );
   }
 
   // 4. JWT: tenant activo.

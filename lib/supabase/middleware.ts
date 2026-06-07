@@ -64,10 +64,22 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Con sesión en páginas de auth regulares → dashboard.
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Excepción: un usuario autenticado SIN tenant (típico del alta vía Google SSO)
+  // se queda en /signup para completar el paso "Tu negocio". Detectamos "sin
+  // tenant" por ausencia de current_tenant_id en app_metadata (lo setea
+  // create_tenant). Así el wizard puede continuar el flujo de SSO.
+  if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+  if (user && pathname === "/signup") {
+    const meta = user.app_metadata as { current_tenant_id?: string } | null;
+    if (meta?.current_tenant_id) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

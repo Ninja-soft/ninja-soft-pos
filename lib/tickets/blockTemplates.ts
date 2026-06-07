@@ -11,6 +11,7 @@ import {
   type BlockType,
   type TicketBlock,
 } from "@/lib/tickets/blocks";
+import { FISCAL_TRANSPARENCY_TEXT } from "@/lib/tickets/legal";
 
 export interface BlockStarterTemplate {
   key: string;
@@ -31,6 +32,9 @@ const NINJA = {
   midViolet: "#2B1A67",
   softWhite: "#F7F7FF",
   lavender: "#B8AEDC",
+  // Gris para texto secundario sobre papel blanco (= tailwind neutral-500).
+  neutral: "#737373",
+  ink: "#1A1A1A",
 } as const;
 
 // newBlock(type) + overrides, preservando el tipo de cada variante del bloque.
@@ -39,6 +43,17 @@ function mk<T extends BlockType>(
   overrides: Partial<Extract<TicketBlock, { type: T }>> = {},
 ): TicketBlock {
   return { ...(newBlock(type) as Extract<TicketBlock, { type: T }>), ...overrides };
+}
+
+// Bloque de leyenda fiscal estándar (Ley 27.743), gris chico, para ventas.
+function fiscalBlock(font: "mono" | "sans" | "serif" = "sans"): TicketBlock {
+  return mk("text", {
+    text: FISCAL_TRANSPARENCY_TEXT,
+    size: "sm",
+    align: "center",
+    font,
+    color: NINJA.neutral,
+  });
 }
 
 export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
@@ -63,6 +78,7 @@ export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
       mk("payments"),
       mk("separator", { style: "dashed", color: NINJA.flame }),
       mk("qr"),
+      fiscalBlock("mono"),
       mk("footer", { text: "¡Gracias por tu compra!", font: "mono", color: NINJA.flame }),
     ],
   },
@@ -94,6 +110,7 @@ export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
       mk("payments"),
       mk("separator", { style: "solid", color: NINJA.gold }),
       mk("qr"),
+      fiscalBlock("sans"),
       mk("footer", {
         text: "¡Gracias por tu compra!",
         font: "sans",
@@ -131,6 +148,7 @@ export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
       mk("payments"),
       mk("qr"),
       mk("separator", { style: "double", color: NINJA.gold }),
+      fiscalBlock("serif"),
       mk("footer", { text: "Gracias por su preferencia", font: "serif", color: NINJA.midViolet }),
     ],
   },
@@ -191,6 +209,101 @@ export const BLOCK_STARTER_TEMPLATES: BlockStarterTemplate[] = [
       mk("separator", { style: "double", color: NINJA.gold }),
       mk("business", { showLegalName: true, showCuit: false, showAddress: false, showPhone: false }),
       mk("footer", { text: "Válido presentando este vale", font: "serif", color: NINJA.gold }),
+    ],
+  },
+  {
+    // A4 ejecutivo: serif elegante, encabezado dos columnas (negocio a la izq /
+    // título a la der), ítems con precio unitario, total destacado, leyenda
+    // fiscal y pie sobrio. Venta → logo + QR.
+    key: "a4-ejecutivo",
+    name: "A4 Ejecutivo",
+    description: "Factura A4 serif elegante, encabezado a dos columnas y total destacado.",
+    paper: "a4",
+    kind: "sale",
+    blocks: [
+      mk("logo"),
+      mk("business", {
+        showLegalName: true,
+        showCuit: true,
+        showAddress: true,
+        showPhone: true,
+      }),
+      mk("title", {
+        text: "COMPROBANTE NO FISCAL",
+        size: "lg",
+        bold: true,
+        align: "right",
+        font: "serif",
+        color: NINJA.deepViolet,
+      }),
+      mk("separator", { style: "solid", color: NINJA.deepViolet }),
+      mk("saleInfo"),
+      mk("customer"),
+      mk("separator", { style: "solid", color: NINJA.deepViolet }),
+      mk("items", { showUnitPrice: true }),
+      mk("separator", { style: "double", color: NINJA.deepViolet }),
+      mk("totals"),
+      mk("payments"),
+      mk("qr"),
+      fiscalBlock("serif"),
+      mk("footer", { text: "Gracias por su compra", font: "serif", color: NINJA.neutral }),
+    ],
+  },
+  {
+    // A4 minimal: sans, mucho aire, hairlines, tipografía grande en el total.
+    // Venta → logo + QR + leyenda fiscal.
+    key: "a4-minimal",
+    name: "A4 Minimal",
+    description: "A4 sans minimalista: mucho blanco, hairlines y total en grande.",
+    paper: "a4",
+    kind: "sale",
+    blocks: [
+      mk("logo"),
+      mk("title", {
+        text: "Comprobante",
+        size: "lg",
+        bold: false,
+        align: "left",
+        font: "sans",
+        color: NINJA.ink,
+      }),
+      mk("business", { showLegalName: true, showCuit: true, showAddress: false, showPhone: false }),
+      mk("separator", { style: "solid", color: NINJA.neutral }),
+      mk("saleInfo"),
+      mk("items", { showUnitPrice: true }),
+      mk("separator", { style: "solid", color: NINJA.neutral }),
+      mk("totals"),
+      mk("payments"),
+      mk("qr"),
+      fiscalBlock("sans"),
+      mk("footer", { text: "¡Gracias!", font: "sans", color: NINJA.neutral }),
+    ],
+  },
+  {
+    // Térmico denso: mono compacto, info maximizada con QR + código de barras.
+    // Venta → logo + QR + leyenda fiscal.
+    key: "termico-denso",
+    name: "Térmico denso",
+    description: "Térmico 80 mono compacto: info maximizada con QR y código de barras.",
+    paper: "80",
+    kind: "sale",
+    blocks: [
+      mk("logo"),
+      mk("business", { showLegalName: true, showCuit: true, showAddress: true, showPhone: true }),
+      mk("title", { text: "", size: "sm", bold: true, font: "mono", color: NINJA.ink }),
+      mk("separator", { style: "dashed", color: NINJA.ink }),
+      mk("saleInfo"),
+      mk("customer"),
+      mk("separator", { style: "dashed", color: NINJA.ink }),
+      mk("items", { showUnitPrice: true }),
+      mk("separator", { style: "dashed", color: NINJA.ink }),
+      mk("totals"),
+      mk("payments"),
+      mk("separator", { style: "dashed", color: NINJA.ink }),
+      mk("qr"),
+      mk("barcode"),
+      fiscalBlock("mono"),
+      mk("footer", { text: "¡Gracias por su compra!", font: "mono", color: NINJA.ink }),
     ],
   },
 ];

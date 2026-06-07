@@ -7,6 +7,7 @@ import { Plus } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { useToast } from "@/components/ui/Toast";
 import {
   ProductSchema,
@@ -300,11 +301,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
         {/* Datos adicionales plegables (H10b): todo opcional, colapsado por
             defecto para que el alta rápida sea una sola pantalla corta. */}
-        <details className="rounded-lg border border-border bg-muted/20 [&[open]>summary]:border-b [&[open]>summary]:border-border">
-          <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:text-foreground">
-            Datos adicionales (descripción, tags, temporada, garantía)
-          </summary>
-          <div className="space-y-3 p-3">
+        <Disclosure title="Datos adicionales (descripción, tags, temporada, garantía)">
+          <div className="space-y-3">
             <Input label="Descripción" {...register("description")} />
             <div className="grid grid-cols-2 gap-3">
               <Input label="Temporada" placeholder="Verano 2026" {...register("season")} />
@@ -325,7 +323,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               />
             )}
           </div>
-        </details>
+        </Disclosure>
 
         {active && (
           <ProductImages productId={active.id} tenantId={active.tenant_id} />

@@ -1,48 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
   Code2,
-  Crop,
   Eye,
   EyeOff,
   LayoutGrid,
-  Move,
   Plus,
   Printer,
   SlidersHorizontal,
-  Upload,
   X,
 } from "lucide-react";
-import { Rnd } from "react-rnd";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
 import { TicketRenderer } from "@/components/tickets/TicketRenderer";
-import {
-  CanvasElementView,
-  CanvasItemsTable,
-  CanvasTicketRenderer,
-} from "@/components/tickets/CanvasTicketRenderer";
+import { CanvasTicketRenderer } from "@/components/tickets/CanvasTicketRenderer";
 import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
-import { ImageCropModal } from "@/components/tickets/ImageCropModal";
-import { uploadTicketImage } from "@/lib/tickets/uploadTicketImage";
 import {
   BLOCK_LABELS,
-  CANVAS_WIDTH,
   defaultSaleBlocks,
   newBlock,
-  newCanvasElement,
   type Align,
   type BlocksContent,
   type BlockType,
   type CanvasContent,
   type CanvasElement,
-  type CanvasElementType,
   type HtmlContent,
   type TemplateContent,
   type TextSize,
@@ -51,8 +39,8 @@ import {
 import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import { HTML_STARTER_TEMPLATES } from "@/lib/tickets/htmlTemplates";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
-import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
-import { buildMyBrandBlocks, buildMyBrandCanvas } from "@/lib/tickets/myBrand";
+import { buildMyBrandBlocks } from "@/lib/tickets/myBrand";
+import { FISCAL_TRANSPARENCY_TEXT } from "@/lib/tickets/legal";
 import { HTML_TEMPLATE_VARS } from "@/lib/tickets/htmlVars";
 import { sampleTicketData, type SampleBrand } from "@/lib/tickets/sample";
 import {
@@ -91,16 +79,9 @@ const SIZE_OPTIONS: { value: TextSize; label: string }[] = [
   { value: "lg", label: "L" },
 ];
 
-const CANVAS_ELEMENT_LABELS: Record<CanvasElementType, string> = {
-  text: "Texto",
-  image: "Imagen",
-  logo: "Logo",
-  qr: "QR",
-  barcode: "Código de barras",
-  separator: "Separador",
-  items: "Ítems",
-};
-
+// Modos creables: solo Bloques y HTML (canvas quedó como legado, no se crea ni
+// edita más — feedback PR7). Las plantillas canvas existentes siguen
+// renderizándose/imprimiéndose vía CanvasTicketRenderer.
 const MODE_CHOICES: {
   mode: TemplateMode;
   label: string;
@@ -112,12 +93,6 @@ const MODE_CHOICES: {
     label: "Bloques (simple)",
     desc: "Apilá secciones predefinidas. Lo más rápido y prolijo.",
     icon: <LayoutGrid size={22} />,
-  },
-  {
-    mode: "canvas",
-    label: "Canvas (libre)",
-    desc: "Posicioná elementos a mano arrastrándolos sobre el ticket.",
-    icon: <Move size={22} />,
   },
   {
     mode: "html",
@@ -338,45 +313,51 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
             setKind(s.kind);
             setPaper(s.paper);
             if (s.mode === "html") setHtml(s.html);
-            else if (s.mode === "blocks") setBlocks(s.blocks);
-            else {
-              setElements(s.canvas.elements);
-              setCanvasHeight(s.canvas.height);
-            }
+            else setBlocks(s.blocks);
             // Toda elección enciende el footer NinjaSoft por defecto (PR6).
             setShowNinja(true);
             setStep("editor");
           }}
           onScratch={() => {
             if (mode === "html") setHtml(MINIMAL_HTML);
-            else if (mode === "blocks") setBlocks(defaultSaleBlocks());
-            else {
-              setElements([]);
-              setCanvasHeight(300);
-            }
+            else setBlocks(defaultSaleBlocks());
             setShowNinja(true);
             setStep("editor");
           }}
         />
+      ) : mode === "canvas" ? (
+        // Canvas legado: solo lectura. Ya no se crea ni edita el canvas (PR7);
+        // las plantillas existentes se ven/imprimen, pero no se modifican.
+        <>
+          <p className="no-print mb-4 rounded-lg border border-ninja-flameSoft/40 bg-ninja-flame/10 px-3 py-2.5 text-sm text-muted-foreground">
+            Esta es una plantilla <strong className="text-foreground">Canvas (legado)</strong>. El
+            editor de canvas ya no está disponible: podés verla, imprimirla, activarla o duplicarla,
+            pero para cambiar el diseño creá un modelo nuevo en Bloques o HTML.
+          </p>
+          <div className="mx-auto max-w-md">
+            <CanvasTicketRenderer
+              content={{ elements, height: canvasHeight }}
+              data={data}
+              paper={paper}
+              showNinjaLogo={showNinja}
+              className="ticket-print"
+            />
+          </div>
+          <div className="no-print mt-6 flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+            <Button variant="secondary" onClick={() => window.print()}>
+              <Printer size={16} /> Imprimir
+            </Button>
+          </div>
+        </>
       ) : (
         <>
           <div className="grid gap-6 md:grid-cols-2">
             {/* Controles */}
             <div className="no-print space-y-5">
               {metaControls}
-
-              {mode === "canvas" && (
-                <label className="block text-sm text-muted-foreground">
-                  Alto del lienzo (px)
-                  <input
-                    type="number"
-                    min={120}
-                    className={`${inputCls} mt-1`}
-                    value={canvasHeight}
-                    onChange={(e) => setCanvasHeight(Math.max(120, Number(e.target.value) || 0))}
-                  />
-                </label>
-              )}
 
               {mode === "blocks" && (
                 <BlocksControls
@@ -394,16 +375,6 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
                   void navigator.clipboard?.writeText(v);
                   toast({ title: `Copiado ${v}`, variant: "success" });
                 }} />
-              )}
-
-              {mode === "canvas" && (
-                <CanvasControls
-                  elements={elements}
-                  setElements={setElements}
-                  expanded={expanded}
-                  setExpanded={setExpanded}
-                  tenantId={tenantId}
-                />
               )}
             </div>
 
@@ -428,18 +399,6 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
                   paper={paper}
                   showNinjaLogo={showNinja}
                   className="ticket-print"
-                />
-              )}
-              {mode === "canvas" && (
-                <CanvasPreview
-                  elements={elements}
-                  height={canvasHeight}
-                  setElements={setElements}
-                  selected={expanded}
-                  setSelected={setExpanded}
-                  data={data}
-                  paper={paper}
-                  showNinja={showNinja}
                 />
               )}
             </div>
@@ -491,9 +450,9 @@ function ModeChooser({ onChoose }: { onChoose: (m: TemplateMode) => void }) {
 /* ---------------------------- Starter chooser --------------------------- */
 
 // Plantilla de inicio normalizada para la grilla, con el contenido por modo.
+// Canvas quedó como legado (no se crea más) → solo blocks/html.
 type StarterPick =
   | ({ mode: "blocks" } & (typeof BLOCK_STARTER_TEMPLATES)[number])
-  | ({ mode: "canvas" } & (typeof CANVAS_STARTER_TEMPLATES)[number])
   | ({ mode: "html"; description: string } & (typeof HTML_STARTER_TEMPLATES)[number]);
 
 const KIND_LABEL: Record<TemplateKind, string> = {
@@ -524,18 +483,6 @@ function starterPicks(mode: TemplateMode, brand: SampleBrand | null): StarterPic
       description: i === 0 ? MY_BRAND_DESC : `Plantilla HTML ${paperLabel(t.paper)}.`,
     }));
   }
-  if (mode === "canvas") {
-    const myBrand: StarterPick = {
-      mode: "canvas",
-      key: "mi-marca",
-      name: "Mi marca",
-      description: MY_BRAND_DESC,
-      paper: "80",
-      kind: "sale",
-      canvas: buildMyBrandCanvas(brand),
-    };
-    return [myBrand, ...CANVAS_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "canvas" as const }))];
-  }
   const myBrand: StarterPick = {
     mode: "blocks",
     key: "mi-marca",
@@ -565,9 +512,6 @@ function StarterThumb({ pick, brand }: { pick: StarterPick; brand: SampleBrand |
       >
         {pick.mode === "blocks" && (
           <TicketRenderer blocks={pick.blocks} data={data} paper={pick.paper} showNinjaLogo={false} />
-        )}
-        {pick.mode === "canvas" && (
-          <CanvasTicketRenderer content={pick.canvas} data={data} paper={pick.paper} showNinjaLogo={false} />
         )}
         {pick.mode === "html" && (
           <HtmlTicketRenderer html={pick.html} data={data} paper={pick.paper} showNinjaLogo={false} />
@@ -676,6 +620,19 @@ function BlocksControls({
   function add() {
     setBlocks((prev) => [...prev, newBlock(addType)]);
   }
+  // Preset: inserta un bloque de texto con la leyenda fiscal (Ley 27.743).
+  function addFiscalLegend() {
+    setBlocks((prev) => [
+      ...prev,
+      {
+        ...(newBlock("text") as Extract<TicketBlock, { type: "text" }>),
+        text: FISCAL_TRANSPARENCY_TEXT,
+        size: "sm",
+        align: "center",
+        color: "#737373",
+      },
+    ]);
+  }
 
   return (
     <>
@@ -717,6 +674,17 @@ function BlocksControls({
           <Plus size={16} /> Agregar
         </Button>
       </div>
+
+      {/* Preset rápido: leyenda fiscal estándar (Ley 27.743). */}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="w-full justify-center"
+        onClick={addFiscalLegend}
+      >
+        <Plus size={15} /> Leyenda fiscal (Ley 27.743)
+      </Button>
     </>
   );
 }
@@ -743,11 +711,8 @@ function HtmlControls({
           onChange={(e) => setHtml(e.target.value)}
         />
       </label>
-      <details className="rounded-lg border border-border">
-        <summary className="cursor-pointer px-3 py-2 text-sm text-muted-foreground">
-          Variables disponibles
-        </summary>
-        <div className="grid gap-1 border-t border-border px-3 py-2 sm:grid-cols-2">
+      <Disclosure title="Variables disponibles">
+        <div className="grid gap-1 sm:grid-cols-2">
           {HTML_TEMPLATE_VARS.map((v) => {
             const placeholder = `{{${v.key}}}`;
             return (
@@ -764,508 +729,7 @@ function HtmlControls({
             );
           })}
         </div>
-      </details>
-    </div>
-  );
-}
-
-/* ----------------------------- Canvas pane ------------------------------ */
-
-const CANVAS_ADD_OPTIONS: CanvasElementType[] = [
-  "text",
-  "image",
-  "logo",
-  "qr",
-  "barcode",
-  "separator",
-  "items",
-];
-
-function CanvasControls({
-  elements,
-  setElements,
-  expanded,
-  setExpanded,
-  tenantId,
-}: {
-  elements: CanvasElement[];
-  setElements: React.Dispatch<React.SetStateAction<CanvasElement[]>>;
-  expanded: string | null;
-  setExpanded: React.Dispatch<React.SetStateAction<string | null>>;
-  tenantId: string;
-}) {
-  const [addType, setAddType] = useState<CanvasElementType>("text");
-  const hasItems = elements.some((e) => e.type === "items");
-  const options = CANVAS_ADD_OPTIONS.filter((t) => t !== "items" || !hasItems);
-
-  function patch(id: string, changes: Partial<CanvasElement>) {
-    setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...changes } : e)));
-  }
-  function remove(id: string) {
-    setElements((prev) => prev.filter((e) => e.id !== id));
-  }
-  function add() {
-    setElements((prev) => {
-      const el = newCanvasElement(addType);
-      setExpanded(el.id);
-      return [...prev, el];
-    });
-  }
-
-  // Si el tipo seleccionado deja de estar disponible (items ya agregado), reseteá.
-  useEffect(() => {
-    if (!options.includes(addType)) setAddType(options[0] ?? "text");
-  }, [options, addType]);
-
-  return (
-    <>
-      <div className="space-y-2">
-        <span className="block text-sm font-medium text-muted-foreground">Elementos</span>
-        {elements.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Agregá elementos y arrastralos sobre la vista previa.
-          </p>
-        )}
-        {elements.map((el) => (
-          <CanvasRow
-            key={el.id}
-            el={el}
-            tenantId={tenantId}
-            expanded={expanded === el.id}
-            onToggleExpand={() => setExpanded((e) => (e === el.id ? null : el.id))}
-            onRemove={() => remove(el.id)}
-            onPatch={(c) => patch(el.id, c)}
-          />
-        ))}
-      </div>
-
-      <div className="flex items-end gap-2">
-        <label className="flex-1 text-sm text-muted-foreground">
-          Agregar elemento
-          <select
-            className={`${inputCls} mt-1`}
-            value={addType}
-            onChange={(e) => setAddType(e.target.value as CanvasElementType)}
-          >
-            {options.map((t) => (
-              <option key={t} value={t}>
-                {CANVAS_ELEMENT_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button type="button" variant="secondary" onClick={add}>
-          <Plus size={16} /> Agregar
-        </Button>
-      </div>
-    </>
-  );
-}
-
-function CanvasRow({
-  el,
-  tenantId,
-  expanded,
-  onToggleExpand,
-  onRemove,
-  onPatch,
-}: {
-  el: CanvasElement;
-  tenantId: string;
-  expanded: boolean;
-  onToggleExpand: () => void;
-  onRemove: () => void;
-  onPatch: (c: Partial<CanvasElement>) => void;
-}) {
-  const isItems = el.type === "items";
-  return (
-    <div className={cn("rounded-lg border border-border", expanded && "ring-1 ring-ninja-flameSoft")}>
-      <div className="flex items-center gap-1 px-2 py-1.5">
-        {/* Punto de color: flame cuando el elemento está seleccionado (PR6). */}
-        <span
-          aria-hidden
-          className={cn(
-            "h-2 w-2 shrink-0 rounded-full transition",
-            expanded ? "bg-ninja-flame" : "bg-muted-foreground/40",
-          )}
-        />
-        <span className="min-w-0 flex-1 truncate text-sm">{CANVAS_ELEMENT_LABELS[el.type]}</span>
-        <IconBtn title="Ajustes" onClick={onToggleExpand} active={expanded}>
-          <SlidersHorizontal size={15} />
-        </IconBtn>
-        <IconBtn title="Quitar" onClick={onRemove} danger>
-          <X size={15} />
-        </IconBtn>
-      </div>
-      {expanded && (
-        <div className="space-y-2 border-t border-border px-3 py-2.5">
-          <div className="grid grid-cols-3 gap-2">
-            {!isItems && (
-              <NumField
-                label="X px"
-                value={el.x}
-                min={0}
-                onChange={(v) => onPatch({ x: Math.max(0, v) })}
-              />
-            )}
-            <NumField label="Y px" value={el.y} min={0} onChange={(v) => onPatch({ y: Math.max(0, v) })} />
-            {!isItems && (
-              <NumField
-                label="Ancho px"
-                value={el.w}
-                min={24}
-                onChange={(v) => onPatch({ w: Math.max(24, v) })}
-              />
-            )}
-          </div>
-
-          {!isItems && (
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <NumField
-                  label="Alto px"
-                  value={el.h ?? 0}
-                  min={0}
-                  onChange={(v) => onPatch({ h: v > 0 ? Math.max(16, v) : undefined })}
-                />
-              </div>
-              {el.h !== undefined && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onPatch({ h: undefined })}
-                  title="Alto automático"
-                >
-                  Auto
-                </Button>
-              )}
-            </div>
-          )}
-
-          {el.type === "text" && (
-            <>
-              <textarea
-                className={`${inputCls} h-20 py-2`}
-                value={el.text ?? ""}
-                onChange={(e) => onPatch({ text: e.target.value })}
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Segmented
-                  value={el.size ?? "md"}
-                  onChange={(v) => onPatch({ size: v })}
-                  options={SIZE_OPTIONS}
-                />
-                <Segmented
-                  value={el.align ?? "center"}
-                  onChange={(v) => onPatch({ align: v })}
-                  options={ALIGN_OPTIONS}
-                />
-                <Check checked={Boolean(el.bold)} onChange={(v) => onPatch({ bold: v })}>
-                  Negrita
-                </Check>
-              </div>
-            </>
-          )}
-
-          {el.type === "image" && (
-            <ImageElementSettings el={el} tenantId={tenantId} onPatch={onPatch} />
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ImageElementSettings({
-  el,
-  tenantId,
-  onPatch,
-}: {
-  el: CanvasElement;
-  tenantId: string;
-  onPatch: (c: Partial<CanvasElement>) => void;
-}) {
-  const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [cropOpen, setCropOpen] = useState(false);
-
-  async function onFile(file: File | null) {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const url = await uploadTicketImage(file, tenantId);
-      onPatch({ url });
-      toast({ title: "Imagen subida", variant: "success" });
-    } catch (e) {
-      toast({
-        title: "No se pudo subir la imagen",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
-    } finally {
-      setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <input
-        className={inputCls}
-        placeholder="URL de la imagen"
-        value={el.url ?? ""}
-        onChange={(e) => onPatch({ url: e.target.value })}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          loading={busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload size={15} /> Subir imagen
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={!el.url}
-          onClick={() => setCropOpen(true)}
-        >
-          <Crop size={15} /> Recortar
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-        />
-      </div>
-      {el.url && (
-        <ImageCropModal
-          open={cropOpen}
-          onOpenChange={setCropOpen}
-          url={el.url}
-          tenantId={tenantId}
-          onCropped={(url) => onPatch({ url })}
-        />
-      )}
-    </div>
-  );
-}
-
-function NumField({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min?: number;
-  max?: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block text-xs text-muted-foreground">
-      {label}
-      <input
-        type="number"
-        min={min}
-        max={max}
-        className={`${inputCls} mt-1`}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
-  );
-}
-
-/* --------------------------- Canvas preview ----------------------------- */
-
-// Tamaños mínimos de la caja react-rnd.
-const RND_MIN_W = 24;
-const RND_MIN_H = 16;
-// Snap-to-grid de 4px al arrastrar/redimensionar (PR6 usabilidad).
-const GRID = 4;
-// Manija de tamaño grande y visible (cuadrado flame de 12px).
-const RESIZE_HANDLE_STYLE: React.CSSProperties = {
-  width: 12,
-  height: 12,
-  right: -6,
-  bottom: -6,
-  borderRadius: 3,
-  background: "#FF4B22",
-  border: "2px solid #fff",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-};
-
-// Tipos cuyo alto es intrínseco a su contenido (resize vertical genera h).
-function elementSupportsHeight(type: CanvasElementType) {
-  return type === "image" || type === "qr" || type === "logo" || type === "barcode";
-}
-
-/**
- * Editor del modo canvas con react-rnd. En vez de superponer overlays sobre el
- * renderer, dibuja los elementos directamente como hijos `<Rnd>` dentro de una
- * tarjeta blanca del ancho del papel, reutilizando el mismo visual del renderer
- * (`CanvasElementView`). El elemento "items" parte el lienzo en dos zonas; su
- * caja Rnd se arrastra solo en vertical y define el punto de corte (y).
- */
-function CanvasPreview({
-  elements,
-  height,
-  setElements,
-  selected,
-  setSelected,
-  data,
-  paper,
-  showNinja,
-}: {
-  elements: CanvasElement[];
-  height: number;
-  setElements: React.Dispatch<React.SetStateAction<CanvasElement[]>>;
-  selected: string | null;
-  setSelected: React.Dispatch<React.SetStateAction<string | null>>;
-  data: ReturnType<typeof sampleTicketData>;
-  paper: Paper;
-  showNinja: boolean;
-}) {
-  const width = CANVAS_WIDTH[paper];
-  const itemsEl = elements.find((e) => e.type === "items");
-  const splitY = itemsEl?.y ?? null;
-  const hasItems = splitY !== null;
-  const topZoneH = hasItems ? splitY : height;
-  const bottomZoneH = hasItems ? Math.max(0, height - splitY) : 0;
-
-  const topEls = elements.filter((e) => e.type !== "items" && (!hasItems || e.y < splitY));
-  const bottomEls = hasItems ? elements.filter((e) => e.type !== "items" && e.y >= splitY) : [];
-
-  function patch(id: string, changes: Partial<CanvasElement>) {
-    setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...changes } : e)));
-  }
-
-  // Caja Rnd de un elemento posicionado. `zoneY` = la Y relativa a la zona en
-  // la que vive (igual al renderer). `yBase` se suma al escribir de vuelta.
-  function ElementBox({ el, zoneY, yBase }: { el: CanvasElement; zoneY: number; yBase: number }) {
-    const isSel = selected === el.id;
-    const supportsH = elementSupportsHeight(el.type);
-    return (
-      <Rnd
-        bounds="parent"
-        size={{ width: el.w, height: el.h ?? "auto" }}
-        position={{ x: el.x, y: zoneY }}
-        minWidth={RND_MIN_W}
-        minHeight={RND_MIN_H}
-        // Snap a la grilla de 4px al arrastrar/redimensionar (PR6 usabilidad).
-        dragGrid={[GRID, GRID]}
-        resizeGrid={[GRID, GRID]}
-        enableResizing={{ right: true, bottom: true, bottomRight: true }}
-        // Manija de tamaño grande y visible (cuadrado flame de 12px).
-        resizeHandleStyles={{ bottomRight: RESIZE_HANDLE_STYLE }}
-        onDragStart={() => setSelected(el.id)}
-        onDragStop={(_e, d) => {
-          patch(el.id, { x: Math.round(d.x), y: Math.round(d.y) + yBase });
-        }}
-        onResizeStart={() => setSelected(el.id)}
-        onResizeStop={(_e, _dir, ref, _delta, pos) => {
-          const nextW = Math.round(ref.offsetWidth);
-          const heightChanged = el.h !== undefined || ref.style.height.includes("px");
-          const changes: Partial<CanvasElement> = {
-            w: nextW,
-            x: Math.round(pos.x),
-            y: Math.round(pos.y) + yBase,
-          };
-          // Para tipos con alto intrínseco siempre persistimos h. Para texto y
-          // separador solo si el usuario realmente arrastró el alto.
-          if (supportsH || heightChanged) changes.h = Math.round(ref.offsetHeight);
-          patch(el.id, changes);
-        }}
-        className={cn(
-          "rounded outline-dashed outline-1 outline-offset-1 outline-neutral-300 transition hover:outline-ninja-flameSoft/60",
-          isSel && "outline-ninja-flameSoft outline-2",
-        )}
-        style={{ cursor: "move" }}
-      >
-        <div
-          className="h-full w-full overflow-hidden"
-          onMouseDownCapture={() => setSelected(el.id)}
-        >
-          <CanvasElementView el={el} data={data} />
-        </div>
-      </Rnd>
-    );
-  }
-
-  // Caja Rnd del separador del flujo de ítems: solo se mueve en vertical y
-  // define el punto de corte (y). No redimensiona.
-  function ItemsBox() {
-    if (!itemsEl || splitY === null) return null;
-    return (
-      <Rnd
-        bounds="parent"
-        dragAxis="y"
-        enableResizing={false}
-        size={{ width, height: 4 }}
-        position={{ x: 0, y: 0 }}
-        onDragStart={() => setSelected(itemsEl.id)}
-        onDragStop={(_e, d) => patch(itemsEl.id, { y: Math.max(0, Math.round(d.y) + splitY) })}
-        className={cn(
-          "z-10 border-t-2 border-dashed border-ninja-flame/70",
-          selected === itemsEl.id && "border-ninja-flame",
-        )}
-        style={{ cursor: "ns-resize" }}
-        title="Ítems — arrastrá para mover el punto de corte"
-      />
-    );
-  }
-
-  return (
-    <div className="rounded-xl bg-muted/30 p-4">
-      {/* Barra de ayuda del canvas (PR6 usabilidad). */}
-      <p className="no-print mb-3 rounded-lg border border-border bg-card px-3 py-1.5 text-center text-xs text-muted-foreground">
-        Arrastrá para mover · esquina para tamaño · clic para editar
-      </p>
-      <div
-        className="mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ticket-print"
-        style={{ width: `${width}px`, maxWidth: "100%" }}
-      >
-        {/* Zona superior: alto fijo (= items.y, o todo el lienzo si no hay items). */}
-        <div style={{ position: "relative", height: `${topZoneH}px`, overflow: "hidden" }}>
-          {topEls.map((el) => (
-            <ElementBox key={el.id} el={el} zoneY={el.y} yBase={0} />
-          ))}
-          {hasItems && <ItemsBox />}
-        </div>
-
-        {hasItems && (
-          <>
-            {/* Tabla de ítems de muestra (no interactiva). */}
-            <CanvasItemsTable data={data} />
-            {/* Zona inferior: Y relativa a items.y. */}
-            <div style={{ position: "relative", height: `${bottomZoneH}px`, overflow: "hidden" }}>
-              {bottomEls.map((el) => (
-                <ElementBox key={el.id} el={el} zoneY={el.y - splitY} yBase={splitY} />
-              ))}
-            </div>
-          </>
-        )}
-
-        {data.sale.status === "voided" && (
-          <div className="mt-3 text-center text-xs font-bold text-red-500">** ANULADA **</div>
-        )}
-        {showNinja && (
-          <div className="mt-3 flex justify-center opacity-70">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
-          </div>
-        )}
-      </div>
+      </Disclosure>
     </div>
   );
 }

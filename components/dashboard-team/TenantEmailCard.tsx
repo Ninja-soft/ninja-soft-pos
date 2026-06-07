@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 
@@ -405,15 +406,13 @@ export function TenantEmailCard() {
               </label>
             </div>
           ) : (
-            <details
-              className="mt-3 text-sm"
+            <Disclosure
+              className="mt-3"
+              title="Avanzado (servidor y puerto)"
               open={showAdvanced}
-              onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+              onOpenChange={setShowAdvanced}
             >
-              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                Avanzado (servidor y puerto)
-              </summary>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Input
                   label="Servidor SMTP"
                   value={host}
@@ -435,7 +434,7 @@ export function TenantEmailCard() {
                   Conexión segura (SSL/TLS)
                 </label>
               </div>
-            </details>
+            </Disclosure>
           )}
         </Step>
 
@@ -473,11 +472,8 @@ export function TenantEmailCard() {
           />
 
           {provider === "gmail" && (
-            <details className="text-sm">
-              <summary className="cursor-pointer text-xs font-medium text-ninja-flameSoft hover:underline">
-                ¿Cómo consigo la contraseña de aplicación de Gmail?
-              </summary>
-              <ol className="mt-2 space-y-1.5">
+            <Disclosure variant="help" title="¿Cómo consigo la contraseña de aplicación de Gmail?">
+              <ol className="space-y-1.5">
                 {[
                   "Activá la verificación en 2 pasos en tu cuenta de Google.",
                   "Entrá a Contraseñas de aplicaciones y creá una nueva.",
@@ -499,7 +495,7 @@ export function TenantEmailCard() {
               >
                 Abrir Contraseñas de aplicaciones de Google →
               </a>
-            </details>
+            </Disclosure>
           )}
         </Step>
 

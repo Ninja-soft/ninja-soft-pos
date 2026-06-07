@@ -67,7 +67,7 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
             {b.showLegalName !== false && (
               <div className="font-display text-base font-bold">{brand?.legal_name || "NinjaSoft POS"}</div>
             )}
-            <div className="text-[10px] leading-tight text-muted-foreground">
+            <div className="text-[10px] leading-tight text-neutral-500">
               {b.showCuit !== false && brand?.cuit && <div>CUIT {brand.cuit}</div>}
               {b.showAddress !== false && brand?.address && <div>{brand.address}</div>}
               {b.showPhone !== false && brand?.phone && <div>{brand.phone}</div>}
@@ -78,7 +78,7 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
         return (
           <div
             key={b.id}
-            className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} text-muted-foreground`}
+            className={`${alignCls(b.align)} ${sizeCls(b.size)} ${b.bold ? "font-bold" : ""} text-neutral-500`}
             style={styleProps(b)}
           >
             {b.text || brand?.ticket_title || "Comprobante no fiscal"}
@@ -86,14 +86,14 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
         );
       case "saleInfo":
         return (
-          <div key={b.id} className="flex justify-between text-xs text-muted-foreground">
+          <div key={b.id} className="flex justify-between text-xs text-neutral-500">
             {b.showNumber !== false && <span>Comprobante {sale.numberLabel}</span>}
             {b.showDate !== false && <span>{new Date(sale.created_at).toLocaleString("es-AR")}</span>}
           </div>
         );
       case "customer":
         return customer?.name ? (
-          <div key={b.id} className="text-xs text-muted-foreground">Cliente: {customer.name}</div>
+          <div key={b.id} className="text-xs text-neutral-500">Cliente: {customer.name}</div>
         ) : null;
       case "items":
         return (
@@ -174,16 +174,16 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
           </div>
         ) : null;
       case "separator": {
-        // Default sin props: dashed con color del tema (cero cambio visual).
+        // Default sin props: dashed sobre papel blanco (neutral-300).
         if (!b.style && !b.color) {
-          return <div key={b.id} className="my-3 border-t border-dashed border-border" />;
+          return <div key={b.id} className="my-3 border-t border-dashed border-neutral-300" />;
         }
         const hex = b.color && /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : undefined;
         const st = b.style ?? "dashed";
         return (
           <div
             key={b.id}
-            className={`my-3 ${st === "double" ? "border-t-[3px]" : "border-t"} ${hex ? "" : "border-border"}`}
+            className={`my-3 ${st === "double" ? "border-t-[3px]" : "border-t"} ${hex ? "" : "border-neutral-300"}`}
             style={{ borderTopStyle: st, borderTopColor: hex }}
           />
         );
@@ -191,9 +191,9 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
       case "footer":
         return (
           <div key={b.id} className="text-center" style={styleProps(b)}>
-            <div className="text-xs text-muted-foreground" style={styleProps(b)}>{b.text || brand?.ticket_footer || "¡Gracias por su compra!"}</div>
+            <div className="text-xs text-neutral-500" style={styleProps(b)}>{b.text || brand?.ticket_footer || "¡Gracias por su compra!"}</div>
             {brand?.ticket_legend && (
-              <div className="mt-1 text-[10px] leading-tight text-muted-foreground">{brand.ticket_legend}</div>
+              <div className="mt-1 text-[10px] leading-tight text-neutral-500">{brand.ticket_legend}</div>
             )}
           </div>
         );
@@ -204,7 +204,7 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
 
   return (
     <div
-      className={`mx-auto space-y-2 rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground ${className ?? ""}`}
+      className={`mx-auto space-y-2 rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black ${className ?? ""}`}
       style={{ width, maxWidth: "100%" }}
     >
       {blocks.map(renderBlock)}
@@ -214,7 +214,7 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
       {showNinjaLogo && (
         <div className="mt-3 flex justify-center opacity-70">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
+          <img src="/brand/ninjapos-logo-light-mode.webp" alt="NinjaSoft" className="h-4 w-auto" />
         </div>
       )}
     </div>

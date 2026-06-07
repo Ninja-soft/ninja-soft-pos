@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Mail, Pencil, Plus, Printer, Receipt, Trash2 } from "lucide-react";
+import { Copy, Eye, Mail, Pencil, Plus, Printer, Receipt, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
@@ -35,7 +35,8 @@ const KIND_LABELS: Record<TemplateKind, string> = {
 const PAPER_LABELS: Record<string, string> = { "58": "58 mm", "80": "80 mm", a4: "A4" };
 const MODE_LABELS: Record<TemplateMode, string> = {
   blocks: "Bloques",
-  canvas: "Canvas",
+  // Canvas quedó como legado (PR7): se ve/imprime/duplica pero no se edita.
+  canvas: "Canvas (legado)",
   html: "HTML",
 };
 
@@ -233,8 +234,11 @@ export function TicketTemplatesCard() {
                   }
                   onClick={() => toggleActive(t, "email")}
                 />
-                <RowBtn title="Editar" onClick={() => openEdit(t)}>
-                  <Pencil size={15} />
+                <RowBtn
+                  title={t.mode === "canvas" ? "Ver (Canvas legado, solo lectura)" : "Editar"}
+                  onClick={() => openEdit(t)}
+                >
+                  {t.mode === "canvas" ? <Eye size={15} /> : <Pencil size={15} />}
                 </RowBtn>
                 <RowBtn title="Duplicar" onClick={() => duplicate(t)}>
                   <Copy size={15} />

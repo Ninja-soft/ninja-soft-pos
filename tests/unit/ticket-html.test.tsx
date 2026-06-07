@@ -96,10 +96,10 @@ describe("HtmlTicketRenderer", () => {
 });
 
 describe("HTML_STARTER_TEMPLATES", () => {
-  it("tiene 5 entradas con claves únicas", () => {
-    expect(HTML_STARTER_TEMPLATES).toHaveLength(5);
+  it("tiene 8 entradas con claves únicas", () => {
+    expect(HTML_STARTER_TEMPLATES).toHaveLength(8);
     const keys = HTML_STARTER_TEMPLATES.map((t) => t.key);
-    expect(new Set(keys).size).toBe(5);
+    expect(new Set(keys).size).toBe(8);
   });
 
   it("todas las {{var}} usadas existen en HTML_TEMPLATE_VARS", () => {

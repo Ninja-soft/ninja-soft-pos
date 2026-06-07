@@ -781,6 +781,51 @@ export type Database = {
           },
         ]
       }
+      email_providers: {
+        Row: {
+          api_key: string | null
+          from_email: string | null
+          from_name: string
+          is_active: boolean
+          kind: string
+          slot: number
+          smtp_host: string | null
+          smtp_pass: string | null
+          smtp_port: number | null
+          smtp_secure: boolean | null
+          smtp_user: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string | null
+          from_email?: string | null
+          from_name?: string
+          is_active?: boolean
+          kind?: string
+          slot: number
+          smtp_host?: string | null
+          smtp_pass?: string | null
+          smtp_port?: number | null
+          smtp_secure?: boolean | null
+          smtp_user?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string | null
+          from_email?: string | null
+          from_name?: string
+          is_active?: boolean
+          kind?: string
+          slot?: number
+          smtp_host?: string | null
+          smtp_pass?: string | null
+          smtp_port?: number | null
+          smtp_secure?: boolean | null
+          smtp_user?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           enabled: boolean
@@ -1332,11 +1377,14 @@ export type Database = {
           description: string | null
           icon: string | null
           id: string
+          image_url: string | null
           is_active: boolean
+          is_recommended: boolean
           key: string
           limits: Json
           monthly_price_ars: number
           name: string
+          secondary_name: string | null
           sort: number
           tenant_id: string | null
           trial_days: number
@@ -1348,11 +1396,14 @@ export type Database = {
           description?: string | null
           icon?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          is_recommended?: boolean
           key: string
           limits?: Json
           monthly_price_ars: number
           name: string
+          secondary_name?: string | null
           sort?: number
           tenant_id?: string | null
           trial_days?: number
@@ -1364,11 +1415,14 @@ export type Database = {
           description?: string | null
           icon?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          is_recommended?: boolean
           key?: string
           limits?: Json
           monthly_price_ars?: number
           name?: string
+          secondary_name?: string | null
           sort?: number
           tenant_id?: string | null
           trial_days?: number
@@ -2493,7 +2547,11 @@ export type Database = {
         Row: {
           addon_key: string
           created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
           id: string
+          monthly_price_ars: number | null
+          provider: string | null
           provider_ref: string | null
           source: string
           status: string
@@ -2502,7 +2560,11 @@ export type Database = {
         Insert: {
           addon_key: string
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           id?: string
+          monthly_price_ars?: number | null
+          provider?: string | null
           provider_ref?: string | null
           source?: string
           status?: string
@@ -2511,7 +2573,11 @@ export type Database = {
         Update: {
           addon_key?: string
           created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           id?: string
+          monthly_price_ars?: number | null
+          provider?: string | null
           provider_ref?: string | null
           source?: string
           status?: string
@@ -3311,6 +3377,7 @@ export type Database = {
       }
       ai_available: { Args: never; Returns: boolean }
       ai_monthly_usage: { Args: never; Returns: number }
+      ai_public_config: { Args: never; Returns: Json }
       close_cash_shift: {
         Args: { p_closing_amount: number; p_notes?: string; p_shift_id: string }
         Returns: number
@@ -3327,6 +3394,7 @@ export type Database = {
       }
       current_tenant_id: { Args: never; Returns: string }
       gating_summary: { Args: never; Returns: Json }
+      get_email_providers: { Args: never; Returns: Json }
       get_email_smtp: { Args: never; Returns: Json }
       get_tenant_smtp: { Args: never; Returns: Json }
       internal_clone_plan: {

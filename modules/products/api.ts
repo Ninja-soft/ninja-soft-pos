@@ -312,6 +312,23 @@ export const productsImportApi = {
 
     const { error } = await supabase.from("products").insert(payload);
     if (error) throw error;
+
+    // H34: auditoría del import (cantidad creada/errores) — best effort, no bloquea.
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await supabase.from("audit_logs").insert({
+        actor_user_id: user?.id ?? null,
+        entity_type: "products",
+        entity_id: null,
+        action: "imported",
+        after_data: { total: payload.length, created: payload.length },
+      });
+    } catch (e) {
+      console.warn("H34 audit (products import) falló:", e);
+    }
+
     return payload.length;
   },
 };

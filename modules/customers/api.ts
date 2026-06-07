@@ -310,6 +310,23 @@ export const customersApi = {
       .from("customers")
       .insert(rows.map((r) => ({ ...r, is_active: true })));
     if (error) throw error;
+
+    // H34: auditoría del import (cantidad creada/errores) — best effort, no bloquea.
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      await supabase.from("audit_logs").insert({
+        actor_user_id: user?.id ?? null,
+        entity_type: "customers",
+        entity_id: null,
+        action: "imported",
+        after_data: { total: rows.length, created: rows.length },
+      });
+    } catch (e) {
+      console.warn("H34 audit (customers import) falló:", e);
+    }
+
     return rows.length;
   },
 

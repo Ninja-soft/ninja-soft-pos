@@ -41,7 +41,10 @@ import {
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
-import { productsApi } from "@/modules/products/api";
+import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
+import { productsApi, variantLabel } from "@/modules/products/api";
+import { useMostradorPricing } from "@/modules/prices/hooks";
+import { resolvePrice } from "@/lib/prices/resolve";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -88,6 +91,12 @@ export default function PosPage() {
   } | null>(null);
   const [serialChoice, setSerialChoice] = useState("");
   const [serialOther, setSerialOther] = useState("");
+  const [variantProduct, setVariantProduct] = useState<{
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+  } | null>(null);
   const { data: serialList } = useProductSerials(
     serialProduct?.id ?? null,
     serialProduct !== null,
@@ -123,10 +132,30 @@ export default function PosPage() {
   const addProduct = useCartStore((s) => s.addProduct);
   const addWeighed = useCartStore((s) => s.addWeighed);
   const addSerialized = useCartStore((s) => s.addSerialized);
+  const addVariant = useCartStore((s) => s.addVariant);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
 
+  // Lista de precios 'mostrador' activa (si existe): el precio unitario al
+  // agregar al carrito se resuelve contra esta lista. Sin lista → precio base.
+  const { data: mostrador } = useMostradorPricing();
+  // basePrice = price_override de la variante (si aplica) ya resuelto por el
+  // caller. Devuelve el precio efectivo de mostrador.
+  function priceFor(
+    productId: string,
+    variantId: string | null,
+    basePrice: number,
+  ): number {
+    return resolvePrice(
+      basePrice,
+      productId,
+      variantId,
+      mostrador?.list ?? null,
+      mostrador?.items ?? [],
+    );
+  }
+
   // Click en un producto: serializado abre picker de serial; por peso (kg) abre
-  // modal de peso; si no, lo agrega directo.
+  // modal de peso; si no, lo agrega directo (precio resuelto por la lista mostrador).
   function pickProduct(p: {
     id: string;
     name: string;
@@ -134,16 +163,24 @@ export default function PosPage() {
     price: number;
     unit: string;
     is_serialized?: boolean;
+    has_variants?: boolean;
   }) {
-    if (p.is_serialized) {
+    if (p.has_variants) {
+      setVariantProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+    } else if (p.is_serialized) {
       setSerialProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
       setSerialChoice("");
       setSerialOther("");
     } else if (p.unit === "kg") {
-      setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setWeighProduct({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: priceFor(p.id, null, p.price),
+      });
       setWeighGrams("");
     } else {
-      addProduct(p);
+      addProduct({ ...p, price: priceFor(p.id, null, p.price) });
     }
   }
 
@@ -155,7 +192,10 @@ export default function PosPage() {
       toast({ title: "Elegí o ingresá un N° de serie", variant: "error" });
       return;
     }
-    addSerialized(serialProduct, serial);
+    addSerialized(
+      { ...serialProduct, price: priceFor(serialProduct.id, null, serialProduct.price) },
+      serial,
+    );
     setSerialProduct(null);
     setSerialChoice("");
     setSerialOther("");
@@ -213,16 +253,32 @@ export default function PosPage() {
   // Lector USB/Bluetooth (HID): escanea en cualquier parte del POS y agrega.
   useScanner(async (code) => {
     try {
-      const p = await productsApi.findByCode(code);
-      if (p) {
-        pickProduct({
-          id: p.id,
-          name: p.name,
-          sku: p.sku,
-          price: p.price,
-          unit: p.unit,
-          is_serialized: p.is_serialized,
-        });
+      const res = await productsApi.findByCode(code);
+      if (res) {
+        const { product: p, variant } = res;
+        if (variant) {
+          // Barcode/SKU de variante: agrega directo, sin abrir el picker. El
+          // precio base de la variante (override o padre) se resuelve por la
+          // lista mostrador.
+          addVariant({
+            id: p.id,
+            name: p.name,
+            sku: variant.sku ?? p.sku,
+            price: priceFor(p.id, variant.id, variant.price_override ?? p.price),
+            variantId: variant.id,
+            variantLabel: variantLabel(variant),
+          });
+        } else {
+          pickProduct({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            price: p.price,
+            unit: p.unit,
+            is_serialized: p.is_serialized,
+            has_variants: p.has_variants,
+          });
+        }
       } else {
         setSearch(code);
         toast({ title: `Sin producto para "${code}"`, variant: "info" });
@@ -283,6 +339,7 @@ export default function PosPage() {
         product_id: l.productId,
         ...(l.productId ? {} : { name: l.name }),
         ...(l.serial ? { serial: l.serial } : {}),
+        ...(l.variantId ? { variant_id: l.variantId } : {}),
         quantity: l.quantity,
         unit_price: l.unitPrice,
         discount: l.discount,
@@ -459,11 +516,19 @@ export default function PosPage() {
                         price: p.price,
                         unit: p.unit,
                         is_serialized: p.is_serialized,
+                        has_variants: p.has_variants,
                       })
                     }
                     className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
                   >
-                    <div className="truncate font-medium text-foreground">{p.name}</div>
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="truncate font-medium text-foreground">{p.name}</div>
+                      {p.has_variants && (
+                        <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
+                          Variantes
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-2 font-semibold text-foreground">
                       {formatCurrency(p.price)}
                       {p.unit === "kg" && (
@@ -497,11 +562,19 @@ export default function PosPage() {
                     price: p.price,
                     unit: p.unit,
                     is_serialized: p.is_serialized,
+                    has_variants: p.has_variants,
                   })
                 }
                 className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
               >
-                <div className="truncate font-medium text-foreground">{p.name}</div>
+                <div className="flex items-start justify-between gap-1.5">
+                  <div className="truncate font-medium text-foreground">{p.name}</div>
+                  {p.has_variants && (
+                    <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
+                      Variantes
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {formatQty(p.stock)} {p.unit}
                 </div>
@@ -538,6 +611,11 @@ export default function PosPage() {
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-foreground">{l.name}</span>
+                    {l.variantLabel && (
+                      <span className="block text-xs font-medium text-ninja-flameSoft">
+                        {l.variantLabel}
+                      </span>
+                    )}
                     {l.serial && (
                       <span className="block font-mono text-xs text-muted-foreground">
                         S/N: {l.serial}
@@ -789,6 +867,22 @@ export default function PosPage() {
         open={scanOpen}
         onOpenChange={setScanOpen}
         onDetected={(code) => setSearch(code)}
+      />
+      <VariantPickerModal
+        product={variantProduct}
+        onClose={() => setVariantProduct(null)}
+        onPick={({ variantId, variantLabel: label, price }) => {
+          if (!variantProduct) return;
+          addVariant({
+            id: variantProduct.id,
+            name: variantProduct.name,
+            sku: variantProduct.sku,
+            price: priceFor(variantProduct.id, variantId, price),
+            variantId,
+            variantLabel: label,
+          });
+          setVariantProduct(null);
+        }}
       />
       <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta rápida">
         <div className="space-y-4">

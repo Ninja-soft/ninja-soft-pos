@@ -35,6 +35,8 @@ type Ctx = {
   userIds: string[];
   productA: string;
   productB: string;
+  variantParentA: string;
+  priceListA: string;
 };
 const ctx = {} as Ctx;
 
@@ -112,12 +114,25 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       { tenant_id: ctx.tenantB, name: `Cliente B ${STAMP}` },
     ]);
     if (cErr) throw cErr;
+
+    // H10: producto padre de variantes en el tenant A.
+    const { data: parent, error: vpErr } = await admin
+      .from("products")
+      .insert({ tenant_id: ctx.tenantA, name: `Variante Padre ${STAMP}`, price: 100 })
+      .select("id")
+      .single();
+    if (vpErr || !parent) throw vpErr ?? new Error("variant parent");
+    ctx.variantParentA = parent.id;
   }, 60_000);
 
   afterAll(async () => {
     const { admin } = ctx;
     if (!admin) return;
     for (const t of [ctx.tenantA, ctx.tenantB].filter(Boolean)) {
+      // H10: items -> listas -> variantes, antes de borrar products.
+      await admin.from("price_list_items").delete().eq("tenant_id", t);
+      await admin.from("price_lists").delete().eq("tenant_id", t);
+      await admin.from("product_variants").delete().eq("tenant_id", t);
       await admin.from("ticket_templates").delete().eq("tenant_id", t);
       await admin.from("payment_plans").delete().eq("tenant_id", t);
       await admin.from("audit_logs").delete().eq("tenant_id", t);
@@ -349,6 +364,132 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       name: `Intruso ${STAMP}`,
     });
     expect(error).not.toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // product_variants (H10): lectura = miembros del tenant; escritura = owner/manager
+  // ---------------------------------------------------------------------------
+
+  it("product_variants: el owner crea una variante en su tenant", async () => {
+    const { error } = await ctx.ownerA.from("product_variants").insert({
+      tenant_id: ctx.tenantA,
+      product_id: ctx.variantParentA,
+      option1: "M",
+    });
+    expect(error).toBeNull();
+  });
+
+  it("product_variants: el cashier no puede crear variantes", async () => {
+    const { error } = await ctx.cashierA.from("product_variants").insert({
+      tenant_id: ctx.tenantA,
+      product_id: ctx.variantParentA,
+      option1: "L",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("product_variants: el cashier puede leer las variantes de su tenant", async () => {
+    const { data, error } = await ctx.cashierA
+      .from("product_variants")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("product_variants: el owner B no ve las variantes del tenant A", async () => {
+    const { data: byProduct } = await ctx.ownerB
+      .from("product_variants")
+      .select("id")
+      .eq("product_id", ctx.variantParentA);
+    expect(byProduct).toEqual([]);
+
+    const { data: byTenant } = await ctx.ownerB
+      .from("product_variants")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(byTenant).toEqual([]);
+  });
+
+  it("product_variants: el owner A no puede insertar en el tenant ajeno", async () => {
+    const { error } = await ctx.ownerA.from("product_variants").insert({
+      tenant_id: ctx.tenantB,
+      product_id: ctx.variantParentA,
+      option1: "XL",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // price_lists (H10): lectura = miembros del tenant; escritura = owner/manager
+  // ---------------------------------------------------------------------------
+
+  it("price_lists: el owner crea una lista en su tenant", async () => {
+    const { data, error } = await ctx.ownerA
+      .from("price_lists")
+      .insert({ tenant_id: ctx.tenantA, name: `Lista ${STAMP}`, channel: "custom" })
+      .select("id")
+      .single();
+    expect(error).toBeNull();
+    ctx.priceListA = data!.id;
+  });
+
+  it("price_lists: el cashier no puede crear listas", async () => {
+    const { error } = await ctx.cashierA.from("price_lists").insert({
+      tenant_id: ctx.tenantA,
+      name: `Lista cashier ${STAMP}`,
+      channel: "custom",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("price_lists: el cashier puede leer las listas de su tenant", async () => {
+    const { data, error } = await ctx.cashierA
+      .from("price_lists")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("price_lists: el owner B no ve las listas del tenant A", async () => {
+    const { data: cross } = await ctx.ownerB
+      .from("price_lists")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(cross).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // price_list_items (H10): lectura = miembros del tenant; escritura = owner/manager
+  // ---------------------------------------------------------------------------
+
+  it("price_list_items: el owner inserta un ítem en su tenant", async () => {
+    const { error } = await ctx.ownerA.from("price_list_items").insert({
+      tenant_id: ctx.tenantA,
+      price_list_id: ctx.priceListA,
+      product_id: ctx.variantParentA,
+      price: 123,
+    });
+    expect(error).toBeNull();
+  });
+
+  it("price_list_items: el cashier no puede insertar ítems", async () => {
+    const { error } = await ctx.cashierA.from("price_list_items").insert({
+      tenant_id: ctx.tenantA,
+      price_list_id: ctx.priceListA,
+      product_id: ctx.variantParentA,
+      price: 456,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("price_list_items: el owner B no ve los ítems del tenant A", async () => {
+    const { data: cross } = await ctx.ownerB
+      .from("price_list_items")
+      .select("id")
+      .eq("tenant_id", ctx.tenantA);
+    expect(cross).toEqual([]);
   });
 });
 

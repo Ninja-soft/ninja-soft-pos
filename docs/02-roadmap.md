@@ -282,12 +282,13 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] **PR3 — Email del negocio + activación por destino** *(2026-06-06)*: comprobantes salen del **SMTP del propio tenant** (card guiada en Configuración → Email: Gmail/Outlook/Otro, contraseña de aplicación, probar conexión; `tenant_email_smtp` deny-all + `set_tenant_smtp`); cuerpo HTML con branding del tenant (logo + acento, fallback ninja) y **texto personalizable**, comprobante adjunto; **un modelo activo para impresión y uno para email** (`print_active`/`email_active`, únicos por tenant; sin activo → ticket clásico); fix: la plantilla activa ahora sí aplica al cobrar en el POS.
   - [x] **PR4 — Canvas PRO + 5 modelos por modo** *(2026-06-06)*: subir imágenes al canvas (pipeline WebP de H7 → tenant-assets), **resize con handle** y **recorte** con modal propio; **5 modelos precargados en los 3 modos** (bloques, canvas y HTML) con picker al crear — promo/gift ya no arrancan vacíos.
 
-- [~] **H10 — Catálogo público + variantes.** — *Catálogo público base hecho (PR #32); variantes y listas por canal pendientes.*
+- [~] **H10 — Catálogo público + variantes.** — *Variantes + listas de precios por canal completas (2026-06-07). Solo queda carrito/pedido (→ F12/F13). Spec: [`superpowers/specs/2026-06-06-h10-variants-price-lists-design.md`](superpowers/specs/2026-06-06-h10-variants-price-lists-design.md).*
   - [x] Catálogo web público por tenant en `/c/<slug>` (RPC `public_catalog` SECURITY DEFINER, anónimo; solo tenants activos y productos activos). Muestra logo/branding, fotos, precios y categorías.
-  - [ ] Variantes por rubro (talle/color para textil; SKU compuesto).
-  - [ ] Listas de precios por canal (mostrador / catálogo / mayorista).
+  - [x] Variantes por rubro (talle/color para textil; SKU compuesto). — *Ejes genéricos (máx 2) + matriz de combinaciones en el form (`VariantsEditor`), SKU auto-sufijado, barcode/precio/stock por variante; picker en el POS + escaneo directo; `create_sale`/`return_sale` mueven stock por variante; +tests RLS y de matriz.*
+  - [x] Listas de precios por canal (mostrador / catálogo / mayorista). — *`price_lists` + `price_list_items` (por producto/variante), resolución item-variante → item-producto → ajuste % → base (`lib/prices/resolve.ts`); UI en Configuración; POS usa lista mostrador; `/c/<slug>` usa lista catálogo (RPC reescrita).*
   - [ ] Carrito/pedido desde el catálogo (cruza con F12/F13 y delivery).
   - [x] *Criterio (base):* un tenant con productos activos publica su catálogo en `/c/<slug>` sin tocar código.
+  - [x] *Criterio (variantes):* un textil gestiona talle/color con stock por combinación, el POS pide la variante al vender y el precio del catálogo sale de su propia lista. ✓
   - *Nota:* el motor de promociones se trata aparte y a fondo en **[F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro)**.
 
 - [x] **H10b — Catálogo PRO: ficha de producto completa, marcas y categorías.** — *Completado (2026-06-05). Solo quedan fuera stock por depósito (→ F11/H33) y variantes (→ H10).*

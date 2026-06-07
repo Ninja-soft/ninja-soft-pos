@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { CreditCard, Mail, Palette, ReceiptText, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -26,6 +26,7 @@ import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
+import { PriceListsCard } from "@/components/prices/PriceListsCard";
 
 type Section =
   | "apariencia"
@@ -35,6 +36,7 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "precios"
   | "garantias";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
@@ -44,6 +46,7 @@ const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "email", label: "Email", icon: Mail },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
+  { key: "precios", label: "Listas de precios", icon: BadgeDollarSign },
   { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
 ];
 
@@ -306,6 +309,9 @@ export default function ConfiguracionPage() {
 
           {/* Operación del POS (solo owner/manager; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard />}
+
+          {/* Listas de precios por canal (escritura protegida por RLS) */}
+          {section === "precios" && <PriceListsCard />}
 
           {/* Garantías extendidas */}
           {section === "garantias" && (

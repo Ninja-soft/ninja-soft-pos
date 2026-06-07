@@ -60,6 +60,34 @@ describe("cart store", () => {
     ).toBe(400);
   });
 
+  it("dos variantes distintas del mismo producto son dos líneas", () => {
+    const { addVariant } = useCartStore.getState();
+    addVariant({ id: "p1", name: "Remera", sku: "R", price: 100, variantId: "v-m", variantLabel: "M / Rojo" });
+    addVariant({ id: "p1", name: "Remera", sku: "R", price: 120, variantId: "v-l", variantLabel: "L / Rojo" });
+    const lines = useCartStore.getState().lines;
+    expect(lines).toHaveLength(2);
+    expect(lines.map((l) => l.variantLabel).sort()).toEqual(["L / Rojo", "M / Rojo"]);
+  });
+
+  it("repetir la misma variante acumula cantidad", () => {
+    const { addVariant } = useCartStore.getState();
+    const v = { id: "p1", name: "Remera", sku: "R", price: 100, variantId: "v-m", variantLabel: "M / Rojo" };
+    addVariant(v);
+    addVariant(v);
+    const lines = useCartStore.getState().lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.quantity).toBe(2);
+    expect(lines[0]!.variantId).toBe("v-m");
+  });
+
+  it("una línea de variante no se fusiona con la línea simple del mismo producto", () => {
+    const { addProduct, addVariant } = useCartStore.getState();
+    addProduct(P);
+    addVariant({ id: P.id, name: P.name, sku: P.sku, price: 100, variantId: "v-m", variantLabel: "M" });
+    const lines = useCartStore.getState().lines;
+    expect(lines).toHaveLength(2);
+  });
+
   it("agrega por peso (kg) y acumula peso", () => {
     const { addWeighed } = useCartStore.getState();
     const prod = { id: "k1", name: "Jamón", sku: null, price: 1000 };

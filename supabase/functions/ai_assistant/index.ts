@@ -6,7 +6,13 @@
 // Guard (server-side, todo vía service_role admin):
 //   allowed = addon asistente_ia/ai_assistant activo para el tenant
 //             OR el owner del tenant == ai_config.beta_owner_email.
-//   Si no → 403 { error: 'addon_required' }.
+//   Si no → 403 { error: 'addon_required' }, SALVO body {intro:true}: ahí
+//   devuelve 200 { reply: <texto comercial>, locked: true } para que la
+//   burbuja pueda abrirse y mostrar el explicador sin el complemento.
+//
+// Robustez del proveedor: toda respuesta non-2xx o cuerpo inesperado se
+// traduce a 502 { error:'ai_provider_error', detail:<mensaje truncado> }.
+// Nunca se deja escapar un throw al runtime (502/503 opaco sin cuerpo).
 //
 // Contexto READ-ONLY scoped por tenant (nunca SQL libre): ventas de hoy/7d,
 // top productos, stock bajo, estado de config. + guía fija de pantallas.
@@ -30,6 +36,36 @@ const json = (b: unknown, s = 200) =>
 // Tope mensual de tokens por tenant (estimado). Por encima → 429.
 const MONTHLY_TOKEN_CAP = 500_000;
 
+// Modelos por defecto cuando ai_config.model viene vacío.
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_CLAUDE_MODEL = "claude-haiku-4-5-20251001";
+
+// Modelos de Gemini dados de baja por Google: en v1beta:generateContent
+// devuelven 404 NOT_FOUND. Si la config trae uno de estos lo remapeamos al
+// default vigente para no romper al tenant hasta que edite la config a mano.
+// (Causa del 502 histórico: ai_config tenía 'gemini-2.0-flash', shut down.)
+const DEAD_GEMINI_MODELS = new Set([
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-exp",
+  "gemini-2.0-flash-001",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash-002",
+  "gemini-1.5-pro",
+  "gemini-1.5-pro-latest",
+  "gemini-1.5-pro-002",
+  "gemini-pro",
+]);
+
+// Texto comercial por defecto del addon IA (cuando ai_config.commercial_text
+// está vacío). Se muestra al abrir la burbuja sin el complemento contratado.
+const DEFAULT_COMMERCIAL_TEXT =
+  "El Asistente IA de NinjaPos responde en lenguaje natural sobre tu negocio: " +
+  "ventas del día y de la semana, productos más vendidos, alertas de stock bajo, " +
+  "estado de tus clientes y cómo usar cada pantalla del sistema.\n\n" +
+  "Es un complemento opcional: lo activás desde el Panel del dueño → Plan y " +
+  "complementos, y queda disponible al instante para todo tu equipo.";
+
 // Las llamadas HTTP a los proveedores pueden rechazar fuera de nuestro await;
 // sin handlers globales Deno mata el worker (503). Mirror de los siblings.
 addEventListener("unhandledrejection", (e) => {
@@ -48,6 +84,43 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       setTimeout(() => rej(new Error(`${label}_timeout`)), ms),
     ),
   ]);
+}
+
+// Lee el cuerpo de error de un Response sin tirar si ya se consumió/no hay body.
+async function safeText(r: Response): Promise<string> {
+  try {
+    return await r.text();
+  } catch {
+    return "";
+  }
+}
+
+// Parsea JSON de un Response devolviendo null si el cuerpo no es JSON válido
+// (evita que un 200 con HTML/garbage del proveedor explote el handler).
+async function safeJson(r: Response): Promise<unknown> {
+  try {
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// Extrae un mensaje legible del cuerpo de error del proveedor (Gemini/Claude
+// devuelven { error: { message } }). Trunca para no filtrar payloads enormes.
+function providerErrText(raw: string, model: string): string {
+  let msg = raw;
+  try {
+    const j = JSON.parse(raw) as { error?: { message?: string } | string };
+    if (j && typeof j.error === "object" && j.error?.message) {
+      msg = j.error.message;
+    } else if (typeof j?.error === "string") {
+      msg = j.error;
+    }
+  } catch {
+    /* raw no era JSON: se usa tal cual */
+  }
+  msg = (msg || "error del proveedor").slice(0, 300);
+  return `[${model}] ${msg}`;
 }
 
 // Guía fija de pantallas del POS (rutas reales de la app). El asistente la usa
@@ -90,6 +163,18 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+    // ── Body ────────────────────────────────────────────────────────────────
+    // Se parsea antes del guard para poder atender el flag {intro:true}: cuando
+    // el tenant NO tiene acceso pero abre la burbuja, devolvemos 200 con el
+    // explicador comercial (no 403) para que el panel pueda mostrarlo.
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    const wantsIntro = body.intro === true;
+
     // ── Guard server-side (todo con service_role) ───────────────────────────
     // 1) addon activo (asistente_ia | ai_assistant).
     const { data: addon } = await admin
@@ -130,6 +215,13 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!allowed) {
+      // Sin acceso pero abriendo la burbuja (intro): explicador comercial 200.
+      if (wantsIntro) {
+        const commercialText =
+          (cfg.commercial_text ?? "").trim() || DEFAULT_COMMERCIAL_TEXT;
+        return json({ reply: commercialText, locked: true });
+      }
+      // Mensaje real sin acceso → 403.
       return json(
         {
           error: "addon_required",
@@ -143,9 +235,13 @@ Deno.serve(async (req: Request) => {
     const provider = (cfg.provider === "claude" ? "claude" : "gemini") as
       | "gemini"
       | "claude";
-    const model =
-      (cfg.model ?? "").trim() ||
-      (provider === "claude" ? "claude-haiku-4-5-20251001" : "gemini-2.0-flash");
+    let model = (cfg.model ?? "").trim();
+    if (provider === "claude") {
+      if (!model) model = DEFAULT_CLAUDE_MODEL;
+    } else {
+      // Vacío o modelo dado de baja → default vigente (evita el 404/502).
+      if (!model || DEAD_GEMINI_MODELS.has(model)) model = DEFAULT_GEMINI_MODEL;
+    }
     const apiKey = (cfg.api_key ?? "").trim();
     if (!apiKey) return json({ error: "ai_not_configured" }, 400);
 
@@ -166,13 +262,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "quota_exceeded" }, 429);
     }
 
-    // ── Body ────────────────────────────────────────────────────────────────
-    let body: Record<string, unknown>;
-    try {
-      body = await req.json();
-    } catch {
-      return json({ error: "invalid_json" }, 400);
-    }
+    // ── Mensajes del historial (el body ya se parseó arriba) ─────────────────
     const rawMessages = Array.isArray(body.messages) ? body.messages : [];
     const messages = rawMessages
       .map((m) => {
@@ -202,76 +292,140 @@ Deno.serve(async (req: Request) => {
       HELP_GUIDE;
 
     // ── Llamada al proveedor ────────────────────────────────────────────────
+    // Robustez: cualquier respuesta non-2xx del proveedor o cuerpo inesperado
+    // se traduce a `ai_provider_error` (502) con el detalle truncado. Nunca se
+    // deja escapar un throw al runtime (eso daría un 502/503 opaco sin cuerpo).
     let reply = "";
     let tokens = 0;
-    if (provider === "claude") {
-      const r = await withTimeout(
-        fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: messages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-          }),
-        }),
-        30_000,
-        "claude",
-      );
-      if (!r.ok) {
-        const detail = (await r.text()).slice(0, 500);
-        return json({ error: "provider_error", detail }, 502);
-      }
-      const data = (await r.json()) as {
-        content?: { text?: string }[];
-        usage?: { input_tokens?: number; output_tokens?: number };
-      };
-      reply = data.content?.[0]?.text ?? "";
-      tokens =
-        (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
-    } else {
-      // Gemini: el system va en systemInstruction; el historial en contents.
-      const r = await withTimeout(
-        fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-            model,
-          )}:generateContent?key=${encodeURIComponent(apiKey)}`,
-          {
+    try {
+      if (provider === "claude") {
+        const r = await withTimeout(
+          fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            },
             body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents: messages.map((m) => ({
-                role: m.role === "assistant" ? "model" : "user",
-                parts: [{ text: m.content }],
+              model,
+              max_tokens: 1024,
+              system: systemPrompt,
+              messages: messages.map((m) => ({
+                role: m.role,
+                content: m.content,
               })),
             }),
-          },
-        ),
-        30_000,
-        "gemini",
-      );
-      if (!r.ok) {
-        const detail = (await r.text()).slice(0, 500);
-        return json({ error: "provider_error", detail }, 502);
+          }),
+          30_000,
+          "claude",
+        );
+        if (!r.ok) {
+          const detail = providerErrText(await safeText(r), model);
+          console.error("claude non-200:", r.status, detail);
+          return json({ error: "ai_provider_error", detail }, 502);
+        }
+        const data = (await safeJson(r)) as {
+          content?: { text?: string }[];
+          usage?: { input_tokens?: number; output_tokens?: number };
+        } | null;
+        // Shape esperada: content[0].text.
+        const text = data?.content?.[0]?.text;
+        if (typeof text !== "string") {
+          console.error("claude bad shape:", JSON.stringify(data).slice(0, 500));
+          return json(
+            {
+              error: "ai_provider_error",
+              detail: "Respuesta del proveedor sin texto utilizable.",
+            },
+            502,
+          );
+        }
+        reply = text;
+        tokens =
+          (data?.usage?.input_tokens ?? 0) + (data?.usage?.output_tokens ?? 0);
+      } else {
+        // Gemini v1beta: system en systemInstruction; historial en contents.
+        // Los modelos 2.5 "piensan" y consumen tokens de salida: damos un
+        // maxOutputTokens holgado para que queden tokens para la respuesta y no
+        // vuelva un candidate con parts vacío (finishReason MAX_TOKENS).
+        const r = await withTimeout(
+          fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+              model,
+            )}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-goog-api-key": apiKey,
+              },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: messages.map((m) => ({
+                  role: m.role === "assistant" ? "model" : "user",
+                  parts: [{ text: m.content }],
+                })),
+                generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+              }),
+            },
+          ),
+          30_000,
+          "gemini",
+        );
+        if (!r.ok) {
+          const detail = providerErrText(await safeText(r), model);
+          console.error("gemini non-200:", r.status, detail);
+          return json({ error: "ai_provider_error", detail }, 502);
+        }
+        const data = (await safeJson(r)) as {
+          candidates?: {
+            content?: { parts?: { text?: string }[] };
+            finishReason?: string;
+          }[];
+          promptFeedback?: { blockReason?: string };
+          usageMetadata?: { totalTokenCount?: number };
+        } | null;
+        // Shape esperada: candidates[0].content.parts[0].text.
+        const cand = data?.candidates?.[0];
+        const parts = cand?.content?.parts ?? [];
+        const text = parts.map((p) => p?.text ?? "").join("").trim();
+        if (!text) {
+          // Sin texto: bloqueo de seguridad o corte por tokens. Lo reportamos
+          // como ai_provider_error con la razón para no devolver un 502 opaco.
+          const reason =
+            data?.promptFeedback?.blockReason ||
+            cand?.finishReason ||
+            "sin_contenido";
+          console.error(
+            "gemini empty:",
+            reason,
+            JSON.stringify(data).slice(0, 400),
+          );
+          return json(
+            {
+              error: "ai_provider_error",
+              detail: `El proveedor no devolvió texto (motivo: ${reason}).`,
+            },
+            502,
+          );
+        }
+        reply = text;
+        tokens = data?.usageMetadata?.totalTokenCount ?? 0;
       }
-      const data = (await r.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-        usageMetadata?: { totalTokenCount?: number };
-      };
-      reply = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      tokens = data.usageMetadata?.totalTokenCount ?? 0;
+    } catch (e) {
+      // Timeout o fallo de red contra el proveedor.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("provider call failed:", detail);
+      return json({ error: "ai_provider_error", detail: detail.slice(0, 300) }, 502);
     }
 
-    if (!reply.trim()) return json({ error: "empty_reply" }, 502);
+    if (!reply.trim()) {
+      return json(
+        { error: "ai_provider_error", detail: "Respuesta vacía del proveedor." },
+        502,
+      );
+    }
 
     // Estimación de tokens si el proveedor no la dio.
     if (!tokens) {

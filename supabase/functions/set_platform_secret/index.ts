@@ -30,11 +30,17 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
   ]),
   // Config del Asistente IA (Fase F): proveedor/modelo/api_key (secreta) +
   // beta_owner_email (pública). La api_key nunca se devuelve en claro.
+  // Campos públicos del addon (avatar, texto comercial, precio y trial) para
+  // el explicador de la burbuja: NO son secretos, se devuelven en claro.
   ai_config: new Set([
     "provider",
     "model",
     "api_key",
     "beta_owner_email",
+    "image_url",
+    "commercial_text",
+    "addon_price_ars",
+    "addon_trial_days",
   ]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).

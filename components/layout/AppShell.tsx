@@ -337,18 +337,13 @@ export function AppShell({
             </span>
           </Link>
         )}
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <UserMenu
-              email={email}
-              role={shell?.role ?? null}
-              onChangePassword={() => setPwOpen(true)}
-              onEditProfile={() => setPfOpen(true)}
-              onSignOut={signOut}
-            />
-          </div>
-          <NotificationBell />
-        </div>
+        <UserMenu
+          email={email}
+          role={shell?.role ?? null}
+          onChangePassword={() => setPwOpen(true)}
+          onEditProfile={() => setPfOpen(true)}
+          onSignOut={signOut}
+        />
       </div>
     </nav>
   );
@@ -378,7 +373,7 @@ export function AppShell({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
@@ -388,6 +383,12 @@ export function AppShell({
             <NotificationBell />
           </div>
         </header>
+
+        {/* Campana flotante arriba a la derecha, sobre el contenido (solo desktop).
+            z-40 < z-50 de los modales: nunca tapa overlays. */}
+        <div className="fixed right-4 top-4 z-40 hidden lg:block">
+          <NotificationBell floating />
+        </div>
 
         <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">
           <BlockingNotificationBanner />

@@ -24,6 +24,7 @@ import type {
   TicketTemplate,
 } from "@/modules/tickets/api";
 import { TicketTemplateEditor } from "@/components/tickets/TicketTemplateEditor";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 const KIND_LABELS: Record<TemplateKind, string> = {
   sale: "Venta",
@@ -69,6 +70,7 @@ export function TicketTemplatesCard() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<TicketTemplate | null>(null);
+  const [toDelete, setToDelete] = useState<TicketTemplate | null>(null);
 
   function openNew() {
     setEditing(null);
@@ -132,9 +134,16 @@ export function TicketTemplatesCard() {
   }
 
   function del(t: TicketTemplate) {
-    if (!window.confirm(`¿Eliminar el modelo "${t.name}"?`)) return;
-    remove.mutate(t.id, {
-      onSuccess: () => toast({ title: "Modelo eliminado", variant: "success" }),
+    setToDelete(t);
+  }
+
+  function confirmDelete() {
+    if (!toDelete) return;
+    remove.mutate(toDelete.id, {
+      onSuccess: () => {
+        toast({ title: "Modelo eliminado", variant: "success" });
+        setToDelete(null);
+      },
       onError: () => toast({ title: "No se pudo eliminar", variant: "error" }),
     });
   }
@@ -235,6 +244,17 @@ export function TicketTemplatesCard() {
           tenantId={tenantId}
         />
       )}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title="Eliminar modelo"
+        description={toDelete ? `¿Eliminar el modelo "${toDelete.name}"? Es una baja lógica.` : undefined}
+        confirmLabel="Eliminar"
+        danger
+        loading={remove.isPending}
+        onConfirm={confirmDelete}
+      />
     </Card>
   );
 }

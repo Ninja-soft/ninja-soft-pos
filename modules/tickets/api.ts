@@ -117,7 +117,12 @@ export const ticketTemplatesApi = {
     const supabase = createClient();
     const { error } = await supabase
       .from("ticket_templates")
-      .update({ deleted_at: new Date().toISOString(), is_default: false })
+      .update({
+        deleted_at: new Date().toISOString(),
+        is_default: false,
+        print_active: false,
+        email_active: false,
+      })
       .eq("id", id);
     if (error) throw error;
   },

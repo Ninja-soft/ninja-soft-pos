@@ -7,7 +7,6 @@ import {
   ticketTemplatesApi,
   type TemplateDestination,
   type TemplateInput,
-  type TemplateKind,
 } from "./api";
 
 const KEY = ["ticket-templates"];
@@ -35,11 +34,14 @@ export function useTicketTemplates() {
   return useQuery({ queryKey: KEY, queryFn: ticketTemplatesApi.list });
 }
 
-export function useDefaultTemplate(kind: TemplateKind, enabled = true) {
+// Modelo activo por destino (impresión/email). queryKey bajo el prefijo KEY,
+// así las mutaciones de activación (useSetActiveTemplate / useClearActiveTemplate)
+// que invalidan KEY refrescan también este cache.
+export function useActiveTemplate(destination: TemplateDestination, enabled = true) {
   return useQuery({
-    queryKey: [...KEY, "default", kind],
+    queryKey: [...KEY, "active", destination],
     enabled,
-    queryFn: () => ticketTemplatesApi.getDefault(kind),
+    queryFn: () => ticketTemplatesApi.getActive(destination),
   });
 }
 
@@ -62,15 +64,6 @@ export function useUpdateTemplate() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: Partial<TemplateInput> }) =>
       ticketTemplatesApi.update(id, input),
-    onSuccess: inv,
-  });
-}
-
-export function useSetDefaultTemplate() {
-  const inv = useInvalidate();
-  return useMutation({
-    mutationFn: ({ id, kind }: { id: string; kind: TemplateKind }) =>
-      ticketTemplatesApi.setDefault(id, kind),
     onSuccess: inv,
   });
 }

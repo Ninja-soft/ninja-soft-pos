@@ -9,7 +9,8 @@ import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { SendReceiptEmail, sendReceiptEmail } from "@/components/sales/SendReceiptEmail";
-import { useDefaultTemplate, useTicketBranding } from "@/modules/tickets/hooks";
+import { useActiveTemplate, useTicketBranding } from "@/modules/tickets/hooks";
+import { emailTemplateDiffers } from "@/modules/tickets/api";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 import { downloadA4FromNode } from "@/lib/tickets/exportPng";
@@ -27,11 +28,17 @@ interface Props {
 export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
   const { data: brand } = useTicketBranding(open);
-  const { data: tpl } = useDefaultTemplate("sale", open);
+  // Plantilla activa por DESTINO: impresión vs email pueden diferir.
+  const { data: printTpl } = useActiveTemplate("print", open);
+  const { data: emailTpl } = useActiveTemplate("email", open);
   const { data: numFmt } = useSaleNumberFormat();
   const { toast } = useToast();
   const qc = useQueryClient();
   const ticketRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLDivElement>(null);
+  // Espejo de `emailDiffers` para leerlo dentro del setTimeout del auto-envío
+  // sin re-disparar el efecto cuando las plantillas cargan tarde.
+  const emailDiffersRef = useRef(false);
   const printedRef = useRef(false);
   const emailedRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
@@ -85,7 +92,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
     emailedRef.current = true;
     const saleId = data.sale.id;
     const t = setTimeout(() => {
-      const node = ticketRef.current;
+      // Misma resolución de nodo que el botón manual: nodo de email oculto si
+      // la plantilla de email difiere de la de impresión, si no el visible.
+      const node = emailDiffersRef.current ? emailRef.current : ticketRef.current;
       if (!node) return;
       sendReceiptEmail(saleId, to, node)
         .then(() => {
@@ -135,14 +144,26 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
     : null;
 
   const paper =
-    (tpl?.paper as "58" | "80" | "a4" | undefined) ??
+    (printTpl?.paper as "58" | "80" | "a4" | undefined) ??
     (brand?.ticket_width === "58" ? "58" : "80");
+
+  // El email usa la plantilla de email si difiere de la de impresión. Cuando
+  // coincide (o no hay plantilla de email), reutiliza el ticket visible.
+  const emailDiffers = emailTemplateDiffers(printTpl, emailTpl);
+  emailDiffersRef.current = emailDiffers;
+  const emailPaper = (emailTpl?.paper as "58" | "80" | "a4" | undefined) ?? paper;
+
+  // Resolución única del nodo a exportar a PNG para email: nodo oculto si la
+  // plantilla de email difiere, si no el ticket visible. Usado por el botón
+  // manual y por el auto-envío.
+  const getEmailNode = (): HTMLElement | null =>
+    emailDiffers ? emailRef.current : ticketRef.current;
 
   async function handleA4() {
     if (!data) return;
     setDownloading(true);
     try {
-      if (tpl && ticketRef.current) {
+      if (printTpl && ticketRef.current) {
         await downloadA4FromNode(ticketRef.current, data.sale.number);
       } else {
         downloadTicketPdf({
@@ -168,7 +189,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
         <>
           <div ref={ticketRef}>
             <TemplateRenderer
-              template={tpl ?? null}
+              template={printTpl ?? null}
               fallbackBlocks={fallbackBlocks}
               data={ticketData}
               paperOverride={paper}
@@ -176,10 +197,27 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
             />
           </div>
 
+          {/* Nodo de email oculto cuando la plantilla de email difiere de la de
+              impresión. SIN clase `ticket-print`: no debe verse al imprimir. */}
+          {emailDiffers && (
+            <div
+              ref={emailRef}
+              aria-hidden
+              className="pointer-events-none fixed -left-[9999px] top-0"
+            >
+              <TemplateRenderer
+                template={emailTpl ?? null}
+                fallbackBlocks={fallbackBlocks}
+                data={ticketData}
+                paperOverride={emailPaper}
+              />
+            </div>
+          )}
+
           <div className="no-print mt-4 space-y-3">
             <SendReceiptEmail
               saleId={data.sale.id}
-              getTicketNode={() => ticketRef.current}
+              getTicketNode={getEmailNode}
               defaultEmail={data.sale.customers?.email ?? null}
               customerId={data.sale.customer_id}
               sentTo={data.sale.receipt_email_to}

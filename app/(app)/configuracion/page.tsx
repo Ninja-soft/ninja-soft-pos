@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -96,6 +97,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function ConfiguracionPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConfiguracionInner />
+    </Suspense>
+  );
+}
+
+function ConfiguracionInner() {
   const { theme, setTheme } = useTheme();
   const {
     display,
@@ -107,7 +116,12 @@ export default function ConfiguracionPage() {
     setBg,
     setPriceAccent,
   } = useAppearance();
-  const [section, setSection] = useState<Section>("apariencia");
+  const params = useSearchParams();
+  const initialSection = (() => {
+    const q = params.get("seccion");
+    return SECTIONS.some((s) => s.key === q) ? (q as Section) : "apariencia";
+  })();
+  const [section, setSection] = useState<Section>(initialSection);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">

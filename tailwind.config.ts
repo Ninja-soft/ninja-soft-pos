@@ -110,6 +110,10 @@ const config: Config = {
           from: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
           to: { opacity: "0", transform: "translate(-50%, -50%) scale(0.97)" },
         },
+        "scale-in": {
+          from: { opacity: "0", transform: "scale(0.4)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 180ms ease-out",
@@ -118,6 +122,7 @@ const config: Config = {
         "overlay-out": "overlay-out 130ms ease-in forwards",
         "modal-in": "modal-in 210ms cubic-bezier(0.22, 1, 0.36, 1)",
         "modal-out": "modal-out 130ms ease-in forwards",
+        "scale-in": "scale-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
     },
   },

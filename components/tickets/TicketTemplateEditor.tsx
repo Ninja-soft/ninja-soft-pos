@@ -39,6 +39,8 @@ import {
   type TicketBlock,
 } from "@/lib/tickets/blocks";
 import { HTML_STARTER_TEMPLATES } from "@/lib/tickets/htmlTemplates";
+import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
+import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
 import { HTML_TEMPLATE_VARS } from "@/lib/tickets/htmlVars";
 import { sampleTicketData } from "@/lib/tickets/sample";
 import {
@@ -233,7 +235,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
 
   function chooseMode(m: TemplateMode) {
     setMode(m);
-    setStep(m === "html" ? "starter" : "editor");
+    setStep("starter");
   }
 
   function buildInput(): TemplateInput {
@@ -310,14 +312,25 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
         <ModeChooser onChoose={chooseMode} />
       ) : step === "starter" ? (
         <StarterChooser
-          onPick={(t) => {
-            setHtml(t.html);
-            setPaper(t.paper);
-            setKind(t.kind);
+          mode={mode}
+          onPick={(s) => {
+            setKind(s.kind);
+            setPaper(s.paper);
+            if (s.mode === "html") setHtml(s.html);
+            else if (s.mode === "blocks") setBlocks(s.blocks);
+            else {
+              setElements(s.canvas.elements);
+              setCanvasHeight(s.canvas.height);
+            }
             setStep("editor");
           }}
           onScratch={() => {
-            setHtml(MINIMAL_HTML);
+            if (mode === "html") setHtml(MINIMAL_HTML);
+            else if (mode === "blocks") setBlocks(defaultSaleBlocks());
+            else {
+              setElements([]);
+              setCanvasHeight(300);
+            }
             setStep("editor");
           }}
         />
@@ -452,27 +465,62 @@ function ModeChooser({ onChoose }: { onChoose: (m: TemplateMode) => void }) {
 
 /* ---------------------------- Starter chooser --------------------------- */
 
+// Plantilla de inicio normalizada para la grilla, con el contenido por modo.
+type StarterPick =
+  | ({ mode: "blocks" } & (typeof BLOCK_STARTER_TEMPLATES)[number])
+  | ({ mode: "canvas" } & (typeof CANVAS_STARTER_TEMPLATES)[number])
+  | ({ mode: "html"; description: string } & (typeof HTML_STARTER_TEMPLATES)[number]);
+
+const KIND_LABEL: Record<TemplateKind, string> = {
+  sale: "Venta",
+  promo: "Promo",
+  gift: "Gift",
+};
+
+function paperLabel(p: Paper) {
+  return p === "a4" ? "A4" : `${p} mm`;
+}
+
+function starterPicks(mode: TemplateMode): StarterPick[] {
+  if (mode === "html")
+    return HTML_STARTER_TEMPLATES.map((t) => ({
+      ...t,
+      mode: "html" as const,
+      description: `Plantilla HTML ${paperLabel(t.paper)}.`,
+    }));
+  if (mode === "canvas")
+    return CANVAS_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "canvas" as const }));
+  return BLOCK_STARTER_TEMPLATES.map((t) => ({ ...t, mode: "blocks" as const }));
+}
+
 function StarterChooser({
+  mode,
   onPick,
   onScratch,
 }: {
-  onPick: (t: (typeof HTML_STARTER_TEMPLATES)[number]) => void;
+  mode: TemplateMode;
+  onPick: (s: StarterPick) => void;
   onScratch: () => void;
 }) {
+  const picks = starterPicks(mode);
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">Elegí una plantilla HTML de inicio.</p>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Elegí un modelo de inicio o empezá desde cero.
+      </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {HTML_STARTER_TEMPLATES.map((t) => (
+        {picks.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => onPick(t)}
-            className="flex flex-col items-start gap-1 rounded-xl border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+            className="flex flex-col items-start gap-1.5 rounded-xl border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
           >
             <span className="font-medium text-foreground">{t.name}</span>
-            <span className="text-xs text-muted-foreground">
-              {t.paper === "a4" ? "A4" : `${t.paper} mm`}
+            <span className="text-xs text-muted-foreground">{t.description}</span>
+            <span className="mt-1 flex flex-wrap gap-1.5">
+              <Chip>{KIND_LABEL[t.kind]}</Chip>
+              <Chip>{paperLabel(t.paper)}</Chip>
             </span>
           </button>
         ))}
@@ -486,6 +534,14 @@ function StarterChooser({
         </button>
       </div>
     </div>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+      {children}
+    </span>
   );
 }
 

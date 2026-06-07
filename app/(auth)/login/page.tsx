@@ -17,6 +17,8 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { Accent, Eyebrow } from "@/components/ui/Typography";
+import { GoogleButton } from "@/components/auth/GoogleButton";
+import { useToast } from "@/components/ui/Toast";
 
 export default function LoginPage({
   searchParams,
@@ -24,7 +26,12 @@ export default function LoginPage({
   searchParams?: { next?: string };
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Tras un fallo de credenciales no sabemos el proveedor (pre-auth no lo
+  // expone por email), así que mostramos siempre el hint de Google.
+  const [showGoogleHint, setShowGoogleHint] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const {
     register,
     handleSubmit,
@@ -36,14 +43,45 @@ export default function LoginPage({
 
   async function onSubmit(values: LoginInput) {
     setServerError(null);
+    setShowGoogleHint(false);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword(values);
     if (error) {
       setServerError("Email o contraseña incorrectos.");
+      setShowGoogleHint(true);
       return;
     }
     router.push((safeNext ?? "/dashboard") as never);
     router.refresh();
+  }
+
+  async function onGoogle() {
+    setServerError(null);
+    setShowGoogleHint(false);
+    setGoogleLoading(true);
+    const supabase = createClient();
+    const origin = window.location.origin;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${origin}/dashboard` },
+    });
+    if (error) {
+      setGoogleLoading(false);
+      const msg = error.message?.toLowerCase() ?? "";
+      if (
+        msg.includes("provider") ||
+        msg.includes("not enabled") ||
+        msg.includes("disabled")
+      ) {
+        toast({
+          title: "Google está casi listo — falta habilitarlo",
+          variant: "info",
+        });
+      } else {
+        toast({ title: "No pudimos iniciar con Google", variant: "error" });
+      }
+    }
+    // En éxito, el navegador redirige a Google; no hace falta más.
   }
 
   return (
@@ -60,6 +98,20 @@ export default function LoginPage({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <GoogleButton
+          label="Ingresar con Google"
+          onClick={onGoogle}
+          loading={googleLoading}
+        />
+
+        <div className="my-6 flex items-center gap-3">
+          <span className="h-px flex-1 bg-white/10" />
+          <span className="text-xs uppercase tracking-wider text-ninja-lavender">
+            o con email
+          </span>
+          <span className="h-px flex-1 bg-white/10" />
+        </div>
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <Input
             label="Email"
@@ -77,6 +129,12 @@ export default function LoginPage({
           />
           {serverError && (
             <p className="text-sm text-destructive">{serverError}</p>
+          )}
+          {showGoogleHint && (
+            <p className="text-sm text-ninja-lavender">
+              ¿Te registraste con Google? Usá el botón &quot;Ingresar con
+              Google&quot;.
+            </p>
           )}
           <Button type="submit" loading={isSubmitting} className="w-full">
             Entrar

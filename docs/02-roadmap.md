@@ -543,7 +543,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Depósito default por tipo de entrega/devolución.
   - [ ] *Criterio:* se transfiere stock de depósito central a sucursal, queda en tránsito y luego recibido.
 
-- [~] **H34 — Importación masiva por Excel.** — *Productos y clientes hechos (parsers `exceljs`, plantilla descargable, preview con errores, import por lote en `/productos` y `/clientes`). Faltan depósitos/stock/listas (dependen de F4) y auditoría/reversión.*
+- [~] **H34 — Importación masiva por Excel.** — *Productos y clientes hechos (parsers `exceljs`, plantilla descargable, preview con errores, import por lote en `/productos` y `/clientes`). Faltan depósitos/stock/listas (dependen de F4) y reversión. Auditoría hecha (2026-06-07): cada import de productos/clientes deja entrada en audit_logs con el total importado (best-effort, no bloquea el import).*
   - [x] Importar productos por XLSX (parser `parseProductsXlsx` + `ImportProductsModal`).
   - [x] Importar clientes por XLSX (parser `parseCustomersXlsx` + `ImportCustomersModal`).
   - [ ] Importar depósitos/sucursales por XLSX. *(depende de F4 multi-depósito)*

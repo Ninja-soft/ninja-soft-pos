@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Mail } from "lucide-react";
+import { AlertCircle, Check, Eye, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -10,8 +10,10 @@ import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
+import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
@@ -65,8 +67,9 @@ type SmtpResult =
   | { error: string; detail?: string };
 
 // Diseños del cuerpo del email del comprobante (H9b PR5). Las claves coinciden
-// con EMAIL_BODY_TEMPLATES en send_receipt_email; el preview de acá replica el
-// look de cada diseño con divs simples (no es el HTML real, solo orientativo).
+// con buildReceiptEmailHtml (lib/email/receiptTemplates) y EMAIL_BODY_TEMPLATES
+// en send_receipt_email. Las MINI-previews de acá (DesignPreview) son solo
+// orientativas (divs simples); la VISTA PREVIA real usa el builder compartido.
 type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
 const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = [
   { key: "brand", label: "Marca", desc: "Usa el color de tu marca" },
@@ -76,7 +79,7 @@ const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = 
   { key: "minimal", label: "Mínimo", desc: "Sólo lo esencial" },
 ];
 const SAMPLE_BODY = "¡Gracias por tu compra!";
-const FOOTER_LABEL = "Enviado con NinjaSoft POS";
+const FOOTER_LABEL = "Enviado con NinjaPos";
 // Wordmark de NinjaSoft para el fallback (sin logo del tenant). Mismo asset que
 // usa el email real (NINJA_LOGO_URL en send_receipt_email).
 const NINJA_WORDMARK = "/brand/ninjasoft-wordmark.webp";
@@ -203,6 +206,7 @@ export function TenantEmailCard() {
   const [hasPassword, setHasPassword] = useState(false);
   const [bodyText, setBodyText] = useState("");
   const [bodyTemplate, setBodyTemplate] = useState<BodyTemplateKey>("brand");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [result, setResult] = useState<
     { kind: "ok"; tested: boolean; to?: string } | { kind: "error"; msg: string } | null
   >(null);
@@ -515,9 +519,19 @@ export function TenantEmailCard() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Diseño del email
-            </label>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium text-muted-foreground">
+                Diseño del email
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setPreviewOpen(true)}
+              >
+                <Eye size={15} /> Previsualizar
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {BODY_TEMPLATES.map((t) => (
                 <button
@@ -584,7 +598,55 @@ export function TenantEmailCard() {
           </div>
         </Step>
       </CardContent>
+
+      {/* Preview real: replica el HTML del email del comprobante (mismo builder
+          que la Edge Function, vía lib/email/receiptTemplates) con el branding
+          del negocio y el texto/diseño elegidos. */}
+      <Modal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        title="Vista previa del email"
+        description="Así verá tu cliente el comprobante."
+        className="max-w-lg"
+      >
+        <ReceiptEmailPreview
+          design={bodyTemplate}
+          accent={accent}
+          logoUrl={logoUrl}
+          name={String(branding?.legal_name ?? "").trim() || fromName.trim() || "Mi Negocio"}
+          bodyText={bodyText.trim()}
+        />
+      </Modal>
     </Card>
+  );
+}
+
+// Preview fiel del email: renderiza el HTML real (builder compartido) en un
+// contenedor con fondo claro. El HTML es de strings confiables + inputs
+// escapados por buildReceiptEmailHtml.
+function ReceiptEmailPreview({
+  design,
+  accent,
+  logoUrl,
+  name,
+  bodyText,
+}: {
+  design: BodyTemplateKey;
+  accent: string;
+  logoUrl: string | null;
+  name: string;
+  bodyText: string;
+}) {
+  const html = buildReceiptEmailHtml(design, {
+    accent,
+    logoUrl: logoUrl ?? "",
+    name,
+    bodyText,
+  });
+  return (
+    <div className="rounded-lg bg-neutral-100 p-4">
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
   );
 }
 

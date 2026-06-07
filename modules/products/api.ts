@@ -512,6 +512,22 @@ export const variantsApi = {
   ): Promise<void> => {
     const supabase = createClient();
 
+    // Pre-check de gating (Fase D): variantes es feature gateada. Cortesía
+    // client-side — corta antes de tocar la DB con un error amigable. El
+    // enforcement server-side estricto para variantes llegará con RLS más fina
+    // (policy sobre product_variants que invoque tenant_has_feature) en una
+    // iteración posterior; por ahora la barrera dura es a nivel UI + esta RPC.
+    const { data: allowed, error: gateErr } = await supabase.rpc(
+      "tenant_has_feature",
+      { p_key: "variantes" },
+    );
+    if (gateErr) throw gateErr;
+    if (!allowed) {
+      throw new Error(
+        "Las variantes no están incluidas en tu plan. Mejorá tu plan para usarlas.",
+      );
+    }
+
     const toInsert = rows.filter((r) => !r.id);
     const toUpdate = rows.filter((r) => r.id);
 

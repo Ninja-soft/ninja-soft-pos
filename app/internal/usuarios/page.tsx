@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -25,6 +26,11 @@ export default function InternalUsersPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [onlySuspended, setOnlySuspended] = useState(false);
+  const [toSuspend, setToSuspend] = useState<{
+    id: string;
+    suspended_at: string | null;
+    email: string;
+  } | null>(null);
   const { data: users, isLoading } = useInternalUsers();
   const setActive = useSetUserActive();
 
@@ -57,11 +63,18 @@ export default function InternalUsersPage() {
 
   function toggle(u: { id: string; suspended_at: string | null; email: string }) {
     const activating = Boolean(u.suspended_at);
-    if (
-      !activating &&
-      !window.confirm(`¿Suspender la cuenta ${u.email}? No va a poder iniciar sesión.`)
-    )
+    if (!activating) {
+      // Suspensión: confirmación con diálogo propio (sin window.confirm).
+      setToSuspend(u);
       return;
+    }
+    doToggle(u, activating);
+  }
+
+  function doToggle(
+    u: { id: string; suspended_at: string | null; email: string },
+    activating: boolean,
+  ) {
     setActive
       .mutateAsync({ userId: u.id, active: activating })
       .then(() =>
@@ -225,6 +238,25 @@ export default function InternalUsersPage() {
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={toSuspend !== null}
+        onOpenChange={(o) => !o && setToSuspend(null)}
+        title="Suspender cuenta"
+        description={
+          toSuspend
+            ? `¿Suspender la cuenta ${toSuspend.email}? No va a poder iniciar sesión.`
+            : undefined
+        }
+        confirmLabel="Suspender"
+        danger
+        loading={setActive.isPending}
+        onConfirm={() => {
+          if (!toSuspend) return;
+          doToggle(toSuspend, false);
+          setToSuspend(null);
+        }}
+      />
     </>
   );
 }

@@ -43,7 +43,7 @@ export default function ClientesPage() {
     await exportXlsx("clientes", [
       {
         name: "Clientes",
-        title: "Base de clientes — NinjaPos",
+        title: "Base de clientes • NinjaPos",
         columns: [
           { header: "name", key: "name" },
           { header: "document_type", key: "document_type" },

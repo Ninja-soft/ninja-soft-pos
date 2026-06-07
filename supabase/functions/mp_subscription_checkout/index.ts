@@ -100,7 +100,7 @@ Deno.serve(async (req: Request) => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      reason: `NinjaSoft POS — Plan ${plan.name ?? ""}`.trim(),
+      reason: `NinjaSoft POS • Plan ${plan.name ?? ""}`.trim(),
       external_reference: sub.id,
       payer_email: payerEmail,
       auto_recurring: {

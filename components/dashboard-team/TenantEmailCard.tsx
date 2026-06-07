@@ -468,7 +468,7 @@ export function TenantEmailCard() {
             data-lpignore="true"
             placeholder={
               hasPassword
-                ? "•••••• (guardada — dejá vacío para mantener)"
+                ? "•••••• (guardada • dejá vacío para mantener)"
                 : "Contraseña de aplicación"
             }
             value={password}
@@ -577,7 +577,7 @@ export function TenantEmailCard() {
               <span>
                 {result.kind === "ok"
                   ? result.tested
-                    ? `Conexión OK — email de prueba enviado a ${result.to}`
+                    ? `Conexión OK • email de prueba enviado a ${result.to}`
                     : "Configuración guardada."
                   : result.msg}
               </span>

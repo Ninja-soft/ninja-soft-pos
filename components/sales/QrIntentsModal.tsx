@@ -88,7 +88,7 @@ export function QrIntentsModal({
     await exportXlsx("cobros-qr", [
       {
         name: "Cobros QR",
-        title: "Conciliación de cobros QR — NinjaPos",
+        title: "Conciliación de cobros QR • NinjaPos",
         columns: [
           { header: "Fecha", key: "fecha", width: 22 },
           { header: "Proveedor", key: "proveedor", width: 16 },
@@ -166,7 +166,7 @@ export function QrIntentsModal({
         {orphans.length > 0 && (
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-medium text-red-300">
             <AlertTriangle size={14} /> {orphans.length} aprobado
-            {orphans.length > 1 ? "s" : ""} sin venta — revisar
+            {orphans.length > 1 ? "s" : ""} sin venta • revisar
           </span>
         )}
       </div>

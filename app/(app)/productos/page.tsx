@@ -99,7 +99,7 @@ export default function ProductosPage() {
     await exportXlsx("productos", [
       {
         name: "Productos",
-        title: "Base de productos — NinjaPos",
+        title: "Base de productos • NinjaPos",
         columns: [
           { header: "name", key: "name" },
           { header: "sku", key: "sku" },

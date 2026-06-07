@@ -22,7 +22,7 @@ export function AccountsReceivableModal({
     await exportXlsx("cuentas-por-cobrar", [
       {
         name: "Cuentas por cobrar",
-        title: "Cuentas por cobrar — NinjaPos",
+        title: "Cuentas por cobrar • NinjaPos",
         columns: [
           { header: "Cliente", key: "name" },
           { header: "Vencido", key: "overdue" },

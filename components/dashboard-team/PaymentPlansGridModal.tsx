@@ -216,7 +216,7 @@ export function PaymentPlansGridModal({
     await exportXlsx(`plantilla-planes-${providerKey}`, [
       {
         name: "Planes",
-        title: `Plantilla de planes · ${providerName} — completá y reimportá`,
+        title: `Plantilla de planes · ${providerName} • completá y reimportá`,
         columns: [
           { header: "base", key: "base", width: 14 },
           { header: "marca", key: "marca", width: 14 },

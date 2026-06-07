@@ -35,7 +35,7 @@ export function VariantPickerModal({
     <Modal
       open={product !== null}
       onOpenChange={(o) => !o && onClose()}
-      title={product ? `Variante — ${product.name}` : "Variante"}
+      title={product ? `Variante • ${product.name}` : "Variante"}
     >
       <div className="space-y-3">
         {(variants ?? []).length === 0 && (

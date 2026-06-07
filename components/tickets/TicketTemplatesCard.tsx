@@ -218,7 +218,7 @@ export function TicketTemplatesCard() {
                   label="Impresión"
                   title={
                     t.print_active
-                      ? "Activo para impresión — clic para usar el ticket clásico"
+                      ? "Activo para impresión • clic para usar el ticket clásico"
                       : "Activar este modelo para impresión"
                   }
                   onClick={() => toggleActive(t, "print")}
@@ -229,7 +229,7 @@ export function TicketTemplatesCard() {
                   label="Email"
                   title={
                     t.email_active
-                      ? "Activo para email — clic para usar el ticket clásico"
+                      ? "Activo para email • clic para usar el ticket clásico"
                       : "Activar este modelo para email"
                   }
                   onClick={() => toggleActive(t, "email")}

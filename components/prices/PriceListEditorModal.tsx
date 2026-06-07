@@ -54,7 +54,7 @@ export function PriceListEditorModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={list ? `Precios — ${list.name}` : "Precios"}
+      title={list ? `Precios • ${list.name}` : "Precios"}
       className="max-w-3xl"
     >
       <div className="space-y-4">

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
+import type { Paged } from "@/lib/utils/pagination";
 
 export interface ReturnItemInput {
   sale_item_id: string;
@@ -51,7 +52,72 @@ export interface SaleDetail {
   payments: Payment[];
 }
 
+export interface SalesPageParams {
+  page: number; // 1-based
+  pageSize: number;
+  search?: string;
+  status?: string; // 'completed' | 'voided' | ''
+  range?: { from?: Date; to?: Date };
+}
+
+// Solo dígitos del N°: evita romper filtros / inyección.
+function searchToNumber(search: string): number | null {
+  const digits = search.replace(/\D/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
 export const salesApi = {
+  // Listado paginado server-side (.range + count exact). Búsqueda server-side:
+  // si el texto tiene dígitos se interpreta como N° de comprobante (match exacto
+  // sobre sales.number, tolerante a prefijo/ceros); si es texto se busca por
+  // nombre de cliente (ilike con inner join). Nunca tira error si está vacío.
+  listPaged: async (params: SalesPageParams): Promise<Paged<SaleRow>> => {
+    const supabase = createClient();
+    const { page, pageSize, search, status, range } = params;
+    const start = Math.max(0, (page - 1) * pageSize);
+    const end = start + pageSize - 1;
+    const q = (search ?? "").trim();
+    const asNumber = q ? searchToNumber(q) : null;
+    // Búsqueda por nombre solo si el texto tiene letras (no es un N°).
+    const byName = q.length > 0 && asNumber === null;
+
+    let query = supabase
+      .from("sales")
+      .select(byName ? "*, customers!inner(name)" : "*, customers(name)", {
+        count: "exact",
+      })
+      .order("created_at", { ascending: false });
+
+    if (status) query = query.eq("status", status);
+    if (range?.from) query = query.gte("created_at", range.from.toISOString());
+    if (range?.to) {
+      const rangeEnd = new Date(range.to);
+      rangeEnd.setHours(23, 59, 59, 999);
+      query = query.lte("created_at", rangeEnd.toISOString());
+    }
+    if (asNumber !== null) query = query.eq("number", asNumber);
+    if (byName) query = query.ilike("customers.name", `%${q}%`);
+
+    const { data, error, count } = await query.range(start, end);
+    if (error) throw error;
+    return { rows: (data ?? []) as unknown as SaleRow[], total: count ?? 0 };
+  },
+
+  // Filas para exportar respetando los filtros activos (sin paginar). Tope alto
+  // para no traer cantidades extremas de una sola vez.
+  exportRows: async (
+    params: Omit<SalesPageParams, "page" | "pageSize"> & { limit?: number },
+  ): Promise<SaleRow[]> => {
+    const { rows } = await salesApi.listPaged({
+      ...params,
+      page: 1,
+      pageSize: params.limit ?? 5000,
+    });
+    return rows;
+  },
+
   list: async (range?: { from?: Date; to?: Date }): Promise<SaleRow[]> => {
     const supabase = createClient();
     let q = supabase

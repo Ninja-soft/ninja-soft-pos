@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Code2,
+  Crop,
   Eye,
   EyeOff,
   LayoutGrid,
@@ -12,6 +13,7 @@ import {
   Plus,
   Printer,
   SlidersHorizontal,
+  Upload,
   X,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -22,6 +24,8 @@ import { useToast } from "@/components/ui/Toast";
 import { TicketRenderer } from "@/components/tickets/TicketRenderer";
 import { CanvasTicketRenderer } from "@/components/tickets/CanvasTicketRenderer";
 import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
+import { ImageCropModal } from "@/components/tickets/ImageCropModal";
+import { uploadTicketImage } from "@/lib/tickets/uploadTicketImage";
 import {
   BLOCK_LABELS,
   defaultSaleBlocks,
@@ -378,6 +382,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
                   setElements={setElements}
                   expanded={expanded}
                   setExpanded={setExpanded}
+                  tenantId={tenantId}
                 />
               )}
             </div>
@@ -696,11 +701,13 @@ function CanvasControls({
   setElements,
   expanded,
   setExpanded,
+  tenantId,
 }: {
   elements: CanvasElement[];
   setElements: React.Dispatch<React.SetStateAction<CanvasElement[]>>;
   expanded: string | null;
   setExpanded: React.Dispatch<React.SetStateAction<string | null>>;
+  tenantId: string;
 }) {
   const [addType, setAddType] = useState<CanvasElementType>("text");
   const hasItems = elements.some((e) => e.type === "items");
@@ -738,6 +745,7 @@ function CanvasControls({
           <CanvasRow
             key={el.id}
             el={el}
+            tenantId={tenantId}
             expanded={expanded === el.id}
             onToggleExpand={() => setExpanded((e) => (e === el.id ? null : el.id))}
             onRemove={() => remove(el.id)}
@@ -771,12 +779,14 @@ function CanvasControls({
 
 function CanvasRow({
   el,
+  tenantId,
   expanded,
   onToggleExpand,
   onRemove,
   onPatch,
 }: {
   el: CanvasElement;
+  tenantId: string;
   expanded: boolean;
   onToggleExpand: () => void;
   onRemove: () => void;
@@ -844,14 +854,90 @@ function CanvasRow({
           )}
 
           {el.type === "image" && (
-            <input
-              className={inputCls}
-              placeholder="URL de la imagen"
-              value={el.url ?? ""}
-              onChange={(e) => onPatch({ url: e.target.value })}
-            />
+            <ImageElementSettings el={el} tenantId={tenantId} onPatch={onPatch} />
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function ImageElementSettings({
+  el,
+  tenantId,
+  onPatch,
+}: {
+  el: CanvasElement;
+  tenantId: string;
+  onPatch: (c: Partial<CanvasElement>) => void;
+}) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+
+  async function onFile(file: File | null) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const url = await uploadTicketImage(file, tenantId);
+      onPatch({ url });
+      toast({ title: "Imagen subida", variant: "success" });
+    } catch (e) {
+      toast({
+        title: "No se pudo subir la imagen",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        className={inputCls}
+        placeholder="URL de la imagen"
+        value={el.url ?? ""}
+        onChange={(e) => onPatch({ url: e.target.value })}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          loading={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          <Upload size={15} /> Subir imagen
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={!el.url}
+          onClick={() => setCropOpen(true)}
+        >
+          <Crop size={15} /> Recortar
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        />
+      </div>
+      {el.url && (
+        <ImageCropModal
+          open={cropOpen}
+          onOpenChange={setCropOpen}
+          url={el.url}
+          tenantId={tenantId}
+          onCropped={(url) => onPatch({ url })}
+        />
       )}
     </div>
   );
@@ -911,13 +997,16 @@ function CanvasPreview({
   showNinja: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Estado de drag activo: id + posición de inicio (puntero y elemento).
+  // Estado de drag activo: id + modo (mover o redimensionar) + posición de
+  // inicio (puntero y elemento) y ancho del contenedor para convertir px→%.
   const dragRef = useRef<{
     id: string;
+    mode: "move" | "resize";
     startX: number;
     startY: number;
     elX: number;
     elY: number;
+    elW: number;
     width: number;
   } | null>(null);
 
@@ -928,7 +1017,7 @@ function CanvasPreview({
   // Sin items: Y = el.y. Con items, los de abajo (y >= splitY) se desplazan
   // por el alto de la tabla, pero en preview lo aproximamos: el overlay usa la
   // misma Y que el elemento; el drag ajusta la Y guardada. Suficiente y robusto.
-  function onPointerDown(e: React.PointerEvent, el: CanvasElement) {
+  function startDrag(e: React.PointerEvent, el: CanvasElement, dragMode: "move" | "resize") {
     if (el.type === "items") return;
     const container = containerRef.current;
     if (!container) return;
@@ -936,17 +1025,37 @@ function CanvasPreview({
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = {
       id: el.id,
+      mode: dragMode,
       startX: e.clientX,
       startY: e.clientY,
       elX: el.x,
       elY: el.y,
+      elW: el.w,
       width: container.getBoundingClientRect().width,
     };
+  }
+
+  function onPointerDown(e: React.PointerEvent, el: CanvasElement) {
+    startDrag(e, el, "move");
+  }
+
+  // Inicia un redimensionado desde el handle; no debe disparar el move.
+  function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
+    e.stopPropagation();
+    startDrag(e, el, "resize");
   }
 
   function onPointerMove(e: React.PointerEvent) {
     const d = dragRef.current;
     if (!d) return;
+    if (d.mode === "resize") {
+      const dwPct = ((e.clientX - d.startX) / d.width) * 100;
+      const nextW = clamp(Math.round(d.elW + dwPct), 10, 100);
+      setElements((prev) =>
+        prev.map((el) => (el.id === d.id ? { ...el, w: nextW } : el)),
+      );
+      return;
+    }
     const dxPct = ((e.clientX - d.startX) / d.width) * 100;
     const dyPx = e.clientY - d.startY;
     const nextX = clamp(Math.round(d.elX + dxPct), 0, 100);
@@ -995,8 +1104,10 @@ function CanvasPreview({
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 className={cn(
-                  "pointer-events-auto absolute cursor-move rounded ring-1 ring-transparent transition hover:ring-ninja-flameSoft/60",
-                  isSel && "ring-ninja-flameSoft",
+                  // Contorno punteado en TODOS los elementos para que se vea qué
+                  // es editable; anillo más fuerte en hover y en el seleccionado.
+                  "pointer-events-auto absolute cursor-move rounded outline-dashed outline-1 outline-offset-1 outline-border transition hover:outline-ninja-flameSoft/60",
+                  isSel && "outline-ninja-flameSoft outline-2",
                 )}
                 style={{
                   left: `${el.x}%`,
@@ -1005,7 +1116,22 @@ function CanvasPreview({
                   minHeight: 16,
                 }}
                 title={`${CANVAS_ELEMENT_LABELS[el.type]} — arrastrar`}
-              />
+              >
+                {isSel && (
+                  <span
+                    onPointerDown={(e) => onResizePointerDown(e, el)}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    role="slider"
+                    aria-label="Redimensionar ancho"
+                    aria-valuenow={el.w}
+                    aria-valuemin={10}
+                    aria-valuemax={100}
+                    title="Redimensionar ancho"
+                    className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-sm border border-background bg-ninja-flame"
+                  />
+                )}
+              </div>
             );
           })}
       </div>

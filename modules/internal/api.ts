@@ -200,6 +200,24 @@ export function effectiveMonthlyPrice(
   return Math.max(0, price);
 }
 
+// ── Bitácora de envíos de email (paridad Food) ──────────────────────────────
+
+export type SystemEmailKind = "system" | "receipt" | "smtp_test";
+export type SystemEmailStatus = "pending" | "sent" | "failed";
+
+export interface SystemEmail {
+  id: string;
+  tenant_id: string | null;
+  recipient: string;
+  subject: string;
+  kind: SystemEmailKind;
+  status: SystemEmailStatus;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+  tenantName: string | null;
+}
+
 export const internalApi = {
   listTenants: async (): Promise<InternalTenant[]> => {
     const supabase = createClient();
@@ -856,6 +874,44 @@ export const internalApi = {
         hasTenant: n.target_tenant_id !== null,
         hasUser: n.target_user_id !== null,
       }),
+    }));
+  },
+
+  // Bitácora de envíos: últimos 200 emails salientes (sistema, comprobante,
+  // prueba SMTP) con el negocio asociado. Solo staff los ve (RLS interna).
+  listSystemEmails: async (): Promise<SystemEmail[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("system_emails")
+      .select(
+        "id, tenant_id, recipient, subject, kind, status, error_message, sent_at, created_at, tenants(name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    type Row = {
+      id: string;
+      tenant_id: string | null;
+      recipient: string;
+      subject: string;
+      kind: string;
+      status: string;
+      error_message: string | null;
+      sent_at: string | null;
+      created_at: string;
+      tenants: { name: string } | null;
+    };
+    return ((data ?? []) as unknown as Row[]).map((e) => ({
+      id: e.id,
+      tenant_id: e.tenant_id,
+      recipient: e.recipient,
+      subject: e.subject,
+      kind: e.kind as SystemEmailKind,
+      status: e.status as SystemEmailStatus,
+      error_message: e.error_message,
+      sent_at: e.sent_at,
+      created_at: e.created_at,
+      tenantName: e.tenants?.name ?? null,
     }));
   },
 };

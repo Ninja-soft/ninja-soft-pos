@@ -2,13 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Plus, Send } from "lucide-react";
+import { Download, Mail, Plus, RefreshCw, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useSystemEmails } from "@/modules/internal/hooks";
+import type {
+  SystemEmail,
+  SystemEmailKind,
+  SystemEmailStatus,
+} from "@/modules/internal/api";
+import { exportXlsx } from "@/lib/utils/xlsx";
 import {
   Dropdown,
   DropdownContent,
@@ -327,6 +334,153 @@ export default function InternalEmailsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Bitácora de envíos (paridad Food) */}
+      <SystemEmailsLog />
     </>
+  );
+}
+
+// ── Bitácora de envíos ───────────────────────────────────────────────────────
+
+const KIND_LABELS: Record<SystemEmailKind, string> = {
+  system: "Sistema",
+  receipt: "Comprobante",
+  smtp_test: "Prueba SMTP",
+};
+
+const STATUS_LABELS: Record<SystemEmailStatus, string> = {
+  sent: "Enviado",
+  failed: "Fallido",
+  pending: "Pendiente",
+};
+
+function fmtDate(s: string): string {
+  return new Date(s).toLocaleString("es-AR");
+}
+
+function StatusChip({ email }: { email: SystemEmail }) {
+  const label = STATUS_LABELS[email.status] ?? email.status;
+  const cls =
+    email.status === "sent"
+      ? "bg-emerald-500/12 text-emerald-400"
+      : email.status === "failed"
+        ? "bg-red-500/12 text-red-400"
+        : "bg-muted text-muted-foreground";
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+        cls,
+      )}
+      title={email.status === "failed" ? email.error_message ?? undefined : undefined}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SystemEmailsLog() {
+  const { data: emails = [], isLoading, isFetching, refetch } = useSystemEmails();
+
+  async function onExport() {
+    await exportXlsx("bitacora-envios", [
+      {
+        name: "Envíos",
+        title: "Bitácora de envíos",
+        columns: [
+          { header: "Fecha", key: "fecha", width: 22 },
+          { header: "Asunto", key: "asunto", width: 36 },
+          { header: "Destinatario", key: "destinatario", width: 28 },
+          { header: "Negocio", key: "negocio", width: 24 },
+          { header: "Tipo", key: "tipo", width: 16 },
+          { header: "Estado", key: "estado", width: 14 },
+          { header: "Error", key: "error", width: 40 },
+        ],
+        rows: emails.map((e) => ({
+          fecha: fmtDate(e.created_at),
+          asunto: e.subject,
+          destinatario: e.recipient,
+          negocio: e.tenantName ?? "—",
+          tipo: KIND_LABELS[e.kind] ?? e.kind,
+          estado: STATUS_LABELS[e.status] ?? e.status,
+          error: e.error_message ?? "",
+        })),
+      },
+    ]);
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardContent className="space-y-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 font-semibold">
+            <Mail size={16} /> Bitácora de envíos
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />{" "}
+              Actualizar
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onExport}
+              disabled={emails.length === 0}
+            >
+              <Download size={15} /> Exportar XLSX
+            </Button>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : emails.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Todavía no hay envíos registrados.
+          </p>
+        ) : (
+          <div className="-mx-1 overflow-x-auto px-1">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Fecha</th>
+                  <th className="py-2 pr-3 font-medium">Asunto</th>
+                  <th className="py-2 pr-3 font-medium">Destinatario</th>
+                  <th className="py-2 pr-3 font-medium">Negocio</th>
+                  <th className="py-2 pr-3 font-medium">Tipo</th>
+                  <th className="py-2 pr-3 font-medium">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emails.map((e) => (
+                  <tr key={e.id} className="border-b border-border/60">
+                    <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
+                      {fmtDate(e.created_at)}
+                    </td>
+                    <td className="py-2 pr-3">{e.subject}</td>
+                    <td className="py-2 pr-3">{e.recipient}</td>
+                    <td className="py-2 pr-3">{e.tenantName ?? "—"}</td>
+                    <td className="py-2 pr-3">
+                      <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        {KIND_LABELS[e.kind] ?? e.kind}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <StatusChip email={e} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

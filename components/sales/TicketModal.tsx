@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileDown, Printer } from "lucide-react";
+import { FileDown, Printer, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -245,39 +245,46 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
               onOpenChange={setEmailOpen}
             />
 
-            {/* Cerrar a la izquierda; acciones a la derecha (en sm+).
-                En mobile: acciones en grid 2 cols y Cerrar full-width al final. */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-                <Button
-                  onClick={() => window.print()}
-                  className="h-10"
-                >
-                  <Printer size={16} /> Imprimir
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleA4}
-                  disabled={downloading}
-                  className="h-10"
-                >
-                  <FileDown size={16} /> A4 (PDF)
-                </Button>
+            {/* Fila compacta solo-ícono: Cerrar a la izquierda; acciones a la
+                derecha (Mail / A4 / Imprimir). Tooltips via title + aria-label. */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                className="h-10 w-10 p-0"
+                title="Cerrar"
+                aria-label="Cerrar"
+              >
+                <X size={18} />
+              </Button>
+              <div className="ml-auto flex items-center gap-2">
                 <SendReceiptEmailButton
                   open={emailOpen}
                   onToggle={() => setEmailOpen((v) => !v)}
                   sentAt={data.sale.receipt_emailed_at}
                   smtpMissing={smtpMissing}
-                  className="col-span-2 h-10 sm:col-span-1"
+                  className="h-10 w-10 p-0"
+                  iconOnly
                 />
+                <Button
+                  variant="secondary"
+                  onClick={handleA4}
+                  disabled={downloading}
+                  className="h-10 w-10 p-0"
+                  title="Descargar A4"
+                  aria-label="Descargar A4"
+                >
+                  <FileDown size={18} />
+                </Button>
+                <Button
+                  onClick={() => window.print()}
+                  className="h-10 w-10 p-0"
+                  title="Imprimir"
+                  aria-label="Imprimir"
+                >
+                  <Printer size={18} />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() => onOpenChange(false)}
-                className="order-last h-10 w-full sm:order-first sm:w-auto"
-              >
-                Cerrar
-              </Button>
             </div>
           </div>
         </>

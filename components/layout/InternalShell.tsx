@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bell,
   Building2,
   ChevronDown,
   CreditCard,
@@ -25,7 +26,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import { useTheme } from "@/lib/theme/ThemeProvider";
-import { Isotype, WordmarkPos } from "@/components/brand/Logo";
+import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
 import { ProfileEditModal } from "@/components/account/ProfileEditModal";
@@ -45,6 +46,7 @@ const NAV = [
   { href: "/internal/staff", label: "Staff", icon: ShieldCheck },
   { href: "/internal/emails", label: "Emails", icon: Mail },
   { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
+  { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {
@@ -106,15 +108,18 @@ export function InternalShell({
   const nav = (
     <nav className="flex h-full flex-col gap-1 p-3">
       <Link
-        href="/internal/tenants"
+        href="/internal"
         onClick={() => setDrawer(false)}
         className="mb-1 flex items-center gap-2.5 px-2 py-2"
       >
         <Isotype className="h-8 w-auto" priority />
-        <WordmarkPos className="h-6 w-auto" priority />
-        <span className="h-6 w-0.5 rounded-full bg-gradient-to-b from-ninja-flame to-ninja-gold" />
-        <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-ninja-flameSoft">
-          Interno
+        <span className="flex flex-col leading-none">
+          <span className="font-display text-sm font-extrabold tracking-tight text-foreground">
+            NinjaPos
+          </span>
+          <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-ninja-flameSoft">
+            Panel interno
+          </span>
         </span>
       </Link>
       <div className="mb-2" />

@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import type { SalePaymentInput } from "@/modules/pos/api";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import { useEnabledPaymentMethods, usePaymentPlans } from "@/modules/pos/hooks";
+import { useGating } from "@/modules/saas/gating";
 import type { PaymentPlan } from "@/modules/pos/api";
 import type { WarrantyPlan } from "@/modules/products/api";
 
@@ -19,6 +20,17 @@ const ALL_METHODS: { value: SalePaymentInput["method"]; label: string; providers
   { value: "credit",   label: "Crédito",         providers: ["mercadopago_point", "payway", "getnet", "fiserv", "mobbex"] },
   { value: "qr",       label: "QR / Terminal",   providers: ["mercadopago", "mobbex", "modo", "pagos360"] },
 ];
+
+// Feature de plan por proveedor (espejo de payment_method_plan_key en SQL).
+// Un proveedor sin entrada NO está gateado por plan (posnet propio, pagos360…).
+// El backend (trigger en payments + Edge de QR) bloquea de verdad; esto solo
+// evita ofrecer en la UI un medio que el plan no permite.
+const PROVIDER_FEATURE: Record<string, string> = {
+  mercadopago: "mercado_pago",
+  mercadopago_point: "mercado_pago",
+  modo: "modo",
+  mobbex: "mobbex",
+};
 
 // Base del plan según el método seleccionado.
 const METHOD_PLAN_BASE: Partial<Record<SalePaymentInput["method"], string>> = {
@@ -130,6 +142,7 @@ export function PaymentModal({
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allPlans } = usePaymentPlans();
   const { data: enabledProviders } = useEnabledPaymentMethods();
+  const { data: gating } = useGating();
 
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [warrantyId, setWarrantyId] = useState("");
@@ -149,18 +162,28 @@ export function PaymentModal({
   // Reset el plan cuando cambia el método.
   useEffect(() => { setPlanId(""); }, [method]);
 
-  // Filtrar métodos por los proveedores habilitados del tenant (H14).
+  // Filtrar métodos por los proveedores habilitados del tenant (H14) Y por el
+  // plan (gating real, espejo del enforcement backend). Un proveedor se ofrece
+  // sólo si está habilitado por el tenant y su feature de plan está activa.
+  // Proveedores sin feature (posnet propio, pagos360) sólo dependen de enabled.
   const methods = useMemo(() => {
     const enabledKeys = new Set(
       (enabledProviders ?? []).map((p: { provider_key: string }) => p.provider_key),
     );
-    // Si el tenant no configuró nada, mostramos todo (fallback).
+    // Si el tenant no configuró nada, mostramos todo (fallback) — pero igual
+    // respetamos el plan: un proveedor gateado sin la feature no se ofrece.
     const noConfig = enabledKeys.size === 0;
+    const planAllows = (provider: string) => {
+      const feat = PROVIDER_FEATURE[provider];
+      if (!feat) return true; // sin gating de plan
+      // Mientras carga el gating no escondemos nada (optimista); el backend
+      // sigue bloqueando si no corresponde.
+      return gating ? gating.features[feat] === true : true;
+    };
+    const providerUsable = (provider: string) =>
+      (noConfig || enabledKeys.has(provider)) && planAllows(provider);
 
-    const filtered = ALL_METHODS.filter((m) => {
-      if (noConfig) return true;
-      return m.providers.some((p) => enabledKeys.has(p));
-    });
+    const filtered = ALL_METHODS.filter((m) => m.providers.some(providerUsable));
 
     const applyRound = (x: number) =>
       rounding > 0 ? Math.round(x / rounding) * rounding : x;
@@ -176,7 +199,7 @@ export function PaymentModal({
         ? [{ value: "account" as const, label: "Cuenta corriente (fiado)", providers: [] }]
         : []),
     ];
-  }, [enabledProviders, storeCreditBalance, hasCustomer, base, rounding]);
+  }, [enabledProviders, gating, storeCreditBalance, hasCustomer, base, rounding]);
 
   // Planes del método actual (débito → base "debito", crédito → "credito").
   const planBase = METHOD_PLAN_BASE[method];

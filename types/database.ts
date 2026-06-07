@@ -1019,6 +1019,7 @@ export type Database = {
       }
       plans: {
         Row: {
+          base_plan_key: string | null
           created_at: string
           description: string | null
           id: string
@@ -1027,9 +1028,11 @@ export type Database = {
           limits: Json
           monthly_price_ars: number
           name: string
+          tenant_id: string | null
           yearly_price_ars: number | null
         }
         Insert: {
+          base_plan_key?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1038,9 +1041,11 @@ export type Database = {
           limits?: Json
           monthly_price_ars: number
           name: string
+          tenant_id?: string | null
           yearly_price_ars?: number | null
         }
         Update: {
+          base_plan_key?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1049,9 +1054,18 @@ export type Database = {
           limits?: Json
           monthly_price_ars?: number
           name?: string
+          tenant_id?: string | null
           yearly_price_ars?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "plans_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_secrets: {
         Row: {
@@ -2127,6 +2141,7 @@ export type Database = {
           current_period_end: string | null
           current_period_start: string | null
           id: string
+          limit_overrides: Json
           mp_preapproval_id: string | null
           plan_id: string
           status: string
@@ -2140,6 +2155,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          limit_overrides?: Json
           mp_preapproval_id?: string | null
           plan_id: string
           status: string
@@ -2153,6 +2169,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          limit_overrides?: Json
           mp_preapproval_id?: string | null
           plan_id?: string
           status?: string
@@ -2334,8 +2351,63 @@ export type Database = {
           },
         ]
       }
+      tenant_discounts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          kind: string
+          reason: string | null
+          tenant_id: string
+          valid_from: string
+          valid_until: string | null
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          kind: string
+          reason?: string | null
+          tenant_id: string
+          valid_from?: string
+          valid_until?: string | null
+          value: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          kind?: string
+          reason?: string | null
+          tenant_id?: string
+          valid_from?: string
+          valid_until?: string | null
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_discounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_discounts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_email_smtp: {
         Row: {
+          body_template: string
           body_text: string | null
           from_email: string
           from_name: string
@@ -2348,6 +2420,7 @@ export type Database = {
           username: string
         }
         Insert: {
+          body_template?: string
           body_text?: string | null
           from_email?: string
           from_name?: string
@@ -2360,6 +2433,7 @@ export type Database = {
           username?: string
         }
         Update: {
+          body_template?: string
           body_text?: string | null
           from_email?: string
           from_name?: string
@@ -2801,6 +2875,15 @@ export type Database = {
       current_tenant_id: { Args: never; Returns: string }
       get_email_smtp: { Args: never; Returns: Json }
       get_tenant_smtp: { Args: never; Returns: Json }
+      internal_clone_plan: {
+        Args: {
+          p_base_plan_key: string
+          p_monthly_price: number
+          p_name: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       internal_extend_trial: {
         Args: { p_days: number; p_tenant_id: string }
         Returns: string
@@ -2823,6 +2906,15 @@ export type Database = {
       internal_set_industry: {
         Args: { p_industry: string; p_tenant_id: string }
         Returns: undefined
+      }
+      internal_set_limit_override: {
+        Args: {
+          p_key: string
+          p_reason?: string
+          p_tenant_id: string
+          p_value: number
+        }
+        Returns: Json
       }
       internal_set_plan: {
         Args: { p_plan_key: string; p_tenant_id: string }
@@ -2849,6 +2941,16 @@ export type Database = {
       }
       internal_trial_outcome: {
         Args: { p_outcome: string; p_reason?: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      internal_update_custom_plan: {
+        Args: {
+          p_limits: Json
+          p_monthly_price: number
+          p_name: string
+          p_plan_id: string
+          p_reason?: string
+        }
         Returns: undefined
       }
       is_internal: { Args: never; Returns: boolean }

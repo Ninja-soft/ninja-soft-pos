@@ -40,6 +40,7 @@ import {
   usePosSettings,
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
+import { useFeature } from "@/modules/saas/gating";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { productsApi, variantLabel } from "@/modules/products/api";
@@ -111,9 +112,14 @@ export default function PosPage() {
   const { data: myTenant } = useMyTenant();
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
   const { data: mp } = useMpMethod();
-  const mpReady = Boolean(mp?.enabled && mp?.connected);
+  // El plan debe permitir el medio (gating real, espejo del backend). Sin la
+  // feature, además de ocultar el botón, la Edge de QR rechaza la creación del
+  // cobro. `!== false` = optimista mientras carga el gating.
+  const mpFeature = useFeature("mercado_pago");
+  const mobbexFeature = useFeature("mobbex");
+  const mpReady = Boolean(mp?.enabled && mp?.connected && mpFeature !== false);
   const { data: mobbex } = useProviderMethod("mobbex");
-  const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected);
+  const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected && mobbexFeature !== false);
   const { data: posSettings } = usePosSettings();
   const role = myTenant?.role ?? "cashier";
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;

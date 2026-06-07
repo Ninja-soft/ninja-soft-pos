@@ -60,6 +60,17 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
+  // Gating de plan (enforcement real): el botón "Cobrar con QR · Mobbex" del POS
+  // sólo se oculta en la UI; acá se bloquea de verdad. Esta Edge corre con
+  // service_role (saltea RLS) y crea el intent ANTES del cobro. Sin el feature
+  // 'mobbex' no se genera el checkout. (El trigger en `payments` es la red de
+  // seguridad para el registro de la venta.)
+  const { data: mbxAllowed } = await admin.rpc("tenant_has_feature_for", {
+    p_tenant: tenantId,
+    p_key: "mobbex",
+  });
+  if (mbxAllowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
+
   // Credenciales Mobbex del tenant.
   const { data: secretRow } = await admin
     .from("payment_secrets")

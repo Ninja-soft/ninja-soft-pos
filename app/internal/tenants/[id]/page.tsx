@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Copy, ExternalLink, ShieldAlert, Trash2 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
+import { PlanCard } from "@/components/internal/PlanCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
@@ -23,12 +24,6 @@ import {
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
 
-const PLANS = [
-  { key: "start", name: "Start" },
-  { key: "pro", name: "Pro" },
-  { key: "business", name: "Business" },
-  { key: "enterprise", name: "Enterprise" },
-];
 const STATUSES = [
   { key: "trial", name: "Trial" },
   { key: "active", name: "Activo" },
@@ -62,7 +57,7 @@ export default function InternalTenantDetail({
   const { data: notes } = useTenantNotes(params.id);
   const noteMut = useTenantNoteMutations(params.id);
   const [noteBody, setNoteBody] = useState("");
-  const { setPlan, setStatus, setFlag, setIndustry } = useInternalMutations(
+  const { setStatus, setFlag, setIndustry } = useInternalMutations(
     params.id,
   );
   const supabase = createClient();
@@ -187,27 +182,11 @@ export default function InternalTenantDetail({
         )}
       </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardContent className="p-5">
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Plan
-            </label>
-            <select
-              className={selectCls}
-              value={tenant?.planKey ?? "start"}
-              onChange={(e) =>
-                wrap(setPlan.mutateAsync(e.target.value), "Plan actualizado")
-              }
-            >
-              {PLANS.map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </CardContent>
-        </Card>
+      <div className="mt-6">
+        <PlanCard tenantId={params.id} />
+      </div>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Card>
           <CardContent className="p-5">
             <label className="mb-2 block text-sm font-medium text-muted-foreground">

@@ -183,7 +183,7 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
       {showNinjaLogo && (
         <div className="mt-3 flex justify-center opacity-70">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
+          <img src="/brand/ninjapos-logo-light-mode.webp" alt="NinjaSoft" className="h-4 w-auto" />
         </div>
       )}
     </div>

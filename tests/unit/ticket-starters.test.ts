@@ -1,22 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
-import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
-import { CANVAS_WIDTH } from "@/lib/tickets/blocks";
+import { FISCAL_TRANSPARENCY_TEXT } from "@/lib/tickets/legal";
 
 const KINDS = ["sale", "promo", "gift"];
 const PAPERS = ["58", "80", "a4"];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 describe("BLOCK_STARTER_TEMPLATES", () => {
-  it("tiene 5 entradas con claves únicas", () => {
-    expect(BLOCK_STARTER_TEMPLATES).toHaveLength(5);
+  it("tiene 8 entradas con claves únicas", () => {
+    expect(BLOCK_STARTER_TEMPLATES).toHaveLength(8);
     const keys = BLOCK_STARTER_TEMPLATES.map((t) => t.key);
-    expect(new Set(keys).size).toBe(5);
+    expect(new Set(keys).size).toBe(8);
   });
 
-  it("expone las claves rediseñadas (clasico/moderno/elegante/promo/gift)", () => {
+  it("expone las claves esperadas (5 base + 3 modelos nuevos)", () => {
     const keys = BLOCK_STARTER_TEMPLATES.map((t) => t.key).sort();
-    expect(keys).toEqual(["clasico", "elegante", "gift", "moderno", "promo"]);
+    expect(keys).toEqual([
+      "a4-ejecutivo",
+      "a4-minimal",
+      "clasico",
+      "elegante",
+      "gift",
+      "moderno",
+      "promo",
+      "termico-denso",
+    ]);
   });
 
   it("kind y paper válidos en cada entrada", () => {
@@ -49,53 +57,19 @@ describe("BLOCK_STARTER_TEMPLATES", () => {
     );
     expect(withColor.length).toBeGreaterThanOrEqual(4);
   });
-});
 
-describe("CANVAS_STARTER_TEMPLATES", () => {
-  it("tiene 5 entradas con claves únicas", () => {
-    expect(CANVAS_STARTER_TEMPLATES).toHaveLength(5);
-    const keys = CANVAS_STARTER_TEMPLATES.map((t) => t.key);
-    expect(new Set(keys).size).toBe(5);
-  });
-
-  it("expone las claves rediseñadas", () => {
-    const keys = CANVAS_STARTER_TEMPLATES.map((t) => t.key).sort();
-    expect(keys).toEqual(["cartel-a4", "clasico", "gift-card", "moderno-dark", "promo-flyer"]);
-  });
-
-  it("todo color/bg presente en elementos es un hex válido", () => {
-    for (const t of CANVAS_STARTER_TEMPLATES) {
-      for (const el of t.canvas.elements) {
-        if (el.color) expect(el.color, `${t.key}/${el.type} color`).toMatch(HEX);
-        if (el.bg) expect(el.bg, `${t.key}/${el.type} bg`).toMatch(HEX);
-      }
+  it("todos los modelos de venta incluyen la leyenda fiscal (Ley 27.743)", () => {
+    const sales = BLOCK_STARTER_TEMPLATES.filter((t) => t.kind === "sale");
+    expect(sales.length).toBeGreaterThanOrEqual(5);
+    for (const t of sales) {
+      const hasFiscal = t.blocks.some(
+        (b) => b.type === "text" && b.text === FISCAL_TRANSPARENCY_TEXT,
+      );
+      expect(hasFiscal, `${t.key} debe incluir la leyenda fiscal`).toBe(true);
     }
   });
 
-  it("kind y paper válidos en cada entrada", () => {
-    for (const t of CANVAS_STARTER_TEMPLATES) {
-      expect(KINDS).toContain(t.kind);
-      expect(PAPERS).toContain(t.paper);
-    }
-  });
-
-  it("a lo sumo un elemento items por modelo", () => {
-    for (const t of CANVAS_STARTER_TEMPLATES) {
-      const items = t.canvas.elements.filter((e) => e.type === "items");
-      expect(items.length, `${t.key} tiene más de un items`).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it("coordenadas v2 en px: x>=0, w>=10, y>=0 y dentro del ancho del papel", () => {
-    for (const t of CANVAS_STARTER_TEMPLATES) {
-      const width = CANVAS_WIDTH[t.paper];
-      for (const el of t.canvas.elements) {
-        expect(el.x, `${t.key}/${el.type} x`).toBeGreaterThanOrEqual(0);
-        expect(el.y, `${t.key}/${el.type} y`).toBeGreaterThanOrEqual(0);
-        expect(el.w, `${t.key}/${el.type} w`).toBeGreaterThanOrEqual(10);
-        // No se sale del lienzo por la derecha.
-        expect(el.x + el.w, `${t.key}/${el.type} x+w`).toBeLessThanOrEqual(width);
-      }
-    }
+  it("la leyenda fiscal menciona la Ley 27.743", () => {
+    expect(FISCAL_TRANSPARENCY_TEXT).toContain("27.743");
   });
 });

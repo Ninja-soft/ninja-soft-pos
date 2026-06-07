@@ -1220,6 +1220,10 @@ export type Database = {
           rounding_multiple: number
           sale_pad: number
           sale_prefix: string
+          scanner_beep: boolean
+          scanner_dup_ms: number
+          scanner_prefix: string
+          scanner_suffix: string
           sku_auto: boolean
           sku_prefix: string
           tenant_id: string
@@ -1238,6 +1242,10 @@ export type Database = {
           rounding_multiple?: number
           sale_pad?: number
           sale_prefix?: string
+          scanner_beep?: boolean
+          scanner_dup_ms?: number
+          scanner_prefix?: string
+          scanner_suffix?: string
           sku_auto?: boolean
           sku_prefix?: string
           tenant_id: string
@@ -1256,6 +1264,10 @@ export type Database = {
           rounding_multiple?: number
           sale_pad?: number
           sale_prefix?: string
+          scanner_beep?: boolean
+          scanner_dup_ms?: number
+          scanner_prefix?: string
+          scanner_suffix?: string
           sku_auto?: boolean
           sku_prefix?: string
           tenant_id?: string

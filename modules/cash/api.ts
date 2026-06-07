@@ -42,13 +42,24 @@ export const cashApi = {
   },
 
   // Historial inmutable de cierres Z (más reciente primero).
-  zClosures: async (): Promise<ZClosure[]> => {
+  zClosures: async (range?: { from?: Date; to?: Date }): Promise<ZClosure[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("cash_z_closures")
       .select("*")
       .order("z_number", { ascending: false })
-      .limit(100);
+      .order("closed_at", { ascending: false });
+    if (range?.from) {
+      const from = new Date(range.from);
+      from.setHours(0, 0, 0, 0);
+      query = query.gte("closed_at", from.toISOString());
+    }
+    if (range?.to) {
+      const to = new Date(range.to);
+      to.setHours(23, 59, 59, 999);
+      query = query.lte("closed_at", to.toISOString());
+    }
+    const { data, error } = await query.limit(100);
     if (error) throw error;
     return (data ?? []) as ZClosure[];
   },

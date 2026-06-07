@@ -5,6 +5,7 @@ import { Download, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { useZClosures } from "@/modules/cash/hooks";
 import type { ZClosure } from "@/modules/cash/api";
 import { formatCurrency } from "@/lib/utils/format";
@@ -23,7 +24,8 @@ function breakdown(z: ZClosure): [string, number][] {
 }
 
 export function ZClosuresHistory() {
-  const { data: closures, isLoading } = useZClosures();
+  const [range, setRange] = useState<DateRange | undefined>();
+  const { data: closures, isLoading } = useZClosures(range);
   const [sel, setSel] = useState<ZClosure | null>(null);
 
   async function exportZ(z: ZClosure) {
@@ -76,6 +78,18 @@ export function ZClosuresHistory() {
         Historial contable de cada cierre de caja con su consolidado del turno. No
         se puede editar ni borrar.
       </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <DateRangePicker value={range} onChange={setRange} className="h-10" />
+        {range?.from && (
+          <button
+            onClick={() => setRange(undefined)}
+            className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            Limpiar
+          </button>
+        )}
+      </div>
 
       <Card className="mt-3">
         <CardContent className="overflow-x-auto p-0">

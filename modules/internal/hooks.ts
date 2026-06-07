@@ -374,6 +374,15 @@ export function useSendNotification() {
   });
 }
 
+export function useDeleteNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => internalApi.deleteNotification(id),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["internal", "notifications"] }),
+  });
+}
+
 // ── Bitácora de envíos de email ─────────────────────────────────────────────
 
 export function useSystemEmails() {

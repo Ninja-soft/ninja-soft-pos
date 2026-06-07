@@ -131,17 +131,17 @@ function NotificationItem({
             Entendido
           </button>
         )}
+        <button
+          type="button"
+          title="Archivar"
+          aria-label="Archivar"
+          onClick={() => onArchive(n.id)}
+          className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          <Archive size={14} />
+          Archivar
+        </button>
       </div>
-
-      <button
-        type="button"
-        title="Archivar"
-        aria-label="Archivar"
-        onClick={() => onArchive(n.id)}
-        className="absolute right-2 top-2 hidden rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground group-hover:block"
-      >
-        <Archive size={14} />
-      </button>
     </div>
   );
 }

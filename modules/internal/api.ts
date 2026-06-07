@@ -1117,7 +1117,9 @@ export const internalApi = {
 
   sendNotification: async (input: SendNotificationInput): Promise<string> => {
     const supabase = createClient();
-    const { data, error } = await supabase.rpc("internal_notify", {
+    // p_display_until es el 12º arg (migración 20260608200000); aún no está en
+    // los types generados (regen pendiente), por eso el cast del payload.
+    const args: Record<string, unknown> = {
       // El backend acepta null para acotar/ampliar la audiencia; los types los
       // tipan como string requerido, por eso el cast.
       p_tenant_id: input.tenantId as unknown as string,
@@ -1131,9 +1133,26 @@ export const internalApi = {
       p_action_url: input.actionUrl || undefined,
       p_requires_ack: input.requiresAck,
       p_expires_at: input.expiresAt || undefined,
-    });
+      p_display_until: input.displayUntil || undefined,
+    };
+    const { data, error } = await supabase.rpc(
+      "internal_notify",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      args as any,
+    );
     if (error) throw error;
     return data as string;
+  },
+
+  // Baja lógica auditada de una notificación cargada (RPC internal, solo staff
+  // no-support). RPC nuevo (migración 20260608200000) aún sin types generados.
+  deleteNotification: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("internal_delete_notification", {
+      p_id: id,
+    });
+    if (error) throw error;
   },
 
   // Últimas 100 notificaciones (el staff las ve todas vía RLS), con una
@@ -1143,7 +1162,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("notifications")
       .select(
-        "id, type, severity, title, body, requires_ack, target_tenant_id, target_role, target_user_id, created_at, expires_at, tenants:target_tenant_id(name), users:target_user_id(full_name, email)",
+        "id, type, severity, title, body, requires_ack, target_tenant_id, target_role, target_user_id, created_at, expires_at, display_until, tenants:target_tenant_id(name), users:target_user_id(full_name, email)",
       )
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
@@ -1161,6 +1180,7 @@ export const internalApi = {
       target_user_id: string | null;
       created_at: string;
       expires_at: string | null;
+      display_until: string | null;
       tenants: { name: string } | null;
       users: { full_name: string | null; email: string } | null;
     };
@@ -1173,6 +1193,7 @@ export const internalApi = {
       requiresAck: n.requires_ack,
       createdAt: n.created_at,
       expiresAt: n.expires_at,
+      displayUntil: n.display_until,
       audience: describeAudience({
         tenantName: n.tenants?.name ?? null,
         role: n.target_role,
@@ -1236,6 +1257,7 @@ export interface SendNotificationInput {
   actionUrl: string;
   requiresAck: boolean;
   expiresAt: string; // ISO o "" si no vence
+  displayUntil: string; // ISO o "" si no hay corte de captación
 }
 
 export interface SentNotification {
@@ -1247,6 +1269,7 @@ export interface SentNotification {
   requiresAck: boolean;
   createdAt: string;
   expiresAt: string | null;
+  displayUntil: string | null;
   audience: string;
 }
 

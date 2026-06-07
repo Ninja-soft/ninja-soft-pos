@@ -19,11 +19,15 @@ type Status = {
   model: string | null;
   beta_owner_email: string | null;
   api_key: boolean;
+  image_url: string | null;
+  commercial_text: string | null;
+  addon_price_ars: string | null;
+  addon_trial_days: string | null;
 };
 
 // Modelo por defecto según proveedor.
 const DEFAULT_MODEL: Record<Provider, string> = {
-  gemini: "gemini-2.0-flash",
+  gemini: "gemini-2.5-flash",
   claude: "claude-haiku-4-5-20251001",
 };
 
@@ -36,6 +40,11 @@ export function AiConfigCard() {
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [betaEmail, setBetaEmail] = useState("");
+  // Campos públicos del addon (para el explicador de la burbuja).
+  const [imageUrl, setImageUrl] = useState("");
+  const [commercialText, setCommercialText] = useState("");
+  const [priceArs, setPriceArs] = useState("");
+  const [trialDays, setTrialDays] = useState("");
   // El usuario tocó el modelo manualmente → no lo pisamos al cambiar proveedor.
   const [modelTouched, setModelTouched] = useState(false);
 
@@ -58,6 +67,10 @@ export function AiConfigCard() {
     setProvider(p);
     setModel(status.model ?? DEFAULT_MODEL[p]);
     setBetaEmail(status.beta_owner_email ?? "");
+    setImageUrl(status.image_url ?? "");
+    setCommercialText(status.commercial_text ?? "");
+    setPriceArs(status.addon_price_ars ?? "");
+    setTrialDays(status.addon_trial_days ?? "");
     if (status.model) setModelTouched(true);
   }, [status]);
 
@@ -78,6 +91,11 @@ export function AiConfigCard() {
         beta_owner_email: betaEmail.trim().toLowerCase(),
       };
       if (apiKey.trim()) secrets.api_key = apiKey.trim();
+      // Campos públicos del addon: el merge del backend ignora los vacíos.
+      if (imageUrl.trim()) secrets.image_url = imageUrl.trim();
+      if (commercialText.trim()) secrets.commercial_text = commercialText.trim();
+      if (priceArs.trim()) secrets.addon_price_ars = priceArs.trim();
+      if (trialDays.trim()) secrets.addon_trial_days = trialDays.trim();
       const { data, error } = await supabase.functions.invoke("set_platform_secret", {
         body: { key: "ai_config", secrets },
       });
@@ -169,6 +187,80 @@ export function AiConfigCard() {
             onChange={(e) => setBetaEmail(e.target.value)}
             placeholder="tu-email@dominio.com"
           />
+
+          {/* Presentación pública del addon (lo ve quien NO lo tiene contratado
+              al abrir la burbuja). image_url y texto comercial NO son secretos. */}
+          <div className="mt-1 border-t border-border pt-4">
+            <span className="block text-sm font-semibold text-foreground">
+              Presentación del addon
+            </span>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Avatar y texto que ve un dueño sin el complemento al abrir la
+              burbuja del asistente.
+            </p>
+          </div>
+
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Input
+                label="Imagen del asistente (URL avatar/gif)"
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://…/asistente.gif"
+              />
+            </div>
+            {imageUrl.trim() && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageUrl.trim()}
+                alt="Previsualización del avatar"
+                className="h-11 w-11 shrink-0 rounded-full border border-border object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.visibility =
+                    "hidden";
+                }}
+              />
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="ai-commercial-text"
+              className="mb-2 block text-sm font-medium text-muted-foreground"
+            >
+              Texto comercial (explicador sin addon)
+            </label>
+            <textarea
+              id="ai-commercial-text"
+              value={commercialText}
+              onChange={(e) => setCommercialText(e.target.value)}
+              rows={4}
+              placeholder="Qué ofrece el Asistente IA y cómo se contrata…"
+              className="w-full resize-y rounded-lg border border-input bg-background p-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Precio del addon (ARS / mes)"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={priceArs}
+              onChange={(e) => setPriceArs(e.target.value)}
+              placeholder="5000"
+            />
+            <Input
+              label="Días de prueba"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              placeholder="14"
+            />
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button disabled={save.isPending} onClick={() => save.mutate()}>

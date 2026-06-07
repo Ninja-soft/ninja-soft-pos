@@ -6,7 +6,8 @@
 // { test: true, test_to } → tras guardar, envía un email de prueba. H9b PR3.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+// @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
+import nodemailer from "npm:nodemailer@6.9.16";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,7 @@ const json = (b: unknown, s = 200) =>
   });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// denomailer dispara promesas internas (conexión) que pueden rechazar fuera
+// El cliente SMTP dispara promesas internas (conexión) que pueden rechazar fuera
 // de nuestro await: sin esto, Deno mata el worker (503, deployment_id null) y
 // ningún try/catch del handler lo evita. Capturamos a nivel global.
 addEventListener("unhandledrejection", (e) => {
@@ -156,39 +157,35 @@ Deno.serve(async (req: Request) => {
       .replace(/[\x00-\x1f\x7f]+/g, " ")
       .trim() || "NinjaSoft POS";
     // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
-    // (denomailer lo negocia solo sobre conexión plana si el server lo ofrece).
+    // (nodemailer lo negocia solo sobre conexión plana si el server lo ofrece).
     const smtpPort = cfg.port || 587;
     const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
-    const client = new SMTPClient({
-      connection: {
-        hostname: cfg.host,
-        port: smtpPort,
-        tls: smtpTls,
-        auth: cfg.username
-          ? { username: cfg.username, password: cfg.password }
-          : undefined,
-      },
+    const transporter = nodemailer.createTransport({
+      host: cfg.host,
+      port: smtpPort,
+      secure: smtpTls, // true para 465 (TLS directo); false para 587 (STARTTLS automático)
+      auth: cfg.username
+        ? { user: cfg.username, pass: cfg.password }
+        : undefined,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
     });
     try {
       await withTimeout(
-        client.send({
-          from: `${fromName} <${cfg.from_email}>`,
+        transporter.sendMail({
+          from: `"${fromName.replace(/"/g, "")}" <${cfg.from_email}>`,
           to: testTo,
           subject: "Prueba de email del negocio",
-          content:
+          text:
             "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración SMTP funciona.",
         }),
-        20000,
+        25000,
         "smtp_send",
       );
-      try {
-        await withTimeout(client.close(), 3000, "smtp_close");
-      } catch (_) {
-        /* noop */
-      }
     } catch (e) {
       try {
-        await withTimeout(client.close(), 3000, "smtp_close");
+        transporter.close();
       } catch (_) {
         /* noop */
       }
@@ -196,6 +193,11 @@ Deno.serve(async (req: Request) => {
         error: "test_failed",
         detail: e instanceof Error ? e.message : String(e),
       });
+    }
+    try {
+      transporter.close();
+    } catch (_) {
+      /* noop */
     }
     return json({ ok: true, tested: true });
   }

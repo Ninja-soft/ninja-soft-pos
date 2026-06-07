@@ -5,7 +5,8 @@
 // Cuerpo HTML con branding del tenant (logo/accent/legal_name).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+// @ts-ignore tipos de nodemailer no resuelven en Deno; el archivo está excluido del tsconfig.
+import nodemailer from "npm:nodemailer@6.9.16";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -28,7 +29,7 @@ const escapeHtml = (s: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-// denomailer dispara promesas internas (conexión) que pueden rechazar fuera
+// El cliente SMTP dispara promesas internas (conexión) que pueden rechazar fuera
 // de nuestro await: sin esto, Deno mata el worker (503, deployment_id null) y
 // ningún try/catch del handler lo evita. Capturamos a nivel global.
 addEventListener("unhandledrejection", (e) => {
@@ -207,7 +208,7 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", sale.tenant_id)
     .maybeSingle();
   // Sin caracteres de control: legal_name viaja en headers SMTP (From/Subject);
-  // CR/LF permitirían inyectar headers (denomailer no los filtra).
+  // CR/LF permitirían inyectar headers (nodemailer no los filtra).
   const name = (brand?.legal_name || cfg.from_name || "NinjaSoft POS")
     // deno-lint-ignore no-control-regex
     .replace(/[\x00-\x1f\x7f]+/g, " ")
@@ -234,24 +235,25 @@ Deno.serve(async (req: Request) => {
   const html = buildBody({ accent, logoHtml, safeName, safeBodyText });
 
   // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
-  // (denomailer lo negocia solo sobre conexión plana si el server lo ofrece).
+  // (nodemailer lo negocia solo sobre conexión plana si el server lo ofrece).
   const smtpPort = cfg.port || 587;
   const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
-  const client = new SMTPClient({
-    connection: {
-      hostname: cfg.host,
-      port: smtpPort,
-      tls: smtpTls,
-      auth: cfg.username ? { username: cfg.username, password: cfg.password } : undefined,
-    },
+  const transporter = nodemailer.createTransport({
+    host: cfg.host,
+    port: smtpPort,
+    secure: smtpTls, // true para 465 (TLS directo); false para 587 (STARTTLS automático)
+    auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
   try {
     await withTimeout(
-      client.send({
-        from: `${name} <${cfg.from_email}>`,
+      transporter.sendMail({
+        from: `"${name.replace(/"/g, "")}" <${cfg.from_email}>`,
         to,
         subject: `Tu comprobante de ${name}`,
-        content: bodyTextRaw,
+        text: bodyTextRaw,
         html,
         attachments: [
           {
@@ -262,17 +264,12 @@ Deno.serve(async (req: Request) => {
           },
         ],
       }),
-      20000,
+      25000,
       "smtp_send",
     );
-    try {
-      await withTimeout(client.close(), 3000, "smtp_close");
-    } catch (_) {
-      /* noop */
-    }
   } catch (e) {
     try {
-      await withTimeout(client.close(), 3000, "smtp_close");
+      transporter.close();
     } catch (_) {
       /* noop */
     }
@@ -280,6 +277,11 @@ Deno.serve(async (req: Request) => {
       { error: "send_failed", detail: e instanceof Error ? e.message : String(e) },
       502,
     );
+  }
+  try {
+    transporter.close();
+  } catch (_) {
+    /* noop */
   }
   await admin
     .from("sales")

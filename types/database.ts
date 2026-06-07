@@ -542,6 +542,7 @@ export type Database = {
           created_by: string | null
           customer_id: string
           delta: number
+          due_date: string | null
           id: string
           reason: string | null
           sale_id: string | null
@@ -552,6 +553,7 @@ export type Database = {
           created_by?: string | null
           customer_id: string
           delta: number
+          due_date?: string | null
           id?: string
           reason?: string | null
           sale_id?: string | null
@@ -562,6 +564,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string
           delta?: number
+          due_date?: string | null
           id?: string
           reason?: string | null
           sale_id?: string | null
@@ -1205,6 +1208,7 @@ export type Database = {
       }
       pos_settings: {
         Row: {
+          account_due_days: number
           allow_negative_stock: boolean
           auto_email_receipt: boolean
           blind_close: boolean
@@ -1222,6 +1226,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_due_days?: number
           allow_negative_stock?: boolean
           auto_email_receipt?: boolean
           blind_close?: boolean
@@ -1239,6 +1244,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_due_days?: number
           allow_negative_stock?: boolean
           auto_email_receipt?: boolean
           blind_close?: boolean

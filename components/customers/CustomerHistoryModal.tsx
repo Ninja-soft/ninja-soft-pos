@@ -18,6 +18,16 @@ const SALE_STATUS: Record<string, string> = {
   suspended: "Suspendida",
 };
 
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function formatDueDate(ms: number): string {
+  return new Date(ms).toLocaleDateString("es-AR");
+}
+
 // Historial del cliente (H31): saldo a favor, compras y devoluciones.
 export function CustomerHistoryModal({
   open,
@@ -80,6 +90,17 @@ export function CustomerHistoryModal({
               >
                 {formatCurrency(data.accountDebt)}
               </div>
+              {data.accountDebt > 0 && data.nextDue != null && (
+                data.nextDue < startOfToday() ? (
+                  <div className="mt-1 text-xs text-red-400">
+                    Vencido desde {formatDueDate(data.nextDue)}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Próximo vencimiento: {formatDueDate(data.nextDue)}
+                  </div>
+                )
+              )}
             </div>
           </div>
 

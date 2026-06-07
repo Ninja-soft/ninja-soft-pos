@@ -516,15 +516,15 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] Integridad: el Z queda enlazado a sus ventas/movimientos (vía `cash_shift_id`); cualquier ajuste posterior va por contramovimiento auditado, no por edición del Z (la tabla no admite UPDATE/DELETE).
   - [x] *Criterio:* al cerrar caja aparece su Z en el historial con el consolidado del turno; se puede reimprimir y exportar, pero no modificar. ✓
 
-- [ ] **H31 — Cuenta corriente y grupos de clientes.**
+- [~] **H31 — Cuenta corriente y grupos de clientes.** — *Criterio principal cumplido (2026-06-07). Restan: deuda en historial desde el selector del POS y grupos para precios/promos/riesgo.*
   - [~] **Historial del cliente**: modal en /clientes con saldo a favor (vale), compras y devoluciones (`CustomerHistoryModal`). Falta deuda de cuenta corriente (depende de este hito) y acceso desde el selector del POS.
   - [x] Medio de pago "Cuenta corriente" que deja deuda del cliente (trigger en `payments` → `customer_account_movements`).
   - [x] Límite de deuda por cliente (`customers.credit_limit`; 0 = sin límite; se valida al cobrar fiado). Deuda visible en el historial del cliente.
-  - [~] Cuentas por cobrar: registrar pagos de deuda desde el historial del cliente (reduce la deuda) + **vista global de CxC** en /clientes (`AccountsReceivableModal`) con buckets de antigüedad 0-30/31-60/61-90/+90 días (FIFO: los pagos cancelan los cargos más viejos) y export XLSX. Falta plazo/vencimiento por venta fiada.
+  - [~] Cuentas por cobrar: registrar pagos de deuda desde el historial del cliente (reduce la deuda) + **vista global de CxC** en /clientes (`AccountsReceivableModal`) con buckets de antigüedad 0-30/31-60/61-90/+90 días (FIFO: los pagos cancelan los cargos más viejos) y export XLSX. Plazo/vencimiento por venta fiada hecho (2026-06-07): `due_date` por cargo (plazo configurable en Operación del POS), columna Vencido en CxC y próximo vencimiento en el historial.
   - [~] Grupos de clientes (tabla `customer_groups` + `customers.group_id`; alta inline y selector en la ficha del cliente). Falta usarlos para precios/promos/riesgo.
   - [x] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento. Configurable por el dueño en Operación del POS (`pos_settings.customer_required`); se exige en la ficha del cliente (alta/edición) con marca " *" y bloqueo de guardado. Se agregó `customers.birth_date` (fecha de nacimiento). Default: nada obligatorio salvo el nombre.
   - [ ] **Escaneo de DNI argentino para alta rápida de cliente** *(agregado 2026-06-06)*: leer el código **PDF417** del frente del DNI (scanner 2D USB tipo teclado o cámara, gancha con H23) y parsear offline los campos separados por `@` (apellido, nombre, sexo, N° de DNI, fecha de nacimiento) para autocompletar la ficha del cliente en alta/edición y en el selector del POS. Sin servicios ni registros gubernamentales — el dato vive en el propio código del documento. Validación visual antes de guardar.
-  - [ ] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar.
+  - [x] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar. ✓
 
 - [ ] **H32 — Pedidos de salón, reservas y despacho.**
   - [ ] Pedidos pendientes de facturar: vendedor arma pedido y cajera lo cobra.

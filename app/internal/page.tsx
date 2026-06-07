@@ -40,7 +40,7 @@ export default async function InternalHomePage() {
     supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, created_at, subscriptions(status, billing_cycle, plans(key, name, monthly_price_ars))",
+        "id, name, slug, status, created_at, subscriptions(status, billing_cycle, updated_at, plans(key, name, monthly_price_ars))",
       )
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
@@ -53,6 +53,7 @@ export default async function InternalHomePage() {
   type SubRow = {
     status: string;
     billing_cycle: string;
+    updated_at: string;
     plans: { key: string; name: string; monthly_price_ars: number } | null;
   };
   type TenantRaw = {
@@ -92,15 +93,31 @@ export default async function InternalHomePage() {
   const new7 = list.filter((t) => t.created_at >= d7).length;
   const new30 = list.filter((t) => t.created_at >= d30).length;
 
-  // ── MRR ─────────────────────────────────────────────────────────────────
+  // ── MRR / ARR ─────────────────────────────────────────────────────────────
+  // Suma el precio del plan PROPIO de cada suscripción (incluye planes custom,
+  // cuyo monthly_price_ars viaja en el join), no un mapa global por key.
   const mrr = list.reduce((acc, t) => {
     const s = sub(t);
-    if (s?.status === "active") {
+    if (s?.status === "active" || s?.status === "past_due") {
       const price = s.plans?.monthly_price_ars ?? 0;
       return acc + (s.billing_cycle === "yearly" ? price * 0.9 : price);
     }
     return acc;
   }, 0);
+  const arr = mrr * 12;
+
+  // ── Churn 30d ──────────────────────────────────────────────────────────────
+  // Aproximación: una suscripción cancelada en los últimos 30 días se detecta
+  // por su updated_at (el cambio de estado bumpea updated_at vía trigger).
+  // Base = activos + past_due + suspendidos (base de cobro vigente) + las bajas
+  // de los últimos 30 días.
+  const cancelled30d = list.filter((t) => {
+    const s = sub(t);
+    return s?.status === "cancelled" && s.updated_at >= d30;
+  }).length;
+  const churnBase = nActive + nPastDue + nSuspended + cancelled30d;
+  const churnRate =
+    churnBase > 0 ? Math.round((cancelled30d / churnBase) * 100) : null;
 
   // ── Plan breakdown ───────────────────────────────────────────────────────
   const planCount: Record<string, number> = {};
@@ -128,7 +145,7 @@ export default async function InternalHomePage() {
       </p>
 
       {/* ── KPIs principales ── */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard label="Total negocios" value={total} icon={<Building2 size={18} />} />
         <KpiCard
           label="En prueba"
@@ -149,15 +166,15 @@ export default async function InternalHomePage() {
           color={nProblemas > 0 ? "text-orange-400" : undefined}
           sub={nProblemas > 0 ? `${nPastDue} pago pend. · ${nSuspended} susp.` : undefined}
         />
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
           label="Nuevos (7 días)"
           value={new7}
           icon={<TrendingUp size={18} />}
           color="text-ninja-flameSoft"
         />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Nuevos (30 días)"
           value={new30}
@@ -171,11 +188,26 @@ export default async function InternalHomePage() {
           sub={`${nActive} activos · ${nCancelled} cancelados`}
         />
         <KpiCard
+          label="Churn 30d"
+          value={churnRate !== null ? `${churnRate}%` : "—"}
+          icon={<TrendingUp size={18} />}
+          color={churnRate !== null && churnRate > 0 ? "text-red-400" : "text-emerald-400"}
+          sub={`${cancelled30d} baja${cancelled30d === 1 ? "" : "s"} · 30d`}
+          title="Aproximado: cancelaciones de los últimos 30 días sobre la base activa."
+        />
+        <KpiCard
           label="MRR estimado"
           value={mrr > 0 ? formatCurrency(mrr) : "—"}
           icon={<CreditCard size={18} />}
           color="text-ninja-flameSoft"
           sub={mrr === 0 ? "Precios en $0 (placeholder)" : undefined}
+        />
+        <KpiCard
+          label="ARR estimado"
+          value={arr > 0 ? formatCurrency(arr) : "—"}
+          icon={<CreditCard size={18} />}
+          color="text-ninja-violet"
+          sub={arr > 0 ? "MRR × 12" : undefined}
         />
       </div>
 
@@ -257,16 +289,18 @@ function KpiCard({
   icon,
   color,
   sub,
+  title,
 }: {
   label: string;
   value: string | number;
   icon: React.ReactNode;
   color?: string;
   sub?: string;
+  title?: string;
 }) {
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-4" title={title}>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           {icon}
           <span className="text-xs">{label}</span>

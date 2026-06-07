@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { ExternalLink, Lock } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthProvider } from "@/modules/auth/hooks";
 
 export function ChangePasswordModal({
   open,
@@ -15,6 +17,8 @@ export function ChangePasswordModal({
   onOpenChange: (o: boolean) => void;
 }) {
   const { toast } = useToast();
+  const { data: provider } = useAuthProvider();
+  const isGoogle = provider === "google";
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -108,6 +112,48 @@ export function ChangePasswordModal({
       description: "Te mandamos un enlace para blanquear la contraseña.",
       variant: "success",
     });
+  }
+
+  // Cuenta vinculada a Google: la contraseña la gestiona Google. Mostramos
+  // un estado bloqueado en lugar del formulario.
+  if (isGoogle) {
+    return (
+      <Modal
+        open={open}
+        onOpenChange={onOpenChange}
+        title="Cambiar contraseña"
+      >
+        <div className="space-y-5">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
+              <Lock size={22} />
+            </span>
+            <p className="text-sm text-muted-foreground">
+              Tu cuenta está vinculada a Google. La contraseña se gestiona desde
+              tu cuenta de Google.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <a
+              href="https://myaccount.google.com/security"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-muted/30 px-4 text-sm font-semibold text-foreground transition hover:bg-muted"
+            >
+              Administrar en Google
+              <ExternalLink size={15} />
+            </a>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => onOpenChange(false)}
+            >
+              Cerrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    );
   }
 
   return (

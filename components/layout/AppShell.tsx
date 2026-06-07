@@ -45,6 +45,7 @@ import {
   BlockingNotificationBanner,
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
+import { AssistantBubble } from "@/components/ai/AssistantBubble";
 
 type Item = { href: string; label: string; icon: React.ElementType };
 type Group = { label: string; items: Item[] };
@@ -398,6 +399,7 @@ export function AppShell({
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
       <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
+      <AssistantBubble />
     </div>
   );
 }

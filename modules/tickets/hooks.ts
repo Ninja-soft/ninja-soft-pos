@@ -3,7 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { SampleBrand } from "@/lib/tickets/sample";
-import { ticketTemplatesApi, type TemplateInput, type TemplateKind } from "./api";
+import {
+  ticketTemplatesApi,
+  type TemplateDestination,
+  type TemplateInput,
+  type TemplateKind,
+} from "./api";
 
 const KEY = ["ticket-templates"];
 
@@ -66,6 +71,24 @@ export function useSetDefaultTemplate() {
   return useMutation({
     mutationFn: ({ id, kind }: { id: string; kind: TemplateKind }) =>
       ticketTemplatesApi.setDefault(id, kind),
+    onSuccess: inv,
+  });
+}
+
+export function useSetActiveTemplate() {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, destination }: { id: string; destination: TemplateDestination }) =>
+      ticketTemplatesApi.setActive(id, destination),
+    onSuccess: inv,
+  });
+}
+
+export function useClearActiveTemplate() {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: (destination: TemplateDestination) =>
+      ticketTemplatesApi.clearActive(destination),
     onSuccess: inv,
   });
 }

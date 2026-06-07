@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Pencil, Plus, Receipt, Star, Trash2 } from "lucide-react";
+import { Copy, Mail, Pencil, Plus, Printer, Receipt, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
@@ -10,13 +10,19 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import {
+  useClearActiveTemplate,
   useCreateTemplate,
   useRemoveTemplate,
-  useSetDefaultTemplate,
+  useSetActiveTemplate,
   useTicketTemplates,
 } from "@/modules/tickets/hooks";
 import { defaultSaleBlocks, type TemplateContent } from "@/lib/tickets/blocks";
-import type { TemplateKind, TemplateMode, TicketTemplate } from "@/modules/tickets/api";
+import type {
+  TemplateDestination,
+  TemplateKind,
+  TemplateMode,
+  TicketTemplate,
+} from "@/modules/tickets/api";
 import { TicketTemplateEditor } from "@/components/tickets/TicketTemplateEditor";
 
 const KIND_LABELS: Record<TemplateKind, string> = {
@@ -57,7 +63,8 @@ export function TicketTemplatesCard() {
   const { data: tenantId } = useTenantId();
   const { data: templates } = useTicketTemplates();
   const create = useCreateTemplate();
-  const setDefault = useSetDefaultTemplate();
+  const setActive = useSetActiveTemplate();
+  const clearActive = useClearActiveTemplate();
   const remove = useRemoveTemplate();
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -94,14 +101,34 @@ export function TicketTemplatesCard() {
     );
   }
 
-  function makeDefault(t: TicketTemplate) {
-    setDefault.mutate(
-      { id: t.id, kind: t.kind as TemplateKind },
-      {
-        onSuccess: () => toast({ title: "Marcado como predeterminado", variant: "success" }),
-        onError: () => toast({ title: "No se pudo marcar", variant: "error" }),
-      },
-    );
+  const DEST_LABELS: Record<TemplateDestination, string> = {
+    print: "impresión",
+    email: "email",
+  };
+
+  // Click en un destino: si ya está activo en ese modelo → lo desactiva (fallback
+  // al ticket clásico); si no, lo activa (y desactiva el anterior del destino).
+  function toggleActive(t: TicketTemplate, destination: TemplateDestination) {
+    const col = destination === "print" ? t.print_active : t.email_active;
+    if (col) {
+      clearActive.mutate(destination, {
+        onSuccess: () =>
+          toast({ title: `Sin modelo de ${DEST_LABELS[destination]}`, variant: "success" }),
+        onError: () => toast({ title: "No se pudo desactivar", variant: "error" }),
+      });
+    } else {
+      setActive.mutate(
+        { id: t.id, destination },
+        {
+          onSuccess: () =>
+            toast({
+              title: `Activado para ${DEST_LABELS[destination]}`,
+              variant: "success",
+            }),
+          onError: () => toast({ title: "No se pudo activar", variant: "error" }),
+        },
+      );
+    }
   }
 
   function del(t: TicketTemplate) {
@@ -136,6 +163,11 @@ export function TicketTemplatesCard() {
           </Button>
         </div>
 
+        <p className="text-xs text-muted-foreground">
+          Un modelo activo para impresión y uno para email. Sin activo se usa el
+          ticket clásico.
+        </p>
+
         <div className="space-y-1.5">
           {list.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">
@@ -149,11 +181,6 @@ export function TicketTemplatesCard() {
             >
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate font-medium">{t.name}</span>
-                {t.is_default && (
-                  <span className="rounded-full bg-ninja-flame/15 px-2 py-0.5 text-xs font-medium text-ninja-flameSoft">
-                    Default
-                  </span>
-                )}
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   {MODE_LABELS[t.mode as TemplateMode] ?? t.mode}
                 </span>
@@ -163,17 +190,34 @@ export function TicketTemplatesCard() {
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                <DestChip
+                  active={t.print_active}
+                  icon={<Printer size={13} />}
+                  label="Impresión"
+                  title={
+                    t.print_active
+                      ? "Activo para impresión — clic para usar el ticket clásico"
+                      : "Activar este modelo para impresión"
+                  }
+                  onClick={() => toggleActive(t, "print")}
+                />
+                <DestChip
+                  active={t.email_active}
+                  icon={<Mail size={13} />}
+                  label="Email"
+                  title={
+                    t.email_active
+                      ? "Activo para email — clic para usar el ticket clásico"
+                      : "Activar este modelo para email"
+                  }
+                  onClick={() => toggleActive(t, "email")}
+                />
                 <RowBtn title="Editar" onClick={() => openEdit(t)}>
                   <Pencil size={15} />
                 </RowBtn>
                 <RowBtn title="Duplicar" onClick={() => duplicate(t)}>
                   <Copy size={15} />
                 </RowBtn>
-                {!t.is_default && (
-                  <RowBtn title="Marcar predeterminado" onClick={() => makeDefault(t)}>
-                    <Star size={15} />
-                  </RowBtn>
-                )}
                 <RowBtn title="Eliminar" danger onClick={() => del(t)}>
                   <Trash2 size={15} />
                 </RowBtn>
@@ -192,6 +236,38 @@ export function TicketTemplatesCard() {
         />
       )}
     </Card>
+  );
+}
+
+function DestChip({
+  active,
+  icon,
+  label,
+  title,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition",
+        active
+          ? "border-ninja-flameSoft/50 bg-ninja-flame/15 text-ninja-flameSoft"
+          : "border-border text-muted-foreground hover:border-ninja-flameSoft/40 hover:text-foreground",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

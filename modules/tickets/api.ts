@@ -5,6 +5,7 @@ import type { TemplateContent } from "@/lib/tickets/blocks";
 export type TicketTemplate = Tables<"ticket_templates">;
 export type TemplateKind = "sale" | "promo" | "gift";
 export type TemplateMode = "blocks" | "canvas" | "html";
+export type TemplateDestination = "print" | "email";
 
 export interface TemplateInput {
   name: string;
@@ -75,6 +76,41 @@ export const ticketTemplatesApi = {
       .update({ is_default: true })
       .eq("id", id);
     if (e2) throw e2;
+  },
+
+  // Activa un modelo para un destino (impresión o email). Como el índice único
+  // parcial sólo admite uno activo por tenant/destino, primero desactiva el
+  // actual y luego activa el nuevo (igual que setDefault).
+  setActive: async (id: string, destination: TemplateDestination): Promise<void> => {
+    const supabase = createClient();
+    const col = destination === "print" ? "print_active" : "email_active";
+    const off =
+      destination === "print" ? { print_active: false } : { email_active: false };
+    const on =
+      destination === "print" ? { print_active: true } : { email_active: true };
+    const { error: e1 } = await supabase
+      .from("ticket_templates")
+      .update(off)
+      .eq(col, true);
+    if (e1) throw e1;
+    const { error: e2 } = await supabase
+      .from("ticket_templates")
+      .update(on)
+      .eq("id", id);
+    if (e2) throw e2;
+  },
+
+  // Desactiva cualquier modelo activo del destino (fallback al ticket clásico).
+  clearActive: async (destination: TemplateDestination): Promise<void> => {
+    const supabase = createClient();
+    const col = destination === "print" ? "print_active" : "email_active";
+    const off =
+      destination === "print" ? { print_active: false } : { email_active: false };
+    const { error } = await supabase
+      .from("ticket_templates")
+      .update(off)
+      .eq(col, true);
+    if (error) throw error;
   },
 
   remove: async (id: string): Promise<void> => {

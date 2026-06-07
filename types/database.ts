@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -3222,6 +3222,7 @@ export type Database = {
         Returns: Json
       }
       current_tenant_id: { Args: never; Returns: string }
+      gating_summary: { Args: never; Returns: Json }
       get_email_smtp: { Args: never; Returns: Json }
       get_tenant_smtp: { Args: never; Returns: Json }
       internal_clone_plan: {
@@ -3372,6 +3373,8 @@ export type Database = {
         Args: { p_industry: string }
         Returns: undefined
       }
+      tenant_has_feature: { Args: { p_key: string }; Returns: boolean }
+      tenant_limit: { Args: { p_key: string }; Returns: number }
       tenant_members: {
         Args: never
         Returns: {

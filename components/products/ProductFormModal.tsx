@@ -107,6 +107,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
   async function onSubmit(values: ProductInput) {
     const parsed = values as unknown as ProductOutput;
+    // Exclusividad kit/serializado/variantes también en submit (la UI los
+    // deshabilita, pero esto evita estados mezclados por cualquier vía).
+    const exclusive = [parsed.is_kit, parsed.is_serialized, parsed.has_variants].filter(Boolean);
+    if (exclusive.length > 1) {
+      toast({
+        title: "Un producto no puede ser kit, serializado y con variantes a la vez",
+        variant: "error",
+      });
+      return;
+    }
     try {
       if (active) {
         await update.mutateAsync({ id: active.id, input: parsed });

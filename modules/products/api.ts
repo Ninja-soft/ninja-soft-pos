@@ -480,7 +480,8 @@ export const variantsApi = {
           price_override: r.price_override,
           stock: r.stock,
         })
-        .eq("id", r.id!);
+        .eq("id", r.id!)
+        .eq("tenant_id", tenantId);
       if (error) throw error;
     }
 

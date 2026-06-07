@@ -291,9 +291,10 @@ export function VariantsEditor({
                     type="number"
                     step="0.001"
                     value={r.stock}
-                    onChange={(e) =>
-                      patchRow(r.key, { stock: Number(e.target.value) })
-                    }
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      patchRow(r.key, { stock: Number.isFinite(n) ? n : 0 });
+                    }}
                     placeholder="Stock"
                     className="h-9 w-full rounded-lg border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
                   />

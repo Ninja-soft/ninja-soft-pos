@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Check, Play } from "lucide-react";
+import { Sparkles, Check, Play, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -18,7 +18,12 @@ type Status = {
   provider: string | null;
   model: string | null;
   beta_owner_email: string | null;
+  // Legacy: api_key único (se mantiene como fallback de Gemini).
   api_key: boolean;
+  // Keys por proveedor: se configura UNO a la vez, pero cada proveedor guarda
+  // su propia key para que cambiar de proveedor no arrastre la key del otro.
+  gemini_api_key: boolean;
+  claude_api_key: boolean;
   image_url: string | null;
   commercial_text: string | null;
   addon_price_ars: string | null;
@@ -31,6 +36,12 @@ const DEFAULT_MODEL: Record<Provider, string> = {
   claude: "claude-haiku-4-5-20251001",
 };
 
+// De dónde saca la API key cada proveedor (guía para el staff).
+const KEY_HELP: Record<Provider, { label: string; url: string }> = {
+  gemini: { label: "Google AI Studio → API keys", url: "https://aistudio.google.com/apikey" },
+  claude: { label: "Anthropic Console → API keys", url: "https://console.anthropic.com/settings/keys" },
+};
+
 export function AiConfigCard() {
   const supabase = createClient();
   const qc = useQueryClient();
@@ -38,6 +49,8 @@ export function AiConfigCard() {
 
   const [provider, setProvider] = useState<Provider>("gemini");
   const [model, setModel] = useState("");
+  // apiKey representa SIEMPRE la key del proveedor seleccionado. Al cambiar de
+  // proveedor se limpia para no enviar la key de uno como la del otro.
   const [apiKey, setApiKey] = useState("");
   const [betaEmail, setBetaEmail] = useState("");
   // Campos públicos del addon (para el explicador de la burbuja).
@@ -59,8 +72,8 @@ export function AiConfigCard() {
     },
   });
 
-  // Prefill de valores públicos (proveedor, modelo, beta email). La api_key no
-  // se devuelve nunca; solo sabemos si existe (status.api_key === true).
+  // Prefill de valores públicos (proveedor, modelo, beta email). Las api_key no
+  // se devuelven nunca; solo sabemos si existen (status.*_api_key === true).
   useEffect(() => {
     if (!status) return;
     const p = (status.provider === "claude" ? "claude" : "gemini") as Provider;
@@ -74,23 +87,33 @@ export function AiConfigCard() {
     if (status.model) setModelTouched(true);
   }, [status]);
 
-  // Al cambiar de proveedor, si el modelo no fue editado a mano, autocompletamos
-  // con el default del nuevo proveedor.
+  // Al cambiar de proveedor: limpiamos la key tipeada (es de otro proveedor) y,
+  // si el modelo no fue editado a mano, autocompletamos con el default nuevo.
   function onProviderChange(p: Provider) {
     setProvider(p);
+    setApiKey("");
     if (!modelTouched) setModel(DEFAULT_MODEL[p]);
   }
 
-  const hasKey = status?.api_key ?? false;
+  // ¿El proveedor seleccionado ya tiene una key guardada? Gemini acepta también
+  // la key legacy (api_key) como fallback; Claude exige su propia key.
+  const hasKey =
+    provider === "claude"
+      ? Boolean(status?.claude_api_key)
+      : Boolean(status?.gemini_api_key || status?.api_key);
 
   const save = useMutation({
     mutationFn: async () => {
       const secrets: Record<string, string> = {
         provider,
-        model: (model.trim() || DEFAULT_MODEL[provider]),
+        model: model.trim() || DEFAULT_MODEL[provider],
         beta_owner_email: betaEmail.trim().toLowerCase(),
       };
-      if (apiKey.trim()) secrets.api_key = apiKey.trim();
+      // La key se guarda en el campo del proveedor seleccionado (no en un único
+      // api_key compartido): así Claude no hereda la key de Gemini ni viceversa.
+      if (apiKey.trim()) {
+        secrets[provider === "claude" ? "claude_api_key" : "gemini_api_key"] = apiKey.trim();
+      }
       // Campos públicos del addon: el merge del backend ignora los vacíos.
       if (imageUrl.trim()) secrets.image_url = imageUrl.trim();
       if (commercialText.trim()) secrets.commercial_text = commercialText.trim();
@@ -134,22 +157,27 @@ export function AiConfigCard() {
       }),
   });
 
+  const keyHelp = KEY_HELP[provider];
+  const providerLabel = provider === "claude" ? "Claude" : "Gemini";
+
   return (
     <section>
       <Heading as="h2" className="flex items-center gap-2 text-base">
         <Sparkles size={18} /> Asistente IA
       </Heading>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Elegí el proveedor y cargá la API key del Asistente IA. La key se guarda
-        cifrada y nunca se devuelve. El <strong>email de la beta</strong> habilita
-        el asistente a ese dueño aunque no tenga el complemento contratado.
+        Configurás <strong>un proveedor a la vez</strong> (Gemini o Claude) con su
+        propia API key. La key se guarda cifrada y nunca se devuelve. Si cambiás de
+        proveedor, pegá la API key de ese proveedor. El{" "}
+        <strong>email de la beta</strong> habilita el asistente a ese dueño aunque no
+        tenga el complemento contratado.
       </p>
 
       <Card className="mt-3">
         <CardContent className="grid max-w-2xl gap-4 p-5">
           <div>
             <span className="mb-2 block text-sm font-medium text-muted-foreground">
-              Proveedor
+              Proveedor activo
             </span>
             <Segmented<Provider>
               value={provider}
@@ -171,14 +199,24 @@ export function AiConfigCard() {
             placeholder={DEFAULT_MODEL[provider]}
           />
 
-          <Input
-            label="API key"
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={hasKey ? "•••• guardada" : "Pegá la API key"}
-          />
+          <div>
+            <Input
+              label={`API key de ${providerLabel}`}
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={hasKey ? `•••• guardada (${providerLabel})` : `Pegá la API key de ${providerLabel}`}
+            />
+            <a
+              href={keyHelp.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-xs text-ninja-flameSoft hover:underline"
+            >
+              <ExternalLink size={12} /> ¿Cómo obtengo la key? {keyHelp.label}
+            </a>
+          </div>
 
           <Input
             label="Email de la beta (dueño con acceso)"
@@ -272,7 +310,7 @@ export function AiConfigCard() {
               disabled={save.isPending || (!hasKey && !apiKey.trim())}
               onClick={() => test.mutate()}
             >
-              <Play size={15} /> Probar
+              <Play size={15} /> Probar {providerLabel}
             </Button>
             {status?.updated_at && (
               <span className="inline-flex items-center gap-1 text-xs text-emerald-400">

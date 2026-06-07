@@ -16,8 +16,8 @@ import {
   Menu,
   Moon,
   ScrollText,
-  Settings,
   ShieldCheck,
+  Sparkles,
   Store,
   Sun,
   Tag,
@@ -50,7 +50,7 @@ const NAV = [
   { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
   { href: "/internal/planes", label: "Planes", icon: Tag },
   { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
-  { href: "/internal/configuracion", label: "Configuración", icon: Settings },
+  { href: "/internal/addons", label: "Complementos", icon: Sparkles },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {

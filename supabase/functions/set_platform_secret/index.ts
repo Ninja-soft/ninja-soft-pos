@@ -35,7 +35,9 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
   ai_config: new Set([
     "provider",
     "model",
-    "api_key",
+    "api_key", // legacy (fallback de Gemini)
+    "gemini_api_key",
+    "claude_api_key",
     "beta_owner_email",
     "image_url",
     "commercial_text",
@@ -44,7 +46,13 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
   ]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).
-const SECRET_KEYS = new Set(["client_secret", "access_token", "api_key"]);
+const SECRET_KEYS = new Set([
+  "client_secret",
+  "access_token",
+  "api_key",
+  "gemini_api_key",
+  "claude_api_key",
+]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });

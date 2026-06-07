@@ -19,6 +19,7 @@ import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
 import { VariantsEditor } from "@/components/products/VariantsEditor";
+import { FeatureGate } from "@/components/saas/FeatureGate";
 import {
   useCategories,
   useCreateCategory,
@@ -418,26 +419,28 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </p>
         )}
 
-        <label
-          className={`flex items-start gap-2 text-sm text-foreground ${
-            variantsDisabled ? "opacity-50" : ""
-          }`}
-          title={variantsDisabled ? exclusiveHint : undefined}
-        >
-          <input
-            type="checkbox"
-            className="mt-0.5 accent-ninja-flame"
-            disabled={variantsDisabled}
-            {...register("has_variants")}
-          />
-          <span>
-            Tiene variantes (talle / color…)
-            <span className="block text-xs text-muted-foreground">
-              Combinaciones con SKU, precio y stock propios. El stock se carga en
-              cada variante, no en el producto padre.
+        <FeatureGate feature="variantes" featureLabel="Variantes">
+          <label
+            className={`flex items-start gap-2 text-sm text-foreground ${
+              variantsDisabled ? "opacity-50" : ""
+            }`}
+            title={variantsDisabled ? exclusiveHint : undefined}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-ninja-flame"
+              disabled={variantsDisabled}
+              {...register("has_variants")}
+            />
+            <span>
+              Tiene variantes (talle / color…)
+              <span className="block text-xs text-muted-foreground">
+                Combinaciones con SKU, precio y stock propios. El stock se carga
+                en cada variante, no en el producto padre.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        </FeatureGate>
 
         {active && hasVariants && (
           <VariantsEditor

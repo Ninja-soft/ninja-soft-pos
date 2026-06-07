@@ -19,6 +19,7 @@ import {
   type PriceList,
 } from "@/modules/prices/api";
 import { PriceListEditorModal } from "@/components/prices/PriceListEditorModal";
+import { FeatureGate } from "@/components/saas/FeatureGate";
 
 const CHANNEL_LABELS: Record<string, string> = Object.fromEntries(
   PRICE_CHANNELS.map((c) => [c.value, c.label]),
@@ -147,9 +148,11 @@ export function PriceListsCard() {
             </label>
           </div>
           <div className="mt-2 flex justify-end">
-            <Button onClick={add} loading={create.isPending} disabled={!tenantId}>
-              <Plus size={15} /> Nueva lista
-            </Button>
+            <FeatureGate feature="listas_precios" featureLabel="Listas de precios">
+              <Button onClick={add} loading={create.isPending} disabled={!tenantId}>
+                <Plus size={15} /> Nueva lista
+              </Button>
+            </FeatureGate>
           </div>
         </div>
 

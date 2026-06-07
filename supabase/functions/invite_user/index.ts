@@ -77,12 +77,64 @@ Deno.serve(async (req: Request) => {
     return json({ error: "forbidden" }, 403);
   }
 
-  let targetId: string | null = null;
-  const { data: existing } = await admin
+  // Gating server-side (Fase D): enforcement del límite max_users del plan.
+  // Replica inline la resolución de tenant_limit (override H12b ?? plan) porque
+  // la función corre con service_role (sin current_tenant_id del JWT). null =
+  // ilimitado → no se bloquea. Se compara contra los miembros activos actuales;
+  // se omite el chequeo si el target ya es miembro activo (no consume cupo nuevo).
+  const { count: activeCount } = await admin
+    .from("tenant_users")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("status", "active");
+
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("limit_overrides, plans(limits)")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  const overrideRaw = (sub?.limit_overrides as Record<string, unknown> | null)?.["max_users"];
+  const planLimits = ((sub?.plans as { limits?: Record<string, unknown> } | null)?.limits ?? {}) as
+    Record<string, unknown>;
+  const planRaw = (planLimits["limits"] as Record<string, unknown> | undefined)?.["max_users"];
+  const rawLimit = overrideRaw ?? planRaw;
+  const maxUsers =
+    rawLimit === undefined || rawLimit === null ? null : Number(rawLimit);
+
+  // ¿el target ya es miembro activo? entonces no suma asiento.
+  let targetAlreadyActive = false;
+  const { data: targetUser } = await admin
     .from("users")
     .select("id")
     .eq("email", email)
     .maybeSingle();
+  if (targetUser) {
+    const { data: existingMembership } = await admin
+      .from("tenant_users")
+      .select("status")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", targetUser.id)
+      .maybeSingle();
+    targetAlreadyActive = existingMembership?.status === "active";
+  }
+
+  if (
+    maxUsers !== null &&
+    !Number.isNaN(maxUsers) &&
+    !targetAlreadyActive &&
+    (activeCount ?? 0) >= maxUsers
+  ) {
+    return json(
+      {
+        error: "limit_reached",
+        detail: `Tu plan permite hasta ${maxUsers} usuarios.`,
+      },
+      403,
+    );
+  }
+
+  const existing = targetUser;
+  let targetId: string | null = targetUser?.id ?? null;
   if (existing) {
     targetId = existing.id;
   } else {

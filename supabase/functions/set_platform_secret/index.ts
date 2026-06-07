@@ -28,9 +28,17 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     "public_key",
     "redirect_uri",
   ]),
+  // Config del Asistente IA (Fase F): proveedor/modelo/api_key (secreta) +
+  // beta_owner_email (pública). La api_key nunca se devuelve en claro.
+  ai_config: new Set([
+    "provider",
+    "model",
+    "api_key",
+    "beta_owner_email",
+  ]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).
-const SECRET_KEYS = new Set(["client_secret", "access_token"]);
+const SECRET_KEYS = new Set(["client_secret", "access_token", "api_key"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });

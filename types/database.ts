@@ -766,6 +766,62 @@ export type Database = {
         }
         Relationships: []
       }
+      invite_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          kind: string
+          max_uses: number | null
+          plan_key: string
+          trial_days: number | null
+          used_count: number
+          valid_from: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          kind: string
+          max_uses?: number | null
+          plan_key: string
+          trial_days?: number | null
+          used_count?: number
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          max_uses?: number | null
+          plan_key?: string
+          trial_days?: number | null
+          used_count?: number
+          valid_from?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_codes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mp_oauth_states: {
         Row: {
           created_at: string
@@ -2277,6 +2333,7 @@ export type Database = {
           current_period_end: string | null
           current_period_start: string | null
           id: string
+          is_lifetime: boolean
           limit_overrides: Json
           mp_preapproval_id: string | null
           plan_id: string
@@ -2291,6 +2348,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          is_lifetime?: boolean
           limit_overrides?: Json
           mp_preapproval_id?: string | null
           plan_id: string
@@ -2305,6 +2363,7 @@ export type Database = {
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          is_lifetime?: boolean
           limit_overrides?: Json
           mp_preapproval_id?: string | null
           plan_id?: string
@@ -2474,6 +2533,7 @@ export type Database = {
           accent: string | null
           address: string | null
           cuit: string | null
+          iva_condition: string | null
           legal_name: string | null
           logo_path: string | null
           logo_url: string | null
@@ -2491,6 +2551,7 @@ export type Database = {
           accent?: string | null
           address?: string | null
           cuit?: string | null
+          iva_condition?: string | null
           legal_name?: string | null
           logo_path?: string | null
           logo_url?: string | null
@@ -2508,6 +2569,7 @@ export type Database = {
           accent?: string | null
           address?: string | null
           cuit?: string | null
+          iva_condition?: string | null
           legal_name?: string | null
           logo_path?: string | null
           logo_url?: string | null
@@ -3068,6 +3130,16 @@ export type Database = {
         Args: { p_days: number; p_tenant_id: string }
         Returns: string
       }
+      internal_grant_access: {
+        Args: {
+          p_free_days?: number
+          p_lifetime: boolean
+          p_plan_key: string
+          p_reason?: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
       internal_level: { Args: never; Returns: string }
       internal_list_staff: {
         Args: never
@@ -3155,6 +3227,11 @@ export type Database = {
         Returns: string
       }
       public_catalog: { Args: { p_slug: string }; Returns: Json }
+      purge_system_emails: { Args: never; Returns: undefined }
+      redeem_invite_code: {
+        Args: { p_code: string; p_tenant_id: string }
+        Returns: Json
+      }
       return_sale: {
         Args: {
           p_items: Json

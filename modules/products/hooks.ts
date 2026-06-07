@@ -10,7 +10,9 @@ import {
   categoriesApi,
   productsApi,
   serialsApi,
+  variantsApi,
   warrantyPlansApi,
+  type VariantRow,
 } from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
 
@@ -118,6 +120,35 @@ export function useSerialMutations(productId: string) {
       onSuccess: invalidate,
     }),
   };
+}
+
+export function useVariants(productId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["products", "variants", productId],
+    queryFn: () => variantsApi.list(productId!),
+    enabled: enabled && Boolean(productId),
+  });
+}
+
+export function useSaveVariants(productId: string, tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { rows: VariantRow[]; axes: string[] }) =>
+      variantsApi.bulkUpsert(productId, tenantId, vars.rows, vars.axes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products", "variants", productId] });
+      qc.invalidateQueries({ queryKey: ["products", "list"] });
+    },
+  });
+}
+
+export function useRemoveVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => variantsApi.remove(id),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["products", "variants", productId] }),
+  });
 }
 
 export function useProductMutations() {

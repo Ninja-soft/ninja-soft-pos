@@ -103,6 +103,7 @@ export const productsApi = {
         is_active: input.is_active,
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
+        has_variants: input.has_variants,
         track_stock: input.track_stock,
         allow_negative:
           input.allow_negative === "inherit"
@@ -137,6 +138,7 @@ export const productsApi = {
         is_active: input.is_active,
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
+        has_variants: input.has_variants,
         track_stock: input.track_stock,
         allow_negative:
           input.allow_negative === "inherit"
@@ -405,6 +407,97 @@ export const categoriesApi = {
       .from("categories")
       .update({ deleted_at: now })
       .in("id", ids);
+    if (error) throw error;
+  },
+};
+
+export type ProductVariant = Tables<"product_variants">;
+
+// Fila editable de variante en el form. id ausente = alta nueva.
+export interface VariantRow {
+  id?: string;
+  option1: string;
+  option2: string | null;
+  sku: string | null;
+  barcode: string | null;
+  price_override: number | null;
+  stock: number;
+}
+
+export const variantsApi = {
+  // Variantes activas de un producto, ordenadas por eje 1 / eje 2.
+  list: async (productId: string): Promise<ProductVariant[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_variants")
+      .select("*")
+      .eq("product_id", productId)
+      .is("deleted_at", null)
+      .order("option1")
+      .order("option2", { nullsFirst: true });
+    if (error) throw error;
+    return (data ?? []) as ProductVariant[];
+  },
+
+  // Upsert masivo: filas con id se actualizan, sin id se insertan. No borra
+  // (la baja se hace explícita con remove). Persiste también variant_axes y
+  // marca has_variants en el producto padre.
+  bulkUpsert: async (
+    productId: string,
+    tenantId: string,
+    rows: VariantRow[],
+    axes: string[],
+  ): Promise<void> => {
+    const supabase = createClient();
+
+    const toInsert = rows.filter((r) => !r.id);
+    const toUpdate = rows.filter((r) => r.id);
+
+    if (toInsert.length) {
+      const { error } = await supabase.from("product_variants").insert(
+        toInsert.map((r) => ({
+          tenant_id: tenantId,
+          product_id: productId,
+          option1: r.option1,
+          option2: r.option2,
+          sku: r.sku,
+          barcode: r.barcode,
+          price_override: r.price_override,
+          stock: r.stock,
+        })),
+      );
+      if (error) throw error;
+    }
+
+    for (const r of toUpdate) {
+      const { error } = await supabase
+        .from("product_variants")
+        .update({
+          option1: r.option1,
+          option2: r.option2,
+          sku: r.sku,
+          barcode: r.barcode,
+          price_override: r.price_override,
+          stock: r.stock,
+        })
+        .eq("id", r.id!);
+      if (error) throw error;
+    }
+
+    const { error: prodErr } = await supabase
+      .from("products")
+      .update({ has_variants: true, variant_axes: axes })
+      .eq("id", productId);
+    if (prodErr) throw prodErr;
+  },
+
+  // Baja lógica de una variante.
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("product_variants")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
     if (error) throw error;
   },
 };

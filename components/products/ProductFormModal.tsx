@@ -17,6 +17,7 @@ import { flattenCategories, type Product } from "@/modules/products/api";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
+import { VariantsEditor } from "@/components/products/VariantsEditor";
 import {
   useCategories,
   useCreateCategory,
@@ -58,6 +59,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   });
   const isKit = watch("is_kit");
   const isSerialized = watch("is_serialized");
+  const hasVariants = watch("has_variants");
+
+  // Tipos de producto mutuamente excluyentes: kit, serializado y con variantes
+  // no pueden combinarse (constraint también en DB). Cada checkbox se deshabilita
+  // si otro ya está activo.
+  const kitDisabled = isSerialized || hasVariants;
+  const serializedDisabled = isKit || hasVariants;
+  const variantsDisabled = isKit || isSerialized;
+  const exclusiveHint =
+    "Incompatible con kit / serializado / variantes. Desmarcá el otro tipo primero.";
 
   useEffect(() => {
     if (open) {
@@ -81,6 +92,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         is_active: product?.is_active ?? true,
         is_kit: product?.is_kit ?? false,
         is_serialized: product?.is_serialized ?? false,
+        has_variants: product?.has_variants ?? false,
         track_stock: product?.track_stock ?? true,
         allow_negative:
           product?.allow_negative == null
@@ -241,12 +253,40 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
         <div className="grid grid-cols-3 gap-3">
           {!isEdit && (
-            <Input label="Stock inicial" type="number" step="0.001" {...register("stock")} />
+            <Input
+              label="Stock inicial"
+              type="number"
+              step="0.001"
+              disabled={hasVariants}
+              title={
+                hasVariants
+                  ? "Con variantes, el stock se carga en cada combinación."
+                  : undefined
+              }
+              {...register("stock")}
+            />
           )}
-          <Input label="Stock mínimo" type="number" step="0.001" {...register("stock_min")} />
+          <Input
+            label="Stock mínimo"
+            type="number"
+            step="0.001"
+            disabled={hasVariants}
+            title={
+              hasVariants
+                ? "Con variantes, el stock se carga en cada combinación."
+                : undefined
+            }
+            {...register("stock_min")}
+          />
           <Input label="Unidad (un, kg, lt…)" {...register("unit")} />
           <Input label="IVA %" type="number" step="0.5" {...register("tax_rate")} />
         </div>
+        {hasVariants && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Este producto tiene variantes: el stock vive en cada combinación, no
+            en el producto padre.
+          </p>
+        )}
 
         {/* Datos adicionales plegables (H10b): todo opcional, colapsado por
             defecto para que el alta rápida sea una sola pantalla corta. */}
@@ -316,10 +356,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </span>
         </label>
 
-        <label className="flex items-start gap-2 text-sm text-foreground">
+        <label
+          className={`flex items-start gap-2 text-sm text-foreground ${
+            kitDisabled ? "opacity-50" : ""
+          }`}
+          title={kitDisabled ? exclusiveHint : undefined}
+        >
           <input
             type="checkbox"
             className="mt-0.5 accent-ninja-flame"
+            disabled={kitDisabled}
             {...register("is_kit")}
           />
           <span>
@@ -337,10 +383,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </p>
         )}
 
-        <label className="flex items-start gap-2 text-sm text-foreground">
+        <label
+          className={`flex items-start gap-2 text-sm text-foreground ${
+            serializedDisabled ? "opacity-50" : ""
+          }`}
+          title={serializedDisabled ? exclusiveHint : undefined}
+        >
           <input
             type="checkbox"
             className="mt-0.5 accent-ninja-flame"
+            disabled={serializedDisabled}
             {...register("is_serialized")}
           />
           <span>
@@ -355,6 +407,42 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {!active && isSerialized && (
           <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
             Guardá el producto primero; después podés cargar los seriales acá mismo.
+          </p>
+        )}
+
+        <label
+          className={`flex items-start gap-2 text-sm text-foreground ${
+            variantsDisabled ? "opacity-50" : ""
+          }`}
+          title={variantsDisabled ? exclusiveHint : undefined}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            disabled={variantsDisabled}
+            {...register("has_variants")}
+          />
+          <span>
+            Tiene variantes (talle / color…)
+            <span className="block text-xs text-muted-foreground">
+              Combinaciones con SKU, precio y stock propios. El stock se carga en
+              cada variante, no en el producto padre.
+            </span>
+          </span>
+        </label>
+
+        {active && hasVariants && (
+          <VariantsEditor
+            productId={active.id}
+            tenantId={active.tenant_id}
+            parentSku={active.sku}
+            parentPrice={active.price}
+          />
+        )}
+        {!active && hasVariants && (
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Guardá el producto primero; después podés definir los ejes y generar
+            las combinaciones acá mismo.
           </p>
         )}
 

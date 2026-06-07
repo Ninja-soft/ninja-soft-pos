@@ -10,7 +10,10 @@ import {
   type AuditFilters,
   type BillingRecordInput,
   type DiscountInput,
+  type GrantAccessInput,
+  type InviteCodeInput,
   type PlanLimits,
+  type SavePlanInput,
   type SendNotificationInput,
 } from "./api";
 
@@ -255,6 +258,98 @@ export function usePlanMutations(tenantId: string) {
           vars.value,
           vars.reason,
         ),
+      onSuccess: inv,
+    }),
+    grantAccess: useMutation({
+      mutationFn: (input: GrantAccessInput) =>
+        internalApi.grantAccess(tenantId, input),
+      onSuccess: inv,
+    }),
+  };
+}
+
+// ── Fase C — Addons por tenant (ficha del tenant) ───────────────────────────
+
+export function useTenantAddons(tenantId: string) {
+  return useQuery({
+    queryKey: ["internal", "tenant-addons", tenantId],
+    queryFn: () => internalApi.tenantAddons(tenantId),
+  });
+}
+
+export function usePlanAddons() {
+  return useQuery({
+    queryKey: ["internal", "plan-addons"],
+    queryFn: () => internalApi.planAddons(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetAddon(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { addonKey: string; active: boolean }) =>
+      internalApi.setAddon(tenantId, vars.addonKey, vars.active),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ["internal", "tenant-addons", tenantId],
+      }),
+  });
+}
+
+// ── Fase C — Creador dinámico de planes (/internal/planes) ──────────────────
+
+export function useFeatures() {
+  return useQuery({
+    queryKey: ["internal", "features"],
+    queryFn: () => internalApi.features(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePlansWithCounts() {
+  return useQuery({
+    queryKey: ["internal", "plans-with-counts"],
+    queryFn: () => internalApi.listPlansWithCounts(),
+  });
+}
+
+export function useSavePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SavePlanInput) => internalApi.savePlan(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "plans-with-counts"] });
+      qc.invalidateQueries({ queryKey: ["internal", "global-plans"] });
+      qc.invalidateQueries({ queryKey: ["internal", "plan-prices"] });
+    },
+  });
+}
+
+export function useInviteCodes() {
+  return useQuery({
+    queryKey: ["internal", "invite-codes"],
+    queryFn: () => internalApi.listInviteCodes(),
+  });
+}
+
+export function useInviteCodeMutations() {
+  const qc = useQueryClient();
+  const inv = () =>
+    qc.invalidateQueries({ queryKey: ["internal", "invite-codes"] });
+  return {
+    create: useMutation({
+      mutationFn: (input: InviteCodeInput) =>
+        internalApi.createInviteCode(input),
+      onSuccess: inv,
+    }),
+    setActive: useMutation({
+      mutationFn: (vars: { id: string; active: boolean }) =>
+        internalApi.setInviteCodeActive(vars.id, vars.active),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => internalApi.deleteInviteCode(id),
       onSuccess: inv,
     }),
   };

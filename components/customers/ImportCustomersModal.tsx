@@ -68,7 +68,7 @@ export function ImportCustomersModal({
     await exportXlsx("plantilla-clientes", [
       {
         name: "Clientes",
-        title: "Plantilla de clientes — NinjaPos",
+        title: "Plantilla de clientes • NinjaPos",
         columns: CUSTOMER_IMPORT_COLUMNS,
         rows: [CUSTOMER_TEMPLATE_ROW],
       },

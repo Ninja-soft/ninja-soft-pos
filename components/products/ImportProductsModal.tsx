@@ -69,7 +69,7 @@ export function ImportProductsModal({
     await exportXlsx("plantilla-productos", [
       {
         name: "Productos",
-        title: "Plantilla de productos — NinjaPos",
+        title: "Plantilla de productos • NinjaPos",
         columns: PRODUCT_IMPORT_COLUMNS,
         rows: [PRODUCT_TEMPLATE_ROW],
       },

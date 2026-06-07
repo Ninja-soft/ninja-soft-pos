@@ -54,7 +54,7 @@ export default function VentasPage() {
     await exportXlsx("ventas", [
       {
         name: "Ventas",
-        title: "Ventas — NinjaPos",
+        title: "Ventas • NinjaPos",
         columns: [
           { header: "N°", key: "number", type: "number", width: 10 },
           { header: "Fecha", key: "fecha", width: 22 },

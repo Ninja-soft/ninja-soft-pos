@@ -921,7 +921,7 @@ export default function PosPage() {
       <Modal
         open={weighProduct !== null}
         onOpenChange={(o) => !o && setWeighProduct(null)}
-        title={weighProduct ? `Peso — ${weighProduct.name}` : "Peso"}
+        title={weighProduct ? `Peso • ${weighProduct.name}` : "Peso"}
       >
         <div className="space-y-4">
           <Input
@@ -957,7 +957,7 @@ export default function PosPage() {
       <Modal
         open={serialProduct !== null}
         onOpenChange={(o) => !o && setSerialProduct(null)}
-        title={serialProduct ? `N° de serie — ${serialProduct.name}` : "N° de serie"}
+        title={serialProduct ? `N° de serie • ${serialProduct.name}` : "N° de serie"}
       >
         <div className="space-y-4">
           <div className="max-h-56 space-y-1.5 overflow-y-auto">

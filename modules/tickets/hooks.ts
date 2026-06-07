@@ -3,7 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { SampleBrand } from "@/lib/tickets/sample";
-import { ticketTemplatesApi, type TemplateInput, type TemplateKind } from "./api";
+import {
+  ticketTemplatesApi,
+  type TemplateDestination,
+  type TemplateInput,
+} from "./api";
 
 const KEY = ["ticket-templates"];
 
@@ -30,11 +34,14 @@ export function useTicketTemplates() {
   return useQuery({ queryKey: KEY, queryFn: ticketTemplatesApi.list });
 }
 
-export function useDefaultTemplate(kind: TemplateKind, enabled = true) {
+// Modelo activo por destino (impresión/email). queryKey bajo el prefijo KEY,
+// así las mutaciones de activación (useSetActiveTemplate / useClearActiveTemplate)
+// que invalidan KEY refrescan también este cache.
+export function useActiveTemplate(destination: TemplateDestination, enabled = true) {
   return useQuery({
-    queryKey: [...KEY, "default", kind],
+    queryKey: [...KEY, "active", destination],
     enabled,
-    queryFn: () => ticketTemplatesApi.getDefault(kind),
+    queryFn: () => ticketTemplatesApi.getActive(destination),
   });
 }
 
@@ -61,11 +68,20 @@ export function useUpdateTemplate() {
   });
 }
 
-export function useSetDefaultTemplate() {
+export function useSetActiveTemplate() {
   const inv = useInvalidate();
   return useMutation({
-    mutationFn: ({ id, kind }: { id: string; kind: TemplateKind }) =>
-      ticketTemplatesApi.setDefault(id, kind),
+    mutationFn: ({ id, destination }: { id: string; destination: TemplateDestination }) =>
+      ticketTemplatesApi.setActive(id, destination),
+    onSuccess: inv,
+  });
+}
+
+export function useClearActiveTemplate() {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: (destination: TemplateDestination) =>
+      ticketTemplatesApi.clearActive(destination),
     onSuccess: inv,
   });
 }

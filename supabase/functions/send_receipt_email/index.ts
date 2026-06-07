@@ -1,7 +1,8 @@
 // =============================================================================
 // Edge Function: send_receipt_email — envía el comprobante de una venta (PNG)
 // por email al cliente. Guard: miembro activo del tenant de la venta.
-// SMTP del sistema (system_email_smtp, ver /internal/emails). H9b.
+// SMTP del NEGOCIO (tenant_email_smtp, ver Configuración → Email). H9b PR3.
+// Cuerpo HTML con branding del tenant (logo/accent/legal_name).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
@@ -76,27 +77,51 @@ Deno.serve(async (req: Request) => {
   if (!member) return json({ error: "forbidden" }, 403);
 
   const { data: cfg } = await admin
-    .from("system_email_smtp")
+    .from("tenant_email_smtp")
     .select("*")
-    .eq("id", true)
+    .eq("tenant_id", sale.tenant_id)
     .maybeSingle();
   if (!cfg?.host || !cfg?.from_email)
     return json(
-      { error: "smtp_not_configured", detail: "Configura el SMTP en /internal/emails." },
+      {
+        error: "tenant_smtp_not_configured",
+        detail: "Configurá el email de tu negocio en Configuración → Email.",
+      },
       400,
     );
   const { data: brand } = await admin
     .from("tenant_branding")
-    .select("legal_name")
+    .select("legal_name, logo_url, accent")
     .eq("tenant_id", sale.tenant_id)
     .maybeSingle();
   // Sin caracteres de control: legal_name viaja en headers SMTP (From/Subject);
   // CR/LF permitirían inyectar headers (denomailer no los filtra).
-  const name = (brand?.legal_name || "NinjaSoft POS")
+  const name = (brand?.legal_name || cfg.from_name || "NinjaSoft POS")
     // deno-lint-ignore no-control-regex
     .replace(/[\x00-\x1f\x7f]+/g, " ")
     .trim() || "NinjaSoft POS";
   const safeName = escapeHtml(name);
+
+  // Branding del cuerpo HTML.
+  const accent = /^#[0-9a-fA-F]{6}$/.test(String(brand?.accent ?? ""))
+    ? String(brand!.accent)
+    : "#111827";
+  const logoUrl = String(brand?.logo_url ?? "").trim();
+  const safeLogo = escapeHtml(logoUrl); // escapa comillas para el atributo src
+  const bodyTextRaw =
+    String(cfg.body_text ?? "").trim() ||
+    "¡Gracias por tu compra! Te enviamos tu comprobante.";
+  const safeBodyText = escapeHtml(bodyTextRaw);
+  const html = `<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+  <div style="background:${accent};padding:20px;text-align:center">
+    ${logoUrl ? `<img src="${safeLogo}" alt="" style="max-height:48px">` : `<strong style="color:#fff;font-size:18px">${safeName}</strong>`}
+  </div>
+  <div style="padding:24px;color:#111">
+    <p style="white-space:pre-wrap">${safeBodyText}</p>
+    <p style="color:#6b7280;font-size:12px">Tu comprobante va adjunto a este email.</p>
+  </div>
+  <div style="background:#f9fafb;padding:12px;text-align:center;color:#9ca3af;font-size:11px">Enviado con NinjaSoft POS</div>
+</div>`;
 
   const client = new SMTPClient({
     connection: {
@@ -111,8 +136,8 @@ Deno.serve(async (req: Request) => {
       from: `${name} <${cfg.from_email}>`,
       to,
       subject: `Tu comprobante de ${name}`,
-      content: "Adjuntamos tu comprobante de compra. ¡Gracias!",
-      html: `<p>Adjuntamos tu comprobante de compra de <b>${safeName}</b>. ¡Gracias!</p>`,
+      content: bodyTextRaw,
+      html,
       attachments: [
         {
           filename: `comprobante-${sale.number}.png`,

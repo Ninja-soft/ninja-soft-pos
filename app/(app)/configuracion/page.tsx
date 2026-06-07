@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { CreditCard, Palette, ReceiptText, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { CreditCard, Mail, Palette, ReceiptText, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -24,6 +24,7 @@ import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCa
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
+import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
 
 type Section =
@@ -31,6 +32,7 @@ type Section =
   | "rubro"
   | "marca"
   | "tickets"
+  | "email"
   | "pagos"
   | "operacion"
   | "garantias";
@@ -39,6 +41,7 @@ const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "rubro", label: "Rubro del negocio", icon: Tag },
   { key: "marca", label: "Marca del negocio", icon: Store },
   { key: "tickets", label: "Tickets", icon: ReceiptText },
+  { key: "email", label: "Email", icon: Mail },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
   { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
@@ -290,6 +293,9 @@ export default function ConfiguracionPage() {
 
           {/* Modelos de ticket (escritura protegida por RLS) */}
           {section === "tickets" && <TicketTemplatesCard />}
+
+          {/* Email del negocio (solo owner/manager; el componente se auto-oculta) */}
+          {section === "email" && <TenantEmailCard />}
 
           {/* Medios de pago (solo owner/manager; se auto-oculta) */}
           {section === "pagos" && (

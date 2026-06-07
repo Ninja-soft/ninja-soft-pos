@@ -279,6 +279,8 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] **Modo canvas libre (XY tipo Canva)**: elementos con posición/tamaño libres, drag con puntero + coordenadas numéricas; la tabla de ítems es elemento de flujo (alto elástico). Ideal promos/gift. — *PR2, `CanvasTicketRenderer` + editor canvas.*
   - [x] **Modo HTML avanzado** con variables `{{…}}` (18 vars, click-para-copiar) y **5 plantillas precargadas** (Clásico 80mm, Compacto 58mm, A4 factura, Volante promo, Gift card); sanitizado DOMPurify. — *PR2, `HtmlTicketRenderer`.*
   - [x] *Criterio:* el dueño diseña su ticket en cualquiera de los 3 modos, lo guarda como default, y al cobrar puede imprimirlo, bajarlo en A4 y enviarlo por email al cliente con ese diseño. ✓
+  - [x] **PR3 — Email del negocio + activación por destino** *(2026-06-06)*: comprobantes salen del **SMTP del propio tenant** (card guiada en Configuración → Email: Gmail/Outlook/Otro, contraseña de aplicación, probar conexión; `tenant_email_smtp` deny-all + `set_tenant_smtp`); cuerpo HTML con branding del tenant (logo + acento, fallback ninja) y **texto personalizable**, comprobante adjunto; **un modelo activo para impresión y uno para email** (`print_active`/`email_active`, únicos por tenant; sin activo → ticket clásico); fix: la plantilla activa ahora sí aplica al cobrar en el POS.
+  - [ ] **PR4 pendiente — Canvas PRO + 5 modelos por modo**: subir imágenes al canvas (no solo URL, pipeline WebP de H7), resize con handles, recorte (crop); **5 modelos precargados también en modos bloques y canvas** (hoy solo HTML los tiene) para que promo/gift no arranquen vacíos.
 
 - [~] **H10 — Catálogo público + variantes.** — *Catálogo público base hecho (PR #32); variantes y listas por canal pendientes.*
   - [x] Catálogo web público por tenant en `/c/<slug>` (RPC `public_catalog` SECURITY DEFINER, anónimo; solo tenants activos y productos activos). Muestra logo/branding, fotos, precios y categorías.
@@ -1057,6 +1059,7 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 
 ## Backlog para fases siguientes (no priorizado)
 
+- [ ] **Registro/login con Google (OAuth)** *(agregado 2026-06-06)*: alta y acceso con cuenta de Google vía Supabase Auth (provider google). **Feature de plan de pago** (gateado por feature flag / plan). Incluye vincular cuenta existente por email y respetar el flujo de onboarding actual.
 - [ ] **Inventario PRO avanzado fuera de F14:** WMS profundo, ubicaciones/bin picking, ondas de preparación, inventario por radiofrecuencia y terminales industriales.
 - [ ] **Compras y proveedores avanzados fuera de F14:** EDI, portal de proveedor, licitaciones, conciliación automática de facturas de proveedor.
 - [ ] **Devoluciones y cambios avanzados:** cubierto en F11/H29; queda en backlog solo integración posterior con nota de crédito fiscal automática si AFIP requiere ampliar flujo.

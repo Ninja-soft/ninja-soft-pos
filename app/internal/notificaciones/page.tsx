@@ -11,11 +11,16 @@ import { Segmented } from "@/components/ui/Segmented";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils/cn";
 import { formatRelative } from "@/lib/utils/format";
+import { createClient } from "@/lib/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { Trash2 } from "lucide-react";
 import { useInternalTenants } from "@/modules/internal/hooks";
 import {
+  useDeleteNotification,
   useSendNotification,
   useSentNotifications,
 } from "@/modules/internal/hooks";
+import type { SentNotification } from "@/modules/internal/api";
 import type {
   NotificationSeverity,
   NotificationType,
@@ -82,6 +87,25 @@ export default function InternalNotificacionesPage() {
   const { data: tenants = [] } = useInternalTenants();
   const { data: sent = [], isLoading: sentLoading } = useSentNotifications();
   const send = useSendNotification();
+  const del = useDeleteNotification();
+
+  // Nivel del staff actual: solo no-support puede borrar (el RPC también lo
+  // bloquea server-side; esto solo oculta la acción en la UI).
+  const { data: myLevel } = useQuery({
+    queryKey: ["my-internal-level"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      return ((user?.app_metadata as { internal_level?: string } | null)
+        ?.internal_level ?? null) as string | null;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const canDelete = myLevel !== "support";
+
+  const [toDelete, setToDelete] = useState<SentNotification | null>(null);
 
   const [audience, setAudience] = useState<Audience>("all");
   const [tenantId, setTenantId] = useState<string>("");
@@ -95,6 +119,7 @@ export default function InternalNotificacionesPage() {
   const [actionUrl, setActionUrl] = useState("");
   const [requiresAck, setRequiresAck] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
+  const [displayUntil, setDisplayUntil] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const filteredTenants = useMemo(() => {
@@ -137,6 +162,7 @@ export default function InternalNotificacionesPage() {
     setActionUrl("");
     setRequiresAck(false);
     setExpiresAt("");
+    setDisplayUntil("");
   }
 
   function doSend() {
@@ -153,6 +179,7 @@ export default function InternalNotificacionesPage() {
         actionUrl: actionUrl.trim(),
         requiresAck,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+        displayUntil: displayUntil ? new Date(displayUntil).toISOString() : "",
       },
       {
         onSuccess: () => {
@@ -383,6 +410,30 @@ export default function InternalNotificacionesPage() {
             </div>
           </div>
 
+          {/* Ventana de captación: límite para mostrarla a nuevos registros. */}
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className="text-sm text-muted-foreground"
+                htmlFor="display-until"
+              >
+                Mostrar hasta (captación de nuevos registros)
+              </label>
+              <input
+                id="display-until"
+                type="datetime-local"
+                value={displayUntil}
+                onChange={(e) => setDisplayUntil(e.target.value)}
+                className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Quien se registre después del envío la verá solo si esta fecha
+              todavía no pasó. Los ya registrados la ven igual. Vacío = sin
+              corte.
+            </p>
+          </div>
+
           <div className="flex justify-end">
             <Button
               onClick={() => setConfirmOpen(true)}
@@ -416,6 +467,11 @@ export default function InternalNotificacionesPage() {
                     <th className="py-2 pr-4 font-medium">Tipo</th>
                     <th className="py-2 pr-4 font-medium">Título</th>
                     <th className="py-2 pr-4 font-medium">Conf.</th>
+                    {canDelete && (
+                      <th className="py-2 pr-2 text-right font-medium">
+                        Acción
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -445,6 +501,19 @@ export default function InternalNotificacionesPage() {
                       <td className="py-2.5 pr-4 text-muted-foreground">
                         {n.requiresAck ? "Sí" : "—"}
                       </td>
+                      {canDelete && (
+                        <td className="py-2.5 pr-2 text-right">
+                          <button
+                            type="button"
+                            title="Borrar notificación"
+                            aria-label="Borrar notificación"
+                            onClick={() => setToDelete(n)}
+                            className="inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-red-500"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -463,6 +532,40 @@ export default function InternalNotificacionesPage() {
         danger={broadcast}
         loading={send.isPending}
         onConfirm={doSend}
+      />
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setToDelete(null);
+        }}
+        title="¿Borrar notificación?"
+        description={
+          toDelete
+            ? `Se dará de baja “${toDelete.title}”. Dejará de mostrarse a los usuarios.`
+            : undefined
+        }
+        confirmLabel="Borrar"
+        danger
+        loading={del.isPending}
+        onConfirm={() => {
+          if (!toDelete) return;
+          const id = toDelete.id;
+          del.mutate(id, {
+            onSuccess: () => {
+              setToDelete(null);
+              toast({ title: "Notificación borrada", variant: "success" });
+            },
+            onError: (e) => {
+              setToDelete(null);
+              toast({
+                title: "No se pudo borrar",
+                description: e instanceof Error ? e.message : undefined,
+                variant: "error",
+              });
+            },
+          });
+        }}
       />
     </>
   );

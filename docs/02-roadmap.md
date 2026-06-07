@@ -509,12 +509,12 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] SKU automático para productos sin código de barras con prefijo configurable (trigger `products_auto_sku`).
   - [x] *Criterio:* un cashier no puede superar el descuento máximo; el cierre exige motivo si supera la tolerancia.
 
-- [ ] **H30b — Cierres Z inmutables e historial contable de caja.**
-  - [ ] Al cerrar una caja se genera un **Cierre Z**: cierre **contable diario del turno**, registro **inmutable** (no editable ni borrable) con su **snapshot consolidado** del turno.
-  - [ ] Snapshot del Z: número correlativo de Z por sucursal/caja, apertura/cierre, cajero, ventas (cantidad y total), **desglose por medio de pago**, ingresos/egresos de caja, descuentos, anulaciones, monto esperado vs. contado, **diferencia**, e items vendidos resumidos.
-  - [ ] **Historial de Cierres Z** (pantalla dedicada en Caja): lista filtrable por fecha/sucursal/caja/cajero; cada Z se puede ver, **reimprimir** (ticket/A4, gancha con F10/H22) y exportar XLSX (TX-2). Nunca se edita.
-  - [ ] Integridad: el Z queda enlazado a sus ventas/movimientos; cualquier ajuste posterior va por contramovimiento auditado, no por edición del Z.
-  - [ ] *Criterio:* al cerrar caja aparece su Z en el historial con el consolidado del turno; se puede reimprimir y exportar, pero no modificar.
+- [~] **H30b — Cierres Z inmutables e historial contable de caja.** — *Auditoría contra el código (2026-06-07): el grueso ya estaba implementado desde el 2026-05-31 (`cash_z_closures`); roadmap sincronizado con evidencia. Quedan: items resumidos en el snapshot y correlativo por sucursal/caja (hoy por tenant — cruza con F4 multi-caja).*
+  - [x] Al cerrar una caja se genera un **Cierre Z**: cierre **contable diario del turno**, registro **inmutable** (no editable ni borrable) con su **snapshot consolidado** del turno. — *`close_cash_shift` v2 inserta en `cash_z_closures` (append-only: RLS sin UPDATE/DELETE, unique por turno).*
+  - [~] Snapshot del Z: número correlativo de Z por sucursal/caja, apertura/cierre, cajero, ventas (cantidad y total), **desglose por medio de pago**, ingresos/egresos de caja, descuentos, anulaciones, monto esperado vs. contado, **diferencia**, e items vendidos resumidos. — *Todo presente salvo items resumidos; correlativo hoy por tenant (por caja → F4).*
+  - [x] **Historial de Cierres Z** (pantalla dedicada en Caja): lista filtrable por fecha; cada Z se puede ver, **reimprimir** (ticket vía `ticket-print`) y exportar XLSX. Nunca se edita. — *`ZClosuresHistory` en /caja; filtro por rango de fechas agregado 2026-06-07. Filtro por sucursal/caja/cajero → F4 multi-caja.*
+  - [x] Integridad: el Z queda enlazado a sus ventas/movimientos (vía `cash_shift_id`); cualquier ajuste posterior va por contramovimiento auditado, no por edición del Z (la tabla no admite UPDATE/DELETE).
+  - [x] *Criterio:* al cerrar caja aparece su Z en el historial con el consolidado del turno; se puede reimprimir y exportar, pero no modificar. ✓
 
 - [ ] **H31 — Cuenta corriente y grupos de clientes.**
   - [~] **Historial del cliente**: modal en /clientes con saldo a favor (vale), compras y devoluciones (`CustomerHistoryModal`). Falta deuda de cuenta corriente (depende de este hito) y acceso desde el selector del POS.

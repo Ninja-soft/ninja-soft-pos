@@ -47,6 +47,8 @@ export function useTicketTemplates() {
 export interface TenantSmtpStatus {
   allowed: boolean;
   configured: boolean;
+  // Proveedor de envío del negocio: 'smtp' (default) o 'resend'.
+  provider?: string;
   host?: string;
   port?: number;
   secure?: boolean;
@@ -56,6 +58,8 @@ export interface TenantSmtpStatus {
   body_text?: string | null;
   body_template?: string | null;
   has_password?: boolean;
+  // ¿Hay una API key de Resend guardada? La clave NUNCA viaja al frontend.
+  has_resend_key?: boolean;
 }
 
 export function useTenantSmtpStatus(enabled = true) {
@@ -71,6 +75,7 @@ export function useTenantSmtpStatus(enabled = true) {
       return {
         allowed: Boolean(d.allowed),
         configured: Boolean(d.configured),
+        provider: d.provider,
         host: d.host,
         port: d.port,
         secure: d.secure,
@@ -80,6 +85,7 @@ export function useTenantSmtpStatus(enabled = true) {
         body_text: d.body_text,
         body_template: d.body_template,
         has_password: d.has_password,
+        has_resend_key: d.has_resend_key,
       };
     },
   });

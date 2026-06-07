@@ -4,24 +4,25 @@ import { useRef, useState } from "react";
 import { Mail } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { exportNodePng } from "@/lib/tickets/exportPng";
+import { exportNodePdfBase64 } from "@/lib/tickets/exportPng";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Helper compartido: exporta el ticket a PNG e invoca la Edge Function.
-// Lanza Error con el código mapeable (smtp_not_configured, send_failed, …)
-// como message. Reutilizado por el botón manual y el auto-envío del modal.
+// Helper compartido: genera el comprobante en PDF (cliente) e invoca la Edge
+// Function, que lo adjunta como factura.pdf. Lanza Error con el código mapeable
+// (smtp_not_configured, send_failed, …) como message. Reutilizado por el botón
+// manual y el auto-envío del modal.
 export async function sendReceiptEmail(
   saleId: string,
   to: string,
   node: HTMLElement,
 ): Promise<void> {
   const supabase = createClient();
-  const png = await exportNodePng(node);
+  const pdf = await exportNodePdfBase64(node);
   const { data, error } = await supabase.functions.invoke("send_receipt_email", {
-    body: { sale_id: saleId, to, png },
+    body: { sale_id: saleId, to, pdf },
   });
   if (error) throw error;
   const errCode = (data as { error?: string } | null)?.error;

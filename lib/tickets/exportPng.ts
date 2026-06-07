@@ -46,6 +46,35 @@ export async function exportNodePng(node: HTMLElement): Promise<string> {
   }
 }
 
+// Nodo del ticket → PDF de una sola página, con la página recortada al alto del
+// comprobante (no un A4 enorme con una imagen chica): el ancho se fija y el alto
+// se deriva del aspect-ratio del render. Devuelve el base64 CRUDO del PDF (sin el
+// prefijo `data:` — el caller lo manda así a la Edge Function para adjuntarlo).
+// Usado por el envío del comprobante por email (PDF adjunto, reemplaza al PNG).
+export async function exportNodePdfBase64(node: HTMLElement): Promise<string> {
+  const restore = await inlineImages(node);
+  try {
+    const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff" });
+    const png = canvas.toDataURL("image/png");
+    // Página a la medida del ticket: 80mm de ancho (rollo estándar) y alto
+    // proporcional al render. Márgenes finos para que respire.
+    const margin = 4; // mm
+    const pageW = 80;
+    const contentW = pageW - margin * 2;
+    const contentH = (canvas.height / canvas.width) * contentW;
+    const pageH = contentH + margin * 2;
+    const doc = new jsPDF({ unit: "mm", format: [pageW, pageH], compress: true });
+    doc.addImage(png, "PNG", margin, margin, contentW, contentH, undefined, "FAST");
+    // datauristring → "data:application/pdf;filename=...;base64,XXXX"; nos
+    // quedamos solo con el payload base64 (lo que espera la Edge Function).
+    const dataUri = doc.output("datauristring");
+    const comma = dataUri.indexOf(",");
+    return comma >= 0 ? dataUri.slice(comma + 1) : dataUri;
+  } finally {
+    restore();
+  }
+}
+
 // A4/PDF a partir del nodo ya renderizado por TicketRenderer.
 export async function downloadA4FromNode(node: HTMLElement, saleNumber: number): Promise<void> {
   const png = await exportNodePng(node);

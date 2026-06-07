@@ -173,9 +173,11 @@ export function AssistantBubble() {
         </button>
       )}
 
-      {/* Panel */}
+      {/* Panel: fondo casi sólido (no "liquid glass" translúcido) para que el
+          texto del chat sea siempre legible sobre cualquier pantalla detrás.
+          El blur queda solo como detalle en los bordes. */}
       {open && (
-        <div className="fixed bottom-4 right-4 z-40 flex h-[min(560px,80dvh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-background/80 shadow-2xl backdrop-blur-2xl">
+        <div className="fixed bottom-4 right-4 z-40 flex h-[min(560px,80dvh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-ninja-flame/15 bg-[#0d0822]/95 shadow-2xl ring-1 ring-black/40 backdrop-blur-xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="flex items-center gap-2 font-semibold text-foreground">
@@ -255,10 +257,10 @@ export function AssistantBubble() {
                   >
                     <div
                       className={cn(
-                        "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm",
+                        "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
                         m.role === "user"
-                          ? "bg-ninja-flame/15 text-ninja-flameSoft"
-                          : "bg-muted text-foreground",
+                          ? "bg-ninja-flame/25 text-foreground"
+                          : "border border-white/10 bg-[#1b1438] text-foreground",
                       )}
                     >
                       {m.content}
@@ -267,7 +269,7 @@ export function AssistantBubble() {
                 ))}
                 {send.isPending && (
                   <div className="flex justify-start">
-                    <div className="flex items-center gap-1 rounded-2xl bg-muted px-3 py-2.5">
+                    <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-[#1b1438] px-3 py-2.5">
                       <Dot delay="0ms" />
                       <Dot delay="150ms" />
                       <Dot delay="300ms" />

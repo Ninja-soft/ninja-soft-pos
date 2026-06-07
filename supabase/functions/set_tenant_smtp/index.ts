@@ -43,6 +43,35 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
+// Envío de prueba por Resend (POST a su API con Bearer api_key). Mismo patrón
+// que send_receipt_email / send_email.
+async function sendViaResend(
+  apiKey: string,
+  fromName: string,
+  fromEmail: string,
+  to: string,
+  subject: string,
+  text: string,
+): Promise<void> {
+  const from = `${fromName.replace(/"/g, "")} <${fromEmail}>`;
+  const res = await withTimeout(
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from, to, subject, text }),
+    }),
+    25000,
+    "resend",
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`resend_${res.status}: ${detail.slice(0, 300)}`);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -104,8 +133,13 @@ Deno.serve(async (req: Request) => {
     ? bodyTemplateRaw
     : "brand";
 
+  // Proveedor de envío del negocio: 'resend' (API key) o 'smtp' (default).
+  const providerRaw = String(b.provider ?? "smtp").trim();
+  const provider = providerRaw === "resend" ? "resend" : "smtp";
+
   const patch: Record<string, unknown> = {
     tenant_id: tenantId,
+    provider,
     host: String(b.host ?? "").trim(),
     port,
     secure: !!b.secure,
@@ -119,7 +153,12 @@ Deno.serve(async (req: Request) => {
 
   // password vacío/ausente → conservar el guardado (no se sobrescribe).
   const pwd = typeof b.password === "string" ? b.password : "";
-  const row = pwd ? { ...patch, password: pwd } : patch;
+  // resend_api_key vacío/ausente → conservar la guardada (mismo patrón que el
+  // password). NUNCA se devuelve al frontend: se guarda y se olvida.
+  const resendKey = typeof b.resend_api_key === "string" ? b.resend_api_key.trim() : "";
+  const row: Record<string, unknown> = { ...patch };
+  if (pwd) row.password = pwd;
+  if (resendKey) row.resend_api_key = resendKey;
 
   const { error: upErr } = await admin
     .from("tenant_email_smtp")
@@ -144,35 +183,29 @@ Deno.serve(async (req: Request) => {
       .select("*")
       .eq("tenant_id", tenantId)
       .maybeSingle();
-    if (!cfg?.host || !cfg?.from_email) {
+    const cfgProvider = String(cfg?.provider ?? "smtp");
+    // Requisito mínimo por proveedor: Resend (api_key+from), SMTP (host+from).
+    const incomplete =
+      cfgProvider === "resend"
+        ? !cfg?.resend_api_key || !cfg?.from_email
+        : !cfg?.host || !cfg?.from_email;
+    if (incomplete) {
       return json({ error: "test_failed", detail: "incomplete_config" });
     }
-    const testTo = String(b.test_to ?? cfg.from_email).trim().toLowerCase();
+    const testTo = String(b.test_to ?? cfg!.from_email).trim().toLowerCase();
     if (!EMAIL_RE.test(testTo)) {
       return json({ error: "test_failed", detail: "invalid_test_to" });
     }
     // Sin caracteres de control: from_name viaja en headers SMTP.
-    const fromName = (cfg.from_name || "NinjaSoft POS")
+    const fromName = (cfg!.from_name || "NinjaSoft POS")
       // deno-lint-ignore no-control-regex
       .replace(/[\x00-\x1f\x7f]+/g, " ")
       .trim() || "NinjaSoft POS";
-    // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
-    // (nodemailer lo negocia solo sobre conexión plana si el server lo ofrece).
-    const smtpPort = cfg.port || 587;
-    const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
-    const transporter = nodemailer.createTransport({
-      host: cfg.host,
-      port: smtpPort,
-      secure: smtpTls, // true para 465 (TLS directo); false para 587 (STARTTLS automático)
-      auth: cfg.username
-        ? { user: cfg.username, pass: cfg.password }
-        : undefined,
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 20000,
-    });
-    // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
     const testSubject = "Prueba de email del negocio";
+    const testText =
+      "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración de email funciona.";
+
+    // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).
     let logId: string | null = null;
     try {
       const { data: logRow } = await admin
@@ -192,23 +225,51 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-      await withTimeout(
-        transporter.sendMail({
-          from: `"${fromName.replace(/"/g, "")}" <${cfg.from_email}>`,
-          to: testTo,
-          subject: testSubject,
-          text:
-            "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración SMTP funciona.",
-        }),
-        25000,
-        "smtp_send",
-      );
-    } catch (e) {
-      try {
-        transporter.close();
-      } catch (_) {
-        /* noop */
+      if (cfgProvider === "resend") {
+        await sendViaResend(
+          String(cfg!.resend_api_key),
+          fromName,
+          cfg!.from_email,
+          testTo,
+          testSubject,
+          testText,
+        );
+      } else {
+        // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 =
+        // STARTTLS (nodemailer lo negocia solo si el server lo ofrece).
+        const smtpPort = cfg!.port || 587;
+        const smtpTls = smtpPort === 465 ? true : !!cfg!.secure;
+        const transporter = nodemailer.createTransport({
+          host: cfg!.host,
+          port: smtpPort,
+          secure: smtpTls,
+          auth: cfg!.username
+            ? { user: cfg!.username, pass: cfg!.password }
+            : undefined,
+          connectionTimeout: 15000,
+          greetingTimeout: 10000,
+          socketTimeout: 20000,
+        });
+        try {
+          await withTimeout(
+            transporter.sendMail({
+              from: `"${fromName.replace(/"/g, "")}" <${cfg!.from_email}>`,
+              to: testTo,
+              subject: testSubject,
+              text: testText,
+            }),
+            25000,
+            "smtp_send",
+          );
+        } finally {
+          try {
+            transporter.close();
+          } catch (_) {
+            /* noop */
+          }
+        }
       }
+    } catch (e) {
       if (logId) {
         try {
           await admin
@@ -226,11 +287,6 @@ Deno.serve(async (req: Request) => {
         error: "test_failed",
         detail: e instanceof Error ? e.message : String(e),
       });
-    }
-    try {
-      transporter.close();
-    } catch (_) {
-      /* noop */
     }
     if (logId) {
       try {

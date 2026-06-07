@@ -13,6 +13,7 @@ import {
   Hash,
   ClipboardCheck,
   Mail,
+  CalendarClock,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -39,6 +40,7 @@ type Settings = {
   sale_pad: number;
   customer_required: CustomerRequired;
   auto_email_receipt: boolean;
+  account_due_days: number;
 };
 
 const ROLES: { key: string; label: string }[] = [
@@ -82,7 +84,7 @@ export function OperationSettingsCard() {
       const { data } = await supabase
         .from("pos_settings")
         .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required, auto_email_receipt",
+          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required, auto_email_receipt, account_due_days",
         )
         .eq("tenant_id", tenantId)
         .maybeSingle();
@@ -100,6 +102,7 @@ export function OperationSettingsCard() {
           sale_pad: 0,
           customer_required: {},
           auto_email_receipt: false,
+          account_due_days: 30,
         }
       );
     },
@@ -117,6 +120,7 @@ export function OperationSettingsCard() {
   const [salePad, setSalePad] = useState(0);
   const [customerReq, setCustomerReq] = useState<CustomerRequired>({});
   const [autoEmailReceipt, setAutoEmailReceipt] = useState(false);
+  const [accountDueDays, setAccountDueDays] = useState(30);
 
   useEffect(() => {
     if (!settings) return;
@@ -136,6 +140,7 @@ export function OperationSettingsCard() {
     setSalePad(settings.sale_pad ?? 0);
     setCustomerReq((settings.customer_required as CustomerRequired) ?? {});
     setAutoEmailReceipt(settings.auto_email_receipt ?? false);
+    setAccountDueDays(settings.account_due_days ?? 30);
   }, [settings]);
 
   const save = useMutation({
@@ -160,6 +165,7 @@ export function OperationSettingsCard() {
           sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
           customer_required: customerReq,
           auto_email_receipt: autoEmailReceipt,
+          account_due_days: Math.max(1, Number(accountDueDays) || 30),
         },
         { onConflict: "tenant_id" },
       );
@@ -395,6 +401,31 @@ export function OperationSettingsCard() {
             onCheckedChange={setRequireCustomer}
             label="Requerir cliente"
           />
+        </CardContent>
+      </Card>
+
+      {/* Plazo de cuenta corriente */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <CalendarClock size={16} className="text-ninja-flameSoft" /> Plazo de cuenta corriente (días)
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Vencimiento de cada venta fiada (cuenta corriente).
+            </p>
+          </div>
+          <span className="flex items-center gap-1">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={accountDueDays}
+              onChange={(e) => setAccountDueDays(Number(e.target.value) || 30)}
+              className={numCls}
+            />
+            <span className="text-sm text-muted-foreground">días</span>
+          </span>
         </CardContent>
       </Card>
 

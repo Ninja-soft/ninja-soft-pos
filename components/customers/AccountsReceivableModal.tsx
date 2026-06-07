@@ -25,6 +25,7 @@ export function AccountsReceivableModal({
         title: "Cuentas por cobrar — NinjaPos",
         columns: [
           { header: "Cliente", key: "name" },
+          { header: "Vencido", key: "overdue" },
           { header: "0-30 días", key: "b0_30" },
           { header: "31-60 días", key: "b31_60" },
           { header: "61-90 días", key: "b61_90" },
@@ -33,6 +34,7 @@ export function AccountsReceivableModal({
         ],
         rows: data.rows.map((r) => ({
           name: r.name,
+          overdue: r.overdue,
           b0_30: r.b0_30,
           b31_60: r.b31_60,
           b61_90: r.b61_90,
@@ -100,6 +102,7 @@ export function AccountsReceivableModal({
             <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Cliente</th>
+                <th className="px-3 py-2 text-right font-medium">Vencido</th>
                 <th className="px-3 py-2 text-right font-medium">0-30</th>
                 <th className="px-3 py-2 text-right font-medium">31-60</th>
                 <th className="px-3 py-2 text-right font-medium">61-90</th>
@@ -110,14 +113,14 @@ export function AccountsReceivableModal({
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!isLoading && data && data.rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Nadie debe. Cuentas al día.
                   </td>
                 </tr>
@@ -125,6 +128,15 @@ export function AccountsReceivableModal({
               {data?.rows.map((r) => (
                 <tr key={r.customer_id} className="border-t border-border">
                   <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td
+                    className={
+                      r.overdue > 0
+                        ? "px-3 py-2 text-right font-semibold tabular-nums text-red-400"
+                        : "px-3 py-2 text-right tabular-nums text-muted-foreground"
+                    }
+                  >
+                    {r.overdue > 0 ? formatCurrency(r.overdue) : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                     {r.b0_30 ? formatCurrency(r.b0_30) : "—"}
                   </td>
@@ -154,6 +166,15 @@ export function AccountsReceivableModal({
                 <tr>
                   <td className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Total
+                  </td>
+                  <td
+                    className={
+                      data.totals.overdue > 0
+                        ? "px-3 py-2 text-right font-semibold tabular-nums text-red-400"
+                        : "px-3 py-2 text-right tabular-nums"
+                    }
+                  >
+                    {formatCurrency(data.totals.overdue)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(data.totals.b0_30)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(data.totals.b31_60)}</td>

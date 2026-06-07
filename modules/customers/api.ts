@@ -22,6 +22,62 @@ function payload(input: CustomerOutput) {
   };
 }
 
+const DAY_MS = 86_400_000;
+
+// Inicio del día de hoy (medianoche local) en epoch ms. Un vencimiento se
+// considera vencido cuando su fecha es estrictamente anterior a hoy.
+function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Movimiento de cuenta corriente para el cálculo FIFO.
+export type AccountMovement = {
+  delta: number | string | null;
+  created_at: string;
+  due_date?: string | null;
+};
+
+// Cargo impago que sobrevive al cálculo FIFO.
+export type RemainingCharge = { amount: number; date: number; due: number };
+
+// FIFO: los pagos (delta < 0) cancelan los cargos (delta > 0) más viejos
+// primero. Devuelve los cargos que siguen impagos (parcial o totalmente), cada
+// uno con su monto remanente, su fecha y su vencimiento. Si el cargo no tiene
+// `due_date` (datos viejos), se asume vencimiento = fecha + 30 días.
+export function remainingCharges(
+  movements: AccountMovement[],
+): RemainingCharge[] {
+  const ordered = [...movements].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  const charges: RemainingCharge[] = [];
+  for (const m of ordered) {
+    const delta = Number(m.delta) || 0;
+    if (delta > 0) {
+      const date = new Date(m.created_at).getTime();
+      const due = m.due_date
+        ? new Date(m.due_date + "T00:00:00").getTime()
+        : date + 30 * DAY_MS;
+      charges.push({ amount: delta, date, due });
+    } else if (delta < 0) {
+      let pay = -delta;
+      while (pay > 0 && charges.length > 0) {
+        const head = charges[0]!;
+        if (head.amount <= pay) {
+          pay -= head.amount;
+          charges.shift();
+        } else {
+          head.amount -= pay;
+          pay = 0;
+        }
+      }
+    }
+  }
+  return charges;
+}
+
 export type CustomerGroup = Tables<"customer_groups">;
 
 export const customerGroupsApi = {
@@ -97,17 +153,18 @@ export const customersApi = {
       customer_id: string;
       name: string;
       total: number;
+      overdue: number;
       b0_30: number;
       b31_60: number;
       b61_90: number;
       b90plus: number;
     }[];
-    totals: { total: number; b0_30: number; b31_60: number; b61_90: number; b90plus: number };
+    totals: { total: number; overdue: number; b0_30: number; b31_60: number; b61_90: number; b90plus: number };
   }> => {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("customer_account_movements")
-      .select("customer_id, delta, created_at, customers(name)")
+      .select("customer_id, delta, created_at, due_date, customers(name)")
       .order("created_at", { ascending: true });
     if (error) throw error;
 
@@ -115,47 +172,33 @@ export const customersApi = {
       customer_id: string;
       delta: number;
       created_at: string;
+      due_date: string | null;
       customers: { name: string } | null;
     };
     const byCustomer = new Map<
       string,
-      { name: string; charges: { amount: number; date: number }[] }
+      { name: string; movements: AccountMovement[] }
     >();
 
     for (const m of (data ?? []) as unknown as Row[]) {
       if (!m.customer_id) continue;
       const entry =
         byCustomer.get(m.customer_id) ??
-        { name: m.customers?.name ?? "—", charges: [] };
+        { name: m.customers?.name ?? "—", movements: [] };
       if (!byCustomer.has(m.customer_id)) byCustomer.set(m.customer_id, entry);
-      const delta = Number(m.delta) || 0;
-      if (delta > 0) {
-        entry.charges.push({ amount: delta, date: new Date(m.created_at).getTime() });
-      } else if (delta < 0) {
-        // pago: cancela cargos más viejos primero
-        let pay = -delta;
-        while (pay > 0 && entry.charges.length > 0) {
-          const head = entry.charges[0]!;
-          if (head.amount <= pay) {
-            pay -= head.amount;
-            entry.charges.shift();
-          } else {
-            head.amount -= pay;
-            pay = 0;
-          }
-        }
-      }
+      entry.movements.push({ delta: m.delta, created_at: m.created_at, due_date: m.due_date });
     }
 
     const now = Date.now();
-    const DAY = 86_400_000;
-    const totals = { total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
+    const today = startOfTodayMs();
+    const totals = { total: 0, overdue: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
     const rows = [...byCustomer.entries()]
       .map(([customer_id, e]) => {
-        const r = { customer_id, name: e.name, total: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
-        for (const c of e.charges) {
-          const days = (now - c.date) / DAY;
+        const r = { customer_id, name: e.name, total: 0, overdue: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
+        for (const c of remainingCharges(e.movements)) {
+          const days = (now - c.date) / DAY_MS;
           r.total += c.amount;
+          if (c.due < today) r.overdue += c.amount;
           if (days <= 30) r.b0_30 += c.amount;
           else if (days <= 60) r.b31_60 += c.amount;
           else if (days <= 90) r.b61_90 += c.amount;
@@ -168,6 +211,7 @@ export const customersApi = {
 
     for (const r of rows) {
       totals.total += r.total;
+      totals.overdue += r.overdue;
       totals.b0_30 += r.b0_30;
       totals.b31_60 += r.b31_60;
       totals.b61_90 += r.b61_90;
@@ -191,13 +235,17 @@ export const customersApi = {
   ): Promise<{
     creditBalance: number;
     accountDebt: number;
+    nextDue: number | null;
     sales: { id: string; number: number; total: number; status: string; created_at: string }[];
     returns: { id: string; number: number; total: number; refund_method: string; created_at: string }[];
   }> => {
     const supabase = createClient();
     const [creditRes, debtRes, salesRes, returnsRes] = await Promise.all([
       supabase.from("store_credit_movements").select("delta").eq("customer_id", customerId),
-      supabase.from("customer_account_movements").select("delta").eq("customer_id", customerId),
+      supabase
+        .from("customer_account_movements")
+        .select("delta, created_at, due_date")
+        .eq("customer_id", customerId),
       supabase
         .from("sales")
         .select("id, number, total, status, created_at")
@@ -211,9 +259,13 @@ export const customersApi = {
         .order("created_at", { ascending: false })
         .limit(50),
     ]);
+    const charges = remainingCharges((debtRes.data ?? []) as AccountMovement[]);
+    const nextDue =
+      charges.length > 0 ? Math.min(...charges.map((c) => c.due)) : null;
     return {
       creditBalance: (creditRes.data ?? []).reduce((a, r) => a + Number(r.delta || 0), 0),
       accountDebt: (debtRes.data ?? []).reduce((a, r) => a + Number(r.delta || 0), 0),
+      nextDue,
       sales: (salesRes.data ?? []) as never,
       returns: (returnsRes.data ?? []) as never,
     };

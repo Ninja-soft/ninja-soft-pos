@@ -41,6 +41,10 @@ import {
   DropdownSeparator,
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
+import {
+  BlockingNotificationBanner,
+  NotificationBell,
+} from "@/components/notifications/NotificationBell";
 
 type Item = { href: string; label: string; icon: React.ElementType };
 type Group = { label: string; items: Item[] };
@@ -333,13 +337,18 @@ export function AppShell({
             </span>
           </Link>
         )}
-        <UserMenu
-          email={email}
-          role={shell?.role ?? null}
-          onChangePassword={() => setPwOpen(true)}
-          onEditProfile={() => setPfOpen(true)}
-          onSignOut={signOut}
-        />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <UserMenu
+              email={email}
+              role={shell?.role ?? null}
+              onChangePassword={() => setPwOpen(true)}
+              onEditProfile={() => setPfOpen(true)}
+              onSignOut={signOut}
+            />
+          </div>
+          <NotificationBell />
+        </div>
       </div>
     </nav>
   );
@@ -375,9 +384,15 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
         </header>
 
-        <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <BlockingNotificationBanner />
+          {children}
+        </main>
       </div>
 
       <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />

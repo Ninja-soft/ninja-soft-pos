@@ -15,7 +15,7 @@ import { useTenantSmtpStatus } from "@/modules/tickets/hooks";
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
 const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean }[] = [
-  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "587", secure: false },
+  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true },
   { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false },
   { key: "otro", label: "Otro", host: "", port: "587", secure: false },
 ];
@@ -35,6 +35,9 @@ function mapError(error: string, detail?: string): string {
     case "invalid_from_email":
       return "El email no es válido.";
     case "test_failed":
+      if (detail && /timeout/i.test(detail)) {
+        return "El servidor SMTP no respondió (timeout). Verificá host/puerto/SSL.";
+      }
       return detail
         ? `No se pudo enviar: ${detail}`
         : "No se pudo enviar el email de prueba.";
@@ -46,7 +49,12 @@ function mapError(error: string, detail?: string): string {
       return "Tu sesión expiró. Volvé a iniciar sesión.";
     case "save_failed":
       return "No se pudo guardar la configuración.";
+    case "internal":
+      return "Error interno del servidor de envío. Probá de nuevo.";
     default:
+      if (detail && /timeout/i.test(detail)) {
+        return "El servidor SMTP no respondió (timeout). Verificá host/puerto/SSL.";
+      }
       return "No se pudo guardar. Revisá los datos e intentá de nuevo.";
   }
 }
@@ -227,6 +235,13 @@ export function TenantEmailCard() {
               </button>
             ))}
           </div>
+
+          {provider === "outlook" && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo
+              soporta.
+            </p>
+          )}
 
           {provider === "otro" ? (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">

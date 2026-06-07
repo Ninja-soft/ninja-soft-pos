@@ -28,9 +28,19 @@ const escapeHtml = (s: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+// Carrera contra un timeout: si la promesa SMTP no resuelve a tiempo, rechaza.
+// Evita que un socket colgado mate al worker (deployment_id:null / 503).
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label}_timeout`)), ms)),
+  ]);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  try {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -123,34 +133,46 @@ Deno.serve(async (req: Request) => {
   <div style="background:#f9fafb;padding:12px;text-align:center;color:#9ca3af;font-size:11px">Enviado con NinjaSoft POS</div>
 </div>`;
 
+  // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
+  // (denomailer lo negocia solo sobre conexión plana si el server lo ofrece).
+  const smtpPort = cfg.port || 587;
+  const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
   const client = new SMTPClient({
     connection: {
       hostname: cfg.host,
-      port: cfg.port || 587,
-      tls: !!cfg.secure,
+      port: smtpPort,
+      tls: smtpTls,
       auth: cfg.username ? { username: cfg.username, password: cfg.password } : undefined,
     },
   });
   try {
-    await client.send({
-      from: `${name} <${cfg.from_email}>`,
-      to,
-      subject: `Tu comprobante de ${name}`,
-      content: bodyTextRaw,
-      html,
-      attachments: [
-        {
-          filename: `comprobante-${sale.number}.png`,
-          content: base64,
-          encoding: "base64",
-          contentType: "image/png",
-        },
-      ],
-    });
-    await client.close();
+    await withTimeout(
+      client.send({
+        from: `${name} <${cfg.from_email}>`,
+        to,
+        subject: `Tu comprobante de ${name}`,
+        content: bodyTextRaw,
+        html,
+        attachments: [
+          {
+            filename: `comprobante-${sale.number}.png`,
+            content: base64,
+            encoding: "base64",
+            contentType: "image/png",
+          },
+        ],
+      }),
+      20000,
+      "smtp_send",
+    );
+    try {
+      await withTimeout(client.close(), 3000, "smtp_close");
+    } catch (_) {
+      /* noop */
+    }
   } catch (e) {
     try {
-      await client.close();
+      await withTimeout(client.close(), 3000, "smtp_close");
     } catch (_) {
       /* noop */
     }
@@ -172,4 +194,7 @@ Deno.serve(async (req: Request) => {
     after_data: { to },
   });
   return json({ ok: true });
+  } catch (e) {
+    return json({ error: "internal", detail: String(e) }, 500);
+  }
 });

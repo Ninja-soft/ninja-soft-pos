@@ -21,10 +21,20 @@ const json = (b: unknown, s = 200) =>
   });
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Carrera contra un timeout: si la promesa SMTP no resuelve a tiempo, rechaza.
+// Evita que un socket colgado mate al worker (deployment_id:null / 503).
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label}_timeout`)), ms)),
+  ]);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
+  try {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -124,28 +134,40 @@ Deno.serve(async (req: Request) => {
       // deno-lint-ignore no-control-regex
       .replace(/[\x00-\x1f\x7f]+/g, " ")
       .trim() || "NinjaSoft POS";
+    // Hardening de puerto/TLS: 465 = SSL directo (forzar tls); 587 = STARTTLS
+    // (denomailer lo negocia solo sobre conexión plana si el server lo ofrece).
+    const smtpPort = cfg.port || 587;
+    const smtpTls = smtpPort === 465 ? true : !!cfg.secure;
     const client = new SMTPClient({
       connection: {
         hostname: cfg.host,
-        port: cfg.port || 587,
-        tls: !!cfg.secure,
+        port: smtpPort,
+        tls: smtpTls,
         auth: cfg.username
           ? { username: cfg.username, password: cfg.password }
           : undefined,
       },
     });
     try {
-      await client.send({
-        from: `${fromName} <${cfg.from_email}>`,
-        to: testTo,
-        subject: "Prueba de email del negocio",
-        content:
-          "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración SMTP funciona.",
-      });
-      await client.close();
+      await withTimeout(
+        client.send({
+          from: `${fromName} <${cfg.from_email}>`,
+          to: testTo,
+          subject: "Prueba de email del negocio",
+          content:
+            "Este es un email de prueba de NinjaSoft POS. Si lo recibís, tu configuración SMTP funciona.",
+        }),
+        20000,
+        "smtp_send",
+      );
+      try {
+        await withTimeout(client.close(), 3000, "smtp_close");
+      } catch (_) {
+        /* noop */
+      }
     } catch (e) {
       try {
-        await client.close();
+        await withTimeout(client.close(), 3000, "smtp_close");
       } catch (_) {
         /* noop */
       }
@@ -158,4 +180,7 @@ Deno.serve(async (req: Request) => {
   }
 
   return json({ ok: true });
+  } catch (e) {
+    return json({ error: "internal", detail: String(e) }, 500);
+  }
 });

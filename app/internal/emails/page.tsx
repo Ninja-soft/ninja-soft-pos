@@ -28,6 +28,22 @@ import { cn } from "@/lib/utils/cn";
 
 type Saved = Record<string, { subject: string; html: string }>;
 
+// Presets de proveedor para el SMTP del sistema (mismo patrón que TenantEmailCard).
+// "otro" deja host/puerto/secure editables.
+type ProviderKey = "gmail" | "outlook" | "otro";
+const SMTP_PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean }[] = [
+  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true },
+  { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false },
+  { key: "otro", label: "Otro", host: "", port: "587", secure: false },
+];
+
+function inferSmtpProvider(host: string): ProviderKey {
+  const h = host.trim().toLowerCase();
+  if (h === "smtp.gmail.com") return "gmail";
+  if (h === "smtp.office365.com") return "outlook";
+  return "otro";
+}
+
 export default function InternalEmailsPage() {
   const supabase = createClient();
   const qc = useQueryClient();
@@ -45,6 +61,7 @@ export default function InternalEmailsPage() {
     from_email: "",
   });
   const [hasPassword, setHasPassword] = useState(false);
+  const [provider, setProvider] = useState<ProviderKey>("gmail");
 
   const { data: smtpCfg } = useQuery({
     queryKey: ["system-email-smtp"],
@@ -55,9 +72,10 @@ export default function InternalEmailsPage() {
   });
   useEffect(() => {
     if (smtpCfg) {
+      const cfgHost = String(smtpCfg.host ?? "");
       setSmtp((s) => ({
         ...s,
-        host: String(smtpCfg.host ?? ""),
+        host: cfgHost,
         port: String(smtpCfg.port ?? "587"),
         secure: !!smtpCfg.secure,
         username: String(smtpCfg.username ?? ""),
@@ -66,10 +84,18 @@ export default function InternalEmailsPage() {
         password: "",
       }));
       setHasPassword(!!smtpCfg.has_password);
+      setProvider(cfgHost ? inferSmtpProvider(cfgHost) : "gmail");
     }
   }, [smtpCfg]);
   const setS = (k: keyof typeof smtp, v: string | boolean) =>
     setSmtp((s) => ({ ...s, [k]: v }));
+
+  function pickProvider(key: ProviderKey) {
+    setProvider(key);
+    if (key === "otro") return;
+    const preset = SMTP_PROVIDERS.find((p) => p.key === key)!;
+    setSmtp((s) => ({ ...s, host: preset.host, port: preset.port, secure: preset.secure }));
+  }
 
   const { data: saved = {} } = useQuery<Saved>({
     queryKey: ["system-email-templates"],
@@ -184,12 +210,43 @@ export default function InternalEmailsPage() {
           <div className="flex items-center gap-2 font-semibold">
             <Send size={16} /> Servidor de envío (SMTP)
           </div>
+          {/* Presets de proveedor (prellenan host/puerto/seguridad). */}
+          <div>
+            <div className="mb-2 text-sm font-medium text-muted-foreground">
+              Proveedor
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {SMTP_PROVIDERS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => pickProvider(p.key)}
+                  className={cn(
+                    "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                    provider === p.key
+                      ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
+                      : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {provider === "outlook" && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo soporta.
+              </p>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               label="Servidor SMTP"
               placeholder="smtp.gmail.com"
               value={smtp.host}
-              onChange={(e) => setS("host", e.target.value)}
+              onChange={(e) => {
+                setS("host", e.target.value);
+                setProvider(inferSmtpProvider(e.target.value));
+              }}
             />
             <Input
               label="Puerto"
@@ -380,8 +437,33 @@ function StatusChip({ email }: { email: SystemEmail }) {
   );
 }
 
+// Origen del envío: "negocios" = originado por un tenant (comprobante o prueba
+// SMTP del negocio); "sistema" = emails del sistema NinjaPos.
+type OriginFilter = "todos" | "negocios" | "sistema";
+const ORIGIN_FILTERS: { key: OriginFilter; label: string }[] = [
+  { key: "todos", label: "Todos" },
+  { key: "negocios", label: "Negocios" },
+  { key: "sistema", label: "Sistema" },
+];
+
+function matchesOrigin(email: SystemEmail, origin: OriginFilter): boolean {
+  if (origin === "todos") return true;
+  if (origin === "sistema") return email.kind === "system";
+  // negocios: comprobantes y pruebas SMTP (originados por el tenant).
+  return email.kind === "receipt" || email.kind === "smtp_test";
+}
+
 function SystemEmailsLog() {
   const { data: emails = [], isLoading, isFetching, refetch } = useSystemEmails();
+  const [origin, setOrigin] = useState<OriginFilter>("todos");
+  const [tenantQuery, setTenantQuery] = useState("");
+
+  const filtered = emails.filter((e) => {
+    if (!matchesOrigin(e, origin)) return false;
+    const q = tenantQuery.trim().toLowerCase();
+    if (q && !(e.tenantName ?? "").toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   async function onExport() {
     await exportXlsx("bitacora-envios", [
@@ -397,7 +479,8 @@ function SystemEmailsLog() {
           { header: "Estado", key: "estado", width: 14 },
           { header: "Error", key: "error", width: 40 },
         ],
-        rows: emails.map((e) => ({
+        // El export respeta los filtros activos (origen + negocio).
+        rows: filtered.map((e) => ({
           fecha: fmtDate(e.created_at),
           asunto: e.subject,
           destinatario: e.recipient,
@@ -431,18 +514,48 @@ function SystemEmailsLog() {
               variant="secondary"
               size="sm"
               onClick={onExport}
-              disabled={emails.length === 0}
+              disabled={filtered.length === 0}
             >
               <Download size={15} /> Exportar XLSX
             </Button>
           </div>
         </div>
 
+        {/* Filtros: origen (segmented) + búsqueda por negocio. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-border p-0.5">
+            {ORIGIN_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setOrigin(f.key)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  origin === f.key
+                    ? "bg-ninja-flame/12 text-ninja-flameSoft"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="w-full max-w-[220px]">
+            <Input
+              placeholder="Filtrar por negocio…"
+              value={tenantQuery}
+              onChange={(e) => setTenantQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : emails.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Todavía no hay envíos registrados.
+            {emails.length === 0
+              ? "Todavía no hay envíos registrados."
+              : "No hay envíos que coincidan con los filtros."}
           </p>
         ) : (
           <div className="-mx-1 overflow-x-auto px-1">
@@ -458,7 +571,7 @@ function SystemEmailsLog() {
                 </tr>
               </thead>
               <tbody>
-                {emails.map((e) => (
+                {filtered.map((e) => (
                   <tr key={e.id} className="border-b border-border/60">
                     <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">
                       {fmtDate(e.created_at)}

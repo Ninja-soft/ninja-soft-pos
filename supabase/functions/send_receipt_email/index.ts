@@ -50,13 +50,28 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-// --- Diseños del cuerpo del email del comprobante (H9b PR5) ---------------
+// --- Diseños del cuerpo del email del comprobante (H9b PR5 + PR8) ----------
 // Cada diseño recibe el contexto ya escapado y devuelve el HTML completo. Solo
 // estilos inline (los clientes de email descartan <style>/clases). Todos muestran
-// el logo (tenant o NinjaSoft de fallback) y cierran con "Enviado con NinjaSoft POS".
+// el logo (tenant o NinjaSoft de fallback) y cierran con el footer contrastado.
+//
+// ⚠️ MANTENER EN ESPEJO con lib/email/receiptTemplates.ts (mismo markup/estilos).
+// Deno no puede importar desde lib/ en nuestros deploys single-file, por eso esta
+// copia vive acá; el PREVIEW del cliente usa la versión de lib/.
 const NINJA_LOGO_URL = "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordmark.webp";
-const FOOTER_TEXT = "Enviado con NinjaSoft POS";
+// Wordmark dark-mode de NinjaPos (texto "pos" blanco → solo sobre fondo oscuro).
+const NINJA_LOGO_DARK_URL = "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp";
+const FOOTER_TEXT = "Enviado con NinjaPos";
 const ATTACH_NOTE = "Tu comprobante va adjunto a este email.";
+
+// Footer contrastado: fondo oscuro (#09051C ninja void) con el wordmark
+// dark-mode de NinjaPos + texto tenue. En el diseño dark (tarjeta ya oscura) se
+// pasa un bg levemente distinto (#1f2937) para separar el footer del cuerpo.
+const footerHtml = (bg = "#09051C") =>
+  `<div style="background:${bg};padding:18px 12px;text-align:center">
+    <img src="${NINJA_LOGO_DARK_URL}" alt="NinjaPos" style="max-height:20px;display:inline-block" />
+    <div style="color:#9ca3af;font-size:11px;margin-top:8px">${FOOTER_TEXT}</div>
+  </div>`;
 
 interface BodyCtx {
   accent: string;
@@ -79,7 +94,7 @@ const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
     <p style="white-space:pre-wrap;margin:0 0 12px">${safeBodyText}</p>
     <p style="color:#6b7280;font-size:12px;margin:0">${ATTACH_NOTE}</p>
   </div>
-  <div style="background:#f9fafb;padding:12px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+  ${footerHtml()}
 </div>`,
 
   // 2) clean — blanco, borde superior accent 4px, logo centrado, mucho aire.
@@ -93,7 +108,7 @@ const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
     <p style="white-space:pre-wrap;margin:0 0 16px;font-size:15px">${safeBodyText}</p>
     <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
   </div>
-  <div style="background:#f7f8fa;padding:16px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+  ${footerHtml()}
 </div>`,
 
   // 3) dark — tarjeta oscura, texto claro, divisor accent.
@@ -108,7 +123,7 @@ const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
     <p style="white-space:pre-wrap;margin:0 0 14px;font-size:15px">${safeBodyText}</p>
     <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
   </div>
-  <div style="background:#1f2937;padding:14px;text-align:center;color:#9ca3af;font-size:11px">${FOOTER_TEXT}</div>
+  ${footerHtml("#1f2937")}
 </div>`,
 
   // 4) warm — fondo cálido, header naranja (accent si está seteado), redondeado.
@@ -122,7 +137,7 @@ const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
     <p style="white-space:pre-wrap;margin:0 0 14px;font-size:15px">${safeBodyText}</p>
     <p style="color:#c2693e;font-size:12px;margin:0">${ATTACH_NOTE}</p>
   </div>
-  <div style="background:#ffedd5;padding:14px;text-align:center;color:#b45309;font-size:11px">${FOOTER_TEXT}</div>
+  ${footerHtml()}
 </div>`,
 
   // 5) minimal — sin bloque header; logo chico arriba-izquierda, separadores finos.
@@ -136,7 +151,7 @@ const EMAIL_BODY_TEMPLATES: Record<BodyTemplateKey, (c: BodyCtx) => string> = {
     <p style="white-space:pre-wrap;margin:0 0 12px;font-size:14px;color:#374151">${safeBodyText}</p>
     <p style="color:#9ca3af;font-size:12px;margin:0">${ATTACH_NOTE}</p>
   </div>
-  <div style="padding:12px 4px 4px;border-top:1px solid #ececec;color:#b0b4ba;font-size:10px">${FOOTER_TEXT}</div>
+  ${footerHtml()}
 </div>`,
 };
 

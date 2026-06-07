@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_usage: {
+        Row: {
+          created_at: string
+          id: string
+          provider: string | null
+          tenant_id: string
+          tokens: number
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          provider?: string | null
+          tenant_id: string
+          tokens?: number
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          provider?: string | null
+          tenant_id?: string
+          tokens?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -3267,6 +3309,8 @@ export type Database = {
         }
         Returns: number
       }
+      ai_available: { Args: never; Returns: boolean }
+      ai_monthly_usage: { Args: never; Returns: number }
       close_cash_shift: {
         Args: { p_closing_amount: number; p_notes?: string; p_shift_id: string }
         Returns: number

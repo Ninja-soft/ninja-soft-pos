@@ -8,8 +8,16 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useSaleDetail, useSaleNumberFormat } from "@/modules/sales/hooks";
-import { SendReceiptEmail, sendReceiptEmail } from "@/components/sales/SendReceiptEmail";
-import { useActiveTemplate, useTicketBranding } from "@/modules/tickets/hooks";
+import {
+  SendReceiptEmail,
+  SendReceiptEmailButton,
+  sendReceiptEmail,
+} from "@/components/sales/SendReceiptEmail";
+import {
+  useActiveTemplate,
+  useTenantSmtpStatus,
+  useTicketBranding,
+} from "@/modules/tickets/hooks";
 import { emailTemplateDiffers } from "@/modules/tickets/api";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
@@ -32,8 +40,15 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data: printTpl } = useActiveTemplate("print", open);
   const { data: emailTpl } = useActiveTemplate("email", open);
   const { data: numFmt } = useSaleNumberFormat();
+  // Estado del SMTP del negocio. allowed:true && !configured = el dueño aún no
+  // lo configuró → gateamos el botón. Para cajeros la RPC responde
+  // allowed:false (estado desconocido) y NO gateamos: el server rechaza con
+  // error amable si falta el SMTP. Ver useTenantSmtpStatus.
+  const { data: smtp } = useTenantSmtpStatus(open);
+  const smtpMissing = Boolean(smtp?.allowed && !smtp.configured);
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [emailOpen, setEmailOpen] = useState(false);
   const ticketRef = useRef<HTMLDivElement>(null);
   const emailRef = useRef<HTMLDivElement>(null);
   // Espejo de `emailDiffers` para leerlo dentro del setTimeout del auto-envío
@@ -85,7 +100,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
       !autoEmailEnabled ||
       data.sale.receipt_emailed_at ||
       !to ||
-      data.sale.status !== "completed"
+      data.sale.status !== "completed" ||
+      // El dueño aún no configuró el SMTP: evitamos una llamada que fallaría.
+      smtpMissing
     ) {
       return;
     }
@@ -104,7 +121,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
         .catch((e) => console.warn("auto-email comprobante falló:", e));
     }, 500);
     return () => clearTimeout(t);
-  }, [open, data, autoEmailEnabled, qc]);
+  }, [open, data, autoEmailEnabled, smtpMissing, qc]);
 
   // Fallback de bloques (legacy-compat): si no hay plantilla, replica el ticket
   // clásico respetando los flags viejos del branding. El despacho por modo lo
@@ -215,6 +232,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
           )}
 
           <div className="no-print mt-4 space-y-3">
+            {/* Estado de envío + hint SMTP + formulario inline (bloque propio). */}
             <SendReceiptEmail
               saleId={data.sale.id}
               getTicketNode={getEmailNode}
@@ -222,16 +240,43 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
               customerId={data.sale.customer_id}
               sentTo={data.sale.receipt_email_to}
               sentAt={data.sale.receipt_emailed_at}
+              smtpMissing={smtpMissing}
+              open={emailOpen}
+              onOpenChange={setEmailOpen}
             />
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="secondary" onClick={() => onOpenChange(false)}>
+
+            {/* Cerrar a la izquierda; acciones a la derecha (en sm+).
+                En mobile: acciones en grid 2 cols y Cerrar full-width al final. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                <Button
+                  onClick={() => window.print()}
+                  className="h-10"
+                >
+                  <Printer size={16} /> Imprimir
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleA4}
+                  disabled={downloading}
+                  className="h-10"
+                >
+                  <FileDown size={16} /> A4 (PDF)
+                </Button>
+                <SendReceiptEmailButton
+                  open={emailOpen}
+                  onToggle={() => setEmailOpen((v) => !v)}
+                  sentAt={data.sale.receipt_emailed_at}
+                  smtpMissing={smtpMissing}
+                  className="col-span-2 h-10 sm:col-span-1"
+                />
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                className="order-last h-10 w-full sm:order-first sm:w-auto"
+              >
                 Cerrar
-              </Button>
-              <Button variant="secondary" onClick={handleA4} disabled={downloading}>
-                <FileDown size={16} /> A4 (PDF)
-              </Button>
-              <Button onClick={() => window.print()}>
-                <Printer size={16} /> Imprimir
               </Button>
             </div>
           </div>

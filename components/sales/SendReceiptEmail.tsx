@@ -41,6 +41,14 @@ interface Props {
   customerId?: string | null;
   sentTo?: string | null;
   sentAt?: string | null;
+  // Cuando el dueño NO configuró el SMTP, deshabilitamos el botón con tooltip.
+  // Solo se setea para owners (allowed:true && !configured): para cajeros el
+  // estado es desconocido y NO gateamos (el server rechaza con error amable).
+  smtpMissing?: boolean;
+  // El estado abierto/cerrado del formulario lo controla el modal (el botón
+  // disparador vive en la fila de acciones junto a Imprimir / A4).
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
 }
 
 export function SendReceiptEmail({
@@ -50,10 +58,12 @@ export function SendReceiptEmail({
   customerId,
   sentTo,
   sentAt,
+  smtpMissing,
+  open,
+  onOpenChange,
 }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [save, setSave] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -92,7 +102,7 @@ export function SendReceiptEmail({
       }
 
       toast({ title: "Comprobante enviado", variant: "success" });
-      setOpen(false);
+      onOpenChange(false);
       qc.invalidateQueries({ queryKey: ["sales", "detail", saleId] });
       qc.invalidateQueries({ queryKey: ["sales", "list"] });
     } catch (e) {
@@ -105,25 +115,25 @@ export function SendReceiptEmail({
   }
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => setOpen((v) => !v)}
-          disabled={busy}
-        >
-          <Mail size={16} /> {sentAt ? "Reenviar email" : "Enviar por email"}
-        </Button>
-      </div>
-
+    <>
+      {/* Estado de envío: línea breve y atenuada, a todo el ancho, ARRIBA de
+          la fila de botones (ya no apretada al costado del botón). */}
       {sentAt && (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Enviado a {sentTo ?? "—"} · {new Date(sentAt).toLocaleString("es-AR")}
         </p>
       )}
 
-      {open && (
-        <div className="mt-3 space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+      {smtpMissing && (
+        <p className="text-xs text-muted-foreground">
+          Configurá el email del negocio en Configuración → Email para poder
+          enviar comprobantes.
+        </p>
+      )}
+
+      {/* Formulario inline como bloque propio (no apretado en la fila). */}
+      {open && !smtpMissing && (
+        <div className="w-full space-y-2 rounded-lg border border-border bg-muted/30 p-3">
           <input
             type="email"
             value={email}
@@ -149,6 +159,41 @@ export function SendReceiptEmail({
           </div>
         </div>
       )}
-    </div>
+    </>
+  );
+}
+
+// Botón disparador "Enviar por email" para la fila de acciones del ticket.
+// Deshabilitado solo cuando el dueño aún no configuró el SMTP (smtpMissing).
+export function SendReceiptEmailButton({
+  open,
+  onToggle,
+  sentAt,
+  smtpMissing,
+  busy,
+  className,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  sentAt?: string | null;
+  smtpMissing?: boolean;
+  busy?: boolean;
+  className?: string;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      className={className}
+      onClick={onToggle}
+      disabled={busy || smtpMissing}
+      aria-expanded={open}
+      title={
+        smtpMissing
+          ? "Configurá el email del negocio en Configuración → Email"
+          : undefined
+      }
+    >
+      <Mail size={16} /> {sentAt ? "Reenviar email" : "Enviar por email"}
+    </Button>
   );
 }

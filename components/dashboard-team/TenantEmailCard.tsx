@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -10,6 +10,7 @@ import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils/cn";
+import { useTenantSmtpStatus } from "@/modules/tickets/hooks";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
@@ -50,17 +51,6 @@ function mapError(error: string, detail?: string): string {
   }
 }
 
-type SmtpCfg = {
-  host?: string;
-  port?: number;
-  secure?: boolean;
-  username?: string;
-  from_name?: string;
-  from_email?: string;
-  body_text?: string | null;
-  has_password?: boolean;
-};
-
 type SmtpResult =
   | { ok: true; tested?: boolean }
   | { error: string; detail?: string };
@@ -84,28 +74,23 @@ export function TenantEmailCard() {
     { kind: "ok"; tested: boolean; to?: string } | { kind: "error"; msg: string } | null
   >(null);
 
-  // get_tenant_smtp devuelve null si no es owner/manager → no se renderiza la config.
-  const { data: cfg, isLoading } = useQuery<SmtpCfg | null>({
-    queryKey: ["tenant-smtp"],
-    queryFn: async (): Promise<SmtpCfg | null> => {
-      const { data } = await supabase.rpc("get_tenant_smtp");
-      return (data as SmtpCfg | null) ?? null;
-    },
-  });
+  // get_tenant_smtp: allowed:false → no es owner/manager; allowed:true →
+  // owner (con configured true/false y los campos del SMTP en el mismo objeto).
+  const { data: status, isLoading } = useTenantSmtpStatus();
 
-  // Hidratar campos desde la config guardada.
+  // Hidratar campos desde la config guardada (anidada en el mismo payload).
   useEffect(() => {
-    if (!cfg) return;
-    const cfgHost = String(cfg.host ?? "");
+    if (!status?.allowed) return;
+    const cfgHost = String(status.host ?? "");
     setHost(cfgHost || "smtp.gmail.com");
-    setPort(String(cfg.port ?? "587"));
-    setSecure(!!cfg.secure);
-    setEmail(String(cfg.from_email ?? cfg.username ?? ""));
-    setFromName(String(cfg.from_name ?? ""));
-    setBodyText(String(cfg.body_text ?? ""));
-    setHasPassword(!!cfg.has_password);
+    setPort(String(status.port ?? "587"));
+    setSecure(!!status.secure);
+    setEmail(String(status.from_email ?? status.username ?? ""));
+    setFromName(String(status.from_name ?? ""));
+    setBodyText(String(status.body_text ?? ""));
+    setHasPassword(!!status.has_password);
     setProvider(cfgHost ? inferProvider(cfgHost) : "gmail");
-  }, [cfg]);
+  }, [status]);
 
   function pickProvider(key: ProviderKey) {
     setProvider(key);
@@ -143,7 +128,7 @@ export function TenantEmailCard() {
         toast({ title: msg, variant: "error" });
         // Aun con test_failed la config queda guardada en el server.
         if (res.error === "test_failed") {
-          qc.invalidateQueries({ queryKey: ["tenant-smtp"] });
+          qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
           setPassword("");
         }
         return;
@@ -154,7 +139,7 @@ export function TenantEmailCard() {
         variant: "success",
       });
       setPassword("");
-      qc.invalidateQueries({ queryKey: ["tenant-smtp"] });
+      qc.invalidateQueries({ queryKey: ["tenant-smtp-status"] });
     },
     onError: () => {
       const msg = "No se pudo guardar. Revisá tu conexión e intentá de nuevo.";
@@ -165,8 +150,8 @@ export function TenantEmailCard() {
 
   if (isLoading) return null;
 
-  // No owner/manager: RPC devuelve null.
-  if (!cfg) {
+  // No owner/manager: allowed:false.
+  if (!status?.allowed) {
     return (
       <Card>
         <CardContent className="p-6">
@@ -188,7 +173,10 @@ export function TenantEmailCard() {
     );
   }
 
-  const configured = Boolean(host.trim() && email.trim());
+  // Estado persistido (server) para el chip. El estado del formulario
+  // (formReady) habilita los botones de guardar.
+  const configured = status.configured;
+  const formReady = Boolean(host.trim() && email.trim());
   const saving = save.isPending;
 
   return (
@@ -406,12 +394,12 @@ export function TenantEmailCard() {
           <div className="flex flex-wrap justify-end gap-2">
             <Button
               variant="secondary"
-              disabled={saving || !configured}
+              disabled={saving || !formReady}
               onClick={() => save.mutate(false)}
             >
               {saving ? "Guardando…" : "Guardar"}
             </Button>
-            <Button disabled={saving || !configured} onClick={() => save.mutate(true)}>
+            <Button disabled={saving || !formReady} onClick={() => save.mutate(true)}>
               {saving ? "Enviando…" : "Guardar y enviar prueba"}
             </Button>
           </div>

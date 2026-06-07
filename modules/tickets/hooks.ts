@@ -34,6 +34,55 @@ export function useTicketTemplates() {
   return useQuery({ queryKey: KEY, queryFn: ticketTemplatesApi.list });
 }
 
+// Estado del SMTP del negocio. La RPC get_tenant_smtp SOLO responde a
+// owner/manager: `allowed:false` significa "no sos dueño" (cajero o sin
+// permiso). Para owners devuelve además `configured` y los campos del SMTP.
+//
+// Cajeros reciben `allowed:false` AUNQUE el negocio TENGA SMTP configurado
+// (la tabla tenant_email_smtp es deny-all RLS, no se puede leer desde el
+// cliente). Por eso `configured` solo es confiable cuando `allowed:true`. Los
+// consumidores que deshabilitan acciones deben gatear únicamente con
+// `allowed === true && configured === false` y dejar que el server rechace
+// con error amable cuando un cajero envía sin SMTP configurado.
+export interface TenantSmtpStatus {
+  allowed: boolean;
+  configured: boolean;
+  host?: string;
+  port?: number;
+  secure?: boolean;
+  username?: string;
+  from_name?: string;
+  from_email?: string;
+  body_text?: string | null;
+  has_password?: boolean;
+}
+
+export function useTenantSmtpStatus(enabled = true) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: ["tenant-smtp-status"],
+    enabled,
+    queryFn: async (): Promise<TenantSmtpStatus> => {
+      const { data } = await supabase.rpc("get_tenant_smtp");
+      // Compat legacy: la RPC vieja devolvía null cuando no era owner.
+      if (data == null) return { allowed: false, configured: false };
+      const d = data as Partial<TenantSmtpStatus>;
+      return {
+        allowed: Boolean(d.allowed),
+        configured: Boolean(d.configured),
+        host: d.host,
+        port: d.port,
+        secure: d.secure,
+        username: d.username,
+        from_name: d.from_name,
+        from_email: d.from_email,
+        body_text: d.body_text,
+        has_password: d.has_password,
+      };
+    },
+  });
+}
+
 // Modelo activo por destino (impresión/email). queryKey bajo el prefijo KEY,
 // así las mutaciones de activación (useSetActiveTemplate / useClearActiveTemplate)
 // que invalidan KEY refrescan también este cache.

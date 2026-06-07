@@ -172,6 +172,7 @@ export function SendReceiptEmailButton({
   smtpMissing,
   busy,
   className,
+  iconOnly,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -179,7 +180,15 @@ export function SendReceiptEmailButton({
   smtpMissing?: boolean;
   busy?: boolean;
   className?: string;
+  // Modo compacto: solo el ícono Mail (fila de acciones del ticket).
+  iconOnly?: boolean;
 }) {
+  const label = sentAt ? "Reenviar email" : "Enviar por email";
+  const title = smtpMissing
+    ? "Configurá el email del negocio en Configuración → Email"
+    : iconOnly
+      ? label
+      : undefined;
   return (
     <Button
       variant="secondary"
@@ -187,13 +196,10 @@ export function SendReceiptEmailButton({
       onClick={onToggle}
       disabled={busy || smtpMissing}
       aria-expanded={open}
-      title={
-        smtpMissing
-          ? "Configurá el email del negocio en Configuración → Email"
-          : undefined
-      }
+      aria-label={iconOnly ? label : undefined}
+      title={title}
     >
-      <Mail size={16} /> {sentAt ? "Reenviar email" : "Enviar por email"}
+      <Mail size={16} /> {!iconOnly && label}
     </Button>
   );
 }

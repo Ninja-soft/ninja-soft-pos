@@ -16,18 +16,23 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { Rnd } from "react-rnd";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
 import { TicketRenderer } from "@/components/tickets/TicketRenderer";
-import { CanvasTicketRenderer } from "@/components/tickets/CanvasTicketRenderer";
+import {
+  CanvasElementView,
+  CanvasItemsTable,
+} from "@/components/tickets/CanvasTicketRenderer";
 import { HtmlTicketRenderer } from "@/components/tickets/HtmlTicketRenderer";
 import { ImageCropModal } from "@/components/tickets/ImageCropModal";
 import { uploadTicketImage } from "@/lib/tickets/uploadTicketImage";
 import {
   BLOCK_LABELS,
+  CANVAS_WIDTH,
   defaultSaleBlocks,
   newBlock,
   newCanvasElement,
@@ -42,6 +47,7 @@ import {
   type TextSize,
   type TicketBlock,
 } from "@/lib/tickets/blocks";
+import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import { HTML_STARTER_TEMPLATES } from "@/lib/tickets/htmlTemplates";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
 import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
@@ -212,8 +218,14 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
         setHtml(MINIMAL_HTML);
       }
       if (content && "canvas" in content && content.canvas) {
-        setElements(Array.isArray(content.canvas.elements) ? content.canvas.elements : []);
-        setCanvasHeight(content.canvas.height || 360);
+        const tpaper = (template.paper as Paper) ?? "80";
+        const safe = {
+          elements: Array.isArray(content.canvas.elements) ? content.canvas.elements : [],
+          height: content.canvas.height || 360,
+        };
+        const upgraded = upgradeCanvas(safe, tpaper);
+        setElements(upgraded.elements);
+        setCanvasHeight(upgraded.height);
       } else {
         setElements([]);
         setCanvasHeight(360);
@@ -809,24 +821,46 @@ function CanvasRow({
           <div className="grid grid-cols-3 gap-2">
             {!isItems && (
               <NumField
-                label="X %"
+                label="X px"
                 value={el.x}
                 min={0}
-                max={100}
-                onChange={(v) => onPatch({ x: clamp(v, 0, 100) })}
+                onChange={(v) => onPatch({ x: Math.max(0, v) })}
               />
             )}
             <NumField label="Y px" value={el.y} min={0} onChange={(v) => onPatch({ y: Math.max(0, v) })} />
             {!isItems && (
               <NumField
-                label="Ancho %"
+                label="Ancho px"
                 value={el.w}
-                min={10}
-                max={100}
-                onChange={(v) => onPatch({ w: clamp(v, 10, 100) })}
+                min={24}
+                onChange={(v) => onPatch({ w: Math.max(24, v) })}
               />
             )}
           </div>
+
+          {!isItems && (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <NumField
+                  label="Alto px"
+                  value={el.h ?? 0}
+                  min={0}
+                  onChange={(v) => onPatch({ h: v > 0 ? Math.max(16, v) : undefined })}
+                />
+              </div>
+              {el.h !== undefined && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onPatch({ h: undefined })}
+                  title="Alto automático"
+                >
+                  Auto
+                </Button>
+              )}
+            </div>
+          )}
 
           {el.type === "text" && (
             <>
@@ -971,12 +1005,24 @@ function NumField({
   );
 }
 
-function clamp(v: number, lo: number, hi: number) {
-  return Math.min(hi, Math.max(lo, v));
-}
-
 /* --------------------------- Canvas preview ----------------------------- */
 
+// Tamaños mínimos de la caja react-rnd.
+const RND_MIN_W = 24;
+const RND_MIN_H = 16;
+
+// Tipos cuyo alto es intrínseco a su contenido (resize vertical genera h).
+function elementSupportsHeight(type: CanvasElementType) {
+  return type === "image" || type === "qr" || type === "logo" || type === "barcode";
+}
+
+/**
+ * Editor del modo canvas con react-rnd. En vez de superponer overlays sobre el
+ * renderer, dibuja los elementos directamente como hijos `<Rnd>` dentro de una
+ * tarjeta blanca del ancho del papel, reutilizando el mismo visual del renderer
+ * (`CanvasElementView`). El elemento "items" parte el lienzo en dos zonas; su
+ * caja Rnd se arrastra solo en vertical y define el punto de corte (y).
+ */
 function CanvasPreview({
   elements,
   height,
@@ -996,145 +1042,125 @@ function CanvasPreview({
   paper: Paper;
   showNinja: boolean;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  // Estado de drag activo: id + modo (mover o redimensionar) + posición de
-  // inicio (puntero y elemento) y ancho del contenedor para convertir px→%.
-  const dragRef = useRef<{
-    id: string;
-    mode: "move" | "resize";
-    startX: number;
-    startY: number;
-    elX: number;
-    elY: number;
-    elW: number;
-    width: number;
-  } | null>(null);
-
+  const width = CANVAS_WIDTH[paper];
   const itemsEl = elements.find((e) => e.type === "items");
   const splitY = itemsEl?.y ?? null;
+  const hasItems = splitY !== null;
+  const topZoneH = hasItems ? splitY : height;
+  const bottomZoneH = hasItems ? Math.max(0, height - splitY) : 0;
 
-  // Para cada elemento (excepto items) calculamos su Y absoluta de overlay.
-  // Sin items: Y = el.y. Con items, los de abajo (y >= splitY) se desplazan
-  // por el alto de la tabla, pero en preview lo aproximamos: el overlay usa la
-  // misma Y que el elemento; el drag ajusta la Y guardada. Suficiente y robusto.
-  function startDrag(e: React.PointerEvent, el: CanvasElement, dragMode: "move" | "resize") {
-    if (el.type === "items") return;
-    const container = containerRef.current;
-    if (!container) return;
-    setSelected(el.id);
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = {
-      id: el.id,
-      mode: dragMode,
-      startX: e.clientX,
-      startY: e.clientY,
-      elX: el.x,
-      elY: el.y,
-      elW: el.w,
-      width: container.getBoundingClientRect().width,
-    };
+  const topEls = elements.filter((e) => e.type !== "items" && (!hasItems || e.y < splitY));
+  const bottomEls = hasItems ? elements.filter((e) => e.type !== "items" && e.y >= splitY) : [];
+
+  function patch(id: string, changes: Partial<CanvasElement>) {
+    setElements((prev) => prev.map((e) => (e.id === id ? { ...e, ...changes } : e)));
   }
 
-  function onPointerDown(e: React.PointerEvent, el: CanvasElement) {
-    startDrag(e, el, "move");
-  }
-
-  // Inicia un redimensionado desde el handle; no debe disparar el move.
-  function onResizePointerDown(e: React.PointerEvent, el: CanvasElement) {
-    e.stopPropagation();
-    startDrag(e, el, "resize");
-  }
-
-  function onPointerMove(e: React.PointerEvent) {
-    const d = dragRef.current;
-    if (!d) return;
-    if (d.mode === "resize") {
-      const dwPct = ((e.clientX - d.startX) / d.width) * 100;
-      const nextW = clamp(Math.round(d.elW + dwPct), 10, 100);
-      setElements((prev) =>
-        prev.map((el) => (el.id === d.id ? { ...el, w: nextW } : el)),
-      );
-      return;
-    }
-    const dxPct = ((e.clientX - d.startX) / d.width) * 100;
-    const dyPx = e.clientY - d.startY;
-    const nextX = clamp(Math.round(d.elX + dxPct), 0, 100);
-    const nextY = Math.max(0, Math.round(d.elY + dyPx));
-    setElements((prev) =>
-      prev.map((el) => (el.id === d.id ? { ...el, x: nextX, y: nextY } : el)),
+  // Caja Rnd de un elemento posicionado. `zoneY` = la Y relativa a la zona en
+  // la que vive (igual al renderer). `yBase` se suma al escribir de vuelta.
+  function ElementBox({ el, zoneY, yBase }: { el: CanvasElement; zoneY: number; yBase: number }) {
+    const isSel = selected === el.id;
+    const supportsH = elementSupportsHeight(el.type);
+    return (
+      <Rnd
+        bounds="parent"
+        size={{ width: el.w, height: el.h ?? "auto" }}
+        position={{ x: el.x, y: zoneY }}
+        minWidth={RND_MIN_W}
+        minHeight={RND_MIN_H}
+        enableResizing={{ right: true, bottom: true, bottomRight: true }}
+        onDragStart={() => setSelected(el.id)}
+        onDragStop={(_e, d) => {
+          patch(el.id, { x: Math.round(d.x), y: Math.round(d.y) + yBase });
+        }}
+        onResizeStart={() => setSelected(el.id)}
+        onResizeStop={(_e, _dir, ref, _delta, pos) => {
+          const nextW = Math.round(ref.offsetWidth);
+          const heightChanged = el.h !== undefined || ref.style.height.includes("px");
+          const changes: Partial<CanvasElement> = {
+            w: nextW,
+            x: Math.round(pos.x),
+            y: Math.round(pos.y) + yBase,
+          };
+          // Para tipos con alto intrínseco siempre persistimos h. Para texto y
+          // separador solo si el usuario realmente arrastró el alto.
+          if (supportsH || heightChanged) changes.h = Math.round(ref.offsetHeight);
+          patch(el.id, changes);
+        }}
+        className={cn(
+          "rounded outline-dashed outline-1 outline-offset-1 outline-border transition hover:outline-ninja-flameSoft/60",
+          isSel && "outline-ninja-flameSoft outline-2",
+        )}
+        style={{ cursor: "move" }}
+      >
+        <div
+          className="h-full w-full overflow-hidden"
+          onMouseDownCapture={() => setSelected(el.id)}
+        >
+          <CanvasElementView el={el} data={data} />
+        </div>
+      </Rnd>
     );
   }
 
-  function onPointerUp(e: React.PointerEvent) {
-    if (dragRef.current) {
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        /* noop */
-      }
-      dragRef.current = null;
-    }
+  // Caja Rnd del separador del flujo de ítems: solo se mueve en vertical y
+  // define el punto de corte (y). No redimensiona.
+  function ItemsBox() {
+    if (!itemsEl || splitY === null) return null;
+    return (
+      <Rnd
+        bounds="parent"
+        dragAxis="y"
+        enableResizing={false}
+        size={{ width, height: 4 }}
+        position={{ x: 0, y: 0 }}
+        onDragStart={() => setSelected(itemsEl.id)}
+        onDragStop={(_e, d) => patch(itemsEl.id, { y: Math.max(0, Math.round(d.y) + splitY) })}
+        className={cn(
+          "z-10 border-t-2 border-dashed border-ninja-flame/70",
+          selected === itemsEl.id && "border-ninja-flame",
+        )}
+        style={{ cursor: "ns-resize" }}
+        title="Ítems — arrastrá para mover el punto de corte"
+      />
+    );
   }
 
-  const hasItems = splitY !== null;
-
   return (
-    <div ref={containerRef} className="relative">
-      <CanvasTicketRenderer
-        content={{ elements, height }}
-        data={data}
-        paper={paper}
-        showNinjaLogo={showNinja}
-        className="ticket-print"
-      />
-      {/* Capa de overlays de arrastre, alineada al contenido del renderer
-          (mismo padding p-4 = 16px). Solo elementos posicionados. */}
-      <div className="pointer-events-none absolute inset-0 p-4">
-        {elements
-          .filter((el) => el.type !== "items")
-          .map((el) => {
-            const isSel = selected === el.id;
-            // Overlay aproximado: usa el y crudo (la zona inferior real queda
-            // desplazada por el alto variable de la tabla de ítems).
-            const top = el.y;
-            return (
-              <div
-                key={el.id}
-                onPointerDown={(e) => onPointerDown(e, el)}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                className={cn(
-                  // Contorno punteado en TODOS los elementos para que se vea qué
-                  // es editable; anillo más fuerte en hover y en el seleccionado.
-                  "pointer-events-auto absolute cursor-move rounded outline-dashed outline-1 outline-offset-1 outline-border transition hover:outline-ninja-flameSoft/60",
-                  isSel && "outline-ninja-flameSoft outline-2",
-                )}
-                style={{
-                  left: `${el.x}%`,
-                  top: `${top}px`,
-                  width: `${el.w}%`,
-                  minHeight: 16,
-                }}
-                title={`${CANVAS_ELEMENT_LABELS[el.type]} — arrastrar`}
-              >
-                {isSel && (
-                  <span
-                    onPointerDown={(e) => onResizePointerDown(e, el)}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    role="slider"
-                    aria-label="Redimensionar ancho"
-                    aria-valuenow={el.w}
-                    aria-valuemin={10}
-                    aria-valuemax={100}
-                    title="Redimensionar ancho"
-                    className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize rounded-sm border border-background bg-ninja-flame"
-                  />
-                )}
-              </div>
-            );
-          })}
+    <div
+      className="mx-auto rounded-lg border border-border bg-background p-4 font-mono text-sm text-foreground ticket-print"
+      style={{ width: `${width}px`, maxWidth: "100%" }}
+    >
+      {/* Zona superior: alto fijo (= items.y, o todo el lienzo si no hay items). */}
+      <div style={{ position: "relative", height: `${topZoneH}px` }}>
+        {topEls.map((el) => (
+          <ElementBox key={el.id} el={el} zoneY={el.y} yBase={0} />
+        ))}
+        {hasItems && <ItemsBox />}
       </div>
+
+      {hasItems && (
+        <>
+          {/* Tabla de ítems de muestra (no interactiva). */}
+          <CanvasItemsTable data={data} />
+          {/* Zona inferior: Y relativa a items.y. */}
+          <div style={{ position: "relative", height: `${bottomZoneH}px` }}>
+            {bottomEls.map((el) => (
+              <ElementBox key={el.id} el={el} zoneY={el.y - splitY} yBase={splitY} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {data.sale.status === "voided" && (
+        <div className="mt-3 text-center text-xs font-bold text-red-500">** ANULADA **</div>
+      )}
+      {showNinja && (
+        <div className="mt-3 flex justify-center opacity-70">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/ninjasoft-wordmark.webp" alt="NinjaSoft" className="h-4 w-auto" />
+        </div>
+      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ describe("CanvasTicketRenderer", () => {
   it("renderiza el contenido de un elemento de texto en la zona superior", () => {
     render(
       <CanvasTicketRenderer
-        content={canvas([{ id: "t1", type: "text", x: 5, y: 20, w: 90, text: "Bienvenidos" }])}
+        content={canvas([{ id: "t1", type: "text", x: 10, y: 20, w: 280, text: "Bienvenidos" }])}
         data={sampleTicketData(brand)}
         paper="80"
         showNinjaLogo={false}
@@ -40,9 +40,9 @@ describe("CanvasTicketRenderer", () => {
     const { container } = render(
       <CanvasTicketRenderer
         content={canvas([
-          { id: "head", type: "text", x: 5, y: 10, w: 90, text: "ENCABEZADO" },
-          { id: "it", type: "items", x: 0, y: 100, w: 100 },
-          { id: "foot", type: "text", x: 5, y: 150, w: 90, text: "PIE DE PAGINA" },
+          { id: "head", type: "text", x: 10, y: 10, w: 280, text: "ENCABEZADO" },
+          { id: "it", type: "items", x: 0, y: 100, w: 300 },
+          { id: "foot", type: "text", x: 10, y: 150, w: 280, text: "PIE DE PAGINA" },
         ])}
         data={sampleTicketData(brand)}
         paper="80"
@@ -62,7 +62,7 @@ describe("CanvasTicketRenderer", () => {
     render(
       <CanvasTicketRenderer
         content={canvas([
-          { id: "a", type: "text", x: 5, y: 20, w: 90, text: "Solo texto" },
+          { id: "a", type: "text", x: 10, y: 20, w: 200, text: "Solo texto" },
         ])}
         data={sampleTicketData(brand)}
         paper="58"
@@ -77,7 +77,7 @@ describe("CanvasTicketRenderer", () => {
     data.sale.status = "voided";
     render(
       <CanvasTicketRenderer
-        content={canvas([{ id: "t", type: "text", x: 5, y: 20, w: 90, text: "Hola" }])}
+        content={canvas([{ id: "t", type: "text", x: 10, y: 20, w: 280, text: "Hola" }])}
         data={data}
         paper="80"
         showNinjaLogo={false}

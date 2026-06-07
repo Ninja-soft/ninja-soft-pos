@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BLOCK_STARTER_TEMPLATES } from "@/lib/tickets/blockTemplates";
 import { CANVAS_STARTER_TEMPLATES } from "@/lib/tickets/canvasTemplates";
+import { CANVAS_WIDTH } from "@/lib/tickets/blocks";
 
 const KINDS = ["sale", "promo", "gift"];
 const PAPERS = ["58", "80", "a4"];
@@ -49,13 +50,15 @@ describe("CANVAS_STARTER_TEMPLATES", () => {
     }
   });
 
-  it("x en 0-100 y w en 10-100 para cada elemento", () => {
+  it("coordenadas v2 en px: x>=0, w>=10, y>=0 y dentro del ancho del papel", () => {
     for (const t of CANVAS_STARTER_TEMPLATES) {
+      const width = CANVAS_WIDTH[t.paper];
       for (const el of t.canvas.elements) {
         expect(el.x, `${t.key}/${el.type} x`).toBeGreaterThanOrEqual(0);
-        expect(el.x, `${t.key}/${el.type} x`).toBeLessThanOrEqual(100);
+        expect(el.y, `${t.key}/${el.type} y`).toBeGreaterThanOrEqual(0);
         expect(el.w, `${t.key}/${el.type} w`).toBeGreaterThanOrEqual(10);
-        expect(el.w, `${t.key}/${el.type} w`).toBeLessThanOrEqual(100);
+        // No se sale del lienzo por la derecha.
+        expect(el.x + el.w, `${t.key}/${el.type} x+w`).toBeLessThanOrEqual(width);
       }
     }
   });

@@ -1,6 +1,7 @@
-// H9b PR4 — Modelos precargados para el modo "canvas" del ticket.
-// Cada entrada arma sus elementos con newCanvasElement(type) + overrides.
-// Espeja la forma de HTML_STARTER_TEMPLATES (ver lib/tickets/htmlTemplates.ts).
+// H9b PR4/PR5 — Modelos precargados para el modo "canvas" del ticket.
+// Coordenadas en px (modelo v2) sobre el lienzo de ancho fijo por papel
+// (CANVAS_WIDTH: 58→220, 80→300, a4→794). Cada entrada arma sus elementos con
+// newCanvasElement(type) + overrides. Espeja HTML_STARTER_TEMPLATES.
 
 import { newCanvasElement, type CanvasContent } from "@/lib/tickets/blocks";
 
@@ -23,11 +24,11 @@ export const CANVAS_STARTER_TEMPLATES: CanvasStarterTemplate[] = [
     canvas: {
       height: 300,
       elements: [
-        { ...newCanvasElement("logo"), x: 30, y: 10, w: 40 },
-        { ...newCanvasElement("text"), x: 5, y: 70, w: 90, text: "Mi negocio", bold: true, align: "center" },
-        { ...newCanvasElement("items"), x: 0, y: 110, w: 100 },
-        { ...newCanvasElement("qr"), x: 35, y: 200, w: 30 },
-        { ...newCanvasElement("text"), x: 5, y: 260, w: 90, text: "¡Gracias por su compra!", align: "center" },
+        { ...newCanvasElement("logo"), x: 90, y: 10, w: 120, h: 50 },
+        { ...newCanvasElement("text"), x: 10, y: 70, w: 280, text: "Mi negocio", bold: true, align: "center" },
+        { ...newCanvasElement("items"), x: 0, y: 110, w: 300 },
+        { ...newCanvasElement("qr"), x: 90, y: 200, w: 120, h: 120 },
+        { ...newCanvasElement("text"), x: 10, y: 270, w: 280, text: "¡Gracias por su compra!", align: "center" },
       ],
     },
   },
@@ -40,9 +41,9 @@ export const CANVAS_STARTER_TEMPLATES: CanvasStarterTemplate[] = [
     canvas: {
       height: 280,
       elements: [
-        { ...newCanvasElement("text"), x: 5, y: 10, w: 90, text: "Mi negocio", bold: true, align: "center" },
-        { ...newCanvasElement("items"), x: 0, y: 50, w: 100 },
-        { ...newCanvasElement("barcode"), x: 15, y: 230, w: 70 },
+        { ...newCanvasElement("text"), x: 10, y: 10, w: 200, text: "Mi negocio", bold: true, align: "center" },
+        { ...newCanvasElement("items"), x: 0, y: 50, w: 220 },
+        { ...newCanvasElement("barcode"), x: 20, y: 230, w: 180, h: 48 },
       ],
     },
   },
@@ -55,10 +56,10 @@ export const CANVAS_STARTER_TEMPLATES: CanvasStarterTemplate[] = [
     canvas: {
       height: 380,
       elements: [
-        { ...newCanvasElement("text"), x: 5, y: 20, w: 90, text: "¡PROMO!", size: "lg", bold: true, align: "center" },
-        { ...newCanvasElement("image"), x: 5, y: 70, w: 90, url: "" },
-        { ...newCanvasElement("text"), x: 5, y: 220, w: 90, text: "Descripción de la oferta…", align: "center" },
-        { ...newCanvasElement("text"), x: 5, y: 330, w: 90, text: "Mi negocio", bold: true, align: "center" },
+        { ...newCanvasElement("text"), x: 10, y: 20, w: 280, text: "¡PROMO!", size: "lg", bold: true, align: "center" },
+        { ...newCanvasElement("image"), x: 20, y: 70, w: 260, h: 140, url: "" },
+        { ...newCanvasElement("text"), x: 10, y: 220, w: 280, text: "Descripción de la oferta…", align: "center" },
+        { ...newCanvasElement("text"), x: 10, y: 330, w: 280, text: "Mi negocio", bold: true, align: "center" },
       ],
     },
   },
@@ -71,11 +72,11 @@ export const CANVAS_STARTER_TEMPLATES: CanvasStarterTemplate[] = [
     canvas: {
       height: 300,
       elements: [
-        { ...newCanvasElement("text"), x: 5, y: 30, w: 90, text: "VALE DE REGALO", size: "lg", bold: true, align: "center" },
-        { ...newCanvasElement("separator"), x: 10, y: 80, w: 80 },
-        { ...newCanvasElement("text"), x: 5, y: 120, w: 90, text: "Monto: $ ________", align: "center" },
-        { ...newCanvasElement("text"), x: 10, y: 170, w: 80, text: "Para: ____________\nDe: ____________", align: "left" },
-        { ...newCanvasElement("text"), x: 5, y: 260, w: 90, text: "Mi negocio", bold: true, align: "center" },
+        { ...newCanvasElement("text"), x: 10, y: 30, w: 280, text: "VALE DE REGALO", size: "lg", bold: true, align: "center" },
+        { ...newCanvasElement("separator"), x: 30, y: 80, w: 240, h: 8 },
+        { ...newCanvasElement("text"), x: 10, y: 120, w: 280, text: "Monto: $ ________", align: "center" },
+        { ...newCanvasElement("text"), x: 30, y: 170, w: 240, text: "Para: ____________\nDe: ____________", align: "left" },
+        { ...newCanvasElement("text"), x: 10, y: 260, w: 280, text: "Mi negocio", bold: true, align: "center" },
       ],
     },
   },
@@ -88,9 +89,9 @@ export const CANVAS_STARTER_TEMPLATES: CanvasStarterTemplate[] = [
     canvas: {
       height: 640,
       elements: [
-        { ...newCanvasElement("text"), x: 5, y: 40, w: 90, text: "¡OFERTA!", size: "lg", bold: true, align: "center" },
-        { ...newCanvasElement("image"), x: 10, y: 120, w: 80, url: "" },
-        { ...newCanvasElement("text"), x: 5, y: 560, w: 90, text: "Mi negocio", align: "center" },
+        { ...newCanvasElement("text"), x: 40, y: 40, w: 714, text: "¡OFERTA!", size: "lg", bold: true, align: "center" },
+        { ...newCanvasElement("image"), x: 80, y: 120, w: 634, h: 400, url: "" },
+        { ...newCanvasElement("text"), x: 40, y: 560, w: 714, text: "Mi negocio", align: "center" },
       ],
     },
   },

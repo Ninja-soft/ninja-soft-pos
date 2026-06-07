@@ -76,12 +76,22 @@ export function newBlock(type: BlockType): TicketBlock {
 export type CanvasElementType =
   | "text" | "image" | "logo" | "qr" | "barcode" | "separator" | "items";
 
+// v2: lienzo de ancho fijo en px por tipo de papel. El editor (react-rnd) y el
+// renderer trabajan sobre estas dimensiones; el print stylesheet imprime el nodo
+// tal cual (px son válidos para impresión).
+export const CANVAS_WIDTH: Record<"58" | "80" | "a4", number> = {
+  "58": 220,
+  "80": 300,
+  a4: 794,
+};
+
 export interface CanvasElement {
   id: string;
   type: CanvasElementType;
-  x: number; // % del ancho del papel (0-100)
-  y: number; // px desde arriba (zona superior) — para "items" marca el punto de flujo
-  w: number; // % del ancho (10-100)
+  x: number; // px desde la izquierda
+  y: number; // px desde arriba (para "items" marca el punto de flujo)
+  w: number; // px de ancho
+  h?: number; // px de alto — opcional: texto/separator/items pueden ser auto (undefined)
   text?: string;       // type text
   url?: string;        // type image
   size?: TextSize;     // text
@@ -107,13 +117,21 @@ export function newCanvasElement(type: CanvasElementType): CanvasElement {
   const id = uid();
   switch (type) {
     case "text":
-      return { id, type, x: 5, y: 20, w: 90, text: "Texto", size: "md", align: "center" };
+      return { id, type, x: 10, y: 20, w: 280, text: "Texto", size: "md", align: "center" };
     case "image":
-      return { id, type, x: 10, y: 20, w: 80, url: "" };
+      return { id, type, x: 20, y: 20, w: 260, h: 160, url: "" };
     case "items":
-      return { id, type, x: 0, y: 120, w: 100 };
+      return { id, type, x: 0, y: 120, w: 300 };
+    case "qr":
+      return { id, type, x: 20, y: 20, w: 120, h: 120 };
+    case "logo":
+      return { id, type, x: 20, y: 20, w: 160, h: 60 };
+    case "barcode":
+      return { id, type, x: 20, y: 20, w: 260, h: 48 };
+    case "separator":
+      return { id, type, x: 10, y: 20, w: 280, h: 8 };
     default:
-      return { id, type, x: 10, y: 20, w: 80 };
+      return { id, type, x: 20, y: 20, w: 260 };
   }
 }
 

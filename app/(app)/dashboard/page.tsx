@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { Display, Accent, Eyebrow } from "@/components/ui/Typography";
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -77,6 +78,8 @@ export default async function DashboardPage() {
           Tu centro de operaciones. Desde acá vendés, controlás la caja y seguís
           tus resultados.
         </p>
+
+        {memberships.length > 0 && <OnboardingChecklist />}
 
         {memberships.length > 0 && (
           <Card className="mt-6 max-w-xs">

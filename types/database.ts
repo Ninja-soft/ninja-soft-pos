@@ -1271,6 +1271,7 @@ export type Database = {
           close_tolerance: number
           customer_required: Json
           max_discount: Json
+          onboarding_dismissed: boolean
           require_close_reason: boolean
           require_customer: boolean
           rounding_multiple: number
@@ -1293,6 +1294,7 @@ export type Database = {
           close_tolerance?: number
           customer_required?: Json
           max_discount?: Json
+          onboarding_dismissed?: boolean
           require_close_reason?: boolean
           require_customer?: boolean
           rounding_multiple?: number
@@ -1315,6 +1317,7 @@ export type Database = {
           close_tolerance?: number
           customer_required?: Json
           max_discount?: Json
+          onboarding_dismissed?: boolean
           require_close_reason?: boolean
           require_customer?: boolean
           rounding_multiple?: number
@@ -3222,6 +3225,7 @@ export type Database = {
         Returns: undefined
       }
       is_internal: { Args: never; Returns: boolean }
+      onboarding_status: { Args: never; Returns: Json }
       open_cash_shift: {
         Args: { p_opening_amount: number; p_register_id: string }
         Returns: string

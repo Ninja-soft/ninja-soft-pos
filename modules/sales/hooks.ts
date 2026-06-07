@@ -1,11 +1,17 @@
 "use client";
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { salesApi, returnReasonsApi, type ReturnItemInput } from "./api";
+import {
+  salesApi,
+  returnReasonsApi,
+  type ReturnItemInput,
+  type SalesPageParams,
+} from "./api";
 
 export function useSales(range?: { from?: Date; to?: Date }) {
   return useQuery({
@@ -16,6 +22,25 @@ export function useSales(range?: { from?: Date; to?: Date }) {
       range?.to?.toISOString() ?? null,
     ],
     queryFn: () => salesApi.list(range),
+  });
+}
+
+// Listado paginado server-side de ventas. keepPreviousData evita el parpadeo al
+// pasar de página o al teclear en la búsqueda (debounce desde la página).
+export function useSalesPaged(params: SalesPageParams) {
+  return useQuery({
+    queryKey: [
+      "sales",
+      "paged",
+      params.page,
+      params.pageSize,
+      params.search ?? "",
+      params.status ?? "",
+      params.range?.from?.toISOString() ?? null,
+      params.range?.to?.toISOString() ?? null,
+    ],
+    queryFn: () => salesApi.listPaged(params),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Mail,
   CalendarClock,
+  Rows3,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -41,7 +42,14 @@ type Settings = {
   customer_required: CustomerRequired;
   auto_email_receipt: boolean;
   account_due_days: number;
+  page_size: number;
 };
+
+// page_size aún no vive en los tipos generados (no se regeneran). Acotamos la
+// lectura/escritura a este rango; la DB también lo valida con un CHECK.
+const PAGE_SIZE_MIN = 10;
+const PAGE_SIZE_MAX = 100;
+const PAGE_SIZE_DEFAULT = 20;
 
 const ROLES: { key: string; label: string }[] = [
   { key: "owner", label: "Dueño" },
@@ -81,15 +89,14 @@ export function OperationSettingsCard() {
     queryKey: ["pos-settings", tenantId],
     enabled: !!tenantId,
     queryFn: async (): Promise<Settings> => {
+      // select("*") incluye page_size (aún no tipado): casteamos vía unknown.
       const { data } = await supabase
         .from("pos_settings")
-        .select(
-          "max_discount, rounding_multiple, allow_negative_stock, sku_auto, sku_prefix, require_close_reason, close_tolerance, require_customer, sale_prefix, sale_pad, customer_required, auto_email_receipt, account_due_days",
-        )
+        .select("*")
         .eq("tenant_id", tenantId)
         .maybeSingle();
       return (
-        (data as Settings) ?? {
+        (data as unknown as Settings) ?? {
           max_discount: { owner: 100, manager: 100, cashier: 100, viewer: 100 },
           rounding_multiple: 0,
           allow_negative_stock: true,
@@ -103,6 +110,7 @@ export function OperationSettingsCard() {
           customer_required: {},
           auto_email_receipt: false,
           account_due_days: 30,
+          page_size: PAGE_SIZE_DEFAULT,
         }
       );
     },
@@ -121,6 +129,7 @@ export function OperationSettingsCard() {
   const [customerReq, setCustomerReq] = useState<CustomerRequired>({});
   const [autoEmailReceipt, setAutoEmailReceipt] = useState(false);
   const [accountDueDays, setAccountDueDays] = useState(30);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT);
 
   useEffect(() => {
     if (!settings) return;
@@ -141,10 +150,12 @@ export function OperationSettingsCard() {
     setCustomerReq((settings.customer_required as CustomerRequired) ?? {});
     setAutoEmailReceipt(settings.auto_email_receipt ?? false);
     setAccountDueDays(settings.account_due_days ?? 30);
+    setPageSize(settings.page_size ?? PAGE_SIZE_DEFAULT);
   }, [settings]);
 
   const save = useMutation({
     mutationFn: async () => {
+      // page_size aún no está tipado en el Insert generado: casteamos el payload.
       const { error } = await supabase.from("pos_settings").upsert(
         {
           tenant_id: tenantId,
@@ -166,7 +177,8 @@ export function OperationSettingsCard() {
           customer_required: customerReq,
           auto_email_receipt: autoEmailReceipt,
           account_due_days: Math.max(1, Number(accountDueDays) || 30),
-        },
+          page_size: clampPageSize(pageSize),
+        } as never,
         { onConflict: "tenant_id" },
       );
       if (error) throw error;
@@ -174,6 +186,8 @@ export function OperationSettingsCard() {
     onSuccess: () => {
       toast({ title: "Guardado", variant: "success" });
       qc.invalidateQueries({ queryKey: ["pos-settings", tenantId] });
+      // Refresca el tamaño de página que usan los listados paginados.
+      qc.invalidateQueries({ queryKey: ["pos", "page-size"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -429,6 +443,34 @@ export function OperationSettingsCard() {
         </CardContent>
       </Card>
 
+      {/* Tamaño de página de los listados */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Rows3 size={16} className="text-ninja-flameSoft" /> Filas por página
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cuántas filas se muestran por página en los listados (ventas,
+              productos, clientes). Entre {PAGE_SIZE_MIN} y {PAGE_SIZE_MAX}.
+            </p>
+          </div>
+          <span className="flex items-center gap-1">
+            <input
+              type="number"
+              min={PAGE_SIZE_MIN}
+              max={PAGE_SIZE_MAX}
+              step="1"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) || PAGE_SIZE_DEFAULT)}
+              onBlur={() => setPageSize((v) => clampPageSize(v))}
+              className={numCls}
+            />
+            <span className="text-sm text-muted-foreground">filas</span>
+          </span>
+        </CardContent>
+      </Card>
+
       {/* Comprobante por email automático */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -492,4 +534,10 @@ function clampPct(v: number | undefined) {
   const n = Number(v);
   if (!Number.isFinite(n)) return 0;
   return Math.min(100, Math.max(0, n));
+}
+
+function clampPageSize(v: number | undefined) {
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n)) return PAGE_SIZE_DEFAULT;
+  return Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, n));
 }

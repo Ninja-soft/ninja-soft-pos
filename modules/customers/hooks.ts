@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -12,6 +13,20 @@ export function useCustomers(search: string) {
   return useQuery({
     queryKey: ["customers", "list", search],
     queryFn: () => customersApi.list(search),
+  });
+}
+
+// Listado paginado server-side de clientes. keepPreviousData evita parpadeos al
+// cambiar de página o tipear (debounce desde la página).
+export function useCustomersPaged(params: {
+  page: number;
+  pageSize: number;
+  search?: string;
+}) {
+  return useQuery({
+    queryKey: ["customers", "paged", params.page, params.pageSize, params.search ?? ""],
+    queryFn: () => customersApi.listPaged(params),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -12,6 +13,7 @@ import {
   serialsApi,
   variantsApi,
   warrantyPlansApi,
+  type ProductsPageParams,
   type VariantRow,
 } from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
@@ -55,6 +57,24 @@ export function useProducts(
   return useQuery({
     queryKey: ["products", "list", search, categoryId ?? null, brandId ?? null],
     queryFn: () => productsApi.list(search, categoryId, brandId),
+  });
+}
+
+// Listado paginado server-side de productos. keepPreviousData evita parpadeos al
+// cambiar de página o tipear en la búsqueda (debounce desde la página).
+export function useProductsPaged(params: ProductsPageParams) {
+  return useQuery({
+    queryKey: [
+      "products",
+      "paged",
+      params.page,
+      params.pageSize,
+      params.search ?? "",
+      params.categoryId ?? null,
+      params.brandId ?? null,
+    ],
+    queryFn: () => productsApi.listPaged(params),
+    placeholderData: keepPreviousData,
   });
 }
 

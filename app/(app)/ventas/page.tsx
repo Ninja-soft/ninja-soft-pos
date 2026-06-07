@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ban, Download, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
@@ -9,9 +9,13 @@ import { TicketModal } from "@/components/sales/TicketModal";
 import { ReturnModal } from "@/components/sales/ReturnModal";
 import { QrIntentsModal } from "@/components/sales/QrIntentsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { useSales, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { Pagination } from "@/components/ui/Pagination";
+import { useSalesPaged, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hooks";
+import { salesApi } from "@/modules/sales/api";
+import { usePageSize } from "@/hooks/usePageSize";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatCurrency } from "@/lib/utils/format";
-import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
+import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 
@@ -22,28 +26,41 @@ const SALE_STATUS: Record<string, string> = {
 
 export default function VentasPage() {
   const { toast } = useToast();
+  const pageSize = usePageSize();
   const [range, setRange] = useState<DateRange | undefined>(undefined);
-  const { data: sales, isLoading } = useSales(
-    range?.from ? { from: range.from, to: range.to ?? range.from } : undefined,
-  );
-  const { data: numFmt } = useSaleNumberFormat();
-  const voidSale = useVoidSale();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const q = search.trim().toLowerCase();
-  const visible = (sales ?? [])
-    .filter(
-      (s) =>
-        saleMatchesQuery(s.number, numFmt, search) ||
-        (q.length > 0 && (s.customers?.name ?? "").toLowerCase().includes(q)),
-    )
-    .filter((s) => !statusFilter || s.status === statusFilter);
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search, 350);
+
+  const saleRange = range?.from
+    ? { from: range.from, to: range.to ?? range.from }
+    : undefined;
+
+  // Volver a la página 1 cuando cambian los filtros (búsqueda, estado, fechas).
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, range?.from, range?.to, pageSize]);
+
+  const { data, isLoading, isPlaceholderData, isError, refetch } = useSalesPaged({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    status: statusFilter,
+    range: saleRange,
+  });
+  const visible = data?.rows ?? [];
+  const total = data?.total ?? 0;
+
+  const { data: numFmt } = useSaleNumberFormat();
+  const voidSale = useVoidSale();
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<{ id: string; number: number } | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   function openTicket(id: string) {
     setTicketId(id);
@@ -51,31 +68,48 @@ export default function VentasPage() {
   }
 
   async function exportVentas() {
-    await exportXlsx("ventas", [
-      {
-        name: "Ventas",
-        title: "Ventas • NinjaPos",
-        columns: [
-          { header: "N°", key: "number", type: "number", width: 10 },
-          { header: "Fecha", key: "fecha", width: 22 },
-          { header: "Cliente", key: "cliente", width: 24 },
-          { header: "Total", key: "total", type: "money" },
-          { header: "Estado", key: "estado", width: 14 },
-        ],
-        rows: (sales ?? []).map((s) => ({
-          number: s.number,
-          fecha: new Date(s.created_at).toLocaleString("es-AR"),
-          cliente: s.customers?.name ?? "",
-          total: s.total,
-          estado: SALE_STATUS[s.status] ?? s.status,
-        })),
-        totals: {
-          total: (sales ?? [])
-            .filter((s) => s.status === "completed")
-            .reduce((a, s) => a + s.total, 0),
+    setExporting(true);
+    try {
+      // Exporta TODO lo que matchea los filtros activos (no solo la página).
+      const rows = await salesApi.exportRows({
+        search: debouncedSearch,
+        status: statusFilter,
+        range: saleRange,
+      });
+      await exportXlsx("ventas", [
+        {
+          name: "Ventas",
+          title: "Ventas • NinjaPos",
+          columns: [
+            { header: "N°", key: "number", type: "number", width: 10 },
+            { header: "Fecha", key: "fecha", width: 22 },
+            { header: "Cliente", key: "cliente", width: 24 },
+            { header: "Total", key: "total", type: "money" },
+            { header: "Estado", key: "estado", width: 14 },
+          ],
+          rows: rows.map((s) => ({
+            number: s.number,
+            fecha: new Date(s.created_at).toLocaleString("es-AR"),
+            cliente: s.customers?.name ?? "",
+            total: s.total,
+            estado: SALE_STATUS[s.status] ?? s.status,
+          })),
+          totals: {
+            total: rows
+              .filter((s) => s.status === "completed")
+              .reduce((a, s) => a + s.total, 0),
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (e) {
+      toast({
+        title: "No se pudo exportar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function onVoid(reason: string) {
@@ -106,7 +140,12 @@ export default function VentasPage() {
             <Button variant="secondary" onClick={() => setQrOpen(true)}>
               <QrCode size={16} /> Cobros QR
             </Button>
-            <Button variant="secondary" onClick={exportVentas} disabled={!sales?.length}>
+            <Button
+              variant="secondary"
+              onClick={exportVentas}
+              loading={exporting}
+              disabled={total === 0 || exporting}
+            >
               <Download size={16} /> Exportar XLSX
             </Button>
           </div>
@@ -130,7 +169,7 @@ export default function VentasPage() {
             <button
               onClick={() => setRange(undefined)}
               className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              title="Quitar filtro de fechas (vuelve a las últimas 100)"
+              title="Quitar filtro de fechas"
             >
               ✕ Fechas
             </button>
@@ -166,7 +205,17 @@ export default function VentasPage() {
                   </td>
                 </tr>
               )}
-              {!isLoading && visible.length === 0 && (
+              {isError && !isLoading && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-red-300">
+                    Error al cargar.{" "}
+                    <button onClick={() => refetch()} className="underline">
+                      Reintentar
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!isLoading && !isError && visible.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                     {search ? "Sin resultados para la búsqueda." : "No hay ventas registradas."}
@@ -240,6 +289,14 @@ export default function VentasPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          loading={isPlaceholderData}
+        />
       </div>
 
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />

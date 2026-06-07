@@ -1,11 +1,21 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
+import type { Paged } from "@/lib/utils/pagination";
+import { sanitizeIlike } from "@/lib/utils/search";
 import type {
   CategoryInput,
   ProductOutput,
   StockAdjustInput,
 } from "./schemas";
 import { StockAdjustSchema } from "./schemas";
+
+export interface ProductsPageParams {
+  page: number; // 1-based
+  pageSize: number;
+  search?: string;
+  categoryId?: string | null;
+  brandId?: string | null;
+}
 
 export type Product = Tables<"products"> & {
   categories?: { name: string } | null;
@@ -42,8 +52,8 @@ export const productsApi = {
       .is("deleted_at", null)
       .order("name")
       .limit(200);
-    if (search && search.trim()) {
-      const s = search.trim();
+    const s = sanitizeIlike(search);
+    if (s) {
       q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`);
     }
     if (categoryId) q = q.eq("category_id", categoryId);
@@ -51,6 +61,30 @@ export const productsApi = {
     const { data, error } = await q;
     if (error) throw error;
     return (data ?? []) as unknown as Product[];
+  },
+
+  // Listado paginado server-side (.range + count exact). Búsqueda server-side por
+  // nombre/SKU/código (ilike, saneada para no romper el filtro). Cargar bajo
+  // demanda: trae solo la página pedida.
+  listPaged: async (params: ProductsPageParams): Promise<Paged<Product>> => {
+    const supabase = createClient();
+    const { page, pageSize, search, categoryId, brandId } = params;
+    const start = Math.max(0, (page - 1) * pageSize);
+    const end = start + pageSize - 1;
+
+    let q = supabase
+      .from("products")
+      .select("*, categories(name)", { count: "exact" })
+      .is("deleted_at", null)
+      .order("name");
+    const s = sanitizeIlike(search);
+    if (s) q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`);
+    if (categoryId) q = q.eq("category_id", categoryId);
+    if (brandId) q = q.eq("brand_id", brandId);
+
+    const { data, error, count } = await q.range(start, end);
+    if (error) throw error;
+    return { rows: (data ?? []) as unknown as Product[], total: count ?? 0 };
   },
 
   // Busca por código de barras o SKU exacto (para escaneo). Matchea primero

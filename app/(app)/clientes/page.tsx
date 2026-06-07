@@ -1,36 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Pagination } from "@/components/ui/Pagination";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { CustomerHistoryModal } from "@/components/customers/CustomerHistoryModal";
 import { AccountsReceivableModal } from "@/components/customers/AccountsReceivableModal";
 import { BirthdaysModal } from "@/components/customers/BirthdaysModal";
 import { ImportCustomersModal } from "@/components/customers/ImportCustomersModal";
-import { useCustomers, useCustomerMutations } from "@/modules/customers/hooks";
+import { useCustomersPaged, useCustomerMutations } from "@/modules/customers/hooks";
 import {
   DOC_TYPE_LABELS,
   IVA_LABELS,
 } from "@/modules/customers/schemas";
 import type { Customer } from "@/modules/customers/api";
+import { usePageSize } from "@/hooks/usePageSize";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 
 export default function ClientesPage() {
   const { toast } = useToast();
+  const pageSize = usePageSize();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [arOpen, setArOpen] = useState(false);
   const [bdayOpen, setBdayOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
   const [delTarget, setDelTarget] = useState<Customer | null>(null);
-  const { data: customers, isLoading } = useCustomers(search);
+  const debouncedSearch = useDebouncedValue(search, 350);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, pageSize]);
+
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useCustomersPaged({
+    page,
+    pageSize,
+    search: debouncedSearch,
+  });
+  const customers = data?.rows ?? [];
+  const total = data?.total ?? 0;
   const { remove } = useCustomerMutations();
 
   async function exportBase() {
@@ -144,14 +161,24 @@ export default function ClientesPage() {
                   </td>
                 </tr>
               )}
-              {!isLoading && customers?.length === 0 && (
+              {isError && !isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Sin clientes. Creá el primero.
+                  <td colSpan={5} className="px-4 py-10 text-center text-red-300">
+                    Error al cargar.{" "}
+                    <button onClick={() => refetch()} className="underline">
+                      Reintentar
+                    </button>
                   </td>
                 </tr>
               )}
-              {customers?.map((c) => (
+              {!isLoading && !isError && customers.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                    {search ? "Sin resultados para la búsqueda." : "Sin clientes. Creá el primero."}
+                  </td>
+                </tr>
+              )}
+              {customers.map((c) => (
                 <tr key={c.id} className="transition hover:bg-muted/40">
                   <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -199,6 +226,14 @@ export default function ClientesPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          loading={isPlaceholderData}
+        />
       </div>
 
       <CustomerFormModal

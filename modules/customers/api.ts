@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
+import type { Paged } from "@/lib/utils/pagination";
+import { sanitizeIlike } from "@/lib/utils/search";
 import type { CustomerOutput, CustomerRequired } from "./schemas";
 import type { ParsedCustomer } from "./import";
 
@@ -279,13 +281,36 @@ export const customersApi = {
       .is("deleted_at", null)
       .order("name")
       .limit(200);
-    if (search && search.trim()) {
-      const s = search.trim();
-      q = q.or(`name.ilike.%${s}%,document_number.ilike.%${s}%`);
-    }
+    const s = sanitizeIlike(search);
+    if (s) q = q.or(`name.ilike.%${s}%,document_number.ilike.%${s}%`);
     const { data, error } = await q;
     if (error) throw error;
     return (data ?? []) as Customer[];
+  },
+
+  // Listado paginado server-side (.range + count exact). Búsqueda server-side por
+  // nombre o documento (ilike, saneada). Carga solo la página pedida.
+  listPaged: async (params: {
+    page: number; // 1-based
+    pageSize: number;
+    search?: string;
+  }): Promise<Paged<Customer>> => {
+    const supabase = createClient();
+    const { page, pageSize, search } = params;
+    const start = Math.max(0, (page - 1) * pageSize);
+    const end = start + pageSize - 1;
+
+    let q = supabase
+      .from("customers")
+      .select("*", { count: "exact" })
+      .is("deleted_at", null)
+      .order("name");
+    const s = sanitizeIlike(search);
+    if (s) q = q.or(`name.ilike.%${s}%,document_number.ilike.%${s}%`);
+
+    const { data, error, count } = await q.range(start, end);
+    if (error) throw error;
+    return { rows: (data ?? []) as Customer[], total: count ?? 0 };
   },
 
   create: async (input: CustomerOutput): Promise<void> => {

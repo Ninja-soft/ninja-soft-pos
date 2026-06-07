@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Download,
   FolderTree,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Pagination } from "@/components/ui/Pagination";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
@@ -27,17 +27,20 @@ import { BrandsModal } from "@/components/products/BrandsModal";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
 import {
-  useProducts,
+  useProductsPaged,
   useProductMutations,
   useCategories,
   useBrands,
 } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
+import { usePageSize } from "@/hooks/usePageSize";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function ProductosPage() {
+  const pageSize = usePageSize();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -48,17 +51,27 @@ export default function ProductosPage() {
   const [warrantyOpen, setWarrantyOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const { toast } = useToast();
+  const debouncedSearch = useDebouncedValue(search, 350);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, categoryId, brandId, pageSize]);
 
   const { data: categories } = useCategories();
   const { data: brands } = useBrands();
-  const { data: products, isLoading, isError, refetch } = useProducts(
-    search,
-    categoryId || null,
-    brandId || null,
-  );
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useProductsPaged({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    categoryId: categoryId || null,
+    brandId: brandId || null,
+  });
+  const products = data?.rows ?? [];
+  const total = data?.total ?? 0;
   const { remove } = useProductMutations();
 
   function openNew() {
@@ -230,14 +243,16 @@ export default function ProductosPage() {
                   </td>
                 </tr>
               )}
-              {!isLoading && !isError && products?.length === 0 && (
+              {!isLoading && !isError && products.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    No hay productos todavía. Creá el primero con “Nuevo producto”.
+                    {search || categoryId || brandId
+                      ? "Sin resultados para el filtro."
+                      : "No hay productos todavía. Creá el primero con “Nuevo producto”."}
                   </td>
                 </tr>
               )}
-              {products?.map((p) => {
+              {products.map((p) => {
                 const low =
                   (p.stock_min ?? 0) > 0 && p.stock <= (p.stock_min ?? 0);
                 return (
@@ -299,6 +314,14 @@ export default function ProductosPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          loading={isPlaceholderData}
+        />
       </div>
 
       <ProductFormModal

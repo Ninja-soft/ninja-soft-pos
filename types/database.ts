@@ -2407,6 +2407,50 @@ export type Database = {
         }
         Relationships: []
       }
+      system_emails: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          kind: string
+          recipient: string
+          sent_at: string | null
+          status: string
+          subject: string
+          tenant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          kind?: string
+          recipient: string
+          sent_at?: string | null
+          status?: string
+          subject: string
+          tenant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          kind?: string
+          recipient?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+          tenant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           key: string

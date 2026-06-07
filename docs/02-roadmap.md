@@ -220,6 +220,13 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
     - [ ] **Preguntas y mensajería** de compradores: bandeja básica para responder desde el POS *(etapa 2)*.
     - [ ] *Criterio:* el dueño conecta su cuenta ML, publica un producto del catálogo con foto y precio propio del canal, una venta en ML descuenta stock y aparece en /ventas con su comisión, y una venta en mostrador baja el stock de la publicación sin tocar ML a mano.
   - [ ] Tienda Nube.
+  - [ ] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07, pedido directo)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan).
+    - [ ] **Burbuja de chat** en el shell (visible solo con el addon activo) con Claude API vía Edge Function (la key vive en `platform_secrets`, nunca en el cliente).
+    - [ ] **Configuración guiada del ticket**: la IA lee la plantilla activa del tenant y propone/aplica cambios (tool-use sobre `ticket_templates`, siempre con confirmación del usuario).
+    - [ ] **Guía del sistema**: responde "¿cómo hago X?" con contexto de las pantallas del POS (catálogo de ayuda embebido como contexto).
+    - [ ] **Consultas sobre sus datos** (solo lectura, scoped por RLS al tenant): "¿cuánto vendí esta semana?", "¿qué producto está bajo de stock?".
+    - [ ] Límite de uso por plan (mensajes/mes) + medición para facturar el addon.
+    - [ ] *Criterio:* un tenant con el addon activo abre el chat, pide "armame un ticket con mi logo y mis colores", la IA genera la plantilla y el dueño la confirma; sin el addon, la burbuja no existe.
   - [ ] WhatsApp Business para notificaciones.
 - [ ] **API pública** con OAuth para clientes Enterprise.
 - [ ] **Tema visual personalizado** por tenant (logo, color de acento dentro de los límites de marca).

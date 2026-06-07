@@ -364,7 +364,7 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] **POS del cliente:** los tenants suman **sus propios proveedores** para **campañas masivas** a sus clientes (en `/configuracion` del tenant) — *fase aparte (no son los emails del sistema).*
   - [x] *Criterio:* en `/internal/emails` se edita una plantilla, se previsualiza con variables y se envía una prueba (una vez cargado `RESEND_API_KEY`).
 
-- [ ] **H13b — Centro de notificaciones por cuenta.**
+- [~] **H13b — Centro de notificaciones por cuenta.** — *Base completa (2026-06-07): tablas `notifications`/`notification_reads` con RLS por audiencia, campana + panel en el POS (leer/archivar/ack, banner para `blocking`), composer en `/internal/notificaciones` (broadcast/negocio/rol, historial) y notificación automática al cambiar precio de plan custom. Quedan: preferencias por canal (email/WhatsApp/push) y acciones embebidas transaccionales (pagar/aceptar).*
   - [ ] Panel de notificaciones dentro de cada tenant: novedades, cambios de plan, vencimientos, pagos, alertas de uso, seguridad, AFIP, mantenimiento y soporte.
   - [ ] Notificaciones dirigidas por audiencia: owner, manager, cashier, viewer, todos, sucursal específica o usuario específico.
   - [ ] Estados: no leída, leída, archivada, requiere acción, vencida.

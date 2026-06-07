@@ -286,6 +286,11 @@ export default function PosPage() {
     } catch {
       setSearch(code);
     }
+  }, {
+    prefix: posSettings?.scannerPrefix ?? "",
+    suffix: posSettings?.scannerSuffix ?? "",
+    beep: posSettings?.scannerBeep ?? true,
+    dupMs: posSettings?.scannerDupMs ?? 1500,
   });
 
   async function handleOpenShift(opening: number) {

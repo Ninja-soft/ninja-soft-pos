@@ -330,17 +330,27 @@ export const posApi = {
     maxDiscount: Record<string, number>;
     rounding: number;
     requireCustomer: boolean;
+    scannerPrefix: string;
+    scannerSuffix: string;
+    scannerBeep: boolean;
+    scannerDupMs: number;
   } | null> => {
     const supabase = createClient();
     const { data } = await supabase
       .from("pos_settings")
-      .select("max_discount, rounding_multiple, require_customer")
+      .select(
+        "max_discount, rounding_multiple, require_customer, scanner_prefix, scanner_suffix, scanner_beep, scanner_dup_ms",
+      )
       .maybeSingle();
     if (!data) return null;
     return {
       maxDiscount: (data.max_discount as Record<string, number>) ?? {},
       rounding: Number(data.rounding_multiple) || 0,
       requireCustomer: Boolean(data.require_customer),
+      scannerPrefix: data.scanner_prefix ?? "",
+      scannerSuffix: data.scanner_suffix ?? "",
+      scannerBeep: data.scanner_beep ?? true,
+      scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
     };
   },
 

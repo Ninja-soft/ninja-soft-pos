@@ -53,51 +53,6 @@ export default function InternalEmailsPage() {
   const [selectedKey, setSelectedKey] = useState(EMAIL_TEMPLATES[0]!.key);
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("");
-  const [smtp, setSmtp] = useState({
-    host: "",
-    port: "587",
-    secure: false,
-    username: "",
-    password: "",
-    from_name: "NinjaPos",
-    from_email: "",
-  });
-  const [hasPassword, setHasPassword] = useState(false);
-  const [provider, setProvider] = useState<ProviderKey>("gmail");
-
-  const { data: smtpCfg } = useQuery({
-    queryKey: ["system-email-smtp"],
-    queryFn: async () => {
-      const { data } = await supabase.rpc("get_email_smtp");
-      return (data as Record<string, unknown> | null) ?? null;
-    },
-  });
-  useEffect(() => {
-    if (smtpCfg) {
-      const cfgHost = String(smtpCfg.host ?? "");
-      setSmtp((s) => ({
-        ...s,
-        host: cfgHost,
-        port: String(smtpCfg.port ?? "587"),
-        secure: !!smtpCfg.secure,
-        username: String(smtpCfg.username ?? ""),
-        from_name: String(smtpCfg.from_name ?? "NinjaPos"),
-        from_email: String(smtpCfg.from_email ?? ""),
-        password: "",
-      }));
-      setHasPassword(!!smtpCfg.has_password);
-      setProvider(cfgHost ? inferSmtpProvider(cfgHost) : "gmail");
-    }
-  }, [smtpCfg]);
-  const setS = (k: keyof typeof smtp, v: string | boolean) =>
-    setSmtp((s) => ({ ...s, [k]: v }));
-
-  function pickProvider(key: ProviderKey) {
-    setProvider(key);
-    if (key === "otro") return;
-    const preset = SMTP_PROVIDERS.find((p) => p.key === key)!;
-    setSmtp((s) => ({ ...s, host: preset.host, port: preset.port, secure: preset.secure }));
-  }
 
   const { data: saved = {} } = useQuery<Saved>({
     queryKey: ["system-email-templates"],
@@ -141,20 +96,6 @@ export default function InternalEmailsPage() {
       }
     });
   }
-
-  const saveCfg = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.functions.invoke("set_email_smtp", {
-        body: { ...smtp, port: Number(smtp.port) || 587 },
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "SMTP guardado", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["system-email-smtp"] });
-    },
-    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
-  });
 
   const saveTpl = useMutation({
     mutationFn: async () => {
@@ -215,108 +156,6 @@ export default function InternalEmailsPage() {
 
       {/* Proveedores de email (Resend + failover SMTP). Camino de envío principal. */}
       <EmailProvidersCard />
-
-      {/* SMTP legacy del sistema: fallback si no hay proveedor activo. */}
-      <Card className="mt-6">
-        <CardContent className="space-y-4 p-5">
-          <div className="flex items-center gap-2 font-semibold">
-            <Send size={16} /> Servidor de envío legacy (SMTP)
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Solo se usa como último recurso si ningún proveedor de arriba está activo.
-            Para envíos normales configurá Resend o un SMTP en “Proveedores de email”.
-          </p>
-          {/* Presets de proveedor (prellenan host/puerto/seguridad). */}
-          <div>
-            <div className="mb-2 text-sm font-medium text-muted-foreground">
-              Proveedor
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {SMTP_PROVIDERS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => pickProvider(p.key)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
-                    provider === p.key
-                      ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
-                      : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {provider === "outlook" && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo soporta.
-              </p>
-            )}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              label="Servidor SMTP"
-              placeholder="smtp.gmail.com"
-              value={smtp.host}
-              onChange={(e) => {
-                setS("host", e.target.value);
-                setProvider(inferSmtpProvider(e.target.value));
-              }}
-            />
-            <Input
-              label="Puerto"
-              inputMode="numeric"
-              placeholder="587"
-              value={smtp.port}
-              onChange={(e) => setS("port", e.target.value.replace(/\D/g, ""))}
-            />
-            <Input
-              label="Usuario"
-              placeholder="tu@email.com"
-              value={smtp.username}
-              onChange={(e) => setS("username", e.target.value)}
-            />
-            <Input
-              label={hasPassword ? "Contraseña (dejar vacío para no cambiar)" : "Contraseña"}
-              type="password"
-              placeholder={hasPassword ? "••••••••" : ""}
-              value={smtp.password}
-              onChange={(e) => setS("password", e.target.value)}
-            />
-            <Input
-              label="Nombre del remitente"
-              value={smtp.from_name}
-              onChange={(e) => setS("from_name", e.target.value)}
-            />
-            <Input
-              label="Email del remitente"
-              type="email"
-              placeholder="hola@tudominio.com"
-              value={smtp.from_email}
-              onChange={(e) => setS("from_email", e.target.value)}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              className="accent-ninja-flame"
-              checked={smtp.secure}
-              onChange={(e) => setS("secure", e.target.checked)}
-            />
-            Conexión segura (SSL/TLS, puerto 465)
-          </label>
-          <div className="flex justify-end">
-            <Button onClick={() => saveCfg.mutate()} disabled={saveCfg.isPending}>
-              Guardar SMTP
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Usá tu propio email (ej. Gmail con contraseña de aplicación, o el SMTP de
-            tu hosting). No requiere servicios pagos ni secrets externos.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Plantillas */}
       <Card className="mt-6">
@@ -566,20 +405,20 @@ function EmailProvidersCard() {
           <Zap size={16} /> Proveedores de email
         </div>
         <p className="text-xs text-muted-foreground">
-          El <b>slot 1</b> es el principal y el <b>slot 2</b> el de respaldo: si el
-          envío por el slot 1 falla, NinjaPos reintenta automáticamente por el slot 2
-          (failover). Cada slot puede ser Resend (recomendado) o un SMTP propio.
+          El <b>proveedor principal</b> se usa siempre; el de <b>respaldo</b> entra
+          automáticamente solo si el principal falla (failover). Cada uno puede ser
+          Resend (recomendado) o un SMTP propio.
         </p>
         <div className="grid gap-4 lg:grid-cols-2">
           <SlotEditor
-            title="Slot 1 — principal"
+            title="Proveedor principal"
             state={slot1}
             onChange={setSlot1}
             onSave={() => save.mutate({ slot: 1, state: slot1 })}
             saving={save.isPending}
           />
           <SlotEditor
-            title="Slot 2 — respaldo (failover)"
+            title="Proveedor de respaldo (failover)"
             state={slot2}
             onChange={setSlot2}
             onSave={() => save.mutate({ slot: 2, state: slot2 })}
@@ -750,7 +589,7 @@ function SlotEditor({
 
         <div className="flex justify-end">
           <Button size="sm" onClick={onSave} disabled={saving}>
-            Guardar slot
+            Guardar proveedor
           </Button>
         </div>
       </div>

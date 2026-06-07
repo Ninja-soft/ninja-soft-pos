@@ -242,8 +242,21 @@ Deno.serve(async (req: Request) => {
       // Vacío o modelo dado de baja → default vigente (evita el 404/502).
       if (!model || DEAD_GEMINI_MODELS.has(model)) model = DEFAULT_GEMINI_MODEL;
     }
-    const apiKey = (cfg.api_key ?? "").trim();
-    if (!apiKey) return json({ error: "ai_not_configured" }, 400);
+    // Key por proveedor: cada proveedor usa SU propia key. Gemini acepta la key
+    // legacy (api_key) como fallback para configs viejas; Claude exige
+    // claude_api_key — así elegir Claude nunca reutiliza por error la key de
+    // Gemini (esa era la causa del 401/502 "al poner Claude sigue en gemini").
+    const apiKey = (
+      provider === "claude"
+        ? (cfg.claude_api_key ?? "")
+        : (cfg.gemini_api_key ?? "") || (cfg.api_key ?? "")
+    ).trim();
+    if (!apiKey) {
+      return json(
+        { error: "ai_not_configured", detail: `Falta la API key de ${provider}.` },
+        400,
+      );
+    }
 
     // ── Cuota mensual ───────────────────────────────────────────────────────
     const monthStart = new Date();

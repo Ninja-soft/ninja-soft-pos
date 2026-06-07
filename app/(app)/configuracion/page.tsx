@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -22,6 +22,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
+import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
@@ -36,6 +37,7 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "escaner"
   | "precios"
   | "garantias";
 const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
@@ -46,6 +48,7 @@ const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "email", label: "Email", icon: Mail },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
+  { key: "escaner", label: "Escáner", icon: ScanLine },
   { key: "precios", label: "Listas de precios", icon: BadgeDollarSign },
   { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
 ];
@@ -309,6 +312,9 @@ export default function ConfiguracionPage() {
 
           {/* Operación del POS (solo owner/manager; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard />}
+
+          {/* Escáner: perfil del lector + diagnóstico (solo owner; se auto-oculta) */}
+          {section === "escaner" && <ScannerCard />}
 
           {/* Listas de precios por canal (escritura protegida por RLS) */}
           {section === "precios" && <PriceListsCard />}

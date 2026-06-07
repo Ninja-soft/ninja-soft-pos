@@ -419,15 +419,15 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [ ] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar.
   - [ ] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto.
 
-- [~] **H23 — Scanners y captura de códigos PRO.** — *Base hecha (PR #80): lector USB/BT (HID) + cámara + producto por código. Perfiles/diagnóstico pendientes.*
+- [~] **H23 — Scanners y captura de códigos PRO.** — *Base (PR #80) + perfil/beep/anti-dup/diagnóstico (2026-06-07). Quedan: QR de pago/fidelización y etiquetas de balanza.*
   - [x] Soporte para lector USB HID tipo teclado y Bluetooth (`useScanner`: captura global de teclado por velocidad de tipeo + Enter, sin foco previo), cámara (`BarcodeDetector`) y entrada manual (búsqueda).
-  - [ ] Perfiles de scanner por caja: prefijo/sufijo, Enter automático, delay entre caracteres, normalización de EAN/UPC/Code128/QR.
-  - [~] Modo continuo en POS: lectura sin tocar mouse (escaneo en cualquier parte agrega al carrito). Falta beep/feedback y anti-duplicado fino.
+  - [~] Perfiles de scanner por caja: prefijo/sufijo, Enter automático, delay entre caracteres, normalización de EAN/UPC/Code128/QR. — *Perfil por tenant hecho (prefijo/sufijo/anti-dup en Configuración → Escáner); por caja → F4. Formato inferido EAN/UPC/QR en diagnóstico.*
+  - [x] Modo continuo en POS: lectura sin tocar mouse (escaneo en cualquier parte agrega al carrito), **beep de confirmación** y **anti-duplicado** configurable. — *useScanner v2 (2026-06-07).*
   - [x] Producto por SKU/barcode (`productsApi.findByCode`).
   - [ ] QR de pago.
   - [ ] QR de cliente/fidelización.
   - [ ] Etiquetas internas de balanza/precio-peso.
-  - [ ] Diagnóstico de scanner: pantalla de prueba que muestra caracteres recibidos, tiempos y formato detectado.
+  - [x] Diagnóstico de scanner: pantalla de prueba que muestra caracteres recibidos, tiempos y formato detectado. — *Configuración → Escáner: últimas 10 capturas con código/crudo/largo/duración/gap/formato/duplicado (2026-06-07).*
   - [ ] *Criterio:* un lector USB escanea 100 productos seguidos sin perder foco ni duplicar lecturas; un móvil usa cámara como fallback.
 
 - [~] **H24 — Etiquetas, códigos y balanzas.** — *Generador + impresión por lote hechos (PR #79). Balanza (parsing/WebSerial) pendiente.*

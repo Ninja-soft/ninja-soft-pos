@@ -11,6 +11,7 @@ import {
   type BillingRecordInput,
   type DiscountInput,
   type PlanLimits,
+  type SendNotificationInput,
 } from "./api";
 
 export function useInternalTenants() {
@@ -257,6 +258,25 @@ export function usePlanMutations(tenantId: string) {
       onSuccess: inv,
     }),
   };
+}
+
+// ── H13b — Composer de notificaciones ───────────────────────────────────────
+
+export function useSentNotifications() {
+  return useQuery({
+    queryKey: ["internal", "notifications"],
+    queryFn: () => internalApi.listSentNotifications(),
+  });
+}
+
+export function useSendNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SendNotificationInput) =>
+      internalApi.sendNotification(input),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["internal", "notifications"] }),
+  });
 }
 
 export function useTenantDiscounts(tenantId: string) {

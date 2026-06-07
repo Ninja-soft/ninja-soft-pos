@@ -849,6 +849,124 @@ export type Database = {
           },
         ]
       }
+      notification_reads: {
+        Row: {
+          acked_at: string | null
+          archived_at: string | null
+          id: string
+          notification_id: string
+          read_at: string | null
+          user_id: string
+        }
+        Insert: {
+          acked_at?: string | null
+          archived_at?: string | null
+          id?: string
+          notification_id: string
+          read_at?: string | null
+          user_id: string
+        }
+        Update: {
+          acked_at?: string | null
+          archived_at?: string | null
+          id?: string
+          notification_id?: string
+          read_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_reads_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          action_label: string | null
+          action_url: string | null
+          body: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          expires_at: string | null
+          id: string
+          requires_ack: boolean
+          severity: string
+          target_role: string | null
+          target_tenant_id: string | null
+          target_user_id: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          action_label?: string | null
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at?: string | null
+          id?: string
+          requires_ack?: boolean
+          severity?: string
+          target_role?: string | null
+          target_tenant_id?: string | null
+          target_user_id?: string | null
+          title: string
+          type?: string
+        }
+        Update: {
+          action_label?: string | null
+          action_url?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at?: string | null
+          id?: string
+          requires_ack?: boolean
+          severity?: string
+          target_role?: string | null
+          target_tenant_id?: string | null
+          target_user_id?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_target_tenant_id_fkey"
+            columns: ["target_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_plans: {
         Row: {
           base: string
@@ -2898,6 +3016,22 @@ export type Database = {
           id: string
           internal_level: string
         }[]
+      }
+      internal_notify: {
+        Args: {
+          p_action_label?: string
+          p_action_url?: string
+          p_body?: string
+          p_expires_at?: string
+          p_requires_ack?: boolean
+          p_role: string
+          p_severity: string
+          p_tenant_id: string
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
       }
       internal_set_flag: {
         Args: { p_enabled: boolean; p_flag_key: string; p_tenant_id: string }

@@ -249,12 +249,54 @@
 }
 
 /* ============================================================
-   Scrollbar fina tematizada — sidebar y paneles con overflow.
-   Chrome/Firefox: propiedades estándar; Safari: pseudos webkit.
+   Scrollbar global tematizado — fino, redondeado, en colores de marca.
+   Aplica a TODA la app (modales, registro, tiendita, paneles).
+   Track transparente; thumb violeta/flame suave que se intensifica al hover.
+   WebKit/Blink (Chrome, Edge, Safari) vía pseudos + Firefox vía estándar.
    ============================================================ */
+:root {
+  /* Color base del thumb: violeta de marca translúcido (se ve bien en dark
+     y en claro). El track es transparente. */
+  --scrollbar-thumb: rgba(109, 74, 255, 0.35);
+  --scrollbar-thumb-hover: rgba(255, 75, 34, 0.55);
+}
+
+/* Firefox: scrollbar fino con color de marca (thumb + track). */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  /* Reserva el ancho del scrollbar para que aparecer/desaparecer no salte
+     el layout (no pelea con el resto de estilos). */
+  scrollbar-gutter: stable;
+}
+
+/* WebKit/Blink: scrollbar fino y redondeado en toda la app. */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  /* Borde transparente => el thumb se ve más fino y "flotante" sobre el track. */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Variante explícita para paneles que la piden por clase. Alineada al estilo
+   global (mismo radio/colores), un toque más fina. */
 .slim-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 .slim-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -264,11 +306,11 @@
   background: transparent;
 }
 .slim-scrollbar::-webkit-scrollbar-thumb {
-  background-color: var(--border);
+  background-color: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 .slim-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: var(--muted-foreground);
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* Ticket no fiscal: al imprimir, solo se ve el ticket. */

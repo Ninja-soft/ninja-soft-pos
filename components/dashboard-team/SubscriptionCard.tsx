@@ -867,12 +867,12 @@ export function SubscriptionCard() {
         onOpenChange={setPlanPickerOpen}
         title="Mejorá o cambiá tu plan"
         description="Mirá qué suma cada plan respecto del tuyo. El nuevo precio se aplica desde tu próximo ciclo."
-        className="max-w-4xl"
+        className="max-w-6xl"
       >
         <PlanCards
           plans={planModels}
           comparedToKey={sub.plan.is_custom ? null : sub.plan.key}
-          columnsClassName="sm:grid-cols-2 lg:grid-cols-3"
+          columnsClassName="sm:grid-cols-2 lg:grid-cols-4"
           renderCta={(p, isCompared) =>
             isCompared ? (
               <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400">

@@ -30,7 +30,10 @@ type PlanBadgeSize = "sm" | "md" | "lg";
 const SIZES: Record<
   PlanBadgeSize,
   {
-    img: string;
+    // Caja FIJA del logo (alto + ancho). El logo se centra dentro con
+    // object-contain, así todos los planes ocupan la misma área y alinean,
+    // sin importar el aspect ratio de la imagen (cinturón ancho vs badge).
+    imgBox: string;
     name: string;
     secondary: string;
     iconBox: string;
@@ -39,7 +42,7 @@ const SIZES: Record<
   }
 > = {
   sm: {
-    img: "h-7 max-w-[88px]",
+    imgBox: "h-9 w-[120px]",
     name: "text-base",
     secondary: "text-[11px]",
     iconBox: "h-8 w-8",
@@ -47,7 +50,7 @@ const SIZES: Record<
     gap: "gap-2.5",
   },
   md: {
-    img: "h-10 max-w-[140px]",
+    imgBox: "h-12 w-[160px]",
     name: "text-2xl",
     secondary: "text-xs",
     iconBox: "h-11 w-11",
@@ -55,7 +58,7 @@ const SIZES: Record<
     gap: "gap-3",
   },
   lg: {
-    img: "h-16 max-w-[220px]",
+    imgBox: "h-20 w-[240px]",
     name: "text-4xl",
     secondary: "text-sm",
     iconBox: "h-14 w-14",
@@ -91,13 +94,23 @@ export function PlanBadge({
           className,
         )}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={plan.imageUrl as string}
-          alt={plan.name}
-          onError={() => setImgFailed(true)}
-          className={cn("w-auto object-contain", s.img)}
-        />
+        {/* Caja de tamaño fijo: el logo se centra y usa object-contain, así
+            todos los planes alinean aunque tengan distinto aspect ratio. */}
+        <span
+          className={cn(
+            "flex shrink-0 items-center",
+            centered ? "justify-center" : "justify-start",
+            s.imgBox,
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={plan.imageUrl as string}
+            alt={plan.name}
+            onError={() => setImgFailed(true)}
+            className="max-h-full max-w-full object-contain"
+          />
+        </span>
         {secondary && (
           <span
             className={cn(

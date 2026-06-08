@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 
 export interface CartLine {
   lineId: string; // id local de la línea (estable; soporta ítems sin producto)
@@ -15,6 +16,10 @@ export interface CartLine {
   variantId?: string | null; // variante (producto con has_variants)
   variantLabel?: string; // ej. "M / Rojo" para mostrar en el carrito
   warrantyMonths?: number; // garantía de fábrica del producto (H28): > 0 ⇒ elegible para garantía extendida
+  // Modificadores elegidos (H37): tamaños/sabores/toppings. El unitPrice ya
+  // incluye los deltas; este snapshot es para mostrar y persistir en la venta.
+  modifiers?: SaleLineModifierGroup[] | null;
+  modifiersLabel?: string; // ej. "Frutilla, Crema (+200), Dulce de leche"
 }
 
 interface CartState {
@@ -49,6 +54,18 @@ interface CartState {
     p: { id: string; name: string; sku: string | null; price: number; warrantyMonths?: number },
     serial: string,
   ) => void;
+  // Agrega un producto con modificadores (H37). unitPrice = base + suma de deltas
+  // (lo calcula el caller con los modificadores elegidos). No fusiona con otras
+  // líneas: cada combinación de modificadores es su propia línea.
+  addWithModifiers: (p: {
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number; // ya ajustado (base + deltas)
+    modifiers: SaleLineModifierGroup[];
+    modifiersLabel: string;
+    warrantyMonths?: number;
+  }) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
   setQuantity: (lineId: string, quantity: number) => void;
   setLineDiscount: (lineId: string, discount: number) => void;
@@ -169,6 +186,27 @@ export const useCartStore = create<CartState>((set) => ({
           discount: 0,
           unit: "un",
           serial: serial.trim(),
+          warrantyMonths: p.warrantyMonths ?? 0,
+        },
+      ],
+    })),
+  addWithModifiers: (p) =>
+    set((state) => ({
+      // Línea propia por selección de modificadores (no fusiona): dos cafés con
+      // toppings distintos son dos líneas; el unitPrice ya trae los deltas.
+      lines: [
+        ...state.lines,
+        {
+          lineId: crypto.randomUUID(),
+          productId: p.id,
+          name: p.name,
+          sku: p.sku,
+          unitPrice: p.price,
+          quantity: 1,
+          discount: 0,
+          unit: "un",
+          modifiers: p.modifiers,
+          modifiersLabel: p.modifiersLabel,
           warrantyMonths: p.warrantyMonths ?? 0,
         },
       ],

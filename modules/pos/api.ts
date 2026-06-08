@@ -26,6 +26,10 @@ export interface SaleItemInput {
   name?: string; // nombre del ítem libre (cuando product_id es null)
   serial?: string; // N° de serie (producto serializado)
   variant_id?: string | null; // variante (producto con has_variants)
+  // Modificadores elegidos (H37): snapshot { group, options[{name, price_delta}] }.
+  // El precio ya está aplicado en unit_price; create_sale lo persiste en
+  // sale_items.modifiers. Opcional; ausente = línea sin modificadores.
+  modifiers?: { group: string; options: { name: string; price_delta: number }[] }[];
   quantity: number;
   unit_price: number;
   discount: number;

@@ -56,7 +56,9 @@ import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
+import { ModifierPickerModal } from "@/components/pos/ModifierPickerModal";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
+import { useProductsWithModifiers } from "@/modules/products/modifiers";
 import { productsApi, variantLabel } from "@/modules/products/api";
 import { CategoryNav, subtreeIds } from "@/components/pos/CategoryNav";
 import { FavoritesGrid } from "@/components/pos/FavoritesGrid";
@@ -129,6 +131,16 @@ export default function PosPage() {
     price: number;
     warrantyMonths?: number;
   } | null>(null);
+  // Producto con modificadores (H37) pendiente de elegir opciones en el picker.
+  const [modifierProduct, setModifierProduct] = useState<{
+    id: string;
+    name: string;
+    sku: string | null;
+    price: number;
+    warrantyMonths?: number;
+  } | null>(null);
+  // IDs de productos del tenant que tienen modificadores → rutean al picker.
+  const { data: withMods } = useProductsWithModifiers();
   const { data: serialList } = useProductSerials(
     serialProduct?.id ?? null,
     serialProduct !== null,
@@ -267,6 +279,7 @@ export default function PosPage() {
   const addWeighed = useCartStore((s) => s.addWeighed);
   const addSerialized = useCartStore((s) => s.addSerialized);
   const addVariant = useCartStore((s) => s.addVariant);
+  const addWithModifiers = useCartStore((s) => s.addWithModifiers);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
 
   // Lista de precios 'mostrador' activa (si existe): el precio unitario al
@@ -320,6 +333,16 @@ export default function PosPage() {
       });
       setSerialChoice("");
       setSerialOther("");
+    } else if (withMods?.has(p.id)) {
+      // H37: producto con modificadores (tamaños/sabores/toppings) → picker. El
+      // precio base se resuelve por la lista mostrador; el picker suma los deltas.
+      setModifierProduct({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: priceFor(p.id, null, p.price),
+        warrantyMonths: p.warranty_months ?? 0,
+      });
     } else if (p.unit === "kg") {
       setWeighProduct({
         id: p.id,
@@ -595,6 +618,8 @@ export default function PosPage() {
         ...(l.productId ? {} : { name: l.name }),
         ...(l.serial ? { serial: l.serial } : {}),
         ...(l.variantId ? { variant_id: l.variantId } : {}),
+        // Modificadores (H37): snapshot por línea; el precio ya está en unit_price.
+        ...(l.modifiers && l.modifiers.length > 0 ? { modifiers: l.modifiers } : {}),
         quantity: l.quantity,
         unit_price: l.unitPrice,
         discount: l.discount,
@@ -916,6 +941,11 @@ export default function PosPage() {
                     {l.serial && (
                       <span className="block font-mono text-xs text-muted-foreground">
                         S/N: {l.serial}
+                      </span>
+                    )}
+                    {l.modifiersLabel && (
+                      <span className="block text-xs text-muted-foreground">
+                        {l.modifiersLabel}
                       </span>
                     )}
                   </span>
@@ -1284,6 +1314,23 @@ export default function PosPage() {
             warrantyMonths: variantProduct.warrantyMonths ?? 0,
           });
           setVariantProduct(null);
+        }}
+      />
+      <ModifierPickerModal
+        product={modifierProduct}
+        onClose={() => setModifierProduct(null)}
+        onConfirm={({ price, modifiers, modifiersLabel }) => {
+          if (!modifierProduct) return;
+          addWithModifiers({
+            id: modifierProduct.id,
+            name: modifierProduct.name,
+            sku: modifierProduct.sku,
+            price, // base (lista mostrador) + suma de deltas
+            modifiers,
+            modifiersLabel,
+            warrantyMonths: modifierProduct.warrantyMonths ?? 0,
+          });
+          setModifierProduct(null);
         }}
       />
       <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta libre">

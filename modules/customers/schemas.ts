@@ -61,6 +61,8 @@ export const CustomerSchema = z
     address: optional(160),
     birth_date: optional(10),
     notes: optional(300),
+    // Preferencias / gustos del cliente (H40): texto libre, distinto de notes.
+    preferences: optional(600),
     is_active: z.boolean().default(true),
     credit_limit: z.coerce.number().min(0).default(0),
     group_id: z

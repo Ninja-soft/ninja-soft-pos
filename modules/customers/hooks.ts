@@ -46,6 +46,27 @@ export function useCustomerHistory(customerId: string | null | undefined) {
   });
 }
 
+// Ítems de la última venta del cliente (H40 — recompra rápida). enabled evita el
+// fetch sin id. Lo usa el POS al entrar con ?repeat=<customerId>.
+export function useCustomerLastSaleItems(customerId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["customers", "last-sale-items", customerId],
+    enabled: Boolean(customerId),
+    queryFn: () => customersApi.lastSaleItems(customerId!),
+  });
+}
+
+// Próximos turnos del cliente (H40, reusa H38). Para el historial del cliente.
+export function useCustomerUpcomingAppointments(
+  customerId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ["customers", "upcoming-appointments", customerId],
+    enabled: Boolean(customerId),
+    queryFn: () => customersApi.upcomingAppointments(customerId!),
+  });
+}
+
 export function useAccountsReceivable(enabled = true) {
   return useQuery({
     queryKey: ["customers", "accounts-receivable"],

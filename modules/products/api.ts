@@ -75,6 +75,23 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
+  // Productos ACTIVOS por una lista de ids (H40 — recompra rápida). Filtra los
+  // dados de baja (deleted_at) e inactivos: el POS usa esto para resolver el
+  // precio actual al "repetir última venta" y omitir lo que ya no se vende.
+  getByIds: async (ids: string[]): Promise<Product[]> => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (unique.length === 0) return [];
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .in("id", unique);
+    if (error) throw error;
+    return (data ?? []) as unknown as Product[];
+  },
+
   // Listado paginado server-side (.range + count exact). Búsqueda server-side por
   // nombre/SKU/código (ilike, saneada para no romper el filtro). Cargar bajo
   // demanda: trae solo la página pedida.

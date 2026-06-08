@@ -18,6 +18,9 @@ function payload(input: CustomerOutput) {
     address: input.address,
     birth_date: input.birth_date,
     notes: input.notes,
+    // preferences (H40): texto libre de gustos del cliente. Aún no está en los
+    // tipos generados (no se regeneran); el payload se castea al insertar/actualizar.
+    preferences: input.preferences,
     is_active: input.is_active,
     credit_limit: input.credit_limit ?? 0,
     group_id: input.group_id ?? null,
@@ -287,6 +290,94 @@ export const customersApi = {
     };
   },
 
+  // Ítems de la ÚLTIMA venta completada del cliente (H40 — recompra rápida
+  // "Repetir última venta"). Devuelve las líneas crudas (sin resolver precios):
+  // el POS las mapea al carrito resolviendo el precio ACTUAL del producto y
+  // omitiendo los productos dados de baja. Sólo ventas 'completed' (no anuladas).
+  lastSaleItems: async (
+    customerId: string,
+  ): Promise<{
+    saleId: string;
+    saleNumber: number;
+    createdAt: string;
+    customerName: string | null;
+    items: {
+      product_id: string | null;
+      product_name: string;
+      quantity: number;
+      unit_price: number;
+      variant_id: string | null;
+    }[];
+  } | null> => {
+    const supabase = createClient();
+    // Trae el nombre del cliente en el mismo query (join) para que el POS lo
+    // seleccione sin un fetch extra (no depende de listar clientes).
+    const { data: lastSale } = await supabase
+      .from("sales")
+      .select("id, number, created_at, customers(name)")
+      .eq("customer_id", customerId)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!lastSale) return null;
+    const { data: items } = await supabase
+      .from("sale_items")
+      .select("product_id, product_name, quantity, unit_price, variant_id")
+      .eq("sale_id", lastSale.id);
+    return {
+      saleId: lastSale.id,
+      saleNumber: lastSale.number,
+      createdAt: lastSale.created_at,
+      customerName:
+        (lastSale as unknown as { customers: { name: string } | null }).customers
+          ?.name ?? null,
+      items: (items ?? []) as {
+        product_id: string | null;
+        product_name: string;
+        quantity: number;
+        unit_price: number;
+        variant_id: string | null;
+      }[],
+    };
+  },
+
+  // Próximos turnos del cliente (H40, reusa H38 · appointments). Turnos FUTUROS
+  // (starts_at >= ahora) no cancelados ni ya realizados, ordenados por fecha.
+  // appointments aún no está en los tipos generados (no se regeneran): cast.
+  upcomingAppointments: async (
+    customerId: string,
+  ): Promise<
+    {
+      id: string;
+      service_name: string;
+      starts_at: string;
+      duration_min: number;
+      status: string;
+      professionals: { name: string } | null;
+    }[]
+  > => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("appointments" as never)
+      .select(
+        "id, service_name, starts_at, duration_min, status, professionals(name)",
+      )
+      .eq("customer_id", customerId)
+      .gte("starts_at", new Date().toISOString())
+      .not("status", "in", "(cancelado,realizado,no_show)")
+      .order("starts_at")
+      .limit(20);
+    return (data ?? []) as unknown as {
+      id: string;
+      service_name: string;
+      starts_at: string;
+      duration_min: number;
+      status: string;
+      professionals: { name: string } | null;
+    }[];
+  },
+
   list: async (search?: string): Promise<Customer[]> => {
     const supabase = createClient();
     let q = supabase
@@ -329,7 +420,8 @@ export const customersApi = {
 
   create: async (input: CustomerOutput): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("customers").insert(payload(input));
+    // payload incluye `preferences` (H40), aún no tipado: cast a never.
+    const { error } = await supabase.from("customers").insert(payload(input) as never);
     if (error) throw error;
   },
 
@@ -364,9 +456,10 @@ export const customersApi = {
 
   update: async (id: string, input: CustomerOutput): Promise<void> => {
     const supabase = createClient();
+    // payload incluye `preferences` (H40), aún no tipado: cast a never.
     const { error } = await supabase
       .from("customers")
-      .update(payload(input))
+      .update(payload(input) as never)
       .eq("id", id);
     if (error) throw error;
   },

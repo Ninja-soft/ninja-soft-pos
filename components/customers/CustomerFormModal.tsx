@@ -100,6 +100,10 @@ export function CustomerFormModal({
         address: customer?.address ?? "",
         birth_date: (customer?.birth_date as string | null) ?? "",
         notes: customer?.notes ?? "",
+        // preferences (H40): aún no está en el tipo Customer (no se regeneran tipos).
+        preferences:
+          ((customer as unknown as { preferences?: string | null })?.preferences ??
+            "") || "",
         is_active: customer?.is_active ?? true,
         credit_limit: customer?.credit_limit ?? 0,
         group_id: (customer?.group_id as string | null) ?? "",
@@ -243,6 +247,19 @@ export function CustomerFormModal({
           {...register("birth_date")}
         />
         <Input label="Notas" {...register("notes")} />
+        {/* Preferencias / gustos del cliente (H40): texto libre para personalizar
+            la atención y la recompra (ej. "corte degradé", "talle M oscuro"). */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Preferencias / gustos
+          </label>
+          <textarea
+            rows={2}
+            placeholder="Ej. corte degradé sin máquina · cortado con leche de almendras · talle M, colores oscuros"
+            className="w-full resize-none rounded-lg border border-input bg-background px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+            {...register("preferences")}
+          />
+        </div>
         <Input
           label="Límite de cuenta corriente ($, 0 = sin límite)"
           type="number"

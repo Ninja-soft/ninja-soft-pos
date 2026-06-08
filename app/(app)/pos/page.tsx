@@ -37,6 +37,7 @@ import {
   useCustomers,
   useStoreCreditBalance,
   useCustomerMutations,
+  useCustomerLastSaleItems,
 } from "@/modules/customers/hooks";
 import { DniScanModal } from "@/components/customers/DniScanModal";
 import type { ParsedDni } from "@/lib/customers/dniParse";
@@ -103,6 +104,13 @@ function PosPageInner() {
   const { data: pendingAppt } = useAppointment(appointmentId);
   // Evita recargar el servicio al carrito en cada render: sólo una vez por turno.
   const loadedApptRef = useRef<string | null>(null);
+  // Recompra rápida (F12 · H40): /pos?repeat=<customerId>. Carga los ítems de la
+  // ÚLTIMA venta completada del cliente al carrito (precio ACTUAL del producto;
+  // omite los dados de baja) y selecciona al cliente, listo para cobrar.
+  const repeatCustomerId = searchParams.get("repeat");
+  const { data: repeatSale } = useCustomerLastSaleItems(repeatCustomerId);
+  // Sólo una carga por cliente (no en cada render).
+  const loadedRepeatRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
@@ -529,6 +537,90 @@ function PosPageInner() {
     setCustomer(null);
     router.replace("/pos");
   }
+
+  // Recompra rápida (H40): al entrar con ?repeat=<customerId>, cargá los ítems de
+  // la última venta del cliente UNA sola vez. Resuelve el precio ACTUAL de cada
+  // producto (lista mostrador) y omite los dados de baja (con aviso). Las líneas
+  // sin producto (venta libre / servicios sueltos) se recrean a su precio
+  // histórico. Selecciona al cliente y limpia el query param. Best-effort.
+  useEffect(() => {
+    if (!repeatCustomerId) return;
+    const r = repeatSale; // null = el cliente no tiene ventas previas
+    if (repeatSale === undefined) return; // aún cargando
+    if (loadedRepeatRef.current === repeatCustomerId) return;
+    loadedRepeatRef.current = repeatCustomerId;
+    let cancelled = false;
+    // Cliente de la venta (nombre del join; sin fetch extra). Si no hay venta
+    // previa igual lo seleccionamos por id para que la próxima venta sea de él.
+    setCustomer({ id: repeatCustomerId, name: r?.customerName ?? "Cliente" });
+    (async () => {
+      if (!r || r.items.length === 0) {
+        if (!cancelled)
+          toast({
+            title: "El cliente no tiene una venta para repetir",
+            variant: "info",
+          });
+        if (!cancelled) router.replace("/pos");
+        return;
+      }
+      // Productos vigentes (precio actual + baja). Las líneas sin producto se
+      // recrean aparte a su precio histórico.
+      const productIds = r.items
+        .map((it) => it.product_id)
+        .filter((id): id is string => Boolean(id));
+      let current: Awaited<ReturnType<typeof productsApi.getByIds>> = [];
+      try {
+        current = await productsApi.getByIds(productIds);
+      } catch {
+        /* si falla, se tratan todos como no disponibles */
+      }
+      if (cancelled) return;
+      const byId = new Map(current.map((p) => [p.id, p]));
+      clear();
+      const omitted: string[] = [];
+      for (const it of r.items) {
+        const qty = it.quantity > 0 ? it.quantity : 1;
+        if (it.product_id) {
+          const p = byId.get(it.product_id);
+          if (!p) {
+            omitted.push(it.product_name);
+            continue;
+          }
+          // Precio actual del producto, resuelto contra la lista mostrador.
+          addProduct(
+            {
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              price: priceFor(p.id, null, p.price),
+              unit: p.unit,
+              warrantyMonths: p.warranty_months ?? 0,
+            },
+            qty,
+          );
+        } else {
+          // Venta libre / servicio suelto: precio histórico de la línea.
+          addFreeAmount({ name: it.product_name, amount: it.unit_price * qty });
+        }
+      }
+      if (cancelled) return;
+      router.replace("/pos");
+      if (omitted.length > 0) {
+        toast({
+          title:
+            omitted.length === 1
+              ? `Se omitió "${omitted[0]}" (ya no está disponible)`
+              : `Se omitieron ${omitted.length} productos que ya no están disponibles`,
+          variant: "info",
+        });
+      }
+      toast({ title: "Última venta cargada en el carrito", variant: "success" });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repeatCustomerId, repeatSale]);
 
   const subtotal = cartSubtotal(lines);
   const rawTotal = Math.max(0, subtotal - discountTotal);

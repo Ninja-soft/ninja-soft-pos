@@ -161,6 +161,21 @@ export function useReturnSaleV2() {
   });
 }
 
+// CAMBIO con diferencia (exchange_sale): devolución + venta nueva atómicas.
+// Invalida ventas/productos/clientes/vales (impacta a todos a la vez).
+export function useExchangeSale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: Parameters<typeof salesApi.exchange>[0]) => salesApi.exchange(vars),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["vouchers"] });
+    },
+  });
+}
+
 // Canje de vale por código en el POS.
 export function useRedeemVoucher() {
   const qc = useQueryClient();

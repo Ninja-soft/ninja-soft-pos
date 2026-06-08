@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Lock, Mail, MonitorSmartphone, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Lock, Mail, MonitorSmartphone, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -32,6 +32,7 @@ import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
+import { PrintSettingsCard } from "@/components/dashboard-team/PrintSettingsCard";
 import { PriceListsCard } from "@/components/prices/PriceListsCard";
 import { useFeature } from "@/modules/saas/gating";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
@@ -41,6 +42,7 @@ type Section =
   | "rubro"
   | "marca"
   | "tickets"
+  | "impresion"
   | "email"
   | "pagos"
   | "operacion"
@@ -98,6 +100,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     title: "Comprobantes",
     sections: [
       { key: "tickets", label: "Tickets", icon: ReceiptText, feature: "tickets_pro" },
+      { key: "impresion", label: "Impresión", icon: Printer },
       { key: "email", label: "Email", icon: Mail, feature: "email_comprobantes" },
     ],
   },
@@ -417,6 +420,10 @@ function ConfiguracionInner() {
 
           {/* Modelos de ticket (escritura protegida por RLS) */}
           {section === "tickets" && <TicketTemplatesCard />}
+
+          {/* Impresión por tipo de documento: formato, copias, auto/manual
+              (F10 · H22; solo owner/manager, el componente se auto-oculta) */}
+          {section === "impresion" && <PrintSettingsCard />}
 
           {/* Email del negocio (solo owner/manager; el componente se auto-oculta) */}
           {section === "email" && <TenantEmailCard />}

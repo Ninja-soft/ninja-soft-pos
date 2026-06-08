@@ -37,8 +37,13 @@ import {
   isValidCuit,
   type CustomerFieldKey,
 } from "@/modules/customers/schemas";
-import { useActiveTemplate, useTicketBranding } from "@/modules/tickets/hooks";
+import {
+  useActiveTemplate,
+  usePrintProfiles,
+  useTicketBranding,
+} from "@/modules/tickets/hooks";
 import { defaultSaleBlocks } from "@/lib/tickets/blocks";
+import { webPrintCopies } from "@/lib/print/webPrint";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { Barcode, type TicketData } from "@/components/tickets/TicketRenderer";
 import { STOCK_DESTINATIONS, type ReturnV2Result } from "@/modules/sales/api";
@@ -988,6 +993,9 @@ function ReturnResult({
 }) {
   const { data: brand } = useTicketBranding(true);
   const { data: printTpl } = useActiveTemplate("print", true);
+  // Perfil de impresión de "devolución / nota de crédito" (H22): formato + copias.
+  const { data: printProfiles } = usePrintProfiles(true);
+  const returnProfile = printProfiles?.return;
   const ticketRef = useRef<HTMLDivElement>(null);
   const isVoucher = result.refund === "store_credit" && Boolean(result.voucher_code);
 
@@ -1026,9 +1034,13 @@ function ReturnResult({
     brand: brand ?? null,
   };
 
+  // La plantilla activa manda el formato; si no hay, el del perfil de devolución
+  // (H22) y, por último, el ancho del branding.
   const paper =
     (printTpl?.paper as "58" | "80" | "a4" | undefined) ??
+    returnProfile?.paper ??
     (brand?.ticket_width === "58" ? "58" : "80");
+  const returnCopies = returnProfile?.copies ?? 1;
 
   return (
     <div className="space-y-4">
@@ -1094,8 +1106,12 @@ function ReturnResult({
         <Button variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
-        <Button onClick={() => window.print()}>
+        <Button
+          onClick={() => webPrintCopies(returnCopies)}
+          title={returnCopies > 1 ? `Imprimir (${returnCopies} copias)` : "Imprimir"}
+        >
           <RotateCcw size={16} /> Imprimir
+          {returnCopies > 1 ? ` (${returnCopies})` : ""}
         </Button>
       </div>
     </div>

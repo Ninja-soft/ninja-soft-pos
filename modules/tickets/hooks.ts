@@ -4,12 +4,37 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { SampleBrand } from "@/lib/tickets/sample";
 import {
+  normalizePrintProfiles,
+  type PrintProfiles,
+} from "@/lib/print/profiles";
+import {
   ticketTemplatesApi,
   type TemplateDestination,
   type TemplateInput,
 } from "./api";
 
 const KEY = ["ticket-templates"];
+
+// Perfiles de impresión por tipo de documento (H22). Lee
+// pos_settings.print_profiles (jsonb, no tipado en los types generados: cast +
+// normalización) y siempre devuelve los 5 perfiles válidos. Lo consumen el POS
+// (ticket de venta), Caja (cierre Z) y Devoluciones para elegir formato/copias y
+// respetar impresión auto/manual. queryKey propia para invalidarla al guardar.
+export function usePrintProfiles(enabled = true) {
+  const supabase = createClient();
+  return useQuery({
+    queryKey: ["print-profiles"],
+    enabled,
+    queryFn: async (): Promise<PrintProfiles> => {
+      const { data } = await supabase
+        .from("pos_settings")
+        .select("print_profiles")
+        .maybeSingle();
+      const raw = (data as { print_profiles?: unknown } | null)?.print_profiles;
+      return normalizePrintProfiles(raw);
+    },
+  });
+}
 
 // Branding del negocio para el preview/render de tickets. Movido desde
 // TicketModal (H9b) para compartirlo con el editor de plantillas.

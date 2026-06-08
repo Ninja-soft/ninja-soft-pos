@@ -8,6 +8,7 @@ import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Barcode } from "@/components/products/Barcode";
 import { useProducts } from "@/modules/products/hooks";
+import { usePrintProfiles } from "@/modules/tickets/hooks";
 import { buildLabels, clampCopies, type LabelSource } from "@/lib/labels";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -17,12 +18,16 @@ export default function EtiquetasPage() {
   const [search, setSearch] = useState("");
   const { data: products } = useProducts(search);
   const [sel, setSel] = useState<Sel>({});
+  // Copias por defecto del perfil "etiqueta de producto" (H22): al marcar un
+  // producto se siembra con esta cantidad (editable por producto).
+  const { data: printProfiles } = usePrintProfiles();
+  const defaultCopies = clampCopies(printProfiles?.product_label.copies ?? 1);
 
   function toggle(p: LabelSource) {
     setSel((s) => {
       const next = { ...s };
       if (next[p.id]) delete next[p.id];
-      else next[p.id] = { ...p, copies: 1 };
+      else next[p.id] = { ...p, copies: defaultCopies };
       return next;
     });
   }

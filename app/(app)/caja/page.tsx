@@ -22,6 +22,8 @@ import { useOpenShift } from "@/modules/pos/hooks";
 import { useShiftMovements, useAddMovement } from "@/modules/cash/hooks";
 import { summarize } from "@/modules/cash/api";
 import { ZClosuresHistory } from "@/components/cash/ZClosuresHistory";
+import { usePrintProfiles } from "@/modules/tickets/hooks";
+import { webPrintCopies } from "@/lib/print/webPrint";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
@@ -32,6 +34,9 @@ export default function CajaPage() {
   const { data: shift } = useOpenShift();
   const { data: movements } = useShiftMovements(shift?.id ?? null);
   const addMovement = useAddMovement();
+  // Perfil de impresión del "cierre Z" (H22): copias configuradas por el negocio.
+  const { data: printProfiles } = usePrintProfiles();
+  const zCopies = printProfiles?.z_close.copies ?? 1;
 
   const [modalType, setModalType] = useState<"income" | "expense" | null>(null);
   const [amount, setAmount] = useState("");
@@ -137,8 +142,13 @@ export default function CajaPage() {
               <Button variant="secondary" onClick={exportZ}>
                 <Download size={16} /> Exportar Z (XLSX)
               </Button>
-              <Button variant="secondary" onClick={() => window.print()}>
+              <Button
+                variant="secondary"
+                onClick={() => webPrintCopies(zCopies)}
+                title={zCopies > 1 ? `Imprimir Z (${zCopies} copias)` : "Imprimir Z"}
+              >
                 <Printer size={16} /> Imprimir Z
+                {zCopies > 1 ? ` (${zCopies})` : ""}
               </Button>
             </div>
 

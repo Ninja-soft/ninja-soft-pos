@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   ArrowRight,
   Banknote,
   Check,
@@ -46,7 +47,8 @@ import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { webPrintCopies } from "@/lib/print/webPrint";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { Barcode, type TicketData } from "@/components/tickets/TicketRenderer";
-import { STOCK_DESTINATIONS, type ReturnV2Result } from "@/modules/sales/api";
+import { STOCK_DESTINATIONS, type ReturnV2Result, type ExchangeResult } from "@/modules/sales/api";
+import { ExchangeFlow } from "@/components/sales/ExchangeFlow";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { cn } from "@/lib/utils/cn";
@@ -86,6 +88,9 @@ export function ReturnModal({
   const { data: numFmt } = useSaleNumberFormat();
   const ret = useReturnSaleV2();
 
+  // Modo del flujo: devolución pura (dinero/vale al cliente) o CAMBIO (devuelve y
+  // se lleva otros productos; la diferencia se cobra o reintegra).
+  const [mode, setMode] = useState<"return" | "exchange">("return");
   const [step, setStep] = useState(0);
   const [qtys, setQtys] = useState<Record<string, number>>({});
   const [reasonId, setReasonId] = useState<string>("");
@@ -99,9 +104,11 @@ export function ReturnModal({
       })
     | null
   >(null);
+  const [exchangeResult, setExchangeResult] = useState<ExchangeResult | null>(null);
 
   useEffect(() => {
     if (open) {
+      setMode("return");
       setStep(0);
       setQtys({});
       setReasonId("");
@@ -109,6 +116,7 @@ export function ReturnModal({
       setCustomer(null);
       setAllowedBranchIds([]);
       setResult(null);
+      setExchangeResult(null);
     }
   }, [open, saleId]);
 
@@ -230,6 +238,8 @@ export function ReturnModal({
         <p className="py-10 text-center text-sm text-muted-foreground">Cargando venta…</p>
       ) : result ? (
         <ReturnResult result={result} onClose={() => onOpenChange(false)} />
+      ) : exchangeResult ? (
+        <ExchangeResultView result={exchangeResult} onClose={() => onOpenChange(false)} />
       ) : (
         <div className="space-y-5">
           {/* Resumen de la venta de origen */}
@@ -255,6 +265,18 @@ export function ReturnModal({
             </div>
           </div>
 
+          {/* Selector de modo: Devolución pura vs Cambio (diferencia a cobrar) */}
+          <ModeToggle mode={mode} onChange={setMode} />
+
+          {mode === "exchange" ? (
+            <ExchangeFlow
+              data={data}
+              saleId={saleId as string}
+              onDone={setExchangeResult}
+              onClose={() => onOpenChange(false)}
+            />
+          ) : (
+          <>
           {/* Stepper */}
           <Stepper steps={steps} current={step} />
 
@@ -367,9 +389,130 @@ export function ReturnModal({
               )}
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
     </Modal>
+  );
+}
+
+// Selector de modo: devolución pura (dinero/vale) o cambio (diferencia a cobrar).
+function ModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: "return" | "exchange";
+  onChange: (m: "return" | "exchange") => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/30 p-1">
+      <button
+        type="button"
+        onClick={() => onChange("return")}
+        className={cn(
+          "flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors",
+          mode === "return"
+            ? "bg-ninja-flame/15 text-ninja-flameSoft"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <RotateCcw size={15} /> Devolución
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("exchange")}
+        className={cn(
+          "flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors",
+          mode === "exchange"
+            ? "bg-ninja-flame/15 text-ninja-flameSoft"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <ArrowLeftRight size={15} /> Cambio
+      </button>
+    </div>
+  );
+}
+
+// Resultado del cambio: devolución + venta nueva enlazadas, con la diferencia /
+// sobrante y el vale de la devolución (canjeable si quedó saldo).
+function ExchangeResultView({
+  result,
+  onClose,
+}: {
+  result: ExchangeResult;
+  onClose: () => void;
+}) {
+  const charged = result.difference > 0.001;
+  const surplus = result.surplus > 0.001;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-emerald-400">
+          <Check size={18} />
+        </span>
+        <div className="text-sm">
+          <div className="font-semibold">Cambio registrado</div>
+          <div className="text-xs text-muted-foreground">
+            Devolución #{result.return_number} → Venta #{result.sale_number}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Valor devuelto (crédito)</span>
+          <span className="tabular-nums">{formatCurrency(result.returned)}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between">
+          <span className="text-muted-foreground">Total productos nuevos</span>
+          <span className="tabular-nums">{formatCurrency(result.new_total)}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
+          <span className="font-semibold">
+            {charged ? "Diferencia cobrada" : surplus ? "Sobrante devuelto" : "Cambio par"}
+          </span>
+          <span
+            className={cn(
+              "font-price font-bold tabular-nums",
+              charged ? "text-ninja-flameSoft" : surplus ? "text-emerald-400" : "text-muted-foreground",
+            )}
+          >
+            {formatCurrency(charged ? result.difference : result.surplus)}
+          </span>
+        </div>
+        {surplus && (
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Sobrante en</span>
+            <span>{result.surplus_to === "store_credit" ? "Vale (saldo a favor)" : "Efectivo"}</span>
+          </div>
+        )}
+      </div>
+
+      {/* El vale de la devolución solo deja saldo canjeable si quedó sobrante en
+          vale; si se aplicó todo a la compra (o el sobrante fue efectivo), el vale
+          queda en cero. Mostramos el código emitido para trazabilidad. */}
+      {result.voucher_code && (
+        <div className="rounded-xl border border-dashed border-border px-4 py-3 text-center">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Comprobante de devolución del cambio
+          </div>
+          <div className="mt-1 font-mono text-base font-black tracking-wider">
+            {result.voucher_code}
+          </div>
+          {surplus && result.surplus_to === "store_credit" && (
+            <div className="mt-0.5 text-xs text-emerald-400">
+              Saldo a favor {formatCurrency(result.surplus)} — canjeable en el POS
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button onClick={onClose}>Cerrar</Button>
+      </div>
+    </div>
   );
 }
 

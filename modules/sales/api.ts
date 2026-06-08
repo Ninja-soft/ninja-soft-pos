@@ -336,7 +336,65 @@ export const salesApi = {
     if (error) throw error;
     return data as unknown as ReturnV2Result;
   },
+
+  // CAMBIO con diferencia (exchange_sale): orquesta devolución + venta nueva en
+  // una transacción atómica y auditada. El valor devuelto se aplica como crédito
+  // a la compra nueva; la diferencia (>0) se cobra por differencePayments y el
+  // sobrante (<0) va a efectivo o vale según surplusTo / la política del tenant.
+  // exchange_sale aún no está en los tipos generados (no se regeneran): looseClient.
+  exchange: async (input: {
+    saleId: string;
+    returnItems: { sale_item_id: string; quantity: number }[];
+    newItems: ExchangeNewItem[];
+    differencePayments?: { method: string; amount: number; reference?: string }[];
+    reasonId?: string | null;
+    newDiscount?: number;
+    customerId?: string | null;
+    allowedBranchIds?: string[] | null;
+    surplusTo?: "cash" | "store_credit" | null;
+    notes?: string | null;
+  }): Promise<ExchangeResult> => {
+    const { data, error } = await looseClient().rpc("exchange_sale", {
+      p_sale_id: input.saleId,
+      p_return_items: input.returnItems as unknown as Json,
+      p_new_items: input.newItems as unknown as Json,
+      p_difference_payments: (input.differencePayments ?? []) as unknown as Json,
+      p_reason_id: input.reasonId ?? undefined,
+      p_new_discount: input.newDiscount ?? 0,
+      p_customer_id: input.customerId ?? undefined,
+      p_allowed_branch_ids: input.allowedBranchIds ?? undefined,
+      p_surplus_to: input.surplusTo ?? undefined,
+      p_notes: input.notes ?? undefined,
+    });
+    if (error) throw error;
+    return data as unknown as ExchangeResult;
+  },
 };
+
+// Ítem nuevo del cambio (mismo formato que SaleItemInput de create_sale).
+export interface ExchangeNewItem {
+  product_id: string | null;
+  name?: string;
+  serial?: string;
+  variant_id?: string | null;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+}
+
+export interface ExchangeResult {
+  return_id: string;
+  return_number: number;
+  voucher_code: string | null;
+  sale_id: string;
+  sale_number: number;
+  returned: number;
+  new_total: number;
+  credit_applied: number;
+  difference: number; // >0 cobrada, <0 sobrante, =0 par
+  surplus: number;
+  surplus_to: "cash" | "store_credit" | null;
+}
 
 export interface ReturnV2Result {
   return_id: string;

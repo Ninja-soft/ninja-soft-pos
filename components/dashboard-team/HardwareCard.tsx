@@ -99,11 +99,11 @@ function StatusBadge({ kind, label }: { kind: StateKind; label?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium",
         m.cls,
       )}
     >
-      <Icon size={13} />
+      <Icon size={13} className="shrink-0" />
       {label ?? m.label}
     </span>
   );
@@ -135,12 +135,12 @@ function PeripheralCard({
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 rounded-lg bg-ninja-flame/12 p-2 text-ninja-flameSoft">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span className="mt-0.5 shrink-0 rounded-lg bg-ninja-flame/12 p-2 text-ninja-flameSoft">
               <Icon size={18} />
             </span>
-            <div>
+            <div className="min-w-0">
               <div className="font-semibold">{title}</div>
               <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
             </div>

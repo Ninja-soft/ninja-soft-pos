@@ -748,6 +748,8 @@ export const internalApi = {
   // ── H12b — Planes custom + overrides + descuentos ─────────────────────────
 
   // Catálogo de planes globales (tenant_id null) para el selector.
+  // Orden jerárquico por `sort` (Start→Pro→Business→Enterprise), no por precio:
+  // así el dropdown respeta la jerarquía aunque un plan caro tenga sort bajo.
   globalPlans: async (): Promise<{ key: string; name: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -755,7 +757,7 @@ export const internalApi = {
       .select("key, name")
       .is("tenant_id", null)
       .eq("is_active", true)
-      .order("monthly_price_ars");
+      .order("sort");
     if (error) throw error;
     return (data ?? []).map((p) => ({ key: p.key, name: p.name }));
   },

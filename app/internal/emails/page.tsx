@@ -660,8 +660,10 @@ function SystemEmailsLog() {
   const [origin, setOrigin] = useState<OriginFilter>("todos");
   const [tenantQuery, setTenantQuery] = useState("");
 
-  // Despacha los emails del sistema en cola (estado 'pending'). El motor de
-  // dunning solo encola; el envío real ocurre acá (o por automatización futura).
+  // Despacha los emails del sistema en cola (pending + failed reintentables).
+  // El auto-envío real lo hace un cron (pg_cron + pg_net) cada 5 min vía
+  // process_pending_emails (por Resend/failover); este botón es un disparo
+  // MANUAL para no esperar al próximo tick.
   const processPending = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("process_pending_emails", {

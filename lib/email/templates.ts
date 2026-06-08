@@ -218,6 +218,20 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     ),
   },
 
+  // === Transaccionales — Tiendita (compra de catálogo) =====================
+  {
+    key: "catalog_purchased",
+    label: "Catálogo comprado",
+    description: "Confirma la compra de un catálogo de Tiendita (pago único).",
+    variables: [...BASE_VARS, "catalogo"],
+    defaultSubject: "Ya tenés acceso a tu catálogo en NinjaPos",
+    defaultHtml: brandedEmail(
+      "<p>¡Listo! Tu compra del catálogo <b>{{catalogo}}</b> para <b>{{negocio}}</b> se acreditó.</p>" +
+        "<p>Entrá a Tiendita para buscar productos del catálogo y agregarlos a tu tienda con un clic.</p>" +
+        ctaButton("https://ninja-soft-pos.vercel.app/login", "Ir a Tiendita"),
+    ),
+  },
+
   // === Legacy / catálogo previo (no romper flujos existentes) ===============
   // Estas claves ya existían (dunning, invitaciones). Se conservan tal cual para
   // no romper overrides ni el HTML que arma el cron por su cuenta.
@@ -292,5 +306,6 @@ export function sampleVars(negocio: string): Record<string, string> {
     plan: "Pyme",
     precio_anterior: "$ 9.900,00",
     precio_nuevo: "$ 12.500,00",
+    catalogo: "Kiosco esencial",
   };
 }

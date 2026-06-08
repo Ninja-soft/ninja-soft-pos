@@ -12,6 +12,7 @@ import { redeemInviteCode } from "@/modules/auth/invite";
 import { applySignupPlan } from "@/modules/auth/plan";
 import { startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
 import { useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
+import { activateAiAddon } from "@/modules/saas/aiPublicConfig";
 import {
   SignupAccountSchema,
   SignupBusinessSchema,
@@ -153,6 +154,8 @@ function SignupWizard() {
   // Plan elegido (key). Arranca null y se autoselecciona el recomendado (Pro)
   // cuando cargan los planes. El selector aplica salvo que un invite code lo fije.
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  // ¿Suma el Asistente IA a la suscripción? Se activa tras crear el tenant.
+  const [addonAi, setAddonAi] = useState(false);
   const { data: signupPlans } = useSignupPlans();
   // Si el alta de email ya creó el usuario, no lo recreamos en un reintento.
   const userCreatedRef = useRef(false);
@@ -296,6 +299,24 @@ function SignupWizard() {
     }
   }
 
+  // Si el usuario marcó "sumar Asistente IA", lo activamos tras aplicar el plan.
+  // activate_addon alinea el período del addon al de la suscripción (respeta el
+  // trial del plan) y fija su precio. Best-effort: si falla, no aborta el alta
+  // (el dueño lo activa desde el panel) y para planes pagos debe correr ANTES del
+  // checkout para que el preapproval incluya el monto del addon.
+  async function maybeActivateAddon() {
+    if (!addonAi) return;
+    const res = await activateAiAddon();
+    if (!res.ok) {
+      toast({
+        title: "Negocio creado",
+        description:
+          "No pudimos sumar el Asistente IA ahora. Lo activás desde tu panel (Suscripción).",
+        variant: "info",
+      });
+    }
+  }
+
   // Plan SIN trial (Enterprise/Sensei): el dueño paga al crear la cuenta.
   // 1) fija el plan elegido en la suscripción (request_plan_change, owner-only);
   // 2) crea el preapproval del dueño (Edge mp_subscription_checkout) y redirige
@@ -405,6 +426,10 @@ function SignupWizard() {
       const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
       await applyChosenPlan(invitePinnedPlan);
 
+      // 3b. Add-on IA (si lo marcó). Antes del checkout: el preapproval del plan
+      //     pago debe incluir el monto del addon.
+      await maybeActivateAddon();
+
       // 4. Plan sin trial → cobro self-service: redirige a Mercado Pago. Si
       //    redirige, cortamos acá (no vamos al dashboard).
       if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
@@ -447,6 +472,7 @@ function SignupWizard() {
       await supabase.auth.refreshSession();
       const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
       await applyChosenPlan(invitePinnedPlan);
+      await maybeActivateAddon();
       if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
@@ -593,7 +619,12 @@ function SignupWizard() {
             {/* ---------- FLUJO EMAIL · paso 3: elegir plan ---------- */}
             {mode === "account" && step === 3 && (
               <div className="space-y-6">
-                <SignupStepPlan value={selectedPlan} onChange={setSelectedPlan} />
+                <SignupStepPlan
+                  value={selectedPlan}
+                  onChange={setSelectedPlan}
+                  addonAi={addonAi}
+                  onAddonAiChange={setAddonAi}
+                />
                 <div className="space-y-3">
                   <div className="flex gap-3">
                     <Button
@@ -666,7 +697,12 @@ function SignupWizard() {
                   <p className="text-sm text-destructive">{industryError}</p>
                 )}
 
-                <SignupStepPlan value={selectedPlan} onChange={setSelectedPlan} />
+                <SignupStepPlan
+                  value={selectedPlan}
+                  onChange={setSelectedPlan}
+                  addonAi={addonAi}
+                  onAddonAiChange={setAddonAi}
+                />
 
                 <Button
                   type="button"

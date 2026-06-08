@@ -24,6 +24,7 @@ import { usePageSize } from "@/hooks/usePageSize";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { CUSTOMER_IMPORT_COLUMNS } from "@/modules/customers/import";
 
 export default function ClientesPage() {
   const { toast } = useToast();
@@ -59,25 +60,24 @@ export default function ClientesPage() {
       .select("name, document_type, document_number, iva_condition, email, phone, address, notes")
       .is("deleted_at", null)
       .order("name", { ascending: true });
+    // Etiquetas legibles (DNI, Consumidor Final). El import acepta tanto la
+    // etiqueta como el código, así que la base exportada se puede reimportar.
     await exportXlsx("clientes", [
       {
         name: "Clientes",
         title: "Base de clientes • NinjaPos",
-        columns: [
-          { header: "name", key: "name" },
-          { header: "document_type", key: "document_type" },
-          { header: "document_number", key: "document_number" },
-          { header: "iva_condition", key: "iva_condition" },
-          { header: "email", key: "email" },
-          { header: "phone", key: "phone" },
-          { header: "address", key: "address" },
-          { header: "notes", key: "notes" },
-        ],
+        columns: CUSTOMER_IMPORT_COLUMNS,
         rows: (data ?? []).map((c) => ({
           name: c.name,
-          document_type: c.document_type ?? "",
+          document_type: c.document_type
+            ? (DOC_TYPE_LABELS[c.document_type as keyof typeof DOC_TYPE_LABELS] ??
+              c.document_type)
+            : "",
           document_number: c.document_number ?? "",
-          iva_condition: c.iva_condition ?? "",
+          iva_condition: c.iva_condition
+            ? (IVA_LABELS[c.iva_condition as keyof typeof IVA_LABELS] ??
+              c.iva_condition)
+            : "",
           email: c.email ?? "",
           phone: c.phone ?? "",
           address: c.address ?? "",

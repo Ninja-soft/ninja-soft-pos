@@ -333,12 +333,17 @@ export const customersApi = {
     if (error) throw error;
   },
 
-  // Alta rápida desde un flujo (p.ej. emitir un vale sin cliente en la venta).
-  // Crea un cliente mínimo (nombre + opcionales) y devuelve su id.
+  // Alta rápida desde un flujo (p.ej. emitir un vale sin cliente en la venta) que
+  // necesita el id del cliente recién creado. Crea un cliente mínimo (nombre +
+  // opcionales) y devuelve su id. Cuando el tenant exige documento
+  // (require_customer_doc), el llamador valida y pasa tipo + número acá: el alta
+  // los persiste igual que el alta completa. El enforcement vive en la UI.
   createQuick: async (input: {
     name: string;
     phone?: string | null;
     email?: string | null;
+    document_type?: string | null;
+    document_number?: string | null;
   }): Promise<{ id: string; name: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -347,6 +352,8 @@ export const customersApi = {
         name: input.name.trim(),
         phone: input.phone?.trim() || null,
         email: input.email?.trim() || null,
+        document_type: input.document_type?.trim() || null,
+        document_number: input.document_number?.trim() || null,
         is_active: true,
       })
       .select("id, name")

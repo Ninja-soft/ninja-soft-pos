@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, Search, Tags } from "lucide-react";
+import { Receipt, RotateCcw, Search, Tags, Ticket } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Button } from "@/components/ui/Button";
@@ -78,7 +78,7 @@ export default function DevolucionesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="N° de comprobante o ticket…"
-            className="h-12 w-full rounded-lg border border-input bg-background pl-10 pr-4 text-sm outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+            className="h-12 w-full rounded-xl border border-input bg-background pl-10 pr-4 text-sm outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
           />
         </div>
 
@@ -101,18 +101,23 @@ export default function DevolucionesPage() {
             <button
               key={s.id}
               onClick={() => openReturn(s.id)}
-              className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left transition hover:border-ninja-flameSoft/40 hover:bg-muted"
+              className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:border-ninja-flameSoft/40 hover:bg-muted"
             >
-              <span className="min-w-0">
-                <span className="block font-mono font-semibold">
-                  {formatSaleNumber(s.number, numFmt)}
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition group-hover:bg-ninja-flame/10 group-hover:text-ninja-flameSoft">
+                  <Receipt size={17} />
                 </span>
-                <span className="block text-xs text-muted-foreground">
-                  {new Date(s.created_at).toLocaleString("es-AR")}
+                <span className="min-w-0">
+                  <span className="block font-mono font-semibold">
+                    {formatSaleNumber(s.number, numFmt)}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {new Date(s.created_at).toLocaleString("es-AR")}
+                  </span>
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-3">
-                <span className="font-semibold">{formatCurrency(s.total)}</span>
+                <span className="font-price font-semibold tabular-nums">{formatCurrency(s.total)}</span>
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-ninja-flameSoft">
                   <RotateCcw size={15} /> Devolver
                 </span>
@@ -125,25 +130,38 @@ export default function DevolucionesPage() {
             <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
               Últimas devoluciones
             </div>
-            <div className="space-y-1">
-              {(returns ?? []).map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-sm"
-                >
-                  <span className="font-mono font-semibold">Dev #{r.number}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {r.reason || "—"}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {r.refund_method === "store_credit" ? "Vale" : "Efectivo"}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(r.created_at).toLocaleDateString("es-AR")}
-                  </span>
-                  <span className="shrink-0 font-semibold">{formatCurrency(r.total)}</span>
-                </div>
-              ))}
+            <div className="space-y-1.5">
+              {(returns ?? []).map((r) => {
+                const isVoucher = r.refund_method === "store_credit";
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2.5 text-sm"
+                  >
+                    <span className="shrink-0 font-mono font-semibold">Dev #{r.number}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                      {r.reason || "—"}
+                    </span>
+                    <span
+                      className={
+                        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
+                        (isVoucher
+                          ? "bg-ninja-flame/10 text-ninja-flameSoft"
+                          : "bg-muted text-muted-foreground")
+                      }
+                    >
+                      {isVoucher && <Ticket size={12} />}
+                      {isVoucher ? "Vale" : "Efectivo"}
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
+                      {new Date(r.created_at).toLocaleDateString("es-AR")}
+                    </span>
+                    <span className="shrink-0 font-price font-semibold tabular-nums">
+                      {formatCurrency(r.total)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

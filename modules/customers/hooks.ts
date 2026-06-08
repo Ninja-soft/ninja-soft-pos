@@ -85,8 +85,13 @@ export function useCustomerMutations() {
       onSuccess: invalidate,
     }),
     createQuick: useMutation({
-      mutationFn: (input: { name: string; phone?: string | null; email?: string | null }) =>
-        customersApi.createQuick(input),
+      mutationFn: (input: {
+        name: string;
+        phone?: string | null;
+        email?: string | null;
+        document_type?: string | null;
+        document_number?: string | null;
+      }) => customersApi.createQuick(input),
       onSuccess: invalidate,
     }),
     update: useMutation({

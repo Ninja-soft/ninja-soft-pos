@@ -33,9 +33,25 @@
  * script corre SERVER-SIDE únicamente (regla del proyecto).
  */
 
+const fs = require("fs");
 const path = require("path");
 const ExcelJS = require("exceljs");
 const { createClient } = require("@supabase/supabase-js");
+
+// Carga .env.local / .env sin dependencias: completa process.env con las claves
+// que falten. Así alcanza con poner SUPABASE_SERVICE_ROLE_KEY en .env.local
+// (gitignored) y correr `node scripts/import_catalog.cjs <archivo.xlsx>` —
+// no hace falta exportar variables a mano.
+for (const envFile of [".env.local", ".env"]) {
+  const p = path.resolve(process.cwd(), envFile);
+  if (!fs.existsSync(p)) continue;
+  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+    if (!m) continue;
+    const val = m[2].replace(/^["']|["']$/g, "");
+    if (val && process.env[m[1]] === undefined) process.env[m[1]] = val;
+  }
+}
 
 const BATCH_SIZE = 1000;
 const SUMMARY_SHEET = "resumen";

@@ -208,7 +208,11 @@ export function AssistantBubble() {
           disabled={!bubbleReady}
           aria-label={bubbleReady ? "Abrir asistente IA" : "Cargando asistente IA"}
           aria-busy={!bubbleReady}
-          className="fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow ring-1 ring-white/10 backdrop-blur-xl transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:active:scale-100"
+          className={`fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-ninjaGlow ring-1 backdrop-blur-xl transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:active:scale-100 ${
+            locked
+              ? "bg-[#0d0822] text-ninja-flameSoft ring-ninja-flame/40"
+              : "bg-ninja-gradient text-ninja-voidViolet ring-white/10"
+          }`}
         >
           {bubbleReady ? (
             <BubbleAvatar url={iconUrl} size={56} iconSize={24} />
@@ -226,7 +230,13 @@ export function AssistantBubble() {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="flex items-center gap-2 font-semibold text-foreground">
-              <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg bg-ninja-gradient text-ninja-voidViolet">
+              <span
+                className={`grid h-7 w-7 place-items-center overflow-hidden rounded-lg ${
+                  locked
+                    ? "bg-[#0d0822] text-ninja-flameSoft ring-1 ring-ninja-flame/30"
+                    : "bg-ninja-gradient text-ninja-voidViolet"
+                }`}
+              >
                 <BubbleAvatar url={iconUrl} size={28} iconSize={16} />
               </span>
               Asistente IA
@@ -244,7 +254,7 @@ export function AssistantBubble() {
             /* ── Modo bloqueado: explicador comercial + CTA ── */
             <div className="slim-scrollbar flex flex-1 flex-col overflow-y-auto p-5">
               <div className="flex flex-col items-center text-center">
-                <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+                <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-[#0d0822] text-ninja-flameSoft shadow-ninjaGlow ring-1 ring-ninja-flame/30">
                   <BubbleAvatar url={iconUrl} size={64} iconSize={30} />
                 </span>
                 <h3 className="mt-3 flex items-center gap-1.5 text-base font-semibold text-foreground">

@@ -165,6 +165,13 @@ export default async function DashboardTeamPage() {
         )}
       </div>
 
+      {/* Acceso rápido al POS — por encima de la suscripción. */}
+      <div className="flex justify-end">
+        <Link href="/dashboard" className={buttonVariants()}>
+          Ir al POS
+        </Link>
+      </div>
+
       {/* Panel de suscripción interactivo (solo dueños: las RPC son owner-gated). */}
       {isOwner && <SubscriptionCard />}
 
@@ -179,9 +186,6 @@ export default async function DashboardTeamPage() {
       <div className="mt-8 flex flex-wrap gap-3">
         <Link href="/configuracion" className={buttonVariants({ variant: "secondary" })}>
           <Palette size={16} /> Apariencia
-        </Link>
-        <Link href="/dashboard" className={buttonVariants({ variant: "secondary" })}>
-          Ir al POS
         </Link>
       </div>
     </div>

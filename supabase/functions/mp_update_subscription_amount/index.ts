@@ -62,8 +62,11 @@ Deno.serve(async (req: Request) => {
   } catch {
     b = {};
   }
+  // El dueño suele ser TAMBIÉN staff (is_internal): si no manda tenant_id en el
+  // body, cae a su current_tenant_id (gestiona su propia suscripción). Mismo fix
+  // que mp_subscription_checkout/manage.
   const tenantId = isInternal
-    ? String(b.tenant_id ?? "").trim()
+    ? String(b.tenant_id ?? "").trim() || String(meta.current_tenant_id ?? "").trim()
     : String(meta.current_tenant_id ?? "").trim();
   if (!tenantId) return json({ error: "missing_tenant" }, 400);
 

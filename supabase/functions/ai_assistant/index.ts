@@ -14,10 +14,13 @@
 // traduce a 502 { error:'ai_provider_error', detail:<mensaje truncado> }.
 // Nunca se deja escapar un throw al runtime (502/503 opaco sin cuerpo).
 //
-// Contexto READ-ONLY scoped por tenant (nunca SQL libre): ventas de hoy/7d,
-// top productos, stock bajo, estado de config. + guía fija de pantallas.
-// System prompt cerrado al POS. Proveedor Gemini | Claude según ai_config.
-// Cuota mensual por tenant (ai_usage). NO deployar (lo hace el controller).
+// Contexto READ-ONLY scoped por tenant (nunca SQL libre): ventas hoy/7d, mes en
+// curso vs mes anterior + ticket promedio, medios de pago, cuenta corriente
+// (deudores), estado de caja, devoluciones, suscripción, top productos, stock
+// bajo y estado de config. + guía fija de pantallas. System prompt cerrado al
+// POS. Proveedor Gemini | Claude según ai_config. Cuota mensual por tenant
+// configurable (ai_config.monthly_quota, ai_usage). NO deployar (lo hace el
+// controller).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -33,8 +36,18 @@ const json = (b: unknown, s = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
-// Tope mensual de tokens por tenant (estimado). Por encima → 429.
-const MONTHLY_TOKEN_CAP = 500_000;
+// Tope mensual de tokens por tenant (estimado), POR DEFECTO. Por encima → 429.
+// Configurable por NinjaSoft vía ai_config.monthly_quota (número). Si la config
+// trae un valor válido (>0), gana sobre este default.
+const DEFAULT_MONTHLY_TOKEN_CAP = 500_000;
+
+// Resuelve el tope mensual de tokens desde ai_config (monthly_quota). Acepta el
+// valor como número o string numérico; cualquier cosa inválida/≤0 cae al default.
+function resolveMonthlyCap(cfg: Record<string, unknown>): number {
+  const raw = cfg.monthly_quota;
+  const n = typeof raw === "number" ? raw : Number(String(raw ?? "").trim());
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_MONTHLY_TOKEN_CAP;
+}
 
 // Modelos por defecto cuando ai_config.model viene vacío.
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
@@ -462,6 +475,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Cuota mensual ───────────────────────────────────────────────────────
+    // Tope configurable por NinjaSoft (ai_config.monthly_quota); fallback 500k.
+    const monthlyCap = resolveMonthlyCap(cfg);
     const monthStart = new Date();
     monthStart.setUTCDate(1);
     monthStart.setUTCHours(0, 0, 0, 0);
@@ -474,7 +489,7 @@ Deno.serve(async (req: Request) => {
       (acc, r) => acc + (Number((r as { tokens?: number }).tokens) || 0),
       0,
     );
-    if (usedTokens >= MONTHLY_TOKEN_CAP) {
+    if (usedTokens >= monthlyCap) {
       return json({ error: "quota_exceeded" }, 429);
     }
 
@@ -534,30 +549,52 @@ Deno.serve(async (req: Request) => {
       tokens = Math.ceil(chars / 4);
     }
 
-    // Bitácora de consumo (best-effort: no altera la respuesta).
+    // Bitácora de consumo (best-effort: no altera la respuesta del chat).
+    // OJO: supabase-js NO tira en error de DB; devuelve { error }. Por eso el
+    // try/catch viejo nunca se disparaba y un fallo de insert quedaba invisible
+    // (ai_usage en 0). Chequeamos el .error explícitamente y lo logueamos para
+    // que cualquier rechazo (RLS, FK, etc.) aparezca en los logs de la función.
     try {
-      await admin.from("ai_usage").insert({
+      const { error: usageErr } = await admin.from("ai_usage").insert({
         tenant_id: tenantId,
         user_id: user.id,
         provider,
         tokens,
       });
-    } catch (_) {
-      /* noop */
+      if (usageErr) {
+        console.error("ai_usage insert failed:", usageErr.message ?? usageErr);
+      }
+    } catch (e) {
+      console.error("ai_usage insert threw:", e instanceof Error ? e.message : e);
     }
 
     return json({
       reply: reply.trim(),
-      quota: { used: usedTokens + tokens, cap: MONTHLY_TOKEN_CAP },
+      quota: { used: usedTokens + tokens, cap: monthlyCap },
     });
   } catch (e) {
     return json({ error: "internal", detail: String(e) }, 500);
   }
 });
 
+// Formatea un monto como pesos AR sin decimales (contexto compacto para el LLM).
+function ars(n: number): string {
+  return `$${Math.round(Number(n) || 0).toLocaleString("es-AR")}`;
+}
+
+// Variación porcentual de `cur` respecto de `prev`, como texto legible.
+function pctText(cur: number, prev: number): string {
+  if (prev <= 0) return cur > 0 ? "sin base de comparación" : "sin cambios";
+  const pct = ((cur - prev) / prev) * 100;
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(0)}% vs mes anterior`;
+}
+
 // Construye el bloque de contexto del negocio. Todo READ-ONLY y scoped al tenant
 // vía service_role (filtros explícitos por tenant_id). Funciones predefinidas,
-// nunca SQL libre.
+// nunca SQL libre. Cada bloque va en su propio try/catch: un fallo aislado deja
+// una línea de aviso pero NO tumba el resto del contexto. Formato compacto para
+// no inflar el prompt (montos sin decimales, una línea por métrica).
 async function buildContext(
   // deno-lint-ignore no-explicit-any
   admin: any,
@@ -567,10 +604,18 @@ async function buildContext(
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
   const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const days30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // Mes en curso (UTC) y mes anterior, para la comparación.
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+  const prevMonthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+  );
   const lines: string[] = [];
 
+  // ── Ventas hoy / 7 días ───────────────────────────────────────────────────
   try {
-    // Ventas de hoy (completadas).
     const { data: todaySales } = await admin
       .from("sales")
       .select("total")
@@ -582,11 +627,8 @@ async function buildContext(
       (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
       0,
     );
-    lines.push(
-      `Ventas de hoy: ${todayCount} ventas por $${todayTotal.toFixed(2)}.`,
-    );
+    lines.push(`Ventas de hoy: ${todayCount} ventas por ${ars(todayTotal)}.`);
 
-    // Ventas últimos 7 días.
     const { data: weekSales } = await admin
       .from("sales")
       .select("total")
@@ -599,10 +641,105 @@ async function buildContext(
       0,
     );
     lines.push(
-      `Ventas últimos 7 días: ${weekCount} ventas por $${weekTotal.toFixed(2)}.`,
+      `Ventas últimos 7 días: ${weekCount} ventas por ${ars(weekTotal)}.`,
     );
+  } catch (e) {
+    lines.push("(No se pudieron cargar las ventas recientes.)");
+    console.error("buildContext sales(day/week) error:", e);
+  }
 
-    // Top 5 productos (por cantidad) en los últimos 7 días.
+  // ── Ventas del mes en curso vs mes anterior + ticket promedio ─────────────
+  try {
+    // Mes en curso (desde el día 1 hasta ahora).
+    const { data: monthSales } = await admin
+      .from("sales")
+      .select("total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .gte("created_at", monthStart.toISOString());
+    const monthCount = monthSales?.length ?? 0;
+    const monthTotal = (monthSales ?? []).reduce(
+      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+      0,
+    );
+    // Mismo tramo del mes anterior (día 1 → mismo "ahora" desplazado un mes), para
+    // comparar manzanas con manzanas (mes corriente parcial vs igual tramo previo).
+    const prevCutoff = new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth() - 1,
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes(),
+        now.getUTCSeconds(),
+      ),
+    );
+    const { data: prevSales } = await admin
+      .from("sales")
+      .select("total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .gte("created_at", prevMonthStart.toISOString())
+      .lt("created_at", prevCutoff.toISOString());
+    const prevTotal = (prevSales ?? []).reduce(
+      (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
+      0,
+    );
+    const avgTicket = monthCount > 0 ? monthTotal / monthCount : 0;
+    lines.push(
+      `Ventas del mes en curso: ${monthCount} ventas por ${ars(monthTotal)} ` +
+        `(${pctText(monthTotal, prevTotal)}; mismo tramo mes anterior ` +
+        `${ars(prevTotal)}). Ticket promedio del mes: ${ars(avgTicket)}.`,
+    );
+  } catch (e) {
+    lines.push("(No se pudo cargar el comparativo mensual.)");
+    console.error("buildContext month error:", e);
+  }
+
+  // ── Ventas por medio de pago (últimos 7 días) ─────────────────────────────
+  // payments.method es el detalle por medio de pago. Filtramos por created_at
+  // del pago (aprox.: incluye pagos de ventas luego anuladas, marginal en este
+  // contexto orientativo). Etiquetas legibles en español.
+  try {
+    const methodLabels: Record<string, string> = {
+      cash: "Efectivo",
+      debit: "Débito",
+      credit: "Crédito",
+      transfer: "Transferencia",
+      qr: "QR / Mercado Pago",
+      store_credit: "Crédito en tienda",
+      account: "Cuenta corriente",
+      other: "Otros",
+    };
+    const { data: pays } = await admin
+      .from("payments")
+      .select("method, amount")
+      .eq("tenant_id", tenantId)
+      .gte("created_at", weekStart.toISOString())
+      .limit(5000);
+    const byMethod = new Map<string, number>();
+    for (const p of pays ?? []) {
+      const m = String((p as { method?: string }).method ?? "other");
+      byMethod.set(
+        m,
+        (byMethod.get(m) ?? 0) + (Number((p as { amount?: number }).amount) || 0),
+      );
+    }
+    const parts = [...byMethod.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([m, amt]) => `${methodLabels[m] ?? m} ${ars(amt)}`);
+    lines.push(
+      parts.length
+        ? `Ventas por medio de pago (7 días): ${parts.join(", ")}.`
+        : "Ventas por medio de pago (7 días): sin pagos registrados.",
+    );
+  } catch (e) {
+    lines.push("(No se pudieron cargar los medios de pago.)");
+    console.error("buildContext payments error:", e);
+  }
+
+  // ── Top 5 productos por cantidad (últimos 7 días) ─────────────────────────
+  try {
     const { data: items } = await admin
       .from("sale_items")
       .select("product_name, quantity, created_at")
@@ -626,8 +763,13 @@ async function buildContext(
         ? `Top productos (7 días): ${top.join(", ")}.`
         : "Top productos (7 días): sin ventas registradas.",
     );
+  } catch (e) {
+    lines.push("(No se pudieron cargar los productos más vendidos.)");
+    console.error("buildContext top products error:", e);
+  }
 
-    // Productos con stock bajo (stock <= stock_min).
+  // ── Productos con stock bajo (stock <= stock_min) ─────────────────────────
+  try {
     const { data: lowStock } = await admin
       .from("products")
       .select("name, stock, stock_min")
@@ -641,16 +783,236 @@ async function buildContext(
           Number(p.stock_min) > 0 && Number(p.stock) <= Number(p.stock_min),
       )
       .slice(0, 10)
-      .map(
-        (p: { name?: string; stock?: number }) => `${p.name} (${p.stock})`,
-      );
+      .map((p: { name?: string; stock?: number }) => `${p.name} (${p.stock})`);
     lines.push(
       low.length
         ? `Productos con stock bajo: ${low.join(", ")}.`
         : "Productos con stock bajo: ninguno.",
     );
+  } catch (e) {
+    lines.push("(No se pudo cargar el stock bajo.)");
+    console.error("buildContext low stock error:", e);
+  }
 
-    // Estado de configuración.
+  // ── Cuenta corriente: top clientes con saldo deudor ───────────────────────
+  // Saldo (deuda) por cliente = sum(delta) en customer_account_movements
+  // (delta>0 fía, delta<0 paga). Reportamos los de saldo positivo, ordenados.
+  try {
+    const { data: movs } = await admin
+      .from("customer_account_movements")
+      .select("customer_id, delta, due_date")
+      .eq("tenant_id", tenantId)
+      .limit(10000);
+    const balByCustomer = new Map<string, number>();
+    const overdueByCustomer = new Map<string, boolean>();
+    const todayDateStr = now.toISOString().slice(0, 10);
+    for (const m of movs ?? []) {
+      const cid = String((m as { customer_id?: string }).customer_id ?? "");
+      if (!cid) continue;
+      const delta = Number((m as { delta?: number }).delta) || 0;
+      balByCustomer.set(cid, (balByCustomer.get(cid) ?? 0) + delta);
+      const due = (m as { due_date?: string | null }).due_date;
+      // Cargo vencido = delta>0 con due_date pasada (señal de mora).
+      if (delta > 0 && due && due < todayDateStr) overdueByCustomer.set(cid, true);
+    }
+    const debtors = [...balByCustomer.entries()].filter(([, bal]) => bal > 0.5);
+    const totalDebt = debtors.reduce((a, [, bal]) => a + bal, 0);
+    if (debtors.length === 0) {
+      lines.push("Cuenta corriente: sin clientes con saldo deudor.");
+    } else {
+      const topDebtors = debtors.sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const ids = topDebtors.map(([cid]) => cid);
+      const { data: custs } = await admin
+        .from("customers")
+        .select("id, name")
+        .eq("tenant_id", tenantId)
+        .in("id", ids);
+      const nameById = new Map<string, string>();
+      for (const c of custs ?? []) {
+        nameById.set(
+          String((c as { id?: string }).id ?? ""),
+          String((c as { name?: string }).name ?? "Cliente"),
+        );
+      }
+      const parts = topDebtors.map(([cid, bal]) => {
+        const overdue = overdueByCustomer.get(cid) ? " (vencido)" : "";
+        return `${nameById.get(cid) ?? "Cliente"} ${ars(bal)}${overdue}`;
+      });
+      lines.push(
+        `Cuenta corriente: ${debtors.length} clientes deben ${ars(totalDebt)} ` +
+          `en total. Top deudores: ${parts.join(", ")}.`,
+      );
+    }
+  } catch (e) {
+    lines.push("(No se pudo cargar la cuenta corriente.)");
+    console.error("buildContext account movements error:", e);
+  }
+
+  // ── Estado de caja: turno abierto y saldo de efectivo esperado ────────────
+  // Saldo efectivo del turno = apertura + ingresos − egresos + ventas cash −
+  // anulaciones cash (mismo cálculo que close_cash_shift / módulo cash).
+  try {
+    const { data: openShifts } = await admin
+      .from("cash_shifts")
+      .select("id, opening_amount, opened_at")
+      .eq("tenant_id", tenantId)
+      .eq("status", "open")
+      .order("opened_at", { ascending: false })
+      .limit(5);
+    if (!openShifts || openShifts.length === 0) {
+      lines.push("Caja: no hay turno abierto en este momento.");
+    } else {
+      const shiftIds = openShifts.map((s: { id: string }) => s.id);
+      const { data: mvs } = await admin
+        .from("cash_movements")
+        .select("cash_shift_id, type, amount, payment_method")
+        .eq("tenant_id", tenantId)
+        .in("cash_shift_id", shiftIds)
+        .limit(10000);
+      const expectedByShift = new Map<string, number>();
+      for (const s of openShifts) {
+        expectedByShift.set(s.id, Number(s.opening_amount) || 0);
+      }
+      for (const m of mvs ?? []) {
+        const sid = String((m as { cash_shift_id?: string }).cash_shift_id ?? "");
+        if (!expectedByShift.has(sid)) continue;
+        const type = String((m as { type?: string }).type ?? "");
+        const amt = Number((m as { amount?: number }).amount) || 0;
+        const pm = String((m as { payment_method?: string }).payment_method ?? "");
+        let delta = 0;
+        if (type === "income") delta = amt;
+        else if (type === "expense") delta = -amt;
+        else if (type === "sale" && pm === "cash") delta = amt;
+        else if (type === "sale_void" && pm === "cash") delta = -amt;
+        expectedByShift.set(sid, (expectedByShift.get(sid) ?? 0) + delta);
+      }
+      const total = [...expectedByShift.values()].reduce((a, b) => a + b, 0);
+      lines.push(
+        `Caja: ${openShifts.length} turno(s) abierto(s). ` +
+          `Efectivo esperado en caja: ${ars(total)}.`,
+      );
+    }
+  } catch (e) {
+    lines.push("(No se pudo cargar el estado de caja.)");
+    console.error("buildContext cash error:", e);
+  }
+
+  // ── Devoluciones recientes (7 y 30 días) ──────────────────────────────────
+  try {
+    const { data: rets } = await admin
+      .from("sale_returns")
+      .select("total, created_at")
+      .eq("tenant_id", tenantId)
+      .gte("created_at", days30Start.toISOString())
+      .limit(5000);
+    let c7 = 0;
+    let t7 = 0;
+    let c30 = 0;
+    let t30 = 0;
+    const week = weekStart.getTime();
+    for (const r of rets ?? []) {
+      const amt = Number((r as { total?: number }).total) || 0;
+      const ts = new Date(
+        String((r as { created_at?: string }).created_at ?? ""),
+      ).getTime();
+      c30 += 1;
+      t30 += amt;
+      if (ts >= week) {
+        c7 += 1;
+        t7 += amt;
+      }
+    }
+    lines.push(
+      `Devoluciones: ${c7} por ${ars(t7)} en 7 días; ` +
+        `${c30} por ${ars(t30)} en 30 días.`,
+    );
+  } catch (e) {
+    lines.push("(No se pudieron cargar las devoluciones.)");
+    console.error("buildContext returns error:", e);
+  }
+
+  // ── Resumen de suscripción (plan, estado, vencimiento/trial) ──────────────
+  // service_role scoped al tenant: subscriptions + plans + tenants.trial_ends_at.
+  try {
+    const { data: sub } = await admin
+      .from("subscriptions")
+      .select(
+        "status, billing_cycle, current_period_end, cancel_at_period_end, is_lifetime, plan_id",
+      )
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!sub) {
+      lines.push("Suscripción: sin datos de plan.");
+    } else {
+      const s = sub as {
+        status?: string;
+        billing_cycle?: string;
+        current_period_end?: string | null;
+        cancel_at_period_end?: boolean;
+        is_lifetime?: boolean;
+        plan_id?: string | null;
+      };
+      let planName = "—";
+      if (s.plan_id) {
+        const { data: plan } = await admin
+          .from("plans")
+          .select("name, secondary_name")
+          .eq("id", s.plan_id)
+          .maybeSingle();
+        const pn = plan as { name?: string; secondary_name?: string } | null;
+        if (pn?.name) {
+          planName = pn.secondary_name
+            ? `${pn.name} (${pn.secondary_name})`
+            : pn.name;
+        }
+      }
+      const statusLabels: Record<string, string> = {
+        trial: "en prueba",
+        active: "activa",
+        past_due: "con pago vencido",
+        suspended: "suspendida",
+        cancelled: "cancelada",
+      };
+      const statusTxt = statusLabels[s.status ?? ""] ?? (s.status ?? "—");
+      // Para trial, la fecha canónica es tenants.trial_ends_at; si no, el período.
+      let endIso: string | null = s.current_period_end ?? null;
+      if (s.status === "trial") {
+        const { data: t } = await admin
+          .from("tenants")
+          .select("trial_ends_at")
+          .eq("id", tenantId)
+          .maybeSingle();
+        endIso = (t as { trial_ends_at?: string | null } | null)?.trial_ends_at ??
+          endIso;
+      }
+      let tail = "";
+      if (s.is_lifetime) {
+        tail = " Plan de por vida (sin vencimiento).";
+      } else if (endIso) {
+        const end = new Date(endIso);
+        const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
+        const when = end.toISOString().slice(0, 10);
+        const label = s.status === "trial" ? "Prueba termina" : "Próximo vencimiento";
+        tail =
+          daysLeft >= 0
+            ? ` ${label} el ${when} (faltan ${daysLeft} día(s)).`
+            : ` ${label} el ${when} (venció hace ${Math.abs(daysLeft)} día(s)).`;
+      }
+      const cancelTxt = s.cancel_at_period_end
+        ? " Marcada para no renovar al fin del período."
+        : "";
+      lines.push(
+        `Suscripción: plan ${planName}, ${statusTxt} ` +
+          `(ciclo ${s.billing_cycle ?? "—"}).${tail}${cancelTxt}`,
+      );
+    }
+  } catch (e) {
+    lines.push("(No se pudo cargar la suscripción.)");
+    console.error("buildContext subscription error:", e);
+  }
+
+  // ── Estado de configuración ───────────────────────────────────────────────
+  try {
     const { data: ticket } = await admin
       .from("ticket_templates")
       .select("id")
@@ -673,13 +1035,11 @@ async function buildContext(
     lines.push(
       `Config: ticket de impresión ${ticket ? "configurado" : "sin configurar"}; ` +
         `Mercado Pago ${mp?.enabled ? "habilitado" : "deshabilitado"}; ` +
-        `email de comprobantes ${
-          smtp?.host ? "configurado" : "sin configurar"
-        }.`,
+        `email de comprobantes ${smtp?.host ? "configurado" : "sin configurar"}.`,
     );
   } catch (e) {
-    lines.push("(No se pudo cargar parte del contexto del negocio.)");
-    console.error("buildContext error:", e);
+    lines.push("(No se pudo cargar el estado de configuración.)");
+    console.error("buildContext config error:", e);
   }
 
   return lines.join("\n");

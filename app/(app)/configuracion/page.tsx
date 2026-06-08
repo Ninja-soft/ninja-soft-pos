@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Lock, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Lock, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -42,30 +42,67 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "clientes"
   | "devoluciones"
   | "escaner"
   | "precios"
   | "garantias";
-// `feature` (opcional): si el plan no la incluye, la sección queda deshabilitada
-// (candado) y el click abre el UpgradeModal en lugar de entrar a la sección.
-const SECTIONS: {
+
+type SectionDef = {
   key: Section;
   label: string;
   icon: React.ElementType;
+  // `feature` (opcional): si el plan no la incluye, la sección queda
+  // deshabilitada (candado) y el click abre el UpgradeModal en lugar de entrar.
   feature?: string;
-}[] = [
-  { key: "apariencia", label: "Apariencia", icon: Palette },
-  { key: "rubro", label: "Rubro del negocio", icon: Tag },
-  { key: "marca", label: "Marca del negocio", icon: Store, feature: "personalizacion_marca" },
-  { key: "tickets", label: "Tickets", icon: ReceiptText, feature: "tickets_pro" },
-  { key: "email", label: "Email", icon: Mail, feature: "email_comprobantes" },
-  { key: "pagos", label: "Medios de pago", icon: CreditCard },
-  { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
-  { key: "devoluciones", label: "Devoluciones", icon: RotateCcw, feature: "devoluciones" },
-  { key: "escaner", label: "Escáner", icon: ScanLine },
-  { key: "precios", label: "Listas de precios", icon: BadgeDollarSign, feature: "listas_precios" },
-  { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck, feature: "garantias" },
+};
+
+// Las secciones se agrupan en bloques temáticos para que el menú sea navegable
+// (Negocio / Operación / Cobro / Clientes / Comprobantes / Apariencia). El orden
+// y el agrupado son visuales: cada sección sigue siendo independiente.
+const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
+  {
+    title: "Negocio",
+    sections: [
+      { key: "rubro", label: "Rubro del negocio", icon: Tag },
+      { key: "marca", label: "Marca del negocio", icon: Store, feature: "personalizacion_marca" },
+    ],
+  },
+  {
+    title: "Operación del POS",
+    sections: [
+      { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
+      { key: "escaner", label: "Escáner", icon: ScanLine },
+    ],
+  },
+  {
+    title: "Cobro",
+    sections: [
+      { key: "pagos", label: "Medios de pago", icon: CreditCard },
+      { key: "precios", label: "Listas de precios", icon: BadgeDollarSign, feature: "listas_precios" },
+      { key: "devoluciones", label: "Devoluciones", icon: RotateCcw, feature: "devoluciones" },
+      { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck, feature: "garantias" },
+    ],
+  },
+  {
+    title: "Clientes",
+    sections: [{ key: "clientes", label: "Datos del cliente", icon: Users }],
+  },
+  {
+    title: "Comprobantes",
+    sections: [
+      { key: "tickets", label: "Tickets", icon: ReceiptText, feature: "tickets_pro" },
+      { key: "email", label: "Email", icon: Mail, feature: "email_comprobantes" },
+    ],
+  },
+  {
+    title: "Apariencia",
+    sections: [{ key: "apariencia", label: "Apariencia", icon: Palette }],
+  },
 ];
+
+// Lista plana derivada de los grupos (validación del query param, etc.).
+const SECTIONS: SectionDef[] = SECTION_GROUPS.flatMap((g) => g.sections);
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
   "ninja-dark": { bg: "#0a0518", a: "#ff5a2c", b: "#ffd21f" },
@@ -117,7 +154,7 @@ function SectionNavButton({
   active,
   onSelect,
 }: {
-  section: { key: Section; label: string; icon: React.ElementType; feature?: string };
+  section: SectionDef;
   active: boolean;
   onSelect: () => void;
 }) {
@@ -196,15 +233,24 @@ function ConfiguracionInner() {
       </p>
 
       <div className="mt-8 grid gap-6 md:grid-cols-[210px_1fr]">
-        {/* Menú de secciones */}
-        <nav className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
-          {SECTIONS.map((s) => (
-            <SectionNavButton
-              key={s.key}
-              section={s}
-              active={section === s.key}
-              onSelect={() => setSection(s.key)}
-            />
+        {/* Menú de secciones, agrupado por bloque temático. En mobile es una
+            tira horizontal de pills (sin títulos); en desktop, lista vertical
+            con encabezados de grupo. */}
+        <nav className="flex gap-2 overflow-x-auto md:flex-col md:gap-4 md:overflow-visible">
+          {SECTION_GROUPS.map((group) => (
+            <div key={group.title} className="flex shrink-0 gap-2 md:flex-col md:gap-1">
+              <div className="hidden px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70 md:block">
+                {group.title}
+              </div>
+              {group.sections.map((s) => (
+                <SectionNavButton
+                  key={s.key}
+                  section={s}
+                  active={section === s.key}
+                  onSelect={() => setSection(s.key)}
+                />
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -376,8 +422,12 @@ function ConfiguracionInner() {
             </Suspense>
           )}
 
-          {/* Operación del POS (solo owner/manager; se auto-oculta) */}
-          {section === "operacion" && <OperationSettingsCard />}
+          {/* Operación del POS + productos (solo owner; se auto-oculta) */}
+          {section === "operacion" && <OperationSettingsCard view="operacion" />}
+
+          {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
+              automático del comprobante (solo owner; se auto-oculta) */}
+          {section === "clientes" && <OperationSettingsCard view="clientes" />}
 
           {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
           {section === "devoluciones" && <ReturnsSettingsCard />}

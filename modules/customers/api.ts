@@ -103,14 +103,28 @@ export const customerGroupsApi = {
 };
 
 export const customersApi = {
-  // Config del tenant: qué campos del cliente son obligatorios (H31).
-  requiredFields: async (): Promise<CustomerRequired> => {
+  // Config del tenant: qué campos del cliente son obligatorios (H31) + si el
+  // documento (tipo + número) es obligatorio (require_customer_doc, default true).
+  requiredFields: async (): Promise<{
+    fields: CustomerRequired;
+    requireDoc: boolean;
+  }> => {
     const supabase = createClient();
+    // require_customer_doc aún no está en los tipos generados (no se regeneran):
+    // leemos con select("*") y casteamos vía unknown.
     const { data } = await supabase
       .from("pos_settings")
-      .select("customer_required")
+      .select("*")
       .maybeSingle();
-    return ((data?.customer_required as CustomerRequired) ?? {}) as CustomerRequired;
+    const row = (data as unknown as {
+      customer_required?: CustomerRequired;
+      require_customer_doc?: boolean;
+    } | null) ?? null;
+    return {
+      fields: (row?.customer_required ?? {}) as CustomerRequired,
+      // Default true: si no hay fila o la columna viene nula, se pide el documento.
+      requireDoc: row?.require_customer_doc ?? true,
+    };
   },
 
   // Cumpleaños del mes (H40 base): clientes con fecha de nacimiento cuyo mes

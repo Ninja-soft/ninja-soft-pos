@@ -18,7 +18,11 @@ import {
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
 import { GatedButton } from "@/components/saas/GatedAction";
-import { useSalesReport, useWarrantyReport } from "@/modules/reports/hooks";
+import {
+  useSalesReport,
+  useWarrantyReport,
+  useStaffProductivity,
+} from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
@@ -34,6 +38,7 @@ const REPORTS = [
   { key: "by_product", label: "Top productos" },
   { key: "by_customer", label: "Top clientes" },
   { key: "warranties", label: "Garantías y comisiones" },
+  { key: "staff", label: "Productividad del staff" },
   { key: "low_stock", label: "Stock bajo" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
@@ -45,6 +50,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_product: true,
   by_customer: true,
   warranties: true,
+  staff: true,
   low_stock: true,
 };
 
@@ -63,6 +69,9 @@ export default function ReportesPage() {
 
   const { data, isLoading } = useSalesReport(fromISO, toISO);
   const { data: warranty } = useWarrantyReport(fromISO, toISO);
+  // Productividad por profesional (H39): el owner liquida comisiones de la semana
+  // mirando esta tabla (+ export XLSX).
+  const { data: staff } = useStaffProductivity(fromISO, toISO);
 
   async function exportReporte() {
     if (!data) return;
@@ -169,6 +178,35 @@ export default function ReportesPage() {
           commission: warranty?.commission ?? 0,
         },
       },
+      {
+        name: "Productividad staff",
+        title: "Comisiones y propinas por profesional",
+        columns: [
+          { header: "Profesional", key: "professional", width: 24 },
+          { header: "Servicios", key: "services", type: "number" },
+          { header: "Productos", key: "products_qty", type: "number" },
+          { header: "Ventas", key: "sales_count", type: "number" },
+          { header: "Facturado", key: "billed", type: "money" },
+          { header: "Comisión", key: "commission", type: "money" },
+          { header: "Propinas", key: "tips", type: "money" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: (staff ?? []).map((r) => ({
+          professional: r.professional,
+          services: r.services,
+          products_qty: r.products_qty,
+          sales_count: r.sales_count,
+          billed: r.billed,
+          commission: r.commission,
+          tips: r.tips,
+          avg_ticket: r.avg_ticket,
+        })),
+        totals: {
+          billed: (staff ?? []).reduce((a, r) => a + r.billed, 0),
+          commission: (staff ?? []).reduce((a, r) => a + r.commission, 0),
+          tips: (staff ?? []).reduce((a, r) => a + r.tips, 0),
+        },
+      },
     ]);
   }
 
@@ -244,12 +282,18 @@ export default function ReportesPage() {
         value: r.total,
         secondary: r.qty,
       })),
+      // Comisión por profesional (la barra principal); facturado como secundario.
+      staff: (staff ?? []).map<ReportChartDatum>((r) => ({
+        label: r.professional,
+        value: r.commission,
+        secondary: r.billed,
+      })),
       low_stock: lowStock.slice(0, 10).map<ReportChartDatum>((p) => ({
         label: p.name,
         value: p.stock,
       })),
     };
-  }, [data, warranty, lowStock]);
+  }, [data, warranty, staff, lowStock]);
 
   return (
     <>
@@ -483,6 +527,40 @@ export default function ReportesPage() {
                       formatCurrency(r.total),
                       `${r.commission_pct}%`,
                       formatCurrency(r.commission),
+                    ])}
+                  />
+                }
+              />
+            )}
+            {vis.staff && (
+              <ReportSection
+                id="staff"
+                title="Productividad del staff"
+                chartData={chart.staff}
+                chartTypes={["bar", "pie"]}
+                valueName="Comisión"
+                className="lg:col-span-2"
+                table={
+                  <BareTable
+                    cols={[
+                      "Profesional",
+                      "Serv.",
+                      "Prod.",
+                      "Ventas",
+                      "Facturado",
+                      "Comisión",
+                      "Propinas",
+                      "Ticket prom.",
+                    ]}
+                    rows={(staff ?? []).map((r) => [
+                      r.professional,
+                      String(r.services),
+                      formatQty(r.products_qty),
+                      String(r.sales_count),
+                      formatCurrency(r.billed),
+                      formatCurrency(r.commission),
+                      formatCurrency(r.tips),
+                      formatCurrency(r.avg_ticket),
                     ])}
                   />
                 }

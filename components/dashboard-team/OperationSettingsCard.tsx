@@ -60,6 +60,7 @@ type Settings = {
   offer_warranty: boolean;
   require_card_voucher: boolean;
   allow_free_sale: boolean;
+  staff_sees_own_only: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -140,6 +141,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           offer_warranty: true,
           require_card_voucher: false,
           allow_free_sale: true,
+          staff_sees_own_only: false,
         }
       );
     },
@@ -166,6 +168,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [offerWarranty, setOfferWarranty] = useState(true);
   const [requireCardVoucher, setRequireCardVoucher] = useState(false);
   const [allowFreeSale, setAllowFreeSale] = useState(true);
+  const [staffSeesOwnOnly, setStaffSeesOwnOnly] = useState(false);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -198,6 +201,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setOfferWarranty(settings.offer_warranty ?? true);
     setRequireCardVoucher(settings.require_card_voucher ?? false);
     setAllowFreeSale(settings.allow_free_sale ?? true);
+    setStaffSeesOwnOnly(settings.staff_sees_own_only ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -232,6 +236,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           offer_warranty: offerWarranty,
           require_card_voucher: requireCardVoucher,
           allow_free_sale: allowFreeSale,
+          staff_sees_own_only: staffSeesOwnOnly,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -450,6 +455,31 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             checked={allowFreeSale}
             onCheckedChange={setAllowFreeSale}
             label="Permitir venta libre (monto manual) en el POS"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Staff ve sólo lo suyo (H39): si está activo, un profesional/cajero ve
+          únicamente su propia agenda y su productividad/comisión; el dueño ve
+          todo. El match usuario↔profesional usa el usuario vinculado a cada
+          profesional. Default desactivado (todos ven todo). */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Users size={16} className="text-ninja-flameSoft" /> El staff ve sólo lo suyo
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cada profesional/cajero ve únicamente su propia agenda y su
+              productividad (servicios, comisión y propinas). El dueño sigue
+              viendo a todo el equipo. Requiere vincular cada profesional con su
+              usuario.
+            </p>
+          </div>
+          <Switch
+            checked={staffSeesOwnOnly}
+            onCheckedChange={setStaffSeesOwnOnly}
+            label="Cada profesional/cajero ve sólo su propia agenda y comisión"
           />
         </CardContent>
       </Card>

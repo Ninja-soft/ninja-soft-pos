@@ -25,6 +25,21 @@ export interface WarrantyReport {
   qty: number;
 }
 
+// Productividad por profesional (H39): una fila por profesional con actividad en
+// el período. Lo calcula la RPC staff_productivity (SECURITY DEFINER, tenant-
+// scoped; respeta pos_settings.staff_sees_own_only).
+export interface StaffProductivityRow {
+  professional_id: string;
+  professional: string;
+  services: number; // turnos realizados
+  products_qty: number; // unidades de producto vendidas
+  sales_count: number; // ventas atribuidas
+  billed: number; // total facturado (productos, sin propina)
+  commission: number; // comisión calculada
+  tips: number; // propinas atribuidas
+  avg_ticket: number; // billed / sales_count
+}
+
 export const reportsApi = {
   sales: async (fromISO: string, toISO: string): Promise<SalesReport> => {
     const supabase = createClient();
@@ -89,5 +104,20 @@ export const reportsApi = {
       commission: rows.reduce((a, r) => a + r.commission, 0),
       qty: rows.reduce((a, r) => a + r.qty, 0),
     };
+  },
+
+  // Productividad por profesional (H39). RPC staff_productivity no está en los
+  // tipos generados (no se regeneran): se castean args y payload.
+  staffProductivity: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<StaffProductivityRow[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("staff_productivity" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as StaffProductivityRow[];
   },
 };

@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Lock, Mail, MonitorSmartphone, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
+import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -30,6 +30,7 @@ import { CustomerDisplayCard } from "@/components/dashboard-team/CustomerDisplay
 import { HardwareCard } from "@/components/dashboard-team/HardwareCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
+import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
 import { PrintSettingsCard } from "@/components/dashboard-team/PrintSettingsCard";
@@ -46,6 +47,7 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "profesionales"
   | "clientes"
   | "devoluciones"
   | "escaner"
@@ -78,6 +80,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     title: "Operación del POS",
     sections: [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
+      { key: "profesionales", label: "Profesionales (agenda)", icon: CalendarDays, feature: "agenda" },
       { key: "escaner", label: "Escáner", icon: ScanLine },
       { key: "pantalla-cliente", label: "Pantalla del cliente", icon: MonitorSmartphone },
       { key: "hardware", label: "Diagnóstico de hardware", icon: Wrench },
@@ -437,6 +440,26 @@ function ConfiguracionInner() {
 
           {/* Operación del POS + productos (solo owner; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard view="operacion" />}
+
+          {/* Profesionales para la agenda (F12 · H38): quienes prestan los
+              servicios, con color y comisión. La agenda vive en /agenda. */}
+          {section === "profesionales" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <CalendarDays size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Profesionales y agenda</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Cargá a quienes prestan los servicios (peluquería, estética,
+                  turnos). La agenda de turnos está en la sección{" "}
+                  <span className="font-medium text-foreground">Agenda</span> del
+                  menú.
+                </p>
+                <ProfessionalsManager />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
               automático del comprobante (solo owner; se auto-oculta) */}

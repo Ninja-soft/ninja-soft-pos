@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Building2,
+  CalendarDays,
   ChevronDown,
   KeyRound,
   LayoutDashboard,
@@ -83,6 +84,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Operación",
       items: [
         { href: "/pos", label: "Punto de venta", icon: ShoppingCart },
+        // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
+        // defecto; un plan puede apagarla y el ítem queda con candado.
+        { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
         { href: "/caja", label: "Caja", icon: Wallet },
         { href: "/ventas", label: "Ventas", icon: Receipt },
         {

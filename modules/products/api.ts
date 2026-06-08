@@ -24,6 +24,9 @@ export type Product = Tables<"products"> & {
   plu: string | null;
   is_favorite: boolean;
   favorite_order: number;
+  // Servicio (F12 · H38): duración por defecto del turno (min) y % de comisión.
+  service_duration_min: number | null;
+  commission_pct: number | null;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -222,6 +225,9 @@ export const productsApi = {
         // Botón rápido del POS (H36): favorito + orden.
         is_favorite: input.is_favorite,
         favorite_order: input.favorite_order,
+        // Servicio (H38): duración del turno + comisión (null = producto normal).
+        service_duration_min: input.service_duration_min ?? null,
+        commission_pct: input.commission_pct ?? null,
         // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
@@ -263,6 +269,9 @@ export const productsApi = {
         // Botón rápido del POS (H36): favorito + orden.
         is_favorite: input.is_favorite,
         favorite_order: input.favorite_order,
+        // Servicio (H38): duración del turno + comisión (null = producto normal).
+        service_duration_min: input.service_duration_min ?? null,
+        commission_pct: input.commission_pct ?? null,
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)

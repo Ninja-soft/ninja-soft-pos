@@ -374,10 +374,17 @@ export const customersApi = {
   bulkImport: async (rows: ParsedCustomer[]): Promise<number> => {
     if (rows.length === 0) return 0;
     const supabase = createClient();
-    const { error } = await supabase
-      .from("customers")
-      .insert(rows.map((r) => ({ ...r, is_active: true })));
-    if (error) throw error;
+    const payload = rows.map((r) => ({ ...r, is_active: true }));
+
+    // Inserción en lotes para archivos grandes (request acotado por chunk).
+    let created = 0;
+    for (let i = 0; i < payload.length; i += 500) {
+      const { error } = await supabase
+        .from("customers")
+        .insert(payload.slice(i, i + 500));
+      if (error) throw error;
+      created += Math.min(500, payload.length - i);
+    }
 
     // H34: auditoría del import (cantidad creada/errores) — best effort, no bloquea.
     try {
@@ -389,13 +396,13 @@ export const customersApi = {
         entity_type: "customers",
         entity_id: null,
         action: "imported",
-        after_data: { total: rows.length, created: rows.length },
+        after_data: { total: created, created },
       });
     } catch (e) {
       console.warn("H34 audit (customers import) falló:", e);
     }
 
-    return rows.length;
+    return created;
   },
 
   softDelete: async (id: string): Promise<void> => {

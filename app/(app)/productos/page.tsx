@@ -46,6 +46,7 @@ import { usePageSize } from "@/hooks/usePageSize";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function ProductosPage() {
@@ -133,36 +134,35 @@ export default function ProductosPage() {
     const supabase = createClient();
     const { data } = await supabase
       .from("products")
-      .select("name, sku, barcode, price, cost, stock, stock_min, unit, categories(name)")
+      .select(
+        "name, sku, barcode, price, cost, stock, stock_min, unit, tax_rate, track_stock, categories(name), brands(name)",
+      )
       .is("deleted_at", null)
       .order("name", { ascending: true });
+    // Mismas columnas que la plantilla/import → la base exportada se puede
+    // reimportar tal cual.
     const rows = (data ?? []).map((p) => ({
       name: p.name,
-      sku: p.sku ?? "",
       barcode: p.barcode ?? "",
+      sku: p.sku ?? "",
       price: p.price,
       cost: p.cost ?? "",
+      category: (p.categories as unknown as { name: string } | null)?.name ?? "",
+      brand: (p.brands as unknown as { name: string } | null)?.name ?? "",
+      tax_rate: (p as unknown as { tax_rate: number | null }).tax_rate ?? "",
+      unit: p.unit,
       stock: p.stock,
       stock_min: p.stock_min ?? "",
-      unit: p.unit,
-      category:
-        (p.categories as unknown as { name: string } | null)?.name ?? "",
+      track_stock:
+        (p as unknown as { track_stock: boolean | null }).track_stock === false
+          ? "no"
+          : "si",
     }));
     await exportXlsx("productos", [
       {
         name: "Productos",
         title: "Base de productos • NinjaPos",
-        columns: [
-          { header: "name", key: "name" },
-          { header: "sku", key: "sku" },
-          { header: "barcode", key: "barcode" },
-          { header: "price", key: "price", type: "money" },
-          { header: "cost", key: "cost", type: "money" },
-          { header: "stock", key: "stock", type: "number" },
-          { header: "stock_min", key: "stock_min", type: "number" },
-          { header: "unit", key: "unit" },
-          { header: "category", key: "category" },
-        ],
+        columns: PRODUCT_IMPORT_COLUMNS,
         rows,
       },
     ]);

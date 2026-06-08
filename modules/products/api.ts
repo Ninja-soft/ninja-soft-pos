@@ -372,37 +372,83 @@ export const pluSettingsApi = {
   },
 };
 
+// Resuelve nombres → id contra una tabla con baja lógica (categories/brands),
+// creando los faltantes. Devuelve un mapa case-insensitive nombre→id. Reusado
+// para categoría y marca en el import. El tenant_id lo pone el default de la DB
+// (la RLS ya filtra por tenant en el select).
+async function resolveByName(
+  supabase: ReturnType<typeof createClient>,
+  table: "categories" | "brands",
+  names: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = Array.from(
+    new Set(names.map((n) => n.trim()).filter((n) => n !== "")),
+  );
+  if (unique.length === 0) return map;
+
+  const { data: existing } = await supabase
+    .from(table)
+    .select("id, name")
+    .is("deleted_at", null);
+  for (const c of (existing ?? []) as { id: string; name: string }[]) {
+    map.set(c.name.toLowerCase(), c.id);
+  }
+
+  const missing = unique.filter((n) => !map.has(n.toLowerCase()));
+  if (missing.length) {
+    const { data: created, error } = await supabase
+      .from(table)
+      .insert(missing.map((name) => ({ name })))
+      .select("id, name");
+    if (error) throw error;
+    for (const c of (created ?? []) as { id: string; name: string }[]) {
+      map.set(c.name.toLowerCase(), c.id);
+    }
+  }
+  return map;
+}
+
+// Inserta en lotes para no mandar un único INSERT gigantesco con archivos
+// grandes (mantiene cada request acotado). Devuelve el total insertado.
+async function insertChunked(
+  supabase: ReturnType<typeof createClient>,
+  table: "products" | "customers",
+  payload: Record<string, unknown>[],
+  size = 500,
+): Promise<number> {
+  let inserted = 0;
+  for (let i = 0; i < payload.length; i += size) {
+    const chunk = payload.slice(i, i + size);
+    const { error } = await supabase.from(table).insert(chunk as never);
+    if (error) throw error;
+    inserted += chunk.length;
+  }
+  return inserted;
+}
+
 export const productsImportApi = {
   bulkImport: async (
     rows: import("./import").ParsedProduct[],
   ): Promise<number> => {
+    if (rows.length === 0) return 0;
     const supabase = createClient();
 
-    // Resolver categorías por nombre (crear las faltantes).
-    const names = Array.from(
-      new Set(rows.map((r) => r.category).filter((c): c is string => !!c)),
+    // Resolver categoría y marca por nombre (crear las faltantes).
+    const catMap = await resolveByName(
+      supabase,
+      "categories",
+      rows.map((r) => r.category ?? "").filter(Boolean),
     );
-    const map = new Map<string, string>();
-    if (names.length) {
-      const { data: existing } = await supabase
-        .from("categories")
-        .select("id, name")
-        .is("deleted_at", null);
-      for (const c of existing ?? []) map.set(c.name.toLowerCase(), c.id);
-
-      const missing = names.filter((n) => !map.has(n.toLowerCase()));
-      if (missing.length) {
-        const { data: created, error } = await supabase
-          .from("categories")
-          .insert(missing.map((name) => ({ name })))
-          .select("id, name");
-        if (error) throw error;
-        for (const c of created ?? []) map.set(c.name.toLowerCase(), c.id);
-      }
-    }
+    const brandMap = await resolveByName(
+      supabase,
+      "brands",
+      rows.map((r) => r.brand ?? "").filter(Boolean),
+    );
 
     const payload = rows.map((r) => ({
       name: r.name,
+      // SKU vacío → null (queda a cargo de la DB / sin código interno).
       sku: r.sku,
       barcode: r.barcode,
       price: r.price,
@@ -410,11 +456,15 @@ export const productsImportApi = {
       stock: r.stock,
       stock_min: r.stock_min,
       unit: r.unit,
-      category_id: r.category ? (map.get(r.category.toLowerCase()) ?? null) : null,
+      tax_rate: r.tax_rate,
+      track_stock: r.track_stock,
+      category_id: r.category
+        ? (catMap.get(r.category.toLowerCase()) ?? null)
+        : null,
+      brand_id: r.brand ? (brandMap.get(r.brand.toLowerCase()) ?? null) : null,
     }));
 
-    const { error } = await supabase.from("products").insert(payload);
-    if (error) throw error;
+    const created = await insertChunked(supabase, "products", payload);
 
     // H34: auditoría del import (cantidad creada/errores) — best effort, no bloquea.
     try {
@@ -426,13 +476,13 @@ export const productsImportApi = {
         entity_type: "products",
         entity_id: null,
         action: "imported",
-        after_data: { total: payload.length, created: payload.length },
+        after_data: { total: created, created },
       });
     } catch (e) {
       console.warn("H34 audit (products import) falló:", e);
     }
 
-    return payload.length;
+    return created;
   },
 };
 

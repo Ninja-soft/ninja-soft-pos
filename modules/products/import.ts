@@ -1,7 +1,16 @@
-// Import masivo de productos. Estándar XLSX (TX-4); se mantiene el parser de
-// grilla para reusarlo. Ver docs/02-roadmap.md TX-4.
-import ExcelJS from "exceljs";
+// Import masivo de productos en XLSX (TX-3). Usa el helper genérico
+// `parseXlsx` (lib/utils/xlsxImport) y declara el spec de columnas con sus
+// validaciones/normalizaciones. Las filas válidas e inválidas (con errores por
+// fila) las consume el modal de preview. La inserción la hace
+// `productsImportApi.bulkImport` (resuelve categoría y marca por nombre).
+import {
+  parseXlsx,
+  type ImportColumn,
+  type ParseXlsxResult,
+} from "@/lib/utils/xlsxImport";
+import type { XlsxColumn } from "@/lib/utils/xlsx";
 
+/** Fila de producto ya tipada lista para insertar. */
 export interface ParsedProduct {
   name: string;
   sku: string | null;
@@ -11,158 +20,128 @@ export interface ParsedProduct {
   stock: number;
   stock_min: number;
   unit: string;
+  tax_rate: number;
+  track_stock: boolean;
   category: string | null;
+  brand: string | null;
 }
 
-export interface ParseResult {
-  rows: ParsedProduct[];
-  errors: string[];
-}
-
-export const CSV_TEMPLATE =
-  "name,sku,barcode,price,cost,stock,stock_min,unit,category\n" +
-  "Coca Cola 500ml,COCA500,7790001,800,500,24,6,un,Bebidas\n";
-
-/** Parser CSV mínimo con soporte de comillas dobles. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ",") {
-      row.push(field);
-      field = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      if (row.some((f) => f.trim() !== "")) rows.push(row);
-      row = [];
-      field = "";
-    } else field += c;
-  }
-  if (field !== "" || row.length > 0) {
-    row.push(field);
-    if (row.some((f) => f.trim() !== "")) rows.push(row);
-  }
-  return rows;
-}
-
-const numOr = (v: string, def: number): number => {
-  const n = Number(String(v).replace(",", ".").trim());
-  return Number.isFinite(n) ? n : def;
-};
-const txtOrNull = (v: string | undefined): string | null => {
-  const t = (v ?? "").trim();
-  return t === "" ? null : t;
-};
-
-/** Columnas de la plantilla/export de productos (XLSX). */
-export const PRODUCT_IMPORT_COLUMNS = [
+/**
+ * Columnas de la plantilla/export de productos (XLSX). Compatibles con
+ * `exportXlsx` (header/key/type). Se reusan para descargar la plantilla y para
+ * exportar la base entera.
+ */
+export const PRODUCT_IMPORT_COLUMNS: XlsxColumn[] = [
   { header: "name", key: "name" },
-  { header: "sku", key: "sku" },
   { header: "barcode", key: "barcode" },
-  { header: "price", key: "price", type: "money" as const },
-  { header: "cost", key: "cost", type: "money" as const },
-  { header: "stock", key: "stock", type: "number" as const },
-  { header: "stock_min", key: "stock_min", type: "number" as const },
-  { header: "unit", key: "unit" },
+  { header: "sku", key: "sku" },
+  { header: "price", key: "price", type: "money" },
+  { header: "cost", key: "cost", type: "money" },
   { header: "category", key: "category" },
+  { header: "brand", key: "brand" },
+  { header: "tax_rate", key: "tax_rate", type: "number" },
+  { header: "unit", key: "unit" },
+  { header: "stock", key: "stock", type: "number" },
+  { header: "stock_min", key: "stock_min", type: "number" },
+  { header: "track_stock", key: "track_stock" },
 ];
-export const PRODUCT_TEMPLATE_ROW = {
+
+/** Fila de ejemplo para la plantilla. */
+export const PRODUCT_TEMPLATE_ROW: Record<string, unknown> = {
   name: "Coca Cola 500ml",
+  barcode: "7790895000990",
   sku: "COCA500",
-  barcode: "7790001",
   price: 800,
   cost: 500,
+  category: "Bebidas",
+  brand: "Coca Cola",
+  tax_rate: 21,
+  unit: "un",
   stock: 24,
   stock_min: 6,
-  unit: "un",
-  category: "Bebidas",
+  track_stock: "si",
 };
 
-/** Valida una grilla (header + filas) en filas de producto. */
-function rowsFromGrid(grid: string[][]): ParseResult {
-  const errors: string[] = [];
-  if (grid.length < 2) {
-    return { rows: [], errors: ["El archivo no tiene filas de datos."] };
-  }
-  const header = grid[0]!.map((h) => h.trim().toLowerCase());
-  const idx = (name: string) => header.indexOf(name);
-  if (idx("name") === -1 || idx("price") === -1) {
-    return {
-      rows: [],
-      errors: ['Faltan columnas obligatorias: "name" y "price".'],
-    };
-  }
+// Spec de parseo: tipos + obligatoriedad + normalización por celda. El SKU se
+// deja vacío a propósito si no viene (lo genera la DB / queda null). La
+// categoría y la marca se resuelven por nombre en el bulkImport.
+const SPEC: ImportColumn[] = [
+  { header: "name", key: "name", type: "text", required: true },
+  { header: "barcode", key: "barcode", type: "text", aliases: ["ean", "codigo de barras", "código de barras"] },
+  { header: "sku", key: "sku", type: "text", aliases: ["codigo", "código"] },
+  {
+    header: "price",
+    key: "price",
+    type: "number",
+    required: true,
+    aliases: ["precio"],
+    transform: (v: number | null) => {
+      if (v == null) return { error: "Falta el precio." };
+      return v >= 0
+        ? { value: v }
+        : { error: "El precio debe ser mayor o igual a 0." };
+    },
+  },
+  {
+    header: "cost",
+    key: "cost",
+    type: "number",
+    aliases: ["costo"],
+    transform: (v: number | null) =>
+      v == null || v >= 0
+        ? { value: v }
+        : { error: "El costo no puede ser negativo." },
+  },
+  { header: "category", key: "category", type: "text", aliases: ["categoria", "categoría", "rubro"] },
+  { header: "brand", key: "brand", type: "text", aliases: ["marca"] },
+  {
+    header: "tax_rate",
+    key: "tax_rate",
+    type: "number",
+    aliases: ["iva", "iva %", "alicuota", "alícuota"],
+    // IVA en %, default 21. Permite 0..100.
+    transform: (v: number | null) => {
+      if (v == null) return { value: 21 };
+      if (v < 0 || v > 100) return { error: "El IVA debe estar entre 0 y 100." };
+      return { value: v };
+    },
+  },
+  {
+    header: "unit",
+    key: "unit",
+    type: "text",
+    aliases: ["unidad"],
+    transform: (v: string | null) => ({ value: (v ?? "un") || "un" }),
+  },
+  {
+    header: "stock",
+    key: "stock",
+    type: "number",
+    transform: (v: number | null) => ({ value: v ?? 0 }),
+  },
+  {
+    header: "stock_min",
+    key: "stock_min",
+    type: "number",
+    aliases: ["stock minimo", "stock mínimo", "minimo", "mínimo"],
+    transform: (v: number | null) => ({ value: v ?? 0 }),
+  },
+  {
+    header: "track_stock",
+    key: "track_stock",
+    type: "boolean",
+    aliases: ["controla stock", "lleva stock"],
+    // Default: controla stock (true) si no se especifica.
+    transform: (v: boolean | null) => ({ value: v ?? true }),
+  },
+];
 
-  const rows: ParsedProduct[] = [];
-  for (let r = 1; r < grid.length; r++) {
-    const cols = grid[r]!;
-    const get = (name: string) => cols[idx(name)] ?? "";
-    const name = get("name").trim();
-    if (!name) {
-      errors.push(`Fila ${r + 1}: sin nombre, omitida.`);
-      continue;
-    }
-    const priceRaw = get("price").trim();
-    const price = priceRaw === "" ? -1 : numOr(priceRaw, -1);
-    if (price < 0) {
-      errors.push(`Fila ${r + 1} (${name}): precio inválido, omitida.`);
-      continue;
-    }
-    rows.push({
-      name,
-      sku: txtOrNull(get("sku")),
-      barcode: txtOrNull(get("barcode")),
-      price,
-      cost: idx("cost") > -1 && get("cost").trim() ? numOr(get("cost"), 0) : null,
-      stock: numOr(get("stock"), 0),
-      stock_min: numOr(get("stock_min"), 0),
-      unit: txtOrNull(get("unit")) ?? "un",
-      category: txtOrNull(get("category")),
-    });
-  }
-  return { rows, errors };
-}
-
-/** Convierte el texto CSV en filas de producto validadas. */
-export function parseProductsCsv(text: string): ParseResult {
-  return rowsFromGrid(parseCsv(text));
-}
-
-/** Lee un XLSX y devuelve filas de producto validadas. */
-export async function parseProductsXlsx(buffer: ArrayBuffer): Promise<ParseResult> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  const ws = wb.worksheets[0];
-  if (!ws) return { rows: [], errors: ["El archivo no tiene hojas."] };
-  const grid: string[][] = [];
-  ws.eachRow({ includeEmpty: false }, (row) => {
-    const cells: string[] = [];
-    row.eachCell({ includeEmpty: true }, (cell) => {
-      const v = cell.value;
-      const text =
-        v == null
-          ? ""
-          : typeof v === "object" && "text" in (v as object)
-            ? String((v as { text: unknown }).text ?? "")
-            : typeof v === "object" && "result" in (v as object)
-              ? String((v as { result: unknown }).result ?? "")
-              : String(v);
-      cells.push(text.trim());
-    });
-    grid.push(cells);
-  });
-  return rowsFromGrid(grid);
+/**
+ * Lee un XLSX de productos y devuelve filas tipadas + errores por fila.
+ * Detecta barcodes duplicados dentro del mismo archivo.
+ */
+export async function parseProductsXlsx(
+  buffer: ArrayBuffer,
+): Promise<ParseXlsxResult<ParsedProduct>> {
+  return parseXlsx<ParsedProduct>(buffer, SPEC, { dedupeKey: "barcode" });
 }

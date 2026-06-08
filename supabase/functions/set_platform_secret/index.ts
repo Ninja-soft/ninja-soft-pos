@@ -39,7 +39,11 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     "gemini_api_key",
     "claude_api_key",
     "beta_owner_email",
-    "image_url",
+    "image_url", // legacy (avatar único; fallback de Gemini)
+    // Avatar del asistente POR proveedor (el del activo es el ícono del cliente
+    // con el addon). NO son secretos: se devuelven en claro en el status.
+    "gemini_image_url",
+    "claude_image_url",
     "commercial_text",
     "addon_price_ars",
     "addon_trial_days",

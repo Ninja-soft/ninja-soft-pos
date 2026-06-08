@@ -10,6 +10,7 @@ import { Heading } from "@/components/ui/Typography";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
+import { Switch } from "@/components/ui/Switch";
 
 type Provider = "gemini" | "claude";
 
@@ -28,6 +29,8 @@ type Status = {
   commercial_text: string | null;
   addon_price_ars: string | null;
   addon_trial_days: string | null;
+  // Estado activo/inactivo del addon ("true"/"false"). null → se asume activo.
+  active: string | null;
 };
 
 // Modelo por defecto según proveedor.
@@ -58,6 +61,8 @@ export function AiConfigCard() {
   const [commercialText, setCommercialText] = useState("");
   const [priceArs, setPriceArs] = useState("");
   const [trialDays, setTrialDays] = useState("");
+  // Toggle "Asistente IA activo". Default activo (null en config → true).
+  const [active, setActive] = useState(true);
   // El usuario tocó el modelo manualmente → no lo pisamos al cambiar proveedor.
   const [modelTouched, setModelTouched] = useState(false);
 
@@ -84,6 +89,8 @@ export function AiConfigCard() {
     setCommercialText(status.commercial_text ?? "");
     setPriceArs(status.addon_price_ars ?? "");
     setTrialDays(status.addon_trial_days ?? "");
+    // null/ausente → activo por defecto; solo "false" explícito lo apaga.
+    setActive(status.active !== "false");
     if (status.model) setModelTouched(true);
   }, [status]);
 
@@ -108,6 +115,9 @@ export function AiConfigCard() {
         provider,
         model: model.trim() || DEFAULT_MODEL[provider],
         beta_owner_email: betaEmail.trim().toLowerCase(),
+        // Estado del addon: siempre se envía ("true"/"false", nunca vacío) para
+        // que el backend lo persista en cada guardado.
+        active: active ? "true" : "false",
       };
       // La key se guarda en el campo del proveedor seleccionado (no en un único
       // api_key compartido): así Claude no hereda la key de Gemini ni viceversa.
@@ -175,6 +185,23 @@ export function AiConfigCard() {
 
       <Card className="mt-3">
         <CardContent className="grid max-w-2xl gap-4 p-5">
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background/40 p-3">
+            <div>
+              <span className="block text-sm font-medium text-foreground">
+                Asistente IA activo
+              </span>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Si lo desactivás, el asistente deja de responder mensajes (el
+                explicador del addon se sigue mostrando).
+              </p>
+            </div>
+            <Switch
+              checked={active}
+              onCheckedChange={setActive}
+              label="Asistente IA activo"
+            />
+          </div>
+
           <div>
             <span className="mb-2 block text-sm font-medium text-muted-foreground">
               Proveedor activo

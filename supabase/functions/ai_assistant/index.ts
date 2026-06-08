@@ -195,6 +195,10 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     const cfg = (cfgRow?.secrets ?? {}) as Record<string, string>;
     const betaEmail = (cfg.beta_owner_email ?? "").trim().toLowerCase();
+    // Toggle "Asistente IA activo" (ai_config.active). undefined o "true" →
+    // comportamiento normal; "false" explícito → el asistente NO responde a
+    // mensajes reales. El explicador {intro:true} puede seguir mostrándose.
+    const aiDisabled = (cfg.active ?? "").trim().toLowerCase() === "false";
 
     // 2) beta: el owner del tenant == beta_owner_email.
     if (!allowed && betaEmail) {
@@ -226,6 +230,25 @@ Deno.serve(async (req: Request) => {
         {
           error: "addon_required",
           detail: "El Asistente IA es un complemento. Activalo desde tu plan.",
+        },
+        403,
+      );
+    }
+
+    // ── Toggle activo/inactivo del addon ────────────────────────────────────
+    // Con acceso pero el asistente desactivado globalmente (ai_config.active
+    // === "false"): no respondemos mensajes reales. El explicador {intro:true}
+    // sí puede mostrarse (el dueño ve la presentación aunque esté apagado).
+    if (aiDisabled) {
+      if (wantsIntro) {
+        const commercialText =
+          (cfg.commercial_text ?? "").trim() || DEFAULT_COMMERCIAL_TEXT;
+        return json({ reply: commercialText, locked: true });
+      }
+      return json(
+        {
+          error: "ai_disabled",
+          detail: "El Asistente IA está temporalmente desactivado.",
         },
         403,
       );

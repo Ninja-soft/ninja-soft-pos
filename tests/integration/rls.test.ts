@@ -90,6 +90,20 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
     ctx.tenantA = tenants[0]!.id;
     ctx.tenantB = tenants[1]!.id;
 
+    // Gating server-side (mig. 20260608410000): los triggers de price_lists /
+    // price_list_items exigen la feature 'listas_precios' (is_basic=false). Sin
+    // plan/addon, tenant_has_feature_for(...) → false y todo INSERT/UPDATE en esas
+    // tablas se rechaza con check_violation (23514). Esta suite valida AISLAMIENTO
+    // y permisos por rol de price_lists, no el gating por plan, así que habilitamos
+    // la feature en ambos tenants vía addon activo (paso 2 de la cadena de
+    // resolución), sin montar un plan/suscripción. Se hace con el admin
+    // (service_role, saltea RLS); se limpia en el teardown.
+    const { error: addonErr } = await admin.from("subscription_addons").insert([
+      { tenant_id: ctx.tenantA, addon_key: "listas_precios", status: "active", source: "granted" },
+      { tenant_id: ctx.tenantB, addon_key: "listas_precios", status: "active", source: "granted" },
+    ]);
+    if (addonErr) throw addonErr;
+
     const ownerA = await makeUser(admin, `owner-a-${STAMP}@test.local`, ctx.tenantA, "owner");
     const cashierA = await makeUser(admin, `cashier-a-${STAMP}@test.local`, ctx.tenantA, "cashier");
     const ownerB = await makeUser(admin, `owner-b-${STAMP}@test.local`, ctx.tenantB, "owner");
@@ -135,6 +149,7 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       await admin.from("product_variants").delete().eq("tenant_id", t);
       await admin.from("ticket_templates").delete().eq("tenant_id", t);
       await admin.from("payment_plans").delete().eq("tenant_id", t);
+      await admin.from("subscription_addons").delete().eq("tenant_id", t);
       await admin.from("audit_logs").delete().eq("tenant_id", t);
       await admin.from("customers").delete().eq("tenant_id", t);
       await admin.from("products").delete().eq("tenant_id", t);

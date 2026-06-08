@@ -40,7 +40,11 @@ export function QrCheckoutModal({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   base: number;
-  onApproved: (reference: string, amount: number, extras: { name: string; amount: number }[]) => void;
+  onApproved: (
+    reference: string,
+    amount: number,
+    extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
+  ) => void;
   provider?: "mercadopago" | "mobbex" | "modo";
   providerName?: string;
 }) {
@@ -179,7 +183,9 @@ export function QrCheckoutModal({
       firedRef.current = true;
       setPhase("approved");
       const c = chosenRef.current;
-      const extras = c ? [{ name: `Recargo ${c.label}`, amount: c.surcharge }] : [];
+      const extras = c
+        ? [{ name: `Recargo ${c.label}`, amount: c.surcharge, kind: "surcharge" as const }]
+        : [];
       onApproved(status.mp_payment_id ?? intentId ?? "", amount, extras);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");

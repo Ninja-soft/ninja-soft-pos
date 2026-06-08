@@ -20,6 +20,13 @@ export interface CartLine {
   // incluye los deltas; este snapshot es para mostrar y persistir en la venta.
   modifiers?: SaleLineModifierGroup[] | null;
   modifiersLabel?: string; // ej. "Frutilla, Crema (+200), Dulce de leche"
+  // Pack vendido en esta línea (H41): service_packs.id. La línea entra por su
+  // precio; al confirmar, create_sale acredita el saldo de sesiones al cliente.
+  packId?: string | null;
+  // Línea CUBIERTA por una sesión de pack (H41): customer_pack_credits.id. La
+  // línea no se cobra (lineSubtotal = 0) y create_sale consume una sesión. Se
+  // conserva unitPrice para mostrar el valor tachado ("cubierto por el pack").
+  packCreditId?: string | null;
 }
 
 interface CartState {
@@ -67,6 +74,15 @@ interface CartState {
     warrantyMonths?: number;
   }) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
+  // Vende un pack (H41): línea por su precio que, al confirmar, acredita las
+  // sesiones al cliente (create_sale, extra kind='pack'). Cada pack es su propia
+  // línea (no fusiona); cantidad 1.
+  addPack: (p: { packId: string; name: string; price: number }) => void;
+  // Cubre una línea con una sesión de pack (H41): la línea pasa a precio 0 y se
+  // marca con el crédito que la cubre. Al confirmar, create_sale consume una
+  // sesión (extra kind='pack_session'). Quitar la cobertura la vuelve a cobrar.
+  coverLineWithPack: (lineId: string, packCreditId: string) => void;
+  uncoverLine: (lineId: string) => void;
   setQuantity: (lineId: string, quantity: number) => void;
   setLineDiscount: (lineId: string, discount: number) => void;
   removeLine: (lineId: string) => void;
@@ -227,6 +243,42 @@ export const useCartStore = create<CartState>((set) => ({
         },
       ],
     })),
+  addPack: (p) =>
+    set((state) => ({
+      // Pack vendido: ítem libre (sin producto/stock) por su precio, con packId
+      // para que create_sale acredite las sesiones. Línea propia (no fusiona).
+      lines: [
+        ...state.lines,
+        {
+          lineId: crypto.randomUUID(),
+          productId: null,
+          name: p.name,
+          sku: null,
+          unitPrice: p.price,
+          quantity: 1,
+          discount: 0,
+          unit: "un",
+          packId: p.packId,
+        },
+      ],
+    })),
+  coverLineWithPack: (lineId, packCreditId) =>
+    set((state) => ({
+      // Cubre la línea con una sesión: fija cantidad 1 (una sesión por visita) y
+      // marca el crédito. El precio se conserva (se muestra tachado); el subtotal
+      // efectivo lo computa lineSubtotal como 0.
+      lines: state.lines.map((l) =>
+        l.lineId === lineId
+          ? { ...l, packCreditId, quantity: 1, discount: 0 }
+          : l,
+      ),
+    })),
+  uncoverLine: (lineId) =>
+    set((state) => ({
+      lines: state.lines.map((l) =>
+        l.lineId === lineId ? { ...l, packCreditId: null } : l,
+      ),
+    })),
   setQuantity: (lineId, quantity) =>
     set((state) => ({
       lines: state.lines
@@ -248,6 +300,8 @@ export const useCartStore = create<CartState>((set) => ({
 }));
 
 export function lineSubtotal(l: CartLine): number {
+  // Línea cubierta por una sesión de pack (H41): no se cobra.
+  if (l.packCreditId) return 0;
   return l.unitPrice * l.quantity - l.discount;
 }
 export function cartSubtotal(lines: CartLine[]): number {

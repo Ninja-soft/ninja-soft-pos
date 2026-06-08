@@ -52,8 +52,14 @@ export interface CreateSaleResult {
 //     de la propina (efectivo/tarjeta/QR).
 //   * 'professional' (atribución · H39): vendedor/profesional de la venta para
 //     la comisión. `id` = professionals.id. Sin él (y sin turno), sin comisión.
+//   * 'pack' (vender pack · H41): acredita un saldo de sesiones al cliente.
+//     `id` = service_packs.id. El pack ya entra como ítem por su precio (en
+//     `items`); este extra es sólo la señal para acreditar el saldo.
+//   * 'pack_session' (consumir sesión · H41): descuenta una sesión del crédito.
+//     `id` = customer_pack_credits.id. La línea cubierta ya entra en 0 (en
+//     `items`); este extra es la señal para consumir la sesión.
 export interface SaleExtraInput {
-  kind: "warranty" | "surcharge" | "tip" | "professional";
+  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session";
   amount?: number;
   method?: string;
   id?: string;

@@ -9,6 +9,7 @@ import {
   Lock,
   Minus,
   MonitorSmartphone,
+  Package,
   Plus,
   ScanBarcode,
   Search,
@@ -53,6 +54,7 @@ import {
   useProviderMethod,
   usePosSettings,
 } from "@/modules/pos/hooks";
+import type { SaleExtraInput } from "@/modules/pos/api";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
@@ -77,6 +79,9 @@ import {
 } from "@/components/pos/PosModals";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { VoucherRedeemModal } from "@/components/pos/VoucherRedeemModal";
+import { SellPackModal } from "@/components/pos/SellPackModal";
+import { useCustomerPackCredits } from "@/modules/packs/hooks";
+import type { CustomerPackCredit } from "@/modules/packs/api";
 import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import {
@@ -226,6 +231,7 @@ function PosPageInner() {
   const [custOpen, setCustOpen] = useState(false);
   const [dniOpen, setDniOpen] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
   const { data: customers } = useCustomers(custSearch);
   const { createQuick } = useCustomerMutations();
@@ -253,6 +259,15 @@ function PosPageInner() {
     }
   }
   const { data: scBalance } = useStoreCreditBalance(customer?.id);
+  // Packs / sesiones (H41): la feature gatea "Vender paquete" y la oferta de
+  // "usar sesión" en el carrito. Saldos disponibles del cliente (no vencidos,
+  // con sesiones) para ofrecer cubrir una línea con una sesión del pack.
+  const packsFeature = useFeature("packs");
+  const packsEnabled = packsFeature !== false; // optimista mientras carga el gating
+  const { data: packCredits } = useCustomerPackCredits(
+    packsEnabled ? customer?.id : null,
+    true,
+  );
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
   // Favoritos (H36): botones rápidos grandes arriba de la grilla. Se muestran
@@ -295,6 +310,10 @@ function PosPageInner() {
   const addVariant = useCartStore((s) => s.addVariant);
   const addWithModifiers = useCartStore((s) => s.addWithModifiers);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
+  // Packs (H41): vender un pack y cubrir/descubrir una línea con una sesión.
+  const addPack = useCartStore((s) => s.addPack);
+  const coverLineWithPack = useCartStore((s) => s.coverLineWithPack);
+  const uncoverLine = useCartStore((s) => s.uncoverLine);
 
   // Lista de precios 'mostrador' activa (si existe): el precio unitario al
   // agregar al carrito se resuelve contra esta lista. Sin lista → precio base.
@@ -462,6 +481,18 @@ function PosPageInner() {
   useEffect(() => {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
+
+  // Packs (H41): si cambia el cliente de la venta, quitá la cobertura por pack de
+  // las líneas (el saldo de sesiones es del cliente anterior; el nuevo cliente
+  // puede tener otros packs u ninguno). Las líneas vuelven a su precio normal.
+  const customerId = customer?.id ?? null;
+  useEffect(() => {
+    for (const l of useCartStore.getState().lines) {
+      if (l.packCreditId) uncoverLine(l.lineId);
+    }
+    // Sólo al cambiar de cliente (no en cada cambio de líneas).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   // Cobro desde un turno (H38): al llegar el turno (?appointment=<id>), cargá su
   // servicio en el carrito UNA sola vez y seleccioná el cliente. Si el turno ya
@@ -671,8 +702,10 @@ function PosPageInner() {
         // Modificadores (H37): snapshot por línea; el precio ya está en unit_price.
         ...(l.modifiers && l.modifiers.length > 0 ? { modifiers: l.modifiers } : {}),
         quantity: l.quantity,
-        unit_price: l.unitPrice,
-        discount: l.discount,
+        // Línea cubierta por una sesión de pack (H41): entra en 0 (no se cobra);
+        // create_sale consume la sesión vía el extra 'pack_session'.
+        unit_price: l.packCreditId ? 0 : l.unitPrice,
+        discount: l.packCreditId ? 0 : l.discount,
       }));
       // Extras que entran como ítem de venta para que el total y el ticket los
       // reflejen: recargo (H27) y garantía extendida (H28). La propina (H39) NO
@@ -692,7 +725,7 @@ function PosPageInner() {
       // valida contra 'garantias'; los recargos (kind='surcharge') no se gatean;
       // la propina (kind='tip', amount+method) va a sales.tip_amount; el
       // profesional (kind='professional', id) atribuye la comisión.
-      const saleExtras = (extras ?? [])
+      const saleExtras: SaleExtraInput[] = (extras ?? [])
         .filter(
           (ex) =>
             (ex.kind === "professional" && ex.id) ||
@@ -705,6 +738,14 @@ function PosPageInner() {
           ...(ex.method ? { method: ex.method } : {}),
           ...(ex.id ? { id: ex.id } : {}),
         }));
+      // Packs (H41): por cada línea que vende un pack, una señal 'pack' (acredita
+      // sesiones). Por cada línea cubierta por una sesión, una 'pack_session'
+      // (descuenta una sesión del crédito). Los ítems ya se enviaron arriba (el
+      // pack por su precio; la línea cubierta en 0).
+      for (const l of lines) {
+        if (l.packId) saleExtras.push({ kind: "pack", id: l.packId });
+        if (l.packCreditId) saleExtras.push({ kind: "pack_session", id: l.packCreditId });
+      }
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
@@ -750,13 +791,51 @@ function PosPageInner() {
                 ? "La cuenta corriente necesita un cliente"
                 : msg.includes("insufficient_store_credit")
                   ? "El cliente no tiene saldo de vale suficiente"
-                  : "No se pudo cobrar";
+                  : msg.includes("pack_needs_customer")
+                    ? "Elegí un cliente para vender o usar un pack"
+                    : msg.includes("pack_no_sessions_left")
+                      ? "El pack ya no tiene sesiones disponibles"
+                      : msg.includes("pack_expired")
+                        ? "El pack del cliente está vencido"
+                        : msg.includes("pack_credit_not_found")
+                          ? "No se encontró el saldo de pack del cliente"
+                          : msg.includes("pack_not_found")
+                            ? "No se encontró el paquete"
+                            : "No se pudo cobrar";
       toast({
         title,
         description: title === "No se pudo cobrar" ? msg || undefined : undefined,
         variant: "error",
       });
     }
+  }
+
+  // Packs / sesiones (H41): saldo restante por crédito, descontando las líneas
+  // del carrito que YA lo cubren (una sesión por línea). Evita ofrecer la misma
+  // sesión a más líneas de las que el crédito tiene. El backend revalida igual.
+  const packRemaining = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of packCredits ?? []) m.set(c.id, c.sessions_left);
+    for (const l of lines) {
+      if (l.packCreditId && m.has(l.packCreditId)) {
+        m.set(l.packCreditId, (m.get(l.packCreditId) ?? 0) - 1);
+      }
+    }
+    return m;
+  }, [packCredits, lines]);
+
+  // Crédito de pack que puede cubrir esta línea: del producto de la línea (o
+  // genérico), con sesión disponible (saldo restante > 0). Devuelve el de
+  // vencimiento más próximo (packCredits ya viene ordenado por la RPC). Excluye
+  // líneas sin producto, gratis, ya cubiertas o que venden un pack.
+  function creditForLine(l: (typeof lines)[number]): CustomerPackCredit | null {
+    if (!packsEnabled || l.packId || l.packCreditId) return null;
+    if (l.unitPrice <= 0) return null;
+    for (const c of packCredits ?? []) {
+      const matches = c.product_id == null || c.product_id === l.productId;
+      if (matches && (packRemaining.get(c.id) ?? 0) > 0) return c;
+    }
+    return null;
   }
 
   // Si el negocio exige cliente, bloquea el cobro hasta elegir uno.
@@ -1079,13 +1158,22 @@ function PosPageInner() {
                       </button>
                     </div>
                   )}
-                  <span className="text-sm font-semibold">
-                    {formatCurrency(lineSubtotal(l))}
-                  </span>
+                  {l.packCreditId ? (
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <span className="text-xs font-normal text-muted-foreground line-through">
+                        {formatCurrency(l.unitPrice * l.quantity)}
+                      </span>
+                      <span className="text-emerald-300">Gratis</span>
+                    </span>
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {formatCurrency(lineSubtotal(l))}
+                    </span>
+                  )}
                 </div>
                 {/* Cantidades rápidas en la línea (H36): suma de un toque sin
                     teclear. Sólo para ítems por unidad (los de peso usan kg). */}
-                {l.unit !== "kg" && (
+                {l.unit !== "kg" && !l.packCreditId && (
                   <div className="mt-2 flex gap-1.5">
                     {[2, 6, 12].map((q) => (
                       <button
@@ -1099,6 +1187,37 @@ function PosPageInner() {
                       </button>
                     ))}
                   </div>
+                )}
+                {/* Pack / sesiones (H41): cubrir esta línea con una sesión del
+                    pack del cliente, o quitar la cobertura. Sólo si el cliente
+                    tiene un pack que cubre esta línea con sesión disponible. */}
+                {l.packCreditId ? (
+                  <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+                      <Package size={13} /> Cubierto por el pack
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => uncoverLine(l.lineId)}
+                      className="text-xs font-medium text-muted-foreground transition hover:text-foreground"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  (() => {
+                    const credit = creditForLine(l);
+                    if (!credit) return null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => coverLineWithPack(l.lineId, credit.id)}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/10"
+                      >
+                        <Package size={13} /> Usar sesión del pack ({credit.sessions_left} restantes)
+                      </button>
+                    );
+                  })()
                 )}
               </div>
             ))}
@@ -1141,14 +1260,34 @@ function PosPageInner() {
                 </span>
               </span>
             </button>
-            {/* Canje de vale por código → acredita saldo a favor del cliente */}
-            <button
-              type="button"
-              onClick={() => setVoucherOpen(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
-            >
-              <Ticket size={13} /> Canjear vale
-            </button>
+            <div className="flex gap-2">
+              {/* Canje de vale por código → acredita saldo a favor del cliente */}
+              <button
+                type="button"
+                onClick={() => setVoucherOpen(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
+              >
+                <Ticket size={13} /> Canjear vale
+              </button>
+              {/* Vender un pack de sesiones (H41) → acredita sesiones al cliente.
+                  Requiere cliente; la oferta de "usar sesión" vive en cada línea. */}
+              {packsEnabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!customer) {
+                      toast({ title: "Elegí un cliente para venderle un pack", variant: "error" });
+                      setCustOpen(true);
+                      return;
+                    }
+                    setSellPackOpen(true);
+                  }}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
+                >
+                  <Package size={13} /> Vender pack
+                </button>
+              )}
+            </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
@@ -1394,6 +1533,14 @@ function PosPageInner() {
         onOpenChange={setVoucherOpen}
         customer={customer}
         storeId={register?.store_id ?? null}
+      />
+      <SellPackModal
+        open={sellPackOpen}
+        onOpenChange={setSellPackOpen}
+        onPick={(p) => {
+          addPack(p);
+          toast({ title: `Pack "${p.name}" agregado`, variant: "success" });
+        }}
       />
       <BarcodeScanner
         open={scanOpen}

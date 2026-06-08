@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
+import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -31,6 +31,7 @@ import { HardwareCard } from "@/components/dashboard-team/HardwareCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
+import { ServicePacksManager } from "@/components/packs/ServicePacksManager";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
 import { PrintSettingsCard } from "@/components/dashboard-team/PrintSettingsCard";
@@ -48,6 +49,7 @@ type Section =
   | "pagos"
   | "operacion"
   | "profesionales"
+  | "paquetes"
   | "clientes"
   | "devoluciones"
   | "escaner"
@@ -81,6 +83,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     sections: [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "profesionales", label: "Profesionales (agenda)", icon: CalendarDays, feature: "agenda" },
+      { key: "paquetes", label: "Paquetes y sesiones", icon: Package, feature: "packs" },
       { key: "escaner", label: "Escáner", icon: ScanLine },
       { key: "pantalla-cliente", label: "Pantalla del cliente", icon: MonitorSmartphone },
       { key: "hardware", label: "Diagnóstico de hardware", icon: Wrench },
@@ -457,6 +460,26 @@ function ConfiguracionInner() {
                   menú.
                 </p>
                 <ProfessionalsManager />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Paquetes / packs de sesiones (F12 · H41): bonos que el cliente
+              compra y consume por sesión al cobrar. Escritura RLS por tenant. */}
+          {section === "paquetes" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Package size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Paquetes y sesiones</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Definí bonos de sesiones (ej. &quot;4 cortes&quot;, &quot;10
+                  sesiones de estética&quot;). Al vender un pack se le acreditan
+                  las sesiones al cliente; cada visita consume una al cobrar el
+                  servicio cubierto.
+                </p>
+                <ServicePacksManager />
               </CardContent>
             </Card>
           )}

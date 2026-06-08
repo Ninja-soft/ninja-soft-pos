@@ -588,7 +588,7 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
 - [~] **H36 — POS rápido por botones / catálogo chico.** — *Core de cobro rápido por botones entregado (PR#267): favoritos como botones grandes + cantidades rápidas + venta libre por permiso. Sólo queda la cantidad "sesión individual/pack" (depende de H41 — packs/sesiones).*
   - [x] Pantalla de cobro con grilla táctil de favoritos, categorías grandes y botones de alto contraste. — *`components/pos/FavoritesGrid.tsx` (botones grandes alto contraste, mobile/tablet-first) arriba de la grilla del POS; categorías grandes ya existían (`CategoryNav`).*
   - [x] Productos/servicios sin búsqueda obligatoria: el cajero toca 2-3 botones y cobra. — *Favoritos (`products.is_favorite`) se muestran sin buscar; tap = agrega al carrito.*
-  - [~] Cantidades rápidas: `+1`, `+2`, `x6`, `x12`, medio kilo/kilo, sesión individual/pack. — *`+1` (tap del botón) + chips `×2/×6/×12` en botones y en la línea del carrito; `½ kg`/`1 kg` para productos por peso. Sesión/pack queda para H41.*
+  - [x] Cantidades rápidas: `+1`, `+2`, `x6`, `x12`, medio kilo/kilo, sesión individual/pack. — *`+1` (tap del botón) + chips `×2/×6/×12` en botones y en la línea del carrito; `½ kg`/`1 kg` para productos por peso. Sesión/pack entregado en H41 (consumo de sesión por línea en el carrito).*
   - [x] Botón "Venta libre" con monto manual y motivo, controlado por permiso. — *Botón "Venta libre (monto manual)" gateado por `pos_settings.allow_free_sale` + rol owner/manager; reusa el mecanismo de línea product-less (`addFreeAmount` → `create_sale` con `product_id` null, no descuenta stock). Probado por SQL.*
   - [x] Cobro express: efectivo exacto, efectivo con vuelto, QR, tarjeta, transferencia. — *Reusa `PaymentModal`/QR existentes (no se duplicó).*
   - [ ] *Criterio:* una venta típica de 3 ítems se carga y cobra en menos de 15 segundos en pantalla táctil.
@@ -623,12 +623,12 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [ ] Recompra rápida: "repetir último servicio" o "repetir pedido frecuente".
   - [ ] *Criterio:* un cliente frecuente se cobra desde su historial en menos de 3 taps.
 
-- [ ] **H41 — Paquetes, membresías y sesiones.**
-  - [ ] Packs de sesiones: 4 cortes, 8 clases, 10 sesiones de estética, mantenimiento mensual.
-  - [ ] Saldo de sesiones consumibles con vencimiento opcional.
-  - [ ] Membresía simple recurrente o prepaga, conectable a suscripciones/pagos después.
-  - [ ] Gift cards para servicios y consumos.
-  - [ ] *Criterio:* se vende un pack de 5 sesiones, se consume una al cobrar y queda saldo visible.
+- [~] **H41 — Paquetes, membresías y sesiones.** — *Núcleo (packs de sesiones) entregado (local, pendiente de push — migración `20260608560000_service_packs.sql` aplicada en remoto vía MCP y validada por SQL). **Follow-up (NO en este hito):** membresía recurrente (cruza con suscripciones) y gift cards (cruza con vales H29).*
+  - [x] Packs de sesiones: 4 cortes, 8 clases, 10 sesiones de estética, mantenimiento mensual. — *`service_packs` (nombre, servicio cubierto opcional, nº de sesiones, precio, validez en días, baja lógica). Gestión en Configuración → Paquetes (`ServicePacksManager`), RLS por tenant + auditoría.*
+  - [x] Saldo de sesiones consumibles con vencimiento opcional. — *`customer_pack_credits` (sessions_total/used, expires_at del `validity_days`, snapshot del pack). Vender el pack acredita el saldo y consumir descuenta una sesión, vía `create_sale` (`p_extras` kind `pack`/`pack_session`, sin tocar su firma — patrón H28/H39). Validación de saldo, vencimiento y cliente obligatorio; consumo auditado (`pack_session_used`).*
+  - [ ] Membresía simple recurrente o prepaga, conectable a suscripciones/pagos después. — *Follow-up: cruza con suscripciones; no en este hito.*
+  - [ ] Gift cards para servicios y consumos. — *Follow-up: cruza con vales (H29); no en este hito.*
+  - [x] *Criterio:* se vende un pack de 5 sesiones, se consume una al cobrar y queda saldo visible. — *Cumplido: en el POS se vende el pack (entra como ítem + acredita el saldo al cliente) y, al cobrar el servicio cubierto, "Usar sesión del pack (N restantes)" deja la línea en 0 y descuenta una sesión; el saldo (restantes + vencimiento) se ve en la ficha del cliente (`CustomerHistoryModal`). Validado por SQL: vender→acredita, consumir→sessions_used++, respeta saldo/vencimiento/cliente.*
 
 - [ ] **H42 — Oportunidad comercial y plantillas vendibles.**
   - [ ] Landing/demo por rubro: "POS para heladerías", "POS para peluquerías", "POS para estética", "POS para cafeterías chicas".

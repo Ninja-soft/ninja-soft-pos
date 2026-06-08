@@ -6,7 +6,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { Package } from "lucide-react";
 import { useCustomerHistory } from "@/modules/customers/hooks";
+import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
@@ -39,6 +41,12 @@ export function CustomerHistoryModal({
   customer: Customer | null;
 }) {
   const { data, isLoading } = useCustomerHistory(open ? customer?.id : null);
+  // Packs de sesiones del cliente (H41): todos (no sólo disponibles) para mostrar
+  // también los agotados/vencidos en el historial.
+  const { data: packCredits } = useCustomerPackCredits(
+    open ? customer?.id : null,
+    false,
+  );
   const { data: numFmt } = useSaleNumberFormat();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -127,6 +135,65 @@ export function CustomerHistoryModal({
               >
                 {payDebt.isPending ? "Registrando…" : "Cobrar deuda"}
               </Button>
+            </div>
+          )}
+
+          {/* Paquetes / sesiones (H41): packs activos del cliente con sesiones
+              restantes y vencimiento. Se oculta si el cliente no tiene packs. */}
+          {(packCredits ?? []).length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Package size={13} className="text-ninja-flameSoft" />
+                Paquetes ({(packCredits ?? []).length})
+              </div>
+              <div className="max-h-44 space-y-1 overflow-y-auto">
+                {(packCredits ?? []).map((c) => {
+                  const exhausted = c.sessions_left <= 0;
+                  const inactive = exhausted || c.expired;
+                  return (
+                    <div
+                      key={c.id}
+                      className={
+                        inactive
+                          ? "flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm opacity-70"
+                          : "flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-sm"
+                      }
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">
+                          {c.pack_name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {c.sessions_used} de {c.sessions_total} usadas
+                          {c.expires_at
+                            ? ` · ${c.expired ? "venció" : "vence"} ${new Date(
+                                c.expires_at,
+                              ).toLocaleDateString("es-AR")}`
+                            : " · sin vencimiento"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        {c.expired && !exhausted ? (
+                          <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                            Vencido
+                          </span>
+                        ) : exhausted ? (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            Sin sesiones
+                          </span>
+                        ) : (
+                          <span className="font-price text-base font-black tabular-nums text-emerald-400">
+                            {c.sessions_left}
+                            <span className="ml-1 text-xs font-medium text-muted-foreground">
+                              {c.sessions_left === 1 ? "sesión" : "sesiones"}
+                            </span>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  Boxes,
   Building2,
   ChevronDown,
   CreditCard,
@@ -53,6 +54,7 @@ const NAV = [
   { href: "/internal/planes", label: "Planes", icon: Tag },
   { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
   { href: "/internal/addons", label: "Complementos", icon: Sparkles },
+  { href: "/internal/catalogos", label: "Catálogos", icon: Boxes },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {

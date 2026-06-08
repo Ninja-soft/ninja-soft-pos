@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ban, Download, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
+import { Ban, Download, Lock, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
@@ -11,6 +11,7 @@ import { ReturnModal } from "@/components/sales/ReturnModal";
 import { QrIntentsModal } from "@/components/sales/QrIntentsModal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
+import { GatedButton, useFeatureGate } from "@/components/saas/GatedAction";
 import { useSalesPaged, useVoidSale, useSaleNumberFormat } from "@/modules/sales/hooks";
 import { salesApi } from "@/modules/sales/api";
 import { usePageSize } from "@/hooks/usePageSize";
@@ -62,6 +63,8 @@ export default function VentasPage() {
   const [voidTarget, setVoidTarget] = useState<{ id: string; number: number } | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Devoluciones/cambios es feature de plan (Pro): gatea el botón por fila.
+  const returnGate = useFeatureGate("devoluciones", "Devoluciones");
 
   function openTicket(id: string) {
     setTicketId(id);
@@ -141,17 +144,24 @@ export default function VentasPage() {
             </Display>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setQrOpen(true)}>
+            <GatedButton
+              feature="mercado_pago"
+              featureLabel="Cobros con QR · Mercado Pago"
+              variant="secondary"
+              onClick={() => setQrOpen(true)}
+            >
               <QrCode size={16} /> Cobros QR
-            </Button>
-            <Button
+            </GatedButton>
+            <GatedButton
+              feature="export_xlsx"
+              featureLabel="Exportar a Excel"
               variant="secondary"
               onClick={exportVentas}
               loading={exporting}
               disabled={total === 0 || exporting}
             >
               <Download size={16} /> Exportar XLSX
-            </Button>
+            </GatedButton>
           </div>
         </div>
 
@@ -267,14 +277,30 @@ export default function VentasPage() {
                       </button>
                       {s.status === "completed" && (
                         <button
-                          onClick={() => {
-                            setReturnId(s.id);
-                            setReturnOpen(true);
-                          }}
-                          title="Devolución / cambio"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                          onClick={() =>
+                            returnGate.run(() => {
+                              setReturnId(s.id);
+                              setReturnOpen(true);
+                            })
+                          }
+                          title={
+                            returnGate.locked
+                              ? "Devoluciones: función no incluida en tu plan"
+                              : "Devolución / cambio"
+                          }
+                          className={
+                            returnGate.locked
+                              ? "relative rounded-md p-2 text-muted-foreground/60 transition hover:bg-muted hover:text-muted-foreground"
+                              : "rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                          }
                         >
                           <RotateCcw size={16} />
+                          {returnGate.locked && (
+                            <Lock
+                              size={9}
+                              className="absolute right-0.5 top-0.5 text-ninja-flameSoft"
+                            />
+                          )}
                         </button>
                       )}
                       {s.status === "completed" && (
@@ -303,6 +329,7 @@ export default function VentasPage() {
         />
       </div>
 
+      {returnGate.modal}
       <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
       <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
       <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />

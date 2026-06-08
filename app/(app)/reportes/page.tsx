@@ -17,6 +17,7 @@ import {
   DropdownLabel,
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
+import { GatedButton } from "@/components/saas/GatedAction";
 import { useSalesReport, useWarrantyReport } from "@/modules/reports/hooks";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
@@ -294,9 +295,16 @@ export default function ReportesPage() {
               ))}
             </div>
           </div>
-          <Button variant="secondary" className="shrink-0" onClick={exportReporte} disabled={!data}>
+          <GatedButton
+            feature="export_xlsx"
+            featureLabel="Exportar a Excel"
+            variant="secondary"
+            className="shrink-0"
+            onClick={exportReporte}
+            disabled={!data}
+          >
             <Download size={16} /> Exportar XLSX
-          </Button>
+          </GatedButton>
           <Dropdown>
             <DropdownTrigger asChild>
               <Button variant="secondary" className="shrink-0">

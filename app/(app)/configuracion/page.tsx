@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Lock, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -31,6 +31,8 @@ import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
 import { PriceListsCard } from "@/components/prices/PriceListsCard";
+import { useFeature } from "@/modules/saas/gating";
+import { UpgradeModal } from "@/components/saas/UpgradeModal";
 
 type Section =
   | "apariencia"
@@ -44,18 +46,25 @@ type Section =
   | "escaner"
   | "precios"
   | "garantias";
-const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
+// `feature` (opcional): si el plan no la incluye, la sección queda deshabilitada
+// (candado) y el click abre el UpgradeModal en lugar de entrar a la sección.
+const SECTIONS: {
+  key: Section;
+  label: string;
+  icon: React.ElementType;
+  feature?: string;
+}[] = [
   { key: "apariencia", label: "Apariencia", icon: Palette },
   { key: "rubro", label: "Rubro del negocio", icon: Tag },
-  { key: "marca", label: "Marca del negocio", icon: Store },
-  { key: "tickets", label: "Tickets", icon: ReceiptText },
-  { key: "email", label: "Email", icon: Mail },
+  { key: "marca", label: "Marca del negocio", icon: Store, feature: "personalizacion_marca" },
+  { key: "tickets", label: "Tickets", icon: ReceiptText, feature: "tickets_pro" },
+  { key: "email", label: "Email", icon: Mail, feature: "email_comprobantes" },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
-  { key: "devoluciones", label: "Devoluciones", icon: RotateCcw },
+  { key: "devoluciones", label: "Devoluciones", icon: RotateCcw, feature: "devoluciones" },
   { key: "escaner", label: "Escáner", icon: ScanLine },
-  { key: "precios", label: "Listas de precios", icon: BadgeDollarSign },
-  { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
+  { key: "precios", label: "Listas de precios", icon: BadgeDollarSign, feature: "listas_precios" },
+  { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck, feature: "garantias" },
 ];
 
 const THEME_SWATCH: Record<ThemeName, { bg: string; a: string; b: string }> = {
@@ -97,6 +106,53 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="text-sm font-medium">{label}</div>
       {children}
     </div>
+  );
+}
+
+// Ítem del menú de secciones. Si la sección tiene `feature` y el plan no la
+// incluye, se ve deshabilitado (candado) y el click abre el UpgradeModal en vez
+// de cambiar de sección (gating universal — el backend igual bloquea la escritura).
+function SectionNavButton({
+  section: s,
+  active,
+  onSelect,
+}: {
+  section: { key: Section; label: string; icon: React.ElementType; feature?: string };
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = s.icon;
+  const allowed = useFeature(s.feature ?? "");
+  const [upOpen, setUpOpen] = useState(false);
+  const locked = Boolean(s.feature) && allowed === false;
+
+  return (
+    <>
+      <button
+        onClick={() => (locked ? setUpOpen(true) : onSelect())}
+        title={locked ? `${s.label}: función no incluida en tu plan` : undefined}
+        className={cn(
+          "flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition md:w-full",
+          locked
+            ? "text-muted-foreground/60 hover:bg-muted/60 hover:text-muted-foreground"
+            : active
+              ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )}
+      >
+        <Icon size={17} />
+        <span className="flex-1">{s.label}</span>
+        {locked && <Lock size={13} className="text-ninja-flameSoft" />}
+      </button>
+      {locked && s.feature && (
+        <UpgradeModal
+          open={upOpen}
+          onOpenChange={setUpOpen}
+          featureKey={s.feature}
+          featureLabel={s.label}
+        />
+      )}
+    </>
   );
 }
 
@@ -142,25 +198,14 @@ function ConfiguracionInner() {
       <div className="mt-8 grid gap-6 md:grid-cols-[210px_1fr]">
         {/* Menú de secciones */}
         <nav className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
-          {SECTIONS.map((s) => {
-            const Icon = s.icon;
-            const active = section === s.key;
-            return (
-              <button
-                key={s.key}
-                onClick={() => setSection(s.key)}
-                className={cn(
-                  "flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition md:w-full",
-                  active
-                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon size={17} />
-                {s.label}
-              </button>
-            );
-          })}
+          {SECTIONS.map((s) => (
+            <SectionNavButton
+              key={s.key}
+              section={s}
+              active={section === s.key}
+              onSelect={() => setSection(s.key)}
+            />
+          ))}
         </nav>
 
         {/* Contenido de la sección */}

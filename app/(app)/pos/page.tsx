@@ -801,7 +801,7 @@ function PosPageInner() {
             Punto de venta
             <InfoHint section="pos" />
           </h1>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <Button
               variant="ghost"
               size="sm"
@@ -813,15 +813,15 @@ function PosPageInner() {
             <span
               className={
                 hasShift
-                  ? "inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-emerald-300"
-                  : "inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
+                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-emerald-300"
+                  : "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
               }
             >
               <span
                 className={
                   hasShift
-                    ? "h-2 w-2 rounded-full bg-emerald-400"
-                    : "h-2 w-2 rounded-full bg-muted-foreground/50"
+                    ? "h-2 w-2 shrink-0 rounded-full bg-emerald-400"
+                    : "h-2 w-2 shrink-0 rounded-full bg-muted-foreground/50"
                 }
               />
               {hasShift ? "Caja abierta" : "Caja cerrada"}

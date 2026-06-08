@@ -15,6 +15,13 @@ export function formatQty(value: number | null | undefined): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, "");
 }
 
+const intFmt = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 });
+
+/** Formatea un entero con separador de miles es-AR (1234 → "1.234"). */
+export function formatInt(value: number | null | undefined): string {
+  return intFmt.format(Math.round(value ?? 0));
+}
+
 /**
  * Capitaliza un nombre: primera letra de cada palabra en mayúscula y el resto
  * en minúscula, respetando acentos (usa locale es-AR). Solo cambia la

@@ -243,9 +243,27 @@ async function main() {
       .in("store_key", touchedStores);
     const catalogIds = [...new Set((maps ?? []).map((m) => m.catalog_id))];
     console.log(
-      `\n[import_catalog] Catálogos afectados: ${catalogIds.length}. Notificando tenants…`,
+      `\n[import_catalog] Catálogos afectados: ${catalogIds.length}. Refrescando conteos y notificando…`,
     );
     for (const cid of catalogIds) {
+      // Conteo PÚBLICO del catálogo (catalogs.product_count, deduplicado por EAN
+      // si aplica). Lo escribe el service_role (auth.uid() null) aunque
+      // notify_catalog_update falle por no ser is_internal(): así el storefront
+      // muestra "Incluye N productos" siempre fresco.
+      const { data: cnt, error: cntErr } = await supabase.rpc(
+        "catalog_recount_products",
+        { p_catalog_id: cid },
+      );
+      if (cntErr) {
+        console.warn(
+          `[import_catalog] catalog_recount_products(${cid}) falló: ${cntErr.message}`,
+        );
+      } else {
+        console.log(
+          `[import_catalog] catálogo ${cid}: ${cnt} productos (conteo público actualizado).`,
+        );
+      }
+
       const { data, error } = await supabase.rpc("notify_catalog_update", {
         p_catalog_id: cid,
       });

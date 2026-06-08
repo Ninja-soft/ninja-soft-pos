@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Check,
+  Layers,
   Package,
   PackagePlus,
   Search,
@@ -19,7 +20,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Spinner, SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatInt } from "@/lib/utils/format";
 import {
   useStorefrontCatalogs,
   useCatalogSearch,
@@ -197,6 +198,13 @@ function CatalogCard({
           <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 backdrop-blur">
             <Check size={12} />
             {catalog.source === "granted" ? "Acceso de regalo" : "Comprado"}
+          </span>
+        )}
+        {/* Tamaño del catálogo: info comercial (visible antes de comprar). */}
+        {catalog.productCount > 0 && (
+          <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+            <Layers size={12} className="text-ninja-flameSoft" />
+            Incluye {formatInt(catalog.productCount)} productos
           </span>
         )}
       </div>

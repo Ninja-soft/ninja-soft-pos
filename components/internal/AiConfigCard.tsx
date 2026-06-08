@@ -36,7 +36,13 @@ type Status = {
   addon_trial_days: string | null;
   // Estado activo/inactivo del addon ("true"/"false"). null → se asume activo.
   active: string | null;
+  // Tope mensual de tokens por negocio (número como string). null → default 500k.
+  monthly_quota: string | null;
 };
+
+// Cuota mensual de tokens por defecto (espejo del DEFAULT_MONTHLY_TOKEN_CAP de
+// la Edge Function ai_assistant). Si el campo queda vacío, la IA usa este tope.
+const DEFAULT_MONTHLY_QUOTA = "500000";
 
 // Modelo por defecto según proveedor.
 const DEFAULT_MODEL: Record<Provider, string> = {
@@ -90,6 +96,8 @@ export function AiConfigCard() {
   const [commercialText, setCommercialText] = useState("");
   const [priceArs, setPriceArs] = useState("");
   const [trialDays, setTrialDays] = useState("");
+  // Cuota mensual de tokens por negocio. Vacío → la IA usa el default (500k).
+  const [monthlyQuota, setMonthlyQuota] = useState("");
   // Toggle "Asistente IA activo". Default activo (null en config → true).
   const [active, setActive] = useState(true);
   // El usuario tocó el modelo manualmente → no lo pisamos al cambiar proveedor.
@@ -122,6 +130,7 @@ export function AiConfigCard() {
     setCommercialText(status.commercial_text ?? "");
     setPriceArs(status.addon_price_ars ?? "");
     setTrialDays(status.addon_trial_days ?? "");
+    setMonthlyQuota(status.monthly_quota ?? "");
     // null/ausente → activo por defecto; solo "false" explícito lo apaga.
     setActive(status.active !== "false");
     if (status.model) setModelTouched(true);
@@ -203,6 +212,9 @@ export function AiConfigCard() {
       if (commercialText.trim()) secrets.commercial_text = commercialText.trim();
       if (priceArs.trim()) secrets.addon_price_ars = priceArs.trim();
       if (trialDays.trim()) secrets.addon_trial_days = trialDays.trim();
+      // Cuota mensual: si lo dejan vacío, la IA cae al default (500k). Solo se
+      // persiste si hay un valor (el merge del backend ignora los vacíos).
+      if (monthlyQuota.trim()) secrets.monthly_quota = monthlyQuota.trim();
       const { data, error } = await supabase.functions.invoke("set_platform_secret", {
         body: { key: "ai_config", secrets },
       });
@@ -450,6 +462,27 @@ export function AiConfigCard() {
               onChange={(e) => setTrialDays(e.target.value)}
               placeholder="14"
             />
+          </div>
+
+          {/* Límite operativo de consumo (no es presentación): tope mensual de
+              tokens por negocio. La IA corta con "cuota agotada" al superarlo. */}
+          <div className="border-t border-border pt-4">
+            <Input
+              label="Cuota mensual de tokens por negocio"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1000}
+              value={monthlyQuota}
+              onChange={(e) => setMonthlyQuota(e.target.value)}
+              placeholder={DEFAULT_MONTHLY_QUOTA}
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Tope de tokens que cada negocio puede consumir por mes con el
+              asistente. Al superarlo, la IA deja de responder hasta el mes
+              siguiente. Si lo dejás vacío, se usa {DEFAULT_MONTHLY_QUOTA} por
+              defecto.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

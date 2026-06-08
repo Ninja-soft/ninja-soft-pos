@@ -50,6 +50,10 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     // Estado activo/inactivo del addon IA ("true"/"false"). NO es secreto: se
     // devuelve en claro en el status para que la card pueda prefijar el toggle.
     "active",
+    // Tope mensual de tokens por negocio (número como string). NO es secreto:
+    // se devuelve en claro para prefijar el campo de la card. La Edge Function
+    // ai_assistant lo lee con fallback al default (500k).
+    "monthly_quota",
   ]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).

@@ -1,4 +1,4 @@
-// Información explicativa de cada feature del catálogo (37 entradas).
+// Información explicativa de cada feature del catálogo.
 // La usa el editor de planes para mostrar un tooltip por funcionalidad:
 //   - desc:   qué hace / qué habilita el módulo.
 //   - impact: qué implica desactivarlo en el plan.
@@ -78,6 +78,36 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con Mercado Pago: integra MP (QR, point, link) como medio de pago y permite conectar la cuenta del negocio.",
     impact: "Sin esto no se puede cobrar con Mercado Pago ni vincular la cuenta del comercio.",
     minPlan: "Pro",
+  },
+  mercadopago_point: {
+    desc: "Cobros con Mercado Point: terminal presencial de Mercado Pago para cobrar con tarjeta en el mostrador.",
+    impact: "Desactivado, no se puede usar la terminal Point de Mercado Pago como medio de cobro.",
+    minPlan: "Pro",
+  },
+  payway: {
+    desc: "Cobros con Payway (Prisma): pasarela de tarjetas de crédito y débito a través de Payway.",
+    impact: "Sin esto Payway no figura como medio de pago disponible al cobrar.",
+    minPlan: "Pro",
+  },
+  getnet: {
+    desc: "Cobros con Getnet: pasarela de pago con tarjetas vía Getnet (Santander).",
+    impact: "Desactivado, no se puede cobrar con Getnet desde el POS.",
+    minPlan: "Pro",
+  },
+  nave: {
+    desc: "Cobros con Nave: medio de pago de Nave (Banco Galicia) integrado al POS.",
+    impact: "Sin esto Nave no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+  },
+  fiserv: {
+    desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",
+    impact: "Desactivado, las terminales Fiserv/Clover no quedan disponibles como medio de cobro.",
+    minPlan: "Business",
+  },
+  pagos360: {
+    desc: "Cobros con Pagos360: links de pago y DEBIN para cobrar a distancia o por débito inmediato.",
+    impact: "Sin esto no se pueden generar links de pago ni cobros DEBIN con Pagos360.",
+    minPlan: "Business",
   },
 
   // ── Catálogo ────────────────────────────────────────────────────────────────

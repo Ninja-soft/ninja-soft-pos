@@ -22,14 +22,20 @@ const ALL_METHODS: { value: SalePaymentInput["method"]; label: string; providers
 ];
 
 // Feature de plan por proveedor (espejo de payment_method_plan_key en SQL).
-// Un proveedor sin entrada NO está gateado por plan (posnet propio, pagos360…).
-// El backend (trigger en payments + Edge de QR) bloquea de verdad; esto solo
-// evita ofrecer en la UI un medio que el plan no permite.
+// Un proveedor sin entrada NO está gateado por plan. El backend (trigger en
+// payments + Edge de QR) bloquea de verdad; esto solo evita ofrecer en la UI un
+// medio que el plan no permite. La feature key coincide con payment_providers.key.
 const PROVIDER_FEATURE: Record<string, string> = {
   mercadopago: "mercado_pago",
-  mercadopago_point: "mercado_pago",
+  // Mercado Point tiene su propia feature (MP online ≠ Point presencial).
+  mercadopago_point: "mercadopago_point",
   modo: "modo",
   mobbex: "mobbex",
+  payway: "payway",
+  getnet: "getnet",
+  fiserv: "fiserv",
+  pagos360: "pagos360",
+  nave: "nave",
 };
 
 // Base del plan según el método seleccionado.

@@ -157,6 +157,10 @@ Detalle: [`docs/workflows/git-workflow.md`](docs/workflows/git-workflow.md).
 
 Ver [`docs/04-database.md`](docs/04-database.md) y el agente `supabase-architect`.
 
+### Convención de features de plan
+
+Toda nueva funcionalidad, módulo o medio de pago se agrega como **check en la tabla `features`** y se marca por plan en **`plans.limits.modules`** según análisis comercial. El **gating real** (`tenant_has_feature` / `tenant_has_feature_for` + los triggers correspondientes, p. ej. el de `payments` para medios de pago) **debe cubrirla**: la UI nunca es la única barrera. La UI la muestra en la **matriz interna del editor de planes** y en la **comparación de planes** (`lib/saas/planComparison.ts`). Para medios de pago, la feature key coincide con `payment_providers.key` y se mapea en `payment_method_plan_key(method)`; el espejo de UI vive en `components/pos/PosModals.tsx` (`PROVIDER_FEATURE`). Sumá también su copy en `lib/saas/featureInfo.ts` (desc / impact / minPlan).
+
 ---
 
 ## 7. Antes de empezar a trabajar

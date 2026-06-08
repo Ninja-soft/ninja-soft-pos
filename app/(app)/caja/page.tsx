@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { Isotype } from "@/components/brand/Logo";
@@ -109,7 +110,10 @@ export default function CajaPage() {
     <>
 <div className="mx-auto max-w-5xl px-6 py-8">
         <Eyebrow>Operación</Eyebrow>
-        <Display className="mt-3 text-3xl md:text-4xl">Caja</Display>
+        <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+          Caja
+          <InfoHint section="caja" size={18} />
+        </Display>
 
         {!shift ? (
           <Card className="mt-6">

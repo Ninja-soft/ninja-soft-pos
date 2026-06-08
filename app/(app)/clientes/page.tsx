@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
@@ -102,7 +103,10 @@ export default function ClientesPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>Clientes</Eyebrow>
-            <Display className="mt-3 text-3xl md:text-4xl">Clientes</Display>
+            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+              Clientes
+              <InfoHint section="clientes" size={18} />
+            </Display>
           </div>
           <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Button variant="secondary" className="shrink-0" onClick={exportBase}>

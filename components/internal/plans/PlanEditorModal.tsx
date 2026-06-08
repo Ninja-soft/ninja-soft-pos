@@ -73,17 +73,33 @@ function planModules(limits: PlanLimits): Record<string, boolean> {
 }
 
 // Popover de información de una feature (Info icon → explicación).
+//
+// IMPORTANTE: este Popover vive DENTRO del Modal (Radix Dialog). Un Popover de
+// Radix *no controlado* anidado en un Dialog se cierra solo: al abrir, su
+// contenido (portaleado fuera del DOM del Dialog) intenta tomar el foco y el
+// FocusScope del Dialog lo reclama de inmediato, por lo que el popover nunca
+// llega a verse. La solución (mismo patrón que `InfoHint`, que sí funciona) es:
+//   1) controlar el `open` nosotros (useState) y abrir en click/hover,
+//   2) `onOpenAutoFocus` → preventDefault: el popover NO roba el foco, así el
+//      Dialog no pelea por recuperarlo y el contenido permanece visible.
 function FeatureInfoButton({ featureKey }: { featureKey: string }) {
+  const [open, setOpen] = useState(false);
   const info = FEATURE_INFO[featureKey];
   if (!info) return null;
   return (
-    <Popover.Root>
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"
           aria-label="Más información"
           className="shrink-0 rounded p-0.5 text-muted-foreground transition hover:text-ninja-flameSoft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={(e) => e.preventDefault()}
+          onClick={(e) => {
+            // El botón vive junto a un <label>; evitamos que el click togglee
+            // el checkbox vecino, pero toggleamos el popover nosotros.
+            e.preventDefault();
+            setOpen((v) => !v);
+          }}
+          onMouseEnter={() => setOpen(true)}
         >
           <Info size={14} />
         </button>
@@ -94,7 +110,9 @@ function FeatureInfoButton({ featureKey }: { featureKey: string }) {
           align="center"
           sideOffset={6}
           collisionPadding={12}
-          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-ninjaSoft data-[state=open]:animate-modal-in"
+          onMouseLeave={() => setOpen(false)}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-modal-in"
         >
           <p className="text-foreground">{info.desc}</p>
           <p className="mt-2 text-muted-foreground">

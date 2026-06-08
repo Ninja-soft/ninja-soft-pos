@@ -42,6 +42,9 @@ export const ProductSchema = z.object({
   // Override de venta en negativo: "inherit" usa el ajuste global del tenant.
   allow_negative: z.enum(["inherit", "yes", "no"]).default("inherit"),
   warranty_months: z.coerce.number().int().min(0).max(600).default(0),
+  // Botón rápido del POS (H36): favorito + orden de aparición en la grilla.
+  is_favorite: z.boolean().default(false),
+  favorite_order: z.coerce.number().int().min(0).max(9999).default(0),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

@@ -24,6 +24,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
   useTopProducts,
+  useFavoriteProducts,
   useProductSerials,
   useCategories,
   useWarrantyPlans,
@@ -58,6 +59,8 @@ import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { productsApi, variantLabel } from "@/modules/products/api";
 import { CategoryNav, subtreeIds } from "@/components/pos/CategoryNav";
+import { FavoritesGrid } from "@/components/pos/FavoritesGrid";
+import type { Product } from "@/modules/products/api";
 import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
 import {
@@ -185,6 +188,11 @@ export default function PosPage() {
   const { data: warrantyPlans } = useWarrantyPlans(true);
   const offerWarranty = posSettings?.offerWarranty ?? true;
   const role = myTenant?.role ?? "cashier";
+  // Venta libre (monto manual · H36): habilitada por flag del negocio
+  // (pos_settings.allow_free_sale) Y sólo para owner/manager. Un cashier sin
+  // permiso no ve el botón. Default del flag = true.
+  const allowFreeSale = posSettings?.allowFreeSale ?? true;
+  const canFreeSale = allowFreeSale && (role === "owner" || role === "manager");
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
   const rounding = posSettings?.rounding ?? 0;
   const requireCustomer = posSettings?.requireCustomer ?? false;
@@ -221,6 +229,11 @@ export default function PosPage() {
   const { data: scBalance } = useStoreCreditBalance(customer?.id);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
+  // Favoritos (H36): botones rápidos grandes arriba de la grilla. Se muestran
+  // cuando no se está buscando ni filtrando por categoría (pantalla de cobro
+  // rápido sin búsqueda). Independiente del rubro: si hay favoritos, aparecen.
+  const showFavorites = !search.trim() && !categoryFilter;
+  const { data: favorites } = useFavoriteProducts(showFavorites);
 
   // ----- Pantalla del cliente / doble pantalla (F10 · H25) -----
   // Branding del negocio (logo + nombre + acento) para la pantalla del cliente.
@@ -322,6 +335,43 @@ export default function PosPage() {
         warrantyMonths: p.warranty_months ?? 0,
       });
     }
+  }
+
+  // ----- Favoritos / cantidades rápidas (H36) -----
+  // Tap del botón favorito: rutea por tipo (serial/variante/peso) o agrega 1.
+  function favTap(p: Product) {
+    pickProduct({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      price: p.price,
+      unit: p.unit,
+      is_serialized: p.is_serialized,
+      has_variants: p.has_variants,
+      warranty_months: p.warranty_months ?? undefined,
+    });
+  }
+  // Cantidad rápida (×2/×6/×12) para un favorito por unidad simple: suma qty de
+  // un toque. El precio se resuelve contra la lista mostrador.
+  function favQuickUnits(p: Product, qty: number) {
+    addProduct(
+      {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: priceFor(p.id, null, p.price),
+        unit: p.unit,
+        warrantyMonths: p.warranty_months ?? 0,
+      },
+      qty,
+    );
+  }
+  // Peso rápido (½ kg / 1 kg) para un favorito por peso.
+  function favQuickWeight(p: Product, kg: number) {
+    addWeighed(
+      { id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price) },
+      kg,
+    );
   }
 
   function confirmSerial() {
@@ -701,14 +751,17 @@ export default function PosPage() {
             </button>
           </div>
 
-          {quickSale && (
+          {/* Venta libre (H36): monto manual + concepto. Sólo owner/manager y si
+              el negocio la habilita (pos_settings.allow_free_sale). Un cashier
+              sin permiso no ve el botón. */}
+          {canFreeSale && (
             <Button
               type="button"
               variant="secondary"
               className="mt-3 w-full"
               onClick={() => setFreeOpen(true)}
             >
-              <Banknote size={16} /> Venta rápida (monto libre)
+              <Banknote size={16} /> Venta libre (monto manual)
             </Button>
           )}
           {/* Navegador de categorías: raíces como pestañas + drill-down a
@@ -722,6 +775,18 @@ export default function PosPage() {
                 onSelect={setCategoryFilter}
               />
             </div>
+          )}
+
+          {/* Grilla táctil de favoritos (H36): botones grandes para cobrar sin
+              buscar. Tap = agrega 1 (o abre serial/variante/peso); chips de
+              cantidad rápida ×2/×6/×12 o ½/1 kg. */}
+          {showFavorites && (
+            <FavoritesGrid
+              products={favorites ?? []}
+              onTap={favTap}
+              onQuickUnits={favQuickUnits}
+              onQuickWeight={favQuickWeight}
+            />
           )}
 
           {showFrequent && !categoryFilter && topProducts && topProducts.length > 0 && (
@@ -887,6 +952,23 @@ export default function PosPage() {
                     {formatCurrency(lineSubtotal(l))}
                   </span>
                 </div>
+                {/* Cantidades rápidas en la línea (H36): suma de un toque sin
+                    teclear. Sólo para ítems por unidad (los de peso usan kg). */}
+                {l.unit !== "kg" && (
+                  <div className="mt-2 flex gap-1.5">
+                    {[2, 6, 12].map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setQuantity(l.lineId, l.quantity + q)}
+                        title={`Sumar ${q}`}
+                        className="rounded-md border border-border bg-card px-2 py-1 text-xs font-semibold text-muted-foreground transition active:scale-95 hover:border-ninja-flameSoft/50 hover:text-ninja-flameSoft"
+                      >
+                        +{q}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1204,8 +1286,12 @@ export default function PosPage() {
           setVariantProduct(null);
         }}
       />
-      <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta rápida">
+      <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta libre">
         <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Cobra un monto manual con un concepto. No descuenta stock (ítem sin
+            SKU). Útil para servicios sueltos, cargos o ítems fuera del catálogo.
+          </p>
           <Input
             label="Monto"
             type="number"
@@ -1220,10 +1306,10 @@ export default function PosPage() {
             }}
           />
           <Input
-            label="Detalle (opcional)"
+            label="Concepto / motivo (opcional)"
             value={freeName}
             onChange={(e) => setFreeName(e.target.value)}
-            placeholder="Venta rápida"
+            placeholder="Venta libre"
           />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFreeOpen(false)}>

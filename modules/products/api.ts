@@ -17,10 +17,13 @@ export interface ProductsPageParams {
   brandId?: string | null;
 }
 
-// `plu` (código corto de 6 dígitos) aún no vive en los tipos generados
-// (no se regeneran). Se expone por intersección para tiparlo en toda la app.
+// `plu` (código corto de 6 dígitos) e `is_favorite`/`favorite_order` (botón
+// rápido del POS · H36) aún no viven en los tipos generados (no se regeneran).
+// Se exponen por intersección para tiparlos en toda la app.
 export type Product = Tables<"products"> & {
   plu: string | null;
+  is_favorite: boolean;
+  favorite_order: number;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -155,6 +158,35 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
+  // Favoritos del POS (H36): productos/servicios marcados como botón rápido.
+  // Orden por favorite_order y luego nombre. La RLS filtra por tenant.
+  // `is_favorite`/`favorite_order` aún no están en los tipos generados: se
+  // castea el nombre de tabla para poder filtrar/ordenar por esas columnas.
+  favorites: async (): Promise<Product[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("products" as never)
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .eq("is_favorite", true)
+      .order("favorite_order")
+      .order("name")
+      .limit(60);
+    if (error) throw error;
+    return (data ?? []) as unknown as Product[];
+  },
+
+  // Toggle del favorito desde el listado de productos (un toque, sin abrir el
+  // form). `is_favorite` aún no está en los tipos generados: cast del payload.
+  setFavorite: async (id: string, is_favorite: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("products")
+      .update({ is_favorite } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
   create: async (input: ProductOutput): Promise<Product> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -187,7 +219,10 @@ export const productsApi = {
             ? null
             : input.allow_negative === "yes",
         warranty_months: input.warranty_months,
-        // `plu` aún no está en los tipos generados: casteamos el payload.
+        // Botón rápido del POS (H36): favorito + orden.
+        is_favorite: input.is_favorite,
+        favorite_order: input.favorite_order,
+        // `plu`/`is_favorite` aún no están en los tipos generados: casteamos el payload.
       } as never)
       .select("*")
       .single();
@@ -225,6 +260,9 @@ export const productsApi = {
             ? null
             : input.allow_negative === "yes",
         warranty_months: input.warranty_months,
+        // Botón rápido del POS (H36): favorito + orden.
+        is_favorite: input.is_favorite,
+        favorite_order: input.favorite_order,
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
       } as never)

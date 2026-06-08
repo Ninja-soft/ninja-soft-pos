@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
+import { Plus, Star } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -107,6 +107,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               ? "yes"
               : "no",
         warranty_months: product?.warranty_months ?? 0,
+        is_favorite: product?.is_favorite ?? false,
+        favorite_order: product?.favorite_order ?? 0,
       });
     }
   }, [open, product, reset]);
@@ -369,6 +371,25 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" className="accent-ninja-flame" {...register("is_active")} />
           Activo
+        </label>
+
+        {/* Botón rápido del POS (H36): marca el producto/servicio como favorito
+            para que aparezca como botón grande en la pantalla de cobro rápido. */}
+        <label className="flex items-start gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-ninja-flame"
+            {...register("is_favorite")}
+          />
+          <span>
+            <span className="inline-flex items-center gap-1">
+              <Star size={14} className="text-ninja-flameSoft" /> Favorito (botón rápido del POS)
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              Aparece como botón grande en el POS para cobrarlo sin buscar. Ideal
+              para sabores, cafés, servicios y el catálogo chico.
+            </span>
+          </span>
         </label>
 
         <label className="flex items-start gap-2 text-sm text-foreground">

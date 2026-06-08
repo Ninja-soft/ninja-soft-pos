@@ -10,6 +10,7 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Star,
   Tag,
   Trash2,
   Upload,
@@ -34,6 +35,7 @@ import {
   useCategories,
   useBrands,
   usePluSettings,
+  useSetFavorite,
 } from "@/modules/products/hooks";
 import { FirstProductPluPrompt } from "@/components/products/FirstProductPluPrompt";
 import { EmptyProductsPromo } from "@/components/products/EmptyProductsPromo";
@@ -85,6 +87,7 @@ export default function ProductosPage() {
   const products = data?.rows ?? [];
   const total = data?.total ?? 0;
   const { remove } = useProductMutations();
+  const setFavorite = useSetFavorite();
   const { data: pluSettings } = usePluSettings();
   const noFilters = !debouncedSearch && !categoryId && !brandId;
 
@@ -171,6 +174,21 @@ export default function ProductosPage() {
 
   async function onDelete(p: Product) {
     setDeleteTarget(p);
+  }
+
+  // Toggle del favorito (botón rápido del POS · H36) desde el listado.
+  async function toggleFavorite(p: Product) {
+    try {
+      await setFavorite.mutateAsync({ id: p.id, is_favorite: !p.is_favorite });
+      toast({
+        title: p.is_favorite
+          ? "Quitado de favoritos del POS"
+          : "Agregado a favoritos del POS",
+        variant: "success",
+      });
+    } catch {
+      toast({ title: "No se pudo actualizar el favorito", variant: "error" });
+    }
   }
 
   async function confirmDelete(_reason?: string) {
@@ -360,6 +378,25 @@ export default function ProductosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => toggleFavorite(p)}
+                          title={
+                            p.is_favorite
+                              ? "Quitar de favoritos del POS"
+                              : "Marcar como favorito (botón rápido del POS)"
+                          }
+                          aria-pressed={p.is_favorite}
+                          className={
+                            p.is_favorite
+                              ? "rounded-md p-2 text-ninja-flameSoft transition hover:bg-muted"
+                              : "rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                          }
+                        >
+                          <Star
+                            size={16}
+                            className={p.is_favorite ? "fill-ninja-flameSoft" : ""}
+                          />
+                        </button>
                         <button
                           onClick={() => openAdjust(p)}
                           title="Ajustar stock"

@@ -20,14 +20,18 @@ export interface CartLine {
 interface CartState {
   lines: CartLine[];
   discountTotal: number; // descuento global (monto)
-  addProduct: (p: {
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    unit?: string;
-    warrantyMonths?: number;
-  }) => void;
+  addProduct: (
+    p: {
+      id: string;
+      name: string;
+      sku: string | null;
+      price: number;
+      unit?: string;
+      warrantyMonths?: number;
+    },
+    // Cantidad a sumar (H36: botones de cantidad rápida +1/+2/x6/x12). Default 1.
+    qty?: number,
+  ) => void;
   addVariant: (p: {
     id: string;
     name: string;
@@ -56,8 +60,9 @@ interface CartState {
 export const useCartStore = create<CartState>((set) => ({
   lines: [],
   discountTotal: 0,
-  addProduct: (p) =>
+  addProduct: (p, qty = 1) =>
     set((state) => {
+      const add = qty > 0 ? qty : 1;
       // Línea sin variante: identidad por producto. No fusiona con líneas de
       // variante del mismo producto (esas llevan variantId).
       const existing = state.lines.find(
@@ -66,7 +71,7 @@ export const useCartStore = create<CartState>((set) => ({
       if (existing) {
         return {
           lines: state.lines.map((l) =>
-            l.lineId === existing.lineId ? { ...l, quantity: l.quantity + 1 } : l,
+            l.lineId === existing.lineId ? { ...l, quantity: l.quantity + add } : l,
           ),
         };
       }
@@ -79,7 +84,7 @@ export const useCartStore = create<CartState>((set) => ({
             name: p.name,
             sku: p.sku,
             unitPrice: p.price,
-            quantity: 1,
+            quantity: add,
             discount: 0,
             unit: p.unit ?? "un",
             warrantyMonths: p.warrantyMonths ?? 0,

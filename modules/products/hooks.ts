@@ -109,6 +109,26 @@ export function useTopProducts(enabled: boolean, limit = 12) {
   });
 }
 
+// Favoritos del POS (H36): botones rápidos. `enabled` evita el fetch cuando la
+// grilla rápida no está visible (p. ej. mientras se busca).
+export function useFavoriteProducts(enabled = true) {
+  return useQuery({
+    queryKey: ["products", "favorites"],
+    queryFn: () => productsApi.favorites(),
+    enabled,
+  });
+}
+
+// Toggle del favorito desde el listado de productos (un toque).
+export function useSetFavorite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; is_favorite: boolean }) =>
+      productsApi.setFavorite(v.id, v.is_favorite),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
+  });
+}
+
 export function useCategories() {
   return useQuery({
     queryKey: ["categories", "list"],

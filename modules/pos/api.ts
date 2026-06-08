@@ -442,6 +442,9 @@ export const posApi = {
     offerWarranty: boolean;
     // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
     requireCardVoucher: boolean;
+    // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
+    // debe ser owner/manager (chequeo en la página). Default true.
+    allowFreeSale: boolean;
   } | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
@@ -464,6 +467,9 @@ export const posApi = {
       offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
       // Default false: por defecto NO se exige voucher de tarjeta.
       requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
+      // Default true: la venta libre queda habilitada (igual que hoy donde el
+      // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
+      allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
     };
   },
 

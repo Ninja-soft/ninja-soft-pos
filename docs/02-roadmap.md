@@ -585,12 +585,12 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [ ] Modo "sin stock" para servicios y comercios donde el inventario no importa al inicio.
   - [ ] *Criterio:* una heladería o peluquería queda lista para cobrar una primera venta en menos de 10 minutos, sin importar Excel ni tocar SQL.
 
-- [ ] **H36 — POS rápido por botones / catálogo chico.**
-  - [ ] Pantalla de cobro con grilla táctil de favoritos, categorías grandes y botones de alto contraste.
-  - [ ] Productos/servicios sin búsqueda obligatoria: el cajero toca 2-3 botones y cobra.
-  - [ ] Cantidades rápidas: `+1`, `+2`, `x6`, `x12`, medio kilo/kilo, sesión individual/pack.
-  - [ ] Botón "Venta libre" con monto manual y motivo, controlado por permiso.
-  - [ ] Cobro express: efectivo exacto, efectivo con vuelto, QR, tarjeta, transferencia.
+- [~] **H36 — POS rápido por botones / catálogo chico.** — *Core de cobro rápido por botones entregado (PR#TBD-H36): favoritos como botones grandes + cantidades rápidas + venta libre por permiso. Sólo queda la cantidad "sesión individual/pack" (depende de H41 — packs/sesiones).*
+  - [x] Pantalla de cobro con grilla táctil de favoritos, categorías grandes y botones de alto contraste. — *`components/pos/FavoritesGrid.tsx` (botones grandes alto contraste, mobile/tablet-first) arriba de la grilla del POS; categorías grandes ya existían (`CategoryNav`).*
+  - [x] Productos/servicios sin búsqueda obligatoria: el cajero toca 2-3 botones y cobra. — *Favoritos (`products.is_favorite`) se muestran sin buscar; tap = agrega al carrito.*
+  - [~] Cantidades rápidas: `+1`, `+2`, `x6`, `x12`, medio kilo/kilo, sesión individual/pack. — *`+1` (tap del botón) + chips `×2/×6/×12` en botones y en la línea del carrito; `½ kg`/`1 kg` para productos por peso. Sesión/pack queda para H41.*
+  - [x] Botón "Venta libre" con monto manual y motivo, controlado por permiso. — *Botón "Venta libre (monto manual)" gateado por `pos_settings.allow_free_sale` + rol owner/manager; reusa el mecanismo de línea product-less (`addFreeAmount` → `create_sale` con `product_id` null, no descuenta stock). Probado por SQL.*
+  - [x] Cobro express: efectivo exacto, efectivo con vuelto, QR, tarjeta, transferencia. — *Reusa `PaymentModal`/QR existentes (no se duplicó).*
   - [ ] *Criterio:* una venta típica de 3 ítems se carga y cobra en menos de 15 segundos en pantalla táctil.
 
 - [ ] **H37 — Modificadores simples para heladería/cafetería.**

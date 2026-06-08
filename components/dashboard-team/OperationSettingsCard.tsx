@@ -21,6 +21,7 @@ import {
   TrendingUp,
   ShieldCheck,
   CreditCard,
+  Banknote,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -58,6 +59,7 @@ type Settings = {
   show_catalog_price_hints: boolean;
   offer_warranty: boolean;
   require_card_voucher: boolean;
+  allow_free_sale: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -137,6 +139,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           show_catalog_price_hints: true,
           offer_warranty: true,
           require_card_voucher: false,
+          allow_free_sale: true,
         }
       );
     },
@@ -162,6 +165,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [showCatalogPriceHints, setShowCatalogPriceHints] = useState(true);
   const [offerWarranty, setOfferWarranty] = useState(true);
   const [requireCardVoucher, setRequireCardVoucher] = useState(false);
+  const [allowFreeSale, setAllowFreeSale] = useState(true);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -193,6 +197,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setShowCatalogPriceHints(settings.show_catalog_price_hints ?? true);
     setOfferWarranty(settings.offer_warranty ?? true);
     setRequireCardVoucher(settings.require_card_voucher ?? false);
+    setAllowFreeSale(settings.allow_free_sale ?? true);
   }, [settings]);
 
   const save = useMutation({
@@ -226,6 +231,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           show_catalog_price_hints: showCatalogPriceHints,
           offer_warranty: offerWarranty,
           require_card_voucher: requireCardVoucher,
+          allow_free_sale: allowFreeSale,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -421,6 +427,29 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             checked={requireCardVoucher}
             onCheckedChange={setRequireCardVoucher}
             label="Exigir lote, cupón y nº de autorización al cobrar con tarjeta"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Venta libre (H36): habilita el botón de monto manual en el POS. El
+          botón sólo lo ve owner/manager; este flag deja apagar la función por
+          completo aun para roles habilitados. Default activado. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Banknote size={16} className="text-ninja-flameSoft" /> Permitir venta libre (monto manual)
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Muestra en el POS el botón “Venta libre” para cobrar un monto manual
+              con un concepto, sin producto del catálogo (no descuenta stock). Sólo
+              lo ven el dueño y el encargado.
+            </p>
+          </div>
+          <Switch
+            checked={allowFreeSale}
+            onCheckedChange={setAllowFreeSale}
+            label="Permitir venta libre (monto manual) en el POS"
           />
         </CardContent>
       </Card>

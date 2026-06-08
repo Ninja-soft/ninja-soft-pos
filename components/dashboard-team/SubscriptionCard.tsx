@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard,
   Sparkles,
   Check,
-  Calendar,
+  CalendarClock,
   Receipt,
   ArrowUpRight,
   XCircle,
   AlertTriangle,
   Star,
   Zap,
+  TrendingUp,
+  ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -30,8 +33,11 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
+import { PlanBadge } from "@/components/internal/plans/PlanBadge";
+import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
+import { PaymentHistory, type PaymentRecord } from "@/components/saas/PaymentHistory";
 
-// Tipos del RPC my_subscription() (no están en los tipos generados → cast).
+// Tipos de los RPC (no están en los tipos generados → cast laxo).
 type Addon = {
   addon_key: string;
   label: string | null;
@@ -66,6 +72,7 @@ type MySub = {
     created_at: string;
   } | null;
 };
+// public_plans(): incluye modules + limits (para comparar planes).
 type PublicPlan = {
   key: string;
   name: string;
@@ -77,6 +84,8 @@ type PublicPlan = {
   trial_days: number;
   is_recommended: boolean;
   sort: number;
+  modules: Record<string, boolean>;
+  limits: Record<string, number | null>;
 };
 type AiCfg = {
   image_url: string;
@@ -85,7 +94,7 @@ type AiCfg = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  trial: "Prueba",
+  trial: "Prueba gratis",
   active: "Activa",
   past_due: "Pago pendiente",
   suspended: "Suspendida",
@@ -100,14 +109,12 @@ const STATUS_TONE: Record<string, string> = {
 };
 const AI_ADDON_KEYS = ["ai_assistant", "asistente_ia"];
 
-// Estado del preapproval de Mercado Pago (medio de pago de la suscripción).
 const MP_STATUS_LABELS: Record<string, string> = {
   authorized: "Autorizado",
   pending: "Pendiente de autorizar",
   paused: "Pausado",
   cancelled: "Cancelado",
 };
-// Marca legible del medio (MP no expone los últimos 4 dígitos en el preapproval).
 const MP_PM_LABELS: Record<string, string> = {
   visa: "Visa",
   master: "Mastercard",
@@ -117,18 +124,49 @@ const MP_PM_LABELS: Record<string, string> = {
   account_money: "Dinero en cuenta",
 };
 
+// Marca local para mostrar "Cambiaste a X" un ratito tras un cambio de plan
+// (request_plan_change aplica al instante; no hay estado "pendiente" en DB).
+const PLAN_CHANGE_KEY = "ninja:last-plan-change";
+const PLAN_CHANGE_WINDOW_MS = 1000 * 60 * 60 * 24; // 24 h.
+
 function fmtMoney(n: number | null | undefined): string {
   return `$${Number(n ?? 0).toLocaleString("es-AR")}`;
 }
 function fmtDate(s: string | null | undefined): string {
-  return s ? new Date(s).toLocaleDateString("es-AR") : "—";
+  return s
+    ? new Date(s).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "—";
 }
-// rpc tipado laxo: los RPC nuevos no están en los tipos generados.
+function fmtDateShort(s: string | null | undefined): string {
+  return s ? new Date(s).toLocaleDateString("es-AR", { day: "2-digit", month: "long" }) : "—";
+}
+// Días restantes (>= 0) hasta una fecha. null si no hay fecha.
+function daysUntil(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const ms = new Date(s).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
 function rpc(supabase: ReturnType<typeof createClient>) {
   return supabase.rpc as unknown as (
     fn: string,
     args?: Record<string, unknown>,
   ) => Promise<{ data: unknown; error: { message?: string } | null }>;
+}
+
+function toPlanCardModel(p: PublicPlan): PlanCardModel {
+  return {
+    key: p.key,
+    name: p.name,
+    secondaryName: p.secondary_name,
+    imageUrl: p.image_url,
+    icon: p.icon,
+    monthlyPriceArs: Number(p.monthly_price_ars ?? 0),
+    trialDays: Number(p.trial_days ?? 0),
+    isRecommended: p.is_recommended === true,
+    sort: Number(p.sort ?? 0),
+    modules: p.modules ?? {},
+    limits: p.limits ?? {},
+  };
 }
 
 export function SubscriptionCard() {
@@ -138,8 +176,8 @@ export function SubscriptionCard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Vuelta desde el checkout de Mercado Pago (?sub=ok). El estado real lo
-  // confirma el webhook mp_billing_webhook; acá sólo damos feedback y refrescamos.
+  // Vuelta desde el checkout de MP (?sub=ok): feedback + refresco (el estado real
+  // lo confirma el webhook mp_billing_webhook).
   useEffect(() => {
     if (searchParams.get("sub") !== "ok") return;
     toast({
@@ -162,6 +200,8 @@ export function SubscriptionCard() {
   const [closeAccountOpen, setCloseAccountOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closeConfirmText, setCloseConfirmText] = useState("");
+  // Aviso local de "cambiaste a X" (nombre del plan recién elegido).
+  const [recentChange, setRecentChange] = useState<string | null>(null);
 
   const { data: sub, isLoading } = useQuery({
     queryKey: ["my-subscription"],
@@ -195,7 +235,6 @@ export function SubscriptionCard() {
     },
   });
 
-  // Estado de cobro de la suscripción (preapproval + total calculado plan+addons).
   const { data: billing } = useQuery({
     queryKey: ["owner-billing-summary"],
     queryFn: async (): Promise<OwnerBillingSummary | null> =>
@@ -203,8 +242,6 @@ export function SubscriptionCard() {
   });
   const hasPreapproval = billing?.has_preapproval === true;
 
-  // Estado del medio de pago (consulta a MP vía edge). Sólo se pide si ya hay un
-  // preapproval; así un tenant en trial sin pago no dispara una llamada inútil.
   const { data: payMethod } = useQuery({
     queryKey: ["subscription-payment-method"],
     enabled: hasPreapproval,
@@ -212,15 +249,28 @@ export function SubscriptionCard() {
     queryFn: async () => fetchSubscriptionPaymentMethod(),
   });
 
+  // Lee la marca local de cambio reciente al montar (y limpia si venció).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PLAN_CHANGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { name: string; at: number };
+      if (Date.now() - parsed.at <= PLAN_CHANGE_WINDOW_MS) {
+        setRecentChange(parsed.name);
+      } else {
+        localStorage.removeItem(PLAN_CHANGE_KEY);
+      }
+    } catch {
+      /* marca corrupta: ignorar */
+    }
+  }, []);
+
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["my-subscription"] });
     qc.invalidateQueries({ queryKey: ["ai-available"] });
     qc.invalidateQueries({ queryKey: ["owner-billing-summary"] });
   }
 
-  // Tras activar/cancelar un addon, el monto del preapproval debe reflejar el
-  // nuevo total (plan + addons). Best-effort: el addon ya quedó bien en la base;
-  // si MP falla, no rompemos el flujo (el panel/edge re-sincroniza después).
   async function syncAmountSilently() {
     try {
       await syncSubscriptionAmount();
@@ -229,8 +279,6 @@ export function SubscriptionCard() {
     }
   }
 
-  // Inicia el checkout del preapproval del dueño (pagar/activar/reactivar) y
-  // redirige a Mercado Pago. back_url vuelve al panel con ?sub=ok.
   const startCheckout = useMutation({
     mutationFn: async () => {
       const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
@@ -243,8 +291,6 @@ export function SubscriptionCard() {
       toast({ title: "No se pudo iniciar el pago", variant: "error" }),
   });
 
-  // Abre el flujo de Mercado Pago para cambiar/actualizar la tarjeta del
-  // preapproval. Pide la URL al edge (mp_subscription_manage) y redirige.
   const updatePaymentMethod = useMutation({
     mutationFn: async () => {
       const pm = await fetchSubscriptionPaymentMethod();
@@ -273,13 +319,31 @@ export function SubscriptionCard() {
       });
       if (error) throw new Error(error.message ?? "error");
     },
-    onSuccess: async () => {
-      toast({ title: "Plan actualizado", variant: "success" });
+    onSuccess: async (_d, planKey) => {
+      const chosen = plans.find((p) => p.key === planKey);
+      const needsPay = chosen != null && chosen.trial_days <= 0 && !hasPreapproval;
+      // Marca local del cambio para el aviso de estado.
+      if (chosen) {
+        try {
+          localStorage.setItem(
+            PLAN_CHANGE_KEY,
+            JSON.stringify({ name: chosen.name, at: Date.now() }),
+          );
+        } catch {
+          /* sin storage: el aviso simplemente no persiste */
+        }
+        setRecentChange(chosen.name);
+      }
+      toast({
+        title: chosen ? `Cambiaste a ${chosen.name}` : "Plan actualizado",
+        variant: "success",
+      });
       setConfirmPlan(null);
       setPlanPickerOpen(false);
-      // El monto del preapproval debe reflejar el nuevo plan (+ addons).
       await syncAmountSilently();
       invalidate();
+      // Plan sin trial y sin medio de pago → llevamos a pagar para activarlo.
+      if (needsPay) startCheckout.mutate();
     },
     onError: () => toast({ title: "No se pudo cambiar el plan", variant: "error" }),
   });
@@ -292,7 +356,7 @@ export function SubscriptionCard() {
       if (error) throw new Error(error.message ?? "error");
     },
     onSuccess: async () => {
-      toast({ title: "Complemento activado", variant: "success" });
+      toast({ title: "Asistente IA activado", variant: "success" });
       await syncAmountSilently();
       invalidate();
     },
@@ -352,6 +416,27 @@ export function SubscriptionCard() {
       toast({ title: "No se pudo registrar la baja", variant: "error" }),
   });
 
+  // Modelos para PlanCards (todos los planes + comparación contra el actual).
+  const planModels = useMemo<PlanCardModel[]>(
+    () => plans.map(toPlanCardModel),
+    [plans],
+  );
+
+  // Pagos para el "Registro de pagos": hoy, el último pago expuesto por
+  // my_subscription (billing_records tiene RLS solo-staff). Si no hay, lista vacía.
+  const payments = useMemo<PaymentRecord[]>(() => {
+    if (!sub?.last_payment) return [];
+    return [
+      {
+        amount: sub.last_payment.amount,
+        medium: sub.last_payment.medium,
+        period_end: sub.last_payment.period_end,
+        created_at: sub.last_payment.created_at,
+        currency: "ARS",
+      },
+    ];
+  }, [sub?.last_payment]);
+
   if (isLoading) {
     return (
       <section className="mt-10">
@@ -383,9 +468,37 @@ export function SubscriptionCard() {
   const closureRequested = Boolean(sub.closure_requested_at);
   const aiAddon = sub.addons.find((a) => AI_ADDON_KEYS.includes(a.addon_key));
   const aiActive =
-    aiAddon &&
-    (aiAddon.status === "active" || aiAddon.cancel_at_period_end);
+    aiAddon && (aiAddon.status === "active" || aiAddon.cancel_at_period_end);
   const aiPrice = (aiCfg?.addon_price_ars ?? "").trim();
+
+  const isTrial = sub.status === "trial";
+  const daysLeft = daysUntil(sub.current_period_end);
+  // Mensaje principal de "días restantes" según el estado.
+  let periodLine: { label: string; tone: string } | null = null;
+  if (sub.is_lifetime) {
+    periodLine = { label: "Acceso vitalicio, sin cobros", tone: "text-ninja-flameSoft" };
+  } else if (sub.cancel_at_period_end) {
+    periodLine = {
+      label: `Acceso hasta el ${fmtDate(sub.current_period_end)} (no se renueva)`,
+      tone: "text-amber-400",
+    };
+  } else if (daysLeft != null) {
+    periodLine = isTrial
+      ? {
+          label:
+            daysLeft === 0
+              ? "Tu prueba termina hoy"
+              : `Te ${daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`} de prueba gratis`,
+          tone: daysLeft <= 3 ? "text-amber-400" : "text-ninja-brightViolet",
+        }
+      : {
+          label:
+            daysLeft === 0
+              ? `Próximo cobro hoy (${fmtDateShort(sub.current_period_end)})`
+              : `Próximo cobro en ${daysLeft === 1 ? "1 día" : `${daysLeft} días`}, el ${fmtDateShort(sub.current_period_end)}`,
+          tone: "text-muted-foreground",
+        };
+  }
 
   return (
     <section className="mt-10">
@@ -396,219 +509,202 @@ export function SubscriptionCard() {
         Gestioná tu plan, tus complementos y tu método de pago.
       </p>
 
-      {/* ── Plan actual + estado ── */}
-      <Card className="mt-3">
-        <CardContent className="p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold">{sub.plan.name}</span>
-                <span
-                  className={`inline-flex items-center rounded-ninjaFull border px-2 py-0.5 text-[11px] font-semibold ${
-                    STATUS_TONE[sub.status] ??
-                    "border-border bg-muted/30 text-muted-foreground"
-                  }`}
-                >
-                  {STATUS_LABELS[sub.status] ?? sub.status}
-                </span>
-                {sub.is_lifetime && (
-                  <span className="inline-flex items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-flameSoft">
-                    <Star size={11} /> Vitalicio
-                  </span>
-                )}
-              </div>
-              {sub.plan.secondary_name && (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {sub.plan.secondary_name}
-                </p>
-              )}
-              <p className="mt-1 text-sm text-muted-foreground">
-                {fmtMoney(sub.plan.monthly_price_ars)}{" "}
-                <span className="text-xs">/ mes</span>
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPlanPickerOpen(true)}
-            >
-              <ArrowUpRight size={15} /> Cambiar plan
-            </Button>
-          </div>
-
-          {/* Próximo cobro + último pago */}
-          <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
-            <div className="flex items-start gap-2.5">
-              <Calendar size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Próximo cobro
-                </div>
-                <div className="text-sm font-medium">
-                  {sub.is_lifetime
-                    ? "Sin cobros (vitalicio)"
-                    : sub.cancel_at_period_end
-                      ? `Se cancela el ${fmtDate(sub.current_period_end)}`
-                      : fmtDate(sub.next_charge)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <Receipt size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Último pago
-                </div>
-                <div className="text-sm font-medium">
-                  {sub.last_payment
-                    ? `${fmtMoney(sub.last_payment.amount)} · ${fmtDate(
-                        sub.last_payment.created_at,
-                      )}`
-                    : "Sin pagos registrados"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {sub.cancel_at_period_end && !closureRequested && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-300">
-              <AlertTriangle size={14} className="shrink-0" />
-              Tu suscripción se cancela el {fmtDate(sub.current_period_end)}. Vas a
-              mantener el acceso hasta esa fecha.
-            </div>
-          )}
-
-          {/* Total facturado (plan + addons). Sólo si hay addons que suman al
-              cobro, para que el dueño entienda por qué paga más que el plan. */}
-          {!sub.is_lifetime &&
-            billing?.billing &&
-            billing.billing.addons_amount > 0 && (
-              <div className="mt-4 flex items-start gap-2.5 border-t border-border pt-4">
-                <Receipt size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-                <div className="text-sm">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Total que se cobra
+      {/* ── Plan actual (hero premium) ── */}
+      <Card className="mt-3 overflow-hidden">
+        <div className="bg-[radial-gradient(120%_140%_at_0%_0%,rgba(236,63,23,0.10),transparent_55%)]">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-4">
+                <PlanBadge
+                  plan={{
+                    name: sub.plan.name,
+                    secondaryName: sub.plan.secondary_name,
+                    imageUrl: sub.plan.image_url,
+                    icon: sub.plan.icon,
+                  }}
+                  size="md"
+                />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-ninjaFull border px-2 py-0.5 text-[11px] font-semibold ${
+                        STATUS_TONE[sub.status] ??
+                        "border-border bg-muted/30 text-muted-foreground"
+                      }`}
+                    >
+                      {STATUS_LABELS[sub.status] ?? sub.status}
+                    </span>
+                    {sub.is_lifetime && (
+                      <span className="inline-flex items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-flameSoft">
+                        <Star size={11} /> Vitalicio
+                      </span>
+                    )}
                   </div>
-                  <p className="text-muted-foreground">
-                    {fmtMoney(billing.billing.plan_amount)} (plan) +{" "}
-                    {fmtMoney(billing.billing.addons_amount)} (complementos) ={" "}
-                    <span className="font-semibold text-foreground">
-                      {fmtMoney(billing.billing.total)}
+                  <p className="mt-1.5 text-2xl font-black tracking-tight text-foreground">
+                    {fmtMoney(sub.plan.monthly_price_ars)}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {" "}
+                      / mes
                     </span>
                   </p>
                 </div>
               </div>
-            )}
+              <Button size="sm" onClick={() => setPlanPickerOpen(true)}>
+                <TrendingUp size={15} /> Mejorar / Cambiar plan
+              </Button>
+            </div>
 
-          {/* Método de pago de la suscripción (preapproval de Mercado Pago que
-              gestiona NinjaSoft). El dueño puede pagar/activar, reactivar y
-              cambiar su tarjeta. */}
-          {!sub.is_lifetime && (
-            <div className="mt-4 flex items-start gap-2.5 border-t border-border pt-4">
-              <CreditCard size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1 text-sm">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Método de pago
+            {/* Días restantes + estado de cambio */}
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4">
+              {periodLine && (
+                <div className="flex items-center gap-2">
+                  <CalendarClock size={16} className={`shrink-0 ${periodLine.tone}`} />
+                  <span className={`text-sm font-medium ${periodLine.tone}`}>
+                    {periodLine.label}
+                  </span>
                 </div>
-
-                {hasPreapproval ? (
-                  <>
-                    <p className="text-muted-foreground">
-                      Cobro automático por Mercado Pago
-                      {payMethod?.payment_method_id
-                        ? ` · ${
-                            MP_PM_LABELS[payMethod.payment_method_id] ??
-                            payMethod.payment_method_id
-                          }`
-                        : ""}
-                      {payMethod?.status
-                        ? ` · ${
-                            MP_STATUS_LABELS[payMethod.status] ?? payMethod.status
-                          }`
-                        : ""}
-                      .
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        loading={updatePaymentMethod.isPending}
-                        onClick={() => updatePaymentMethod.mutate()}
-                      >
-                        <CreditCard size={15} /> Actualizar medio de pago
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-muted-foreground">
-                      {sub.status === "trial"
-                        ? "Estás en período de prueba. Activá tu plan para que el cobro mensual se haga solo por Mercado Pago."
-                        : "Tu suscripción no tiene un pago activo. Activala para no perder acceso."}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        loading={startCheckout.isPending}
-                        onClick={() => startCheckout.mutate()}
-                      >
-                        <Zap size={15} />{" "}
-                        {sub.status === "cancelled" || sub.status === "past_due"
-                          ? "Reactivar y pagar"
-                          : "Pagar y activar"}
-                      </Button>
-                    </div>
-                  </>
-                )}
+              )}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1.5 text-sm ${
+                    recentChange ? "text-emerald-400" : "text-muted-foreground"
+                  }`}
+                >
+                  {recentChange ? (
+                    <>
+                      <Check size={15} className="shrink-0" /> Cambiaste a{" "}
+                      <strong className="font-semibold">{recentChange}</strong> ·
+                      aplicado
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={15} className="shrink-0" /> Sin cambios
+                      pendientes
+                    </>
+                  )}
+                </span>
               </div>
             </div>
-          )}
-        </CardContent>
+
+            {sub.cancel_at_period_end && !closureRequested && (
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-300">
+                <AlertTriangle size={14} className="shrink-0" />
+                Tu suscripción se cancela el {fmtDate(sub.current_period_end)}. Vas
+                a mantener el acceso hasta esa fecha.
+              </div>
+            )}
+
+            {/* Total facturado (sólo si hay addons que suman al cobro). */}
+            {!sub.is_lifetime &&
+              billing?.billing &&
+              billing.billing.addons_amount > 0 && (
+                <div className="mt-4 flex items-start gap-2.5 border-t border-border pt-4 text-sm">
+                  <Receipt size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Total que se cobra
+                    </div>
+                    <p className="text-muted-foreground">
+                      {fmtMoney(billing.billing.plan_amount)} (plan) +{" "}
+                      {fmtMoney(billing.billing.addons_amount)} (complementos) ={" "}
+                      <span className="font-semibold text-foreground">
+                        {fmtMoney(billing.billing.total)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {/* Método de pago. */}
+            {!sub.is_lifetime && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                <div className="flex items-start gap-2.5">
+                  <CreditCard size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                  <div className="text-sm">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Método de pago
+                    </div>
+                    {hasPreapproval ? (
+                      <p className="text-muted-foreground">
+                        Cobro automático por Mercado Pago
+                        {payMethod?.payment_method_id
+                          ? ` · ${
+                              MP_PM_LABELS[payMethod.payment_method_id] ??
+                              payMethod.payment_method_id
+                            }`
+                          : ""}
+                        {payMethod?.status
+                          ? ` · ${
+                              MP_STATUS_LABELS[payMethod.status] ?? payMethod.status
+                            }`
+                          : ""}
+                        .
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        {isTrial
+                          ? "Estás en período de prueba. Activá tu plan para que el cobro mensual se haga solo por Mercado Pago."
+                          : "Tu suscripción no tiene un pago activo. Activala para no perder acceso."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {hasPreapproval ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={updatePaymentMethod.isPending}
+                    onClick={() => updatePaymentMethod.mutate()}
+                  >
+                    <CreditCard size={15} /> Actualizar medio de pago
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    loading={startCheckout.isPending}
+                    onClick={() => startCheckout.mutate()}
+                  >
+                    <Zap size={15} />{" "}
+                    {sub.status === "cancelled" || sub.status === "past_due"
+                      ? "Reactivar y pagar"
+                      : "Pagar y activar"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </div>
       </Card>
 
-      {/* ── Complementos (addon IA) ── */}
+      {/* ── Asistente IA (addon) ── */}
       <Card className="mt-3">
         <CardContent className="p-5">
           <div className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles size={16} className="text-ninja-flameSoft" /> Complementos
+            <Sparkles size={16} className="text-ninja-flameSoft" /> Asistente IA
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
-            <div className="flex min-w-0 items-center gap-3">
-              {aiCfg?.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={aiCfg.image_url}
-                  alt="Asistente IA"
-                  className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-                />
-              ) : (
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-gradient text-ninja-voidViolet">
-                  <Sparkles size={18} />
-                </span>
-              )}
-              <div className="min-w-0">
-                <div className="font-medium">Asistente IA</div>
-                <div className="text-xs text-muted-foreground">
-                  {aiActive ? (
-                    aiAddon?.cancel_at_period_end ? (
+
+          {aiActive ? (
+            // Contratado: estado + acción discreta.
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <AiAvatar src={aiCfg?.image_url} />
+                <div className="min-w-0">
+                  <div className="font-medium">Asistente IA</div>
+                  <div className="text-xs">
+                    {aiAddon?.cancel_at_period_end ? (
                       <span className="text-amber-400">
                         Se da de baja el {fmtDate(aiAddon?.current_period_end)}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-emerald-400">
                         <Check size={12} /> Activo
+                        {aiPrice ? ` · ${fmtMoney(Number(aiPrice))}/mes` : ""}
                       </span>
-                    )
-                  ) : aiPrice ? (
-                    `${fmtMoney(Number(aiPrice))} / mes`
-                  ) : (
-                    "Complemento opcional"
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-            {aiActive ? (
-              aiAddon?.cancel_at_period_end ? (
+              {aiAddon?.cancel_at_period_end ? (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -626,24 +722,81 @@ export function SubscriptionCard() {
                 >
                   Dar de baja
                 </Button>
-              )
-            ) : (
-              <Button
-                size="sm"
-                loading={activateAddon.isPending}
-                onClick={() => activateAddon.mutate("ai_assistant")}
-              >
-                <Sparkles size={15} /> Activar
-              </Button>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            // No contratado: venta corta + CTA.
+            <div className="mt-3 rounded-xl border border-ninja-flame/30 bg-ninja-flame/[0.05] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <AiAvatar src={aiCfg?.image_url} />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-foreground">
+                      Sumá inteligencia a tu negocio
+                    </div>
+                    <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
+                      {aiCfg?.commercial_text?.trim() ||
+                        "Un asistente que responde sobre tus ventas, tu stock y cómo usar cada función del sistema, desde cualquier pantalla."}
+                    </p>
+                    <ul className="mt-2 grid gap-1 text-xs text-ninja-lavender sm:grid-cols-2">
+                      {[
+                        "Consultá tus ventas en lenguaje natural",
+                        "Resolvé dudas del sistema al instante",
+                        "Ideas para vender y reponer mejor",
+                        "Disponible para todo tu equipo",
+                      ].map((b) => (
+                        <li key={b} className="flex items-start gap-1.5">
+                          <Check size={13} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <div className="text-right">
+                  {aiPrice && (
+                    <div className="mb-2">
+                      <span className="text-lg font-black text-foreground">
+                        {fmtMoney(Number(aiPrice))}
+                      </span>
+                      <span className="text-xs text-muted-foreground"> / mes</span>
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    loading={activateAddon.isPending}
+                    onClick={() => activateAddon.mutate("ai_assistant")}
+                  >
+                    <Sparkles size={15} /> Activar Asistente IA
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* ── Acciones de baja ── */}
-      <Card className="mt-3 border-border/60">
-        <CardContent className="space-y-3 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* ── Registro de pagos ── */}
+      <Card className="mt-3">
+        <CardContent className="p-5">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <Receipt size={16} className="text-muted-foreground" /> Registro de pagos
+          </div>
+          <PaymentHistory payments={payments} />
+        </CardContent>
+      </Card>
+
+      {/* ── Acciones discretas (cancelar / dar de baja) ── */}
+      <details className="group mt-3">
+        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground transition hover:text-foreground">
+          <ChevronDown
+            size={14}
+            className="transition-transform group-open:rotate-180"
+          />
+          Opciones de la cuenta
+        </summary>
+        <div className="mt-2 space-y-2 rounded-xl border border-border/60 bg-muted/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-sm font-medium">Cancelar suscripción</div>
               <p className="text-xs text-muted-foreground">
@@ -660,102 +813,76 @@ export function SubscriptionCard() {
                 No cancelar
               </Button>
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
+              <button
+                type="button"
                 disabled={sub.is_lifetime}
                 onClick={() => setCancelSubOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-2 transition hover:text-destructive hover:underline disabled:opacity-40"
               >
-                <XCircle size={15} /> Cancelar suscripción
-              </Button>
+                <XCircle size={13} /> Cancelar suscripción
+              </button>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2">
             <div className="min-w-0">
-              <div className="text-sm font-medium text-destructive">
-                Dar de baja mi cuenta
-              </div>
+              <div className="text-sm font-medium">Dar de baja la cuenta</div>
               <p className="text-xs text-muted-foreground">
                 {closureRequested
                   ? `Solicitada el ${fmtDate(sub.closure_requested_at)}. Mantenés acceso hasta el fin del período.`
                   : "Cierre definitivo de la cuenta (doble confirmación)."}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
+            <button
+              type="button"
               disabled={closureRequested}
               onClick={() => setCloseAccountOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-2 transition hover:text-destructive hover:underline disabled:opacity-40"
             >
-              {closureRequested ? "Baja solicitada" : "Dar de baja mi cuenta"}
-            </Button>
+              {closureRequested ? "Baja solicitada" : "Dar de baja la cuenta"}
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
-      {/* ── Modal: selector de plan ── */}
+      {/* ── Modal: selector comercial de planes ── */}
       <Modal
         open={planPickerOpen}
         onOpenChange={setPlanPickerOpen}
-        title="Elegí tu plan"
-        className="max-w-3xl"
+        title="Mejorá o cambiá tu plan"
+        description="Mirá qué suma cada plan respecto del tuyo. El nuevo precio se aplica desde tu próximo ciclo."
+        className="max-w-4xl"
       >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((p) => {
-            const current = p.key === sub.plan.key;
-            return (
-              <div
-                key={p.key}
-                className={`relative flex flex-col rounded-xl border p-4 transition ${
-                  p.is_recommended
-                    ? "border-ninja-flameSoft/60 bg-ninja-flame/5 shadow-ninjaGlow"
-                    : "border-border bg-card"
-                }`}
+        <PlanCards
+          plans={planModels}
+          comparedToKey={sub.plan.is_custom ? null : sub.plan.key}
+          columnsClassName="sm:grid-cols-2 lg:grid-cols-3"
+          renderCta={(p, isCompared) =>
+            isCompared ? (
+              <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400">
+                <Check size={14} /> Tu plan actual
+              </span>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full"
+                variant={p.isRecommended ? "primary" : "secondary"}
+                onClick={() => {
+                  const full = plans.find((pp) => pp.key === p.key) ?? null;
+                  setConfirmPlan(full);
+                }}
               >
-                {p.is_recommended && (
-                  <span className="absolute -top-2.5 left-4 inline-flex items-center gap-1 rounded-ninjaFull bg-ninja-gradient px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ninja-voidViolet">
-                    <Star size={10} /> Recomendado
-                  </span>
-                )}
-                <div className="font-bold">{p.name}</div>
-                {p.secondary_name && (
-                  <div className="text-xs text-muted-foreground">
-                    {p.secondary_name}
-                  </div>
-                )}
-                <div className="mt-2 text-lg font-bold">
-                  {fmtMoney(p.monthly_price_ars)}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {" "}
-                    / mes
-                  </span>
-                </div>
-                {p.description && (
-                  <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
-                    {p.description}
-                  </p>
-                )}
-                <div className="mt-4 flex-1" />
-                {current ? (
-                  <span className="inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400">
-                    <Check size={14} /> Tu plan actual
-                  </span>
+                {p.monthlyPriceArs > sub.plan.monthly_price_ars ? (
+                  <>
+                    <ArrowUpRight size={14} /> Mejorar a {p.name}
+                  </>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant={p.is_recommended ? "primary" : "secondary"}
-                    onClick={() => setConfirmPlan(p)}
-                  >
-                    Elegir {p.name}
-                  </Button>
+                  `Cambiar a ${p.name}`
                 )}
-              </div>
-            );
-          })}
-        </div>
+              </Button>
+            )
+          }
+        />
         {sub.plan.is_custom && (
           <p className="mt-4 text-xs text-muted-foreground">
             Tu plan actual es a medida. Si cambiás a un plan estándar, perdés las
@@ -769,9 +896,17 @@ export function SubscriptionCard() {
         open={confirmPlan !== null}
         onOpenChange={(o) => !o && setConfirmPlan(null)}
         title={`Cambiar a ${confirmPlan?.name ?? ""}`}
-        description={`Tu plan pasará a ${confirmPlan?.name ?? ""} (${fmtMoney(
-          confirmPlan?.monthly_price_ars,
-        )} / mes). El nuevo precio se aplica desde tu próximo ciclo de facturación.`}
+        description={
+          confirmPlan
+            ? `Tu plan pasará a ${confirmPlan.name} (${fmtMoney(
+                confirmPlan.monthly_price_ars,
+              )} / mes).${
+                confirmPlan.trial_days <= 0 && !hasPreapproval
+                  ? " Te vamos a llevar a Mercado Pago para activar el cobro."
+                  : " El nuevo precio se aplica desde tu próximo ciclo de facturación."
+              }`
+            : ""
+        }
         confirmLabel="Confirmar cambio"
         loading={changePlan.isPending}
         onConfirm={() => confirmPlan && changePlan.mutate(confirmPlan.key)}
@@ -864,5 +999,24 @@ export function SubscriptionCard() {
         </div>
       </Modal>
     </section>
+  );
+}
+
+// Avatar del asistente IA (imagen del proveedor o ícono de marca).
+function AiAvatar({ src }: { src?: string }) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt="Asistente IA"
+        className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+      />
+    );
+  }
+  return (
+    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-gradient text-ninja-voidViolet">
+      <Sparkles size={18} />
+    </span>
   );
 }

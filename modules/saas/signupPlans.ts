@@ -13,6 +13,7 @@ export interface SignupPlan {
   key: string;
   name: string;
   secondaryName: string | null;
+  imageUrl: string | null;
   icon: string | null;
   monthlyPriceArs: number;
   sort: number;
@@ -44,7 +45,7 @@ export function useSignupPlans() {
       const { data, error } = await supabase
         .from("plans")
         .select(
-          "key, name, secondary_name, icon, monthly_price_ars, sort, trial_days, is_recommended, limits",
+          "key, name, secondary_name, image_url, icon, monthly_price_ars, sort, trial_days, is_recommended, limits",
         )
         .is("tenant_id", null)
         .eq("is_active", true)
@@ -55,6 +56,7 @@ export function useSignupPlans() {
         key: p.key,
         name: p.name,
         secondaryName: p.secondary_name ?? null,
+        imageUrl: p.image_url ?? null,
         icon: p.icon ?? null,
         monthlyPriceArs: Number(p.monthly_price_ars ?? 0),
         sort: p.sort ?? Number.MAX_SAFE_INTEGER,

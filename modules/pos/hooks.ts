@@ -11,6 +11,7 @@ import {
   type PaymentPlanInput,
   type SaleItemInput,
   type SalePaymentInput,
+  type SaleExtraInput,
 } from "./api";
 
 export function useOpenShift() {
@@ -162,12 +163,14 @@ export function usePosMutations() {
         payments: SalePaymentInput[];
         discountTotal: number;
         customerId?: string | null;
+        extras?: SaleExtraInput[];
       }) =>
         posApi.createSale(
           vars.items,
           vars.payments,
           vars.discountTotal,
           vars.customerId,
+          vars.extras,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

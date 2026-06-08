@@ -24,6 +24,15 @@ export interface CreateSaleResult {
   total: number;
 }
 
+// Descriptor de un extra del cobro para el gating server-side. 'warranty' (prima
+// de garantía extendida) se gatea contra la feature 'garantias'; 'surcharge'
+// (recargo de medio/plan) no se gatea. El importe del extra sigue entrando como
+// ítem de venta en `items` (no se duplica el total) — esto es solo la señal.
+export interface SaleExtraInput {
+  kind: "warranty" | "surcharge";
+  amount: number;
+}
+
 export interface QrIntentRow {
   id: string;
   provider_key: string;
@@ -486,6 +495,7 @@ export const posApi = {
     payments: SalePaymentInput[],
     discountTotal: number,
     customerId?: string | null,
+    extras?: SaleExtraInput[],
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("create_sale", {
@@ -493,7 +503,10 @@ export const posApi = {
       p_payments: payments as unknown as Json,
       p_discount_total: discountTotal,
       p_customer_id: customerId ?? undefined,
-    });
+      // Señal de gating (garantía/recargos). `p_extras` aún no está en los tipos
+      // generados (no se regeneran): se castea el payload.
+      p_extras: (extras ?? []) as unknown as Json,
+    } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;
   },

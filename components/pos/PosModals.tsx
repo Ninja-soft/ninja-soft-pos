@@ -139,7 +139,7 @@ export function PaymentModal({
   rounding?: number;
   onConfirm: (
     payments: SalePaymentInput[],
-    extras?: { name: string; amount: number }[],
+    extras?: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
   loading: boolean;
   storeCreditBalance?: number;
@@ -251,12 +251,17 @@ export function PaymentModal({
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
 
-  const extras: { name: string; amount: number }[] = [];
-  if (warrantyPrima > 0 && wplan) extras.push({ name: `Garantía ${wplan.label}`, amount: warrantyPrima });
-  if (planSurcharge > 0 && selectedPlan) extras.push({ name: `Recargo ${selectedPlan.label}`, amount: planSurcharge });
+  // `kind` etiqueta el extra para el gating server-side: 'warranty' (prima de
+  // garantía extendida → feature 'garantias') vs 'surcharge' (recargo de medio/
+  // plan, sin gating). El importe sigue entrando como ítem de venta (name).
+  const extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[] = [];
+  if (warrantyPrima > 0 && wplan)
+    extras.push({ name: `Garantía ${wplan.label}`, amount: warrantyPrima, kind: "warranty" });
+  if (planSurcharge > 0 && selectedPlan)
+    extras.push({ name: `Recargo ${selectedPlan.label}`, amount: planSurcharge, kind: "surcharge" });
   if (methodSurcharge > 0) {
     const methodLabel = ALL_METHODS.find((m) => m.value === method)?.label ?? method;
-    extras.push({ name: `Recargo ${methodLabel} (${methodSurchargePct}%)`, amount: methodSurcharge });
+    extras.push({ name: `Recargo ${methodLabel} (${methodSurchargePct}%)`, amount: methodSurcharge, kind: "surcharge" });
   }
 
   return (

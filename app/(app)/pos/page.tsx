@@ -382,7 +382,7 @@ export default function PosPage() {
 
   async function handleSale(
     payments: { method: string; amount: number; reference?: string }[],
-    extras?: { name: string; amount: number }[],
+    extras?: { name: string; amount: number; kind?: "warranty" | "surcharge" }[],
   ) {
     try {
       const items = lines.map((l) => ({
@@ -407,11 +407,18 @@ export default function PosPage() {
           } as never);
         }
       }
+      // Señal de gating server-side: la prima de garantía (kind='warranty') se
+      // valida contra la feature 'garantias' en create_sale. Los recargos
+      // (kind='surcharge') no se gatean. El importe ya va como ítem (arriba).
+      const saleExtras = (extras ?? [])
+        .filter((ex) => ex.amount > 0 && ex.kind)
+        .map((ex) => ({ kind: ex.kind as "warranty" | "surcharge", amount: ex.amount }));
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
         discountTotal,
         customerId: customer?.id ?? null,
+        extras: saleExtras,
       });
       setPaymentModal(false);
       clear();
@@ -425,13 +432,19 @@ export default function PosPage() {
       setTicketOpen(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      const title = msg.includes("credit_limit_exceeded")
-        ? "Supera el límite de cuenta corriente del cliente"
-        : msg.includes("account_needs_customer")
-          ? "La cuenta corriente necesita un cliente"
-          : msg.includes("insufficient_store_credit")
-            ? "El cliente no tiene saldo de vale suficiente"
-            : "No se pudo cobrar";
+      const title = msg.includes("feature_not_in_plan: descuentos")
+        ? "Los descuentos no están incluidos en tu plan"
+        : msg.includes("feature_not_in_plan: garantias")
+          ? "La garantía extendida no está incluida en tu plan"
+          : msg.includes("feature_not_in_plan: cuenta_corriente")
+            ? "La cuenta corriente no está incluida en tu plan"
+            : msg.includes("credit_limit_exceeded")
+              ? "Supera el límite de cuenta corriente del cliente"
+              : msg.includes("account_needs_customer")
+                ? "La cuenta corriente necesita un cliente"
+                : msg.includes("insufficient_store_credit")
+                  ? "El cliente no tiene saldo de vale suficiente"
+                  : "No se pudo cobrar";
       toast({
         title,
         description: title === "No se pudo cobrar" ? msg || undefined : undefined,

@@ -180,8 +180,8 @@ export function TicketTemplatesCard() {
               </p>
             </div>
           </div>
-          <Button onClick={openNew} disabled={!tenantId}>
-            <Plus size={16} /> Nuevo modelo
+          <Button size="sm" onClick={openNew} disabled={!tenantId}>
+            <Plus size={15} /> Nuevo modelo
           </Button>
         </div>
 

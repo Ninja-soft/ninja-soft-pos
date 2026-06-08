@@ -12,6 +12,9 @@ export interface SampleBrand {
   ticket_legend: string | null;
   ticket_show_qr: boolean | null;
   ticket_show_logo: boolean | null;
+  // Condición frente al IVA del emisor (monotributo / responsable_inscripto /
+  // exento / consumidor_final). Opcional: aparece en la plantilla A4 legal.
+  iva_condition?: string | null;
 }
 
 export interface SampleTicketData {

@@ -13,13 +13,13 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F0** | Fundación técnica | 2 semanas | 🟢 Funcional |
 | **F1** | MVP vendible (POS + Admin) | 10–12 semanas | 🟢 Funcional (base H0–H6) |
 | **F1.5** | Hardening pre-piloto | 2–3 semanas | 🟡 Prioridad inmediata |
-| **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟡 En progreso |
+| **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟢 Funcional (billing self-serve + dunning + gating) |
 | **F3** | Integración AFIP y producción | 4–6 semanas | 🔴 No iniciado |
 | **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 Planificación |
 | **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 Planificación |
-| **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟡 Planificación |
-| **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟡 Planificación |
-| **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 Planificación |
+| **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟢 Funcional (H7–H10b + Tiendita) |
+| **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
+| **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 Planificación |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
@@ -88,6 +88,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte.
 - [ ] Idempotencia documentada para venta/anulación antes de integrar pagos externos.
 - [~] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *Endpoint listo (`GET /api/health` → status/version/env/time, sin DB ni secretos). Falta el checklist de monitoreo.*
+- [x] **Gating server-side real + hardening de seguridad SaaS** *(2026-06-08)*: enforcement backend de **medios de pago por plan** (trigger en `payments`, PRs #215/#240) y de **features de escritura** (descuentos/garantías/cuenta corriente/listas en `create_sale`/escrituras, con advisory lock en el correlativo, PR #250); hardening (policy de planes cerrada a `anon`, guards en RPCs, revokes defensivos, índices/policies de performance, PR #248); **auditoría SaaS exhaustiva** (seguridad/RLS/pagos/funcional/IA/emails) — base sólida, sin fugas, fixes aplicados. *La UI nunca es la única barrera (ver convención de features de plan en `CLAUDE.md`).*
 - [ ] Backup/restore de Supabase probado en staging o entorno descartable.
 - [ ] Seed/demo reproducible para ventas, productos, clientes y caja.
 
@@ -112,7 +113,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [x] **Modelo de suscripciones** completo:
   - [x] Estados: `trial`, `active`, `past_due`, `suspended`, `cancelled` (migración `saas_catalog`).
   - [x] Trial automático de 14 días al alta (Edge Function `create_tenant` setea `trial_ends_at`).
-  - [x] Suspensión por falta de pago (manual en esta fase). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`).*
+  - [x] Suspensión por falta de pago (manual + **automática**). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`); además **motor de dunning de 3 días** que pasa a `suspended` y **reactiva reanclando el período** al vencimiento anterior (migración `dunning_3day_grace_reanchor`, PR #237). El cliente suspendido ve un bloqueo de cuenta (`SuspendedGate`, PR #236).*
 - [~] **Sistema de soporte interno:**
   - [x] Notas internas por tenant. — *Tabla `tenant_notes` (RLS solo `is_internal`, baja lógica) + card "Notas internas" en el detalle del tenant: agregar, listar con autor y fecha relativa, eliminar. Invisibles para los usuarios del tenant.*
   - [~] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores). *KPIs en el detalle del tenant: último login, última venta, ventas 7 días (cantidad + total) y usuarios activos — RPC `internal_tenant_health()` (SECURITY DEFINER, guard `is_internal`, devuelve solo agregados). Errores quedan para observabilidad (F4/Sentry).*
@@ -220,13 +221,14 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
     - [ ] **Preguntas y mensajería** de compradores: bandeja básica para responder desde el POS *(etapa 2)*.
     - [ ] *Criterio:* el dueño conecta su cuenta ML, publica un producto del catálogo con foto y precio propio del canal, una venta en ML descuenta stock y aparece en /ventas con su comisión, y una venta en mostrador baja el stock de la publicación sin tocar ML a mano.
   - [ ] Tienda Nube.
-  - [ ] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07, pedido directo)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan).
-    - [ ] **Burbuja de chat** en el shell (visible solo con el addon activo) con Claude API vía Edge Function (la key vive en `platform_secrets`, nunca en el cliente).
-    - [ ] **Configuración guiada del ticket**: la IA lee la plantilla activa del tenant y propone/aplica cambios (tool-use sobre `ticket_templates`, siempre con confirmación del usuario).
-    - [ ] **Guía del sistema**: responde "¿cómo hago X?" con contexto de las pantallas del POS (catálogo de ayuda embebido como contexto).
-    - [ ] **Consultas sobre sus datos** (solo lectura, scoped por RLS al tenant): "¿cuánto vendí esta semana?", "¿qué producto está bajo de stock?".
-    - [ ] Límite de uso por plan (mensajes/mes) + medición para facturar el addon.
-    - [ ] *Criterio:* un tenant con el addon activo abre el chat, pide "armame un ticket con mi logo y mis colores", la IA genera la plantilla y el dueño la confirma; sin el addon, la burbuja no existe.
+  - [~] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07; base hecha 2026-06-08)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan). — *Addon completo: config por proveedor, contexto amplio, cuota, burbuja con compra y explicador sin addon. Falta el tool-use que aplica cambios al ticket (hoy guía/consulta).*
+    - [x] **Burbuja de chat** en el shell (visible solo con el addon activo) con **Gemini o Claude** vía Edge Function `ai_assistant` (la key vive en `platform_secrets` por proveedor, nunca en el cliente); burbuja con spinner/gif/ícono de proveedor y **botón de compra** cuando no está el addon. — *PRs #208, #231, #238.*
+    - [x] **Configuración interna por proveedor**: Gemini/Claude con **API key por proveedor**, **modelo correcto por proveedor**, modo test, imágenes de proveedor subibles (SVG default) y "Probar" real; sección **Complementos** en el POS. — *PRs #217, #231, #249; migración `ai_public_config_provider_image`.*
+    - [~] **Configuración guiada del ticket**: la IA lee la plantilla activa del tenant y propone/aplica cambios (tool-use sobre `ticket_templates`, siempre con confirmación del usuario). — *Pendiente: hoy la IA guía y consulta; el tool-use que aplica cambios al ticket queda para la siguiente etapa.*
+    - [x] **Guía del sistema**: responde "¿cómo hago X?" con contexto de las pantallas del POS — **explicador disponible sin addon**. — *PR #208.*
+    - [x] **Consultas sobre sus datos** (solo lectura, scoped por RLS al tenant): **contexto amplio de la cuenta** — ventas del mes, caja, cuenta corriente, devoluciones y suscripción. — *PR #249.*
+    - [x] Límite de uso por plan (mensajes/mes) + medición para facturar el addon. — *Cuota mensual configurable (`ai_usage`), PRs #205/#249.*
+    - [~] *Criterio:* un tenant con el addon activo abre el chat, pide "armame un ticket con mi logo y mis colores", la IA genera la plantilla y el dueño la confirma; sin el addon, la burbuja no existe. — *El chat con contexto y el gateo de la burbuja están; la generación/aplicación de la plantilla por la IA queda pendiente.*
   - [ ] WhatsApp Business para notificaciones.
 - [ ] **API pública** con OAuth para clientes Enterprise.
 - [ ] **Tema visual personalizado** por tenant (logo, color de acento dentro de los límites de marca).
@@ -311,6 +313,13 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [ ] **Stock inicial por depósito** desde el alta (gancha con F11/H33) y **variantes talle/color** (gancha con F6/H10) cuando el producto las tenga. — *Pendiente: depende de multi-depósito (H33) y variantes (H10), que no existen aún.*
   - [x] *Criterio:* el dueño crea un producto con marca, IVA, foto WebP, tags y garantía en una sola pantalla; arma una categoría de 2 niveles; marca un servicio como "no controla stock"; define un kit que descuenta sus componentes; y un electro como serializado que pide el N° de serie al vender. ✓
 
+- [~] **H10c — Tiendita / Catálogos precargados (storefront de catálogos).** *(feature nueva, agregada 2026-06-08 — no estaba en el roadmap original)* Un catálogo precargado por NinjaSoft (ej. kiosco/almacén con miles de productos) que el dueño **compra una vez** y carga a su negocio sin cargar productos a mano. Doble plano: **gestión interna** de los catálogos y **storefront** para el dueño. — *Base completa (PRs #245/#246/#247); falta gobierno fino del addon (versionado/actualización del catálogo comprado) y métricas de adopción.*
+  - [x] **Addon interno de catálogos** (`/internal/catalogos`): schema de catálogos precargados, **import batcheado** desde Excel, sample real y gestión (crear, ver, **bonificar** a un tenant). — *PR #245; migraciones `tiendita_catalogs`, `tiendita_catalog_admin_rpcs`.*
+  - [x] **Storefront del dueño** (`/tiendita`): **comprar un catálogo con pago único de Mercado Pago**, buscar y agregar productos del catálogo (con **categoría anidada**) al propio negocio, con animación de logos. — *PR #247; Edge Functions `catalog_purchase_checkout` + `catalog_purchase_webhook`; migración `tiendita_catalog_payment`.*
+  - [x] **Flechas de precio vs. catálogo de referencia** en productos/listas (compara el precio propio contra el del catálogo; toggle en config, visible solo si el tenant compró el catálogo). — *PR #246; migración `catalog_price_reference`.*
+  - [ ] Actualización/versionado del catálogo comprado (re-sincronizar altas/bajas/precios sugeridos cuando NinjaSoft actualiza el catálogo de origen).
+  - [x] *Criterio:* el dueño entra a `/tiendita`, compra un catálogo con un pago único de MP, agrega productos al negocio con su categoría y ve flechas de comparación de precio contra la referencia. ✓
+
 ### F7 — Panel interno PRO + comunicaciones
 
 Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usuarios, planes y comunicaciones.
@@ -348,8 +357,8 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] *Criterio:* el dueño crea "Cajero A" sin email con avatar preset y PIN; luego lo renombra y lo suspende; un cajero no puede editar a otros.
   - *Pendiente menor:* el PIN se hashea con SHA-256 (uso de baja seguridad); migrar a bcrypt cuando se implemente el fichaje en el POS (F12).
 
-- [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base (2026-06-04) + lifecycle del trial y cobranza (2026-06-05): billing_records, extensión/acortar/desenlace de trial con motivo, próximo vencimiento y deuda estimada. Quedan plan custom, overrides, descuentos e historial/automatizaciones.*
-  - [ ] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período.
+- [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base (2026-06-04) + lifecycle del trial y cobranza (2026-06-05) + plan custom/overrides/descuentos (2026-06-07) + **billing self-serve, panel del dueño y dunning automático** (2026-06-08). Cobro real por MP cableado (checkout owner-callable + webhook); el cobro en vivo queda por validar en producción. Quedan historial completo de cambios y automatizaciones avanzadas.*
+  - [~] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período. — *Upgrade desde el panel del dueño (PR #226); estados conciliados por el dunning de 3 días con reanclaje de período (PR #237). Downgrade self-serve fino pendiente.*
   - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
   - [x] **Plan específico por cliente:** clonar un plan base, cambiar nombre comercial, límites, módulos, soporte, precio y condiciones sin afectar a otros tenants. — *RPCs `internal_clone_plan` / `internal_update_custom_plan` + `PlanCard` en el detalle del tenant (2026-06-07).*
   - [~] **Overrides de cuota/límites por cliente:** usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte y límites fiscales. — *Base hecha (2026-06-07): `subscriptions.limit_overrides` + RPC auditado + editor por límite (efectivo = override ?? plan). Cajas/almacenamiento/fiscales cuando existan esos límites.*
@@ -358,28 +367,31 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] Billing manual: registrar pago, medio, período cubierto, comprobante/recibo interno, deuda y próxima fecha de vencimiento. — *Completo (2026-06-05): a la base (`billing_records` append-only) se suma el bloque de cobranza en la card Facturación: próximo vencimiento = último `period_end`; si quedó en el pasado, "Vencido hace N días" + deuda estimada (meses vencidos × precio mensual del plan).*
   - [~] Descuentos comerciales, precio acordado, cupones/manual override y notas internas con vigencia. — *Descuentos percent/fixed con vigencia y precio mensual efectivo en Facturación (2026-06-07); cupones pendientes.*
   - [ ] Historial de cambios de plan/estado/precio con antes/después, autor, fecha, motivo y fuente.
-  - [ ] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago.
-  - [ ] *Criterio:* pasar un tenant de Start trial a un plan custom "Pro Heladería Lucas" activo con vencimiento, pago registrado, cuota aumentada, módulos activados y notificación pendiente queda auditado de punta a punta.
+  - [~] Automatizaciones futuras: avisos de vencimiento, suspensión, reactivación y webhooks de pago. — *Hechas (2026-06-08): **dunning de 3 días** que avisa, suspende y reactiva reanclando el período (PR #237); **webhook de pago** que registra y notifica el cobro (PR #226); **cola de emails auto-enviada** por cron + `pg_net` vía Resend (PR #251). Falta orquestación fina de aumentos masivos.*
+  - [~] **Panel del dueño (self-serve) + cobro por Mercado Pago** *(agregado 2026-06-08)*: el dueño ve plan actual + imagen, días restantes, upgrade, **registro de pagos** (`my_payment_history`), baja sutil/cancelar y gestión del medio de pago; **checkout self-serve por MP** (owner-callable) + **addon IA cobrado en MP** + update del monto (PRs #226, #228, #232, #234, #235, #239). El cobro real queda por validar en producción.
+  - [~] *Criterio:* pasar un tenant de Start trial a un plan custom "Pro Heladería Lucas" activo con vencimiento, pago registrado, cuota aumentada, módulos activados y notificación pendiente queda auditado de punta a punta. — *Casi: plan custom, overrides, pago registrado, vencimiento y notificación al owner están; falta el historial unificado de cambios.*
 
-- [~] **H13 — Emails del sistema (NinjaSoft, en `/internal/emails`).** — *Editor + remitente + envío Resend hechos (PR #51). Falta cargar el secret `RESEND_API_KEY`.*
+- [x] **H13 — Emails del sistema (NinjaSoft, en `/internal/emails`).** — *Editor + remitente + envío Resend (PR #51) + **Resend con failover de proveedores, plantillas transaccionales completas, factura PDF por email y auto-envío de la cola** (2026-06-08, PRs #210/#214/#251). Envíos masivos del cliente quedan para una fase aparte.*
   - [x] **Emails del sistema son GLOBALES y se editan en `/internal/emails`** (no en el POS del cliente). Tablas `system_email_templates` + `system_email_config` (RLS solo `is_internal`). Override de defaults de `lib/email/templates.ts`.
   - [x] **Editor HTML + variables + preview en vivo**; catálogo: bienvenida, invitación, reset, trial por vencer, pago vencido, suspensión.
   - [x] **Remitente configurable** (nombre + email de dominio verificado) en `/internal/emails`.
   - [x] **Envío real por SMTP propio** (denomailer, sin secrets de backend): el remitente y el servidor SMTP se configuran desde `/internal/emails` (host/puerto/usuario/clave/secure/from). Edge Functions `set_email_smtp` (guarda) y `send_email` (envía, guard `is_internal`); clave en `system_email_smtp` (RLS solo service_role), lectura sin clave vía `get_email_smtp()`. Botón "Enviar prueba".
   - [x] **Log de envío** en `audit_logs` (acción `email_sent`).
-  - [ ] **Brevo** + **envíos masivos** y reintentos (siguiente etapa).
+  - [x] **Resend con failover de proveedores** + **plantillas transaccionales** + **prueba con destinatario** + **auto-envío de la cola** (cron + `pg_net`, unificado en Resend) con **reintentos**, **emails de alta de cuenta** y plantillas conectadas a los emisores. — *PRs #210 (Edge Function `set_email_providers`), #251 (migración `email_autosend`).*
+  - [x] **Factura/comprobante PDF por email** (asunto con hora, footer con logo) usando **Resend del cliente**. — *PR #214.*
+  - [ ] **Brevo** + **envíos masivos** (siguiente etapa; el failover ya cubre el envío transaccional con reintentos).
   - [ ] **POS del cliente:** los tenants suman **sus propios proveedores** para **campañas masivas** a sus clientes (en `/configuracion` del tenant) — *fase aparte (no son los emails del sistema).*
-  - [x] *Criterio:* en `/internal/emails` se edita una plantilla, se previsualiza con variables y se envía una prueba (una vez cargado `RESEND_API_KEY`).
+  - [x] *Criterio:* en `/internal/emails` se edita una plantilla, se previsualiza con variables y se envía una prueba; los emails del ciclo de vida salen solos por la cola.
 
-- [~] **H13b — Centro de notificaciones por cuenta.** — *Base completa (2026-06-07): tablas `notifications`/`notification_reads` con RLS por audiencia, campana + panel en el POS (leer/archivar/ack, banner para `blocking`), composer en `/internal/notificaciones` (broadcast/negocio/rol, historial) y notificación automática al cambiar precio de plan custom. Quedan: preferencias por canal (email/WhatsApp/push) y acciones embebidas transaccionales (pagar/aceptar).*
-  - [ ] Panel de notificaciones dentro de cada tenant: novedades, cambios de plan, vencimientos, pagos, alertas de uso, seguridad, AFIP, mantenimiento y soporte.
-  - [ ] Notificaciones dirigidas por audiencia: owner, manager, cashier, viewer, todos, sucursal específica o usuario específico.
-  - [ ] Estados: no leída, leída, archivada, requiere acción, vencida.
-  - [ ] Severidad: info, éxito, advertencia, crítica, bloqueo.
-  - [ ] Acciones embebidas: pagar, actualizar datos, aceptar cambio de plan, descargar comprobante, ver deuda, renovar, contactar soporte.
+- [~] **H13b — Centro de notificaciones por cuenta.** — *Base completa (2026-06-07) + **ventana de captación, borrar y archivar abajo** (2026-06-08, PR #213): tablas `notifications`/`notification_reads` con RLS por audiencia, campana + panel en el POS (leer/archivar/borrar/ack, banner para `blocking`), composer en `/internal/notificaciones` (broadcast/negocio/rol, historial) y notificación automática al cambiar precio de plan custom. Quedan: preferencias por canal (email/WhatsApp/push) y acciones embebidas transaccionales (pagar/aceptar).*
+  - [x] Panel de notificaciones dentro de cada tenant: novedades, cambios de plan, vencimientos, pagos, alertas de uso, seguridad, AFIP, mantenimiento y soporte. — *Campana + panel en el shell del POS (tipos news/plan/billing/usage/security/afip/maintenance/support).*
+  - [x] Notificaciones dirigidas por audiencia: owner, manager, cashier, viewer, todos, sucursal específica o usuario específico. — *Audiencia broadcast / negocio / rol / usuario, vía RLS.*
+  - [x] Estados: no leída, leída, archivada, requiere acción, vencida. — *Leída/archivada/borrada/ack en `notification_reads`; **vencimiento por `display_until`** (ventana de captación, PR #213).*
+  - [x] Severidad: info, éxito, advertencia, crítica, bloqueo. — *info→blocking con acento por severidad y banner fijo para `blocking`.*
+  - [ ] Acciones embebidas: pagar, actualizar datos, aceptar cambio de plan, descargar comprobante, ver deuda, renovar, contactar soporte. — *Acción embebida genérica (`action_label`/`action_url`) e info en "requiere confirmación" (PR #229); las transaccionales (pagar/aceptar) quedan pendientes.*
   - [ ] Preferencias por canal: in-app obligatorio para eventos críticos; email/WhatsApp/push futuro configurables por tipo.
-  - [ ] Composer internal para enviar novedades globales o por segmento de clientes.
-  - [ ] *Criterio:* al aumentar cuota/precio de un tenant, el owner ve una notificación in-app con fecha efectiva, motivo, nuevo monto, historial y acción de aceptación/consulta.
+  - [x] Composer internal para enviar novedades globales o por segmento de clientes. — *`/internal/notificaciones`: broadcast / negocio+rol, con historial.*
+  - [~] *Criterio:* al aumentar cuota/precio de un tenant, el owner ve una notificación in-app con fecha efectiva, motivo, nuevo monto, historial y acción de aceptación/consulta. — *La notificación automática con `requires_ack` está; la acción de aceptación transaccional queda pendiente.*
 
 ### F8 — Pagos y cobros
 
@@ -394,7 +406,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
   - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) + OAuth "Conectar con MP" hechos**: Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook`, `mp_oauth_start`, `mp_oauth_callback` (`state` anti-CSRF, refresh de token); botón "Conectar con Mercado Pago" (un click) y "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Billing de suscripciones**: credenciales de plataforma en `platform_secrets` editables desde `/internal/pagos` (`set_platform_secret`), `mp_subscription_checkout` (preapproval) + `mp_billing_webhook`; "Generar link de cobro" en el detalle del tenant. **Conciliación básica hecha** (modal "Cobros QR" en /ventas: intents cruzados con sus ventas, alerta de "aprobado sin venta", filtros + export XLSX). **Falta:** Mercado **Point** (tarjeta presencial).
-  - [ ] **H16** — **MODO** vía QR interoperable.
+  - [~] **H16** — **MODO** vía QR interoperable. — *Transaccionable en el POS (2026-06-08, PRs #227/#229): Edge Functions `modo_create_qr` + `modo_webhook`, **gating real** por plan, sin botón de cuotas y **conexión de credenciales** desde Medios de pago. **Falta validar el dialecto de la API de MODO con credenciales reales** (cobro en vivo).*
   - [ ] **H17** — **Payway / Prisma**.
   - [ ] **H18** — **Getnet**.
   - [ ] **H19** — **Fiserv / Posnet / Clover**.
@@ -494,9 +506,9 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] Reporte de garantías vendidas y comisiones (Reportes → "Garantías y comisiones": agrupa las líneas "Garantía …" por plan, cruza con `warranty_plans.commission_pct` y muestra cantidad/total/comisión; incluido en el export XLSX).
   - [ ] *Criterio:* al cobrar un producto con garantía de fábrica, el POS ofrece planes aplicables y registra prima/comisión.
 
-- [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas): tablas `sale_returns`/`sale_return_items`, `sale_items.returned_qty` anti doble-devolución, reintegro por efectivo (sale de caja) o vale (`store_credit_movements`). Faltan: redención del vale en el POS, vigencia del vale, catálogo de motivos y "diferencia a cobrar" (cambio).*
-  - [x] Política de devolución: el cajero elige caso a caso reintegro en efectivo o vale.
-  - [ ] Vigencia configurable del vale/saldo a favor.
+- [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas) + **rediseño premium por pasos** (2026-06-08, PRs #221/#243): política, motivos con destino de stock, **vales con código y validez**. Faltan: redención del vale en el POS y "diferencia a cobrar" (cambio).*
+  - [x] Política de devolución: el cajero elige caso a caso reintegro en efectivo o vale. — *Rediseñada en flujo por pasos (PR #221; migración `returns_overhaul`).*
+  - [x] Vigencia configurable del vale/saldo a favor. — *Vales con **código** y **validez** (PRs #221/#243).*
   - [x] Motivos configurables (tabla `return_reasons`, gestión owner/manager desde /devoluciones → Motivos; dropdown en la devolución + "Otro").
   - [x] Destinos de stock por línea: vuelve a stock / a revisión / descarte (revisión y descarte no reponen).
   - [~] Wizard de devolución con trazabilidad y reintegro por efectivo o vale. Cambio con diferencia a cobrar y redención del vale en el POS quedan pendientes.
@@ -1011,6 +1023,7 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Variantes (talle/color), SKU compuesto (textil) | F6/H10 + F5 (perfil textil) |
 | Ficha de producto PRO (marca, IVA, tags, temporada, foto WebP, garantía) | **F6/H10b** |
 | Catálogo de marcas y categorías de 2 niveles | **F6/H10b** |
+| Catálogos precargados / alta masiva por compra (storefront) | **F6/H10c (Tiendita)** |
 | Control de stock por producto (servicios) y kit/combo con BOM | **F6/H10b** (+ F12/H35 sin stock) |
 | Producto serializado (IMEI / N° de serie) | **F6/H10b** + F14/H64 (series enterprise) |
 | Cierre Z inmutable e historial contable de caja | **F11/H30b** |

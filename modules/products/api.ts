@@ -393,8 +393,46 @@ export function flattenCategories(
   return out;
 }
 
-// Máxima profundidad permitida (4 niveles: depth 0..3).
-export const CATEGORY_MAX_DEPTH = 3;
+// Nodo del árbol de categorías: la categoría + sus hijos (recursivo) + la
+// profundidad (0 = nivel 1) y el total de descendientes (para los contadores).
+export interface CategoryTreeNode {
+  cat: Category;
+  depth: number;
+  children: CategoryTreeNode[];
+  descendantCount: number;
+}
+
+// Arma el árbol anidado de categorías a partir de la lista plana (parent_id).
+// Cada nivel se ordena alfabéticamente. Reusado por el modal de categorías para
+// el listado desglosable.
+export function buildCategoryTree(list: Category[]): CategoryTreeNode[] {
+  const byParent = new Map<string | null, Category[]>();
+  for (const c of list) {
+    const k = c.parent_id ?? null;
+    const arr = byParent.get(k) ?? [];
+    arr.push(c);
+    byParent.set(k, arr);
+  }
+  const build = (parent: string | null, depth: number): CategoryTreeNode[] => {
+    const kids = (byParent.get(parent) ?? []).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    return kids.map((cat) => {
+      const children = build(cat.id, depth + 1);
+      const descendantCount = children.reduce(
+        (acc, n) => acc + 1 + n.descendantCount,
+        0,
+      );
+      return { cat, depth, children, descendantCount };
+    });
+  };
+  return build(null, 0);
+}
+
+// Máxima profundidad permitida (10 niveles: depth 0..9).
+// Es un tope de producto, no de base: en la DB `parent_id` es un self-FK sin
+// límite de profundidad, así que el control vive acá y en la UI.
+export const CATEGORY_MAX_DEPTH = 9;
 
 export type WarrantyPlan = Tables<"warranty_plans">;
 
@@ -465,8 +503,8 @@ export const categoriesApi = {
   softDelete: async (id: string): Promise<void> => {
     const supabase = createClient();
     const now = new Date().toISOString();
-    // Baja lógica recursiva: la categoría y TODOS sus descendientes (hasta 4
-    // niveles). El .or de hijos directos dejaba nietos/bisnietos huérfanos.
+    // Baja lógica recursiva: la categoría y TODOS sus descendientes (a cualquier
+    // profundidad). El .or de hijos directos dejaba nietos/bisnietos huérfanos.
     const { data: all } = await supabase
       .from("categories")
       .select("id, parent_id")

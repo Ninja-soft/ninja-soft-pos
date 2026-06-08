@@ -140,6 +140,9 @@ export function PaymentModal({
   onConfirm: (
     payments: SalePaymentInput[],
     extras?: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
+    // Vuelto en efectivo (recibido - total). Lo usa la pantalla del cliente (H25)
+    // para mostrar el vuelto tras cobrar. 0 cuando no es efectivo.
+    change?: number,
   ) => void;
   loading: boolean;
   storeCreditBalance?: number;
@@ -377,6 +380,7 @@ export function PaymentModal({
               onConfirm(
                 [{ method, amount: payTotal }],
                 extras.length > 0 ? extras : [],
+                change,
               )
             }
           >

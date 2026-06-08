@@ -176,16 +176,32 @@ Deno.serve(async (req: Request) => {
     const wantsIntro = body.intro === true;
 
     // ── Guard server-side (todo con service_role) ───────────────────────────
-    // 1) addon activo (asistente_ia | ai_assistant).
-    const { data: addon } = await admin
+    // 1) addon accesible: status='active' OR (cancel_at_period_end y el período
+    //    sigue vigente). El addon dado de baja a fin de período conserva acceso
+    //    hasta current_period_end (semántica de cancel_addon).
+    const { data: addonRow } = await admin
       .from("subscription_addons")
-      .select("id")
+      .select("status, cancel_at_period_end, current_period_end")
       .eq("tenant_id", tenantId)
       .in("addon_key", ["asistente_ia", "ai_assistant"])
-      .eq("status", "active")
       .limit(1)
       .maybeSingle();
-    let allowed = Boolean(addon);
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (date)
+    const addonActive = (() => {
+      if (!addonRow) return false;
+      const a = addonRow as {
+        status?: string;
+        cancel_at_period_end?: boolean;
+        current_period_end?: string | null;
+      };
+      if (a.status === "active") return true;
+      if (a.cancel_at_period_end && a.current_period_end) {
+        // Acceso hasta fin de período inclusive.
+        return a.current_period_end >= todayStr;
+      }
+      return false;
+    })();
+    let allowed = addonActive;
 
     // Config IA (se necesita para el guard de beta y para llamar al proveedor).
     const { data: cfgRow } = await admin

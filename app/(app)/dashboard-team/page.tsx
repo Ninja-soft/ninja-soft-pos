@@ -6,6 +6,7 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
+import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -72,6 +73,7 @@ export default async function DashboardTeamPage() {
     .eq("tenant_id", tenant.id)
     .limit(1);
   const sub = (subData?.[0] as unknown as Sub) ?? null;
+  const isOwner = membership.role === "owner";
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -81,8 +83,8 @@ export default async function DashboardTeamPage() {
         Acá administrás tu NinjaPos: equipo, suscripción y configuración.
       </p>
 
+      {/* Negocio */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        {/* Negocio */}
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -95,24 +97,30 @@ export default async function DashboardTeamPage() {
           </CardContent>
         </Card>
 
-        {/* Suscripción */}
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <CreditCard size={16} /> <span className="text-sm">Suscripción</span>
-            </div>
-            <p className="mt-2 text-lg font-semibold">
-              {sub?.plans?.name ?? "Sin plan"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : "—"}
-              {sub?.current_period_end
-                ? ` · vence ${new Date(sub.current_period_end).toLocaleDateString("es-AR")}`
-                : ""}
-            </p>
-          </CardContent>
-        </Card>
+        {/* Resumen de suscripción para no-dueños (los dueños ven el panel completo
+            abajo, que es interactivo). */}
+        {!isOwner && (
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <CreditCard size={16} /> <span className="text-sm">Suscripción</span>
+              </div>
+              <p className="mt-2 text-lg font-semibold">
+                {sub?.plans?.name ?? "Sin plan"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : "—"}
+                {sub?.current_period_end
+                  ? ` · vence ${new Date(sub.current_period_end).toLocaleDateString("es-AR")}`
+                  : ""}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {/* Panel de suscripción interactivo (solo dueños: las RPC son owner-gated). */}
+      {isOwner && <SubscriptionCard />}
 
       {/* Equipo (cliente: lista + invitar) */}
       <TeamSection

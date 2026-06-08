@@ -23,7 +23,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
-| **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 Planificación |
+| **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 Planificación |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
@@ -601,13 +601,13 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [ ] Impresión opcional de comanda/producción para preparación. — *Follow-up: comanda de cocina/KDS va con [F13 — Gastronomía PRO](#f13--gastronomía-pro). El snapshot ya queda en `sale_items.modifiers` para alimentarla.*
   - [x] *Criterio:* el cajero vende "1/2 kg, 3 sabores" sin crear 200 productos distintos. — *Verificado: schema `product_modifier_groups`/`product_modifier_options` (migración `product_modifiers`, RLS por tenant), editor plegable en `ProductFormModal`, `ModifierPickerModal` en el POS (radio/multi con límite + precio en vivo), `create_sale` persiste `sale_items.modifiers` con el precio ajustado (probado por SQL).* 
 
-- [ ] **H38 — Agenda y servicios para peluquería/estética.**
-  - [ ] Servicios con duración, precio, profesional asignable y comisión.
-  - [ ] Agenda diaria/semanal por profesional, silla/cabina o recurso.
-  - [ ] Turnos, walk-ins y lista de espera.
-  - [ ] Cobro desde turno: servicio realizado → agregar productos extra → cobrar.
-  - [ ] Señas, cancelaciones, no-show y reprogramación.
-  - [ ] *Criterio:* una peluquería agenda corte + color con profesional, cobra el turno y calcula comisión.
+- [~] **H38 — Agenda y servicios para peluquería/estética.** — *Core entregado (local, pendiente de push — migración `20260608540000_agenda.sql` aplicada en remoto vía MCP y validada por SQL): servicios + profesionales + agenda día/semana + cobro desde el turno. **Follow-up (NO en este hito):** liquidación de comisiones (H39), seña/pago de reserva, propinas y lista de espera avanzada.*
+  - [x] Servicios con duración, precio, profesional asignable y comisión. — *Un servicio es un `products` con `track_stock=false` + dos campos nuevos `products.service_duration_min` y `products.commission_pct` (sección “Servicio para agenda” en el form de producto). Reusa categorías/precio/favoritos/listas. El profesional se asigna por turno (no es un atributo fijo del servicio).*
+  - [~] Agenda diaria/semanal por profesional, silla/cabina o recurso. — *Vista **día** (columnas por profesional + “Sin asignar”) y **semana** (columnas por día, filtrable por profesional), grid horario 8–21h con bloques coloreados por profesional, click en hueco = agendar (`AgendaBoard`). Silla/cabina/recurso genérico queda como extensión (hoy el recurso es el profesional).*
+  - [~] Turnos, walk-ins y lista de espera. — *Turnos (`appointments`: snapshot servicio + estado + `sale_id`), **walk-in** (turno ahora, `is_walk_in`, en_curso) hechos. **Lista de espera** queda como follow-up.*
+  - [x] Cobro desde turno: servicio realizado → agregar productos extra → cobrar. — *Botón “Cobrar este turno” → `/pos?appointment=<id>`: el POS carga el servicio en el carrito (permite agregar productos extra) y cobra con el flujo existente (`create_sale` intacto); al confirmar, `link_appointment_sale()` enlaza la venta y marca el turno `realizado`.*
+  - [~] Señas, cancelaciones, no-show y reprogramación. — *Cancelación con motivo, **no-show**, reprogramación (editar fecha/hora) y todos los estados (reservado/confirmado/en_curso/realizado/cancelado/no_show) hechos. **Seña/pago de reserva** queda como follow-up (H39/pagos).*
+  - [x] *Criterio:* una peluquería agenda corte + color con profesional, cobra el turno y calcula comisión. — *Cumplido a nivel core (validado por SQL: profesional + servicio + turno → cambio de estado → venta enlazada; la comisión se calcula y muestra en el detalle del turno). La **liquidación** de comisiones es H39.*
 
 - [ ] **H39 — Comisiones, propinas y productividad del staff.**
   - [ ] Comisión por servicio, por producto, por garantía/extra y por profesional.

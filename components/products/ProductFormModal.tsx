@@ -110,6 +110,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         warranty_months: product?.warranty_months ?? 0,
         is_favorite: product?.is_favorite ?? false,
         favorite_order: product?.favorite_order ?? 0,
+        service_duration_min: product?.service_duration_min ?? "",
+        commission_pct: product?.commission_pct ?? "",
       });
     }
   }, [open, product, reset]);
@@ -362,6 +364,42 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 {...register("image_url")}
               />
             )}
+          </div>
+        </Disclosure>
+
+        {/* Servicio (F12 · H38): duración y comisión para la agenda de turnos.
+            Opcional; sólo lo usan peluquerías/estética/servicios. Si lo cargás,
+            este producto aparece como servicio elegible al agendar un turno y
+            trae su duración/comisión por defecto. Marcá "Controla stock" en off
+            para servicios (no descuentan inventario). */}
+        <Disclosure title="Servicio para agenda (duración y comisión)">
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Para peluquería, estética y servicios con turnos. Cargá la duración
+              y la comisión del profesional; el producto aparecerá como servicio
+              al agendar un turno en la Agenda. Dejalo vacío si es un producto común.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Duración (min)"
+                type="number"
+                step="5"
+                min="0"
+                placeholder="Ej. 45"
+                error={errors.service_duration_min?.message}
+                {...register("service_duration_min")}
+              />
+              <Input
+                label="Comisión del profesional (%)"
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                placeholder="Ej. 30"
+                error={errors.commission_pct?.message}
+                {...register("commission_pct")}
+              />
+            </div>
           </div>
         </Disclosure>
 

@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Banknote,
+  CalendarDays,
   Lock,
   Minus,
   MonitorSmartphone,
@@ -65,6 +67,8 @@ import { FavoritesGrid } from "@/components/pos/FavoritesGrid";
 import type { Product } from "@/modules/products/api";
 import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
+import { useAppointment } from "@/modules/agenda/hooks";
+import { appointmentsApi } from "@/modules/agenda/api";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -82,8 +86,17 @@ import {
 } from "@/lib/pos/customerDisplay";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
-export default function PosPage() {
+function PosPageInner() {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Cobro desde un turno (F12 · H38): /pos?appointment=<id>. Se carga el servicio
+  // del turno en el carrito (+ se permite agregar productos extra) y, al cobrar,
+  // la venta queda enlazada al turno (link_appointment_sale → 'realizado').
+  const appointmentId = searchParams.get("appointment");
+  const { data: pendingAppt } = useAppointment(appointmentId);
+  // Evita recargar el servicio al carrito en cada render: sólo una vez por turno.
+  const loadedApptRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
@@ -449,6 +462,42 @@ export default function PosPage() {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
 
+  // Cobro desde un turno (H38): al llegar el turno (?appointment=<id>), cargá su
+  // servicio en el carrito UNA sola vez y seleccioná el cliente. Si el turno ya
+  // tiene una venta o está cancelado, no se carga (sólo informativo). Usa el
+  // snapshot de precio del turno (estable); si el producto del servicio sigue
+  // existiendo lo agrega como línea de producto, si no, como ítem libre.
+  useEffect(() => {
+    const a = pendingAppt;
+    if (!a) return;
+    if (loadedApptRef.current === a.id) return;
+    loadedApptRef.current = a.id;
+    if (a.sale_id || a.status === "cancelado") return; // ya cobrado / cancelado
+    clear();
+    if (a.service_product_id) {
+      addProduct({
+        id: a.service_product_id,
+        name: a.service_name,
+        sku: null,
+        price: a.service_price,
+        unit: "un",
+      });
+    } else {
+      addFreeAmount({ name: a.service_name, amount: a.service_price });
+    }
+    if (a.customer_id && a.customers?.name) {
+      setCustomer({ id: a.customer_id, name: a.customers.name });
+    }
+  }, [pendingAppt, clear, addProduct, addFreeAmount]);
+
+  // Sale del modo "cobro de turno": limpia el carrito y el query param.
+  function exitAppointmentMode() {
+    loadedApptRef.current = null;
+    clear();
+    setCustomer(null);
+    router.replace("/pos");
+  }
+
   const subtotal = cartSubtotal(lines);
   const rawTotal = Math.max(0, subtotal - discountTotal);
   // Redondeo del total al múltiplo configurado (H30). El server reaplica el
@@ -654,6 +703,17 @@ export default function PosPage() {
       clear();
       setCustomer(null);
       setOfferedWarrantyId("");
+      // Cobro desde turno (H38): enlazá la venta al turno y marcalo 'realizado'.
+      // Best-effort: si el enlace falla, la venta igual quedó registrada.
+      if (appointmentId) {
+        try {
+          await appointmentsApi.linkSale(appointmentId, res.sale_id);
+        } catch (linkErr) {
+          console.warn("No se pudo enlazar el turno con la venta:", linkErr);
+        }
+        loadedApptRef.current = null;
+        router.replace("/pos");
+      }
       // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
       flashPaidScreen(change ?? 0);
       toast({
@@ -708,6 +768,34 @@ export default function PosPage() {
   return (
     <>
       <div className="mx-auto max-w-7xl px-6 py-6">
+        {/* Cobro desde un turno (H38): banner con el servicio cargado. Se puede
+            agregar productos extra antes de cobrar; al cobrar, la venta queda
+            enlazada al turno. */}
+        {pendingAppt && !pendingAppt.sale_id && pendingAppt.status !== "cancelado" && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.08] px-4 py-3">
+            <span className="flex min-w-0 items-center gap-2.5 text-sm">
+              <CalendarDays size={18} className="shrink-0 text-ninja-flameSoft" />
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">
+                  Cobrando turno: {pendingAppt.service_name}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {pendingAppt.customers?.name
+                    ? `Cliente: ${pendingAppt.customers.name} · `
+                    : ""}
+                  Agregá productos extra si hace falta y cobrá normalmente.
+                </span>
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={exitAppointmentMode}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X size={14} /> Cancelar cobro del turno
+            </button>
+          </div>
+        )}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
             Punto de venta
@@ -1463,5 +1551,15 @@ export default function PosPage() {
         </div>
       </Modal>
     </>
+  );
+}
+
+// Wrapper con Suspense: el POS lee ?appointment con useSearchParams (cobro desde
+// turno · H38), que en el App Router debe ir dentro de un límite de Suspense.
+export default function PosPage() {
+  return (
+    <Suspense fallback={null}>
+      <PosPageInner />
+    </Suspense>
   );
 }

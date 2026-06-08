@@ -45,6 +45,16 @@ export const ProductSchema = z.object({
   // Botón rápido del POS (H36): favorito + orden de aparición en la grilla.
   is_favorite: z.boolean().default(false),
   favorite_order: z.coerce.number().int().min(0).max(9999).default(0),
+  // Servicio (F12 · H38): duración por defecto del turno (min) y % de comisión
+  // del profesional. Vacío → null (producto normal, sin agenda).
+  service_duration_min: z
+    .union([z.coerce.number().int().positive().max(1440), z.literal(""), z.null()])
+    .transform((v) => (v === "" || v == null ? null : v))
+    .optional(),
+  commission_pct: z
+    .union([z.coerce.number().min(0).max(100), z.literal(""), z.null()])
+    .transform((v) => (v === "" || v == null ? null : v))
+    .optional(),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Link2, Check, Clock, ChevronDown, Percent } from "lucide-react";
+import { CreditCard, Link2, Check, Clock, ChevronDown, Percent, Lock } from "lucide-react";
 import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -13,6 +13,31 @@ import { Switch } from "@/components/ui/Switch";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { UpgradeModal } from "@/components/saas/UpgradeModal";
+import {
+  useGating,
+  useGlobalPlansForUpgrade,
+  firstPlanWithFeature,
+  type PlanForUpgrade,
+} from "@/modules/saas/gating";
+
+// Feature de plan por proveedor (espejo de payment_method_plan_key en SQL y de
+// PROVIDER_FEATURE en components/pos/PosModals.tsx). Un proveedor sin entrada NO
+// está gateado por plan. El backend (trigger en payments + Edge de QR) es el
+// bloqueo real; este mapa sólo decide qué medio se puede ACTIVAR en config.
+// La feature key coincide con payment_providers.key.
+const PROVIDER_FEATURE: Record<string, string> = {
+  mercadopago: "mercado_pago",
+  // Mercado Point tiene su propia feature (MP online ≠ Point presencial).
+  mercadopago_point: "mercadopago_point",
+  modo: "modo",
+  mobbex: "mobbex",
+  payway: "payway",
+  getnet: "getnet",
+  fiserv: "fiserv",
+  pagos360: "pagos360",
+  nave: "nave",
+};
 
 const KIND_LABELS: Record<string, string> = {
   manual: "Lo cobrás vos",
@@ -216,6 +241,12 @@ export function PaymentMethodsCard() {
     return m;
   }, [methods]);
 
+  // Gating por plan: features activas del tenant + catálogo de planes globales
+  // (para resolver el plan mínimo que incluye cada medio en el UpgradeModal).
+  const { data: gating } = useGating();
+  const features = gating?.features;
+  const { data: plans = [] } = useGlobalPlansForUpgrade();
+
   const save = useMutation({
     mutationFn: async (vars: {
       provider_key: string;
@@ -312,248 +343,32 @@ export function PaymentMethodsCard() {
         ver qué hace al activarlo y cómo es el proceso.
       </p>
       <div className="mt-3 flex flex-col gap-2.5">
-        {providers.map((p) => {
-          const m = byKey.get(p.key);
-          const connected = Boolean(m?.config?.connected);
-          const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
-          const isOpen = expanded.has(p.key);
-          const info = PROVIDER_INFO[p.key];
-          // Medios con grid de planes: el recargo se configura ahí, no en la fila.
-          // Todo medio implementado y no manual (gateway/qr/orquestador).
-          const hasPlans = IMPLEMENTED.has(p.key) && p.kind !== "manual";
-          return (
-            <Card
-              key={p.key}
-              className={
-                connected ? "overflow-hidden border-emerald-500/30" : "overflow-hidden"
-              }
-            >
-              <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
-                {/* Logo */}
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden">
-                  {PROVIDER_LOGO[p.key] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={PROVIDER_LOGO[p.key]}
-                      alt={p.name}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <CreditCard size={18} className="text-muted-foreground" />
-                  )}
-                </span>
-
-                {/* Nombre + chip de tipo */}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{p.name}</div>
-                  <div className="mt-1 inline-flex items-center rounded-ninjaFull border border-ninja-brightViolet/30 bg-ninja-brightViolet/10 px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {PROVIDER_CHIP[p.kind] ?? KIND_LABELS[p.kind] ?? p.kind}
-                  </div>
-                </div>
-
-                {/* Estado de conexión */}
-                <div className="hidden shrink-0 sm:block">
-                  {p.kind === "manual" ? (
-                    <span className="text-xs text-muted-foreground">No requiere</span>
-                  ) : soon ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock size={13} /> Próximamente
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        setConnectKey(p.key);
-                        setToken("");
-                        setMbApiKey("");
-                        setMbToken("");
-                        setModoClientId("");
-                        setModoClientSecret("");
-                        setModoStoreId("");
-                        setShowManual(false);
-                      }}
-                      className={
-                        connected
-                          ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:underline"
-                          : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
-                      }
-                    >
-                      {connected ? (
-                        <>
-                          <Check size={13} /> Conectado
-                        </>
-                      ) : (
-                        <>
-                          <Link2 size={13} /> Conectar
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {/* Planes por marca (solo tarjeta/QR conectado) */}
-                {hasPlans && (
-                  <button
-                    onClick={() => setPlansProvider({ key: p.key, name: p.name })}
-                    title="Planes por tarjeta y cuotas"
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/20"
-                  >
-                    <Percent size={13} /> Planes
-                  </button>
-                )}
-
-                {/* Recargo (oculto en medios con planes: se configura en el grid) */}
-                <div
-                  className={
-                    hasPlans
-                      ? "hidden"
-                      : "hidden shrink-0 flex-col items-end gap-0.5 md:flex"
-                  }
-                >
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Recargo %
-                  </span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    defaultValue={m?.surcharge_pct ?? 0}
-                    disabled={soon}
-                    onBlur={(e) =>
-                      save.mutate({
-                        provider_key: p.key,
-                        surcharge_pct: Number(e.target.value) || 0,
-                      })
-                    }
-                    className="h-9 w-[68px] rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft disabled:opacity-40"
-                  />
-                </div>
-
-                {/* Switch activar */}
-                <Switch
-                  checked={m?.enabled ?? false}
-                  disabled={soon}
-                  onCheckedChange={(v) => save.mutate({ provider_key: p.key, enabled: v })}
-                  label={`Activar ${p.name}`}
-                />
-
-                {/* Desplegar explicación */}
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(p.key)}
-                  aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
-                  aria-expanded={isOpen}
-                  className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:text-foreground"
-                >
-                  <ChevronDown
-                    size={18}
-                    className={isOpen ? "rotate-180 transition" : "transition"}
-                  />
-                </button>
-              </div>
-
-              {/* Detalle desplegable */}
-              {isOpen && (
-                <div className="space-y-3 border-t border-dashed border-border bg-muted/30 px-4 py-4 text-sm">
-                  {/* En mobile, conexión + recargo viven acá (se ocultan en la fila). */}
-                  <div className="flex flex-wrap items-center gap-3 sm:hidden">
-                    {p.kind === "manual" ? (
-                      <span className="text-xs text-muted-foreground">Sin conexión</span>
-                    ) : soon ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock size={13} /> Próximamente
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setConnectKey(p.key);
-                          setToken("");
-                          setMbApiKey("");
-                          setMbToken("");
-                          setModoClientId("");
-                          setModoClientSecret("");
-                          setModoStoreId("");
-                          setShowManual(false);
-                        }}
-                        className={
-                          connected
-                            ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"
-                            : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
-                        }
-                      >
-                        {connected ? (
-                          <>
-                            <Check size={13} /> Conectado
-                          </>
-                        ) : (
-                          <>
-                            <Link2 size={13} /> Conectar
-                          </>
-                        )}
-                      </button>
-                    )}
-                    {hasPlans && (
-                      <button
-                        onClick={() => setPlansProvider({ key: p.key, name: p.name })}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
-                      >
-                        <Percent size={13} /> Planes por tarjeta
-                      </button>
-                    )}
-                  </div>
-
-                  {info ? (
-                    <>
-                      <div>
-                        <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                          Qué pasa al activar
-                        </div>
-                        <p className="text-muted-foreground">{info.activa}</p>
-                      </div>
-                      {info.conexion && (
-                        <div>
-                          <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                            Conexión
-                          </div>
-                          <p className="text-muted-foreground">{info.conexion}</p>
-                        </div>
-                      )}
-                      {info.pasos && (
-                        <div>
-                          <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                            Cómo es el proceso
-                          </div>
-                          <ol className="space-y-1.5">
-                            {info.pasos.map((step, i) => (
-                              <li key={i} className="flex gap-2.5 text-muted-foreground">
-                                <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
-                                  {i + 1}
-                                </span>
-                                <span>{step}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      )}
-                      {info.recargo && !hasPlans && (
-                        <div>
-                          <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                            Recargo
-                          </div>
-                          <p className="text-muted-foreground">{info.recargo}</p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      Integración en camino. Pronto vas a poder conectar tu cuenta y
-                      cobrar con {p.name} desde el POS.
-                    </p>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
+        {providers.map((p) => (
+          <PaymentMethodRow
+            key={p.key}
+            provider={p}
+            method={byKey.get(p.key)}
+            plans={plans}
+            features={features}
+            isOpen={expanded.has(p.key)}
+            onToggleExpand={() => toggleExpand(p.key)}
+            onConnect={() => {
+              setConnectKey(p.key);
+              setToken("");
+              setMbApiKey("");
+              setMbToken("");
+              setModoClientId("");
+              setModoClientSecret("");
+              setModoStoreId("");
+              setShowManual(false);
+            }}
+            onOpenPlans={() => setPlansProvider({ key: p.key, name: p.name })}
+            onSaveEnabled={(v) => save.mutate({ provider_key: p.key, enabled: v })}
+            onSaveSurcharge={(pct) =>
+              save.mutate({ provider_key: p.key, surcharge_pct: pct })
+            }
+          />
+        ))}
       </div>
 
       <Modal
@@ -799,5 +614,369 @@ export function PaymentMethodsCard() {
         />
       )}
     </section>
+  );
+}
+
+// =============================================================================
+// PaymentMethodRow — fila de un medio de pago, con gating por plan.
+//
+// BUG #5/#14: antes el switch quedaba activable aunque el plan no incluyera el
+// medio (p. ej. Mercado Pago en Start). Se podía activar en config, pero el
+// backend lo bloqueaba al cobrar → incoherencia. Ahora, si el medio mapea a una
+// feature de plan que el tenant NO tiene, los controles (activar / conectar /
+// planes) quedan DISABLED con un tooltip "Desactivado — disponible desde el
+// plan <X>" y, al click, abren el UpgradeModal (imagen del plan, precio,
+// descripción y botón de pago). El gating real sigue viviendo en el backend;
+// esto sólo cierra el agujero de UX. Va como componente para poder usar hooks
+// de gating por fila (no se puede en un .map()).
+// =============================================================================
+function PaymentMethodRow({
+  provider: p,
+  method: m,
+  plans,
+  features,
+  isOpen,
+  onToggleExpand,
+  onConnect,
+  onOpenPlans,
+  onSaveEnabled,
+  onSaveSurcharge,
+}: {
+  provider: Provider;
+  method: Method | undefined;
+  plans: PlanForUpgrade[];
+  // Features activas del tenant. undefined mientras carga (optimista: no bloquea).
+  features: Record<string, boolean> | undefined;
+  isOpen: boolean;
+  onToggleExpand: () => void;
+  onConnect: () => void;
+  onOpenPlans: () => void;
+  onSaveEnabled: (v: boolean) => void;
+  onSaveSurcharge: (pct: number) => void;
+}) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const connected = Boolean(m?.config?.connected);
+  const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
+  const info = PROVIDER_INFO[p.key];
+  // Medios con grid de planes: el recargo se configura ahí, no en la fila.
+  const hasPlans = IMPLEMENTED.has(p.key) && p.kind !== "manual";
+
+  // Gating por plan. Optimista mientras `features` es undefined (no parpadea).
+  // Sólo gateamos medios IMPLEMENTADOS (no `soon`): ahí el switch se podía
+  // activar y existía el bypass que reportó el usuario. Los `soon` ya tienen el
+  // switch deshabilitado ("Próximamente") y no prometemos upgrade sobre algo que
+  // todavía no cobra. El backend igual bloquea cualquier medio fuera del plan.
+  const featureKey: string | undefined = PROVIDER_FEATURE[p.key];
+  const locked =
+    !soon &&
+    featureKey !== undefined &&
+    features !== undefined &&
+    features[featureKey] !== true;
+  const target = locked && featureKey ? firstPlanWithFeature(plans, featureKey) : null;
+  const planName = target?.name ?? "superior";
+  const lockTip = `Desactivado — disponible desde el plan ${planName}. Tocá para mejorar tu plan.`;
+  const openUpgrade = () => setUpgradeOpen(true);
+
+  return (
+    <Card
+      className={
+        connected
+          ? "overflow-hidden border-emerald-500/30"
+          : locked
+            ? "overflow-hidden border-ninja-flameSoft/25"
+            : "overflow-hidden"
+      }
+    >
+      <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
+        {/* Logo */}
+        <span
+          className={
+            locked
+              ? "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden opacity-50 grayscale"
+              : "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden"
+          }
+        >
+          {PROVIDER_LOGO[p.key] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={PROVIDER_LOGO[p.key]}
+              alt={p.name}
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <CreditCard size={18} className="text-muted-foreground" />
+          )}
+        </span>
+
+        {/* Nombre + chip de tipo */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-semibold">{p.name}</span>
+            {locked && (
+              <span
+                title={lockTip}
+                className="inline-flex shrink-0 items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft"
+              >
+                <Lock size={10} /> Plan {planName}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 inline-flex items-center rounded-ninjaFull border border-ninja-brightViolet/30 bg-ninja-brightViolet/10 px-2 py-0.5 text-[11px] text-muted-foreground">
+            {PROVIDER_CHIP[p.kind] ?? KIND_LABELS[p.kind] ?? p.kind}
+          </div>
+        </div>
+
+        {/* Estado de conexión / acción de mejora */}
+        <div className="hidden shrink-0 sm:block">
+          {locked ? (
+            <button
+              type="button"
+              onClick={openUpgrade}
+              title={lockTip}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
+            >
+              <Lock size={13} /> Mejorar plan
+            </button>
+          ) : p.kind === "manual" ? (
+            <span className="text-xs text-muted-foreground">No requiere</span>
+          ) : soon ? (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock size={13} /> Próximamente
+            </span>
+          ) : (
+            <button
+              onClick={onConnect}
+              className={
+                connected
+                  ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:underline"
+                  : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
+              }
+            >
+              {connected ? (
+                <>
+                  <Check size={13} /> Conectado
+                </>
+              ) : (
+                <>
+                  <Link2 size={13} /> Conectar
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* Planes por marca (solo medios con grid; bloqueado abre el upgrade) */}
+        {hasPlans &&
+          (locked ? (
+            <button
+              onClick={openUpgrade}
+              title={lockTip}
+              aria-disabled
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/30 bg-ninja-flame/5 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft opacity-60 transition hover:opacity-80"
+            >
+              <Lock size={13} /> Planes
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPlans}
+              title="Planes por tarjeta y cuotas"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/20"
+            >
+              <Percent size={13} /> Planes
+            </button>
+          ))}
+
+        {/* Recargo (oculto en medios con planes: se configura en el grid) */}
+        <div
+          className={
+            hasPlans
+              ? "hidden"
+              : "hidden shrink-0 flex-col items-end gap-0.5 md:flex"
+          }
+        >
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Recargo %
+          </span>
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            defaultValue={m?.surcharge_pct ?? 0}
+            disabled={soon || locked}
+            title={locked ? lockTip : undefined}
+            onBlur={(e) => onSaveSurcharge(Number(e.target.value) || 0)}
+            className="h-9 w-[68px] rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft disabled:opacity-40"
+          />
+        </div>
+
+        {/* Switch activar — bloqueado por plan: se ve apagado/atenuado y NO se
+            puede activar; un botón superpuesto captura el click y abre el
+            upgrade (un <button disabled> traga el click, por eso el overlay). */}
+        {locked ? (
+          <span className="relative inline-flex shrink-0 items-center">
+            <span aria-hidden className="pointer-events-none opacity-50">
+              <Switch checked={false} onCheckedChange={() => {}} disabled />
+            </span>
+            <button
+              type="button"
+              onClick={openUpgrade}
+              title={lockTip}
+              aria-label={`${p.name}: disponible desde el plan ${planName}. Tocá para mejorar tu plan.`}
+              className="absolute inset-0 cursor-pointer rounded-full"
+            />
+          </span>
+        ) : (
+          <Switch
+            checked={m?.enabled ?? false}
+            disabled={soon}
+            onCheckedChange={onSaveEnabled}
+            label={`Activar ${p.name}`}
+          />
+        )}
+
+        {/* Desplegar explicación */}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
+          aria-expanded={isOpen}
+          className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:text-foreground"
+        >
+          <ChevronDown
+            size={18}
+            className={isOpen ? "rotate-180 transition" : "transition"}
+          />
+        </button>
+      </div>
+
+      {/* Detalle desplegable */}
+      {isOpen && (
+        <div className="space-y-3 border-t border-dashed border-border bg-muted/30 px-4 py-4 text-sm">
+          {/* Aviso de gating dentro del detalle (refuerza el motivo del bloqueo). */}
+          {locked && (
+            <button
+              type="button"
+              onClick={openUpgrade}
+              className="flex w-full items-start gap-2 rounded-md border border-ninja-flameSoft/30 bg-ninja-flame/5 p-2.5 text-left text-xs text-muted-foreground transition hover:bg-ninja-flame/10"
+            >
+              <Lock size={14} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+              <span>
+                <strong className="text-ninja-flameSoft">Disponible desde el plan {planName}.</strong>{" "}
+                Tu plan actual no incluye {p.name}, por eso no se puede activar.
+                Tocá para mejorar tu plan y empezar a cobrar con {p.name}.
+              </span>
+            </button>
+          )}
+
+          {/* En mobile, conexión + planes viven acá (se ocultan en la fila). */}
+          <div className="flex flex-wrap items-center gap-3 sm:hidden">
+            {locked ? (
+              <button
+                type="button"
+                onClick={openUpgrade}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
+              >
+                <Lock size={13} /> Mejorar plan
+              </button>
+            ) : p.kind === "manual" ? (
+              <span className="text-xs text-muted-foreground">Sin conexión</span>
+            ) : soon ? (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock size={13} /> Próximamente
+              </span>
+            ) : (
+              <button
+                onClick={onConnect}
+                className={
+                  connected
+                    ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"
+                    : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
+                }
+              >
+                {connected ? (
+                  <>
+                    <Check size={13} /> Conectado
+                  </>
+                ) : (
+                  <>
+                    <Link2 size={13} /> Conectar
+                  </>
+                )}
+              </button>
+            )}
+            {hasPlans && !locked && (
+              <button
+                onClick={onOpenPlans}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
+              >
+                <Percent size={13} /> Planes por tarjeta
+              </button>
+            )}
+          </div>
+
+          {info ? (
+            <>
+              <div>
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                  Qué pasa al activar
+                </div>
+                <p className="text-muted-foreground">{info.activa}</p>
+              </div>
+              {info.conexion && (
+                <div>
+                  <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                    Conexión
+                  </div>
+                  <p className="text-muted-foreground">{info.conexion}</p>
+                </div>
+              )}
+              {info.pasos && (
+                <div>
+                  <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                    Cómo es el proceso
+                  </div>
+                  <ol className="space-y-1.5">
+                    {info.pasos.map((step, i) => (
+                      <li key={i} className="flex gap-2.5 text-muted-foreground">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                          {i + 1}
+                        </span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {info.recargo && !hasPlans && (
+                <div>
+                  <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
+                    Recargo
+                  </div>
+                  <p className="text-muted-foreground">{info.recargo}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              Integración en camino. Pronto vas a poder conectar tu cuenta y
+              cobrar con {p.name} desde el POS.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* UpgradeModal reutilizado (imagen/logo del plan, precio, descripción y
+          botón "Mejorar a <plan> y pagar"). Sólo se monta si el medio está
+          gateado por plan. */}
+      {locked && featureKey && (
+        <UpgradeModal
+          open={upgradeOpen}
+          onOpenChange={setUpgradeOpen}
+          featureKey={featureKey}
+          featureLabel={p.name}
+        />
+      )}
+    </Card>
   );
 }

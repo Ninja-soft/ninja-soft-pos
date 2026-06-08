@@ -20,6 +20,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
+import { GatedButton } from "@/components/saas/GatedAction";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
@@ -158,21 +159,39 @@ export default function ProductosPage() {
             </Display>
           </div>
           <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Button variant="secondary" className="shrink-0" onClick={exportBase}>
+            <GatedButton
+              feature="export_xlsx"
+              featureLabel="Exportar a Excel"
+              variant="secondary"
+              className="shrink-0"
+              onClick={exportBase}
+            >
               <Download size={16} /> Exportar XLSX
-            </Button>
-            <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}>
+            </GatedButton>
+            <GatedButton
+              feature="importacion_excel"
+              featureLabel="Importación desde Excel"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setImportOpen(true)}
+            >
               <Upload size={16} /> Importar XLSX
-            </Button>
+            </GatedButton>
             <Button variant="secondary" className="shrink-0" onClick={() => setCategoriesOpen(true)}>
               <FolderTree size={16} /> Categorías
             </Button>
             <Button variant="secondary" className="shrink-0" onClick={() => setBrandsOpen(true)}>
               <Tag size={16} /> Marcas
             </Button>
-            <Button variant="secondary" className="shrink-0" onClick={() => setWarrantyOpen(true)}>
+            <GatedButton
+              feature="garantias"
+              featureLabel="Garantías"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setWarrantyOpen(true)}
+            >
               <ShieldCheck size={16} /> Garantías
-            </Button>
+            </GatedButton>
             <Button className="shrink-0" onClick={openNew}>
               <Plus size={16} /> Nuevo producto
             </Button>

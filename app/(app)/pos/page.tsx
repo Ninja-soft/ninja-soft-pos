@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
+  Lock,
   Minus,
   Plus,
   ScanBarcode,
@@ -43,6 +44,7 @@ import {
 } from "@/modules/pos/hooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
+import { useFeatureGate } from "@/components/saas/GatedAction";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { productsApi, variantLabel } from "@/modules/products/api";
@@ -122,6 +124,9 @@ export default function PosPage() {
   const mpFeature = useFeature("mercado_pago");
   const mobbexFeature = useFeature("mobbex");
   const modoFeature = useFeature("modo");
+  // Descuentos manuales en la venta es feature de plan (Pro). Sin ella, el campo
+  // de descuento queda bloqueado y al tocarlo se abre el UpgradeModal.
+  const discountGate = useFeatureGate("descuentos", "Descuentos");
   const mpReady = Boolean(mp?.enabled && mp?.connected && mpFeature !== false);
   const { data: mobbex } = useProviderMethod("mobbex");
   const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected && mobbexFeature !== false);
@@ -720,15 +725,31 @@ export default function PosPage() {
               <span>{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-              <span>Descuento</span>
-              <input
-                type="number"
-                step="0.01"
-                value={discountTotal || ""}
-                onChange={(e) => handleDiscountChange(Number(e.target.value) || 0)}
-                placeholder="0"
-                className="h-8 w-24 rounded-md border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-              />
+              <span className="flex items-center gap-1.5">
+                Descuento
+                {discountGate.locked && (
+                  <Lock size={12} className="text-ninja-flameSoft" />
+                )}
+              </span>
+              {discountGate.locked ? (
+                <button
+                  type="button"
+                  onClick={() => discountGate.run(() => {})}
+                  title="Descuentos: función no incluida en tu plan"
+                  className="h-8 w-24 rounded-md border border-input bg-muted/40 px-2 text-right text-sm text-muted-foreground/60 outline-none"
+                >
+                  0
+                </button>
+              ) : (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={discountTotal || ""}
+                  onChange={(e) => handleDiscountChange(Number(e.target.value) || 0)}
+                  placeholder="0"
+                  className="h-8 w-24 rounded-md border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                />
+              )}
             </div>
             <div className="flex items-center justify-between pt-1">
               <span className="font-display text-lg font-bold">Total</span>
@@ -863,6 +884,7 @@ export default function PosPage() {
         </div>
       </Modal>
 
+      {discountGate.modal}
       <OpenShiftModal
         open={openShiftModal}
         onOpenChange={setOpenShiftModal}

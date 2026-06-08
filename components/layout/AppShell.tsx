@@ -10,6 +10,7 @@ import {
   ChevronDown,
   KeyRound,
   LayoutDashboard,
+  Lock,
   LogOut,
   Menu,
   Moon,
@@ -47,8 +48,17 @@ import {
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
 import { AssistantBubble } from "@/components/ai/AssistantBubble";
+import { useFeature } from "@/modules/saas/gating";
+import { UpgradeModal } from "@/components/saas/UpgradeModal";
 
-type Item = { href: string; label: string; icon: React.ElementType };
+// `feature` (opcional): si el plan no la incluye, el ítem de nav se ve
+// deshabilitado (candado) y al click abre el UpgradeModal en vez de navegar.
+type Item = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  feature?: string;
+};
 type Group = { label: string; items: Item[] };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -70,7 +80,12 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/pos", label: "Punto de venta", icon: ShoppingCart },
         { href: "/caja", label: "Caja", icon: Wallet },
         { href: "/ventas", label: "Ventas", icon: Receipt },
-        { href: "/devoluciones", label: "Devoluciones", icon: RotateCcw },
+        {
+          href: "/devoluciones",
+          label: "Devoluciones",
+          icon: RotateCcw,
+          feature: "devoluciones",
+        },
       ],
     },
     {
@@ -101,6 +116,36 @@ function NavLink({
   onNavigate: () => void;
 }) {
   const Icon = item.icon;
+  // Gating del módulo entero: si el plan no incluye la feature, el ítem queda
+  // deshabilitado (candado) y el click abre el UpgradeModal en lugar de navegar.
+  // useFeature siempre se llama (key vacía = sin gating → permitido).
+  const allowed = useFeature(item.feature ?? "");
+  const [upOpen, setUpOpen] = useState(false);
+  const locked = Boolean(item.feature) && allowed === false;
+
+  if (locked) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setUpOpen(true)}
+          title={`${item.label}: función no incluida en tu plan`}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/60 transition hover:bg-muted/60 hover:text-muted-foreground"
+        >
+          <Icon size={17} />
+          <span className="flex-1 text-left">{item.label}</span>
+          <Lock size={13} className="text-ninja-flameSoft" />
+        </button>
+        <UpgradeModal
+          open={upOpen}
+          onOpenChange={setUpOpen}
+          featureKey={item.feature!}
+          featureLabel={item.label}
+        />
+      </>
+    );
+  }
+
   return (
     <Link
       href={item.href as never}

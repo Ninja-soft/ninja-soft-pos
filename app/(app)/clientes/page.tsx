@@ -8,6 +8,7 @@ import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
+import { GatedButton } from "@/components/saas/GatedAction";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { CustomerHistoryModal } from "@/components/customers/CustomerHistoryModal";
 import { AccountsReceivableModal } from "@/components/customers/AccountsReceivableModal";
@@ -109,15 +110,33 @@ export default function ClientesPage() {
             </Display>
           </div>
           <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Button variant="secondary" className="shrink-0" onClick={exportBase}>
+            <GatedButton
+              feature="export_xlsx"
+              featureLabel="Exportar a Excel"
+              variant="secondary"
+              className="shrink-0"
+              onClick={exportBase}
+            >
               <Download size={16} /> Exportar XLSX
-            </Button>
-            <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}>
+            </GatedButton>
+            <GatedButton
+              feature="importacion_excel"
+              featureLabel="Importación desde Excel"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setImportOpen(true)}
+            >
               <Upload size={16} /> Importar XLSX
-            </Button>
-            <Button variant="secondary" className="shrink-0" onClick={() => setArOpen(true)}>
+            </GatedButton>
+            <GatedButton
+              feature="cuenta_corriente"
+              featureLabel="Cuenta corriente"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setArOpen(true)}
+            >
               <Wallet size={16} /> Cuentas por cobrar
-            </Button>
+            </GatedButton>
             <Button variant="secondary" className="shrink-0" onClick={() => setBdayOpen(true)}>
               <Cake size={16} /> Cumpleaños
             </Button>

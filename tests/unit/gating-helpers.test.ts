@@ -15,6 +15,8 @@ function plan(
   return {
     key,
     name: key.toUpperCase(),
+    secondary_name: null,
+    image_url: null,
     monthly_price_ars: opts.price ?? 0,
     sort: opts.sort ?? null,
     limits: { modules: opts.modules ?? {} },

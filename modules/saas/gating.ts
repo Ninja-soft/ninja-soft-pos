@@ -98,6 +98,10 @@ export function useLimit(key: GatingLimitKey): number | null {
 export interface PlanForUpgrade {
   key: string;
   name: string;
+  // Nombre ninja secundario del plan (Aprendiz, Discípulo…) — para el upsell.
+  secondary_name: string | null;
+  // Logo/imagen del plan (si la tiene) — se muestra en el UpgradeModal.
+  image_url: string | null;
   monthly_price_ars: number;
   sort: number | null;
   limits: { modules?: Record<string, unknown> | null } | null;
@@ -132,19 +136,26 @@ export function useGlobalPlansForUpgrade() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("plans")
-        .select("key, name, monthly_price_ars, sort, limits")
+        .select("key, name, secondary_name, image_url, monthly_price_ars, sort, limits")
         .is("tenant_id", null)
         .eq("is_active", true)
         .order("sort")
         .order("monthly_price_ars");
       if (error) throw error;
-      return (data ?? []).map((p) => ({
-        key: p.key,
-        name: p.name,
-        monthly_price_ars: Number(p.monthly_price_ars ?? 0),
-        sort: p.sort ?? null,
-        limits: (p.limits ?? null) as PlanForUpgrade["limits"],
-      }));
+      return (data ?? []).map((p) => {
+        // secondary_name / image_url son columnas del rediseño de planes; los
+        // tipos generados pueden no incluirlas aún → acceso laxo + cast.
+        const row = p as Record<string, unknown>;
+        return {
+          key: p.key,
+          name: p.name,
+          secondary_name: (row.secondary_name as string | null) ?? null,
+          image_url: (row.image_url as string | null) ?? null,
+          monthly_price_ars: Number(p.monthly_price_ars ?? 0),
+          sort: p.sort ?? null,
+          limits: (p.limits ?? null) as PlanForUpgrade["limits"],
+        };
+      });
     },
     staleTime: 5 * 60_000,
   });

@@ -33,6 +33,7 @@ import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
 import { ProfileEditModal } from "@/components/account/ProfileEditModal";
+import { InactivityGuard } from "@/components/system/InactivityGuard";
 import {
   Dropdown,
   DropdownContent,
@@ -213,6 +214,8 @@ export function InternalShell({
 
   return (
     <div className="flex min-h-dvh">
+      {/* Auto-logout por inactividad: aplica también al staff. */}
+      <InactivityGuard />
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
         {nav}
       </aside>

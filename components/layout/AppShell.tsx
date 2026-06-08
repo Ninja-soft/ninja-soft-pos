@@ -50,6 +50,10 @@ import {
 import { AssistantBubble } from "@/components/ai/AssistantBubble";
 import { useFeature } from "@/modules/saas/gating";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
+import { useAccountStatus } from "@/modules/saas/accountStatus";
+import { SuspendedGate } from "@/components/saas/SuspendedGate";
+import { PastDueBanner } from "@/components/saas/PastDueBanner";
+import { InactivityGuard } from "@/components/system/InactivityGuard";
 
 // `feature` (opcional): si el plan no la incluye, el ítem de nav se ve
 // deshabilitado (candado) y al click abre el UpgradeModal en vez de navegar.
@@ -295,6 +299,11 @@ export function AppShell({
   const isInternal = shell?.isInternal ?? false;
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
 
+  // Estado de la cuenta (suspensión / past_due). Lo setea el motor de dunning.
+  // `suspended` bloquea TODA la app del POS: ni montamos el shell, mostramos la
+  // pantalla de reactivación (de la que solo se sale pagando o cerrando sesión).
+  const { data: account } = useAccountStatus();
+
   async function signOut() {
     await createClient().auth.signOut();
     router.push("/login");
@@ -389,8 +398,20 @@ export function AppShell({
     </nav>
   );
 
+  // Cuenta suspendida → no montamos el POS: pantalla de reactivación a pantalla
+  // completa. El InactivityGuard sigue activo (el auto-logout también corre acá).
+  if (account?.isSuspended) {
+    return (
+      <>
+        <InactivityGuard />
+        <SuspendedGate email={email} />
+      </>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh">
+      <InactivityGuard />
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
         {nav}
       </aside>
@@ -432,6 +453,7 @@ export function AppShell({
         </div>
 
         <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <PastDueBanner />
           <BlockingNotificationBanner />
           {children}
         </main>

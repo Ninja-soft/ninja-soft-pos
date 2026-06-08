@@ -10,6 +10,12 @@ import { variantLabel, variantPrice, type Product } from "@/modules/products/api
 import { usePriceListItems, usePriceItemMutations } from "@/modules/prices/hooks";
 import { resolvePrice, type PriceItemLike } from "@/lib/prices/resolve";
 import type { PriceList, PriceListItem } from "@/modules/prices/api";
+import {
+  useCatalogHintsActive,
+  useCatalogPriceReferences,
+} from "@/modules/catalog/hooks";
+import type { PriceReference } from "@/modules/catalog/priceReference";
+import { CatalogPriceArrow } from "@/components/catalog/CatalogPriceArrow";
 import { formatCurrency } from "@/lib/utils/format";
 
 // Edición de precios puntuales de una lista. Tabla con búsqueda; cada fila
@@ -30,6 +36,27 @@ export function PriceListEditorModal({
   const [search, setSearch] = useState("");
   const { data: products } = useProducts(search);
   const { data: items } = usePriceListItems(list?.id ?? null, open && !!list);
+
+  // Productos efectivamente visibles (la lista se recorta a 50).
+  const visibleProducts = useMemo(
+    () => (products ?? []).slice(0, 50),
+    [products],
+  );
+
+  // Comparación vs catálogo de referencia: sólo si el tenant compró un catálogo
+  // y la sugerencia está activada. Referencias de los EANs visibles en batch.
+  const { active: hintsActive } = useCatalogHintsActive();
+  const visibleEans = useMemo(
+    () =>
+      visibleProducts
+        .map((p) => (p.barcode ?? "").trim())
+        .filter((b): b is string => b.length > 0),
+    [visibleProducts],
+  );
+  const { data: priceRefs } = useCatalogPriceReferences(
+    visibleEans,
+    hintsActive && open,
+  );
 
   // Índice de items por (productId|variantId) para lookup rápido.
   const itemsByKey = useMemo(() => {
@@ -76,7 +103,7 @@ export function PriceListEditorModal({
         </div>
 
         <div className="max-h-[55vh] space-y-1 overflow-y-auto">
-          {(products ?? []).slice(0, 50).map((p) => (
+          {visibleProducts.map((p) => (
             <ProductRows
               key={p.id}
               product={p}
@@ -84,6 +111,11 @@ export function PriceListEditorModal({
               tenantId={tenantId}
               itemsByKey={itemsByKey}
               itemsLike={itemsLike}
+              priceRef={
+                hintsActive && p.barcode
+                  ? priceRefs?.get(p.barcode.trim())
+                  : undefined
+              }
             />
           ))}
           {(products ?? []).length === 0 && (
@@ -103,12 +135,16 @@ function ProductRows({
   tenantId,
   itemsByKey,
   itemsLike,
+  priceRef,
 }: {
   product: Product;
   list: PriceList | null;
   tenantId: string | null | undefined;
   itemsByKey: Map<string, PriceListItem>;
   itemsLike: PriceItemLike[];
+  // Referencia de precio del catálogo para el EAN del producto (si aplica). Se
+  // comparte entre todas las variantes (el match es por barcode del producto).
+  priceRef?: PriceReference;
 }) {
   const hasVariants = Boolean(product.has_variants);
   const { data: variants } = useVariants(product.id, hasVariants);
@@ -126,6 +162,7 @@ function ProductRows({
           tenantId={tenantId}
           itemsByKey={itemsByKey}
           itemsLike={itemsLike}
+          priceRef={priceRef}
         />
       ) : (
         <>
@@ -147,6 +184,7 @@ function ProductRows({
               tenantId={tenantId}
               itemsByKey={itemsByKey}
               itemsLike={itemsLike}
+              priceRef={priceRef}
               indent
             />
           ))}
@@ -171,6 +209,7 @@ function PriceRow({
   tenantId,
   itemsByKey,
   itemsLike,
+  priceRef,
   indent,
 }: {
   label: string;
@@ -182,6 +221,7 @@ function PriceRow({
   tenantId: string | null | undefined;
   itemsByKey: Map<string, PriceListItem>;
   itemsLike: PriceItemLike[];
+  priceRef?: PriceReference;
   indent?: boolean;
 }) {
   const { toast } = useToast();
@@ -234,7 +274,12 @@ function PriceRow({
       }`}
     >
       <span className="min-w-0">
-        <span className="block truncate font-medium">{label}</span>
+        <span className="flex items-center gap-1 truncate font-medium">
+          {label}
+          {/* Flecha vs catálogo de referencia: compara el precio EFECTIVO de la
+              lista (resuelto) contra el precio de mercado del EAN del producto. */}
+          <CatalogPriceArrow myPrice={resolved} reference={priceRef} />
+        </span>
         <span className="block truncate text-xs text-muted-foreground">
           {sub ? `${sub} · ` : ""}base {formatCurrency(basePrice)}
           {!item && resolved !== basePrice ? ` · lista ${formatCurrency(resolved)}` : ""}

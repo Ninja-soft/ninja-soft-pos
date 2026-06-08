@@ -18,11 +18,13 @@ import {
   Users,
   IdCard,
   ScanLine,
+  TrendingUp,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
   type CustomerRequired,
 } from "@/modules/customers/schemas";
+import { useHasCatalog } from "@/modules/catalog/hooks";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -51,6 +53,7 @@ type Settings = {
   require_customer_doc: boolean;
   plu_enabled: boolean;
   plu_mode: PluMode;
+  show_catalog_price_hints: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -127,6 +130,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           require_customer_doc: true,
           plu_enabled: false,
           plu_mode: "random",
+          show_catalog_price_hints: true,
         }
       );
     },
@@ -149,6 +153,11 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [requireCustomerDoc, setRequireCustomerDoc] = useState(true);
   const [pluEnabled, setPluEnabled] = useState(false);
   const [pluMode, setPluMode] = useState<PluMode>("random");
+  const [showCatalogPriceHints, setShowCatalogPriceHints] = useState(true);
+
+  // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
+  // compró/recibió al menos un catálogo.
+  const { data: hasCatalog } = useHasCatalog();
 
   useEffect(() => {
     if (!settings) return;
@@ -173,6 +182,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setRequireCustomerDoc(settings.require_customer_doc ?? true);
     setPluEnabled(settings.plu_enabled ?? false);
     setPluMode(settings.plu_mode === "incremental" ? "incremental" : "random");
+    setShowCatalogPriceHints(settings.show_catalog_price_hints ?? true);
   }, [settings]);
 
   const save = useMutation({
@@ -203,6 +213,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           require_customer_doc: requireCustomerDoc,
           plu_enabled: pluEnabled,
           plu_mode: pluMode,
+          show_catalog_price_hints: showCatalogPriceHints,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -216,6 +227,9 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       // El formulario de cliente lee qué campos son obligatorios (incl. el
       // documento obligatorio): refrescá su query para que tome el cambio.
       qc.invalidateQueries({ queryKey: ["customers", "required-fields"] });
+      // Las flechas de precio vs catálogo leen el toggle: refrescá para que el
+      // cambio (activar/desactivar) impacte de inmediato en Productos/Listas.
+      qc.invalidateQueries({ queryKey: ["catalog", "hint-setting"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -475,6 +489,32 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Sugerencias de precio vs catálogo de referencia. SÓLO se muestra si el
+          tenant compró/recibió un catálogo. Al activarse, en Productos y en las
+          listas de precios aparecen flechas (verde = más barato, roja = más
+          caro) comparando contra el precio de mercado. Es orientativo. */}
+      {hasCatalog && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <TrendingUp size={16} className="text-ninja-flameSoft" /> Comparar precios con el catálogo
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Muestra flechas en Productos y en las listas de precios indicando
+                si tu precio está por encima o por debajo del catálogo de
+                referencia. Información orientativa de mercado, no vinculante.
+              </p>
+            </div>
+            <Switch
+              checked={showCatalogPriceHints}
+              onCheckedChange={setShowCatalogPriceHints}
+              label="Mostrar comparación de precios con el catálogo de referencia"
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <GroupHeading icon={Hash}>Comprobante y listados</GroupHeading>
 

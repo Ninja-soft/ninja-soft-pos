@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Download,
   FolderTree,
@@ -37,6 +37,11 @@ import {
 } from "@/modules/products/hooks";
 import { FirstProductPluPrompt } from "@/components/products/FirstProductPluPrompt";
 import type { Product } from "@/modules/products/api";
+import {
+  useCatalogHintsActive,
+  useCatalogPriceReferences,
+} from "@/modules/catalog/hooks";
+import { CatalogPriceArrow } from "@/components/catalog/CatalogPriceArrow";
 import { usePageSize } from "@/hooks/usePageSize";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
@@ -80,6 +85,22 @@ export default function ProductosPage() {
   const { remove } = useProductMutations();
   const { data: pluSettings } = usePluSettings();
   const noFilters = !debouncedSearch && !categoryId && !brandId;
+
+  // Comparación de precios vs catálogo de referencia: sólo si el tenant compró
+  // un catálogo y tiene la sugerencia activada. Las referencias de los EANs
+  // visibles se traen en batch (sin N+1).
+  const { active: hintsActive } = useCatalogHintsActive();
+  const visibleEans = useMemo(
+    () =>
+      (data?.rows ?? [])
+        .map((p) => (p.barcode ?? "").trim())
+        .filter((b): b is string => b.length > 0),
+    [data],
+  );
+  const { data: priceRefs } = useCatalogPriceReferences(
+    visibleEans,
+    hintsActive,
+  );
 
   function openNew() {
     setSelected(null);
@@ -315,7 +336,15 @@ export default function ProductosPage() {
                       {p.categories?.name ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {formatCurrency(p.price)}
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        {formatCurrency(p.price)}
+                        {hintsActive && p.barcode && (
+                          <CatalogPriceArrow
+                            myPrice={Number(p.price)}
+                            reference={priceRefs?.get(p.barcode.trim())}
+                          />
+                        )}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={low ? "font-semibold text-[#FFD21F]" : ""}>

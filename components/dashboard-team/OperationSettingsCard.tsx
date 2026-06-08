@@ -15,6 +15,9 @@ import {
   Mail,
   CalendarClock,
   Rows3,
+  Users,
+  IdCard,
+  ScanLine,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -27,6 +30,8 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
+
+type PluMode = "random" | "incremental";
 
 type Settings = {
   max_discount: Record<string, number>;
@@ -43,7 +48,15 @@ type Settings = {
   auto_email_receipt: boolean;
   account_due_days: number;
   page_size: number;
+  require_customer_doc: boolean;
+  plu_enabled: boolean;
+  plu_mode: PluMode;
 };
+
+// Vista del card: el mismo settings/save se reparte en dos secciones de la
+// pantalla de Configuración. "operacion" muestra reglas de cobro + productos;
+// "clientes" muestra los datos del cliente, c/c y comprobante por email.
+type View = "operacion" | "clientes";
 
 // page_size aún no vive en los tipos generados (no se regeneran). Acotamos la
 // lectura/escritura a este rango; la DB también lo valida con un CHECK.
@@ -60,7 +73,7 @@ const ROLES: { key: string; label: string }[] = [
 const numCls =
   "h-9 w-24 rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft";
 
-export function OperationSettingsCard() {
+export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -111,6 +124,9 @@ export function OperationSettingsCard() {
           auto_email_receipt: false,
           account_due_days: 30,
           page_size: PAGE_SIZE_DEFAULT,
+          require_customer_doc: true,
+          plu_enabled: false,
+          plu_mode: "random",
         }
       );
     },
@@ -130,6 +146,9 @@ export function OperationSettingsCard() {
   const [autoEmailReceipt, setAutoEmailReceipt] = useState(false);
   const [accountDueDays, setAccountDueDays] = useState(30);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT);
+  const [requireCustomerDoc, setRequireCustomerDoc] = useState(true);
+  const [pluEnabled, setPluEnabled] = useState(false);
+  const [pluMode, setPluMode] = useState<PluMode>("random");
 
   useEffect(() => {
     if (!settings) return;
@@ -151,6 +170,9 @@ export function OperationSettingsCard() {
     setAutoEmailReceipt(settings.auto_email_receipt ?? false);
     setAccountDueDays(settings.account_due_days ?? 30);
     setPageSize(settings.page_size ?? PAGE_SIZE_DEFAULT);
+    setRequireCustomerDoc(settings.require_customer_doc ?? true);
+    setPluEnabled(settings.plu_enabled ?? false);
+    setPluMode(settings.plu_mode === "incremental" ? "incremental" : "random");
   }, [settings]);
 
   const save = useMutation({
@@ -178,6 +200,9 @@ export function OperationSettingsCard() {
           auto_email_receipt: autoEmailReceipt,
           account_due_days: Math.max(1, Number(accountDueDays) || 30),
           page_size: clampPageSize(pageSize),
+          require_customer_doc: requireCustomerDoc,
+          plu_enabled: pluEnabled,
+          plu_mode: pluMode,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -188,6 +213,9 @@ export function OperationSettingsCard() {
       qc.invalidateQueries({ queryKey: ["pos-settings", tenantId] });
       // Refresca el tamaño de página que usan los listados paginados.
       qc.invalidateQueries({ queryKey: ["pos", "page-size"] });
+      // El formulario de cliente lee qué campos son obligatorios (incl. el
+      // documento obligatorio): refrescá su query para que tome el cambio.
+      qc.invalidateQueries({ queryKey: ["customers", "required-fields"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -196,14 +224,30 @@ export function OperationSettingsCard() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <SlidersHorizontal size={18} /> Operación del POS
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Reglas de cobro que se aplican en el punto de venta.
-        </p>
-      </div>
+      {view === "operacion" ? (
+        <div>
+          <Heading as="h2" className="flex items-center gap-2 text-base">
+            <SlidersHorizontal size={18} /> Operación y productos
+          </Heading>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Reglas de cobro y de productos que se aplican en el punto de venta.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <Heading as="h2" className="flex items-center gap-2 text-base">
+            <Users size={18} /> Datos del cliente
+          </Heading>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Qué pedir al crear o editar un cliente y cómo se maneja su cuenta.
+          </p>
+        </div>
+      )}
+
+      {/* ===================== Vista: OPERACIÓN Y PRODUCTOS ===================== */}
+      {view === "operacion" && (
+        <>
+          <GroupHeading icon={Percent}>Reglas de cobro</GroupHeading>
 
       {/* Descuento máximo por rol */}
       <Card>
@@ -264,6 +308,46 @@ export function OperationSettingsCard() {
         </CardContent>
       </Card>
 
+      {/* Cierre de caja */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <Lock size={16} className="text-ninja-flameSoft" /> Motivo en el cierre de caja
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Exige escribir un motivo al cerrar si la diferencia (faltante o
+                sobrante) supera la tolerancia.
+              </p>
+            </div>
+            <Switch
+              checked={requireReason}
+              onCheckedChange={setRequireReason}
+              label="Exigir motivo en el cierre"
+            />
+          </div>
+          {requireReason && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Tolerancia $</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={tolerance}
+                onChange={(e) => setTolerance(Number(e.target.value) || 0)}
+                className={numCls}
+              />
+              <span className="text-xs text-muted-foreground">
+                Diferencias hasta este monto no piden motivo.
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <GroupHeading icon={PackageMinus}>Productos</GroupHeading>
+
       {/* Venta en negativo */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -320,43 +404,79 @@ export function OperationSettingsCard() {
         </CardContent>
       </Card>
 
-      {/* Cierre de caja */}
+      {/* PLU: código corto de 6 dígitos para tipear rápido en el POS. La
+          generación del PLU en cada producto la resuelve otro flujo; acá solo se
+          habilita y se elige el modo. */}
       <Card>
         <CardContent className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 font-semibold">
-                <Lock size={16} className="text-ninja-flameSoft" /> Motivo en el cierre de caja
+                <ScanLine size={16} className="text-ninja-flameSoft" /> Usar PLU
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Exige escribir un motivo al cerrar si la diferencia (faltante o
-                sobrante) supera la tolerancia.
+                Código corto de 6 dígitos para tipear rápido un producto en el POS,
+                sin escanear ni buscar por nombre.
               </p>
             </div>
             <Switch
-              checked={requireReason}
-              onCheckedChange={setRequireReason}
-              label="Exigir motivo en el cierre"
+              checked={pluEnabled}
+              onCheckedChange={setPluEnabled}
+              label="Usar PLU (código corto de 6 dígitos para tipear rápido en el POS)"
             />
           </div>
-          {requireReason && (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Tolerancia $</span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={tolerance}
-                onChange={(e) => setTolerance(Number(e.target.value) || 0)}
-                className={numCls}
-              />
-              <span className="text-xs text-muted-foreground">
-                Diferencias hasta este monto no piden motivo.
-              </span>
+          {pluEnabled && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-sm text-muted-foreground">Modo de generación</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    {
+                      value: "random" as PluMode,
+                      label: "Aleatorio",
+                      hint: "Asigna un número de 6 dígitos al azar (no consecutivo).",
+                    },
+                    {
+                      value: "incremental" as PluMode,
+                      label: "Incremental",
+                      hint: "Asigna el siguiente número disponible, de forma correlativa.",
+                    },
+                  ]
+                ).map((m) => {
+                  const active = pluMode === m.value;
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setPluMode(m.value)}
+                      className={
+                        active
+                          ? "flex items-start gap-2.5 rounded-lg border border-ninja-flame bg-ninja-flame/[0.06] px-3 py-2.5 text-left"
+                          : "flex items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      <span
+                        className={
+                          "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border " +
+                          (active ? "border-ninja-flame" : "border-muted-foreground/40")
+                        }
+                      >
+                        {active && <span className="h-2 w-2 rounded-full bg-ninja-flame" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{m.label}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{m.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <GroupHeading icon={Hash}>Comprobante y listados</GroupHeading>
 
       {/* Numeración del comprobante */}
       <Card>
@@ -399,12 +519,45 @@ export function OperationSettingsCard() {
         </CardContent>
       </Card>
 
+      {/* Tamaño de página de los listados */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Rows3 size={16} className="text-ninja-flameSoft" /> Filas por página
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cuántas filas se muestran por página en los listados (ventas,
+              productos, clientes). Entre {PAGE_SIZE_MIN} y {PAGE_SIZE_MAX}.
+            </p>
+          </div>
+          <span className="flex items-center gap-1">
+            <input
+              type="number"
+              min={PAGE_SIZE_MIN}
+              max={PAGE_SIZE_MAX}
+              step="1"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value) || PAGE_SIZE_DEFAULT)}
+              onBlur={() => setPageSize((v) => clampPageSize(v))}
+              className={numCls}
+            />
+            <span className="text-sm text-muted-foreground">filas</span>
+          </span>
+        </CardContent>
+      </Card>
+        </>
+      )}
+
+      {/* ========================= Vista: DATOS DEL CLIENTE ========================= */}
+      {view === "clientes" && (
+        <>
       {/* Requerir cliente */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
           <div>
             <div className="flex items-center gap-2 font-semibold">
-              <UserCheck size={16} className="text-ninja-flameSoft" /> Requerir cliente
+              <UserCheck size={16} className="text-ninja-flameSoft" /> Requerir cliente al cobrar
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Obliga a elegir un cliente antes de cobrar (no permite “consumidor final”).
@@ -415,6 +568,57 @@ export function OperationSettingsCard() {
             onCheckedChange={setRequireCustomer}
             label="Requerir cliente"
           />
+        </CardContent>
+      </Card>
+
+      {/* Documento obligatorio: si está activo, el formulario de alta de cliente
+          exige tipo + número de documento. Default activado. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <IdCard size={16} className="text-ninja-flameSoft" /> Documento obligatorio
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Al crear o editar un cliente, exige el tipo y el número de documento.
+              Recomendado para emitir comprobantes válidos.
+            </p>
+          </div>
+          <Switch
+            checked={requireCustomerDoc}
+            onCheckedChange={setRequireCustomerDoc}
+            label="Exigir tipo y número de documento al dar de alta un cliente"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Datos obligatorios del cliente */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 font-semibold">
+            <ClipboardCheck size={16} className="text-ninja-flameSoft" /> Otros datos obligatorios del cliente
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Campos extra que se exigen al crear o editar un cliente. El nombre
+            siempre es obligatorio. Por defecto no se exige nada.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {CUSTOMER_FIELDS.map((f) => (
+              <label
+                key={f.key}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+              >
+                <span className="text-sm">{f.label}</span>
+                <Switch
+                  checked={Boolean(customerReq[f.key])}
+                  onCheckedChange={(v) =>
+                    setCustomerReq((p) => ({ ...p, [f.key]: v }))
+                  }
+                  label={`Exigir ${f.label}`}
+                />
+              </label>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -443,34 +647,6 @@ export function OperationSettingsCard() {
         </CardContent>
       </Card>
 
-      {/* Tamaño de página de los listados */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
-          <div>
-            <div className="flex items-center gap-2 font-semibold">
-              <Rows3 size={16} className="text-ninja-flameSoft" /> Filas por página
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Cuántas filas se muestran por página en los listados (ventas,
-              productos, clientes). Entre {PAGE_SIZE_MIN} y {PAGE_SIZE_MAX}.
-            </p>
-          </div>
-          <span className="flex items-center gap-1">
-            <input
-              type="number"
-              min={PAGE_SIZE_MIN}
-              max={PAGE_SIZE_MAX}
-              step="1"
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value) || PAGE_SIZE_DEFAULT)}
-              onBlur={() => setPageSize((v) => clampPageSize(v))}
-              className={numCls}
-            />
-            <span className="text-sm text-muted-foreground">filas</span>
-          </span>
-        </CardContent>
-      </Card>
-
       {/* Comprobante por email automático */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
@@ -490,36 +666,8 @@ export function OperationSettingsCard() {
           />
         </CardContent>
       </Card>
-
-      {/* Datos obligatorios del cliente */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 font-semibold">
-            <ClipboardCheck size={16} className="text-ninja-flameSoft" /> Datos obligatorios del cliente
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Campos que se exigen al crear o editar un cliente. El nombre siempre
-            es obligatorio. Por defecto no se exige nada.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {CUSTOMER_FIELDS.map((f) => (
-              <label
-                key={f.key}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
-              >
-                <span className="text-sm">{f.label}</span>
-                <Switch
-                  checked={Boolean(customerReq[f.key])}
-                  onCheckedChange={(v) =>
-                    setCustomerReq((p) => ({ ...p, [f.key]: v }))
-                  }
-                  label={`Exigir ${f.label}`}
-                />
-              </label>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        </>
+      )}
 
       <div className="flex justify-end">
         <Button disabled={save.isPending} onClick={() => save.mutate()}>
@@ -527,6 +675,23 @@ export function OperationSettingsCard() {
         </Button>
       </div>
     </section>
+  );
+}
+
+// Subtítulo de grupo dentro del card: separa visualmente los bloques de cards
+// por dominio (Reglas de cobro / Productos / Comprobante y listados).
+function GroupHeading({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ElementType;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+      <Icon size={14} className="text-ninja-flameSoft" />
+      {children}
+    </div>
   );
 }
 

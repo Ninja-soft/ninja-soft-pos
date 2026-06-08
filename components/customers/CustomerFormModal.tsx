@@ -54,9 +54,13 @@ export function CustomerFormModal({
     formState: { errors },
   } = useForm<CustomerInput>({ resolver: zodResolver(CustomerSchema) });
 
-  const req = required ?? {};
-  // Marca " *" en el label si el campo es obligatorio para este tenant.
-  const star = (key: CustomerFieldKey) => (req[key] ? " *" : "");
+  const req = required?.fields ?? {};
+  // require_customer_doc (default true): exige tipo + número de documento.
+  const requireDoc = required?.requireDoc ?? true;
+  // Marca " *" en el label si el campo es obligatorio para este tenant. El
+  // documento se marca obligatorio también cuando require_customer_doc está on.
+  const star = (key: CustomerFieldKey) =>
+    req[key] || (key === "document_number" && requireDoc) ? " *" : "";
 
   const createGroup = useMutation({
     mutationFn: (name: string) => customerGroupsApi.create(name),
@@ -88,6 +92,19 @@ export function CustomerFormModal({
   }, [open, customer, reset]);
 
   async function onSubmit(values: CustomerInput) {
+    let missing = false;
+    // Documento obligatorio (require_customer_doc): exige tipo + número. Es un
+    // requisito propio (document_type no está en CUSTOMER_FIELDS).
+    if (requireDoc) {
+      if (!String(values.document_type ?? "").trim()) {
+        setError("document_type", { message: "Requerido" });
+        missing = true;
+      }
+      if (!String(values.document_number ?? "").trim()) {
+        setError("document_number", { message: "Requerido" });
+        missing = true;
+      }
+    }
     // Validación de campos obligatorios configurados por el tenant.
     const checks: { key: CustomerFieldKey; val: unknown }[] = [
       { key: "document_number", val: values.document_number },
@@ -97,7 +114,6 @@ export function CustomerFormModal({
       { key: "address", val: values.address },
       { key: "birth_date", val: values.birth_date },
     ];
-    let missing = false;
     for (const c of checks) {
       if (req[c.key] && !String(c.val ?? "").trim()) {
         setError(c.key as keyof CustomerInput, { message: "Requerido" });
@@ -139,8 +155,11 @@ export function CustomerFormModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Tipo de documento
+              Tipo de documento{requireDoc ? " *" : ""}
             </label>
+            {errors.document_type?.message && (
+              <p className="mb-1 text-xs text-destructive">{errors.document_type.message}</p>
+            )}
             <select className={selectCls} {...register("document_type")}>
               <option value="">—</option>
               {DOC_TYPES.map((d) => (

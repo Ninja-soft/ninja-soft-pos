@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/Card";
 import { Display, Accent, Eyebrow } from "@/components/ui/Typography";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { capitalizeName } from "@/lib/utils/format";
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -70,7 +71,7 @@ export default async function DashboardPage() {
         <Display className="mt-4 text-3xl md:text-5xl">
           Hola
           {user.user_metadata.full_name ? (
-            <Accent>, {user.user_metadata.full_name}</Accent>
+            <Accent>, {capitalizeName(user.user_metadata.full_name)}</Accent>
           ) : null}
           .
         </Display>

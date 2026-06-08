@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Avatar } from "@/components/ui/Avatar";
-import { resizeToWebp } from "@/lib/utils/image";
+import { AvatarUploader } from "@/components/account/AvatarUploader";
 
 // Perfil del usuario en el POS = su membresía (tenant_users.display_name/avatar),
 // lo mismo que se ve y edita en la sección Equipo.
@@ -22,11 +22,9 @@ export function MembershipProfileModal({
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -51,26 +49,6 @@ export function MembershipProfileModal({
     })();
   }, [open, supabase]);
 
-  async function onPhoto(file: File | undefined) {
-    if (!file || !tenantId) return;
-    setBusy(true);
-    try {
-      const webp = await resizeToWebp(file, 256, 0.85);
-      const path = `${tenantId}/members/${crypto.randomUUID()}.webp`;
-      const up = await supabase.storage
-        .from("tenant-assets")
-        .upload(path, webp, { contentType: "image/webp", upsert: false });
-      if (up.error) throw up.error;
-      const { data: pub } = supabase.storage.from("tenant-assets").getPublicUrl(path);
-      setAvatar(pub.publicUrl);
-    } catch {
-      toast({ title: "No se pudo subir la foto", variant: "error" });
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
-
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.functions.invoke("member_admin", {
@@ -90,39 +68,21 @@ export function MembershipProfileModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Mi perfil">
       <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          <Avatar name={name || "?"} avatar={avatar} size={56} />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-          >
-            {avatar ? "Cambiar foto" : "Subir foto"}
-          </Button>
-          {avatar && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              onClick={() => setAvatar(null)}
-            >
-              Quitar
-            </Button>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => onPhoto(e.target.files?.[0])}
+        {tenantId ? (
+          <AvatarUploader
+            value={avatar}
+            onChange={setAvatar}
+            name={name || "?"}
+            bucket="tenant-assets"
+            pathPrefix={`${tenantId}/members`}
+            size={56}
           />
-        </div>
+        ) : (
+          <Avatar name={name || "?"} avatar={avatar} size={56} />
+        )}
         <Input label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending || busy}>
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending ? "Guardando…" : "Guardar"}
           </Button>
         </div>

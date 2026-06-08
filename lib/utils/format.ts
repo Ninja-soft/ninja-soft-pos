@@ -15,6 +15,23 @@ export function formatQty(value: number | null | undefined): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, "");
 }
 
+/**
+ * Capitaliza un nombre: primera letra de cada palabra en mayúscula y el resto
+ * en minúscula, respetando acentos (usa locale es-AR). Solo cambia la
+ * capitalización; no agrega ni quita tildes. Reconoce separadores de espacio,
+ * guion y apóstrofo (ej. "ana-maría", "d'angelo").
+ *
+ * "hola juan perez" → "Hola Juan Perez"   ·   "JUAN PÉREZ" → "Juan Pérez"
+ */
+export function capitalizeName(value: string | null | undefined): string {
+  if (!value) return "";
+  return value
+    .toLocaleLowerCase("es-AR")
+    .replace(/(^|[\s\-'’])(\p{L})/gu, (_m, sep: string, ch: string) =>
+      sep + ch.toLocaleUpperCase("es-AR"),
+    );
+}
+
 const rtf = new Intl.RelativeTimeFormat("es-AR", { numeric: "auto" });
 
 /** "hace 5 minutos", "ayer", "hace 3 meses". null/undefined → "nunca". */

@@ -73,6 +73,7 @@ import {
   OpenShiftModal,
   CloseShiftModal,
   PaymentModal,
+  type PaymentExtra,
 } from "@/components/pos/PosModals";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { VoucherRedeemModal } from "@/components/pos/VoucherRedeemModal";
@@ -658,7 +659,7 @@ function PosPageInner() {
       // Voucher de tarjeta (H27): lote/cupón/autorización. create_sale lo persiste.
       card_voucher?: { lote: string; cupon: string; autorizacion: string };
     }[],
-    extras?: { name: string; amount: number; kind?: "warranty" | "surcharge" }[],
+    extras?: PaymentExtra[],
     change?: number,
   ) {
     try {
@@ -673,10 +674,11 @@ function PosPageInner() {
         unit_price: l.unitPrice,
         discount: l.discount,
       }));
-      // Extras del cobro (recargo H27, garantía extendida H28): cada uno entra
-      // como ítem de venta para que el total y el ticket lo reflejen.
+      // Extras que entran como ítem de venta para que el total y el ticket los
+      // reflejen: recargo (H27) y garantía extendida (H28). La propina (H39) NO
+      // es ítem (va a sales.tip_amount) y 'professional' es sólo atribución.
       for (const ex of extras ?? []) {
-        if (ex.amount > 0) {
+        if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {
           items.push({
             product_id: null,
             name: ex.name,
@@ -686,12 +688,23 @@ function PosPageInner() {
           } as never);
         }
       }
-      // Señal de gating server-side: la prima de garantía (kind='warranty') se
-      // valida contra la feature 'garantias' en create_sale. Los recargos
-      // (kind='surcharge') no se gatean. El importe ya va como ítem (arriba).
+      // p_extras para create_sale: la prima de garantía (kind='warranty') se
+      // valida contra 'garantias'; los recargos (kind='surcharge') no se gatean;
+      // la propina (kind='tip', amount+method) va a sales.tip_amount; el
+      // profesional (kind='professional', id) atribuye la comisión.
       const saleExtras = (extras ?? [])
-        .filter((ex) => ex.amount > 0 && ex.kind)
-        .map((ex) => ({ kind: ex.kind as "warranty" | "surcharge", amount: ex.amount }));
+        .filter(
+          (ex) =>
+            (ex.kind === "professional" && ex.id) ||
+            ((ex.kind === "warranty" || ex.kind === "surcharge" || ex.kind === "tip") &&
+              (ex.amount ?? 0) > 0),
+        )
+        .map((ex) => ({
+          kind: ex.kind,
+          ...(ex.amount != null ? { amount: ex.amount } : {}),
+          ...(ex.method ? { method: ex.method } : {}),
+          ...(ex.id ? { id: ex.id } : {}),
+        }));
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,

@@ -609,12 +609,12 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [~] Señas, cancelaciones, no-show y reprogramación. — *Cancelación con motivo, **no-show**, reprogramación (editar fecha/hora) y todos los estados (reservado/confirmado/en_curso/realizado/cancelado/no_show) hechos. **Seña/pago de reserva** queda como follow-up (H39/pagos).*
   - [x] *Criterio:* una peluquería agenda corte + color con profesional, cobra el turno y calcula comisión. — *Cumplido a nivel core (validado por SQL: profesional + servicio + turno → cambio de estado → venta enlazada; la comisión se calcula y muestra en el detalle del turno). La **liquidación** de comisiones es H39.*
 
-- [ ] **H39 — Comisiones, propinas y productividad del staff.**
-  - [ ] Comisión por servicio, por producto, por garantía/extra y por profesional.
-  - [ ] Propinas por efectivo/tarjeta/QR con reparto manual o por profesional.
-  - [ ] Reporte diario por profesional: servicios, productos vendidos, comisión, propina, ticket promedio.
-  - [ ] Permisos para que el staff vea solo su agenda/ventas si el owner lo decide.
-  - [ ] *Criterio:* el owner liquida comisiones de la semana sin planilla externa.
+- [~] **H39 — Comisiones, propinas y productividad del staff.** — *Core hecho (migración `20260608550000_commissions_tips`, aplicada en remoto; **local, pendiente de push**). Propinas al cobrar (monto + medio efectivo/tarjeta/QR) en `sales.tip_amount`/`tip_method`, aparte del total de productos. Atribución de vendedor/profesional a la venta (`sales.professional_id`, selector en el PaymentModal) y comisión por línea `coalesce(products.commission_pct, professional.commission_pct, 0)% × subtotal`. Reporte de productividad por profesional en Reportes (servicios, productos, facturado, comisión, propinas, ticket prom. + export XLSX) vía RPC `staff_productivity` SECURITY DEFINER tenant-scoped. Flag `pos_settings.staff_sees_own_only` (toggle en Configuración → Operación) con RLS de lectura sólo-propia en la agenda y filtro en el reporte. Probado por SQL (rollback). **Reparto de propina entre varios profesionales** → futuro (hoy la propina va al profesional de la venta).*
+  - [x] Comisión por servicio, por producto, por garantía/extra y por profesional. — *Por línea: % del producto si lo define, si no el del profesional, si no 0. Las garantías/extras (ítem libre sin commission_pct de producto) caen al % del profesional. Las garantías además ya tienen su comisión propia en el reporte de Garantías (H28).*
+  - [x] Propinas por efectivo/tarjeta/QR con reparto manual o por profesional. — *Captura al cobrar (monto + medio); se atribuye al profesional de la venta. Reparto manual entre varios queda como mejora futura.*
+  - [x] Reporte diario por profesional: servicios, productos vendidos, comisión, propina, ticket promedio. — *Sección "Productividad del staff" en Reportes con tabla + gráfico (comisión) + export XLSX; respeta el rango de fechas (día/semana).* 
+  - [x] Permisos para que el staff vea solo su agenda/ventas si el owner lo decide. — *`pos_settings.staff_sees_own_only`: RLS RESTRICTIVE de SELECT en `appointments` (lectura sólo-propia) + filtro en `staff_productivity`. El owner ve todo. Match usuario↔profesional por `professionals.user_id`.*
+  - [x] *Criterio:* el owner liquida comisiones de la semana sin planilla externa. — *Verificado por SQL: venta con propina + vendedor → comisión 200 (10% prod + 20% prof) y propina 300 trazada; `staff_productivity` agrega por profesional; el owner exporta XLSX para liquidar. Pendiente de push (modo local).*
 
 - [ ] **H40 — Clientes livianos y recurrencia.**
   - [ ] Ficha mínima opcional: nombre, teléfono/WhatsApp, cumpleaños, preferencias y notas.

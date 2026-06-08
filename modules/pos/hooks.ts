@@ -8,6 +8,7 @@ import {
 import {
   posApi,
   paymentPlansApi,
+  professionalsApi,
   type PaymentPlanInput,
   type SaleItemInput,
   type SalePaymentInput,
@@ -46,6 +47,16 @@ export function usePosSettings() {
   return useQuery({
     queryKey: ["pos", "settings"],
     queryFn: () => posApi.posSettings(),
+  });
+}
+
+// Profesionales/vendedores activos (H38/H39): selector de atribución de comisión
+// en el POS y filtro del reporte de productividad.
+export function useProfessionals() {
+  return useQuery({
+    queryKey: ["pos", "professionals", "active"],
+    queryFn: () => professionalsApi.listActive(),
+    staleTime: 60_000,
   });
 }
 

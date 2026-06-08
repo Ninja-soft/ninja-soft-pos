@@ -7,10 +7,38 @@ import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils/format";
 import { isPlanActive, type SalePaymentInput } from "@/modules/pos/api";
 import { useWarrantyPlans } from "@/modules/products/hooks";
-import { useEnabledPaymentMethods, usePaymentPlans, usePosSettings } from "@/modules/pos/hooks";
+import {
+  useEnabledPaymentMethods,
+  usePaymentPlans,
+  usePosSettings,
+  useProfessionals,
+} from "@/modules/pos/hooks";
 import { useGating } from "@/modules/saas/gating";
 import type { CardVoucher, PaymentPlan } from "@/modules/pos/api";
 import type { WarrantyPlan } from "@/modules/products/api";
+
+// Extra del cobro que emite el PaymentModal hacia el POS. `kind` decide qué hace
+// create_sale (ver SaleExtraInput): warranty/surcharge entran como ítem de venta;
+// 'tip' va a sales.tip_amount (no es ítem); 'professional' atribuye la comisión.
+export interface PaymentExtra {
+  kind: "warranty" | "surcharge" | "tip" | "professional";
+  // Etiqueta para el ítem de venta (sólo warranty/surcharge la usan).
+  name?: string;
+  amount?: number;
+  // Medio de la propina (kind='tip').
+  method?: string;
+  // professionals.id (kind='professional').
+  id?: string;
+}
+
+// Medios disponibles para la propina (H39). Mapean a sales.tip_method.
+const TIP_METHODS: { value: string; label: string }[] = [
+  { value: "cash", label: "Efectivo" },
+  { value: "debit", label: "Débito" },
+  { value: "credit", label: "Crédito" },
+  { value: "transfer", label: "Transferencia" },
+  { value: "qr", label: "QR" },
+];
 
 // Medios de pago base del POS. Se filtran según config del tenant (H14).
 const ALL_METHODS: { value: SalePaymentInput["method"]; label: string; providers: string[] }[] = [
@@ -140,7 +168,7 @@ export function PaymentModal({
   rounding?: number;
   onConfirm: (
     payments: SalePaymentInput[],
-    extras?: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
+    extras?: PaymentExtra[],
     // Vuelto en efectivo (recibido - total). Lo usa la pantalla del cliente (H25)
     // para mostrar el vuelto tras cobrar. 0 cuando no es efectivo.
     change?: number,
@@ -157,11 +185,18 @@ export function PaymentModal({
   const { data: enabledProviders } = useEnabledPaymentMethods();
   const { data: gating } = useGating();
   const { data: posSettings } = usePosSettings();
+  // Profesionales activos para atribuir la comisión de la venta (H39).
+  const { data: professionals } = useProfessionals();
 
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [warrantyId, setWarrantyId] = useState("");
   const [planId, setPlanId] = useState("");
   const [received, setReceived] = useState("");
+  // Propina (H39): monto + medio. Aparte del total de productos.
+  const [tipAmount, setTipAmount] = useState("");
+  const [tipMethod, setTipMethod] = useState("cash");
+  // Profesional/vendedor atribuido a la venta (H39). "" = sin atribución.
+  const [professionalId, setProfessionalId] = useState("");
   // Voucher de tarjeta (H27): lote / cupón / nº de autorización. Sólo se pide en
   // débito/crédito cuando el negocio activó require_card_voucher.
   const [voucherLote, setVoucherLote] = useState("");
@@ -179,6 +214,9 @@ export function PaymentModal({
       setVoucherLote("");
       setVoucherCupon("");
       setVoucherAuth("");
+      setTipAmount("");
+      setTipMethod("cash");
+      setProfessionalId("");
     }
   }, [open, initialWarrantyId]);
 
@@ -272,7 +310,12 @@ export function PaymentModal({
 
   const applyRound = (x: number) =>
     rounding > 0 ? Math.round(x / rounding) * rounding : x;
-  const payTotal = applyRound(base + warrantyPrima + planSurcharge + methodSurcharge);
+  // Total de productos (con garantía/recargos), redondeado. La propina NO se
+  // redondea ni forma parte de este total: se suma al cobro como un agregado.
+  const productsTotal = applyRound(base + warrantyPrima + planSurcharge + methodSurcharge);
+  const tip = Math.max(0, Number(tipAmount) || 0);
+  // Lo que el cliente paga = productos + propina. El cajero recibe ambos.
+  const payTotal = productsTotal + tip;
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
 
@@ -292,10 +335,11 @@ export function PaymentModal({
   // Si hay datos de voucher (aunque no sea obligatorio) se adjunta al pago.
   const voucherHasData = voucher.lote !== "" || voucher.cupon !== "" || voucher.autorizacion !== "";
 
-  // `kind` etiqueta el extra para el gating server-side: 'warranty' (prima de
-  // garantía extendida → feature 'garantias') vs 'surcharge' (recargo de medio/
-  // plan, sin gating). El importe sigue entrando como ítem de venta (name).
-  const extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[] = [];
+  // `kind` etiqueta el extra para create_sale: 'warranty' (prima de garantía
+  // extendida → feature 'garantias') y 'surcharge' (recargo de medio/plan, sin
+  // gating) entran como ítem de venta (name). 'tip' (propina) y 'professional'
+  // (atribución) NO son ítems: van a sales.tip_amount / sales.professional_id.
+  const extras: PaymentExtra[] = [];
   if (warrantyPrima > 0 && wplan)
     extras.push({ name: `Garantía ${wplan.label}`, amount: warrantyPrima, kind: "warranty" });
   if (planSurcharge > 0 && selectedPlan)
@@ -304,6 +348,10 @@ export function PaymentModal({
     const methodLabel = ALL_METHODS.find((m) => m.value === method)?.label ?? method;
     extras.push({ name: `Recargo ${methodLabel} (${methodSurchargePct}%)`, amount: methodSurcharge, kind: "surcharge" });
   }
+  // Propina (H39): aparte del total de productos; se cobra junto a la venta.
+  if (tip > 0) extras.push({ kind: "tip", amount: tip, method: tipMethod });
+  // Atribución de comisión (H39): profesional/vendedor de la venta.
+  if (professionalId) extras.push({ kind: "professional", id: professionalId });
 
   return (
     <Modal
@@ -330,6 +378,29 @@ export function PaymentModal({
             ))}
           </select>
         </div>
+
+        {/* Profesional / vendedor (H39): atribuye la comisión de la venta. Sólo
+            aparece si el negocio cargó profesionales. Opcional. */}
+        {(professionals ?? []).length > 0 && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Vendedor / profesional
+            </label>
+            <select
+              value={professionalId}
+              onChange={(e) => setProfessionalId(e.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            >
+              <option value="">Sin asignar (sin comisión)</option>
+              {(professionals ?? []).map((p) => (
+                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                  {p.name}
+                  {p.commission_pct != null ? ` · ${Number(p.commission_pct)}%` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Plan de pago (débito / crédito) con recargo (H14 / H27) */}
         {methodPlans.length > 0 && (
@@ -413,15 +484,54 @@ export function PaymentModal({
           </div>
         )}
 
-        {/* Resumen de extras (garantía + recargo de plan) */}
-        {extras.length > 0 && (
+        {/* Propina (H39): monto + medio. Aparte del total de productos; el cajero
+            la cobra junto con la venta. Se atribuye al profesional elegido. */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            Propina (opcional)
+          </label>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={tipAmount}
+              onChange={(e) => setTipAmount(e.target.value)}
+              placeholder="0"
+              className="flex-1"
+            />
+            <select
+              value={tipMethod}
+              onChange={(e) => setTipMethod(e.target.value)}
+              aria-label="Medio de la propina"
+              className="h-11 w-40 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+            >
+              {TIP_METHODS.map((m) => (
+                <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Resumen de extras (garantía + recargo de plan + propina) */}
+        {(extras.some((e) => e.kind === "warranty" || e.kind === "surcharge") || tip > 0) && (
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1">
-            {extras.map((e) => (
-              <div key={e.name} className="flex justify-between text-muted-foreground">
-                <span>{e.name}</span>
-                <span>+{formatCurrency(e.amount)}</span>
+            {extras
+              .filter((e) => e.kind === "warranty" || e.kind === "surcharge")
+              .map((e) => (
+                <div key={e.name} className="flex justify-between text-muted-foreground">
+                  <span>{e.name}</span>
+                  <span>+{formatCurrency(e.amount ?? 0)}</span>
+                </div>
+              ))}
+            {tip > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Propina</span>
+                <span>+{formatCurrency(tip)}</span>
               </div>
-            ))}
+            )}
             <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
               <span>Total a cobrar</span>
               <span>{formatCurrency(payTotal)}</span>

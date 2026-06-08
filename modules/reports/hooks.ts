@@ -16,3 +16,12 @@ export function useWarrantyReport(fromISO: string, toISO: string) {
     queryFn: () => reportsApi.warranties(fromISO, toISO),
   });
 }
+
+// Productividad por profesional (H39): servicios, productos, facturado, comisión,
+// propinas y ticket promedio por profesional en el período.
+export function useStaffProductivity(fromISO: string, toISO: string) {
+  return useQuery({
+    queryKey: ["reports", "staff-productivity", fromISO, toISO],
+    queryFn: () => reportsApi.staffProductivity(fromISO, toISO),
+  });
+}

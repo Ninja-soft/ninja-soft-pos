@@ -40,13 +40,35 @@ export interface CreateSaleResult {
   total: number;
 }
 
-// Descriptor de un extra del cobro para el gating server-side. 'warranty' (prima
-// de garantía extendida) se gatea contra la feature 'garantias'; 'surcharge'
-// (recargo de medio/plan) no se gatea. El importe del extra sigue entrando como
-// ítem de venta en `items` (no se duplica el total) — esto es solo la señal.
+// Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo
+// interpreta según `kind`:
+//   * 'warranty' (prima de garantía extendida): se gatea contra 'garantias'.
+//   * 'surcharge' (recargo de medio/plan): no se gatea.
+//     warranty/surcharge además entran como ítem de venta en `items` (no se
+//     duplica el total) — el extra acá es sólo la señal de gating.
+//   * 'tip' (propina · H39): NO es ítem ni parte del total de productos.
+//     create_sale la persiste en sales.tip_amount/tip_method. El importe SÍ se
+//     suma al pago (el cajero la cobra), pero no a sales.total. `method` = medio
+//     de la propina (efectivo/tarjeta/QR).
+//   * 'professional' (atribución · H39): vendedor/profesional de la venta para
+//     la comisión. `id` = professionals.id. Sin él (y sin turno), sin comisión.
 export interface SaleExtraInput {
-  kind: "warranty" | "surcharge";
-  amount: number;
+  kind: "warranty" | "surcharge" | "tip" | "professional";
+  amount?: number;
+  method?: string;
+  id?: string;
+}
+
+// Profesional/vendedor (H38). Se reutiliza en el POS (selector de atribución de
+// comisión) y en el reporte de productividad (H39).
+export interface Professional {
+  id: string;
+  name: string;
+  color: string;
+  commission_pct: number | null;
+  is_active: boolean;
+  user_id: string | null;
+  sort: number;
 }
 
 export interface QrIntentRow {
@@ -306,6 +328,26 @@ export const paymentPlansApi = {
   },
 };
 
+// Profesionales/vendedores del tenant (H38). Tabla `professionals` no está en
+// los tipos generados (no se regeneran): from("professionals") + cast.
+export const professionalsApi = {
+  // Activos (no dados de baja), ordenados por `sort` y nombre. Para el selector
+  // de atribución de comisión en el POS y el filtro del reporte. La tabla
+  // `professionals` no está en los tipos generados (no se regeneran): cast.
+  listActive: async (): Promise<Professional[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("professionals" as never)
+      .select("id, name, color, commission_pct, is_active, user_id, sort")
+      .is("deleted_at", null)
+      .eq("is_active", true)
+      .order("sort")
+      .order("name");
+    if (error) throw error;
+    return (data ?? []) as unknown as Professional[];
+  },
+};
+
 export const posApi = {
   defaultRegister: async (): Promise<CashRegister | null> => {
     const supabase = createClient();
@@ -449,6 +491,9 @@ export const posApi = {
     // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
     // debe ser owner/manager (chequeo en la página). Default true.
     allowFreeSale: boolean;
+    // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
+    // comisión; el owner ve todo (H39). Default false (todos ven todo).
+    staffSeesOwnOnly: boolean;
   } | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
@@ -474,6 +519,8 @@ export const posApi = {
       // Default true: la venta libre queda habilitada (igual que hoy donde el
       // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
       allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
+      // Default false: por defecto el staff ve todo (no se restringe).
+      staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
     };
   },
 

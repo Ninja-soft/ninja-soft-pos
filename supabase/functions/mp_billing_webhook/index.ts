@@ -19,9 +19,10 @@
 //     SQL al pasar a past_due.
 //
 // internal_notify NO se usa (es staff-gated): se inserta directo en
-// notifications. Los emails siguen el patrón del motor de dunning
-// (system_emails kind='system' + _dunning_email_html, los envía
-// process_pending_emails).
+// notifications. Los emails se encolan en system_emails (kind='system') y los
+// envía process_pending_emails (cron, por Resend/failover). El subject+html se
+// resuelven de system_email_templates (editable en /internal/emails); si la
+// plantilla no existe, cae a emailHtml() inline (defensivo).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -33,8 +34,16 @@ const SUB_STATUS: Record<string, string> = {
   pending: "trial",
 };
 
+// Render de {{var}} (mismo contrato que lib/email/templates.ts::renderTemplate).
+function renderTemplate(tpl: string, vars: Record<string, string>): string {
+  return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) =>
+    k in vars ? vars[k]! : `{{${k}}}`,
+  );
+}
+
 // Cuerpo HTML branded mínimo (espeja _dunning_email_html del lado SQL). Solo
-// estilos inline para máxima compatibilidad con clientes de correo.
+// estilos inline para máxima compatibilidad con clientes de correo. FALLBACK:
+// solo se usa si la plantilla de system_email_templates no estuviera.
 function emailHtml(title: string, body: string): string {
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -131,7 +140,7 @@ Deno.serve(async (req: Request) => {
     const { data: sub } = await admin
       .from("subscriptions")
       .select(
-        "id, tenant_id, status, current_period_end, billing_cycle, plans(name, monthly_price_ars, yearly_price_ars)",
+        "id, tenant_id, status, current_period_end, billing_cycle, plans(name, monthly_price_ars, yearly_price_ars), tenants(name)",
       )
       .eq(match.col, match.val)
       .maybeSingle();
@@ -159,7 +168,40 @@ Deno.serve(async (req: Request) => {
       monthly_price_ars?: number;
       yearly_price_ars?: number;
     };
+    const tenantName = (sub.tenants as { name?: string } | null)?.name ?? "";
     const yearly = sub.billing_cycle === "yearly";
+
+    // Encola un email del sistema resolviendo subject+html de
+    // system_email_templates (override de staff o default sembrado). Si la
+    // plantilla no existe, usa el (subject, html) de fallback. Best-effort.
+    async function enqueueEmail(
+      key: string,
+      vars: Record<string, string>,
+      fallbackSubject: string,
+      fallbackHtml: string,
+    ): Promise<void> {
+      const recipient = (await ownerEmail())?.trim().toLowerCase();
+      if (!recipient) return;
+      let subject = fallbackSubject;
+      let html = fallbackHtml;
+      const { data: tpl } = await admin
+        .from("system_email_templates")
+        .select("subject, html")
+        .eq("key", key)
+        .maybeSingle();
+      if (tpl?.subject && tpl?.html) {
+        subject = renderTemplate(tpl.subject as string, vars);
+        html = renderTemplate(tpl.html as string, vars);
+      }
+      await admin.from("system_emails").insert({
+        tenant_id: tenantId,
+        recipient,
+        subject,
+        kind: "system",
+        status: "pending",
+        html_content: html,
+      });
+    }
 
     // Monto: el del preapproval si vino, si no el del plan (mensual/anual).
     const amount = Number(
@@ -300,8 +342,9 @@ Deno.serve(async (req: Request) => {
           } Mercado Pago • Plan ${plan.name ?? ""}`.trim(),
         });
 
-        const email = await ownerEmail();
         const endLabel = new Date(periodEndDate).toLocaleDateString("es-AR");
+        const montoLabel =
+          amount > 0 ? `$ ${amount.toLocaleString("es-AR")}` : "tu suscripción";
 
         // Notificación in-app (insert directo: internal_notify es staff-gated).
         // Si fue reactivación, el copy lo dice (la cuenta estaba bloqueada).
@@ -321,17 +364,30 @@ Deno.serve(async (req: Request) => {
           requires_ack: false,
         });
 
-        // Email payment_ok / reactivación.
-        if (email) {
-          await admin.from("system_emails").insert({
-            tenant_id: tenantId,
-            recipient: email,
-            subject: isReactivation
+        // Email: primera activación de plan pago (trial → active) usa la
+        // plantilla subscription_activated; renovación/reactivación usa payment_ok.
+        // Ambas resuelven de system_email_templates (fallback inline).
+        const isFirstActivation = prevStatus === "trial" && newStatus === "active";
+        if (isFirstActivation) {
+          await enqueueEmail(
+            "subscription_activated",
+            { negocio: tenantName, plan: plan.name ?? "", vence: endLabel },
+            "Tu suscripción de NinjaPos está activa",
+            emailHtml(
+              "Tu suscripción está activa",
+              `¡Gracias por sumarte! Tu plan ${
+                plan.name ?? ""
+              } ya está activo para ${tenantName}. Tu próxima renovación es el ${endLabel}. El cobro es automático por Mercado Pago.`,
+            ),
+          );
+        } else {
+          await enqueueEmail(
+            "payment_ok",
+            { negocio: tenantName, monto: montoLabel, vence: endLabel },
+            isReactivation
               ? "Reactivamos tu cuenta de NinjaPos"
               : "Recibimos tu pago — gracias",
-            kind: "system",
-            status: "pending",
-            html_content: emailHtml(
+            emailHtml(
               isReactivation ? "Reactivamos tu cuenta" : "Recibimos tu pago",
               isReactivation
                 ? `Recibimos tu pago${
@@ -345,7 +401,7 @@ Deno.serve(async (req: Request) => {
                     plan.name ?? ""
                   } sigue activo hasta el ${endLabel}. ¡Gracias por elegirnos!`,
             ),
-          });
+          );
         }
 
         await admin.from("audit_logs").insert({
@@ -373,7 +429,6 @@ Deno.serve(async (req: Request) => {
       (newStatus === "past_due" || newStatus === "cancelled") &&
       prevStatus !== newStatus
     ) {
-      const email = await ownerEmail();
       const cancelled = newStatus === "cancelled";
 
       await admin.from("notifications").insert({
@@ -390,24 +445,33 @@ Deno.serve(async (req: Request) => {
         requires_ack: false,
       });
 
-      if (email) {
-        await admin.from("system_emails").insert({
-          tenant_id: tenantId,
-          recipient: email,
-          subject: cancelled
-            ? "Tu suscripción se canceló"
-            : "Hubo un problema con tu cobro — tenés 3 días",
-          kind: "system",
-          status: "pending",
-          html_content: emailHtml(
-            cancelled
-              ? "Tu suscripción se canceló"
-              : "Hubo un problema con tu cobro",
-            cancelled
-              ? "Mercado Pago canceló tu suscripción de NinjaPos. Para seguir usando el sistema, reactivala desde tu panel. Si ya regularizaste, escribinos."
-              : "No pudimos confirmar el pago de tu suscripción de NinjaPos. Tenés 3 días para regularizarlo desde Mercado Pago; pasado ese plazo tu cuenta se bloquea hasta que pagues. Si ya pagaste, podés ignorar este aviso.",
+      // Email: cancelación → subscription_cancelled; cobro fallido → payment_failed.
+      // Resuelven de system_email_templates (fallback inline).
+      if (cancelled) {
+        await enqueueEmail(
+          "subscription_cancelled",
+          {
+            negocio: tenantName,
+            vence: sub.current_period_end
+              ? new Date(sub.current_period_end as string).toLocaleDateString("es-AR")
+              : "",
+          },
+          "Tu suscripción se canceló",
+          emailHtml(
+            "Tu suscripción se canceló",
+            "Mercado Pago canceló tu suscripción de NinjaPos. Para seguir usando el sistema, reactivala desde tu panel. Si ya regularizaste, escribinos.",
           ),
-        });
+        );
+      } else {
+        await enqueueEmail(
+          "payment_failed",
+          { negocio: tenantName },
+          "Hubo un problema con tu cobro — tenés 3 días",
+          emailHtml(
+            "Hubo un problema con tu cobro",
+            "No pudimos confirmar el pago de tu suscripción de NinjaPos. Tenés 3 días para regularizarlo desde Mercado Pago; pasado ese plazo tu cuenta se bloquea hasta que pagues. Si ya pagaste, podés ignorar este aviso.",
+          ),
+        );
       }
 
       await admin.from("audit_logs").insert({

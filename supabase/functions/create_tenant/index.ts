@@ -5,6 +5,9 @@
 //   2. Crea tenant (trial 14d) + subscription (plan start) + tenant_users(owner).
 //   3. Setea app_metadata.current_tenant_id en el usuario (service_role).
 //   4. Audita la creación.
+//   5. Encola los emails de alta (account_registered + trial_started) en
+//      system_emails usando las plantillas de system_email_templates. El envío
+//      real lo hace process_pending_emails (cron cada 5 min, por Resend/failover).
 // El frontend debe refrescar la sesión para que el JWT tome el nuevo tenant.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
@@ -21,6 +24,44 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...cors, "Content-Type": "application/json" },
   });
+}
+
+// Render de {{var}} (mismo contrato que lib/email/templates.ts::renderTemplate):
+// reemplaza {{ var }} / {{var}} por su valor; si falta, deja el placeholder.
+function renderTemplate(tpl: string, vars: Record<string, string>): string {
+  return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) =>
+    k in vars ? vars[k]! : `{{${k}}}`,
+  );
+}
+
+// Encola un email del sistema resolviendo subject+html de system_email_templates.
+// Best-effort: nunca rompe el alta del tenant (cualquier error se traga).
+async function enqueueSystemEmail(
+  admin: ReturnType<typeof createClient>,
+  tenantId: string,
+  recipient: string,
+  key: string,
+  vars: Record<string, string>,
+): Promise<void> {
+  try {
+    if (!recipient) return;
+    const { data: tpl } = await admin
+      .from("system_email_templates")
+      .select("subject, html")
+      .eq("key", key)
+      .maybeSingle();
+    if (!tpl?.subject || !tpl?.html) return; // sin plantilla: no encolamos
+    await admin.from("system_emails").insert({
+      tenant_id: tenantId,
+      recipient,
+      subject: renderTemplate(tpl.subject as string, vars),
+      kind: "system",
+      status: "pending",
+      html_content: renderTemplate(tpl.html as string, vars),
+    });
+  } catch (_) {
+    /* noop: el alta no depende del email */
+  }
 }
 
 function slugify(name: string): string {
@@ -212,6 +253,27 @@ Deno.serve(async (req: Request) => {
     entity_id: tenant.id,
     action: "tenant_created",
     after_data: { name, slug: tenant.slug, industry },
+  });
+
+  // 6. Emails de alta (account_registered + trial_started). Best-effort: si
+  // fallan, el alta igual responde OK. Los envía process_pending_emails (cron).
+  const ownerName =
+    (typeof user.user_metadata?.full_name === "string" &&
+      user.user_metadata.full_name.trim()) ||
+    (typeof user.user_metadata?.name === "string" &&
+      user.user_metadata.name.trim()) ||
+    (user.email ? user.email.split("@")[0] : "") ||
+    "";
+  const recipient = (user.email ?? "").trim().toLowerCase();
+  const venceLabel = new Date(trialEnds).toLocaleDateString("es-AR");
+  await enqueueSystemEmail(admin, tenant.id, recipient, "account_registered", {
+    negocio: name,
+    nombre: ownerName,
+  });
+  await enqueueSystemEmail(admin, tenant.id, recipient, "trial_started", {
+    negocio: name,
+    dias: "14",
+    vence: venceLabel,
   });
 
   return json({ tenant_id: tenant.id, slug: tenant.slug });

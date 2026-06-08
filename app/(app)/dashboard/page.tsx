@@ -22,6 +22,13 @@ import { Display, Accent, Eyebrow } from "@/components/ui/Typography";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { capitalizeName } from "@/lib/utils/format";
 
+// Acento de marca del tenant (hex #rrggbb válido) o el flame de NinjaSoft.
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const NINJA_FLAME = "#FF4B22";
+function brandAccent(accent: string | null | undefined): string {
+  return typeof accent === "string" && HEX.test(accent) ? accent : NINJA_FLAME;
+}
+
 export default async function DashboardPage() {
   const supabase = createClient();
   const {
@@ -34,17 +41,45 @@ export default async function DashboardPage() {
   type MembershipRow = {
     role: string;
     status: string;
-    tenants: { name: string; slug: string; status: string } | null;
+    tenants: { id: string; name: string; slug: string; status: string } | null;
   };
 
   // Solo MIS membresías. No nos apoyamos en RLS para el scope acá: un usuario
   // interno (is_internal) vería todos los tenants, así que filtramos por user_id.
   const { data } = await supabase
     .from("tenant_users")
-    .select("role, status, tenants(name, slug, status)")
+    .select("role, status, tenants(id, name, slug, status)")
     .eq("user_id", user.id)
     .eq("status", "active");
   const memberships = (data ?? []) as unknown as MembershipRow[];
+
+  // Marca por tenant (logo + acento) para personalizar cada tarjeta, igual que
+  // la card "Negocio" del panel del dueño. RLS deja leer solo el branding del
+  // tenant activo del usuario; el resto cae al ícono genérico.
+  const tenantIds = memberships
+    .map((m) => m.tenants?.id)
+    .filter((id): id is string => Boolean(id));
+  const brandingByTenant = new Map<
+    string,
+    { logo_url: string | null; accent: string | null }
+  >();
+  if (tenantIds.length > 0) {
+    const { data: brandingData } = await supabase
+      .from("tenant_branding")
+      .select("tenant_id, logo_url, accent")
+      .in("tenant_id", tenantIds);
+    const rows = (brandingData ?? []) as unknown as {
+      tenant_id: string;
+      logo_url: string | null;
+      accent: string | null;
+    }[];
+    for (const row of rows) {
+      brandingByTenant.set(row.tenant_id, {
+        logo_url: row.logo_url,
+        accent: row.accent,
+      });
+    }
+  }
 
   // Métrica: ventas de hoy (UTC).
   let todayTotal = 0;
@@ -125,19 +160,49 @@ export default async function DashboardPage() {
         <div className="mt-8">
           {memberships.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {memberships.map((m, i) => (
-                <Card key={i}>
-                  <CardContent className="p-6">
-                    <Building2 className="text-ninja-flameSoft" size={20} />
-                    <h3 className="mt-3 font-display text-lg font-bold">
-                      {m.tenants?.name ?? "Negocio"}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Rol: {m.role} · {m.tenants?.status}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
+              {memberships.map((m, i) => {
+                const brand = m.tenants?.id
+                  ? brandingByTenant.get(m.tenants.id)
+                  : undefined;
+                const accent = brandAccent(brand?.accent);
+                const logoUrl = brand?.logo_url ?? null;
+                return (
+                  <Card
+                    key={i}
+                    className="overflow-hidden border-l-4"
+                    style={{ borderLeftColor: accent }}
+                  >
+                    <CardContent className="p-6">
+                      {logoUrl ? (
+                        <span
+                          className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg border bg-muted"
+                          style={{ borderColor: accent }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={logoUrl}
+                            alt={m.tenants?.name ?? "Negocio"}
+                            className="h-full w-full object-contain"
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          className="grid h-10 w-10 place-items-center rounded-lg"
+                          style={{ backgroundColor: `${accent}1f`, color: accent }}
+                        >
+                          <Building2 size={20} />
+                        </span>
+                      )}
+                      <h3 className="mt-3 font-display text-lg font-bold">
+                        {m.tenants?.name ?? "Negocio"}
+                      </h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Rol: {m.role} · {m.tenants?.status}
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <Card>

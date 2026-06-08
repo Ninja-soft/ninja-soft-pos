@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Lock, Mail, MonitorSmartphone, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Lock, Mail, MonitorSmartphone, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -27,6 +27,7 @@ import { OperationSettingsCard } from "@/components/dashboard-team/OperationSett
 import { ReturnsSettingsCard } from "@/components/dashboard-team/ReturnsSettingsCard";
 import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
 import { CustomerDisplayCard } from "@/components/dashboard-team/CustomerDisplayCard";
+import { HardwareCard } from "@/components/dashboard-team/HardwareCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
@@ -47,6 +48,7 @@ type Section =
   | "devoluciones"
   | "escaner"
   | "pantalla-cliente"
+  | "hardware"
   | "precios"
   | "garantias";
 
@@ -76,6 +78,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "escaner", label: "Escáner", icon: ScanLine },
       { key: "pantalla-cliente", label: "Pantalla del cliente", icon: MonitorSmartphone },
+      { key: "hardware", label: "Diagnóstico de hardware", icon: Wrench },
     ],
   },
   {
@@ -440,6 +443,9 @@ function ConfiguracionInner() {
 
           {/* Pantalla del cliente / doble pantalla (F10 · H25; se auto-oculta) */}
           {section === "pantalla-cliente" && <CustomerDisplayCard />}
+
+          {/* Centro de diagnóstico de hardware (F10 · H26) */}
+          {section === "hardware" && <HardwareCard />}
 
           {/* Listas de precios por canal (escritura protegida por RLS) */}
           {section === "precios" && <PriceListsCard />}

@@ -93,14 +93,14 @@ El navegador no controla monitores como una app nativa. La solución robusta es 
 
 ## 7. Diagnóstico
 
-Debe existir una pantalla `/configuracion/hardware` con:
+Pantalla `/configuracion/hardware` (sección "Diagnóstico de hardware" en Configuración del POS) — implementada en H26 (`components/dashboard-team/HardwareCard.tsx`, PR #261):
 
-- [ ] Ticket de prueba.
-- [ ] Prueba de scanner.
-- [ ] Prueba de cajón.
-- [ ] Prueba de pantalla cliente.
-- [ ] Prueba de balanza.
-- [ ] Export de diagnóstico para soporte.
+- [x] Ticket de prueba. — *Render oculto del ticket de muestra + `window.print()` (web print, reusa `TicketRenderer`/`.ticket-print`).*
+- [x] Prueba de scanner. — *Captura en vivo con `useScanner` (mismo motor del POS): últimas lecturas con código/largo/duración/formato/duplicado.*
+- [x] Prueba de cajón. — *Documenta la limitación: el navegador no abre un cajón USB; se abre por pulso ESC/POS de la térmica vía conector local (no disponible en navegador). El botón registra el intento.*
+- [x] Prueba de pantalla cliente. — *"Abrir pantalla de prueba" (`window.open('/customer-display')`) + "Probar sincronización" (round-trip real de `BroadcastChannel`).*
+- [~] Prueba de balanza. — *Placeholder honesto: requiere WebSerial (H24), aún no implementada.*
+- [x] Export de diagnóstico para soporte. — *XLSX o JSON con tenant/caja, capacidades reales del navegador (BroadcastChannel/WebUSB/WebSerial/Web Bluetooth/BarcodeDetector/web print), entorno (userAgent, resolución, origen seguro…) y log de pruebas. Sin tokens ni datos de clientes. `lib/hardware/export.ts`.*
 
 ## 8. Criterios de cierre
 

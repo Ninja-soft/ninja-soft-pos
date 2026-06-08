@@ -33,7 +33,9 @@ import {
   useProductMutations,
   useCategories,
   useBrands,
+  usePluSettings,
 } from "@/modules/products/hooks";
+import { FirstProductPluPrompt } from "@/components/products/FirstProductPluPrompt";
 import type { Product } from "@/modules/products/api";
 import { usePageSize } from "@/hooks/usePageSize";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -51,6 +53,7 @@ export default function ProductosPage() {
   const [brandsOpen, setBrandsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
+  const [pluPromptOpen, setPluPromptOpen] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [page, setPage] = useState(1);
@@ -75,9 +78,22 @@ export default function ProductosPage() {
   const products = data?.rows ?? [];
   const total = data?.total ?? 0;
   const { remove } = useProductMutations();
+  const { data: pluSettings } = usePluSettings();
+  const noFilters = !debouncedSearch && !categoryId && !brandId;
 
   function openNew() {
     setSelected(null);
+    // Primer producto del tenant y todavía no se decidió el PLU → preguntamos
+    // (modal Tailwind) si lo quiere activar antes de abrir el alta. Una sola vez.
+    if (
+      noFilters &&
+      total === 0 &&
+      pluSettings &&
+      !pluSettings.decided
+    ) {
+      setPluPromptOpen(true);
+      return;
+    }
     setFormOpen(true);
   }
   function openEdit(p: Product) {
@@ -282,11 +298,18 @@ export default function ProductosPage() {
                   <tr key={p.id} className="transition hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{p.name}</div>
-                      {p.sku && (
-                        <div className="font-mono text-xs text-muted-foreground">
-                          {p.sku}
-                        </div>
-                      )}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {p.plu && (
+                          <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
+                            PLU {p.plu}
+                          </span>
+                        )}
+                        {p.sku && (
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {p.sku}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {p.categories?.name ?? "—"}
@@ -361,6 +384,14 @@ export default function ProductosPage() {
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         product={selected}
+      />
+      <FirstProductPluPrompt
+        open={pluPromptOpen}
+        onOpenChange={setPluPromptOpen}
+        onResolved={() => {
+          setSelected(null);
+          setFormOpen(true);
+        }}
       />
       <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} />
       <BrandsModal open={brandsOpen} onOpenChange={setBrandsOpen} />

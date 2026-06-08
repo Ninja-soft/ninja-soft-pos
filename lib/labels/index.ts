@@ -7,6 +7,7 @@ export interface LabelSource {
   price: number;
   barcode: string | null;
   sku: string | null;
+  plu?: string | null; // código corto de 6 dígitos (si el tenant usa PLU)
 }
 
 export interface LabelData {
@@ -14,6 +15,8 @@ export interface LabelData {
   name: string;
   price: number;
   code: string | null; // valor para el código de barras (o null si no hay)
+  plu: string | null; // PLU para tipear en el POS (o null)
+  sku: string | null; // SKU legible debajo del nombre (o null)
 }
 
 // Valor del código de barras de una etiqueta: barcode > sku > null,
@@ -44,6 +47,8 @@ export function buildLabels(
         name: product.name,
         price: product.price,
         code: labelCode(product),
+        plu: product.plu ?? null,
+        sku: product.sku ?? null,
       });
     }
   }

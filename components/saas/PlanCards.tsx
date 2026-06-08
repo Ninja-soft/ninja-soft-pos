@@ -289,7 +289,9 @@ export function PlanCards({
   comparedToKey,
   renderCta,
   className,
-  columnsClassName = "sm:grid-cols-2",
+  // 4 planes (Start/Pro/Business/Enterprise): 1 col mobile, 2 tablet, 4 desktop.
+  // Así entran todos sin cortarse en el selector/registro.
+  columnsClassName = "sm:grid-cols-2 lg:grid-cols-4",
 }: {
   plans: PlanCardModel[];
   // Selección visual (registro). Si se pasa onSelect, las tarjetas son clickeables.

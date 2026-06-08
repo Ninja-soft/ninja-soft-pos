@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Switch } from "@/components/ui/Switch";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -418,7 +419,10 @@ export default function PosPage() {
     <>
       <div className="mx-auto max-w-7xl px-6 py-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-lg font-bold tracking-tight">Punto de venta</h1>
+          <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            Punto de venta
+            <InfoHint section="pos" />
+          </h1>
           <div className="flex items-center gap-3">
             <span
               className={

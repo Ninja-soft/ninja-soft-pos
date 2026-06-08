@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Ban, Download, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { TicketModal } from "@/components/sales/TicketModal";
 import { ReturnModal } from "@/components/sales/ReturnModal";
@@ -134,7 +135,10 @@ export default function VentasPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>Operación</Eyebrow>
-            <Display className="mt-3 text-3xl md:text-4xl">Ventas</Display>
+            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+              Ventas
+              <InfoHint section="ventas" size={18} />
+            </Display>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={() => setQrOpen(true)}>

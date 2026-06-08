@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
@@ -151,7 +152,10 @@ export default function ProductosPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>Catálogo</Eyebrow>
-            <Display className="mt-3 text-3xl md:text-4xl">Productos</Display>
+            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+              Productos
+              <InfoHint section="productos" size={18} />
+            </Display>
           </div>
           <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Button variant="secondary" className="shrink-0" onClick={exportBase}>

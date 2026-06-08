@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { createTenant } from "@/modules/tenants/api";
 import { redeemInviteCode } from "@/modules/auth/invite";
 import { applySignupPlan } from "@/modules/auth/plan";
+import { startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
 import { useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
 import {
   SignupAccountSchema,
@@ -274,13 +275,14 @@ function SignupWizard() {
     return res.ok;
   }
 
-  // Aplica el plan elegido en el selector. Sólo corre cuando NINGÚN invite fijó
-  // el plan y el plan es de prueba (con trial). No aborta el alta si falla.
+  // Aplica el plan elegido en el selector (planes CON trial). Sólo corre cuando
+  // NINGÚN invite fijó el plan. No aborta el alta si falla. Los planes SIN trial
+  // se manejan aparte (applyPaidPlanAndCheckout): se cobran en el alta.
   async function applyChosenPlan(invitePinnedPlan: boolean) {
     if (invitePinnedPlan) return; // el código de invitación manda.
     if (!selectedPlan) return;
     const plan = signupPlans?.find((p) => p.key === selectedPlan);
-    if (!plan || plan.trialDays <= 0) return; // Enterprise no se auto-aplica.
+    if (!plan || plan.trialDays <= 0) return; // sin trial → checkout aparte.
     // create_tenant ya dejó la suscripción en plan start (trial 14d); si el
     // usuario eligió otro plan con trial, lo cambiamos manteniendo el trial.
     if (plan.key === "start") return; // ya es el plan por defecto.
@@ -294,7 +296,49 @@ function SignupWizard() {
     }
   }
 
-  // CTA de Enterprise (sin checkout self-service): abrir contacto con ventas.
+  // Plan SIN trial (Enterprise/Sensei): el dueño paga al crear la cuenta.
+  // 1) fija el plan elegido en la suscripción (request_plan_change, owner-only);
+  // 2) crea el preapproval del dueño (Edge mp_subscription_checkout) y redirige
+  //    al init_point de Mercado Pago para autorizar el pago.
+  // Devuelve true si redirigió a MP (el caller NO debe seguir al dashboard).
+  // Si algo falla, NO redirige: el negocio queda creado y el dueño completa el
+  // pago desde su panel (Suscripción).
+  async function applyPaidPlanAndCheckout(
+    invitePinnedPlan: boolean,
+  ): Promise<boolean> {
+    if (invitePinnedPlan) return false; // el invite ya fijó el plan (sin cobro acá).
+    if (!selectedPlan) return false;
+    const plan = signupPlans?.find((p) => p.key === selectedPlan);
+    if (!plan || plan.trialDays > 0) return false; // sólo planes sin trial.
+    // 1) Fijar el plan elegido (la suscripción nace en plan start).
+    const applied = await applySignupPlan(plan.key);
+    if (!applied.ok) {
+      toast({
+        title: "Negocio creado",
+        description: `No pudimos fijar el plan ${plan.name}: ${applied.message}. Activalo desde tu panel.`,
+        variant: "info",
+      });
+      return false;
+    }
+    // 2) Crear el preapproval y redirigir a Mercado Pago.
+    try {
+      const backUrl = `${window.location.origin}/dashboard?sub=ok`;
+      const initPoint = await startOwnerSubscriptionCheckout(backUrl);
+      toast({ title: "Te llevamos a Mercado Pago para activar tu plan", variant: "info" });
+      window.location.href = initPoint;
+      return true;
+    } catch {
+      toast({
+        title: "Negocio creado",
+        description:
+          "No pudimos iniciar el pago ahora. Activá tu plan desde tu panel (Suscripción).",
+        variant: "info",
+      });
+      return false;
+    }
+  }
+
+  // CTA secundaria: contacto con ventas (queda como alternativa al self-service).
   function contactSales() {
     const subject = encodeURIComponent("Quiero el plan Enterprise (Sensei)");
     window.location.href = `mailto:ventas@ninjapos.com.ar?subject=${subject}`;
@@ -308,11 +352,6 @@ function SignupWizard() {
       return;
     }
     const v = accountForm.getValues();
-    // Enterprise sin invite que lo fije: no hay alta self-service, va a ventas.
-    if (planNeedsContact && !(v.inviteCode && v.inviteCode.trim())) {
-      contactSales();
-      return;
-    }
     setSubmitting(true);
     const supabase = createClient();
     try {
@@ -366,6 +405,10 @@ function SignupWizard() {
       const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
       await applyChosenPlan(invitePinnedPlan);
 
+      // 4. Plan sin trial → cobro self-service: redirige a Mercado Pago. Si
+      //    redirige, cortamos acá (no vamos al dashboard).
+      if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
+
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
       router.refresh();
@@ -391,11 +434,6 @@ function SignupWizard() {
     const valid = await businessForm.trigger();
     if (!valid) return;
     const v = businessForm.getValues();
-    // Enterprise sin invite que lo fije: no hay alta self-service, va a ventas.
-    if (planNeedsContact && !(v.inviteCode && v.inviteCode.trim())) {
-      contactSales();
-      return;
-    }
     setSubmitting(true);
     const supabase = createClient();
     try {
@@ -409,6 +447,7 @@ function SignupWizard() {
       await supabase.auth.refreshSession();
       const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
       await applyChosenPlan(invitePinnedPlan);
+      if (await applyPaidPlanAndCheckout(invitePinnedPlan)) return;
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
       router.refresh();
@@ -555,24 +594,38 @@ function SignupWizard() {
             {mode === "account" && step === 3 && (
               <div className="space-y-6">
                 <SignupStepPlan value={selectedPlan} onChange={setSelectedPlan} />
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="flex-1"
-                    disabled={submitting}
-                    onClick={() => setStep(2)}
-                  >
-                    Atrás
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex-1"
-                    loading={submitting}
-                    onClick={submitAccount}
-                  >
-                    {planNeedsContact ? "Hablar con ventas" : "Crear cuenta"}
-                  </Button>
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="flex-1"
+                      disabled={submitting}
+                      onClick={() => setStep(2)}
+                    >
+                      Atrás
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      loading={submitting}
+                      onClick={submitAccount}
+                    >
+                      {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
+                    </Button>
+                  </div>
+                  {planNeedsContact && (
+                    <p className="text-center text-xs text-ninja-lavender">
+                      Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
+                      <button
+                        type="button"
+                        onClick={contactSales}
+                        className="text-ninja-flameSoft hover:underline"
+                      >
+                        ¿Preferís hablar con ventas?
+                      </button>
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -621,8 +674,20 @@ function SignupWizard() {
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  {planNeedsContact ? "Hablar con ventas" : "Crear cuenta"}
+                  {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
                 </Button>
+                {planNeedsContact && (
+                  <p className="text-center text-xs text-ninja-lavender">
+                    Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
+                    <button
+                      type="button"
+                      onClick={contactSales}
+                      className="text-ninja-flameSoft hover:underline"
+                    >
+                      ¿Preferís hablar con ventas?
+                    </button>
+                  </p>
+                )}
               </div>
             )}
           </div>

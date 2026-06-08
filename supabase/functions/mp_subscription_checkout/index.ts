@@ -1,9 +1,20 @@
 // =============================================================================
 // Edge Function: mp_subscription_checkout — crea una suscripción (preapproval)
-// de Mercado Pago con la cuenta de NinjaSoft para cobrarle a un tenant su plan.
-// SOLO staff internal. Usa platform_secrets.mercadopago.access_token. Guarda el
-// preapproval_id en subscriptions y devuelve el init_point para enviarle al
-// cliente. El estado lo confirma mp_billing_webhook.
+// de Mercado Pago con la cuenta de NinjaSoft para cobrarle a un tenant su plan
+// + addons activos. Guarda el preapproval_id en subscriptions y devuelve el
+// init_point para enviarle al cliente. El estado lo confirma mp_billing_webhook.
+//
+// Quién puede invocarla:
+//   • Staff interno (app_metadata.is_internal): puede pasar cualquier tenant_id
+//     (path original, NO se rompe).
+//   • El DUEÑO del tenant (self-service): NO pasa tenant_id; se usa SIEMPRE su
+//     app_metadata.current_tenant_id y se verifica que sea owner activo en
+//     tenant_users. Así el dueño paga su propia suscripción en el alta o desde
+//     el panel (planes sin trial, reactivación, cambio a plan pago).
+//
+// Monto: plan + addons facturables, calculado por el RPC subscription_billing_total
+// (fuente de verdad = subscriptions.plan + subscription_addons activos). Antes se
+// cobraba SOLO el plan; ahora el preapproval refleja el total real.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -36,9 +47,12 @@ Deno.serve(async (req: Request) => {
     error,
   } = await userClient.auth.getUser();
   if (error || !user) return json({ error: "unauthorized" }, 401);
-  if (!(user.app_metadata as { is_internal?: boolean } | null)?.is_internal) {
-    return json({ error: "forbidden" }, 403);
-  }
+
+  const meta = (user.app_metadata ?? {}) as {
+    is_internal?: boolean;
+    current_tenant_id?: string;
+  };
+  const isInternal = meta.is_internal === true;
 
   let b: Record<string, unknown>;
   try {
@@ -46,11 +60,30 @@ Deno.serve(async (req: Request) => {
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
-  const tenantId = String(b.tenant_id ?? "").trim();
-  if (!tenantId) return json({ error: "missing_tenant" }, 400);
   const backUrl = String(b.back_url ?? "").trim();
 
+  // Resolución del tenant según el invocador:
+  //   • staff: usa el tenant_id del body (path original).
+  //   • dueño: SIEMPRE su current_tenant_id (ignora el body para no permitir
+  //     crear preapprovals de otros tenants).
+  const tenantId = isInternal
+    ? String(b.tenant_id ?? "").trim()
+    : String(meta.current_tenant_id ?? "").trim();
+  if (!tenantId) return json({ error: "missing_tenant" }, 400);
+
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // Autorización del path dueño: debe ser owner activo del tenant.
+  if (!isInternal) {
+    const { data: mem } = await admin
+      .from("tenant_users")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!mem || mem.role !== "owner") return json({ error: "forbidden" }, 403);
+  }
 
   // Access Token de la cuenta de NinjaSoft.
   const { data: plat } = await admin
@@ -62,20 +95,21 @@ Deno.serve(async (req: Request) => {
     ?.access_token;
   if (!accessToken) return json({ error: "platform_not_configured" }, 400);
 
-  // Suscripción del tenant + plan + email del owner.
+  // Suscripción del tenant + plan (para reason/frecuencia) + email del owner.
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, billing_cycle, plans(name, monthly_price_ars, yearly_price_ars)")
+    .select("id, billing_cycle, plans(name)")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!sub) return json({ error: "no_subscription" }, 400);
-  const plan = (sub.plans ?? {}) as {
-    name?: string;
-    monthly_price_ars?: number;
-    yearly_price_ars?: number;
-  };
+  const plan = (sub.plans ?? {}) as { name?: string };
   const yearly = sub.billing_cycle === "yearly";
-  const amount = Number(yearly ? plan.yearly_price_ars : plan.monthly_price_ars);
+
+  // Monto canónico: plan + addons facturables (RPC, fuente de verdad).
+  const { data: billing } = await admin.rpc("subscription_billing_total", {
+    p_tenant: tenantId,
+  });
+  const amount = Number((billing as { total?: number } | null)?.total);
   if (!Number.isFinite(amount) || amount <= 0) {
     return json({ error: "invalid_plan_price" }, 400);
   }
@@ -86,6 +120,7 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", tenantId)
     .eq("role", "owner")
     .eq("status", "active")
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   const payerEmail = (ownerRow?.users as { email?: string } | null)?.email;
@@ -119,8 +154,13 @@ Deno.serve(async (req: Request) => {
     const detail = await res.text();
     return json({ error: "mp_error", detail: detail.slice(0, 400) }, 502);
   }
-  const pre = (await res.json()) as { id?: string; init_point?: string };
+  const pre = (await res.json()) as {
+    id?: string;
+    init_point?: string;
+    sandbox_init_point?: string;
+  };
   if (!pre.id) return json({ error: "no_preapproval" }, 502);
+  const initPoint = pre.init_point || pre.sandbox_init_point || "";
 
   await admin
     .from("subscriptions")
@@ -133,8 +173,12 @@ Deno.serve(async (req: Request) => {
     entity_type: "subscriptions",
     entity_id: sub.id,
     action: "subscription_checkout_created",
-    after_data: { preapproval_id: pre.id, amount },
+    after_data: {
+      preapproval_id: pre.id,
+      amount,
+      via: isInternal ? "staff" : "owner",
+    },
   });
 
-  return json({ init_point: pre.init_point, preapproval_id: pre.id });
+  return json({ init_point: initPoint, preapproval_id: pre.id });
 });

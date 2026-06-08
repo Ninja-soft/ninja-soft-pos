@@ -27,8 +27,8 @@ function planText(p: PaymentPlan) {
 // Cobro por QR (Mercado Pago / Mobbex / MODO). Sin planes configurados → genera
 // el QR directo. Con planes → el cajero elige la tarjeta (por logo) y la cuota
 // (por botón, con el total ya calculado). El recargo del plan se suma al monto.
-// MODO y Mobbex resuelven las cuotas en su propio flujo → el POS sólo manda el
-// monto base y no muestra la pantalla de selección de tarjeta/cuota.
+// MODO resuelve las cuotas en su propia app (las elige el cliente) → el POS sólo
+// manda el monto base y no muestra la pantalla de selección de tarjeta/cuota.
 export function QrCheckoutModal({
   open,
   onOpenChange,
@@ -44,9 +44,11 @@ export function QrCheckoutModal({
   provider?: "mercadopago" | "mobbex" | "modo";
   providerName?: string;
 }) {
-  // Proveedores que manejan su propia selección de cuotas en su checkout/app
-  // (no mostramos pantalla de planes; auto-arrancamos con el monto base).
-  const selfManaged = provider === "mobbex" || provider === "modo";
+  // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
+  // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
+  // pantalla de planes y auto-arranca con el monto base. Mercado Pago y Mobbex
+  // sí ofrecen la selección de tarjeta/cuota desde el POS.
+  const selfManaged = provider === "modo";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -142,9 +144,8 @@ export function QrCheckoutModal({
   }, [open, base]);
 
   // Auto-arranque sin selección:
-  //  - Mobbex / MODO manejan las cuotas en su checkout/app → mandamos el base
-  //    (no aplicamos recargo de precio acá; Mobbex recibe los planes desde su
-  //    Edge Function, MODO resuelve en su app).
+  //  - MODO maneja las cuotas en su app → mandamos el base (las cuotas las
+  //    resuelve el cliente en MODO; no aplicamos recargo de precio acá).
   //  - modo recargo único → aplica el % global y genera el QR
   //  - sin planes activos → genera el QR por el monto base
   useEffect(() => {
@@ -189,8 +190,8 @@ export function QrCheckoutModal({
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
     : "";
 
-  // Pantalla de selección: solo MP con planes y sin modo recargo único.
-  // Mobbex / MODO no la usan (sus cuotas se eligen en su propio flujo).
+  // Pantalla de selección: MP / Mobbex con planes y sin modo recargo único.
+  // MODO no la usa (sus cuotas se eligen en la app del cliente).
   const selecting =
     phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
 

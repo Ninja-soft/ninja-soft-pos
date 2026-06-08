@@ -307,6 +307,24 @@ export const posApi = {
     return data as { intent_id: string; init_point: string };
   },
 
+  // Crea la intención de cobro/QR de MODO y devuelve el init_point (URL/deeplink
+  // para QR). Espeja createMobbexQr. La Edge modo_create_qr valida el plan
+  // (feature 'modo') antes de crear el intent.
+  createModoQr: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("modo_create_qr", {
+      body: { amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
   // Medios de pago habilitados por el tenant (H14).
   // Retorna filas de tenant_payment_methods donde enabled=true.
   enabledMethods: async (): Promise<

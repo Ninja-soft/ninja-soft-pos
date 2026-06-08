@@ -24,9 +24,11 @@ function planText(p: PaymentPlan) {
   return `${BASE_LABEL[p.base ?? "otro"] ?? p.base} · ${cuotas}`;
 }
 
-// Cobro por QR (Mercado Pago / Mobbex). Sin planes configurados → genera el QR
-// directo. Con planes → el cajero elige la tarjeta (por logo) y la cuota (por
-// botón, con el total ya calculado). El recargo del plan se suma al monto.
+// Cobro por QR (Mercado Pago / Mobbex / MODO). Sin planes configurados → genera
+// el QR directo. Con planes → el cajero elige la tarjeta (por logo) y la cuota
+// (por botón, con el total ya calculado). El recargo del plan se suma al monto.
+// MODO y Mobbex resuelven las cuotas en su propio flujo → el POS sólo manda el
+// monto base y no muestra la pantalla de selección de tarjeta/cuota.
 export function QrCheckoutModal({
   open,
   onOpenChange,
@@ -39,9 +41,12 @@ export function QrCheckoutModal({
   onOpenChange: (o: boolean) => void;
   base: number;
   onApproved: (reference: string, amount: number, extras: { name: string; amount: number }[]) => void;
-  provider?: "mercadopago" | "mobbex";
+  provider?: "mercadopago" | "mobbex" | "modo";
   providerName?: string;
 }) {
+  // Proveedores que manejan su propia selección de cuotas en su checkout/app
+  // (no mostramos pantalla de planes; auto-arrancamos con el monto base).
+  const selfManaged = provider === "mobbex" || provider === "modo";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -90,7 +95,11 @@ export function QrCheckoutModal({
     setAmount(amt);
     setPhase("creating");
     const create =
-      provider === "mobbex" ? posApi.createMobbexQr : posApi.createMpQr;
+      provider === "mobbex"
+        ? posApi.createMobbexQr
+        : provider === "modo"
+          ? posApi.createModoQr
+          : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
@@ -133,13 +142,14 @@ export function QrCheckoutModal({
   }, [open, base]);
 
   // Auto-arranque sin selección:
-  //  - Mobbex maneja las cuotas en su checkout → mandamos el base y los planes
-  //    van a Mobbex desde la Edge Function (no aplicamos recargo de precio acá).
+  //  - Mobbex / MODO manejan las cuotas en su checkout/app → mandamos el base
+  //    (no aplicamos recargo de precio acá; Mobbex recibe los planes desde su
+  //    Edge Function, MODO resuelve en su app).
   //  - modo recargo único → aplica el % global y genera el QR
   //  - sin planes activos → genera el QR por el monto base
   useEffect(() => {
     if (!open || loadingAll || startedRef.current) return;
-    if (provider === "mobbex") {
+    if (selfManaged) {
       startedRef.current = true;
       chosenRef.current = null;
       startQr(base);
@@ -180,14 +190,16 @@ export function QrCheckoutModal({
     : "";
 
   // Pantalla de selección: solo MP con planes y sin modo recargo único.
-  // Mobbex no la usa (sus cuotas se eligen en el checkout de Mobbex).
+  // Mobbex / MODO no la usan (sus cuotas se eligen en su propio flujo).
   const selecting =
-    phase === "select" && provider !== "mobbex" && !globalMode && (loadingAll || activePlans.length > 0);
+    phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
 
   const providerLogo =
     provider === "mobbex"
       ? "/img/medios_de_pago/Mobbex_cube.webp"
-      : "/img/medios_de_pago/mercado_pago_cube.webp";
+      : provider === "modo"
+        ? "/img/medios_de_pago/Modo_cube.webp"
+        : "/img/medios_de_pago/mercado_pago_cube.webp";
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={`Cobrar con QR · ${providerName}`}>
@@ -293,7 +305,7 @@ export function QrCheckoutModal({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={qrSrc}
-                alt="QR de pago Mercado Pago"
+                alt={`QR de pago ${providerName}`}
                 className="rounded-lg border border-border bg-white p-2"
                 width={260}
                 height={260}

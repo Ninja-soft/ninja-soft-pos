@@ -319,6 +319,28 @@ export const customersApi = {
     if (error) throw error;
   },
 
+  // Alta rápida desde un flujo (p.ej. emitir un vale sin cliente en la venta).
+  // Crea un cliente mínimo (nombre + opcionales) y devuelve su id.
+  createQuick: async (input: {
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+  }): Promise<{ id: string; name: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("customers")
+      .insert({
+        name: input.name.trim(),
+        phone: input.phone?.trim() || null,
+        email: input.email?.trim() || null,
+        is_active: true,
+      })
+      .select("id, name")
+      .single();
+    if (error) throw error;
+    return data as { id: string; name: string };
+  },
+
   update: async (id: string, input: CustomerOutput): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase

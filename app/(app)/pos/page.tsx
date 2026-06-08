@@ -9,6 +9,7 @@ import {
   ScanBarcode,
   Search,
   Star,
+  Ticket,
   User,
   X,
 } from "lucide-react";
@@ -52,6 +53,7 @@ import {
   PaymentModal,
 } from "@/components/pos/PosModals";
 import { TicketModal } from "@/components/sales/TicketModal";
+import { VoucherRedeemModal } from "@/components/pos/VoucherRedeemModal";
 import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
@@ -127,6 +129,7 @@ export default function PosPage() {
   const requireCustomer = posSettings?.requireCustomer ?? false;
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
+  const [voucherOpen, setVoucherOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
   const { data: customers } = useCustomers(custSearch);
   const { data: scBalance } = useStoreCreditBalance(customer?.id);
@@ -696,6 +699,14 @@ export default function PosPage() {
                 </span>
               </span>
             </button>
+            {/* Canje de vale por código → acredita saldo a favor del cliente */}
+            <button
+              type="button"
+              onClick={() => setVoucherOpen(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
+            >
+              <Ticket size={13} /> Canjear vale
+            </button>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
@@ -873,6 +884,12 @@ export default function PosPage() {
         onOpenChange={setTicketOpen}
         saleId={ticketId}
         autoPrint={autoPrint}
+      />
+      <VoucherRedeemModal
+        open={voucherOpen}
+        onOpenChange={setVoucherOpen}
+        customer={customer}
+        storeId={register?.store_id ?? null}
       />
       <BarcodeScanner
         open={scanOpen}

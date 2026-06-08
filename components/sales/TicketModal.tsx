@@ -15,10 +15,12 @@ import {
 } from "@/components/sales/SendReceiptEmail";
 import {
   useActiveTemplate,
+  usePrintProfiles,
   useTenantSmtpStatus,
   useTicketBranding,
 } from "@/modules/tickets/hooks";
 import { emailTemplateDiffers } from "@/modules/tickets/api";
+import { webPrintCopies } from "@/lib/print/webPrint";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { downloadTicketPdf } from "@/lib/utils/ticketPdf";
 import { downloadA4FromNode } from "@/lib/tickets/exportPng";
@@ -46,6 +48,10 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   // error amable si falta el SMTP. Ver useTenantSmtpStatus.
   const { data: smtp } = useTenantSmtpStatus(open);
   const smtpMissing = Boolean(smtp?.allowed && !smtp.configured);
+  // Perfil de impresión del tipo "ticket de venta" (H22): formato, copias y
+  // auto/manual configurados por el negocio en Configuración → Impresión.
+  const { data: printProfiles } = usePrintProfiles(open);
+  const saleProfile = printProfiles?.sale;
   const { toast } = useToast();
   const qc = useQueryClient();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -72,18 +78,23 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
     },
   });
 
-  // Auto-imprimir al abrir (preferencia del POS), una sola vez por apertura.
+  // Auto-imprimir al abrir, una sola vez por apertura. Se dispara si lo pide el
+  // perfil del negocio (Impresión → ticket de venta en automático) o la
+  // preferencia por dispositivo "Imprimir al cobrar". Respeta la cantidad de
+  // copias del perfil (web print: N llamadas a window.print()).
+  const autoPrintEnabled = Boolean(autoPrint) || Boolean(saleProfile?.auto);
+  const saleCopies = saleProfile?.copies ?? 1;
   useEffect(() => {
     if (!open) {
       printedRef.current = false;
       return;
     }
-    if (autoPrint && data && !printedRef.current) {
+    if (autoPrintEnabled && data && !printedRef.current) {
       printedRef.current = true;
-      const t = setTimeout(() => window.print(), 300);
+      const t = setTimeout(() => webPrintCopies(saleCopies), 300);
       return () => clearTimeout(t);
     }
-  }, [open, autoPrint, data]);
+  }, [open, autoPrintEnabled, saleCopies, data]);
 
   // Auto-envío del comprobante por email (preferencia del POS), una sola vez
   // por apertura. Nunca debe bloquear ni molestar el flujo de venta: ante
@@ -160,8 +171,12 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
       }
     : null;
 
+  // Formato del ticket. La plantilla de impresión activa manda (H9b); si no hay,
+  // usa el formato del perfil "ticket de venta" (H22) y, como último recurso, el
+  // ancho del branding.
   const paper =
     (printTpl?.paper as "58" | "80" | "a4" | undefined) ??
+    saleProfile?.paper ??
     (brand?.ticket_width === "58" ? "58" : "80");
 
   // El email usa la plantilla de email si difiere de la de impresión. Cuando
@@ -277,9 +292,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
                   <FileDown size={18} />
                 </Button>
                 <Button
-                  onClick={() => window.print()}
+                  onClick={() => webPrintCopies(saleCopies)}
                   className="h-10 w-10 p-0"
-                  title="Imprimir"
+                  title={saleCopies > 1 ? `Imprimir (${saleCopies} copias)` : "Imprimir"}
                   aria-label="Imprimir"
                 >
                   <Printer size={18} />

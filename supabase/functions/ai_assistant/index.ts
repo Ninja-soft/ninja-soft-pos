@@ -14,6 +14,12 @@
 // traduce a 502 { error:'ai_provider_error', detail:<mensaje truncado> }.
 // Nunca se deja escapar un throw al runtime (502/503 opaco sin cuerpo).
 //
+// Modo TEST (staff interno, body {test:true}): responde SIEMPRE 200 con un
+// sobre { ok }. Si el proveedor falla → { ok:false, error, detail } con el
+// motivo real; si anda → { ok:true, reply }. Así el panel interno muestra la
+// causa (invoke colapsa cualquier non-2xx a un error genérico sin cuerpo). El
+// chat real (no-test) NO cambia: sigue 502 ante error del proveedor.
+//
 // Contexto READ-ONLY scoped por tenant (nunca SQL libre): ventas hoy/7d, mes en
 // curso vs mes anterior + ticket promedio, medios de pago, cuenta corriente
 // (deudores), estado de caja, devoluciones, suscripción, top productos, stock
@@ -336,10 +342,17 @@ Deno.serve(async (req: Request) => {
 
     // ── Modo TEST (solo staff interno) ───────────────────────────────────────
     // Saltea TODO el guard (tenant/addon/cuota) y simplemente pinguea al
-    // proveedor activo con su api_key. Devuelve {reply} si anda o {error,detail}
-    // claro si falla. No registra consumo (no hay tenant).
+    // proveedor activo con su api_key. No registra consumo (no hay tenant).
+    //
+    // IMPORTANTE: este path SIEMPRE responde 200 con un sobre { ok }. Si el
+    // proveedor falla, devuelve 200 { ok:false, error, detail } con el MOTIVO
+    // real (ej. "API key not valid"). Esto es a propósito: supabase.functions
+    // .invoke trata cualquier non-2xx como un error genérico ("Edge Function
+    // returned a non-2xx status code") y pierde el cuerpo, así que el staff
+    // nunca veía la causa. Devolviendo 200 con { ok:false }, el cliente lee el
+    // detalle. (El chat real —no-test— sigue devolviendo 502 ante error.)
     if (body.test === true) {
-      if (!isInternal) return json({ error: "forbidden" }, 403);
+      if (!isInternal) return json({ ok: false, error: "forbidden" }, 200);
       const { data: cfgRow } = await admin
         .from("platform_secrets")
         .select("secrets")
@@ -348,10 +361,11 @@ Deno.serve(async (req: Request) => {
       const cfg = (cfgRow?.secrets ?? {}) as Record<string, string>;
       const { provider, model, apiKey } = resolveProviderConfig(cfg);
       if (!apiKey) {
-        return json(
-          { error: "ai_not_configured", detail: `Falta la API key de ${provider}.` },
-          400,
-        );
+        return json({
+          ok: false,
+          error: "ai_not_configured",
+          detail: `Falta la API key de ${provider}.`,
+        });
       }
       const testMessages = [{ role: "user", content: "ping" }];
       const systemPrompt =
@@ -359,9 +373,9 @@ Deno.serve(async (req: Request) => {
         "interno. Respondé en una sola línea breve confirmando que estás operativo.";
       const out = await callProvider(provider, model, apiKey, systemPrompt, testMessages);
       if (!out.ok) {
-        return json({ error: out.error, detail: out.detail }, out.status);
+        return json({ ok: false, error: out.error, detail: out.detail });
       }
-      return json({ reply: out.reply.trim() || "OK", provider, model });
+      return json({ ok: true, reply: out.reply.trim() || "OK", provider, model });
     }
 
     const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)

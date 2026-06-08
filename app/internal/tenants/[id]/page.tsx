@@ -3,7 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Copy, ExternalLink, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -20,6 +28,9 @@ import {
   useTenantNoteMutations,
   useImpersonateTenant,
   useInternalAudit,
+  useTenantAddons,
+  useGiftAiAddon,
+  AI_ASSISTANT_ADDON_KEY,
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
@@ -80,6 +91,11 @@ export default function InternalTenantDetail({
     actionLink: string;
     ownerEmail: string;
   } | null>(null);
+
+  // Regalar el Asistente IA a ESTE negocio (addon bonificado, sin cobro).
+  const { data: tenantAddons } = useTenantAddons(params.id);
+  const hasAiAddon = tenantAddons?.has(AI_ASSISTANT_ADDON_KEY) ?? false;
+  const giftAi = useGiftAiAddon(params.id);
 
   // Audit log del tenant (últimas 30 acciones).
   const { data: auditEntries } = useInternalAudit({ tenantId: params.id });
@@ -290,6 +306,66 @@ export default function InternalTenantDetail({
             Crea una suscripción mensual en Mercado Pago con la cuenta de NinjaSoft
             por el plan del negocio. El estado se actualiza solo cuando el cliente
             paga.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Regalar el Asistente IA a ESTE negocio ───────────────────────── */}
+      <Heading className="mt-8" as="h2">
+        Asistente IA
+      </Heading>
+      <Card className="mt-3">
+        <CardContent className="flex flex-wrap items-center gap-4 p-5">
+          {hasAiAddon ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-emerald-300">
+                <Check size={15} /> Asistente IA activo (regalado)
+              </span>
+              <Button
+                variant="secondary"
+                loading={giftAi.revoke.isPending}
+                disabled={giftAi.grant.isPending}
+                onClick={() =>
+                  giftAi.revoke.mutate(undefined, {
+                    onSuccess: () =>
+                      toast({ title: "Asistente IA quitado", variant: "success" }),
+                    onError: (e) =>
+                      toast({
+                        title: "No se pudo quitar",
+                        description: e instanceof Error ? e.message : undefined,
+                        variant: "error",
+                      }),
+                  })
+                }
+              >
+                Quitar Asistente IA
+              </Button>
+            </>
+          ) : (
+            <Button
+              loading={giftAi.grant.isPending}
+              disabled={giftAi.revoke.isPending}
+              onClick={() =>
+                giftAi.grant.mutate(undefined, {
+                  onSuccess: () =>
+                    toast({ title: "Asistente IA regalado", variant: "success" }),
+                  onError: (e) =>
+                    toast({
+                      title: "No se pudo regalar",
+                      description: e instanceof Error ? e.message : undefined,
+                      variant: "error",
+                    }),
+                })
+              }
+            >
+              <Sparkles size={15} /> Regalar Asistente IA
+            </Button>
+          )}
+          <p className="w-full text-xs text-muted-foreground">
+            Activa el complemento del Asistente IA para este negocio sin cobro
+            (bonificado). El dueño y su equipo pueden usarlo al instante. Para un
+            único tester/beta global, usá el “Email de la beta” en la configuración
+            interna de IA.
           </p>
         </CardContent>
       </Card>

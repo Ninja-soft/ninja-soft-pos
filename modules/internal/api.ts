@@ -1000,6 +1000,30 @@ export const internalApi = {
     if (error) throw error;
   },
 
+  // Regalar (bonificar) un addon a un negocio: alta/activación con
+  // source='granted', sin cobro, idempotente y auditada (RPC internal_grant_addon
+  // de la migración 20260608440000). Aún sin types generados → cast del cliente.
+  grantAddon: async (tenantId: string, addonKey: string): Promise<void> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("internal_grant_addon", {
+      p_tenant: tenantId,
+      p_addon_key: addonKey,
+    });
+    if (error) throw error;
+  },
+
+  // Quitar un addon BONIFICADO (cancela el grant; no toca un addon pago).
+  revokeAddon: async (tenantId: string, addonKey: string): Promise<void> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("internal_revoke_addon", {
+      p_tenant: tenantId,
+      p_addon_key: addonKey,
+    });
+    if (error) throw error;
+  },
+
   grantAccess: async (
     tenantId: string,
     input: GrantAccessInput,

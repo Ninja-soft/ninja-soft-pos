@@ -297,6 +297,33 @@ export function useSetAddon(tenantId: string) {
   });
 }
 
+// Key canónica del addon del Asistente IA en plan_addons / subscription_addons.
+// (El guard del Asistente acepta también el alias histórico 'asistente_ia'.)
+export const AI_ASSISTANT_ADDON_KEY = "ai_assistant";
+
+// Regalar / quitar el Asistente IA a UN negocio concreto desde su detalle en
+// internal. Bonifica vía internal_grant_addon (source='granted', sin cobro) y lo
+// cancela vía internal_revoke_addon. Invalida el set de addons del tenant.
+export function useGiftAiAddon(tenantId: string) {
+  const qc = useQueryClient();
+  const inv = () =>
+    qc.invalidateQueries({
+      queryKey: ["internal", "tenant-addons", tenantId],
+    });
+  return {
+    grant: useMutation({
+      mutationFn: () =>
+        internalApi.grantAddon(tenantId, AI_ASSISTANT_ADDON_KEY),
+      onSuccess: inv,
+    }),
+    revoke: useMutation({
+      mutationFn: () =>
+        internalApi.revokeAddon(tenantId, AI_ASSISTANT_ADDON_KEY),
+      onSuccess: inv,
+    }),
+  };
+}
+
 // ── Fase C — Creador dinámico de planes (/internal/planes) ──────────────────
 
 export function useFeatures() {

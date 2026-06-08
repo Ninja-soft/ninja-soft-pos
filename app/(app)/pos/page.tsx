@@ -529,7 +529,13 @@ export default function PosPage() {
   }, []);
 
   async function handleSale(
-    payments: { method: string; amount: number; reference?: string }[],
+    payments: {
+      method: string;
+      amount: number;
+      reference?: string;
+      // Voucher de tarjeta (H27): lote/cupón/autorización. create_sale lo persiste.
+      card_voucher?: { lote: string; cupon: string; autorizacion: string };
+    }[],
     extras?: { name: string; amount: number; kind?: "warranty" | "surcharge" }[],
     change?: number,
   ) {

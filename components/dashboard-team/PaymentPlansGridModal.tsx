@@ -53,6 +53,10 @@ export function PaymentPlansGridModal({
   const [globalMode, setGlobalMode] = useState(false);
   const [globalPct, setGlobalPct] = useState("0");
   const [removeCuotaN, setRemoveCuotaN] = useState<number | null>(null);
+  // Vigencia de la financiación del medio (H27): se aplica a TODOS los planes del
+  // medio. Vacío = sin límite. Al cobrar, sólo se ofrecen los planes vigentes hoy.
+  const [validFrom, setValidFrom] = useState("");
+  const [validUntil, setValidUntil] = useState("");
 
   // Config visual + recargo del medio (tenant_payment_methods)
   const { data: cfg } = useQuery({
@@ -76,6 +80,14 @@ export function PaymentPlansGridModal({
     setGlobalMode(cfg.config.plan_mode === "global");
     setGlobalPct(String(cfg.surcharge ?? 0));
   }, [cfg]);
+
+  // Inicializa la vigencia visible desde el primer plan que tenga una ventana
+  // cargada (setProviderValidity escribe la misma en todos, así que es consistente).
+  useEffect(() => {
+    const withValidity = plans.find((p) => p.valid_from || p.valid_until);
+    setValidFrom(withValidity?.valid_from ?? "");
+    setValidUntil(withValidity?.valid_until ?? "");
+  }, [plans]);
 
   const saveConfig = useMutation({
     mutationFn: async (patch: MethodConfig) => {
@@ -114,6 +126,11 @@ export function PaymentPlansGridModal({
       if (error) throw error;
       // Modo global → planes inactivos (no se ofrecen). Modo planes → activos.
       await m.setProviderActive.mutateAsync(!globalMode);
+      // Vigencia (H27): aplica la ventana a todos los planes del medio. Vacío = null.
+      await m.setProviderValidity.mutateAsync({
+        validFrom: validFrom || null,
+        validUntil: validUntil || null,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["method-config", providerKey] });
@@ -320,6 +337,53 @@ export function PaymentPlansGridModal({
               </span>
             </div>
           )}
+        </div>
+
+        {/* Vigencia de la financiación (H27): ventana de fechas para los planes
+            del medio. Al cobrar, sólo se ofrecen los planes vigentes hoy. Vacío =
+            sin límite. Se aplica a todos los planes del medio al Guardar. */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="min-w-0">
+            <div className="font-semibold">Vigencia de los planes</div>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Período en que se ofrecen estos planes al cobrar. Fuera de la
+              vigencia (vencidos o todavía no empezados) no aparecen en el selector
+              de cuotas. Dejá vacío para que estén siempre disponibles.
+            </p>
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="mb-1 block text-muted-foreground">Desde</span>
+              <input
+                type="date"
+                value={validFrom}
+                onChange={(e) => setValidFrom(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-muted-foreground">Hasta</span>
+              <input
+                type="date"
+                value={validUntil}
+                min={validFrom || undefined}
+                onChange={(e) => setValidUntil(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+              />
+            </label>
+            {(validFrom || validUntil) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setValidFrom("");
+                  setValidUntil("");
+                }}
+                className="h-9 rounded-md border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                Sin límite
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Toolbar */}

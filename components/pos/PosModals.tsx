@@ -5,11 +5,11 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils/format";
-import type { SalePaymentInput } from "@/modules/pos/api";
+import { isPlanActive, type SalePaymentInput } from "@/modules/pos/api";
 import { useWarrantyPlans } from "@/modules/products/hooks";
-import { useEnabledPaymentMethods, usePaymentPlans } from "@/modules/pos/hooks";
+import { useEnabledPaymentMethods, usePaymentPlans, usePosSettings } from "@/modules/pos/hooks";
 import { useGating } from "@/modules/saas/gating";
-import type { PaymentPlan } from "@/modules/pos/api";
+import type { CardVoucher, PaymentPlan } from "@/modules/pos/api";
 import type { WarrantyPlan } from "@/modules/products/api";
 
 // Medios de pago base del POS. Se filtran según config del tenant (H14).
@@ -156,11 +156,17 @@ export function PaymentModal({
   const { data: allPlans } = usePaymentPlans();
   const { data: enabledProviders } = useEnabledPaymentMethods();
   const { data: gating } = useGating();
+  const { data: posSettings } = usePosSettings();
 
   const [method, setMethod] = useState<SalePaymentInput["method"]>("cash");
   const [warrantyId, setWarrantyId] = useState("");
   const [planId, setPlanId] = useState("");
   const [received, setReceived] = useState("");
+  // Voucher de tarjeta (H27): lote / cupón / nº de autorización. Sólo se pide en
+  // débito/crédito cuando el negocio activó require_card_voucher.
+  const [voucherLote, setVoucherLote] = useState("");
+  const [voucherCupon, setVoucherCupon] = useState("");
+  const [voucherAuth, setVoucherAuth] = useState("");
 
   // Reset al abrir (el modal queda montado entre ventas). La garantía arranca con
   // la pre-seleccionada por la oferta contextual (H28), si la hay.
@@ -170,11 +176,19 @@ export function PaymentModal({
       setWarrantyId(initialWarrantyId);
       setPlanId("");
       setReceived("");
+      setVoucherLote("");
+      setVoucherCupon("");
+      setVoucherAuth("");
     }
   }, [open, initialWarrantyId]);
 
-  // Reset el plan cuando cambia el método.
-  useEffect(() => { setPlanId(""); }, [method]);
+  // Reset el plan y el voucher cuando cambia el método (el voucher es por tarjeta).
+  useEffect(() => {
+    setPlanId("");
+    setVoucherLote("");
+    setVoucherCupon("");
+    setVoucherAuth("");
+  }, [method]);
 
   // Filtrar métodos por los proveedores habilitados del tenant (H14) Y por el
   // plan (gating real, espejo del enforcement backend). Un proveedor se ofrece
@@ -216,10 +230,13 @@ export function PaymentModal({
   }, [enabledProviders, gating, storeCreditBalance, hasCustomer, base, rounding]);
 
   // Planes del método actual (débito → base "debito", crédito → "credito").
+  // Sólo se ofrecen los planes VIGENTES hoy (H27): valid_from <= hoy y
+  // (valid_until null o >= hoy). Los fuera de vigencia (vencidos o programados a
+  // futuro) no aparecen en el selector de cuotas.
   const planBase = METHOD_PLAN_BASE[method];
   const methodPlans = useMemo((): PaymentPlan[] => {
     if (!planBase || !allPlans) return [];
-    return allPlans.filter((p: PaymentPlan) => p.base === planBase);
+    return allPlans.filter((p: PaymentPlan) => p.base === planBase && isPlanActive(p));
   }, [planBase, allPlans]);
 
   const selectedPlan = (allPlans ?? []).find((p: PaymentPlan) => p.id === planId) ?? null;
@@ -258,6 +275,22 @@ export function PaymentModal({
   const payTotal = applyRound(base + warrantyPrima + planSurcharge + methodSurcharge);
   const receivedNum = Number(received) || 0;
   const change = method === "cash" ? Math.max(0, receivedNum - payTotal) : 0;
+
+  // Voucher de tarjeta (H27): se pide cuando el negocio activó
+  // require_card_voucher Y el medio es débito o crédito. Los 3 campos
+  // (lote/cupón/autorización) son obligatorios; el botón de confirmar se
+  // bloquea hasta completarlos. El voucher viaja en el payload del pago.
+  const isCardMethod = method === "debit" || method === "credit";
+  const voucherRequired = Boolean(posSettings?.requireCardVoucher) && isCardMethod;
+  const voucher: CardVoucher = {
+    lote: voucherLote.trim(),
+    cupon: voucherCupon.trim(),
+    autorizacion: voucherAuth.trim(),
+  };
+  const voucherComplete =
+    voucher.lote !== "" && voucher.cupon !== "" && voucher.autorizacion !== "";
+  // Si hay datos de voucher (aunque no sea obligatorio) se adjunta al pago.
+  const voucherHasData = voucher.lote !== "" || voucher.cupon !== "" || voucher.autorizacion !== "";
 
   // `kind` etiqueta el extra para el gating server-side: 'warranty' (prima de
   // garantía extendida → feature 'garantias') vs 'surcharge' (recargo de medio/
@@ -317,6 +350,45 @@ export function PaymentModal({
                 </option>
               ))}
             </select>
+          </div>
+        )}
+
+        {/* Voucher de tarjeta (H27): lote / cupón / nº de autorización. Sólo en
+            débito/crédito cuando el negocio activó require_card_voucher. Los 3
+            campos son obligatorios; se guardan junto al pago de la venta. */}
+        {voucherRequired && (
+          <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3">
+            <div className="mb-2 text-sm font-medium text-ninja-flameSoft">
+              Voucher de tarjeta
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Input
+                label="Lote"
+                inputMode="numeric"
+                value={voucherLote}
+                onChange={(e) => setVoucherLote(e.target.value)}
+                placeholder="Ej. 045"
+              />
+              <Input
+                label="Cupón"
+                inputMode="numeric"
+                value={voucherCupon}
+                onChange={(e) => setVoucherCupon(e.target.value)}
+                placeholder="Ej. 001234"
+              />
+              <Input
+                label="Autorización"
+                inputMode="numeric"
+                value={voucherAuth}
+                onChange={(e) => setVoucherAuth(e.target.value)}
+                placeholder="Ej. 998877"
+              />
+            </div>
+            {!voucherComplete && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Completá lote, cupón y nº de autorización del voucher para confirmar.
+              </p>
+            )}
           </div>
         )}
 
@@ -381,9 +453,20 @@ export function PaymentModal({
           </Button>
           <Button
             loading={loading}
+            disabled={voucherRequired && !voucherComplete}
             onClick={() =>
               onConfirm(
-                [{ method, amount: payTotal }],
+                [
+                  {
+                    method,
+                    amount: payTotal,
+                    // Voucher de tarjeta: se adjunta si es obligatorio o si el
+                    // cajero cargó algún dato (siempre en débito/crédito).
+                    ...(isCardMethod && (voucherRequired || voucherHasData)
+                      ? { card_voucher: voucher }
+                      : {}),
+                  },
+                ],
                 extras.length > 0 ? extras : [],
                 change,
               )

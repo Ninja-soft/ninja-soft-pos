@@ -4,10 +4,22 @@ import type { Json, Tables } from "@/types/database";
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
 
+// Voucher de tarjeta (H27): lote / cupón / nº de autorización del POSNET. Dato
+// operativo del cobro; viaja en el payload del pago y create_sale lo persiste en
+// payments.card_voucher. Sólo se completa en débito/crédito cuando el negocio
+// activa pos_settings.require_card_voucher.
+export interface CardVoucher {
+  lote: string;
+  cupon: string;
+  autorizacion: string;
+}
+
 export interface SalePaymentInput {
-  method: "cash" | "debit" | "credit" | "transfer" | "qr" | "other" | "store_credit";
+  method: "cash" | "debit" | "credit" | "transfer" | "qr" | "other" | "store_credit" | "account";
   amount: number;
   reference?: string;
+  // Voucher de tarjeta (lote/cupón/autorización). Opcional; sólo débito/crédito.
+  card_voucher?: CardVoucher;
 }
 export interface SaleItemInput {
   product_id: string | null; // null = ítem de monto libre (venta rápida)
@@ -44,7 +56,12 @@ export interface QrIntentRow {
   saleStatus: string | null;
 }
 
-export type PaymentPlan = Tables<"payment_plans">;
+// payment_plans.valid_from / valid_until (H27) aún no están en los tipos
+// generados (no se regeneran en este PR): se intersectan acá. NULL = sin límite.
+export type PaymentPlan = Tables<"payment_plans"> & {
+  valid_from: string | null;
+  valid_until: string | null;
+};
 export interface PaymentPlanInput {
   provider_key: string;
   label: string;
@@ -54,6 +71,22 @@ export interface PaymentPlanInput {
   surcharge_pct: number;
   sort?: number;
   code?: string | null;
+  // Vigencia del plan (fechas de calendario del negocio). NULL = sin límite.
+  valid_from?: string | null;
+  valid_until?: string | null;
+}
+
+// Un plan está vigente si valid_from <= hoy <= (valid_until ?? ∞). Espeja
+// isDiscountActive (modules/internal/api.ts): fecha LOCAL del negocio, no UTC.
+// Los planes fuera de vigencia no se ofrecen al cobrar.
+export function isPlanActive(
+  p: Pick<PaymentPlan, "valid_from" | "valid_until">,
+  today: Date = new Date(),
+): boolean {
+  const t = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (p.valid_from && p.valid_from > t) return false;
+  if (p.valid_until && p.valid_until < t) return false;
+  return true;
 }
 
 // Code estable por combinación (base+marca+cuotas). Permite upsert/dedupe de
@@ -86,6 +119,10 @@ function planRow(v: PaymentPlanInput) {
     surcharge_pct: v.surcharge_pct,
     sort: v.sort ?? 0,
     code: v.code ?? planCode(v.base, v.brand, v.installments),
+    // Vigencia: sólo se incluye en el upsert cuando viene explícita, para que un
+    // edit de recargo (setCell sin fechas) no pise la vigencia ya cargada.
+    ...(v.valid_from !== undefined ? { valid_from: v.valid_from } : {}),
+    ...(v.valid_until !== undefined ? { valid_until: v.valid_until } : {}),
   };
 }
 
@@ -121,13 +158,14 @@ export const paymentPlansApi = {
 
   create: async (v: PaymentPlanInput): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("payment_plans").insert(planRow(v));
+    // valid_from/valid_until no están en los tipos generados (no se regeneran): cast.
+    const { error } = await supabase.from("payment_plans").insert(planRow(v) as never);
     if (error) throw error;
   },
 
   update: async (id: string, v: Partial<PaymentPlanInput>): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("payment_plans").update(v).eq("id", id);
+    const { error } = await supabase.from("payment_plans").update(v as never).eq("id", id);
     if (error) throw error;
   },
 
@@ -136,7 +174,41 @@ export const paymentPlansApi = {
     const supabase = createClient();
     const { error } = await supabase
       .from("payment_plans")
-      .upsert(planRow(v), { onConflict: "tenant_id,provider_key,code" });
+      .upsert(planRow(v) as never, { onConflict: "tenant_id,provider_key,code" });
+    if (error) throw error;
+  },
+
+  // Vigencia por celda (provider+code): set targeteado que NO toca el recargo.
+  // Permite editar la vigencia de un plan ya cargado desde el grid.
+  setCellValidity: async (
+    providerKey: string,
+    base: string,
+    brand: string | null,
+    installments: number,
+    validFrom: string | null,
+    validUntil: string | null,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .update({ valid_from: validFrom, valid_until: validUntil } as never)
+      .eq("provider_key", providerKey)
+      .eq("code", planCode(base, brand, installments));
+    if (error) throw error;
+  },
+
+  // Vigencia para TODOS los planes de un medio a la vez (campaña de financiación
+  // del medio). Escribe las columnas valid_from/valid_until de cada plan.
+  setProviderValidity: async (
+    providerKey: string,
+    validFrom: string | null,
+    validUntil: string | null,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("payment_plans")
+      .update({ valid_from: validFrom, valid_until: validUntil } as never)
+      .eq("provider_key", providerKey);
     if (error) throw error;
   },
 
@@ -165,7 +237,7 @@ export const paymentPlansApi = {
     const { data, error } = await supabase
       .from("payment_plans")
       .upsert(
-        rows.map((r) => planRow({ ...r, provider_key: providerKey })),
+        rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never,
         { onConflict: "tenant_id,provider_key,code", ignoreDuplicates: true },
       )
       .select("id");
@@ -182,7 +254,7 @@ export const paymentPlansApi = {
     const supabase = createClient();
     const { error } = await supabase
       .from("payment_plans")
-      .upsert(rows.map((r) => planRow({ ...r, provider_key: providerKey })), {
+      .upsert(rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never, {
         onConflict: "tenant_id,provider_key,code",
       });
     if (error) throw error;
@@ -203,7 +275,7 @@ export const paymentPlansApi = {
     if (rows.length === 0) return 0;
     const { error } = await supabase
       .from("payment_plans")
-      .insert(rows.map((r) => planRow({ ...r, provider_key: providerKey })));
+      .insert(rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never);
     if (error) throw error;
     return rows.length;
   },
@@ -368,6 +440,8 @@ export const posApi = {
     displayThanksMessage: string | null;
     // Oferta contextual automática de garantía extendida en el POS (H28).
     offerWarranty: boolean;
+    // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
+    requireCardVoucher: boolean;
   } | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
@@ -388,6 +462,8 @@ export const posApi = {
       displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
       // Default true: si la columna no existe aún (settings viejos), se ofrece.
       offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
+      // Default false: por defecto NO se exige voucher de tarjeta.
+      requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
     };
   },
 

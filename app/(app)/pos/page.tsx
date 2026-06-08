@@ -16,6 +16,7 @@ import {
   Star,
   Ticket,
   User,
+  Utensils,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -72,6 +73,8 @@ import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
 import { useAppointment } from "@/modules/agenda/hooks";
 import { appointmentsApi } from "@/modules/agenda/api";
+import { useTableOrder, useTableOrderItems } from "@/modules/dining/hooks";
+import { tableOrdersApi } from "@/modules/dining/api";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -111,6 +114,15 @@ function PosPageInner() {
   const { data: repeatSale } = useCustomerLastSaleItems(repeatCustomerId);
   // Sólo una carga por cliente (no en cada render).
   const loadedRepeatRef = useRef<string | null>(null);
+  // Cobro de mesa (F13 · H44): /pos?table=<order_id>. Carga los ítems del pedido
+  // de la mesa en el carrito y, al cobrar, cierra la mesa (close_dining_table:
+  // enlaza la venta, marca el pedido 'cobrada' y libera la mesa). Espeja el flujo
+  // de cobro de turno (H38).
+  const tableOrderId = searchParams.get("table");
+  const { data: tableOrder } = useTableOrder(tableOrderId);
+  const { data: tableItems } = useTableOrderItems(tableOrderId);
+  // Sólo una carga por pedido de mesa (no en cada render).
+  const loadedTableRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
@@ -538,6 +550,53 @@ function PosPageInner() {
     router.replace("/pos");
   }
 
+  // Cobro de mesa (H44): al llegar con ?table=<order_id>, cargá los ítems del
+  // pedido en el carrito UNA sola vez. Resuelve cada línea por su unit_price del
+  // pedido (snapshot del precio cargado en la mesa); las líneas con producto se
+  // agregan como producto (descuentan stock al cobrar si corresponde) y las
+  // libres como ítem de monto libre. Si el pedido ya fue cobrado/cancelado, no
+  // carga nada. NO aplica al POS mostrador (sin ?table, todo queda igual).
+  useEffect(() => {
+    const o = tableOrder;
+    if (!o) return;
+    if (loadedTableRef.current === o.id) return;
+    if (tableItems === undefined) return; // ítems aún cargando
+    if (o.status !== "abierta" || o.sale_id) {
+      // Pedido ya cerrado: no recargar; sólo marcar como visto.
+      loadedTableRef.current = o.id;
+      return;
+    }
+    loadedTableRef.current = o.id;
+    clear();
+    for (const it of tableItems ?? []) {
+      const qty = it.qty > 0 ? it.qty : 1;
+      if (it.product_id) {
+        addProduct(
+          {
+            id: it.product_id,
+            name: it.name,
+            sku: null,
+            price: it.unit_price,
+            unit: "un",
+          },
+          qty,
+        );
+      } else {
+        // Ítem libre: una línea por unidad acumulada (monto = precio * cantidad).
+        addFreeAmount({ name: it.name, amount: it.unit_price * qty });
+      }
+    }
+  }, [tableOrder, tableItems, clear, addProduct, addFreeAmount]);
+
+  // Sale del modo "cobro de mesa": limpia el carrito y el query param (la mesa
+  // sigue abierta — el cajero canceló el cobro, no la mesa).
+  function exitTableMode() {
+    loadedTableRef.current = null;
+    clear();
+    setCustomer(null);
+    router.replace("/pos");
+  }
+
   // Recompra rápida (H40): al entrar con ?repeat=<customerId>, cargá los ítems de
   // la última venta del cliente UNA sola vez. Resuelve el precio ACTUAL de cada
   // producto (lista mostrador) y omite los dados de baja (con aviso). Las líneas
@@ -860,6 +919,18 @@ function PosPageInner() {
         loadedApptRef.current = null;
         router.replace("/pos");
       }
+      // Cobro de mesa (H44): cerrá la mesa (enlaza la venta, marca el pedido
+      // 'cobrada' y libera la mesa). Best-effort: si falla, la venta ya quedó
+      // registrada y la mesa puede cerrarse luego desde el Salón.
+      if (tableOrderId) {
+        try {
+          await tableOrdersApi.close(tableOrderId, res.sale_id);
+        } catch (closeErr) {
+          console.warn("No se pudo cerrar la mesa:", closeErr);
+        }
+        loadedTableRef.current = null;
+        router.replace("/pos");
+      }
       // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
       flashPaidScreen(change ?? 0);
       toast({
@@ -977,6 +1048,31 @@ function PosPageInner() {
               className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
               <X size={14} /> Cancelar cobro del turno
+            </button>
+          </div>
+        )}
+        {/* Cobro de mesa (H44): banner con el pedido cargado. Se pueden sumar
+            ítems extra; al cobrar, la venta queda enlazada y la mesa se libera. */}
+        {tableOrder && tableOrder.status === "abierta" && !tableOrder.sale_id && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.08] px-4 py-3">
+            <span className="flex min-w-0 items-center gap-2.5 text-sm">
+              <Utensils size={18} className="shrink-0 text-ninja-flameSoft" />
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">
+                  Cobrando mesa
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  Pedido cargado desde el Salón. Sumá lo que falte y cobrá
+                  normalmente; al confirmar, la mesa queda libre.
+                </span>
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={exitTableMode}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <X size={14} /> Cancelar cobro de la mesa
             </button>
           </div>
         )}

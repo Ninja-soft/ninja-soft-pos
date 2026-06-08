@@ -1,0 +1,323 @@
+"use client";
+
+// Mesas, salones y pedidos de mesa (F13 · H44) + modo gastronómico (H43).
+//
+// - Salones = dining_areas (sector visual).
+// - Mesas   = dining_tables (etiqueta, capacidad, estado, mozo, pedido vivo).
+// - Pedido  = table_orders (cuenta) + table_order_items (líneas).
+//
+// Las acciones de mesa (abrir, agregar/quitar ítem, cancelar, cobrar) van por
+// RPCs tenant-scoped (SECURITY DEFINER + guard de miembro activo). El CRUD de
+// salones/mesas va por la tabla directa con RLS (lo usa el dueño en Config).
+//
+// types/database.ts NO se regenera en este PR: las tablas dining_* no están
+// tipadas. Tipamos explícito acá y casteamos nombre de tabla / payload (mismo
+// enfoque que modules/agenda/api.ts). La DB + RLS validan.
+
+import { createClient } from "@/lib/supabase/client";
+import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
+
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+
+export type TableStatus = "libre" | "ocupada" | "cuenta_pedida" | "bloqueada";
+
+export interface DiningArea {
+  id: string;
+  name: string;
+  sort: number;
+}
+
+export interface DiningTable {
+  id: string;
+  area_id: string | null;
+  label: string;
+  capacity: number;
+  sort: number;
+  status: TableStatus;
+  current_order_id: string | null;
+  waiter_user_id: string | null;
+}
+
+export interface TableOrderItem {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  unit_price: number;
+  modifiers: SaleLineModifierGroup[];
+  notes: string | null;
+}
+
+export interface TableOrder {
+  id: string;
+  table_id: string;
+  status: "abierta" | "cobrada" | "cancelada";
+  opened_by: string | null;
+  opened_at: string;
+  sale_id: string | null;
+  notes: string | null;
+}
+
+export interface AreaInput {
+  name: string;
+  sort?: number;
+}
+export interface TableInput {
+  area_id: string | null;
+  label: string;
+  capacity: number;
+  sort?: number;
+}
+
+// Ítem a agregar al pedido de la mesa (desde el picker del POS/Salón).
+export interface AddItemInput {
+  order_id: string;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  unit_price: number;
+  modifiers?: SaleLineModifierGroup[];
+  notes?: string | null;
+}
+
+// ── Salones ───────────────────────────────────────────────────────────────────
+
+export const areasApi = {
+  list: async (): Promise<DiningArea[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("dining_areas" as never)
+      .select("id, name, sort")
+      .is("deleted_at", null)
+      .order("sort")
+      .order("name");
+    if (error) throw error;
+    return (data ?? []) as unknown as DiningArea[];
+  },
+
+  create: async (input: AreaInput): Promise<DiningArea> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("dining_areas" as never)
+      .insert({ name: input.name, sort: input.sort ?? 0 } as never)
+      .select("id, name, sort")
+      .single();
+    if (error) throw error;
+    return data as unknown as DiningArea;
+  },
+
+  update: async (id: string, input: Partial<AreaInput>): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("dining_areas" as never)
+      .update(input as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // Baja lógica: las mesas del salón conservan su area_id (FK set null en físico).
+  softDelete: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("dining_areas" as never)
+      .update({ deleted_at: new Date().toISOString() } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+};
+
+// ── Mesas ─────────────────────────────────────────────────────────────────────
+
+export const tablesApi = {
+  list: async (): Promise<DiningTable[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("dining_tables" as never)
+      .select("id, area_id, label, capacity, sort, status, current_order_id, waiter_user_id")
+      .is("deleted_at", null)
+      .order("sort")
+      .order("label");
+    if (error) throw error;
+    return (data ?? []) as unknown as DiningTable[];
+  },
+
+  create: async (input: TableInput): Promise<DiningTable> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("dining_tables" as never)
+      .insert({
+        area_id: input.area_id,
+        label: input.label,
+        capacity: input.capacity,
+        sort: input.sort ?? 0,
+      } as never)
+      .select("id, area_id, label, capacity, sort, status, current_order_id, waiter_user_id")
+      .single();
+    if (error) throw error;
+    return data as unknown as DiningTable;
+  },
+
+  update: async (id: string, input: Partial<TableInput>): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("dining_tables" as never)
+      .update(input as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  softDelete: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("dining_tables" as never)
+      .update({ deleted_at: new Date().toISOString() } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // Cambio simple de estado de la mesa (cuenta pedida / bloquear / liberar). RPC
+  // tenant-scoped: valida transiciones (no liberar con pedido abierto, etc.).
+  setStatus: async (tableId: string, status: TableStatus): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_table_status" as never, {
+      p_table_id: tableId,
+      p_status: status,
+    } as never);
+    if (error) throw error;
+  },
+};
+
+// ── Pedidos de mesa ────────────────────────────────────────────────────────────
+
+export const tableOrdersApi = {
+  // Ítems del pedido abierto de una mesa (para la cuenta del Salón / cobro POS).
+  itemsByOrder: async (orderId: string): Promise<TableOrderItem[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("table_order_items" as never)
+      .select("id, order_id, product_id, name, qty, unit_price, modifiers, notes")
+      .eq("order_id", orderId)
+      .order("created_at");
+    if (error) throw error;
+    return (data ?? []) as unknown as TableOrderItem[];
+  },
+
+  // Un pedido por id (para el cobro desde el POS: /pos?table=<order_id>).
+  getById: async (orderId: string): Promise<TableOrder | null> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("table_orders" as never)
+      .select("id, table_id, status, opened_by, opened_at, sale_id, notes")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data ?? null) as unknown as TableOrder | null;
+  },
+
+  // Totales acumulados por pedido abierto del tenant (para mostrar en el grid de
+  // Salón sin traer todas las líneas). Devuelve un mapa order_id → total.
+  openTotals: async (): Promise<Record<string, number>> => {
+    const supabase = createClient();
+    // Trae las líneas de los pedidos abiertos (RLS por tenant) y agrega en cliente.
+    const { data, error } = await supabase
+      .from("table_order_items" as never)
+      .select("order_id, qty, unit_price, table_orders!inner(status)")
+      .eq("table_orders.status", "abierta");
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as {
+      order_id: string;
+      qty: number;
+      unit_price: number;
+    }[];
+    const totals: Record<string, number> = {};
+    for (const r of rows) {
+      totals[r.order_id] = (totals[r.order_id] ?? 0) + Number(r.qty) * Number(r.unit_price);
+    }
+    return totals;
+  },
+
+  // Abre la mesa (crea el pedido si no existe; mesa → ocupada). Devuelve order_id.
+  open: async (tableId: string, waiterUserId?: string | null): Promise<string> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("open_dining_table" as never, {
+      p_table_id: tableId,
+      p_waiter_user_id: waiterUserId ?? null,
+    } as never);
+    if (error) throw error;
+    return (data as { order_id: string }).order_id;
+  },
+
+  addItem: async (input: AddItemInput): Promise<string> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("add_table_order_item" as never, {
+      p_order_id: input.order_id,
+      p_product_id: input.product_id,
+      p_name: input.name,
+      p_qty: input.qty,
+      p_unit_price: input.unit_price,
+      p_modifiers: (input.modifiers ?? []) as unknown,
+      p_notes: input.notes ?? null,
+    } as never);
+    if (error) throw error;
+    return data as unknown as string;
+  },
+
+  // Cambia la cantidad de una línea. qty <= 0 borra la línea.
+  setItemQty: async (itemId: string, qty: number): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_table_order_item_qty" as never, {
+      p_item_id: itemId,
+      p_qty: qty,
+    } as never);
+    if (error) throw error;
+  },
+
+  removeItem: async (itemId: string): Promise<void> => {
+    return tableOrdersApi.setItemQty(itemId, 0);
+  },
+
+  cancel: async (orderId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("cancel_table_order" as never, {
+      p_order_id: orderId,
+    } as never);
+    if (error) throw error;
+  },
+
+  // Enlaza la venta cobrada al pedido y libera la mesa (→ libre). Lo llama el POS
+  // al confirmar el cobro de una mesa (espeja appointmentsApi.linkSale · H38).
+  close: async (orderId: string, saleId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("close_dining_table" as never, {
+      p_order_id: orderId,
+      p_sale_id: saleId,
+    } as never);
+    if (error) throw error;
+  },
+};
+
+// ── Helpers de estado (UI) ─────────────────────────────────────────────────────
+
+export const TABLE_STATUS_LABELS: Record<TableStatus, string> = {
+  libre: "Libre",
+  ocupada: "Ocupada",
+  cuenta_pedida: "Cuenta pedida",
+  bloqueada: "Bloqueada",
+};
+
+// Estilo del tile de mesa por estado (tonos del tema ninja). Libre = ninja-flame
+// (invita a abrir); ocupada = ámbar; cuenta pedida = sky; bloqueada = apagado.
+export const TABLE_STATUS_TILE: Record<TableStatus, string> = {
+  libre: "border-ninja-flame/40 bg-ninja-flame/[0.07] hover:border-ninja-flame",
+  ocupada: "border-amber-400/40 bg-amber-400/[0.08] hover:border-amber-400",
+  cuenta_pedida: "border-sky-400/40 bg-sky-400/[0.08] hover:border-sky-400",
+  bloqueada: "border-border bg-muted/40 opacity-70",
+};
+
+export const TABLE_STATUS_DOT: Record<TableStatus, string> = {
+  libre: "bg-ninja-flame",
+  ocupada: "bg-amber-400",
+  cuenta_pedida: "bg-sky-400",
+  bloqueada: "bg-muted-foreground",
+};

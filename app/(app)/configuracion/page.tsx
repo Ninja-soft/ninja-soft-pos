@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Wrench } from "lucide-react";
+import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -31,6 +31,8 @@ import { HardwareCard } from "@/components/dashboard-team/HardwareCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
+import { SalonesManager } from "@/components/dining/SalonesManager";
+import { useDiningEnabled } from "@/modules/dining/hooks";
 import { ServicePacksManager } from "@/components/packs/ServicePacksManager";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
@@ -48,6 +50,7 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "salones"
   | "profesionales"
   | "paquetes"
   | "clientes"
@@ -65,6 +68,10 @@ type SectionDef = {
   // `feature` (opcional): si el plan no la incluye, la sección queda
   // deshabilitada (candado) y el click abre el UpgradeModal en lugar de entrar.
   feature?: string;
+  // `requiresDining` (opcional): la sección sólo se muestra si el modo
+  // gastronómico (pos_settings.dining_enabled · H43) está activo. No es gating
+  // de plan: es un toggle del propio tenant, así que se oculta (no candado).
+  requiresDining?: boolean;
 };
 
 // Las secciones se agrupan en bloques temáticos para que el menú sea navegable
@@ -82,6 +89,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     title: "Operación del POS",
     sections: [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
+      { key: "salones", label: "Salones y mesas", icon: Utensils, requiresDining: true },
       { key: "profesionales", label: "Profesionales (agenda)", icon: CalendarDays, feature: "agenda" },
       { key: "paquetes", label: "Paquetes y sesiones", icon: Package, feature: "packs" },
       { key: "escaner", label: "Escáner", icon: ScanLine },
@@ -229,11 +237,19 @@ function ConfiguracionInner() {
     setPriceAccent,
   } = useAppearance();
   const params = useSearchParams();
+  // Modo gastronómico (H43): oculta la sección "Salones y mesas" si está apagado.
+  const { data: diningEnabled } = useDiningEnabled();
   const initialSection = (() => {
     const q = params.get("seccion");
     return SECTIONS.some((s) => s.key === q) ? (q as Section) : "apariencia";
   })();
   const [section, setSection] = useState<Section>(initialSection);
+
+  // Grupos visibles: filtra las secciones gated por dining cuando está apagado.
+  const visibleGroups = SECTION_GROUPS.map((g) => ({
+    ...g,
+    sections: g.sections.filter((s) => !s.requiresDining || diningEnabled),
+  })).filter((g) => g.sections.length > 0);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -252,7 +268,7 @@ function ConfiguracionInner() {
             tira horizontal de pills (sin títulos); en desktop, lista vertical
             con encabezados de grupo. */}
         <nav className="flex gap-2 overflow-x-auto md:flex-col md:gap-4 md:overflow-visible">
-          {SECTION_GROUPS.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.title} className="flex shrink-0 gap-2 md:flex-col md:gap-1">
               <div className="hidden px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70 md:block">
                 {group.title}
@@ -443,6 +459,28 @@ function ConfiguracionInner() {
 
           {/* Operación del POS + productos (solo owner; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard view="operacion" />}
+
+          {/* Salones y mesas (F13 · H44): CRUD de salones/sectores y sus mesas. La
+              atención por mesas vive en la sección Salón del menú. Sólo visible
+              con el modo gastronómico activo (H43). Escritura RLS por tenant. */}
+          {section === "salones" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Utensils size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Salones y mesas</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Definí tus salones (ej. Salón principal, Terraza, Barra) y las
+                  mesas de cada uno con su capacidad. La atención por mesas está en
+                  la sección{" "}
+                  <span className="font-medium text-foreground">Salón</span> del
+                  menú.
+                </p>
+                <SalonesManager />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Profesionales para la agenda (F12 · H38): quienes prestan los
               servicios, con color y comisión. La agenda vive en /agenda. */}

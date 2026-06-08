@@ -26,6 +26,7 @@ import {
   Tag,
   UserCog,
   Users,
+  Utensils,
   Wallet,
   X,
 } from "lucide-react";
@@ -51,6 +52,7 @@ import {
 } from "@/components/notifications/NotificationBell";
 import { AssistantBubble } from "@/components/ai/AssistantBubble";
 import { useFeature } from "@/modules/saas/gating";
+import { useDiningEnabled } from "@/modules/dining/hooks";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
@@ -64,6 +66,9 @@ type Item = {
   label: string;
   icon: React.ElementType;
   feature?: string;
+  // Sólo visible con el modo gastronómico (pos_settings.dining_enabled · H43)
+  // activo. No es gating de plan: es un toggle del tenant → se oculta, sin candado.
+  requiresDining?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -84,6 +89,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Operación",
       items: [
         { href: "/pos", label: "Punto de venta", icon: ShoppingCart },
+        // Salón (F13 · H44). Sólo visible con el modo gastronómico activo (H43);
+        // se oculta cuando dining_enabled = false (no es gating de plan).
+        { href: "/salon", label: "Salón", icon: Utensils, requiresDining: true },
         // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
         // defecto; un plan puede apagarla y el ítem queda con candado.
         { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
@@ -305,6 +313,10 @@ export function AppShell({
   const isInternal = shell?.isInternal ?? false;
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
 
+  // Modo gastronómico (H43): oculta los ítems con requiresDining si está apagado.
+  const { data: diningEnabled } = useDiningEnabled();
+  const showItem = (it: Item) => !it.requiresDining || Boolean(diningEnabled);
+
   // Estado de la cuenta (suspensión / past_due). Lo setea el motor de dunning.
   // `suspended` bloquea TODA la app del POS: ni montamos el shell, mostramos la
   // pantalla de reactivación (de la que solo se sale pagando o cerrando sesión).
@@ -357,7 +369,7 @@ export function AppShell({
               </button>
               {isOpen && (
                 <div className="mt-1 space-y-1">
-                  {g.items.map((it) => (
+                  {g.items.filter(showItem).map((it) => (
                     <NavLink
                       key={it.href}
                       item={it}

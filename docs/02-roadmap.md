@@ -641,21 +641,22 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
 
 Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panaderías, rotiserías, food trucks y fast food con mesas, comandas, cocina/barra, delivery/takeaway y variantes de atención. No reemplaza F12: F12 cubre cobro simple; F13 cubre operación gastronómica completa. Ver [`23-restaurant-cafe-operations.md`](./23-restaurant-cafe-operations.md).
 
-- [ ] **H43 — Configuración de negocio gastronómico y modos de atención.**
+- [~] **H43 — Configuración de negocio gastronómico y modos de atención.** — *Núcleo del modo gastronómico hecho (local, pendiente de push): toggle `pos_settings.dining_enabled` (Configuración → Operación → "Modo gastronómico / mesas"). ADITIVO: con off, el POS mostrador queda idéntico; con on, aparece la sección Salón en el menú y "Salones y mesas" en Configuración. **Follow-up:** presets por tipo de rubro gastronómico, modos de venta (take away / delivery / pickup / QR), selector por caja/dispositivo y reglas por modo (cobrar antes/después, comanda al enviar/cobrar) → siguen pendientes (se cruzan con H45/H49).*
+  - [x] Modo gastronómico on/off por tenant (`dining_enabled`), aditivo (mostrador intacto con off).
   - [ ] Presets por tipo: restaurante salón, resto-bar, cafetería, heladería, panadería, rotisería, fast food, food truck, dark kitchen, delivery/takeaway.
   - [ ] Modos de venta: mesa, mostrador, take away, delivery propio, pickup, drive-through, pedido por QR, evento/food truck.
   - [ ] Selector por caja/dispositivo: salón, barra, cocina, mostrador, despacho.
   - [ ] Reglas por modo: cobrar antes/después, imprimir comanda al enviar/cobrar, pedir nombre de cliente, pedir mesa, pedir teléfono/dirección.
   - [ ] *Criterio:* un tenant cambia de cafetería de mostrador a cafetería con mesas sin tocar código ni migraciones manuales.
 
-- [ ] **H44 — Mesas, salones y comandas de salón.**
-  - [ ] Configuración visual de salones/sectores: salón principal, terraza, barra, patio, VIP.
-  - [ ] Mesas con número/nombre, capacidad, posición, forma, estado y mozo asignado.
-  - [ ] Estados de mesa: libre, ocupada, esperando pedido, en cocina, servida, cuenta pedida, limpieza, reservada, bloqueada.
-  - [ ] Apertura de mesa, mover mesa, unir mesas, transferir mesa entre mozos y cerrar mesa.
-  - [ ] División de cuenta por ítem, por comensal, por porcentaje o por monto.
-  - [ ] Propina sugerida y propina libre.
-  - [ ] *Criterio:* un mozo abre mesa 12, carga pedido, envía comanda, divide la cuenta en dos pagos y libera la mesa.
+- [~] **H44 — Mesas, salones y comandas de salón.** — *Núcleo hecho (local, pendiente de push): migración `20260608580000_dining_tables` (`dining_areas`, `dining_tables`, `table_orders`, `table_order_items`, RLS por tenant + RPCs tenant-scoped con guard de miembro activo y auditoría). CRUD de salones/mesas en Configuración → "Salones y mesas". Vista de **Salón** (`/salon`): grid de mesas por salón, color por estado (libre/ocupada/cuenta_pedida/bloqueada), capacidad y total vivo; tap libre → abrir + cargar, tap ocupada → ver/editar cuenta, agregar ítems (picker de productos + ítem libre), cancelar o cobrar. **Cobrar mesa** reusa el POS: `/pos?table=<order_id>` carga los ítems al carrito y, al confirmar, `close_dining_table` enlaza la venta, marca el pedido 'cobrada' y libera la mesa (espeja el cobro de turno · H38). Probado por SQL (abrir → cargar → editar/quitar → cobrar con create_sale → cerrar). **Follow-up (NO en este PR):** división de cuenta, mover/unir/transferir mesas, comanda impresa + ruteo (H45), KDS (H46), reservas (H51), propina por mesa.*
+  - [x] Configuración visual de salones/sectores (salón principal, terraza, barra, etc.) — CRUD en Configuración.
+  - [x] Mesas con número/nombre, capacidad, estado y mozo asignado. (posición/forma → follow-up).
+  - [x] Estados de mesa núcleo: libre, ocupada, cuenta pedida, bloqueada. (esperando pedido/en cocina/servida/limpieza/reservada → con KDS/reservas).
+  - [x] Apertura de mesa, cargar pedido y cerrar mesa (cobro). (mover/unir/transferir → follow-up).
+  - [ ] División de cuenta por ítem, por comensal, por porcentaje o por monto. — *Follow-up (no en este PR).*
+  - [ ] Propina sugerida y propina libre. — *Base de propina en H39; propina por mesa → follow-up.*
+  - [ ] *Criterio:* un mozo abre mesa 12, carga pedido, envía comanda, divide la cuenta en dos pagos y libera la mesa. — *Abrir/cargar/cobrar/liberar OK; comanda (H45) y división → follow-up.*
 
 - [ ] **H45 — Comandas impresas y ruteo por estación.**
   - [ ] Comanda antes del pago para restaurante/cafetería cuando corresponda.

@@ -1,0 +1,136 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import {
+  areasApi,
+  tablesApi,
+  tableOrdersApi,
+  type AreaInput,
+  type TableInput,
+  type TableStatus,
+  type AddItemInput,
+} from "./api";
+
+// ── Modo gastronómico (H43): pos_settings.dining_enabled ───────────────────────
+// Lee el toggle del tenant. Gatea el nav del POS (Salón) y la gestión de salones.
+// La columna no está en los tipos generados (no se regeneran): select + cast.
+export function useDiningEnabled() {
+  return useQuery({
+    queryKey: ["dining", "enabled"],
+    queryFn: async (): Promise<boolean> => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("pos_settings")
+        .select("dining_enabled")
+        .maybeSingle();
+      return Boolean((data as { dining_enabled?: boolean } | null)?.dining_enabled);
+    },
+    staleTime: 60_000,
+  });
+}
+
+// ── Salones ────────────────────────────────────────────────────────────────────
+
+export function useDiningAreas() {
+  return useQuery({ queryKey: ["dining", "areas"], queryFn: () => areasApi.list() });
+}
+
+export function useAreaMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["dining", "areas"] });
+  return {
+    create: useMutation({ mutationFn: (i: AreaInput) => areasApi.create(i), onSuccess: inv }),
+    update: useMutation({
+      mutationFn: (v: { id: string; patch: Partial<AreaInput> }) => areasApi.update(v.id, v.patch),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => areasApi.softDelete(id), onSuccess: inv }),
+  };
+}
+
+// ── Mesas ──────────────────────────────────────────────────────────────────────
+
+export function useDiningTables() {
+  return useQuery({ queryKey: ["dining", "tables"], queryFn: () => tablesApi.list() });
+}
+
+export function useTableMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["dining", "tables"] });
+  return {
+    create: useMutation({ mutationFn: (i: TableInput) => tablesApi.create(i), onSuccess: inv }),
+    update: useMutation({
+      mutationFn: (v: { id: string; patch: Partial<TableInput> }) => tablesApi.update(v.id, v.patch),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => tablesApi.softDelete(id), onSuccess: inv }),
+    setStatus: useMutation({
+      mutationFn: (v: { id: string; status: TableStatus }) => tablesApi.setStatus(v.id, v.status),
+      onSuccess: inv,
+    }),
+  };
+}
+
+// ── Totales acumulados de los pedidos abiertos (grid de Salón) ─────────────────
+export function useOpenTableTotals() {
+  return useQuery({
+    queryKey: ["dining", "open-totals"],
+    queryFn: () => tableOrdersApi.openTotals(),
+    // Refresca seguido: el grid muestra el total vivo de cada mesa.
+    refetchInterval: 15_000,
+  });
+}
+
+// ── Pedido de mesa (ítems) ──────────────────────────────────────────────────────
+
+export function useTableOrderItems(orderId: string | null) {
+  return useQuery({
+    queryKey: ["dining", "order-items", orderId],
+    enabled: Boolean(orderId),
+    queryFn: () => tableOrdersApi.itemsByOrder(orderId!),
+  });
+}
+
+export function useTableOrder(orderId: string | null) {
+  return useQuery({
+    queryKey: ["dining", "order", orderId],
+    enabled: Boolean(orderId),
+    queryFn: () => tableOrdersApi.getById(orderId!),
+  });
+}
+
+export function useTableOrderMutations() {
+  const qc = useQueryClient();
+  // Tras cualquier cambio refrescá tiles (estado/mozo), totales y la cuenta.
+  const inv = () => {
+    qc.invalidateQueries({ queryKey: ["dining", "tables"] });
+    qc.invalidateQueries({ queryKey: ["dining", "open-totals"] });
+    qc.invalidateQueries({ queryKey: ["dining", "order-items"] });
+    qc.invalidateQueries({ queryKey: ["dining", "order"] });
+  };
+  return {
+    open: useMutation({
+      mutationFn: (v: { tableId: string; waiterUserId?: string | null }) =>
+        tableOrdersApi.open(v.tableId, v.waiterUserId),
+      onSuccess: inv,
+    }),
+    addItem: useMutation({
+      mutationFn: (i: AddItemInput) => tableOrdersApi.addItem(i),
+      onSuccess: inv,
+    }),
+    setItemQty: useMutation({
+      mutationFn: (v: { itemId: string; qty: number }) =>
+        tableOrdersApi.setItemQty(v.itemId, v.qty),
+      onSuccess: inv,
+    }),
+    removeItem: useMutation({
+      mutationFn: (itemId: string) => tableOrdersApi.removeItem(itemId),
+      onSuccess: inv,
+    }),
+    cancel: useMutation({
+      mutationFn: (orderId: string) => tableOrdersApi.cancel(orderId),
+      onSuccess: inv,
+    }),
+  };
+}

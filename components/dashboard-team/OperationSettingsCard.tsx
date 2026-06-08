@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   CreditCard,
   Banknote,
+  Utensils,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -61,6 +62,7 @@ type Settings = {
   require_card_voucher: boolean;
   allow_free_sale: boolean;
   staff_sees_own_only: boolean;
+  dining_enabled: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -142,6 +144,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           require_card_voucher: false,
           allow_free_sale: true,
           staff_sees_own_only: false,
+          dining_enabled: false,
         }
       );
     },
@@ -169,6 +172,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [requireCardVoucher, setRequireCardVoucher] = useState(false);
   const [allowFreeSale, setAllowFreeSale] = useState(true);
   const [staffSeesOwnOnly, setStaffSeesOwnOnly] = useState(false);
+  const [diningEnabled, setDiningEnabled] = useState(false);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -202,6 +206,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setRequireCardVoucher(settings.require_card_voucher ?? false);
     setAllowFreeSale(settings.allow_free_sale ?? true);
     setStaffSeesOwnOnly(settings.staff_sees_own_only ?? false);
+    setDiningEnabled(settings.dining_enabled ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -237,6 +242,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           require_card_voucher: requireCardVoucher,
           allow_free_sale: allowFreeSale,
           staff_sees_own_only: staffSeesOwnOnly,
+          dining_enabled: diningEnabled,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -256,6 +262,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       // Las flechas de precio vs catálogo leen el toggle: refrescá para que el
       // cambio (activar/desactivar) impacte de inmediato en Productos/Listas.
       qc.invalidateQueries({ queryKey: ["catalog", "hint-setting"] });
+      // Modo gastronómico (H43): el nav del POS y la vista de Salón leen el flag.
+      qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -287,6 +295,33 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       {/* ===================== Vista: OPERACIÓN Y PRODUCTOS ===================== */}
       {view === "operacion" && (
         <>
+          <GroupHeading icon={Utensils}>Modo de operación</GroupHeading>
+
+      {/* Modo gastronómico (F13 · H43): habilita salones y mesas (vista de Salón).
+          ADITIVO: con off, el POS mostrador queda idéntico. Con on, aparece la
+          sección "Salón" en el menú y "Salones y mesas" en Configuración. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Utensils size={16} className="text-ninja-flameSoft" /> Modo gastronómico (mesas)
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Habilita la atención por mesas: salones, estado de cada mesa, pedido
+              por mesa y cobro desde la cuenta. Aparece la sección{" "}
+              <span className="font-medium text-foreground">Salón</span> en el menú
+              y la gestión de salones en Configuración. El POS de mostrador no
+              cambia.
+            </p>
+          </div>
+          <Switch
+            checked={diningEnabled}
+            onCheckedChange={setDiningEnabled}
+            label="Activar modo gastronómico (salones y mesas)"
+          />
+        </CardContent>
+      </Card>
+
           <GroupHeading icon={Percent}>Reglas de cobro</GroupHeading>
 
       {/* Descuento máximo por rol */}

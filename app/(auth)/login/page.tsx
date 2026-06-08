@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Clock } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createClient } from "@/lib/supabase/client";
@@ -23,11 +24,14 @@ import { useToast } from "@/components/ui/Toast";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams?: { next?: string };
+  searchParams?: { next?: string; reason?: string };
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Aviso de cierre de sesión por inactividad (?reason=inactivity), seteado por
+  // el InactivityGuard del shell.
+  const inactivityLogout = searchParams?.reason === "inactivity";
   // Tras un fallo de credenciales no sabemos el proveedor (pre-auth no lo
   // expone por email), así que mostramos siempre el hint de Google.
   const [showGoogleHint, setShowGoogleHint] = useState(false);
@@ -98,6 +102,15 @@ export default function LoginPage({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {inactivityLogout && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+            <Clock size={16} className="mt-0.5 shrink-0" />
+            <span>
+              Tu sesión se cerró por inactividad. Volvé a iniciar sesión para
+              continuar.
+            </span>
+          </div>
+        )}
         <GoogleButton
           label="Ingresar con Google"
           onClick={onGoogle}

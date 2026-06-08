@@ -19,6 +19,7 @@ import {
   IdCard,
   ScanLine,
   TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -54,6 +55,7 @@ type Settings = {
   plu_enabled: boolean;
   plu_mode: PluMode;
   show_catalog_price_hints: boolean;
+  offer_warranty: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -131,6 +133,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           plu_enabled: false,
           plu_mode: "random",
           show_catalog_price_hints: true,
+          offer_warranty: true,
         }
       );
     },
@@ -154,6 +157,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [pluEnabled, setPluEnabled] = useState(false);
   const [pluMode, setPluMode] = useState<PluMode>("random");
   const [showCatalogPriceHints, setShowCatalogPriceHints] = useState(true);
+  const [offerWarranty, setOfferWarranty] = useState(true);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -183,6 +187,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setPluEnabled(settings.plu_enabled ?? false);
     setPluMode(settings.plu_mode === "incremental" ? "incremental" : "random");
     setShowCatalogPriceHints(settings.show_catalog_price_hints ?? true);
+    setOfferWarranty(settings.offer_warranty ?? true);
   }, [settings]);
 
   const save = useMutation({
@@ -214,6 +219,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           plu_enabled: pluEnabled,
           plu_mode: pluMode,
           show_catalog_price_hints: showCatalogPriceHints,
+          offer_warranty: offerWarranty,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -222,6 +228,9 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     onSuccess: () => {
       toast({ title: "Guardado", variant: "success" });
       qc.invalidateQueries({ queryKey: ["pos-settings", tenantId] });
+      // El POS lee los settings operativos (incl. la oferta de garantía H28):
+      // refrescá para que el toggle impacte de inmediato al cobrar.
+      qc.invalidateQueries({ queryKey: ["pos", "settings"] });
       // Refresca el tamaño de página que usan los listados paginados.
       qc.invalidateQueries({ queryKey: ["pos", "page-size"] });
       // El formulario de cliente lee qué campos son obligatorios (incl. el
@@ -357,6 +366,32 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
               </span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Oferta contextual de garantía extendida (H28): cuando el carrito tiene
+          un producto con garantía de fábrica declarada, el POS ofrece solo los
+          planes de garantía extendida aplicables (descartable, en un click). La
+          prima entra como línea de la venta. Los planes se configuran en
+          Configuración → Garantías. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <ShieldCheck size={16} className="text-ninja-flameSoft" /> Ofrecer garantía extendida al cobrar
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cuando hay un producto con garantía de fábrica en el carrito, el POS
+              sugiere automáticamente los planes de garantía extendida para sumarlos
+              en un click. El cajero puede descartarlo. Los planes se cargan en
+              Configuración → Garantías.
+            </p>
+          </div>
+          <Switch
+            checked={offerWarranty}
+            onCheckedChange={setOfferWarranty}
+            label="Ofrecer garantía extendida automáticamente al cobrar productos con garantía"
+          />
         </CardContent>
       </Card>
 

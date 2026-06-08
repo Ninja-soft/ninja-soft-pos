@@ -14,6 +14,7 @@ export interface CartLine {
   serial?: string | null; // N° de serie (producto serializado)
   variantId?: string | null; // variante (producto con has_variants)
   variantLabel?: string; // ej. "M / Rojo" para mostrar en el carrito
+  warrantyMonths?: number; // garantía de fábrica del producto (H28): > 0 ⇒ elegible para garantía extendida
 }
 
 interface CartState {
@@ -25,6 +26,7 @@ interface CartState {
     sku: string | null;
     price: number;
     unit?: string;
+    warrantyMonths?: number;
   }) => void;
   addVariant: (p: {
     id: string;
@@ -33,13 +35,14 @@ interface CartState {
     price: number;
     variantId: string;
     variantLabel: string;
+    warrantyMonths?: number;
   }) => void;
   addWeighed: (
     p: { id: string; name: string; sku: string | null; price: number },
     weight: number,
   ) => void;
   addSerialized: (
-    p: { id: string; name: string; sku: string | null; price: number },
+    p: { id: string; name: string; sku: string | null; price: number; warrantyMonths?: number },
     serial: string,
   ) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
@@ -79,6 +82,7 @@ export const useCartStore = create<CartState>((set) => ({
             quantity: 1,
             discount: 0,
             unit: p.unit ?? "un",
+            warrantyMonths: p.warrantyMonths ?? 0,
           },
         ],
       };
@@ -111,6 +115,7 @@ export const useCartStore = create<CartState>((set) => ({
             unit: "un",
             variantId: p.variantId,
             variantLabel: p.variantLabel,
+            warrantyMonths: p.warrantyMonths ?? 0,
           },
         ],
       };
@@ -159,6 +164,7 @@ export const useCartStore = create<CartState>((set) => ({
           discount: 0,
           unit: "un",
           serial: serial.trim(),
+          warrantyMonths: p.warrantyMonths ?? 0,
         },
       ],
     })),

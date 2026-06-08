@@ -495,16 +495,16 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Configuración de voucher obligatorio para tarjeta: lote, cupón, autorización.
   - [ ] *Criterio:* el cajero elige "Visa 3 cuotas +8%" y el ticket suma el recargo automáticamente.
 
-- [~] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + planes de garantía extendida + oferta al cobrar (prima como línea) + reporte de garantías/comisiones. Falta oferta contextual automática (al detectar producto con garantía).*
+- [x] **H28 — Garantías extendidas.** — *Garantía de fábrica por producto + planes de garantía extendida + oferta al cobrar (prima como línea) + **oferta contextual automática** + reporte de garantías/comisiones. (Completado 2026-06-08, PR #264.)*
   - [x] Campo "garantía de fábrica" por producto (`warranty_months`).
   - [x] Planes de garantía extendida por tenant: meses, prima fija **o % del precio**, comisión y descripción (`warranty_plans`). Configurable completo en **Configuración → Garantías** (y acceso rápido en Productos → Garantías).
   - [x] Oferta al cobrar: en el POS se elige un plan de garantía y la prima entra como línea de la venta.
-  - [ ] Oferta contextual automática (al cobrar un producto con garantía declarada) y reportes.
-  - [ ] Planes de garantía extendida por tenant/categoría/producto: meses adicionales, prima (% del precio) y comisión del vendedor.
-  - [ ] Oferta contextual al cobrar productos con garantía declarada.
-  - [ ] Prima agregada al ticket como línea/servicio asociado.
+  - [x] **Oferta contextual automática (al cobrar un producto con garantía declarada).** — *`WarrantyOfferCard` en el carrito del POS: detecta productos con `warranty_months > 0` (la garantía viaja a la línea del carrito) y ofrece los planes activos del tenant con su prima; al elegir uno, **pre-selecciona** la garantía y la prima entra como línea vía el mecanismo existente (PaymentModal + extras `kind:'warranty'`, sin duplicar). Descartable, no frena al cajero; si hay varios elegibles ofrece sobre el de mayor importe. Flag `pos_settings.offer_warranty` (Configuración → Operación) para des/activar. PR #264.*
+  - [x] Planes de garantía extendida por tenant: meses adicionales, prima (% del precio) y comisión del vendedor. — *Por tenant (no hay scoping por categoría/producto; aplicabilidad honesta: `warranty_months > 0` habilita los planes del tenant).*
+  - [x] Oferta contextual al cobrar productos con garantía declarada. — *Ver `WarrantyOfferCard` arriba (PR #264).*
+  - [x] Prima agregada al ticket como línea/servicio asociado. — *Entra como ítem "Garantía &lt;plan&gt;" en la venta (reusa el flujo de extras del cobro).*
   - [x] Reporte de garantías vendidas y comisiones (Reportes → "Garantías y comisiones": agrupa las líneas "Garantía …" por plan, cruza con `warranty_plans.commission_pct` y muestra cantidad/total/comisión; incluido en el export XLSX).
-  - [ ] *Criterio:* al cobrar un producto con garantía de fábrica, el POS ofrece planes aplicables y registra prima/comisión.
+  - [x] *Criterio:* al cobrar un producto con garantía de fábrica, el POS ofrece planes aplicables y registra prima/comisión. — *Cumplido (PR #264): la oferta contextual aparece sola, la prima entra como línea y el reporte Garantías y comisiones la agrupa por plan con su comisión.*
 
 - [~] **H29 — Devoluciones, cambios y vales.** — *Devolución parcial hecha (RPC `return_sale` + `ReturnModal` en /ventas) + **rediseño premium por pasos** (2026-06-08, PRs #221/#243): política, motivos con destino de stock, **vales con código y validez**. Faltan: redención del vale en el POS y "diferencia a cobrar" (cambio).*
   - [x] Política de devolución: el cajero elige caso a caso reintegro en efectivo o vale. — *Rediseñada en flujo por pasos (PR #221; migración `returns_overhaul`).*

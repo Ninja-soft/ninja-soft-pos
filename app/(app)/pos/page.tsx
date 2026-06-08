@@ -26,6 +26,7 @@ import {
   useTopProducts,
   useProductSerials,
   useCategories,
+  useWarrantyPlans,
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import {
@@ -54,6 +55,7 @@ import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
+import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { productsApi, variantLabel } from "@/modules/products/api";
 import { CategoryNav, subtreeIds } from "@/components/pos/CategoryNav";
 import { useMostradorPricing } from "@/modules/prices/hooks";
@@ -81,6 +83,9 @@ export default function PosPage() {
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
   const [paymentModal, setPaymentModal] = useState(false);
+  // Plan de garantía extendida pre-seleccionado por la oferta contextual (H28).
+  // Se pasa a PaymentModal para que entre como línea (mecanismo existente).
+  const [offeredWarrantyId, setOfferedWarrantyId] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
@@ -110,6 +115,7 @@ export default function PosPage() {
     name: string;
     sku: string | null;
     price: number;
+    warrantyMonths?: number;
   } | null>(null);
   const [serialChoice, setSerialChoice] = useState("");
   const [serialOther, setSerialOther] = useState("");
@@ -118,6 +124,7 @@ export default function PosPage() {
     name: string;
     sku: string | null;
     price: number;
+    warrantyMonths?: number;
   } | null>(null);
   const { data: serialList } = useProductSerials(
     serialProduct?.id ?? null,
@@ -173,6 +180,10 @@ export default function PosPage() {
   const { data: modo } = useProviderMethod("modo");
   const modoReady = Boolean(modo?.enabled && modo?.connected && modoFeature !== false);
   const { data: posSettings } = usePosSettings();
+  // Oferta contextual de garantía (H28): planes activos del tenant + flag para
+  // des/activar la oferta automática (Configuración → Operación). Default on.
+  const { data: warrantyPlans } = useWarrantyPlans(true);
+  const offerWarranty = posSettings?.offerWarranty ?? true;
   const role = myTenant?.role ?? "cashier";
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
   const rounding = posSettings?.rounding ?? 0;
@@ -266,6 +277,8 @@ export default function PosPage() {
 
   // Click en un producto: serializado abre picker de serial; por peso (kg) abre
   // modal de peso; si no, lo agrega directo (precio resuelto por la lista mostrador).
+  // `warranty_months` (garantía de fábrica) viaja a la línea para la oferta
+  // contextual de garantía extendida (H28).
   function pickProduct(p: {
     id: string;
     name: string;
@@ -274,11 +287,24 @@ export default function PosPage() {
     unit: string;
     is_serialized?: boolean;
     has_variants?: boolean;
+    warranty_months?: number;
   }) {
     if (p.has_variants) {
-      setVariantProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setVariantProduct({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: p.price,
+        warrantyMonths: p.warranty_months ?? 0,
+      });
     } else if (p.is_serialized) {
-      setSerialProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price });
+      setSerialProduct({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: p.price,
+        warrantyMonths: p.warranty_months ?? 0,
+      });
       setSerialChoice("");
       setSerialOther("");
     } else if (p.unit === "kg") {
@@ -290,7 +316,11 @@ export default function PosPage() {
       });
       setWeighGrams("");
     } else {
-      addProduct({ ...p, price: priceFor(p.id, null, p.price) });
+      addProduct({
+        ...p,
+        price: priceFor(p.id, null, p.price),
+        warrantyMonths: p.warranty_months ?? 0,
+      });
     }
   }
 
@@ -338,6 +368,13 @@ export default function PosPage() {
     setFreeName("");
     setFreeOpen(false);
   }
+
+  // Si ya no queda un producto elegible en el carrito (se quitó el ítem con
+  // garantía), descartá la garantía pre-seleccionada para que no se cobre sola.
+  const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
+  useEffect(() => {
+    if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
+  }, [hasEligibleWarranty, offeredWarrantyId]);
 
   const subtotal = cartSubtotal(lines);
   const rawTotal = Math.max(0, subtotal - discountTotal);
@@ -410,6 +447,7 @@ export default function PosPage() {
             price: priceFor(p.id, variant.id, variant.price_override ?? p.price),
             variantId: variant.id,
             variantLabel: variantLabel(variant),
+            warrantyMonths: p.warranty_months ?? 0,
           });
         } else {
           pickProduct({
@@ -420,6 +458,7 @@ export default function PosPage() {
             unit: p.unit,
             is_serialized: p.is_serialized,
             has_variants: p.has_variants,
+            warranty_months: p.warranty_months,
           });
         }
       } else {
@@ -533,6 +572,7 @@ export default function PosPage() {
       setPaymentModal(false);
       clear();
       setCustomer(null);
+      setOfferedWarrantyId("");
       // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
       flashPaidScreen(change ?? 0);
       toast({
@@ -696,6 +736,7 @@ export default function PosPage() {
                         unit: p.unit,
                         is_serialized: p.is_serialized,
                         has_variants: p.has_variants,
+                        warranty_months: p.warranty_months,
                       })
                     }
                     className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
@@ -740,6 +781,7 @@ export default function PosPage() {
                     unit: p.unit,
                     is_serialized: p.is_serialized,
                     has_variants: p.has_variants,
+                    warranty_months: p.warranty_months,
                   })
                 }
                 className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
@@ -844,6 +886,17 @@ export default function PosPage() {
           </div>
 
           <div className="mt-3 space-y-2 border-t border-border pt-3">
+            {/* Oferta contextual de garantía extendida (H28): aparece cuando hay
+                un producto con garantía de fábrica en el carrito. Descartable. */}
+            {offerWarranty && (
+              <WarrantyOfferCard
+                lines={lines}
+                plans={warrantyPlans ?? []}
+                base={rawTotal}
+                selectedWarrantyId={offeredWarrantyId}
+                onSelect={setOfferedWarrantyId}
+              />
+            )}
             {/* Cliente de la venta */}
             <button
               type="button"
@@ -1075,6 +1128,7 @@ export default function PosPage() {
         loading={sale.isPending}
         storeCreditBalance={scBalance ?? 0}
         hasCustomer={customer !== null}
+        initialWarrantyId={offeredWarrantyId}
       />
       <QrCheckoutModal
         open={qrOpen}
@@ -1139,6 +1193,7 @@ export default function PosPage() {
             price: priceFor(variantProduct.id, variantId, price),
             variantId,
             variantLabel: label,
+            warrantyMonths: variantProduct.warrantyMonths ?? 0,
           });
           setVariantProduct(null);
         }}

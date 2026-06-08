@@ -36,6 +36,7 @@ export function QrCheckoutModal({
   onApproved,
   provider = "mercadopago",
   providerName = "Mercado Pago",
+  onQrState,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -47,6 +48,10 @@ export function QrCheckoutModal({
   ) => void;
   provider?: "mercadopago" | "mobbex" | "modo";
   providerName?: string;
+  // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
+  // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
+  // con null cuando ya no hay QR activo (se cerró o cambió de fase).
+  onQrState?: (qr: { initPoint: string; amount: number; providerName: string } | null) => void;
 }) {
   // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
@@ -191,6 +196,20 @@ export function QrCheckoutModal({
       setPhase("rejected");
     }
   }, [status, onApproved, intentId, amount]);
+
+  // Espeja el QR de cobro activo a la pantalla del cliente (H25): cuando el QR
+  // está listo (waiting), publica init_point + monto; en cualquier otro caso
+  // (cerrado / aprobado / rechazado / sin link) limpia. El callback es estable
+  // de parte del POS (no se incluye en deps para evitar re-disparos).
+  useEffect(() => {
+    if (!onQrState) return;
+    if (open && phase === "waiting" && initPoint) {
+      onQrState({ initPoint, amount, providerName });
+    } else {
+      onQrState(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, phase, initPoint, amount, providerName]);
 
   const qrSrc = initPoint
     ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`

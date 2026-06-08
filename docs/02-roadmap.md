@@ -456,19 +456,19 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [ ] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza.
   - [x] *Criterio (impresión):* el negocio selecciona productos e imprime un lote de etiquetas con nombre/precio/código sin tocar código. *(Balanza queda pendiente.)*
 
-- [ ] **H25 — Doble pantalla / display cliente.**
-  - [ ] Ventana secundaria del navegador: el cajero abre una pantalla cliente en otro monitor (`/customer-display`), sincronizada por BroadcastChannel/local storage o Realtime.
-  - [ ] Display cliente dedicado: tablet/celular en la misma caja mostrando carrito, total, promociones y QR de pago.
+- [~] **H25 — Doble pantalla / display cliente.** — *Pantalla web del cliente sincronizada en tiempo real hecha (PR #260). Falta solo el modo hardware (display serial/USB de 2 líneas) y el branding por sucursal (multi-store → F4).*
+  - [x] Ventana secundaria del navegador: el cajero abre una pantalla cliente en otro monitor (`/customer-display`), sincronizada por BroadcastChannel/local storage o Realtime. — *PR #260: ruta `app/(display)/customer-display`, hook `lib/pos/customerDisplay.ts` (`BroadcastChannel('ninja-customer-display')` + respaldo localStorage `storage`), botón “Pantalla cliente” en el POS (`window.open`).*
+  - [x] Display cliente dedicado: tablet/celular en la misma caja mostrando carrito, total, promociones y QR de pago. — *Misma ruta `/customer-display`: se abre en la tablet de la caja (misma sesión/origen) y se sincroniza por el broadcast.*
   - [ ] Modo hardware futuro: integración con display serial/USB de dos líneas para importes básicos.
-  - [ ] Nombre del negocio y caja en pantalla cliente.
-  - [ ] Ítems del carrito en vivo.
-  - [ ] Subtotal, descuentos, total y vuelto.
-  - [ ] QR de Mercado Pago/MODO cuando aplique.
-  - [ ] Mensaje final: “Pago recibido”, “Gracias”, promoción o invitación a fidelización.
-  - [ ] Configuración por tenant: tema, logo, mostrar/ocultar precios unitarios, banners, idle screen, idioma.
-  - [ ] Seguridad: nunca mostrar datos sensibles del cajero, panel interno, tokens ni información privada de otros clientes.
-  - [ ] Limitación técnica documentada: el navegador no puede controlar monitores como una app nativa; el flujo robusto es abrir una URL de display cliente y mantenerla sincronizada.
-  - [ ] *Criterio:* el cajero cobra en el POS y el segundo monitor/tablet muestra carrito, QR y total en tiempo real sin recargar.
+  - [x] Nombre del negocio y caja en pantalla cliente. — *PR #260: logo + nombre (de `tenant_branding`) y nombre de caja (`cash_registers.name`) en el encabezado.*
+  - [x] Ítems del carrito en vivo. — *PR #260: el POS publica el carrito (Zustand) en cada cambio; la pantalla lo renderiza sin recargar.*
+  - [x] Subtotal, descuentos, total y vuelto. — *PR #260: totales grandes a distancia; el vuelto (efectivo) se muestra en la pantalla “Pago recibido”.*
+  - [x] QR de Mercado Pago/MODO cuando aplique. — *PR #260: `QrCheckoutModal` reporta `init_point` + monto vía `onQrState`; la pantalla muestra el QR + importe (MP/MODO/Mobbex).*
+  - [x] Mensaje final: “Pago recibido”, “Gracias”, promoción o invitación a fidelización. — *PR #260: pantalla “Pago recibido ✓” + mensaje de agradecimiento configurable, luego vuelve a idle.*
+  - [x] Configuración por tenant: ~~tema~~, logo, mostrar/ocultar precios unitarios, ~~banners~~, idle screen, ~~idioma~~. — *PR #260: `pos_settings.display_show_unit_prices` + `display_welcome_message` (idle) + `display_thanks_message`; logo/acento de `tenant_branding`. Sección “Pantalla del cliente” en Configuración. (Tema/banners/idioma → fuera de alcance de este PR.)*
+  - [x] Seguridad: nunca mostrar datos sensibles del cajero, panel interno, tokens ni información privada de otros clientes. — *PR #260: la ruta exige sesión del tenant (layout `(display)` redirige a /login); el payload solo lleva la venta en curso; el canal es same-origin/same-device; RLS de `tenant_branding`/`pos_settings` ya vigente.*
+  - [x] Limitación técnica documentada: el navegador no puede controlar monitores como una app nativa; el flujo robusto es abrir una URL de display cliente y mantenerla sincronizada. — *PR #260: documentado en `lib/pos/customerDisplay.ts` y en la sección de Configuración (abrir la ventana, arrastrarla al 2do monitor, F11 para fullscreen).*
+  - [x] *Criterio:* el cajero cobra en el POS y el segundo monitor/tablet muestra carrito, QR y total en tiempo real sin recargar. — *PR #260.*
 
 - [ ] **H26 — Centro de diagnóstico de hardware.**
   - [ ] Pantalla `/configuracion/hardware` con estado de impresoras, scanners, pantalla cliente, cajón y balanza.

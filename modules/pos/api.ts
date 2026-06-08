@@ -353,6 +353,8 @@ export const posApi = {
   },
 
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
+  // Incluye los settings de la pantalla del cliente (H25): mostrar precios
+  // unitarios y mensajes de idle/agradecimiento.
   posSettings: async (): Promise<{
     maxDiscount: Record<string, number>;
     rounding: number;
@@ -361,23 +363,27 @@ export const posApi = {
     scannerSuffix: string;
     scannerBeep: boolean;
     scannerDupMs: number;
+    displayShowUnitPrices: boolean;
+    displayWelcomeMessage: string | null;
+    displayThanksMessage: string | null;
   } | null> => {
     const supabase = createClient();
-    const { data } = await supabase
-      .from("pos_settings")
-      .select(
-        "max_discount, rounding_multiple, require_customer, scanner_prefix, scanner_suffix, scanner_beep, scanner_dup_ms",
-      )
-      .maybeSingle();
-    if (!data) return null;
+    // Las columnas display_* (H25) aún no están en los tipos generados (no se
+    // regeneran): select("*") + cast del payload.
+    const { data: raw } = await supabase.from("pos_settings").select("*").maybeSingle();
+    if (!raw) return null;
+    const data = raw as Record<string, unknown>;
     return {
       maxDiscount: (data.max_discount as Record<string, number>) ?? {},
       rounding: Number(data.rounding_multiple) || 0,
       requireCustomer: Boolean(data.require_customer),
-      scannerPrefix: data.scanner_prefix ?? "",
-      scannerSuffix: data.scanner_suffix ?? "",
-      scannerBeep: data.scanner_beep ?? true,
+      scannerPrefix: (data.scanner_prefix as string) ?? "",
+      scannerSuffix: (data.scanner_suffix as string) ?? "",
+      scannerBeep: (data.scanner_beep as boolean) ?? true,
       scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
+      displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
+      displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
+      displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
     };
   },
 

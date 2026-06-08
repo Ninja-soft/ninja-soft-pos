@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
   Lock,
   Minus,
+  MonitorSmartphone,
   Plus,
   ScanBarcode,
   Search,
@@ -59,6 +60,13 @@ import {
 import { TicketModal } from "@/components/sales/TicketModal";
 import { VoucherRedeemModal } from "@/components/pos/VoucherRedeemModal";
 import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
+import { useTicketBranding } from "@/modules/tickets/hooks";
+import {
+  publishDisplayState,
+  type DisplayBranding,
+  type DisplayQr,
+  type DisplayState,
+} from "@/lib/pos/customerDisplay";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 export default function PosPage() {
@@ -172,6 +180,32 @@ export default function PosPage() {
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
 
+  // ----- Pantalla del cliente / doble pantalla (F10 · H25) -----
+  // Branding del negocio (logo + nombre + acento) para la pantalla del cliente.
+  const { data: dispBranding } = useTicketBranding();
+  // QR de cobro activo (lo reporta el QrCheckoutModal abierto). Cuando hay uno, la
+  // pantalla del cliente muestra el QR + monto en vez de los totales.
+  const [displayQr, setDisplayQr] = useState<DisplayQr | null>(null);
+  const handleQrState = useCallback((qr: DisplayQr | null) => setDisplayQr(qr), []);
+  // Snapshot de la última venta cobrada → pantalla "Pago recibido" + vuelto.
+  // Mientras está seteado, la pantalla del cliente muestra el agradecimiento;
+  // un timeout lo limpia y la pantalla vuelve a idle.
+  const [paidView, setPaidView] = useState<{ change: number } | null>(null);
+  const paidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const displayBranding = useMemo<DisplayBranding>(
+    () => ({
+      businessName: dispBranding?.legal_name ?? null,
+      logoUrl: dispBranding?.logo_url ?? null,
+      accent: dispBranding?.accent ?? null,
+      registerLabel: register?.name ?? null,
+      welcomeMessage: posSettings?.displayWelcomeMessage ?? null,
+      thanksMessage: posSettings?.displayThanksMessage ?? null,
+      showUnitPrices: posSettings?.displayShowUnitPrices ?? true,
+    }),
+    [dispBranding, register?.name, posSettings],
+  );
+
   const lines = useCartStore((s) => s.lines);
   const discountTotal = useCartStore((s) => s.discountTotal);
   const addProduct = useCartStore((s) => s.addProduct);
@@ -281,6 +315,39 @@ export default function PosPage() {
   const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
   const hasShift = Boolean(shift);
 
+  // Publica el estado a la pantalla del cliente (H25) en cada cambio relevante.
+  // Prioridad de fase: pago recibido (paidView) > cobro QR activo (displayQr) >
+  // carrito con ítems > idle. El payload solo lleva datos de la venta en curso.
+  useEffect(() => {
+    const phase: DisplayState["phase"] = paidView
+      ? "paid"
+      : displayQr
+        ? "paying"
+        : lines.length > 0
+          ? "cart"
+          : "idle";
+    publishDisplayState({
+      v: 1,
+      phase,
+      branding: displayBranding,
+      lines: lines.map((l) => ({
+        lineId: l.lineId,
+        name: l.name,
+        variantLabel: l.variantLabel ?? null,
+        unit: l.unit,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        lineTotal: lineSubtotal(l),
+      })),
+      subtotal,
+      discountTotal,
+      total,
+      change: paidView?.change ?? 0,
+      qr: displayQr,
+      at: Date.now(),
+    });
+  }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, paidView]);
+
   // Tope de descuento por rol (H30): no se puede pasar del máximo del rol.
   function handleDiscountChange(value: number) {
     const max = (subtotal * maxDiscPct) / 100;
@@ -380,9 +447,21 @@ export default function PosPage() {
     }
   }
 
+  // Muestra "Pago recibido ✓ / ¡Gracias!" (+ vuelto) en la pantalla del cliente
+  // unos segundos y luego vuelve a idle (H25). Cancela cualquier timer previo.
+  function flashPaidScreen(change: number) {
+    if (paidTimer.current) clearTimeout(paidTimer.current);
+    setPaidView({ change: Math.max(0, change || 0) });
+    paidTimer.current = setTimeout(() => setPaidView(null), 6000);
+  }
+  useEffect(() => () => {
+    if (paidTimer.current) clearTimeout(paidTimer.current);
+  }, []);
+
   async function handleSale(
     payments: { method: string; amount: number; reference?: string }[],
     extras?: { name: string; amount: number; kind?: "warranty" | "surcharge" }[],
+    change?: number,
   ) {
     try {
       const items = lines.map((l) => ({
@@ -423,6 +502,8 @@ export default function PosPage() {
       setPaymentModal(false);
       clear();
       setCustomer(null);
+      // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
+      flashPaidScreen(change ?? 0);
       toast({
         title: `Venta #${res.number} registrada`,
         description: `Total ${formatCurrency(res.total)}`,
@@ -463,6 +544,15 @@ export default function PosPage() {
     return true;
   }
 
+  // Abre la pantalla del cliente (H25) en una ventana nueva, lista para arrastrar
+  // al 2do monitor. Limitación del navegador: no se puede posicionar la ventana
+  // en otro monitor ni forzar fullscreen sin gesto del usuario; el cajero la
+  // mueve y la pone en pantalla completa (F11). La ventana se sincroniza sola
+  // (BroadcastChannel/localStorage). Se publica el estado actual al abrir.
+  function openCustomerDisplay() {
+    window.open("/customer-display", "ninja-customer-display", "noopener");
+  }
+
   return (
     <>
       <div className="mx-auto max-w-7xl px-6 py-6">
@@ -472,6 +562,14 @@ export default function PosPage() {
             <InfoHint section="pos" />
           </h1>
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openCustomerDisplay}
+              title="Abrir la pantalla del cliente en otra ventana (arrastrala al 2do monitor)"
+            >
+              <MonitorSmartphone size={16} /> Pantalla cliente
+            </Button>
             <span
               className={
                 hasShift
@@ -939,6 +1037,7 @@ export default function PosPage() {
         open={qrOpen}
         onOpenChange={setQrOpen}
         base={total}
+        onQrState={handleQrState}
         onApproved={(reference, amount, extras) => {
           setQrOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
@@ -950,6 +1049,7 @@ export default function PosPage() {
         base={total}
         provider="mobbex"
         providerName="Mobbex"
+        onQrState={handleQrState}
         onApproved={(reference, amount, extras) => {
           setQrMobbexOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
@@ -961,6 +1061,7 @@ export default function PosPage() {
         base={total}
         provider="modo"
         providerName="MODO"
+        onQrState={handleQrState}
         onApproved={(reference, amount, extras) => {
           setQrModoOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);

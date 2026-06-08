@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   ShoppingCart,
   Sun,
   Tag,
@@ -96,6 +97,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package },
+        { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
     },

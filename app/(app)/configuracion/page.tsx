@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
+import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -23,6 +23,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
+import { ReturnsSettingsCard } from "@/components/dashboard-team/ReturnsSettingsCard";
 import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
 import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
@@ -38,6 +39,7 @@ type Section =
   | "email"
   | "pagos"
   | "operacion"
+  | "devoluciones"
   | "escaner"
   | "precios"
   | "garantias";
@@ -49,6 +51,7 @@ const SECTIONS: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "email", label: "Email", icon: Mail },
   { key: "pagos", label: "Medios de pago", icon: CreditCard },
   { key: "operacion", label: "Operación del POS", icon: SlidersHorizontal },
+  { key: "devoluciones", label: "Devoluciones", icon: RotateCcw },
   { key: "escaner", label: "Escáner", icon: ScanLine },
   { key: "precios", label: "Listas de precios", icon: BadgeDollarSign },
   { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck },
@@ -326,6 +329,9 @@ function ConfiguracionInner() {
 
           {/* Operación del POS (solo owner/manager; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard />}
+
+          {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
+          {section === "devoluciones" && <ReturnsSettingsCard />}
 
           {/* Escáner: perfil del lector + diagnóstico (solo owner; se auto-oculta) */}
           {section === "escaner" && <ScannerCard />}

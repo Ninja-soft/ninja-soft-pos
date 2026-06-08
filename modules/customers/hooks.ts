@@ -84,6 +84,11 @@ export function useCustomerMutations() {
       mutationFn: (input: CustomerOutput) => customersApi.create(input),
       onSuccess: invalidate,
     }),
+    createQuick: useMutation({
+      mutationFn: (input: { name: string; phone?: string | null; email?: string | null }) =>
+        customersApi.createQuick(input),
+      onSuccess: invalidate,
+    }),
     update: useMutation({
       mutationFn: (vars: { id: string; input: CustomerOutput }) =>
         customersApi.update(vars.id, vars.input),

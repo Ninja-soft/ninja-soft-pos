@@ -41,6 +41,7 @@
     "react": "^18.3.1",
     "react-day-picker": "9",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.54.2",
     "react-rnd": "^10.5.3",
     "recharts": "^3.8.1",

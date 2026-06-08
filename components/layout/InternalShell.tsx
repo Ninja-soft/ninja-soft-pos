@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
+import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
@@ -169,7 +170,7 @@ export function InternalShell({
               <Avatar name={name} avatar={me?.avatar_url} size={32} loading={meLoading} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">
-                  {name}
+                  {name === email ? name : capitalizeName(name)}
                 </span>
                 {name !== email && (
                   <span className="block truncate text-xs text-muted-foreground">

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Avatar } from "@/components/ui/Avatar";
-import { resizeToWebp } from "@/lib/utils/image";
+import { AvatarUploader } from "@/components/account/AvatarUploader";
 
 export function ProfileEditModal({
   open,
@@ -20,10 +19,9 @@ export function ProfileEditModal({
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -32,6 +30,7 @@ export function ProfileEditModal({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
       const { data } = await supabase
         .from("users")
         .select("full_name, avatar_url")
@@ -41,30 +40,6 @@ export function ProfileEditModal({
       setAvatarUrl(data?.avatar_url ?? null);
     })();
   }, [open, supabase]);
-
-  async function onPhoto(file: File | undefined) {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("sin sesión");
-      const webp = await resizeToWebp(file, 256, 0.85);
-      const path = `${user.id}/${crypto.randomUUID()}.webp`;
-      const up = await supabase.storage
-        .from("user-avatars")
-        .upload(path, webp, { contentType: "image/webp", upsert: false });
-      if (up.error) throw up.error;
-      const { data: pub } = supabase.storage.from("user-avatars").getPublicUrl(path);
-      setAvatarUrl(pub.publicUrl);
-    } catch {
-      toast({ title: "No se pudo subir la foto", variant: "error" });
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -90,43 +65,23 @@ export function ProfileEditModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Mi perfil">
       <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          <Avatar name={name || "?"} avatar={avatarUrl} size={56} />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-          >
-            {avatarUrl ? "Cambiar foto" : "Subir foto"}
-          </Button>
-          {avatarUrl && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              onClick={() => setAvatarUrl(null)}
-            >
-              Quitar
-            </Button>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => onPhoto(e.target.files?.[0])}
+        {userId && (
+          <AvatarUploader
+            value={avatarUrl}
+            onChange={setAvatarUrl}
+            name={name || "?"}
+            bucket="user-avatars"
+            pathPrefix={userId}
+            size={56}
           />
-        </div>
+        )}
         <Input
           label="Nombre"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending || busy}>
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending ? "Guardando…" : "Guardar"}
           </Button>
         </div>

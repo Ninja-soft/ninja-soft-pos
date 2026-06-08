@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, IdCard, Upload } from "lucide-react";
+import { UserPlus, Pencil, IdCard } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { resizeToWebp } from "@/lib/utils/image";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
@@ -13,6 +12,8 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
 import { Avatar, AVATAR_ICONS, AVATAR_PRESETS } from "@/components/ui/Avatar";
+import { AvatarUploader } from "@/components/account/AvatarUploader";
+import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -55,86 +56,49 @@ function AvatarPicker({
   name: string;
   tenantId: string;
 }) {
-  const supabase = createClient();
-  const { toast } = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
   const isUrl = !!value && /^https?:\/\//.test(value);
 
-  async function onFile(file: File | undefined) {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const webp = await resizeToWebp(file, 256, 0.85);
-      const path = `${tenantId}/members/${crypto.randomUUID()}.webp`;
-      const up = await supabase.storage
-        .from("tenant-assets")
-        .upload(path, webp, { contentType: "image/webp", upsert: false });
-      if (up.error) throw up.error;
-      const { data: pub } = supabase.storage.from("tenant-assets").getPublicUrl(path);
-      onChange(pub.publicUrl);
-    } catch {
-      toast({ title: "No se pudo subir la foto", variant: "error" });
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => onChange(null)}
-        className={cn(
-          "grid h-9 w-9 place-items-center rounded-full ring-2 transition",
-          value === null ? "ring-ninja-flame" : "ring-transparent",
-        )}
-        title="Iniciales"
-      >
-        <Avatar name={name || "?"} size={32} />
-      </button>
-      {AVATAR_PRESETS.map((key) => {
-        const Icon = AVATAR_ICONS[key];
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onChange(key)}
-            className={cn(
-              "grid h-9 w-9 place-items-center rounded-full ring-2 transition hover:bg-muted",
-              value === key ? "ring-ninja-flame" : "ring-transparent",
-            )}
-            title={key}
-          >
-            {Icon ? <Icon size={18} /> : null}
-          </button>
-        );
-      })}
-      {/* Foto propia */}
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={busy}
-        className={cn(
-          "grid h-9 w-9 place-items-center overflow-hidden rounded-full ring-2 transition hover:bg-muted",
-          isUrl ? "ring-ninja-flame" : "ring-transparent",
-          busy && "opacity-50",
-        )}
-        title="Subir foto"
-      >
-        {isUrl ? (
-          <Avatar name={name || "?"} avatar={value} size={32} />
-        ) : (
-          <Upload size={16} className="text-muted-foreground" />
-        )}
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => onFile(e.target.files?.[0])}
+    <div className="space-y-3">
+      {/* Iniciales + iconos */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className={cn(
+            "grid h-9 w-9 place-items-center rounded-full ring-2 transition",
+            value === null ? "ring-ninja-flame" : "ring-transparent",
+          )}
+          title="Iniciales"
+        >
+          <Avatar name={name || "?"} size={32} />
+        </button>
+        {AVATAR_PRESETS.map((key) => {
+          const Icon = AVATAR_ICONS[key];
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(key)}
+              className={cn(
+                "grid h-9 w-9 place-items-center rounded-full ring-2 transition hover:bg-muted",
+                value === key ? "ring-ninja-flame" : "ring-transparent",
+              )}
+              title={key}
+            >
+              {Icon ? <Icon size={18} /> : null}
+            </button>
+          );
+        })}
+      </div>
+      {/* Foto propia: recorte + ver + descargar */}
+      <AvatarUploader
+        value={isUrl ? value : null}
+        onChange={onChange}
+        name={name}
+        bucket="tenant-assets"
+        pathPrefix={`${tenantId}/members`}
+        size={36}
       />
     </div>
   );
@@ -194,8 +158,12 @@ export function TeamSection({
     qc.invalidateQueries({ queryKey: ["cashier-profiles"] });
   }
 
-  const memberName = (m: Member) =>
-    m.display_name || m.full_name || m.email || "Miembro";
+  // Nombre visible: capitaliza el nombre real; el email se muestra tal cual.
+  const memberName = (m: Member) => {
+    const human = m.display_name || m.full_name;
+    if (human) return capitalizeName(human);
+    return m.email || "Miembro";
+  };
 
   return (
     <section className="mt-8">
@@ -303,7 +271,9 @@ export function TeamSection({
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <Avatar name={p.display_name} avatar={p.avatar} size={34} />
-                            <span className="font-medium">{p.display_name}</span>
+                            <span className="font-medium">
+                              {capitalizeName(p.display_name)}
+                            </span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">

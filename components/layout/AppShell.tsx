@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
+import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
@@ -163,15 +164,9 @@ function UserMenu({
         <button className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-card p-2 text-left transition hover:bg-muted">
           <Avatar name={name} avatar={me?.avatar} size={32} loading={meLoading} />
           <span className="min-w-0 flex-1">
-            <span
-              className={cn(
-                "block truncate text-sm font-medium text-foreground",
-                // Nombre y apellido siempre capitalizados; no aplica si se
-                // muestra el email como fallback.
-                name !== email && "capitalize",
-              )}
-            >
-              {name}
+            <span className="block truncate text-sm font-medium text-foreground">
+              {/* Nombre y apellido siempre capitalizados; el email se deja como está. */}
+              {name === email ? name : capitalizeName(name)}
             </span>
             {name !== email && (
               <span className="block truncate text-xs text-muted-foreground">

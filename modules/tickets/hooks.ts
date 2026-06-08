@@ -22,7 +22,7 @@ export function useTicketBranding(enabled = true) {
       const { data } = await supabase
         .from("tenant_branding")
         .select(
-          "logo_url, legal_name, accent, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo",
+          "logo_url, legal_name, accent, cuit, phone, address, ticket_footer, ticket_width, ticket_title, ticket_legend, ticket_show_qr, ticket_show_logo, iva_condition",
         )
         .maybeSingle();
       return (data as SampleBrand | null) ?? null;

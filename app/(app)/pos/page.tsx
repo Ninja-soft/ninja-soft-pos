@@ -28,7 +28,13 @@ import {
   useCategories,
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
-import { useCustomers, useStoreCreditBalance } from "@/modules/customers/hooks";
+import {
+  useCustomers,
+  useStoreCreditBalance,
+  useCustomerMutations,
+} from "@/modules/customers/hooks";
+import { DniScanModal } from "@/components/customers/DniScanModal";
+import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import {
   useCartStore,
@@ -173,9 +179,34 @@ export default function PosPage() {
   const requireCustomer = posSettings?.requireCustomer ?? false;
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
+  const [dniOpen, setDniOpen] = useState(false);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
   const { data: customers } = useCustomers(custSearch);
+  const { createQuick } = useCustomerMutations();
+
+  // Alta rápida de cliente desde el DNI escaneado (H31): crea un cliente mínimo
+  // con nombre + documento (DNI) y lo selecciona para la venta. El cajero ya
+  // confirmó los datos en la validación visual del DniScanModal.
+  async function quickAddFromDni(d: ParsedDni) {
+    try {
+      const created = await createQuick.mutateAsync({
+        name: d.nombreCompleto,
+        document_type: "dni",
+        document_number: d.dni,
+      });
+      setCustomer({ id: created.id, name: created.name });
+      setDniOpen(false);
+      setCustOpen(false);
+      toast({ title: `Cliente ${created.name} agregado`, variant: "success" });
+    } catch (e) {
+      toast({
+        title: "No se pudo crear el cliente",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
   const { data: scBalance } = useStoreCreditBalance(customer?.id);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
@@ -966,6 +997,16 @@ export default function PosPage() {
             onChange={(e) => setCustSearch(e.target.value)}
             autoFocus
           />
+          {/* Alta rápida por DNI (H31): escanea el frente, crea el cliente y lo
+              selecciona para esta venta. */}
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={() => setDniOpen(true)}
+          >
+            <ScanBarcode size={16} /> Escanear DNI y agregar cliente
+          </Button>
           <div className="max-h-72 space-y-1 overflow-y-auto">
             <button
               type="button"
@@ -1009,6 +1050,8 @@ export default function PosPage() {
           </div>
         </div>
       </Modal>
+
+      <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={quickAddFromDni} />
 
       {discountGate.modal}
       <OpenShiftModal

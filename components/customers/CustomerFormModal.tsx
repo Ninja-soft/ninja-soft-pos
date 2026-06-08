@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, ScanLine } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { DniScanModal } from "@/components/customers/DniScanModal";
+import type { ParsedDni } from "@/lib/customers/dniParse";
 import {
   CustomerSchema,
   DOC_TYPES,
@@ -45,6 +47,7 @@ export function CustomerFormModal({
   const { data: required } = useRequiredCustomerFields();
   const qc = useQueryClient();
   const [newGroup, setNewGroup] = useState("");
+  const [dniOpen, setDniOpen] = useState(false);
   const {
     register,
     handleSubmit,
@@ -53,6 +56,19 @@ export function CustomerFormModal({
     setError,
     formState: { errors },
   } = useForm<CustomerInput>({ resolver: zodResolver(CustomerSchema) });
+
+  // Autocompleta la ficha con los datos parseados del DNI (H31). El cajero ya
+  // los confirmó en la validación visual del DniScanModal; acá solo se vuelcan
+  // al form (no guarda). Documento → tipo DNI + número; nombre completo y fecha
+  // de nacimiento cuando vengan. shouldValidate revalida los campos tocados.
+  function applyDni(d: ParsedDni) {
+    setValue("name", d.nombreCompleto, { shouldValidate: true, shouldDirty: true });
+    setValue("document_type", "dni", { shouldValidate: true, shouldDirty: true });
+    setValue("document_number", d.dni, { shouldValidate: true, shouldDirty: true });
+    if (d.fechaNac)
+      setValue("birth_date", d.fechaNac, { shouldValidate: true, shouldDirty: true });
+    toast({ title: "Datos del DNI cargados", variant: "success" });
+  }
 
   const req = required?.fields ?? {};
   // require_customer_doc (default true): exige tipo + número de documento.
@@ -144,6 +160,7 @@ export function CustomerFormModal({
   }
 
   return (
+    <>
     <Modal
       open={open}
       onOpenChange={onOpenChange}
@@ -151,6 +168,16 @@ export function CustomerFormModal({
       className="max-w-xl"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {/* Alta rápida por DNI (H31): escanea el PDF417 del frente y autocompleta
+            nombre, documento y fecha de nacimiento. Validación visual previa. */}
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={() => setDniOpen(true)}
+        >
+          <ScanLine size={16} /> Escanear DNI
+        </Button>
         <Input label="Nombre / Razón social" error={errors.name?.message} {...register("name")} />
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -263,5 +290,7 @@ export function CustomerFormModal({
         </div>
       </form>
     </Modal>
+    <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={applyDni} />
+    </>
   );
 }

@@ -120,7 +120,7 @@ function PlanCard({
         </div>
         {isContact ? (
           <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
-            <Phone size={11} /> Pago inmediato · con asesoría
+            <Phone size={11} /> Pago inmediato · se activa al pagar
           </span>
         ) : (
           <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">

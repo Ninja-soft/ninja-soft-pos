@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard,
@@ -12,8 +13,16 @@ import {
   XCircle,
   AlertTriangle,
   Star,
+  Zap,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  fetchOwnerBillingSummary,
+  startOwnerSubscriptionCheckout,
+  syncSubscriptionAmount,
+  fetchSubscriptionPaymentMethod,
+  type OwnerBillingSummary,
+} from "@/modules/saas/subscriptionBilling";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
@@ -91,6 +100,23 @@ const STATUS_TONE: Record<string, string> = {
 };
 const AI_ADDON_KEYS = ["ai_assistant", "asistente_ia"];
 
+// Estado del preapproval de Mercado Pago (medio de pago de la suscripción).
+const MP_STATUS_LABELS: Record<string, string> = {
+  authorized: "Autorizado",
+  pending: "Pendiente de autorizar",
+  paused: "Pausado",
+  cancelled: "Cancelado",
+};
+// Marca legible del medio (MP no expone los últimos 4 dígitos en el preapproval).
+const MP_PM_LABELS: Record<string, string> = {
+  visa: "Visa",
+  master: "Mastercard",
+  amex: "American Express",
+  naranja: "Naranja",
+  cabal: "Cabal",
+  account_money: "Dinero en cuenta",
+};
+
 function fmtMoney(n: number | null | undefined): string {
   return `$${Number(n ?? 0).toLocaleString("es-AR")}`;
 }
@@ -109,6 +135,25 @@ export function SubscriptionCard() {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Vuelta desde el checkout de Mercado Pago (?sub=ok). El estado real lo
+  // confirma el webhook mp_billing_webhook; acá sólo damos feedback y refrescamos.
+  useEffect(() => {
+    if (searchParams.get("sub") !== "ok") return;
+    toast({
+      title: "Listo, configuramos tu pago",
+      description:
+        "Mercado Pago está procesando tu suscripción. En unos minutos vas a ver el estado actualizado.",
+      variant: "success",
+    });
+    qc.invalidateQueries({ queryKey: ["my-subscription"] });
+    qc.invalidateQueries({ queryKey: ["owner-billing-summary"] });
+    qc.invalidateQueries({ queryKey: ["subscription-payment-method"] });
+    router.replace("/dashboard-team");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [confirmPlan, setConfirmPlan] = useState<PublicPlan | null>(null);
@@ -150,10 +195,76 @@ export function SubscriptionCard() {
     },
   });
 
+  // Estado de cobro de la suscripción (preapproval + total calculado plan+addons).
+  const { data: billing } = useQuery({
+    queryKey: ["owner-billing-summary"],
+    queryFn: async (): Promise<OwnerBillingSummary | null> =>
+      fetchOwnerBillingSummary(),
+  });
+  const hasPreapproval = billing?.has_preapproval === true;
+
+  // Estado del medio de pago (consulta a MP vía edge). Sólo se pide si ya hay un
+  // preapproval; así un tenant en trial sin pago no dispara una llamada inútil.
+  const { data: payMethod } = useQuery({
+    queryKey: ["subscription-payment-method"],
+    enabled: hasPreapproval,
+    staleTime: 5 * 60_000,
+    queryFn: async () => fetchSubscriptionPaymentMethod(),
+  });
+
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["my-subscription"] });
     qc.invalidateQueries({ queryKey: ["ai-available"] });
+    qc.invalidateQueries({ queryKey: ["owner-billing-summary"] });
   }
+
+  // Tras activar/cancelar un addon, el monto del preapproval debe reflejar el
+  // nuevo total (plan + addons). Best-effort: el addon ya quedó bien en la base;
+  // si MP falla, no rompemos el flujo (el panel/edge re-sincroniza después).
+  async function syncAmountSilently() {
+    try {
+      await syncSubscriptionAmount();
+    } catch {
+      /* el addon ya está aplicado; la sync se reintenta luego. */
+    }
+  }
+
+  // Inicia el checkout del preapproval del dueño (pagar/activar/reactivar) y
+  // redirige a Mercado Pago. back_url vuelve al panel con ?sub=ok.
+  const startCheckout = useMutation({
+    mutationFn: async () => {
+      const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
+      return startOwnerSubscriptionCheckout(backUrl);
+    },
+    onSuccess: (initPoint) => {
+      window.location.href = initPoint;
+    },
+    onError: () =>
+      toast({ title: "No se pudo iniciar el pago", variant: "error" }),
+  });
+
+  // Abre el flujo de Mercado Pago para cambiar/actualizar la tarjeta del
+  // preapproval. Pide la URL al edge (mp_subscription_manage) y redirige.
+  const updatePaymentMethod = useMutation({
+    mutationFn: async () => {
+      const pm = await fetchSubscriptionPaymentMethod();
+      if (!pm.has_preapproval || !pm.manage_url) {
+        throw new Error("no_preapproval");
+      }
+      return pm.manage_url;
+    },
+    onSuccess: (manageUrl) => {
+      window.location.href = manageUrl;
+    },
+    onError: (e: Error) =>
+      toast({
+        title:
+          e.message === "no_preapproval"
+            ? "Todavía no tenés un pago activo para gestionar"
+            : "No se pudo abrir el medio de pago",
+        variant: "error",
+      }),
+  });
 
   const changePlan = useMutation({
     mutationFn: async (planKey: string) => {
@@ -162,10 +273,12 @@ export function SubscriptionCard() {
       });
       if (error) throw new Error(error.message ?? "error");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({ title: "Plan actualizado", variant: "success" });
       setConfirmPlan(null);
       setPlanPickerOpen(false);
+      // El monto del preapproval debe reflejar el nuevo plan (+ addons).
+      await syncAmountSilently();
       invalidate();
     },
     onError: () => toast({ title: "No se pudo cambiar el plan", variant: "error" }),
@@ -178,8 +291,9 @@ export function SubscriptionCard() {
       });
       if (error) throw new Error(error.message ?? "error");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({ title: "Complemento activado", variant: "success" });
+      await syncAmountSilently();
       invalidate();
     },
     onError: () =>
@@ -193,9 +307,10 @@ export function SubscriptionCard() {
       });
       if (error) throw new Error(error.message ?? "error");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({ title: "Complemento dado de baja", variant: "success" });
       setCancelAddonKey(null);
+      await syncAmountSilently();
       invalidate();
     },
     onError: () => toast({ title: "No se pudo dar de baja", variant: "error" }),
@@ -363,20 +478,88 @@ export function SubscriptionCard() {
             </div>
           )}
 
-          {/* Método de pago de la suscripción. El cobro es automático por Mercado
-              Pago (preapproval que gestiona NinjaSoft). No hay autogestión del
-              medio acá todavía: ante un cambio, el equipo lo resuelve. */}
+          {/* Total facturado (plan + addons). Sólo si hay addons que suman al
+              cobro, para que el dueño entienda por qué paga más que el plan. */}
+          {!sub.is_lifetime &&
+            billing?.billing &&
+            billing.billing.addons_amount > 0 && (
+              <div className="mt-4 flex items-start gap-2.5 border-t border-border pt-4">
+                <Receipt size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
+                <div className="text-sm">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Total que se cobra
+                  </div>
+                  <p className="text-muted-foreground">
+                    {fmtMoney(billing.billing.plan_amount)} (plan) +{" "}
+                    {fmtMoney(billing.billing.addons_amount)} (complementos) ={" "}
+                    <span className="font-semibold text-foreground">
+                      {fmtMoney(billing.billing.total)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+          {/* Método de pago de la suscripción (preapproval de Mercado Pago que
+              gestiona NinjaSoft). El dueño puede pagar/activar, reactivar y
+              cambiar su tarjeta. */}
           {!sub.is_lifetime && (
             <div className="mt-4 flex items-start gap-2.5 border-t border-border pt-4">
               <CreditCard size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              <div className="text-sm">
+              <div className="min-w-0 flex-1 text-sm">
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   Método de pago
                 </div>
-                <p className="text-muted-foreground">
-                  El cobro de tu plan es automático por Mercado Pago. Para cambiar el
-                  medio de pago, escribinos y lo resolvemos.
-                </p>
+
+                {hasPreapproval ? (
+                  <>
+                    <p className="text-muted-foreground">
+                      Cobro automático por Mercado Pago
+                      {payMethod?.payment_method_id
+                        ? ` · ${
+                            MP_PM_LABELS[payMethod.payment_method_id] ??
+                            payMethod.payment_method_id
+                          }`
+                        : ""}
+                      {payMethod?.status
+                        ? ` · ${
+                            MP_STATUS_LABELS[payMethod.status] ?? payMethod.status
+                          }`
+                        : ""}
+                      .
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={updatePaymentMethod.isPending}
+                        onClick={() => updatePaymentMethod.mutate()}
+                      >
+                        <CreditCard size={15} /> Actualizar medio de pago
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground">
+                      {sub.status === "trial"
+                        ? "Estás en período de prueba. Activá tu plan para que el cobro mensual se haga solo por Mercado Pago."
+                        : "Tu suscripción no tiene un pago activo. Activala para no perder acceso."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        loading={startCheckout.isPending}
+                        onClick={() => startCheckout.mutate()}
+                      >
+                        <Zap size={15} />{" "}
+                        {sub.status === "cancelled" || sub.status === "past_due"
+                          ? "Reactivar y pagar"
+                          : "Pagar y activar"}
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}

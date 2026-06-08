@@ -633,25 +633,33 @@ export function SubscriptionCard() {
                       Método de pago
                     </div>
                     {hasPreapproval ? (
-                      <p className="text-muted-foreground">
-                        Cobro automático por Mercado Pago
-                        {payMethod?.payment_method_id
-                          ? ` · ${
-                              MP_PM_LABELS[payMethod.payment_method_id] ??
-                              payMethod.payment_method_id
-                            }`
-                          : ""}
-                        {payMethod?.status
-                          ? ` · ${
-                              MP_STATUS_LABELS[payMethod.status] ?? payMethod.status
-                            }`
-                          : ""}
-                        .
-                      </p>
+                      payMethod?.mp_unavailable ? (
+                        <p className="text-muted-foreground">
+                          Cobro automático por Mercado Pago. No pudimos verificar
+                          el estado con Mercado Pago en este momento; podés
+                          gestionarlo igual desde el botón.
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Cobro automático por Mercado Pago
+                          {payMethod?.payment_method_id
+                            ? ` · ${
+                                MP_PM_LABELS[payMethod.payment_method_id] ??
+                                payMethod.payment_method_id
+                              }`
+                            : ""}
+                          {payMethod?.status
+                            ? ` · ${
+                                MP_STATUS_LABELS[payMethod.status] ?? payMethod.status
+                              }`
+                            : ""}
+                          .
+                        </p>
+                      )
                     ) : (
                       <p className="text-muted-foreground">
                         {isTrial
-                          ? "Estás en período de prueba. Activá tu plan para que el cobro mensual se haga solo por Mercado Pago."
+                          ? "Todavía no tenés un cobro automático activo. Se configura al pagar tu plan: el cobro mensual se hace solo por Mercado Pago."
                           : "Tu suscripción no tiene un pago activo. Activala para no perder acceso."}
                       </p>
                     )}

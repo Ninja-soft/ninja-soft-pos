@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils/cn";
 import { PlanIcon } from "./planIcons";
 
@@ -8,12 +9,14 @@ import { PlanIcon } from "./planIcons";
 // Reglas (de la spec):
 //   - Si hay imagen → la imagen es el "logo" del plan; debajo, el nombre
 //     comercial secundario en NARANJA (ninja-flame).
-//   - Si NO hay imagen → se muestra el NOMBRE grande (ej. "PRO") y, debajo, el
-//     nombre secundario en flame más chico.
+//   - Si NO hay imagen (o la imagen falla al cargar) → se muestra el NOMBRE
+//     grande (ej. "PRO") y, debajo, el nombre secundario en flame más chico.
 //
-// Se usa en: preview del editor, filas de PlansManager y (exportable) panel del
-// dueño / registración. Por eso recibe una forma mínima del plan, no el tipo
-// completo, y soporta variantes de tamaño.
+// Se usa en: preview del editor, filas de PlansManager, panel del dueño
+// (SubscriptionCard) y la comparación/selector de planes (PlanCards). Por eso
+// recibe una forma mínima del plan, no el tipo completo, y soporta variantes de
+// tamaño. Es robusto: si la imagen no carga, cae al render de ícono+nombre para
+// que SIEMPRE se vea algo de marca (no un ícono de imagen rota).
 
 export interface PlanBadgePlan {
   name: string;
@@ -75,8 +78,11 @@ export function PlanBadge({
   const s = SIZES[size];
   const secondary = plan.secondaryName?.trim() || null;
   const centered = align === "center";
+  // Si la imagen no carga (URL rota, bucket movido, red), caemos al ícono+nombre.
+  const [imgFailed, setImgFailed] = useState(false);
+  const hasImage = Boolean(plan.imageUrl) && !imgFailed;
 
-  if (plan.imageUrl) {
+  if (hasImage) {
     return (
       <div
         className={cn(
@@ -87,8 +93,9 @@ export function PlanBadge({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={plan.imageUrl}
+          src={plan.imageUrl as string}
           alt={plan.name}
+          onError={() => setImgFailed(true)}
           className={cn("w-auto object-contain", s.img)}
         />
         {secondary && (

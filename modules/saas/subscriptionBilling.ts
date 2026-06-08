@@ -38,6 +38,9 @@ export interface SubscriptionPaymentMethod {
   card_id?: string | null;
   next_payment_date?: string | null;
   manage_url?: string;
+  // true cuando hay preapproval pero MP no respondió (preapproval viejo/cancelado
+  // o MP caído): igual viene un manage_url de fallback para no romper la UI.
+  mp_unavailable?: boolean;
 }
 
 // Resumen de cobro del dueño (RPC). Devuelve null si no es owner / sin sub.

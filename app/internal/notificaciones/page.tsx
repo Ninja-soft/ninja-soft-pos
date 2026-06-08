@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { cn } from "@/lib/utils/cn";
 import { formatRelative } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
@@ -387,15 +388,23 @@ export default function InternalNotificacionesPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                className="accent-ninja-flame"
-                checked={requiresAck}
-                onChange={(e) => setRequiresAck(e.target.checked)}
-              />
-              Requiere confirmación
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="accent-ninja-flame"
+                  checked={requiresAck}
+                  onChange={(e) => setRequiresAck(e.target.checked)}
+                />
+                Requiere confirmación
+              </label>
+              <InfoHint title="Requiere confirmación" label="Qué es requiere confirmación">
+                Si está activado, el usuario debe confirmar/marcar como leída la
+                notificación para cerrarla (acuse de recibo); queda registrado que
+                la vio. Si está desactivado, es informativa y se puede descartar sin
+                confirmar.
+              </InfoHint>
+            </div>
             <div className="flex items-center gap-2">
               <label className="text-sm text-muted-foreground" htmlFor="expires">
                 Vence (opcional)

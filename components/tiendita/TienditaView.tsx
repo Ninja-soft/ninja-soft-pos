@@ -204,7 +204,8 @@ function CatalogCard({
       <CardContent className="flex flex-1 flex-col p-5">
         <h3 className="text-base font-bold text-foreground">{catalog.name}</h3>
         {catalog.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+          // Descripción completa: scroll interno cuando es larga (no se trunca).
+          <p className="slim-scrollbar mt-1 max-h-24 overflow-y-auto whitespace-pre-line pr-1 text-sm leading-relaxed text-muted-foreground">
             {catalog.description}
           </p>
         )}
@@ -377,7 +378,8 @@ function CatalogAccess({
                     </span>
 
                     <div className="min-w-0 flex-1">
-                      <div className="line-clamp-2 text-sm font-medium text-foreground">
+                      {/* Nombre del producto completo: scroll interno si es muy largo. */}
+                      <div className="slim-scrollbar max-h-16 overflow-y-auto break-words pr-1 text-sm font-medium leading-relaxed text-foreground">
                         {p.titulo}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -387,7 +389,7 @@ function CatalogAccess({
                           </span>
                         )}
                         {p.categoriaPath && (
-                          <span className="line-clamp-1">{p.categoriaPath}</span>
+                          <span className="break-words">{p.categoriaPath}</span>
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-2">

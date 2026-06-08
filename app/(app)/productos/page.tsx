@@ -36,6 +36,7 @@ import {
   usePluSettings,
 } from "@/modules/products/hooks";
 import { FirstProductPluPrompt } from "@/components/products/FirstProductPluPrompt";
+import { EmptyProductsPromo } from "@/components/products/EmptyProductsPromo";
 import type { Product } from "@/modules/products/api";
 import {
   useCatalogHintsActive,
@@ -273,6 +274,12 @@ export default function ProductosPage() {
             ))}
           </select>
         </div>
+
+        {/* Promo de Tiendita: solo cuando el tenant NO tiene ningún producto
+            cargado (sin filtros activos y ya terminó de cargar sin error). */}
+        {noFilters && !isLoading && !isError && total === 0 && (
+          <EmptyProductsPromo />
+        )}
 
         <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full min-w-[640px] text-sm">

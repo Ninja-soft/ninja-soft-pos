@@ -69,6 +69,7 @@ export default function PosPage() {
   const [scanOpen, setScanOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrMobbexOpen, setQrMobbexOpen] = useState(false);
+  const [qrModoOpen, setQrModoOpen] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
   useEffect(() => {
@@ -120,9 +121,12 @@ export default function PosPage() {
   // cobro. `!== false` = optimista mientras carga el gating.
   const mpFeature = useFeature("mercado_pago");
   const mobbexFeature = useFeature("mobbex");
+  const modoFeature = useFeature("modo");
   const mpReady = Boolean(mp?.enabled && mp?.connected && mpFeature !== false);
   const { data: mobbex } = useProviderMethod("mobbex");
   const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected && mobbexFeature !== false);
+  const { data: modo } = useProviderMethod("modo");
+  const modoReady = Boolean(modo?.enabled && modo?.connected && modoFeature !== false);
   const { data: posSettings } = usePosSettings();
   const role = myTenant?.role ?? "cashier";
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
@@ -776,6 +780,24 @@ export default function PosPage() {
                 Cobrar con QR · Mobbex
               </button>
             )}
+            {modoReady && (
+              <button
+                type="button"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => ensureCustomer() && setQrModoOpen(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#00d1c1]/40 bg-[#00d1c1]/10 px-4 py-3 font-semibold text-[#0bb5a8] transition hover:bg-[#00d1c1]/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/Modo_cube.webp"
+                    alt="MODO"
+                    className="h-full w-full object-contain"
+                  />
+                </span>
+                Cobrar con QR · MODO
+              </button>
+            )}
             <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
               <span>Imprimir ticket al cobrar</span>
               <Switch
@@ -880,6 +902,17 @@ export default function PosPage() {
         providerName="Mobbex"
         onApproved={(reference, amount, extras) => {
           setQrMobbexOpen(false);
+          handleSale([{ method: "qr", amount, reference }], extras);
+        }}
+      />
+      <QrCheckoutModal
+        open={qrModoOpen}
+        onOpenChange={setQrModoOpen}
+        base={total}
+        provider="modo"
+        providerName="MODO"
+        onApproved={(reference, amount, extras) => {
+          setQrModoOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />

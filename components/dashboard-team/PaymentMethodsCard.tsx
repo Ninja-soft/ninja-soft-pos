@@ -23,7 +23,7 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago", "mobbex"]);
+const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo"]);
 
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
@@ -101,6 +101,18 @@ const PROVIDER_INFO: Record<string, Explain> = {
     ],
     recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
   },
+  modo: {
+    activa:
+      "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
+    conexion:
+      "Pegá las credenciales de comercio de MODO (Client ID y Client Secret; Store ID si tenés varias sucursales). Se guardan cifradas del lado del servidor.",
+    pasos: [
+      "En el POS tocás Cobrar con QR · MODO.",
+      "El cliente escanea el QR con la app MODO y paga.",
+      "Al acreditarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
+  },
 };
 
 type Provider = { key: string; name: string; kind: string; sort: number };
@@ -120,6 +132,10 @@ export function PaymentMethodsCard() {
   const [token, setToken] = useState("");
   const [mbApiKey, setMbApiKey] = useState("");
   const [mbToken, setMbToken] = useState("");
+  // MODO: credenciales de comercio (client_id + client_secret, store_id opcional).
+  const [modoClientId, setModoClientId] = useState("");
+  const [modoClientSecret, setModoClientSecret] = useState("");
+  const [modoStoreId, setModoStoreId] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -350,6 +366,9 @@ export function PaymentMethodsCard() {
                         setToken("");
                         setMbApiKey("");
                         setMbToken("");
+                        setModoClientId("");
+                        setModoClientSecret("");
+                        setModoStoreId("");
                         setShowManual(false);
                       }}
                       className={
@@ -450,6 +469,9 @@ export function PaymentMethodsCard() {
                           setToken("");
                           setMbApiKey("");
                           setMbToken("");
+                          setModoClientId("");
+                          setModoClientSecret("");
+                          setModoStoreId("");
                           setShowManual(false);
                         }}
                         className={
@@ -557,7 +579,76 @@ export function PaymentMethodsCard() {
               />
             </div>
           )}
-          {connectKey === "mobbex" ? (
+          {connectKey === "modo" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                  <Check size={16} /> MODO está conectado.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá las credenciales de comercio de MODO (Client ID y Client
+                  Secret; Store ID si tenés varias sucursales). Se guardan
+                  cifradas del lado del servidor.
+                </p>
+              )}
+              <Input
+                label="Client ID"
+                name="modo_client_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={modoClientId}
+                onChange={(e) => setModoClientId(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID"}
+              />
+              <Input
+                label="Client Secret"
+                type="password"
+                name="modo_client_secret"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={modoClientSecret}
+                onChange={(e) => setModoClientSecret(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret"}
+              />
+              <Input
+                label="Store ID (opcional)"
+                name="modo_store_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={modoStoreId}
+                onChange={(e) => setModoStoreId(e.target.value)}
+                placeholder="Sólo si tenés varias sucursales"
+              />
+              <Button
+                className="w-full"
+                disabled={
+                  connect.isPending ||
+                  modoClientId.trim().length < 4 ||
+                  modoClientSecret.trim().length < 6
+                }
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "modo",
+                    secrets: {
+                      client_id: modoClientId.trim(),
+                      client_secret: modoClientSecret.trim(),
+                      ...(modoStoreId.trim() ? { store_id: modoStoreId.trim() } : {}),
+                    },
+                  })
+                }
+              >
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar credenciales"
+                    : "Conectar MODO"}
+              </Button>
+            </>
+          ) : connectKey === "mobbex" ? (
             <>
               {connectingConnected ? (
                 <p className="flex items-center gap-2 text-sm text-emerald-400">

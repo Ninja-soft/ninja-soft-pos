@@ -235,15 +235,28 @@ export function AiConfigCard() {
   // Test: pinguea al proveedor activo en MODO INTERNO ({test:true}). La Edge
   // Function detecta al staff interno, saltea el guard de tenant/addon/cuota y
   // sólo verifica que la api_key del proveedor activo responda.
+  //
+  // El path de test responde SIEMPRE 200 con un sobre { ok }: si el proveedor
+  // falla trae { ok:false, error, detail } con el MOTIVO real (ej. "API key not
+  // valid"); si anda, { ok:true, reply }. Por eso leemos data.ok en vez de
+  // confiar en el status HTTP (que invoke colapsa a un error genérico).
   const test = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
         body: { messages: [{ role: "user", content: "ping" }], test: true },
       });
       if (error) throw error;
-      const res = data as { reply?: string; error?: string; detail?: string };
-      if (res?.error) throw new Error(res.detail || res.error);
-      if (!res?.reply) throw new Error("sin_respuesta");
+      const res = data as {
+        ok?: boolean;
+        reply?: string;
+        error?: string;
+        detail?: string;
+      };
+      // ok:false → mostramos el motivo real (detail preferido, luego error).
+      if (res?.ok === false) {
+        throw new Error(res.detail || res.error || "El proveedor rechazó la prueba.");
+      }
+      if (!res?.reply) throw new Error("El proveedor no devolvió respuesta.");
       return res.reply;
     },
     onSuccess: () =>
@@ -268,8 +281,10 @@ export function AiConfigCard() {
         Configurás <strong>un proveedor a la vez</strong> (Gemini o Claude) con su
         propia API key. La key se guarda cifrada y nunca se devuelve. Si cambiás de
         proveedor, pegá la API key de ese proveedor. El{" "}
-        <strong>email de la beta</strong> habilita el asistente a ese dueño aunque no
-        tenga el complemento contratado.
+        <strong>email de la beta</strong> es un atajo para darle acceso a{" "}
+        <strong>un único tester</strong> por email. Para{" "}
+        <strong>regalar el Asistente IA a un negocio concreto</strong>, entrá al
+        detalle de ese negocio (Negocios → el negocio → “Regalar Asistente IA”).
       </p>
 
       <Card className="mt-3">
@@ -335,11 +350,12 @@ export function AiConfigCard() {
           </div>
 
           <Input
-            label="Email de la beta (dueño con acceso)"
+            label="Email de la beta (un solo tester)"
             type="email"
             value={betaEmail}
             onChange={(e) => setBetaEmail(e.target.value)}
             placeholder="tu-email@dominio.com"
+            hint="Atajo para darle acceso al asistente a UN dueño/tester por email, aunque no tenga el complemento. Para regalar el Asistente IA a un negocio, hacelo desde el detalle del negocio en internal (“Regalar Asistente IA”)."
           />
 
           {/* Presentación pública del addon (lo ve quien NO lo tiene contratado

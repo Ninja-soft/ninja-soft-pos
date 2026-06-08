@@ -27,6 +27,11 @@ const FALLBACK_COMMERCIAL =
   "stock bajo, productos más vendidos, clientes y cómo usar cada pantalla. " +
   "Es un complemento opcional que activás desde el panel del dueño.";
 
+// Ícono del círculo cuando el dueño NO tiene el addon contratado: gif de marca
+// servido por la app. Con el addon, el ícono es la imagen del proveedor activo
+// (ai_public_config.image_url).
+const UNSCREEN_GIF = "/ia/ia-unscreen.gif";
+
 // Burbuja flotante del Asistente IA. Visible para TODO usuario autenticado del
 // tenant: con el complemento → chat normal; sin él → al abrir muestra el
 // explicador comercial + botón para contratarlo. El guard fuerte (acceso real a
@@ -73,7 +78,11 @@ export function AssistantBubble() {
   });
 
   const locked = available === false;
-  const avatarUrl = (publicCfg?.image_url ?? "").trim();
+  // Imagen del proveedor activo (la que ve el cliente CON el addon).
+  const providerImage = (publicCfg?.image_url ?? "").trim();
+  // Ícono del círculo: sin addon → gif de marca; con addon → imagen del
+  // proveedor activo (fallback al ícono Sparkles si no hubiera ninguna).
+  const iconUrl = locked ? UNSCREEN_GIF : providerImage;
 
   // Explicador comercial: cuando la burbuja está bloqueada y se abre, pedimos el
   // texto a la Edge Function con {intro:true} (devuelve config o su default). Se
@@ -169,7 +178,7 @@ export function AssistantBubble() {
           aria-label="Abrir asistente IA"
           className="fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow ring-1 ring-white/10 backdrop-blur-xl transition hover:brightness-110 active:scale-95"
         >
-          <BubbleAvatar url={avatarUrl} size={56} iconSize={24} />
+          <BubbleAvatar url={iconUrl} size={56} iconSize={24} />
         </button>
       )}
 
@@ -182,7 +191,7 @@ export function AssistantBubble() {
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="flex items-center gap-2 font-semibold text-foreground">
               <span className="grid h-7 w-7 place-items-center overflow-hidden rounded-lg bg-ninja-gradient text-ninja-voidViolet">
-                <BubbleAvatar url={avatarUrl} size={28} iconSize={16} />
+                <BubbleAvatar url={iconUrl} size={28} iconSize={16} />
               </span>
               Asistente IA
             </span>
@@ -200,7 +209,7 @@ export function AssistantBubble() {
             <div className="slim-scrollbar flex flex-1 flex-col overflow-y-auto p-5">
               <div className="flex flex-col items-center text-center">
                 <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
-                  <BubbleAvatar url={avatarUrl} size={64} iconSize={30} />
+                  <BubbleAvatar url={iconUrl} size={64} iconSize={30} />
                 </span>
                 <h3 className="mt-3 flex items-center gap-1.5 text-base font-semibold text-foreground">
                   <Lock size={14} /> Asistente IA

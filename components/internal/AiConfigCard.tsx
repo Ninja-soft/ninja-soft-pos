@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Check, Play, ExternalLink } from "lucide-react";
+import { Sparkles, Check, Play, ExternalLink, ImagePlus, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { Switch } from "@/components/ui/Switch";
+import { resizeToWebp } from "@/lib/utils/image";
 
 type Provider = "gemini" | "claude";
 
@@ -25,7 +26,11 @@ type Status = {
   // su propia key para que cambiar de proveedor no arrastre la key del otro.
   gemini_api_key: boolean;
   claude_api_key: boolean;
+  // Imagen del asistente POR proveedor (la que ve el cliente con el addon en la
+  // burbuja). image_url legacy se mantiene como fallback histórico de Gemini.
   image_url: string | null;
+  gemini_image_url: string | null;
+  claude_image_url: string | null;
   commercial_text: string | null;
   addon_price_ars: string | null;
   addon_trial_days: string | null;
@@ -39,11 +44,33 @@ const DEFAULT_MODEL: Record<Provider, string> = {
   claude: "claude-haiku-4-5-20251001",
 };
 
+// Imagen de marca por defecto si el proveedor no tiene una cargada. Son SVGs
+// servidos por la app (public/ia/*.svg): el cliente los ve como avatar.
+const DEFAULT_IMAGE: Record<Provider, string> = {
+  gemini: "/ia/gemini.svg",
+  claude: "/ia/claude.svg",
+};
+
 // De dónde saca la API key cada proveedor (guía para el staff).
 const KEY_HELP: Record<Provider, { label: string; url: string }> = {
   gemini: { label: "Google AI Studio → API keys", url: "https://aistudio.google.com/apikey" },
   claude: { label: "Anthropic Console → API keys", url: "https://console.anthropic.com/settings/keys" },
 };
+
+// Bucket público para los avatares del asistente (globales, no scoped por
+// tenant). Lo crea la migración 20260608330000 de forma idempotente.
+const AI_ASSETS_BUCKET = "ai-assets";
+
+// Texto comercial por defecto del explicador (sin addon). Pro, vendedor y
+// rioplatense. La Edge Function ai_assistant tiene su propio default alineado.
+const DEFAULT_COMMERCIAL_TEXT =
+  "Sumá un asistente con IA a tu NinjaPos y tené tu negocio en la palma de la mano. " +
+  "Preguntale en lenguaje natural y te responde al toque: cuánto vendiste hoy o esta " +
+  "semana, cuáles son tus productos más vendidos, qué se está por quedar sin stock, " +
+  "cómo viene la cuenta corriente de tus clientes y dónde está cada función del sistema.\n\n" +
+  "Es como tener un encargado que conoce tus números y nunca se cansa: te ahorra tiempo, " +
+  "te ayuda a decidir con datos reales y te saca las dudas de cómo usar cada pantalla.\n\n" +
+  "Se activa al instante para todo tu equipo. Probalo y no vas a querer trabajar sin él.";
 
 export function AiConfigCard() {
   const supabase = createClient();
@@ -56,8 +83,10 @@ export function AiConfigCard() {
   // proveedor se limpia para no enviar la key de uno como la del otro.
   const [apiKey, setApiKey] = useState("");
   const [betaEmail, setBetaEmail] = useState("");
-  // Campos públicos del addon (para el explicador de la burbuja).
-  const [imageUrl, setImageUrl] = useState("");
+  // Imagen del asistente POR proveedor. La que ve el cliente con el addon es la
+  // del proveedor ACTIVO; si está vacía, cae al SVG de marca por defecto.
+  const [geminiImageUrl, setGeminiImageUrl] = useState("");
+  const [claudeImageUrl, setClaudeImageUrl] = useState("");
   const [commercialText, setCommercialText] = useState("");
   const [priceArs, setPriceArs] = useState("");
   const [trialDays, setTrialDays] = useState("");
@@ -65,6 +94,8 @@ export function AiConfigCard() {
   const [active, setActive] = useState(true);
   // El usuario tocó el modelo manualmente → no lo pisamos al cambiar proveedor.
   const [modelTouched, setModelTouched] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: status } = useQuery({
     queryKey: ["platform-ai-status"],
@@ -77,15 +108,17 @@ export function AiConfigCard() {
     },
   });
 
-  // Prefill de valores públicos (proveedor, modelo, beta email). Las api_key no
-  // se devuelven nunca; solo sabemos si existen (status.*_api_key === true).
+  // Prefill de valores públicos (proveedor, modelo, beta email, imágenes). Las
+  // api_key no se devuelven nunca; solo sabemos si existen (status.*_api_key).
   useEffect(() => {
     if (!status) return;
     const p = (status.provider === "claude" ? "claude" : "gemini") as Provider;
     setProvider(p);
     setModel(status.model ?? DEFAULT_MODEL[p]);
     setBetaEmail(status.beta_owner_email ?? "");
-    setImageUrl(status.image_url ?? "");
+    // Imagen por proveedor; Gemini hereda la legacy image_url si no tiene la suya.
+    setGeminiImageUrl(status.gemini_image_url ?? status.image_url ?? "");
+    setClaudeImageUrl(status.claude_image_url ?? "");
     setCommercialText(status.commercial_text ?? "");
     setPriceArs(status.addon_price_ars ?? "");
     setTrialDays(status.addon_trial_days ?? "");
@@ -94,13 +127,20 @@ export function AiConfigCard() {
     if (status.model) setModelTouched(true);
   }, [status]);
 
-  // Al cambiar de proveedor: limpiamos la key tipeada (es de otro proveedor) y,
-  // si el modelo no fue editado a mano, autocompletamos con el default nuevo.
+  // Al cambiar de proveedor: limpiamos la key tipeada (es de otro proveedor) y
+  // SIEMPRE seteamos el modelo por defecto del proveedor nuevo (reset del touch),
+  // así pasar de Gemini a Claude no deja colgado "gemini-2.5-flash".
   function onProviderChange(p: Provider) {
     setProvider(p);
     setApiKey("");
-    if (!modelTouched) setModel(DEFAULT_MODEL[p]);
+    setModel(DEFAULT_MODEL[p]);
+    setModelTouched(false);
   }
+
+  // Imagen del proveedor seleccionado (estado actual del form) y su default.
+  const imageUrl = provider === "claude" ? claudeImageUrl : geminiImageUrl;
+  const setImageUrl = provider === "claude" ? setClaudeImageUrl : setGeminiImageUrl;
+  const previewUrl = imageUrl.trim() || DEFAULT_IMAGE[provider];
 
   // ¿El proveedor seleccionado ya tiene una key guardada? Gemini acepta también
   // la key legacy (api_key) como fallback; Claude exige su propia key.
@@ -108,6 +148,36 @@ export function AiConfigCard() {
     provider === "claude"
       ? Boolean(status?.claude_api_key)
       : Boolean(status?.gemini_api_key || status?.api_key);
+
+  // Subida de la imagen del proveedor activo: resize a WebP + upload al bucket
+  // público ai-assets (mismo patrón que el editor de planes). Guarda la URL en
+  // el campo del proveedor; se persiste al "Guardar".
+  async function onPickImage(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const webp = await resizeToWebp(file, 256, 0.9);
+      const path = `ai/${provider}-${crypto.randomUUID()}.webp`;
+      const up = await supabase.storage
+        .from(AI_ASSETS_BUCKET)
+        .upload(path, webp, { contentType: "image/webp", upsert: false });
+      if (up.error) throw up.error;
+      const { data: pub } = supabase.storage
+        .from(AI_ASSETS_BUCKET)
+        .getPublicUrl(path);
+      setImageUrl(pub.publicUrl);
+      toast({ title: "Imagen cargada", variant: "success" });
+    } catch (e) {
+      toast({
+        title: "No se pudo subir la imagen",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -118,6 +188,11 @@ export function AiConfigCard() {
         // Estado del addon: siempre se envía ("true"/"false", nunca vacío) para
         // que el backend lo persista en cada guardado.
         active: active ? "true" : "false",
+        // Imagen por proveedor: si el campo quedó vacío, persistimos el SVG de
+        // marca por defecto para que el cliente (y ai_public_config) siempre
+        // tengan un avatar del proveedor activo.
+        gemini_image_url: geminiImageUrl.trim() || DEFAULT_IMAGE.gemini,
+        claude_image_url: claudeImageUrl.trim() || DEFAULT_IMAGE.claude,
       };
       // La key se guarda en el campo del proveedor seleccionado (no en un único
       // api_key compartido): así Claude no hereda la key de Gemini ni viceversa.
@@ -125,7 +200,6 @@ export function AiConfigCard() {
         secrets[provider === "claude" ? "claude_api_key" : "gemini_api_key"] = apiKey.trim();
       }
       // Campos públicos del addon: el merge del backend ignora los vacíos.
-      if (imageUrl.trim()) secrets.image_url = imageUrl.trim();
       if (commercialText.trim()) secrets.commercial_text = commercialText.trim();
       if (priceArs.trim()) secrets.addon_price_ars = priceArs.trim();
       if (trialDays.trim()) secrets.addon_trial_days = trialDays.trim();
@@ -140,16 +214,19 @@ export function AiConfigCard() {
       toast({ title: "Configuración guardada", variant: "success" });
       setApiKey("");
       qc.invalidateQueries({ queryKey: ["platform-ai-status"] });
+      // La burbuja del cliente lee la imagen del proveedor activo vía RPC.
+      qc.invalidateQueries({ queryKey: ["ai-public-config"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
 
-  // Test: hace un ping al asistente con un mensaje mínimo. Requiere la config
-  // ya guardada (la Edge Function lee la api_key de platform_secrets).
+  // Test: pinguea al proveedor activo en MODO INTERNO ({test:true}). La Edge
+  // Function detecta al staff interno, saltea el guard de tenant/addon/cuota y
+  // sólo verifica que la api_key del proveedor activo responda.
   const test = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
-        body: { messages: [{ role: "user", content: "ping" }] },
+        body: { messages: [{ role: "user", content: "ping" }], test: true },
       });
       if (error) throw error;
       const res = data as { reply?: string; error?: string; detail?: string };
@@ -254,39 +331,80 @@ export function AiConfigCard() {
           />
 
           {/* Presentación pública del addon (lo ve quien NO lo tiene contratado
-              al abrir la burbuja). image_url y texto comercial NO son secretos. */}
+              al abrir la burbuja). La imagen del proveedor activo es además el
+              ícono del cliente con el addon. Nada de esto es secreto. */}
           <div className="mt-1 border-t border-border pt-4">
             <span className="block text-sm font-semibold text-foreground">
               Presentación del addon
             </span>
             <p className="mt-1 text-xs text-muted-foreground">
-              Avatar y texto que ve un dueño sin el complemento al abrir la
-              burbuja del asistente.
+              Avatar del asistente (lo ve el cliente con el addon) y texto que ve
+              un dueño sin el complemento al abrir la burbuja.
             </p>
           </div>
 
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
+          {/* Imagen del asistente — POR proveedor (la del activo es la del
+              cliente). Se puede subir un archivo o pegar una URL; vacío → SVG
+              de marca por defecto. */}
+          <div className="rounded-lg border border-border p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">
+                Imagen del asistente para {providerLabel}
+              </span>
+              {imageUrl.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="inline-flex items-center gap-1 text-xs text-ninja-flameSoft transition hover:underline"
+                >
+                  Usar logo por defecto
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-border bg-background">
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt={`Avatar del asistente (${providerLabel})`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImagePlus size={20} className="text-muted-foreground" />
+                )}
+              </span>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={uploading}
+                onClick={() => fileRef.current?.click()}
+              >
+                {imageUrl.trim() ? "Cambiar imagen" : "Subir imagen"}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => onPickImage(e.target.files?.[0])}
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Link2 size={14} className="shrink-0 text-muted-foreground" />
               <Input
-                label="Imagen del asistente (URL avatar/gif)"
+                placeholder="…o pegá una URL de imagen/gif"
                 type="url"
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://…/asistente.gif"
+                className="h-9"
               />
             </div>
-            {imageUrl.trim() && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={imageUrl.trim()}
-                alt="Previsualización del avatar"
-                className="h-11 w-11 shrink-0 rounded-full border border-border object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.visibility =
-                    "hidden";
-                }}
-              />
-            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Se convierte a WebP (máx. 256px). Si la dejás vacía, se usa el logo
+              de {providerLabel} por defecto. Cada proveedor tiene su propia imagen.
+            </p>
           </div>
 
           <div>
@@ -300,10 +418,17 @@ export function AiConfigCard() {
               id="ai-commercial-text"
               value={commercialText}
               onChange={(e) => setCommercialText(e.target.value)}
-              rows={4}
-              placeholder="Qué ofrece el Asistente IA y cómo se contrata…"
+              rows={6}
+              placeholder={DEFAULT_COMMERCIAL_TEXT}
               className="w-full resize-y rounded-lg border border-input bg-background p-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
             />
+            <button
+              type="button"
+              onClick={() => setCommercialText(DEFAULT_COMMERCIAL_TEXT)}
+              className="mt-1.5 inline-flex items-center gap-1 text-xs text-ninja-flameSoft transition hover:underline"
+            >
+              <Sparkles size={12} /> Usar texto sugerido
+            </button>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

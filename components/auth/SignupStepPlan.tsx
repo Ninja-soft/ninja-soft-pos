@@ -51,8 +51,9 @@ export function SignupStepPlan({
   onAddonAiChange: (v: boolean) => void;
 }) {
   const { data: plans, isLoading, isError } = useSignupPlans();
-  // En el flujo email (anon) este RPC falla → null → degradamos la venta del
-  // addon (sin precio). En SSO (sesión Google) sí resuelve.
+  // ai_public_config() tiene grant a anon (payload público, sin secretos), así
+  // que resuelve también en el flujo email PRE-AUTH: el precio "+$X/mes" del
+  // addon se muestra sin sesión. Si no hay config → null → copy genérico.
   const { data: aiCfg } = useAiPublicConfig();
 
   const planModels = useMemo<PlanCardModel[]>(

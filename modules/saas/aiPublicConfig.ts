@@ -7,10 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 // trae el RPC ai_public_config(); NO expone la api_key. La usan el panel del
 // dueño y el registro (para vender el complemento y mostrar su precio).
 //
-// OJO con el registro por email: ai_public_config() está grant a `authenticated`
-// (no a anon). En el paso de plan del flujo email todavía no hay sesión, así que
-// la llamada falla → devolvemos null y la UI degrada con copy genérico. En SSO
-// (sesión Google) y en el panel del dueño sí resuelve.
+// ai_public_config() está grant a `authenticated` Y a `anon` (su payload es
+// público: imagen/texto/precio/trial, sin secretos). Por eso resuelve también en
+// el registro PRE-AUTH (flujo email, todavía sin sesión), no solo en SSO (sesión
+// Google) o en el panel del dueño. Si no hay fila de config devolvemos null y la
+// UI degrada con copy genérico.
 
 export interface AiPublicConfig {
   image_url: string;

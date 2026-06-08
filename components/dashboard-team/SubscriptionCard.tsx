@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/Input";
 import { PlanBadge } from "@/components/internal/plans/PlanBadge";
 import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { PaymentHistory, type PaymentRecord } from "@/components/saas/PaymentHistory";
+import { useMyPaymentHistory } from "@/modules/saas/paymentHistory";
 
 // Tipos de los RPC (no están en los tipos generados → cast laxo).
 type Addon = {
@@ -249,6 +250,10 @@ export function SubscriptionCard() {
     queryFn: async () => fetchSubscriptionPaymentMethod(),
   });
 
+  // Historial completo de pagos (RPC owner-gated my_payment_history). Si falla o
+  // viene vacío, caemos al último pago de my_subscription (abajo en `payments`).
+  const { data: paymentHistory = [] } = useMyPaymentHistory();
+
   // Lee la marca local de cambio reciente al montar (y limpia si venció).
   useEffect(() => {
     try {
@@ -422,9 +427,12 @@ export function SubscriptionCard() {
     [plans],
   );
 
-  // Pagos para el "Registro de pagos": hoy, el último pago expuesto por
-  // my_subscription (billing_records tiene RLS solo-staff). Si no hay, lista vacía.
+  // Pagos para el "Registro de pagos": historial completo vía my_payment_history
+  // (RPC owner-gated; billing_records tiene RLS solo-staff). Si el RPC viene vacío
+  // (sin pagos aún, o error), caemos al último pago expuesto por my_subscription
+  // para no perder info en trial. Si tampoco hay, lista vacía.
   const payments = useMemo<PaymentRecord[]>(() => {
+    if (paymentHistory.length > 0) return paymentHistory;
     if (!sub?.last_payment) return [];
     return [
       {
@@ -435,7 +443,7 @@ export function SubscriptionCard() {
         currency: "ARS",
       },
     ];
-  }, [sub?.last_payment]);
+  }, [paymentHistory, sub?.last_payment]);
 
   if (isLoading) {
     return (

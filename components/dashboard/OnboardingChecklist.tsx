@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { cn } from "@/lib/utils/cn";
 
 type StatusKey = "fiscal" | "mp" | "producto" | "ticket" | "venta";
@@ -429,6 +430,24 @@ export function OnboardingChecklist() {
               );
             })}
           </ul>
+
+          {/* Configuración rápida por rubro (F12 · H35): atajo para sembrar un
+              catálogo de muestra cuando todavía no se cargaron productos. Deja
+              el negocio listo para cobrar sin Excel ni SQL. */}
+          {!status.producto && (
+            <div className="mt-4 flex flex-col gap-3 rounded-ninjaMd border border-ninja-flame/20 bg-ninja-flame/[0.05] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  ¿Heladería, peluquería, cafetería?
+                </span>{" "}
+                Sembrá un catálogo de muestra por rubro en un par de clics.
+              </p>
+              <IndustryPresetButton
+                size="sm"
+                className="shrink-0 border-ninja-flame/30 text-ninja-flameSoft hover:bg-ninja-flame/10"
+              />
+            </div>
+          )}
 
           {/* Saltar por ahora */}
           <div className="mt-4 flex justify-end border-t border-border/60 pt-3">

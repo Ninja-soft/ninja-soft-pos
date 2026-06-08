@@ -1,10 +1,11 @@
 "use client";
 
-import { Store } from "lucide-react";
+import { Sparkles, Store } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
+import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { useMyTenant, useSetMyIndustry } from "@/modules/tenants/hooks";
 import {
   VERTICALS,
@@ -104,6 +105,25 @@ export function RubroCard() {
             </div>
           </div>
         )}
+
+        {/* Configuración rápida por rubro (F12 · H35): siembra un catálogo de
+            muestra y deja el negocio listo para cobrar sin Excel ni SQL. */}
+        <div className="rounded-lg border border-ninja-flame/20 bg-ninja-flame/[0.05] p-4">
+          <div className="flex items-start gap-2.5">
+            <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">¿Empezás de cero?</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Elegí un preset de rubro (heladería, peluquería, cafetería…) y
+                sembramos categorías y productos de muestra, listos como botones
+                rápidos del POS. No duplica lo que ya tengas.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3">
+            <IndustryPresetButton size="sm" />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

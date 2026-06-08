@@ -16,6 +16,13 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelada",
 };
 
+// Acento de marca del tenant (hex #rrggbb válido) o el flame de NinjaSoft.
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const NINJA_FLAME = "#FF4B22";
+function brandAccent(accent: string | null | undefined): string {
+  return typeof accent === "string" && HEX.test(accent) ? accent : NINJA_FLAME;
+}
+
 export default async function DashboardTeamPage() {
   const supabase = createClient();
   const {
@@ -75,6 +82,16 @@ export default async function DashboardTeamPage() {
   const sub = (subData?.[0] as unknown as Sub) ?? null;
   const isOwner = membership.role === "owner";
 
+  // Marca del negocio (logo + acento) para personalizar la card "Negocio".
+  const { data: brandingData } = await supabase
+    .from("tenant_branding")
+    .select("logo_url, accent")
+    .eq("tenant_id", tenant.id)
+    .maybeSingle();
+  const branding = (brandingData as { logo_url: string | null; accent: string | null } | null) ?? null;
+  const accent = brandAccent(branding?.accent);
+  const tenantLogo = branding?.logo_url ?? null;
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <Eyebrow>Administración</Eyebrow>
@@ -83,17 +100,46 @@ export default async function DashboardTeamPage() {
         Acá administrás tu NinjaPos: equipo, suscripción y configuración.
       </p>
 
-      {/* Negocio */}
+      {/* Negocio — usa el logo y el color de marca del tenant si los cargó. */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <Card>
+        <Card
+          className="overflow-hidden border-l-4"
+          style={{ borderLeftColor: accent }}
+        >
           <CardContent className="p-5">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Building2 size={16} /> <span className="text-sm">Negocio</span>
+              <Building2 size={16} style={{ color: accent }} />{" "}
+              <span className="text-sm">Negocio</span>
             </div>
-            <p className="mt-2 text-lg font-semibold">{tenant.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {tenant.industry ?? "—"} · {STATUS_LABELS[tenant.status] ?? tenant.status}
-            </p>
+            <div className="mt-2 flex items-center gap-3">
+              {tenantLogo ? (
+                <span
+                  className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
+                  style={{ borderColor: accent }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={tenantLogo}
+                    alt={tenant.name}
+                    className="h-full w-full object-contain"
+                  />
+                </span>
+              ) : (
+                <span
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-lg"
+                  style={{ backgroundColor: `${accent}1f`, color: accent }}
+                >
+                  <Building2 size={22} />
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate text-lg font-semibold">{tenant.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {tenant.industry ?? "—"} ·{" "}
+                  {STATUS_LABELS[tenant.status] ?? tenant.status}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

@@ -15,6 +15,12 @@
 //                         el preapproval (sin doble cobro). Si el GET no trae
 //                         init_point, se arma el checkout de suscripción estándar.
 //
+// Tolerante a fallos: si NO hay preapproval todavía devuelve has_preapproval=false
+// (200, no es un error). Si el GET a MP falla (preapproval viejo/cancelado, o MP
+// caído) NO devuelve 5xx: responde has_preapproval=true + mp_unavailable=true con
+// un manage_url de fallback, para que la UI muestre un estado claro y el dueño
+// igual pueda ir a gestionar su tarjeta en MP en vez de ver un error genérico.
+//
 // Quién: staff (tenant_id en body) o el DUEÑO del tenant (su current_tenant_id,
 // verificado owner activo). Mismo modelo de auth que mp_subscription_checkout.
 // No expone el access_token ni datos sensibles del pagador.
@@ -103,12 +109,38 @@ Deno.serve(async (req: Request) => {
     ?.access_token;
   if (!accessToken) return json({ error: "platform_not_configured" }, 400);
 
-  const res = await fetch(`https://api.mercadopago.com/preapproval/${preId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  // Fallback estándar para gestionar la suscripción en MP cuando no tenemos (o no
+  // pudimos leer) el init_point del preapproval.
+  const fallbackUrl = `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_id=${preId}`;
+
+  let res: Response;
+  try {
+    res = await fetch(`https://api.mercadopago.com/preapproval/${preId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (e) {
+    // MP inalcanzable (red/timeout): no rompemos la UI, devolvemos fallback.
+    return json({
+      has_preapproval: true,
+      preapproval_id: preId,
+      mp_unavailable: true,
+      status: null,
+      manage_url: fallbackUrl,
+      detail: String(e).slice(0, 200),
+    });
+  }
   if (!res.ok) {
+    // Preapproval viejo/cancelado o error de MP: no devolvemos 5xx (la UI lo
+    // trataría como fallo del botón). Damos un estado claro + URL de fallback.
     const detail = await res.text();
-    return json({ error: "mp_error", detail: detail.slice(0, 400) }, 502);
+    return json({
+      has_preapproval: true,
+      preapproval_id: preId,
+      mp_unavailable: true,
+      status: null,
+      manage_url: fallbackUrl,
+      detail: detail.slice(0, 400),
+    });
   }
   const pre = (await res.json()) as {
     id?: string;
@@ -121,10 +153,7 @@ Deno.serve(async (req: Request) => {
   };
 
   // URL a la que se redirige al pagador para cambiar/actualizar su tarjeta.
-  const manageUrl =
-    pre.init_point ||
-    pre.sandbox_init_point ||
-    `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_id=${preId}`;
+  const manageUrl = pre.init_point || pre.sandbox_init_point || fallbackUrl;
 
   return json({
     has_preapproval: true,

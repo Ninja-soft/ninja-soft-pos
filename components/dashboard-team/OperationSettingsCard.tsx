@@ -20,6 +20,7 @@ import {
   ScanLine,
   TrendingUp,
   ShieldCheck,
+  CreditCard,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -56,6 +57,7 @@ type Settings = {
   plu_mode: PluMode;
   show_catalog_price_hints: boolean;
   offer_warranty: boolean;
+  require_card_voucher: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -134,6 +136,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           plu_mode: "random",
           show_catalog_price_hints: true,
           offer_warranty: true,
+          require_card_voucher: false,
         }
       );
     },
@@ -158,6 +161,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [pluMode, setPluMode] = useState<PluMode>("random");
   const [showCatalogPriceHints, setShowCatalogPriceHints] = useState(true);
   const [offerWarranty, setOfferWarranty] = useState(true);
+  const [requireCardVoucher, setRequireCardVoucher] = useState(false);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -188,6 +192,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setPluMode(settings.plu_mode === "incremental" ? "incremental" : "random");
     setShowCatalogPriceHints(settings.show_catalog_price_hints ?? true);
     setOfferWarranty(settings.offer_warranty ?? true);
+    setRequireCardVoucher(settings.require_card_voucher ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -220,6 +225,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           plu_mode: pluMode,
           show_catalog_price_hints: showCatalogPriceHints,
           offer_warranty: offerWarranty,
+          require_card_voucher: requireCardVoucher,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -391,6 +397,30 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             checked={offerWarranty}
             onCheckedChange={setOfferWarranty}
             label="Ofrecer garantía extendida automáticamente al cobrar productos con garantía"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Voucher de tarjeta obligatorio (H27): cuando se cobra con débito o
+          crédito, el POS pide lote, cupón y nº de autorización del voucher del
+          POSNET. Quedan guardados junto al pago y visibles en el detalle de la
+          venta. Por defecto desactivado. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <CreditCard size={16} className="text-ninja-flameSoft" /> Voucher de tarjeta obligatorio
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Al cobrar con débito o crédito, pide el lote, el cupón y el nº de
+              autorización del voucher del POSNET. Se guardan con la venta para
+              conciliar contra la terminal. No cambia el total.
+            </p>
+          </div>
+          <Switch
+            checked={requireCardVoucher}
+            onCheckedChange={setRequireCardVoucher}
+            label="Exigir lote, cupón y nº de autorización al cobrar con tarjeta"
           />
         </CardContent>
       </Card>

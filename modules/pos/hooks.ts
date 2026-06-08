@@ -137,6 +137,30 @@ export function usePaymentPlanMutations(providerKey: string) {
         paymentPlansApi.setProviderActive(providerKey, active),
       onSuccess: inv,
     }),
+    // Vigencia (H27): por celda o para todo el medio. Fechas null = sin límite.
+    setCellValidity: useMutation({
+      mutationFn: (v: {
+        base: string;
+        brand: string | null;
+        installments: number;
+        validFrom: string | null;
+        validUntil: string | null;
+      }) =>
+        paymentPlansApi.setCellValidity(
+          providerKey,
+          v.base,
+          v.brand,
+          v.installments,
+          v.validFrom,
+          v.validUntil,
+        ),
+      onSuccess: inv,
+    }),
+    setProviderValidity: useMutation({
+      mutationFn: (v: { validFrom: string | null; validUntil: string | null }) =>
+        paymentPlansApi.setProviderValidity(providerKey, v.validFrom, v.validUntil),
+      onSuccess: inv,
+    }),
     remove: useMutation({ mutationFn: (id: string) => paymentPlansApi.remove(id), onSuccess: inv }),
   };
 }

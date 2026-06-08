@@ -26,6 +26,7 @@ import {
   useBrands,
   useCreateBrand,
   useProductMutations,
+  usePluSettings,
 } from "@/modules/products/hooks";
 
 interface Props {
@@ -46,6 +47,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { data: brands } = useBrands();
   const createBrand = useCreateBrand();
   const { create, update } = useProductMutations();
+  const { data: plu } = usePluSettings();
+  const pluEnabled = plu?.enabled ?? false;
   const [newCat, setNewCat] = useState("");
   const [newBrand, setNewBrand] = useState("");
 
@@ -79,6 +82,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         name: product?.name ?? "",
         sku: product?.sku ?? "",
         barcode: product?.barcode ?? "",
+        plu: product?.plu ?? "",
         category_id: product?.category_id ?? null,
         brand_id: product?.brand_id ?? null,
         price: product?.price ?? 0,
@@ -106,6 +110,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       });
     }
   }, [open, product, reset]);
+
+  // Tras crear con PLU habilitado, la DB asigna el PLU: lo reflejamos en el
+  // campo (el form sigue abierto en modo edición) para que el dueño lo vea.
+  useEffect(() => {
+    if (created?.plu) setValue("plu", created.plu);
+  }, [created, setValue]);
 
   async function onSubmit(values: ProductInput) {
     const parsed = values as unknown as ProductOutput;
@@ -183,6 +193,32 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           <Input label="SKU" {...register("sku")} />
           <Input label="Código de barras" {...register("barcode")} />
         </div>
+
+        {/* PLU: código corto de 6 dígitos para tipear rápido en el POS. Solo se
+            muestra si el tenant lo tiene habilitado (Configuración del POS). Si
+            se deja vacío al crear, la DB lo genera sola según el modo elegido. */}
+        {pluEnabled && (
+          <div>
+            <Input
+              label="PLU (código corto)"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder={
+                active?.plu
+                  ? undefined
+                  : plu?.mode === "incremental"
+                    ? "Se asigna solo (correlativo)"
+                    : "Se asigna solo (aleatorio)"
+              }
+              error={errors.plu?.message}
+              {...register("plu")}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              6 dígitos para tipear el producto en el POS. Dejalo vacío para que
+              se genere automáticamente; o escribí uno propio (único).
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="mb-2 block text-sm font-medium text-muted-foreground">

@@ -8,10 +8,20 @@ const optionalText = (max: number) =>
     .or(z.literal(""))
     .transform((v) => (v ? v : null));
 
+// PLU: código corto opcional de exactamente 6 dígitos (o vacío → null).
+// Si se deja vacío y el tenant tiene el PLU habilitado, la DB lo genera sola.
+const pluField = z
+  .string()
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => (v ? v.trim() : null))
+  .refine((v) => v === null || /^[0-9]{6}$/.test(v), "Debe ser de 6 dígitos");
+
 export const ProductSchema = z.object({
   name: z.string().min(1, "Requerido").max(120),
   sku: optionalText(60),
   barcode: optionalText(60),
+  plu: pluField,
   category_id: z.string().uuid().nullable().optional(),
   brand_id: z.string().uuid().nullable().optional(),
   price: z.coerce.number().nonnegative("Debe ser ≥ 0"),

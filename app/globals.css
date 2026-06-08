@@ -294,6 +294,59 @@
   }
 }
 
+/* -----------------------------------------------------------------------------
+ * Etiquetas de producto (hoja imprimible). En pantalla se ve como una grilla de
+ * tarjetas; al imprimir, cada etiqueta es negro sobre blanco, con borde, para
+ * que salga prolija en impresora común o de etiquetas. Reusa el aislamiento de
+ * .ticket-print (solo lo marcado .ticket-print queda visible al imprimir).
+ * -------------------------------------------------------------------------- */
+.label-sheet {
+  display: grid;
+  gap: 8px;
+}
+.label-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 8px 8px 6px;
+  text-align: center;
+  min-height: 104px;
+  break-inside: avoid;
+}
+
+@media print {
+  /* La hoja toma todo el ancho; la grilla de etiquetas se ajusta a columnas de
+     un ancho fijo cómodo para góndola (≈ 5cm), llenando la página. */
+  .label-sheet {
+    grid-template-columns: repeat(auto-fill, minmax(48mm, 1fr));
+    gap: 4mm;
+  }
+  .label-card {
+    border: 1px solid #000 !important;
+    border-radius: 6px;
+    color: #000 !important;
+    background: #fff !important;
+    padding: 3mm 2mm;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .label-card * {
+    color: #000 !important;
+  }
+  /* El chip del PLU sale como recuadro con borde (sin relleno de color). */
+  .label-plu {
+    border: 1px solid #000 !important;
+    background: transparent !important;
+  }
+  @page {
+    margin: 8mm;
+  }
+}
+
 /* Grid técnico sutil (UI-NinjaSof.md §26). */
 .ninja-grid {
   background-image: radial-gradient(

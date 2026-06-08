@@ -17,7 +17,10 @@ export interface ProductsPageParams {
   brandId?: string | null;
 }
 
+// `plu` (código corto de 6 dígitos) aún no vive en los tipos generados
+// (no se regeneran). Se expone por intersección para tiparlo en toda la app.
 export type Product = Tables<"products"> & {
+  plu: string | null;
   categories?: { name: string } | null;
 };
 export type Category = Tables<"categories">;
@@ -54,7 +57,10 @@ export const productsApi = {
       .limit(200);
     const s = sanitizeIlike(search);
     if (s) {
-      q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`);
+      // Matchea también por PLU (código corto de 6 dígitos) para tipearlo en el POS.
+      q = q.or(
+        `name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%,plu.ilike.%${s}%`,
+      );
     }
     if (categoryId) q = q.eq("category_id", categoryId);
     if (brandId) q = q.eq("brand_id", brandId);
@@ -78,7 +84,10 @@ export const productsApi = {
       .is("deleted_at", null)
       .order("name");
     const s = sanitizeIlike(search);
-    if (s) q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`);
+    if (s)
+      q = q.or(
+        `name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%,plu.ilike.%${s}%`,
+      );
     if (categoryId) q = q.eq("category_id", categoryId);
     if (brandId) q = q.eq("brand_id", brandId);
 
@@ -123,12 +132,12 @@ export const productsApi = {
       }
     }
 
-    // 2) Producto por barcode/sku.
+    // 2) Producto por barcode/sku/PLU (exacto). El PLU corto también resuelve acá.
     const { data, error } = await supabase
       .from("products")
       .select("*, categories(name)")
       .is("deleted_at", null)
-      .or(`barcode.eq.${c},sku.eq.${c}`)
+      .or(`barcode.eq.${c},sku.eq.${c},plu.eq.${c}`)
       .limit(1)
       .maybeSingle();
     if (error) throw error;
@@ -154,6 +163,8 @@ export const productsApi = {
         name: input.name,
         sku: input.sku,
         barcode: input.barcode,
+        // PLU vacío (null) → lo genera el trigger si el tenant lo tiene activo.
+        plu: input.plu ?? null,
         category_id: input.category_id ?? null,
         brand_id: input.brand_id ?? null,
         price: input.price,
@@ -176,7 +187,8 @@ export const productsApi = {
             ? null
             : input.allow_negative === "yes",
         warranty_months: input.warranty_months,
-      })
+        // `plu` aún no está en los tipos generados: casteamos el payload.
+      } as never)
       .select("*")
       .single();
     if (error) throw error;
@@ -191,6 +203,8 @@ export const productsApi = {
         name: input.name,
         sku: input.sku,
         barcode: input.barcode,
+        // PLU editable a mano (6 dígitos) o vacío para quitarlo.
+        plu: input.plu ?? null,
         category_id: input.category_id ?? null,
         brand_id: input.brand_id ?? null,
         price: input.price,
@@ -213,7 +227,7 @@ export const productsApi = {
         warranty_months: input.warranty_months,
         // image_url no se toca en update: en edición la maneja la galería
         // (ProductImages). El campo URL del form aplica al crear.
-      })
+      } as never)
       .eq("id", id);
     if (error) throw error;
   },
@@ -300,6 +314,61 @@ export const productsApi = {
       .limit(50);
     if (error) throw error;
     return (data ?? []) as StockMovement[];
+  },
+};
+
+// Estado del PLU del tenant (para el form de producto y el prompt del primer
+// producto). `decided` indica si ya se le preguntó al tenant si quiere PLU.
+export interface PluSettings {
+  enabled: boolean;
+  mode: "random" | "incremental";
+  decided: boolean;
+}
+
+export const pluSettingsApi = {
+  get: async (): Promise<PluSettings> => {
+    const supabase = createClient();
+    // plu_* y plu_prompted aún no están en los tipos generados: select("*") + cast.
+    const { data } = await supabase.from("pos_settings").select("*").maybeSingle();
+    const row =
+      (data as unknown as {
+        plu_enabled?: boolean;
+        plu_mode?: string;
+        plu_prompted?: boolean;
+      } | null) ?? null;
+    return {
+      enabled: row?.plu_enabled ?? false,
+      mode: row?.plu_mode === "incremental" ? "incremental" : "random",
+      decided: row?.plu_prompted ?? false,
+    };
+  },
+
+  // Resuelve el prompt del primer producto: marca que ya se preguntó y, si el
+  // dueño aceptó, habilita el PLU con el modo elegido. Upsert por tenant_id.
+  decide: async (accept: boolean, mode: "random" | "incremental"): Promise<void> => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("no_user");
+    const { data: mem } = await supabase
+      .from("tenant_users")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    const tenantId = (mem as { tenant_id?: string } | null)?.tenant_id;
+    if (!tenantId) throw new Error("no_tenant");
+    const { error } = await supabase.from("pos_settings").upsert(
+      {
+        tenant_id: tenantId,
+        plu_prompted: true,
+        ...(accept ? { plu_enabled: true, plu_mode: mode } : {}),
+      } as never,
+      { onConflict: "tenant_id" },
+    );
+    if (error) throw error;
   },
 };
 

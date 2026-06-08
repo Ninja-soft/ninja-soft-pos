@@ -9,6 +9,7 @@ import {
 import {
   brandsApi,
   categoriesApi,
+  pluSettingsApi,
   productsApi,
   serialsApi,
   variantsApi,
@@ -17,6 +18,28 @@ import {
   type VariantRow,
 } from "./api";
 import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
+
+// Estado del PLU del tenant (habilitado / modo / si ya se preguntó).
+export function usePluSettings() {
+  return useQuery({
+    queryKey: ["products", "plu-settings"],
+    queryFn: () => pluSettingsApi.get(),
+    staleTime: 60_000,
+  });
+}
+
+// Resuelve el prompt del primer producto (aceptar/omitir + modo).
+export function useDecidePlu() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { accept: boolean; mode: "random" | "incremental" }) =>
+      pluSettingsApi.decide(v.accept, v.mode),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products", "plu-settings"] });
+      qc.invalidateQueries({ queryKey: ["pos-settings"] });
+    },
+  });
+}
 
 export function useWarrantyPlans(activeOnly = false) {
   return useQuery({

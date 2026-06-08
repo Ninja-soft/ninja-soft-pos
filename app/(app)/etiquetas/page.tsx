@@ -52,8 +52,8 @@ export default function EtiquetasPage() {
           </Button>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          Elegí productos y la cantidad de etiquetas. Se imprime nombre, precio y
-          código de barras (barcode o SKU).
+          Elegí productos y la cantidad de etiquetas. Cada etiqueta lleva nombre,
+          precio, PLU (si lo usás) y código de barras (barcode o SKU).
         </p>
 
         <div className="relative mt-5 max-w-md">
@@ -64,7 +64,7 @@ export default function EtiquetasPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, SKU o código…"
+            placeholder="Buscar por nombre, PLU, SKU o código…"
             className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           />
         </div>
@@ -76,6 +76,7 @@ export default function EtiquetasPage() {
                 <tr>
                   <th className="w-10 px-4 py-3"></th>
                   <th className="whitespace-nowrap px-4 py-3">Producto</th>
+                  <th className="whitespace-nowrap px-4 py-3">PLU</th>
                   <th className="whitespace-nowrap px-4 py-3">Código</th>
                   <th className="whitespace-nowrap px-4 py-3 text-right">Precio</th>
                   <th className="whitespace-nowrap px-4 py-3 text-right">Etiquetas</th>
@@ -98,11 +99,21 @@ export default function EtiquetasPage() {
                               price: p.price,
                               barcode: p.barcode,
                               sku: p.sku,
+                              plu: p.plu,
                             })
                           }
                         />
                       </td>
                       <td className="px-4 py-2 font-medium">{p.name}</td>
+                      <td className="px-4 py-2">
+                        {p.plu ? (
+                          <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
+                            {p.plu}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
                         {p.barcode || p.sku || "—"}
                       </td>
@@ -122,7 +133,7 @@ export default function EtiquetasPage() {
                 })}
                 {products?.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                       Sin productos. Cargá productos primero.
                     </td>
                   </tr>
@@ -142,31 +153,55 @@ export default function EtiquetasPage() {
         )}
       </div>
 
-      {/* Hoja imprimible: solo esto se ve al imprimir (.ticket-print) */}
+      {/* Hoja imprimible: solo esto se ve al imprimir (.ticket-print). La grilla
+          y cada tarjeta usan .label-sheet / .label-card (estilos de impresión en
+          globals.css) para salir negro sobre blanco y prolijas. */}
       {labels.length > 0 && (
-        <div className="ticket-print mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {labels.map((l, i) => (
-            <div
-              key={`${l.id}-${i}`}
-              className="flex flex-col items-center justify-between rounded-md border border-border p-2 text-center"
-              style={{ minHeight: 96 }}
-            >
-              <div className="line-clamp-2 text-xs font-medium leading-tight">
-                {l.name}
+        <div className="ticket-print label-sheet mt-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          {labels.map((l, i) => {
+            // El SKU se muestra como texto solo si aporta algo distinto del valor
+            // que ya va en el código de barras (evita repetir el mismo dato).
+            const showSku = l.sku && l.sku !== l.code;
+            return (
+              <div key={`${l.id}-${i}`} className="label-card border-border">
+                {/* Nombre */}
+                <div className="line-clamp-2 w-full text-[11px] font-semibold uppercase leading-tight tracking-wide">
+                  {l.name}
+                </div>
+
+                {/* Precio (lo más grande de la etiqueta) */}
+                <div className="font-price text-xl font-black leading-none tabular-nums">
+                  {formatCurrency(l.price)}
+                </div>
+
+                {/* PLU: el código corto para tipear en el POS, destacado */}
+                {l.plu && (
+                  <div className="label-plu rounded bg-ninja-flame/10 px-2 py-0.5 font-mono text-xs font-bold tracking-[0.18em] text-ninja-flameSoft">
+                    PLU {l.plu}
+                  </div>
+                )}
+
+                {/* Código de barras + su valor / SKU legible */}
+                {l.code ? (
+                  <div className="flex w-full flex-col items-center gap-0.5">
+                    <Barcode value={l.code} height={30} className="w-full max-w-[42mm]" />
+                    <div className="font-mono text-[8px] tracking-[0.12em]">{l.code}</div>
+                    {showSku && (
+                      <div className="font-mono text-[8px] text-muted-foreground">
+                        SKU {l.sku}
+                      </div>
+                    )}
+                  </div>
+                ) : showSku ? (
+                  <div className="font-mono text-[9px] text-muted-foreground">
+                    SKU {l.sku}
+                  </div>
+                ) : (
+                  <div className="text-[8px] text-muted-foreground">sin código</div>
+                )}
               </div>
-              <div className="font-price text-base font-bold tabular-nums">
-                {formatCurrency(l.price)}
-              </div>
-              {l.code ? (
-                <>
-                  <Barcode value={l.code} height={32} />
-                  <div className="font-mono text-[9px] tracking-wide">{l.code}</div>
-                </>
-              ) : (
-                <div className="text-[9px] text-muted-foreground">sin código</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

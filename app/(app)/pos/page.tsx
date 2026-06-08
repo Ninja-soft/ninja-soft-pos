@@ -498,7 +498,7 @@ export default function PosPage() {
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCategoryFilter(null); }}
-              placeholder="Buscar producto por nombre, SKU o código…"
+              placeholder="Buscar por nombre, PLU, SKU o código…"
               autoFocus
               className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-12 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
             />
@@ -610,8 +610,15 @@ export default function PosPage() {
                     </span>
                   )}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {formatQty(p.stock)} {p.unit}
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {formatQty(p.stock)} {p.unit}
+                  </span>
+                  {p.plu && (
+                    <span className="rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono font-semibold text-ninja-flameSoft">
+                      {p.plu}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-2 font-semibold text-foreground">
                   {formatCurrency(p.price)}

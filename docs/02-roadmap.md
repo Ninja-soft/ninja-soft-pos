@@ -21,7 +21,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
-| **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 Planificación |
+| **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 Planificación |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 Planificación |
@@ -470,12 +470,12 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [x] Limitación técnica documentada: el navegador no puede controlar monitores como una app nativa; el flujo robusto es abrir una URL de display cliente y mantenerla sincronizada. — *PR #260: documentado en `lib/pos/customerDisplay.ts` y en la sección de Configuración (abrir la ventana, arrastrarla al 2do monitor, F11 para fullscreen).*
   - [x] *Criterio:* el cajero cobra en el POS y el segundo monitor/tablet muestra carrito, QR y total en tiempo real sin recargar. — *PR #260.*
 
-- [ ] **H26 — Centro de diagnóstico de hardware.**
-  - [ ] Pantalla `/configuracion/hardware` con estado de impresoras, scanners, pantalla cliente, cajón y balanza.
-  - [ ] Pruebas guiadas: imprimir ticket de prueba, abrir cajón, probar scanner, probar display cliente, probar balanza.
-  - [ ] Logs locales de hardware y errores legibles para soporte.
-  - [ ] Export de diagnóstico para NinjaSoft.
-  - [ ] *Criterio:* soporte puede pedir “Exportar diagnóstico” y ver qué periférico falla sin conectarse a la máquina del cliente.
+- [x] **H26 — Centro de diagnóstico de hardware.** — *Completo (2026-06-08, PR #261): sección "Diagnóstico de hardware" en Configuración (+ ruta directa `/configuracion/hardware`) con tarjeta por periférico, estado claro (ok / no disponible / requiere conector / advertencia) con íconos, pruebas guiadas, log local y export. 100% client-side (detección + pruebas; persistencia en localStorage, sin migración). Honestidad total sobre los límites del navegador.*
+  - [x] Pantalla `/configuracion/hardware` con estado de impresoras, scanners, pantalla cliente, cajón y balanza. — *`HardwareCard` (`components/dashboard-team/HardwareCard.tsx`); ruta `app/(app)/configuracion/hardware/page.tsx` redirige a la sección. Una tarjeta por periférico con badge de estado.*
+  - [x] Pruebas guiadas: imprimir ticket de prueba, abrir cajón, probar scanner, probar display cliente, probar balanza. — *Impresora: render oculto del ticket de muestra + `window.print()` (web print, reusa `TicketRenderer`/`ticket-print`). Escáner: captura en vivo con `useScanner` (mismo motor del POS, últimas lecturas con código/largo/ms/formato/duplicado). Pantalla cliente: "Abrir pantalla de prueba" (`window.open('/customer-display')`) + "Probar sincronización" (round-trip real de `BroadcastChannel`). Cajón: documenta la limitación (se abre por pulso ESC/POS de la térmica vía conector local; no disponible en navegador). Balanza: placeholder honesto (requiere WebSerial, H24).*
+  - [x] Logs locales de hardware y errores legibles para soporte. — *`lib/hardware/diagnosticsLog.ts`: cada prueba registra qué/cuándo/resultado/detalle en `localStorage` (máx 100), listado legible con color por resultado. Sin datos sensibles.*
+  - [x] Export de diagnóstico para NinjaSoft. — *`lib/hardware/export.ts`: "Exportar diagnóstico" baja XLSX (reusa `exportXlsx`: hojas Resumen/Capacidades/Entorno/Pruebas) o JSON, con tenant/caja, capacidades reales del navegador (BroadcastChannel, WebUSB, WebSerial, Web Bluetooth, BarcodeDetector, web print), entorno (userAgent, pantalla/resolución, origen seguro, etc.) y el log. **Sin tokens ni datos de clientes** (test lo verifica).*
+  - [x] *Criterio:* soporte puede pedir “Exportar diagnóstico” y ver qué periférico falla sin conectarse a la máquina del cliente. ✓ — *Tests en `tests/unit/hardwareDiagnostics.test.ts`.*
 
 ### F3 — AFIP (robustecida, se ejecuta al final de esta tanda)
 

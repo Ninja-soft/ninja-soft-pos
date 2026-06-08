@@ -593,13 +593,13 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [x] Cobro express: efectivo exacto, efectivo con vuelto, QR, tarjeta, transferencia. — *Reusa `PaymentModal`/QR existentes (no se duplicó).*
   - [ ] *Criterio:* una venta típica de 3 ítems se carga y cobra en menos de 15 segundos en pantalla táctil.
 
-- [ ] **H37 — Modificadores simples para heladería/cafetería.**
-  - [ ] Tamaños: vasito, cucurucho, 1/4 kg, 1/2 kg, 1 kg, café chico/mediano/grande.
-  - [ ] Sabores/toppings como modificadores, con límite configurable por tamaño.
-  - [ ] Modificadores obligatorios/opcionales y ordenados para que no frenen al cajero.
-  - [ ] Combos simples: café + medialuna, kilo + cucuruchos, docena, promo familiar.
-  - [ ] Impresión opcional de comanda/producción para preparación.
-  - [ ] *Criterio:* el cajero vende "1/2 kg, 3 sabores" sin crear 200 productos distintos.
+- [~] **H37 — Modificadores simples para heladería/cafetería.** — *Core hecho (PR #__, 2026-06-08): grupos de modificadores por producto (Tamaño/Sabores/Toppings) con min/max, obligatorio y orden; opciones con +precio; selector en el POS al agregar; precio = base + deltas; persistencia del snapshot en `sale_items.modifiers`. **Combos** (café + medialuna) → F9; **comanda de cocina/producción** → F13.*
+  - [x] Tamaños: vasito, cucurucho, 1/4 kg, 1/2 kg, 1 kg, café chico/mediano/grande. — *Modelados como un grupo "Tamaño" (radio, min1/max1) con opciones libres por tenant; no hay lista fija, el dueño carga las suyas.*
+  - [x] Sabores/toppings como modificadores, con límite configurable por tamaño. — *Grupos multi con `max_select` configurable (ej. Sabores hasta 3) y opciones con `price_delta` (ej. Crema +200). El POS valida el tope al elegir.*
+  - [x] Modificadores obligatorios/opcionales y ordenados para que no frenen al cajero. — *`required` + `min_select`/`max_select` + `sort`; en el selector del POS los obligatorios van primero y se valida min/max antes de confirmar.*
+  - [ ] Combos simples: café + medialuna, kilo + cucuruchos, docena, promo familiar. — *Follow-up: se trata a fondo en [F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro).*
+  - [ ] Impresión opcional de comanda/producción para preparación. — *Follow-up: comanda de cocina/KDS va con [F13 — Gastronomía PRO](#f13--gastronomía-pro). El snapshot ya queda en `sale_items.modifiers` para alimentarla.*
+  - [x] *Criterio:* el cajero vende "1/2 kg, 3 sabores" sin crear 200 productos distintos. — *Verificado: schema `product_modifier_groups`/`product_modifier_options` (migración `product_modifiers`, RLS por tenant), editor plegable en `ProductFormModal`, `ModifierPickerModal` en el POS (radio/multi con límite + precio en vivo), `create_sale` persiste `sale_items.modifiers` con el precio ajustado (probado por SQL).* 
 
 - [ ] **H38 — Agenda y servicios para peluquería/estética.**
   - [ ] Servicios con duración, precio, profesional asignable y comisión.

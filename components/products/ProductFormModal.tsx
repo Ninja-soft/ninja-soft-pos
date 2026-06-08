@@ -19,6 +19,7 @@ import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
 import { VariantsEditor } from "@/components/products/VariantsEditor";
+import { ModifiersEditor } from "@/components/products/ModifiersEditor";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import {
   useCategories,
@@ -513,6 +514,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             las combinaciones acá mismo.
           </p>
         )}
+
+        {/* Modificadores (H37): tamaños/sabores/toppings con +precio. Sección
+            plegable; se edita una vez creado el producto (igual que kits/seriales/
+            variantes). Al venderlo, el POS pide las opciones y suma los ajustes. */}
+        <Disclosure title="Modificadores (tamaños / sabores / toppings)">
+          {active ? (
+            <ModifiersEditor productId={active.id} />
+          ) : (
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Guardá el producto primero; después podés cargar los grupos de
+              modificadores (ej. Sabores, Toppings) acá mismo.
+            </p>
+          )}
+        </Disclosure>
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>

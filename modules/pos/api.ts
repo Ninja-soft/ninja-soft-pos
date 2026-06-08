@@ -366,10 +366,12 @@ export const posApi = {
     displayShowUnitPrices: boolean;
     displayWelcomeMessage: string | null;
     displayThanksMessage: string | null;
+    // Oferta contextual automática de garantía extendida en el POS (H28).
+    offerWarranty: boolean;
   } | null> => {
     const supabase = createClient();
-    // Las columnas display_* (H25) aún no están en los tipos generados (no se
-    // regeneran): select("*") + cast del payload.
+    // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
+    // tipos generados (no se regeneran): select("*") + cast del payload.
     const { data: raw } = await supabase.from("pos_settings").select("*").maybeSingle();
     if (!raw) return null;
     const data = raw as Record<string, unknown>;
@@ -384,6 +386,8 @@ export const posApi = {
       displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
       displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
       displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
+      // Default true: si la columna no existe aún (settings viejos), se ofrece.
+      offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
     };
   },
 

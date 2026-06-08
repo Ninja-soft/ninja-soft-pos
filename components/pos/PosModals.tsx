@@ -132,6 +132,7 @@ export function PaymentModal({
   loading,
   storeCreditBalance = 0,
   hasCustomer = false,
+  initialWarrantyId = "",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -147,6 +148,9 @@ export function PaymentModal({
   loading: boolean;
   storeCreditBalance?: number;
   hasCustomer?: boolean;
+  // Plan de garantía pre-seleccionado por la oferta contextual (H28). Al abrir,
+  // el modal arranca con esta garantía elegida; el cajero puede cambiarla.
+  initialWarrantyId?: string;
 }) {
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allPlans } = usePaymentPlans();
@@ -158,15 +162,16 @@ export function PaymentModal({
   const [planId, setPlanId] = useState("");
   const [received, setReceived] = useState("");
 
-  // Reset al abrir (el modal queda montado entre ventas).
+  // Reset al abrir (el modal queda montado entre ventas). La garantía arranca con
+  // la pre-seleccionada por la oferta contextual (H28), si la hay.
   useEffect(() => {
     if (open) {
       setMethod("cash");
-      setWarrantyId("");
+      setWarrantyId(initialWarrantyId);
       setPlanId("");
       setReceived("");
     }
-  }, [open]);
+  }, [open, initialWarrantyId]);
 
   // Reset el plan cuando cambia el método.
   useEffect(() => { setPlanId(""); }, [method]);

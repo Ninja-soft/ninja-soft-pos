@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
@@ -48,6 +48,7 @@ import { useFeatureGate } from "@/components/saas/GatedAction";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { productsApi, variantLabel } from "@/modules/products/api";
+import { CategoryNav, subtreeIds } from "@/components/pos/CategoryNav";
 import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
 import {
@@ -110,8 +111,33 @@ export default function PosPage() {
   );
 
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const { data: products } = useProducts(search, categoryFilter);
   const { data: categories } = useCategories();
+  // El filtro por categoría es por sub-árbol (la categoría + sus descendientes):
+  // elegir un rubro padre muestra también los productos de sus sub-rubros. Se
+  // resuelve en cliente, así que la query al server va sin categoría.
+  const { data: allProducts } = useProducts(search);
+  const products = useMemo(() => {
+    if (!categoryFilter) return allProducts;
+    const ids = subtreeIds(categories ?? [], categoryFilter);
+    return (allProducts ?? []).filter(
+      (p) => p.category_id && ids.has(p.category_id),
+    );
+  }, [allProducts, categories, categoryFilter]);
+  // Ruta "Rubro › Sub-rubro › …" de la categoría activa, para el encabezado de
+  // la grilla de productos (da contexto al filtrar profundo).
+  const categoryPath = useMemo(() => {
+    if (!categoryFilter) return null;
+    const byId = new Map((categories ?? []).map((c) => [c.id, c]));
+    const parts: string[] = [];
+    let cur: string | null = categoryFilter;
+    while (cur) {
+      const c = byId.get(cur);
+      if (!c) break;
+      parts.unshift(c.name);
+      cur = c.parent_id;
+    }
+    return parts.length ? parts.join(" › ") : null;
+  }, [categories, categoryFilter]);
   const { data: shift } = useOpenShift();
   const { data: register } = useDefaultRegister();
   const { open, close, sale } = usePosMutations();
@@ -497,32 +523,16 @@ export default function PosPage() {
               <Banknote size={16} /> Venta rápida (monto libre)
             </Button>
           )}
-          {/* Tabs de categoría (H36 — modo quick buttons) */}
-          {quickSale && !search.trim() && (categories ?? []).length > 0 && (
-            <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                onClick={() => setCategoryFilter(null)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  categoryFilter === null
-                    ? "bg-ninja-flame text-white"
-                    : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                Todos
-              </button>
-              {(categories ?? []).map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCategoryFilter(c.id === categoryFilter ? null : c.id)}
-                  className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                    categoryFilter === c.id
-                      ? "bg-ninja-flame text-white"
-                      : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
+          {/* Navegador de categorías: raíces como pestañas + drill-down a
+              sub-categorías (filtra por sub-árbol). Disponible para cualquier
+              rubro que tenga categorías cargadas. */}
+          {!search.trim() && (categories ?? []).length > 0 && (
+            <div className="mt-3">
+              <CategoryNav
+                categories={categories ?? []}
+                selected={categoryFilter}
+                onSelect={setCategoryFilter}
+              />
             </div>
           )}
 
@@ -566,15 +576,13 @@ export default function PosPage() {
                 ))}
               </div>
               <div className="mt-5 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {categoryFilter
-                  ? (categories ?? []).find((c) => c.id === categoryFilter)?.name ?? "Productos"
-                  : "Todos los productos"}
+                {categoryPath ?? "Todos los productos"}
               </div>
             </div>
           )}
-          {!showFrequent && categoryFilter && (
-            <div className="mt-2 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {(categories ?? []).find((c) => c.id === categoryFilter)?.name ?? "Categoría"}
+          {!(showFrequent && !categoryFilter) && categoryPath && (
+            <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {categoryPath}
             </div>
           )}
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

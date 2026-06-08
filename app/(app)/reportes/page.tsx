@@ -21,6 +21,8 @@ import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
+import { ReportSection } from "@/components/reports/ReportSection";
+import type { ReportChartDatum } from "@/components/reports/ReportChart";
 
 const REPORTS = [
   { key: "by_day", label: "Por día" },
@@ -198,6 +200,55 @@ export default function ReportesPage() {
     },
   });
 
+  // --- Datos para los gráficos por sección (es-AR / ARS). ---
+  const chart = useMemo(() => {
+    const dayLabel = (iso: string) => {
+      const [, mm, dd] = iso.split("-");
+      return dd && mm ? `${dd}/${mm}` : iso;
+    };
+    return {
+      by_day: (data?.by_day ?? []).map<ReportChartDatum>((r) => ({
+        label: dayLabel(r.day),
+        value: r.total,
+        secondary: r.count,
+      })),
+      by_method: (data?.by_method ?? []).map<ReportChartDatum>((r) => ({
+        label: METHOD_LABELS[r.method] ?? r.method,
+        value: r.total,
+      })),
+      by_category: (data?.by_category ?? []).map<ReportChartDatum>((r) => ({
+        label: r.category,
+        value: r.total,
+        secondary: r.qty,
+      })),
+      by_user: (data?.by_user ?? []).map<ReportChartDatum>((r) => ({
+        label: r.cashier,
+        value: r.total,
+        secondary: r.count,
+      })),
+      // Top 8 para que el gráfico no se sature; la tabla mantiene todo.
+      by_product: (data?.by_product ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+        label: r.product,
+        value: r.total,
+        secondary: r.qty,
+      })),
+      by_customer: (data?.by_customer ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+        label: r.customer,
+        value: r.total,
+        secondary: r.count,
+      })),
+      warranties: (warranty?.rows ?? []).map<ReportChartDatum>((r) => ({
+        label: r.label,
+        value: r.total,
+        secondary: r.qty,
+      })),
+      low_stock: lowStock.slice(0, 10).map<ReportChartDatum>((p) => ({
+        label: p.name,
+        value: p.stock,
+      })),
+    };
+  }, [data, warranty, lowStock]);
+
   return (
     <>
       <div className="mx-auto max-w-6xl px-6 py-8">
@@ -286,101 +337,163 @@ export default function ReportesPage() {
           </Card>
         </div>
 
-        {!isLoading && vis.by_day && (data?.by_day?.length ?? 0) > 0 && (
-          <DayBars data={data!.by_day} />
-        )}
-
         {isLoading ? (
           <p className="mt-8 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : (
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             {vis.by_day && (
-              <ReportTable
+              <ReportSection
+                id="by_day"
                 title="Por día"
-                cols={["Día", "Total", "Ventas"]}
-                rows={(data?.by_day ?? []).map((r) => [
-                  r.day,
-                  formatCurrency(r.total),
-                  String(r.count),
-                ])}
+                chartData={chart.by_day}
+                chartTypes={["bar", "line", "area"]}
+                valueName="Vendido"
+                className="lg:col-span-2"
+                table={
+                  <BareTable
+                    cols={["Día", "Total", "Ventas"]}
+                    rows={(data?.by_day ?? []).map((r) => [
+                      r.day,
+                      formatCurrency(r.total),
+                      String(r.count),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.by_method && (
-              <ReportTable
+              <ReportSection
+                id="by_method"
                 title="Por medio de pago"
-                cols={["Medio", "Total"]}
-                rows={(data?.by_method ?? []).map((r) => [
-                  METHOD_LABELS[r.method] ?? r.method,
-                  formatCurrency(r.total),
-                ])}
+                chartData={chart.by_method}
+                chartTypes={["pie", "bar"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Medio", "Total"]}
+                    rows={(data?.by_method ?? []).map((r) => [
+                      METHOD_LABELS[r.method] ?? r.method,
+                      formatCurrency(r.total),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.by_category && (
-              <ReportTable
+              <ReportSection
+                id="by_category"
                 title="Por categoría"
-                cols={["Categoría", "Total", "Cant."]}
-                rows={(data?.by_category ?? []).map((r) => [
-                  r.category,
-                  formatCurrency(r.total),
-                  formatQty(r.qty),
-                ])}
+                chartData={chart.by_category}
+                chartTypes={["pie", "bar"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Categoría", "Total", "Cant."]}
+                    rows={(data?.by_category ?? []).map((r) => [
+                      r.category,
+                      formatCurrency(r.total),
+                      formatQty(r.qty),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.by_user && (
-              <ReportTable
+              <ReportSection
+                id="by_user"
                 title="Por cajero"
-                cols={["Cajero", "Total", "Ventas"]}
-                rows={(data?.by_user ?? []).map((r) => [
-                  r.cashier,
-                  formatCurrency(r.total),
-                  String(r.count),
-                ])}
+                chartData={chart.by_user}
+                chartTypes={["bar", "pie"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Cajero", "Total", "Ventas"]}
+                    rows={(data?.by_user ?? []).map((r) => [
+                      r.cashier,
+                      formatCurrency(r.total),
+                      String(r.count),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.by_product && (
-              <ReportTable
+              <ReportSection
+                id="by_product"
                 title="Top productos"
-                cols={["Producto", "Total", "Cant."]}
-                rows={(data?.by_product ?? []).map((r) => [
-                  r.product,
-                  formatCurrency(r.total),
-                  formatQty(r.qty),
-                ])}
+                chartData={chart.by_product}
+                chartTypes={["bar", "pie"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Producto", "Total", "Cant."]}
+                    rows={(data?.by_product ?? []).map((r) => [
+                      r.product,
+                      formatCurrency(r.total),
+                      formatQty(r.qty),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.by_customer && (
-              <ReportTable
+              <ReportSection
+                id="by_customer"
                 title="Top clientes"
-                cols={["Cliente", "Total", "Ventas"]}
-                rows={(data?.by_customer ?? []).map((r) => [
-                  r.customer,
-                  formatCurrency(r.total),
-                  String(r.count),
-                ])}
+                chartData={chart.by_customer}
+                chartTypes={["bar", "pie"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Cliente", "Total", "Ventas"]}
+                    rows={(data?.by_customer ?? []).map((r) => [
+                      r.customer,
+                      formatCurrency(r.total),
+                      String(r.count),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.warranties && (
-              <ReportTable
+              <ReportSection
+                id="warranties"
                 title="Garantías y comisiones"
-                cols={["Garantía", "Vend.", "Total", "Com.%", "Comisión"]}
-                rows={(warranty?.rows ?? []).map((r) => [
-                  r.label,
-                  String(r.qty),
-                  formatCurrency(r.total),
-                  `${r.commission_pct}%`,
-                  formatCurrency(r.commission),
-                ])}
+                chartData={chart.warranties}
+                chartTypes={["bar", "pie"]}
+                valueName="Total"
+                table={
+                  <BareTable
+                    cols={["Garantía", "Vend.", "Total", "Com.%", "Comisión"]}
+                    rows={(warranty?.rows ?? []).map((r) => [
+                      r.label,
+                      String(r.qty),
+                      formatCurrency(r.total),
+                      `${r.commission_pct}%`,
+                      formatCurrency(r.commission),
+                    ])}
+                  />
+                }
               />
             )}
             {vis.low_stock && (
-              <ReportTable
+              <ReportSection
+                id="low_stock"
                 title="Stock bajo"
-                cols={["Producto", "Stock", "Mínimo"]}
-                rows={lowStock.map((p) => [
-                  p.name,
-                  `${formatQty(p.stock)} ${p.unit}`,
-                  formatQty(p.stock_min ?? 0),
-                ])}
+                chartData={chart.low_stock}
+                chartTypes={["bar"]}
+                valueFormat="number"
+                valueName="Stock"
+                table={
+                  <BareTable
+                    cols={["Producto", "Stock", "Mínimo"]}
+                    rows={lowStock.map((p) => [
+                      p.name,
+                      `${formatQty(p.stock)} ${p.unit}`,
+                      formatQty(p.stock_min ?? 0),
+                    ])}
+                  />
+                }
               />
             )}
           </div>
@@ -390,52 +503,10 @@ export default function ReportesPage() {
   );
 }
 
-// Mini-gráfico de barras de ventas por día (CSS puro, sin dependencias).
-function DayBars({ data }: { data: { day: string; total: number; count: number }[] }) {
-  const max = Math.max(1, ...data.map((d) => d.total));
+// Tabla "desnuda" (sin card ni header): el chrome lo aporta ReportSection.
+function BareTable({ cols, rows }: { cols: string[]; rows: string[][] }) {
   return (
-    <div className="mt-8 rounded-lg border border-border bg-card p-5">
-      <div className="mb-3 font-display font-bold">Ventas por día</div>
-      <div className="flex items-end gap-2 overflow-x-auto pb-1" style={{ height: 160 }}>
-        {data.map((d) => {
-          const h = Math.round((d.total / max) * 130) + 2;
-          const [, mm, dd] = d.day.split("-");
-          return (
-            <div key={d.day} className="flex min-w-[28px] flex-1 flex-col items-center gap-1">
-              <span className="text-[10px] tabular-nums text-muted-foreground">
-                {d.total > 0 ? Math.round(d.total / 1000) + "k" : ""}
-              </span>
-              <div
-                className="w-full rounded-t bg-ninja-gradient"
-                style={{ height: h }}
-                title={`${d.day}: ${formatCurrency(d.total)} · ${d.count} ventas`}
-              />
-              <span className="text-[10px] text-muted-foreground">
-                {dd && mm ? `${dd}/${mm}` : d.day}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ReportTable({
-  title,
-  cols,
-  rows,
-}: {
-  title: string;
-  cols: string[];
-  rows: string[][];
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-4 py-3 font-display font-bold">
-        {title}
-      </div>
-      <div className="overflow-x-auto">
+    <div className="overflow-x-auto">
       <table className="w-full min-w-[320px] text-sm">
         <thead className="text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
           <tr>
@@ -469,7 +540,6 @@ function ReportTable({
           )}
         </tbody>
       </table>
-      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RotateCcw, Search, Tags } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Button } from "@/components/ui/Button";
 import { ReturnModal } from "@/components/sales/ReturnModal";
 import { ReturnReasonsModal } from "@/components/sales/ReturnReasonsModal";
@@ -53,7 +54,10 @@ export default function DevolucionesPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <Eyebrow>Operación</Eyebrow>
-            <Display className="mt-3 text-3xl md:text-4xl">Devoluciones</Display>
+            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+              Devoluciones
+              <InfoHint section="devoluciones" size={18} />
+            </Display>
           </div>
           <Button variant="secondary" className="mt-2 shrink-0" onClick={() => setReasonsOpen(true)}>
             <Tags size={16} /> Motivos

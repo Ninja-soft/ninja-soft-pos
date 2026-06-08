@@ -43,6 +43,9 @@ const ALLOWED_KEYS: Record<string, Set<string>> = {
     "commercial_text",
     "addon_price_ars",
     "addon_trial_days",
+    // Estado activo/inactivo del addon IA ("true"/"false"). NO es secreto: se
+    // devuelve en claro en el status para que la card pueda prefijar el toggle.
+    "active",
   ]),
 };
 // Llaves que nunca se devuelven en claro (solo se reporta si están seteadas).

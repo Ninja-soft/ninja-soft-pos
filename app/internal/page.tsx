@@ -3,10 +3,10 @@ import {
   AlertTriangle,
   BarChart3,
   Building2,
+  CircleDashed,
   ClipboardList,
   CreditCard,
   Mail,
-  Minus,
   ShieldCheck,
   TrendingUp,
   UserCog,
@@ -309,10 +309,14 @@ function KpiCard({
           <span className="text-xs">{label}</span>
         </div>
         {noData ? (
-          <p className="mt-1 inline-flex items-center gap-1.5 font-display text-2xl font-black text-muted-foreground/60">
-            <Minus size={20} className="text-muted-foreground/50" aria-hidden />
-            <span className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
-              n/d
+          <p className="mt-1 inline-flex items-center gap-1.5 text-muted-foreground/70">
+            <CircleDashed
+              size={18}
+              className="text-muted-foreground/50"
+              aria-hidden
+            />
+            <span className="text-sm font-semibold text-muted-foreground/70">
+              Sin datos
             </span>
           </p>
         ) : (

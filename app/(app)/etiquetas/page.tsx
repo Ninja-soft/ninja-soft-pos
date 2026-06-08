@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Printer, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Barcode } from "@/components/products/Barcode";
 import { useProducts } from "@/modules/products/hooks";
@@ -42,7 +43,10 @@ export default function EtiquetasPage() {
       <div className="no-print">
         <Eyebrow>Catálogo</Eyebrow>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <Display className="text-3xl md:text-4xl">Etiquetas</Display>
+          <Display className="flex items-center gap-2 text-3xl md:text-4xl">
+            Etiquetas
+            <InfoHint section="etiquetas" size={18} />
+          </Display>
           <Button onClick={() => window.print()} disabled={labels.length === 0}>
             <Printer size={16} /> Imprimir ({labels.length})
           </Button>

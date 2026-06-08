@@ -17,6 +17,8 @@ import {
   Flame,
   Shield,
   Tag,
+  Sprout,
+  Swords,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +28,8 @@ export const PLAN_ICONS: { key: string; Icon: LucideIcon }[] = [
   { key: "Store", Icon: Store },
   { key: "Building2", Icon: Building2 },
   { key: "Rocket", Icon: Rocket },
+  { key: "Sprout", Icon: Sprout },
+  { key: "Swords", Icon: Swords },
   { key: "Crown", Icon: Crown },
   { key: "Star", Icon: Star },
   { key: "Zap", Icon: Zap },

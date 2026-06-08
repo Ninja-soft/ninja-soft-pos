@@ -9,6 +9,8 @@ import { Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTenant } from "@/modules/tenants/api";
 import { redeemInviteCode } from "@/modules/auth/invite";
+import { applySignupPlan } from "@/modules/auth/plan";
+import { useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
 import {
   SignupAccountSchema,
   SignupBusinessSchema,
@@ -25,24 +27,26 @@ import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { ValuePanel } from "@/components/auth/ValuePanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { SignupStepBusiness } from "@/components/auth/SignupStepBusiness";
+import { SignupStepPlan } from "@/components/auth/SignupStepPlan";
 import type { Vertical } from "@/lib/verticals/config";
 import { cn } from "@/lib/utils/cn";
 
 const ivaSelectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
 
-function Stepper({ step }: { step: 1 | 2 }) {
+function Stepper({ step }: { step: 1 | 2 | 3 }) {
   const items = [
     { n: 1, label: "Tu cuenta" },
     { n: 2, label: "Tu negocio" },
+    { n: 3, label: "Tu plan" },
   ] as const;
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 sm:gap-3">
       {items.map((it, i) => {
         const active = step === it.n;
         const done = step > it.n;
         return (
-          <div key={it.n} className="flex items-center gap-3">
+          <div key={it.n} className="flex items-center gap-2 sm:gap-3">
             <span className="flex items-center gap-2">
               <span
                 className={cn(
@@ -65,7 +69,9 @@ function Stepper({ step }: { step: 1 | 2 }) {
                 {it.label}
               </span>
             </span>
-            {i === 0 && <span className="h-px w-6 bg-white/15" aria-hidden />}
+            {i < items.length - 1 && (
+              <span className="h-px w-4 bg-white/15 sm:w-6" aria-hidden />
+            )}
           </div>
         );
       })}
@@ -134,17 +140,35 @@ function SignupWizard() {
   const { toast } = useToast();
 
   // Modo del wizard:
-  // - "account": flujo email, paso 1 (cuenta) → paso 2 (negocio).
-  // - "sso": usuario autenticado por Google sin tenant → solo paso 2 con
-  //   nombre de negocio incluido.
+  // - "account": flujo email, paso 1 (cuenta) → paso 2 (negocio) → paso 3 (plan).
+  // - "sso": usuario autenticado por Google sin tenant → negocio + plan en una
+  //   sola vista (las credenciales ya vienen de Google).
   const [mode, setMode] = useState<"loading" | "account" | "sso">("loading");
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [industry, setIndustry] = useState<Vertical | null>(null);
   const [industryError, setIndustryError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  // Plan elegido (key). Arranca null y se autoselecciona el recomendado (Pro)
+  // cuando cargan los planes. El selector aplica salvo que un invite code lo fije.
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const { data: signupPlans } = useSignupPlans();
   // Si el alta de email ya creó el usuario, no lo recreamos en un reintento.
   const userCreatedRef = useRef(false);
+
+  // Autoselección del plan recomendado (Pro) en cuanto cargan los planes, sin
+  // pisar una elección manual previa del usuario.
+  useEffect(() => {
+    if (selectedPlan || !signupPlans || signupPlans.length === 0) return;
+    const fallback = signupPlans.find((p) => p.isRecommended) ?? signupPlans[0];
+    if (fallback) setSelectedPlan(fallback.key);
+  }, [signupPlans, selectedPlan]);
+
+  // Plan elegido resuelto (objeto). Sirve para distinguir trial vs contacto.
+  const chosenPlan: SignupPlan | null =
+    signupPlans?.find((p) => p.key === selectedPlan) ?? null;
+  // Enterprise (trial_days = 0): no hay checkout self-service → es "contactanos".
+  const planNeedsContact = chosenPlan != null && chosenPlan.trialDays <= 0;
 
   const accountForm = useForm<SignupAccountInput>({
     resolver: zodResolver(SignupAccountSchema),
@@ -221,26 +245,62 @@ function SignupWizard() {
     accountForm.handleSubmit(() => setStep(2))();
   }
 
-  // Aplica datos fiscales + código tras crear el tenant. No aborta el alta.
-  async function applyFiscalAndCode(
+  // Paso 2 (email): exigir rubro y avanzar a elegir plan.
+  function goToPlan() {
+    if (!industry) {
+      setIndustryError("Elegí un tipo de negocio.");
+      return;
+    }
+    setStep(3);
+  }
+
+  // Canjea el código de invitación tras crear el tenant. No aborta el alta.
+  // Devuelve true si un código FIJÓ el plan (entonces gana sobre el selector).
+  async function applyInviteCode(
     tenantId: string,
     code: string | undefined,
-  ) {
-    if (code && code.trim()) {
-      const res = await redeemInviteCode(code, tenantId);
-      if (!res.ok && res.message) {
-        toast({
-          title: "Registro creado",
-          description: `Pero el código no se aplicó: ${res.message}.`,
-          variant: "info",
-        });
-      } else if (res.ok) {
-        toast({ title: res.message, variant: "success" });
-      }
+  ): Promise<boolean> {
+    if (!code || !code.trim()) return false;
+    const res = await redeemInviteCode(code, tenantId);
+    if (!res.ok && res.message) {
+      toast({
+        title: "Registro creado",
+        description: `Pero el código no se aplicó: ${res.message}.`,
+        variant: "info",
+      });
+      return false;
+    }
+    if (res.ok) toast({ title: res.message, variant: "success" });
+    return res.ok;
+  }
+
+  // Aplica el plan elegido en el selector. Sólo corre cuando NINGÚN invite fijó
+  // el plan y el plan es de prueba (con trial). No aborta el alta si falla.
+  async function applyChosenPlan(invitePinnedPlan: boolean) {
+    if (invitePinnedPlan) return; // el código de invitación manda.
+    if (!selectedPlan) return;
+    const plan = signupPlans?.find((p) => p.key === selectedPlan);
+    if (!plan || plan.trialDays <= 0) return; // Enterprise no se auto-aplica.
+    // create_tenant ya dejó la suscripción en plan start (trial 14d); si el
+    // usuario eligió otro plan con trial, lo cambiamos manteniendo el trial.
+    if (plan.key === "start") return; // ya es el plan por defecto.
+    const res = await applySignupPlan(plan.key);
+    if (!res.ok && res.message) {
+      toast({
+        title: "Negocio creado",
+        description: `Pero no pudimos fijar el plan ${plan.name}: ${res.message}. Lo elegís desde tu panel.`,
+        variant: "info",
+      });
     }
   }
 
-  // Submit del flujo EMAIL (paso 2 → crear cuenta).
+  // CTA de Enterprise (sin checkout self-service): abrir contacto con ventas.
+  function contactSales() {
+    const subject = encodeURIComponent("Quiero el plan Enterprise (Sensei)");
+    window.location.href = `mailto:ventas@ninjapos.com.ar?subject=${subject}`;
+  }
+
+  // Submit del flujo EMAIL (paso 3 → crear cuenta).
   async function submitAccount() {
     if (submitting) return;
     if (!industry) {
@@ -248,6 +308,11 @@ function SignupWizard() {
       return;
     }
     const v = accountForm.getValues();
+    // Enterprise sin invite que lo fije: no hay alta self-service, va a ventas.
+    if (planNeedsContact && !(v.inviteCode && v.inviteCode.trim())) {
+      contactSales();
+      return;
+    }
     setSubmitting(true);
     const supabase = createClient();
     try {
@@ -296,8 +361,10 @@ function SignupWizard() {
       });
       await supabase.auth.refreshSession();
 
-      // 3. Código de invitación (no bloqueante).
-      await applyFiscalAndCode(res.tenant_id, v.inviteCode);
+      // 3. Código de invitación (no bloqueante). Si fija plan, gana sobre el
+      //    selector; si no, aplicamos el plan elegido (sólo planes con trial).
+      const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
+      await applyChosenPlan(invitePinnedPlan);
 
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
@@ -324,6 +391,11 @@ function SignupWizard() {
     const valid = await businessForm.trigger();
     if (!valid) return;
     const v = businessForm.getValues();
+    // Enterprise sin invite que lo fije: no hay alta self-service, va a ventas.
+    if (planNeedsContact && !(v.inviteCode && v.inviteCode.trim())) {
+      contactSales();
+      return;
+    }
     setSubmitting(true);
     const supabase = createClient();
     try {
@@ -335,7 +407,8 @@ function SignupWizard() {
         iva_condition: v.ivaCondition || undefined,
       });
       await supabase.auth.refreshSession();
-      await applyFiscalAndCode(res.tenant_id, v.inviteCode);
+      const invitePinnedPlan = await applyInviteCode(res.tenant_id, v.inviteCode);
+      await applyChosenPlan(invitePinnedPlan);
       toast({ title: "¡Listo! Tu negocio fue creado", variant: "success" });
       router.push("/dashboard");
       router.refresh();
@@ -372,9 +445,11 @@ function SignupWizard() {
             <WordmarkPos variant="dark" className="h-6 w-auto" priority />
           </div>
 
-          <Stepper step={mode === "sso" ? 2 : step} />
+          {/* En SSO el negocio y el plan van juntos en una sola vista; el
+              stepper sólo aplica al flujo email de 3 pasos. */}
+          {mode === "account" && <Stepper step={step} />}
 
-          <div className="mt-6">
+          <div className={mode === "account" ? "mt-6" : ""}>
             {/* ---------- FLUJO EMAIL ---------- */}
             {mode === "account" && step === 1 && (
               <div className="space-y-5">
@@ -465,8 +540,28 @@ function SignupWizard() {
                     type="button"
                     variant="secondary"
                     className="flex-1"
-                    disabled={submitting}
                     onClick={() => setStep(1)}
+                  >
+                    Atrás
+                  </Button>
+                  <Button type="button" className="flex-1" onClick={goToPlan}>
+                    Continuar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ---------- FLUJO EMAIL · paso 3: elegir plan ---------- */}
+            {mode === "account" && step === 3 && (
+              <div className="space-y-6">
+                <SignupStepPlan value={selectedPlan} onChange={setSelectedPlan} />
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="flex-1"
+                    disabled={submitting}
+                    onClick={() => setStep(2)}
                   >
                     Atrás
                   </Button>
@@ -476,7 +571,7 @@ function SignupWizard() {
                     loading={submitting}
                     onClick={submitAccount}
                   >
-                    Crear cuenta
+                    {planNeedsContact ? "Hablar con ventas" : "Crear cuenta"}
                   </Button>
                 </div>
               </div>
@@ -518,13 +613,15 @@ function SignupWizard() {
                   <p className="text-sm text-destructive">{industryError}</p>
                 )}
 
+                <SignupStepPlan value={selectedPlan} onChange={setSelectedPlan} />
+
                 <Button
                   type="button"
                   className="w-full"
                   loading={submitting}
                   onClick={submitBusiness}
                 >
-                  Crear cuenta
+                  {planNeedsContact ? "Hablar con ventas" : "Crear cuenta"}
                 </Button>
               </div>
             )}

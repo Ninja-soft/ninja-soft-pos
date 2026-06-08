@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { BadgeDollarSign, CreditCard, Mail, Palette, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
@@ -129,7 +130,10 @@ function ConfiguracionInner() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <Eyebrow>Preferencias</Eyebrow>
-      <Display className="mt-3">Configuración</Display>
+      <Display className="mt-3 flex items-center gap-2">
+        Configuración
+        <InfoHint section="configuracion" size={18} />
+      </Display>
       <p className="mt-2 text-muted-foreground">
         Ajustá NinjaPos a tu medida. Los cambios se aplican al instante y quedan
         guardados en tu cuenta, disponibles en cualquier dispositivo.

@@ -7,6 +7,7 @@ import { format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { Switch } from "@/components/ui/Switch";
@@ -253,7 +254,10 @@ export default function ReportesPage() {
     <>
       <div className="mx-auto max-w-6xl px-6 py-8">
         <Eyebrow>Información</Eyebrow>
-        <Display className="mt-3 text-3xl md:text-4xl">Reportes</Display>
+        <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+          Reportes
+          <InfoHint section="reportes" size={18} />
+        </Display>
 
         <div className="-mx-6 mt-6 flex items-end gap-3 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex shrink-0 flex-col gap-1">

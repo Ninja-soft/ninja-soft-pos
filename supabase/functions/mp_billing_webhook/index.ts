@@ -5,12 +5,18 @@
 // plataforma y actualiza subscriptions.status. Siempre responde 200.
 //
 // Además de actualizar el estado:
-//   • Pago aprobado (preapproval authorized → active): registra un billing_record
-//     (para que "último pago" del panel del dueño se auto-popule), emite una
-//     notificación in-app payment_ok y encola un email payment_ok. Idempotente:
-//     no duplica el billing_record si ya hay uno que cubre el nuevo período.
+//   • Pago aprobado (preapproval authorized → active): REANCLA el período vía el
+//     RPC reanchor_subscription_period (status=active + período anclado al
+//     VENCIMIENTO ANTERIOR, no a now(): si la cuenta venía vencida/suspendida, el
+//     cliente NO gana los días del lapso y se mantiene el día del mes de cobro).
+//     Registra un billing_record (para que "último pago" del panel del dueño se
+//     auto-popule), emite una notificación in-app (pago / reactivación) y encola
+//     un email. Idempotente: no duplica el billing_record si ya hay uno que cubre
+//     el nuevo período.
 //   • Pago fallido/pausado o cancelado (paused/cancelled): emite notificación
-//     payment_failed (solo en la transición, para no spamear en reenvíos).
+//     payment_failed (solo en la transición, para no spamear en reenvíos). El
+//     past_due_since (inicio de la gracia de 3 días) lo setea el trigger del lado
+//     SQL al pasar a past_due.
 //
 // internal_notify NO se usa (es staff-gated): se inserta directo en
 // notifications. Los emails siguen el patrón del motor de dunning
@@ -176,22 +182,72 @@ Deno.serve(async (req: Request) => {
       return (ownerRow?.users as { email?: string } | null)?.email ?? null;
     }
 
-    const patch: Record<string, unknown> = { mp_preapproval_id: pre.id ?? dataId };
-    let newPeriodEnd: Date | null = null;
-    if (newStatus === "active") {
-      const months = pre.auto_recurring?.frequency ?? (yearly ? 12 : 1);
-      const start = new Date();
-      const end = new Date(start);
-      end.setMonth(end.getMonth() + months);
-      newPeriodEnd = end;
-      patch.status = "active";
-      patch.current_period_start = start.toISOString();
-      patch.current_period_end = end.toISOString();
-    } else {
-      patch.status = newStatus;
-    }
+    // ¿La cuenta venía vencida/bloqueada? Entonces este pago es una REACTIVACIÓN
+    // (no una renovación normal): el copy y la auditoría lo reflejan.
+    const isReactivation =
+      newStatus === "active" &&
+      (prevStatus === "past_due" || prevStatus === "suspended");
 
-    await admin.from("subscriptions").update(patch).eq("id", sub.id);
+    const months = pre.auto_recurring?.frequency ?? (yearly ? 12 : 1);
+
+    let newPeriodEnd: Date | null = null;
+    let newPeriodStart: Date | null = null;
+
+    if (newStatus === "active") {
+      // El preapproval_id se actualiza directo; el ESTADO y el PERÍODO los aplica
+      // el RPC reanchor_subscription_period, que ancla el nuevo período al
+      // VENCIMIENTO ANTERIOR (no a now()): si la cuenta venía vencida, el cliente
+      // no gana los días del lapso y se mantiene el día del mes de cobro.
+      await admin
+        .from("subscriptions")
+        .update({ mp_preapproval_id: pre.id ?? dataId })
+        .eq("id", sub.id);
+
+      const { error: reErr } = await admin.rpc("reanchor_subscription_period", {
+        p_subscription_id: sub.id,
+        p_months: months,
+      });
+      if (reErr) {
+        // Si el RPC falla, no dejamos la suscripción a medias: marcamos active y
+        // un período conservador (now → now+months) para no bloquear al cliente
+        // que sí pagó. Se loguea para visibilidad.
+        console.error("[mp_billing_webhook] reanchor_failed", reErr);
+        const start = new Date();
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + months);
+        await admin
+          .from("subscriptions")
+          .update({
+            status: "active",
+            current_period_start: start.toISOString(),
+            current_period_end: end.toISOString(),
+          })
+          .eq("id", sub.id);
+        newPeriodStart = start;
+        newPeriodEnd = end;
+      } else {
+        // El RPC ya dejó status=active + período reanclado. Re-leemos el período
+        // efectivo para el billing_record y el copy.
+        const { data: fresh } = await admin
+          .from("subscriptions")
+          .select("current_period_start, current_period_end")
+          .eq("id", sub.id)
+          .maybeSingle();
+        newPeriodStart = fresh?.current_period_start
+          ? new Date(fresh.current_period_start as string)
+          : null;
+        newPeriodEnd = fresh?.current_period_end
+          ? new Date(fresh.current_period_end as string)
+          : null;
+      }
+    } else {
+      // paused/cancelled/pending → solo status (+ preapproval_id). El trigger SQL
+      // setea past_due_since al pasar a past_due.
+      await admin
+        .from("subscriptions")
+        .update({ status: newStatus, mp_preapproval_id: pre.id ?? dataId })
+        .eq("id", sub.id);
+    }
 
     await admin.from("audit_logs").insert({
       tenant_id: tenantId,
@@ -202,8 +258,10 @@ Deno.serve(async (req: Request) => {
       after_data: {
         preapproval_id: pre.id ?? dataId,
         mp_status: pre.status,
-        status: patch.status,
+        status: newStatus,
         prev_status: prevStatus,
+        reactivation: isReactivation,
+        anchored_to_previous_due: newStatus === "active",
       },
     });
 
@@ -212,7 +270,11 @@ Deno.serve(async (req: Request) => {
     // ===========================================================================
     if (newStatus === "active" && newPeriodEnd) {
       const periodEndDate = newPeriodEnd.toISOString().slice(0, 10); // date
-      const periodStartDate = new Date().toISOString().slice(0, 10);
+      // period_start del cobro = inicio REANCLADO (= vencimiento anterior), no
+      // now(). Refleja a qué período corresponde el pago.
+      const periodStartDate = (newPeriodStart ?? new Date())
+        .toISOString()
+        .slice(0, 10);
 
       // Idempotencia del cobro: solo registramos si NO hay ya un billing_record
       // que cubra este período (mismo criterio que el motor de dunning).
@@ -233,39 +295,55 @@ Deno.serve(async (req: Request) => {
           period_start: periodStartDate,
           period_end: periodEndDate,
           receipt_ref: pre.id ?? dataId,
-          notes: `Cobro automático Mercado Pago • Plan ${plan.name ?? ""}`.trim(),
+          notes: `${
+            isReactivation ? "Reactivación" : "Cobro automático"
+          } Mercado Pago • Plan ${plan.name ?? ""}`.trim(),
         });
 
         const email = await ownerEmail();
+        const endLabel = new Date(periodEndDate).toLocaleDateString("es-AR");
 
         // Notificación in-app (insert directo: internal_notify es staff-gated).
+        // Si fue reactivación, el copy lo dice (la cuenta estaba bloqueada).
         await admin.from("notifications").insert({
           target_tenant_id: tenantId,
           target_role: "owner",
           type: "billing",
           severity: "success",
-          title: "Recibimos tu pago",
-          body: `Acreditamos el pago de tu suscripción${
-            amount > 0 ? ` por $${amount.toLocaleString("es-AR")}` : ""
-          }. ¡Gracias!`,
+          title: isReactivation ? "Reactivamos tu cuenta" : "Recibimos tu pago",
+          body: isReactivation
+            ? `Recibimos tu pago${
+                amount > 0 ? ` de $${amount.toLocaleString("es-AR")}` : ""
+              } y reactivamos tu cuenta. Tu período va hasta el ${endLabel}.`
+            : `Acreditamos el pago de tu suscripción${
+                amount > 0 ? ` por $${amount.toLocaleString("es-AR")}` : ""
+              }. ¡Gracias!`,
           requires_ack: false,
         });
 
-        // Email payment_ok.
+        // Email payment_ok / reactivación.
         if (email) {
           await admin.from("system_emails").insert({
             tenant_id: tenantId,
             recipient: email,
-            subject: "Recibimos tu pago — gracias",
+            subject: isReactivation
+              ? "Reactivamos tu cuenta de NinjaPos"
+              : "Recibimos tu pago — gracias",
             kind: "system",
             status: "pending",
             html_content: emailHtml(
-              "Recibimos tu pago",
-              `Acreditamos el pago de tu suscripción de NinjaPos${
-                amount > 0 ? ` por $${amount.toLocaleString("es-AR")}` : ""
-              }. Tu plan ${plan.name ?? ""} sigue activo hasta el ${new Date(
-                periodEndDate,
-              ).toLocaleDateString("es-AR")}. ¡Gracias por elegirnos!`,
+              isReactivation ? "Reactivamos tu cuenta" : "Recibimos tu pago",
+              isReactivation
+                ? `Recibimos tu pago${
+                    amount > 0 ? ` de $${amount.toLocaleString("es-AR")}` : ""
+                  } y reactivamos tu cuenta de NinjaPos. Tu plan ${
+                    plan.name ?? ""
+                  } queda activo hasta el ${endLabel}. El período se reanudó desde tu vencimiento anterior. ¡Gracias!`
+                : `Acreditamos el pago de tu suscripción de NinjaPos${
+                    amount > 0 ? ` por $${amount.toLocaleString("es-AR")}` : ""
+                  }. Tu plan ${
+                    plan.name ?? ""
+                  } sigue activo hasta el ${endLabel}. ¡Gracias por elegirnos!`,
             ),
           });
         }
@@ -276,7 +354,13 @@ Deno.serve(async (req: Request) => {
           entity_type: "billing_records",
           entity_id: sub.id,
           action: "payment_recorded",
-          after_data: { amount, period_end: periodEndDate, source: "mp_webhook" },
+          after_data: {
+            amount,
+            period_start: periodStartDate,
+            period_end: periodEndDate,
+            source: "mp_webhook",
+            reactivation: isReactivation,
+          },
         });
       }
     }
@@ -302,7 +386,7 @@ Deno.serve(async (req: Request) => {
           : "Hubo un problema con tu cobro",
         body: cancelled
           ? "Mercado Pago canceló la suscripción. Reactivala desde tu panel para no perder acceso."
-          : "No pudimos confirmar el pago de tu suscripción. Revisá tu medio de pago en Mercado Pago.",
+          : "No pudimos confirmar el pago de tu suscripción. Tenés 3 días para regularizarlo; después tu cuenta se bloquea. Revisá tu medio de pago en Mercado Pago.",
         requires_ack: false,
       });
 
@@ -310,14 +394,18 @@ Deno.serve(async (req: Request) => {
         await admin.from("system_emails").insert({
           tenant_id: tenantId,
           recipient: email,
-          subject: "Hubo un problema con tu cobro",
+          subject: cancelled
+            ? "Tu suscripción se canceló"
+            : "Hubo un problema con tu cobro — tenés 3 días",
           kind: "system",
           status: "pending",
           html_content: emailHtml(
-            "Hubo un problema con tu cobro",
+            cancelled
+              ? "Tu suscripción se canceló"
+              : "Hubo un problema con tu cobro",
             cancelled
               ? "Mercado Pago canceló tu suscripción de NinjaPos. Para seguir usando el sistema, reactivala desde tu panel. Si ya regularizaste, escribinos."
-              : "No pudimos confirmar el pago de tu suscripción de NinjaPos. Para no perder acceso, revisá tu medio de pago en Mercado Pago. Si ya pagaste, podés ignorar este aviso.",
+              : "No pudimos confirmar el pago de tu suscripción de NinjaPos. Tenés 3 días para regularizarlo desde Mercado Pago; pasado ese plazo tu cuenta se bloquea hasta que pagues. Si ya pagaste, podés ignorar este aviso.",
           ),
         });
       }

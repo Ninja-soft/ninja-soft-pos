@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { AvatarUploader } from "@/components/account/AvatarUploader";
+import { ProfileModalBody } from "@/components/account/ProfileModalBody";
 
+// Editar mi perfil en Internal = la cuenta global del usuario (tabla `users`:
+// full_name / avatar_url). La UI (recorte de foto, ver/descargar, campos) la
+// aporta ProfileModalBody, compartida con el POS para que la experiencia sea
+// idéntica; acá solo cambia la fuente de datos y el guardado.
 export function ProfileEditModal({
   open,
   onOpenChange,
@@ -63,29 +64,17 @@ export function ProfileEditModal({
   });
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Mi perfil">
-      <div className="space-y-5">
-        {userId && (
-          <AvatarUploader
-            value={avatarUrl}
-            onChange={setAvatarUrl}
-            name={name || "?"}
-            bucket="user-avatars"
-            pathPrefix={userId}
-            size={56}
-          />
-        )}
-        <Input
-          label="Nombre"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
-            {save.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    <ProfileModalBody
+      open={open}
+      onOpenChange={onOpenChange}
+      name={name}
+      onNameChange={setName}
+      avatar={avatarUrl}
+      onAvatarChange={setAvatarUrl}
+      uploadBucket="user-avatars"
+      uploadPathPrefix={userId}
+      onSave={() => save.mutate()}
+      saving={save.isPending}
+    />
   );
 }

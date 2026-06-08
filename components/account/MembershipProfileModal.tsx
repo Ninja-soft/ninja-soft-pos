@@ -4,14 +4,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Avatar } from "@/components/ui/Avatar";
-import { AvatarUploader } from "@/components/account/AvatarUploader";
+import { ProfileModalBody } from "@/components/account/ProfileModalBody";
 
 // Perfil del usuario en el POS = su membresía (tenant_users.display_name/avatar),
-// lo mismo que se ve y edita en la sección Equipo.
+// lo mismo que se ve y edita en la sección Equipo. La UI (recorte de foto,
+// ver/descargar, campos) la aporta ProfileModalBody, idéntica a la de Internal;
+// acá solo cambia la fuente de datos (tenant_users) y el guardado (Edge Fn).
 export function MembershipProfileModal({
   open,
   onOpenChange,
@@ -66,27 +64,17 @@ export function MembershipProfileModal({
   });
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Mi perfil">
-      <div className="space-y-5">
-        {tenantId ? (
-          <AvatarUploader
-            value={avatar}
-            onChange={setAvatar}
-            name={name || "?"}
-            bucket="tenant-assets"
-            pathPrefix={`${tenantId}/members`}
-            size={56}
-          />
-        ) : (
-          <Avatar name={name || "?"} avatar={avatar} size={56} />
-        )}
-        <Input label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
-        <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
-            {save.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    <ProfileModalBody
+      open={open}
+      onOpenChange={onOpenChange}
+      name={name}
+      onNameChange={setName}
+      avatar={avatar}
+      onAvatarChange={setAvatar}
+      uploadBucket="tenant-assets"
+      uploadPathPrefix={tenantId ? `${tenantId}/members` : null}
+      onSave={() => save.mutate()}
+      saving={save.isPending}
+    />
   );
 }

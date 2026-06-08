@@ -7,6 +7,7 @@ import { Sparkles, X, Send, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import { useToast } from "@/components/ui/Toast";
+import { Spinner } from "@/components/ui/Spinner";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -46,7 +47,7 @@ export function AssistantBubble() {
   const listRef = useRef<HTMLDivElement>(null);
 
   // ¿Este tenant tiene acceso real al asistente? (addon / flag / beta).
-  const { data: available } = useQuery({
+  const { data: available, isLoading: availableLoading } = useQuery({
     queryKey: ["ai-available"],
     queryFn: async (): Promise<boolean> => {
       const { data, error } = await supabase.rpc("ai_available");
@@ -58,7 +59,7 @@ export function AssistantBubble() {
 
   // Config pública del addon (avatar + texto comercial). Sin tipos generados
   // para el RPC nuevo → cast con `as any`.
-  const { data: publicCfg } = useQuery({
+  const { data: publicCfg, isLoading: cfgLoading } = useQuery({
     queryKey: ["ai-public-config"],
     queryFn: async (): Promise<PublicCfg | null> => {
       // El RPC ai_public_config aún no está en los tipos generados → cast.
@@ -83,6 +84,22 @@ export function AssistantBubble() {
   // Ícono del círculo: sin addon → gif de marca; con addon → imagen del
   // proveedor activo (fallback al ícono Sparkles si no hubiera ninguna).
   const iconUrl = locked ? UNSCREEN_GIF : providerImage;
+
+  // Estado de carga del ícono: el botón flotante queda en spinner hasta que la
+  // imagen del logo termina de cargar (o falla), para que no aparezca el ícono
+  // genérico y luego "salte" al logo real. Se resetea cada vez que cambia la URL.
+  const [iconReady, setIconReady] = useState(false);
+  useEffect(() => {
+    setIconReady(false);
+  }, [iconUrl]);
+
+  // La burbuja está lista cuando: sabemos el acceso, terminó de cargar la config
+  // pública, y el ícono ya cargó (o no hay URL → usamos Sparkles, listo directo).
+  const bubbleReady =
+    !availableLoading &&
+    available !== undefined &&
+    !cfgLoading &&
+    (iconUrl === "" || iconReady);
 
   // Explicador comercial: cuando la burbuja está bloqueada y se abre, pedimos el
   // texto a la Edge Function con {intro:true} (devuelve config o su default). Se
@@ -160,9 +177,6 @@ export function AssistantBubble() {
     send.mutate(next);
   }
 
-  // Mientras no sabemos el estado de acceso, no parpadeamos la burbuja.
-  if (available === undefined) return null;
-
   const explainer =
     intro.data?.trim() ||
     publicCfg?.commercial_text?.trim() ||
@@ -171,14 +185,36 @@ export function AssistantBubble() {
 
   return (
     <>
-      {/* Botón flotante */}
+      {/* Precarga oculta del logo: dispara la carga de la imagen aunque el botón
+          esté mostrando el spinner, así al estar lista hacemos UN solo swap al
+          logo real (sin ícono genérico intermedio ni salto). */}
+      {iconUrl && !iconReady && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={iconUrl}
+          alt=""
+          aria-hidden
+          className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
+          onLoad={() => setIconReady(true)}
+          onError={() => setIconReady(true)}
+        />
+      )}
+
+      {/* Botón flotante. Mientras carga el acceso/config/imagen queda deshabilitado
+          con un spinner; recién cuando todo está listo se activa con el logo. */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="Abrir asistente IA"
-          className="fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow ring-1 ring-white/10 backdrop-blur-xl transition hover:brightness-110 active:scale-95"
+          disabled={!bubbleReady}
+          aria-label={bubbleReady ? "Abrir asistente IA" : "Cargando asistente IA"}
+          aria-busy={!bubbleReady}
+          className="fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow ring-1 ring-white/10 backdrop-blur-xl transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:active:scale-100"
         >
-          <BubbleAvatar url={iconUrl} size={56} iconSize={24} />
+          {bubbleReady ? (
+            <BubbleAvatar url={iconUrl} size={56} iconSize={24} />
+          ) : (
+            <Spinner size={22} className="border-ninja-voidViolet/40 border-t-ninja-voidViolet" />
+          )}
         </button>
       )}
 

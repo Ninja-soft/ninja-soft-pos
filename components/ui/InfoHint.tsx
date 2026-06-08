@@ -75,10 +75,16 @@ export function InfoHint({
           side={side}
           align={align}
           sideOffset={6}
+          avoidCollisions
           collisionPadding={12}
           onMouseLeave={() => setOpen(false)}
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="z-[60] w-72 rounded-lg border border-border bg-popover p-3.5 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-modal-in"
+          // Animación SOLO de opacidad (fade-in): el popover aparece directo en
+          // la posición que calcula Radix, sin salto. `animate-modal-in` no sirve
+          // acá porque su keyframe fuerza `translate(-50%,-50%)` (pensado para un
+          // modal centrado) y pisa el transform con el que Radix posiciona el
+          // contenido: se veía en un lugar y al terminar la animación saltaba.
+          className="z-[60] w-72 rounded-lg border border-border bg-popover p-3.5 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
         >
           {children ? (
             <div className="text-xs leading-relaxed text-foreground">{children}</div>

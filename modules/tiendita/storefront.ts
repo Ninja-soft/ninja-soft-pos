@@ -15,6 +15,10 @@ export interface StorefrontCatalog {
   description: string | null;
   coverUrl: string | null;
   priceArs: number;
+  // Cantidad de productos que incluye (deduplicada por EAN si el catálogo es
+  // dedupe_by_ean). Conteo PÚBLICO: se muestra como gancho comercial ANTES de
+  // comprar (catalogs.product_count, lo mantiene el import).
+  productCount: number;
   // true si el tenant ya lo compró o lo recibió bonificado (paid | granted).
   owned: boolean;
   // Cómo lo obtuvo (si owned). Útil para el badge.
@@ -51,7 +55,7 @@ export const storefrontApi = {
     const [{ data: cats, error }, { data: purchases }] = await Promise.all([
       supabase
         .from("catalogs")
-        .select("id, name, description, cover_url, price_ars")
+        .select("id, name, description, cover_url, price_ars, product_count")
         .eq("is_active", true)
         .order("name"),
       supabase
@@ -74,6 +78,7 @@ export const storefrontApi = {
         description: (c.description as string) ?? null,
         coverUrl: (c.cover_url as string) ?? null,
         priceArs: Number(c.price_ars ?? 0),
+        productCount: Number(c.product_count ?? 0),
         owned: source != null,
         source,
       };

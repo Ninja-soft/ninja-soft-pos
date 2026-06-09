@@ -24,6 +24,7 @@ import {
 } from "@/modules/dining/hooks";
 import { ComandaModal } from "@/components/dining/ComandaModal";
 import {
+  COURSE_LABELS,
   KDS_STATIONS,
   KDS_STATION_LABELS,
   KDS_STATUS_LABELS,
@@ -120,11 +121,21 @@ function TicketCard({
               {item.name}
             </span>
           </div>
-          {showStation && (
-            <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              {stationLabel(item.station)}
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {/* Tiempo (course): la cocina ve la secuencia entrada→principal→postre. */}
+            <span
+              className="inline-block rounded bg-ninja-flame/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ninja-flameSoft"
+              title={`Tiempo ${item.course}`}
+            >
+              T{item.course}
+              {COURSE_LABELS[item.course] ? ` · ${COURSE_LABELS[item.course]}` : ""}
             </span>
-          )}
+            {showStation && (
+              <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {stationLabel(item.station)}
+              </span>
+            )}
+          </div>
         </div>
         <span
           className={`flex shrink-0 items-center gap-1 text-sm font-bold tabular-nums ${t.timer}`}

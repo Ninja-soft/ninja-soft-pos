@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Clock, Flame, Plus, Search } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,6 +10,7 @@ import { useProducts } from "@/modules/products/hooks";
 import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
 import { useTableOrderMutations } from "@/modules/dining/hooks";
+import { COURSE_LABELS, MAX_COURSE } from "@/modules/dining/api";
 import { formatCurrency } from "@/lib/utils/format";
 
 // Picker para agregar ítems al pedido de una mesa (H44). Busca productos del
@@ -37,6 +38,12 @@ export function TableProductPicker({
   const [freeName, setFreeName] = useState("");
   const [freeAmount, setFreeAmount] = useState("");
 
+  // Cursos / despacho por tiempos (F13 · H47): tiempo al que entran los ítems que
+  // se agreguen, y si van "en espera" (hold) o se disparan a cocina al toque.
+  // Default: Tiempo 1, sin hold (= comportamiento actual; no rompe el flujo rápido).
+  const [course, setCourse] = useState(1);
+  const [hold, setHold] = useState(false);
+
   const list = useMemo(
     () => (products ?? []).filter((p) => p.is_active),
     [products],
@@ -56,8 +63,16 @@ export function TableProductPicker({
         name,
         qty: 1,
         unit_price: price,
+        course,
+        hold,
       });
-      toast({ title: `${name} agregado`, variant: "success" });
+      toast({
+        title: `${name} agregado`,
+        description: hold
+          ? `En espera · Tiempo ${course}`
+          : `Tiempo ${course} · a cocina`,
+        variant: "success",
+      });
     } catch (e) {
       toast({
         title: "No se pudo agregar",
@@ -81,10 +96,18 @@ export function TableProductPicker({
         name: freeName.trim() || "Ítem",
         qty: 1,
         unit_price: amount,
+        course,
+        hold,
       });
       setFreeName("");
       setFreeAmount("");
-      toast({ title: "Ítem agregado", variant: "success" });
+      toast({
+        title: "Ítem agregado",
+        description: hold
+          ? `En espera · Tiempo ${course}`
+          : `Tiempo ${course} · a cocina`,
+        variant: "success",
+      });
     } catch (e) {
       toast({
         title: "No se pudo agregar",
@@ -109,6 +132,52 @@ export function TableProductPicker({
             autoFocus
             className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           />
+        </div>
+
+        {/* Tiempo (course) y despacho: a qué tiempo entran los ítems y si van
+            "en espera" o se mandan a cocina al toque (F13 · H47). */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 px-2.5 py-2">
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            Tiempo
+            <select
+              value={course}
+              onChange={(e) => setCourse(Number(e.target.value))}
+              aria-label="Tiempo (course) de los ítems a agregar"
+              className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
+            >
+              {Array.from({ length: MAX_COURSE }, (_, i) => i + 1).map((c) => (
+                <option key={c} value={c}>
+                  {c} · {COURSE_LABELS[c] ?? `Tiempo ${c}`}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Toggle hold: enviar al toque vs dejar en espera. */}
+          <div className="ml-auto inline-flex rounded-lg border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setHold(false)}
+              className={
+                !hold
+                  ? "flex items-center gap-1 rounded-md bg-ninja-flame/15 px-2.5 py-1 text-xs font-medium text-ninja-flameSoft"
+                  : "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground"
+              }
+            >
+              <Flame size={13} /> A cocina
+            </button>
+            <button
+              type="button"
+              onClick={() => setHold(true)}
+              className={
+                hold
+                  ? "flex items-center gap-1 rounded-md bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-300"
+                  : "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground"
+              }
+            >
+              <Clock size={13} /> En espera
+            </button>
+          </div>
         </div>
 
         <div className="max-h-72 space-y-1 overflow-y-auto">

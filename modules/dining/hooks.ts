@@ -111,6 +111,13 @@ export function useTableOrderMutations() {
     qc.invalidateQueries({ queryKey: ["dining", "order-items"] });
     qc.invalidateQueries({ queryKey: ["dining", "order"] });
   };
+  // Disparar/recolocar tiempos cambia lo que ve la cocina: refrescá también KDS
+  // y comanda además de la cuenta.
+  const invKitchen = () => {
+    inv();
+    qc.invalidateQueries({ queryKey: ["dining", "kds"] });
+    qc.invalidateQueries({ queryKey: ["dining", "comanda"] });
+  };
   return {
     open: useMutation({
       mutationFn: (v: { tableId: string; waiterUserId?: string | null }) =>
@@ -133,6 +140,17 @@ export function useTableOrderMutations() {
     cancel: useMutation({
       mutationFn: (orderId: string) => tableOrdersApi.cancel(orderId),
       onSuccess: inv,
+    }),
+    // Cursos / despacho por tiempos (F13 · H47).
+    setItemCourse: useMutation({
+      mutationFn: (v: { itemId: string; course: number }) =>
+        tableOrdersApi.setItemCourse(v.itemId, v.course),
+      onSuccess: invKitchen,
+    }),
+    fireCourse: useMutation({
+      mutationFn: (v: { orderId: string; course: number | null }) =>
+        tableOrdersApi.fireCourse(v.orderId, v.course),
+      onSuccess: invKitchen,
     }),
   };
 }

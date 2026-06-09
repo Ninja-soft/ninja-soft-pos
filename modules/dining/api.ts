@@ -47,6 +47,11 @@ export interface TableOrderItem {
   unit_price: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Cursos / despacho por tiempos (F13 · H47): `course` = tiempo al que pertenece
+  // el ítem (1=entrada, 2=principal, 3=postre…). `fired_at` = cuándo se disparó a
+  // cocina; null = "en espera" (no fue al KDS/comanda todavía).
+  course: number;
+  fired_at: string | null;
 }
 
 // ── Estaciones de preparación (F13 · H45 ruteo + H46 KDS) ──────────────────────
@@ -97,6 +102,8 @@ export interface KdsTicketItem {
   notes: string | null;
   station: string | null;
   kds_status: KdsStatus;
+  // Tiempo (course) del ítem para que la cocina vea la secuencia (F13 · H47).
+  course: number;
   created_at: string;
   ready_at: string | null;
 }
@@ -123,6 +130,8 @@ export interface ComandaItem {
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
   station: string | null;
+  // Tiempo (course) del ítem para etiquetar/agrupar la comanda por tiempo.
+  course: number;
   printed_at: string | null;
   table_label: string;
   area_name: string | null;
@@ -150,6 +159,34 @@ export interface AddItemInput {
   unit_price: number;
   modifiers?: SaleLineModifierGroup[];
   notes?: string | null;
+  // Cursos / despacho por tiempos (F13 · H47). course default 1; hold=true deja
+  // el ítem "en espera" (no va a cocina hasta dispararlo). Omitidos = flujo
+  // rápido actual (Tiempo 1, se manda a cocina al toque).
+  course?: number;
+  hold?: boolean;
+}
+
+// Tiempos (cursos) que ofrece la UI. Lista corta y razonable (entrada → café);
+// el schema admite cualquier smallint, pero el selector usa 1..MAX_COURSE.
+export const MAX_COURSE = 6;
+export const COURSE_LABELS: Record<number, string> = {
+  1: "Entrada",
+  2: "Principal",
+  3: "Postre",
+  4: "Bebida",
+  5: "Café",
+  6: "Extra",
+};
+
+// Etiqueta "Tiempo N · Nombre" para encabezados; sólo "Tiempo N" si no hay nombre.
+export function courseLabel(course: number): string {
+  const name = COURSE_LABELS[course];
+  return name ? `Tiempo ${course} · ${name}` : `Tiempo ${course}`;
+}
+
+// Etiqueta corta para chips/tarjetas ("T1", "T2"…) en KDS/comanda.
+export function courseShort(course: number): string {
+  return `T${course}`;
 }
 
 // ── Salones ───────────────────────────────────────────────────────────────────
@@ -267,7 +304,9 @@ export const tableOrdersApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("table_order_items" as never)
-      .select("id, order_id, product_id, name, qty, unit_price, modifiers, notes")
+      .select(
+        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, course, fired_at",
+      )
       .eq("order_id", orderId)
       .order("created_at");
     if (error) throw error;
@@ -357,9 +396,37 @@ export const tableOrdersApi = {
       p_unit_price: input.unit_price,
       p_modifiers: (input.modifiers ?? []) as unknown,
       p_notes: input.notes ?? null,
+      p_course: input.course ?? 1,
+      p_hold: input.hold ?? false,
     } as never);
     if (error) throw error;
     return data as unknown as string;
+  },
+
+  // Cambia el tiempo (course) de una línea. Tenant-scoped; sólo con pedido abierto.
+  setItemCourse: async (itemId: string, course: number): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_table_order_item_course" as never, {
+      p_item_id: itemId,
+      p_course: course,
+    } as never);
+    if (error) throw error;
+  },
+
+  // Dispara un tiempo a cocina (fire course): sella fired_at en los ítems en
+  // espera del curso indicado (o de TODOS los pendientes si course=null). Devuelve
+  // cuántos disparó. RPC tenant-scoped (fire_table_order_course).
+  fireCourse: async (
+    orderId: string,
+    course: number | null,
+  ): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("fire_table_order_course" as never, {
+      p_order_id: orderId,
+      p_course: course,
+    } as never);
+    if (error) throw error;
+    return ((data as { fired?: number } | null)?.fired ?? 0) as number;
   },
 
   // Cambia la cantidad de una línea. qty <= 0 borra la línea.

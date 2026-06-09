@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { useComandaData, useMarkComandaPrinted } from "@/modules/dining/hooks";
 import {
+  COURSE_LABELS,
   KDS_STATIONS,
   KDS_STATION_LABELS,
   type ComandaItem,
@@ -337,6 +338,11 @@ function ComandaSheet({
                   {formatQty(it.qty)}×
                 </span>
                 <span className="text-base font-bold">{it.name}</span>
+                {/* Tiempo (course): la cocina ve a qué tiempo pertenece la línea. */}
+                <span className="ml-auto shrink-0 rounded border border-black px-1 text-[11px] font-bold uppercase">
+                  T{it.course}
+                  {COURSE_LABELS[it.course] ? ` ${COURSE_LABELS[it.course]}` : ""}
+                </span>
               </div>
               {mods && <div className="pl-7 text-[13px]">— {mods}</div>}
               {it.notes && (

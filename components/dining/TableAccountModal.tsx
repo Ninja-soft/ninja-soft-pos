@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChefHat,
+  Clock,
   CreditCard,
+  Flame,
   Minus,
   Plus,
   ReceiptText,
@@ -20,8 +22,13 @@ import {
   useTableOrderMutations,
 } from "@/modules/dining/hooks";
 import { useTicketBranding } from "@/modules/tickets/hooks";
-import type { DiningTable, TableStatus } from "@/modules/dining/api";
-import { TABLE_STATUS_LABELS } from "@/modules/dining/api";
+import type { DiningTable, TableOrderItem, TableStatus } from "@/modules/dining/api";
+import {
+  COURSE_LABELS,
+  MAX_COURSE,
+  TABLE_STATUS_LABELS,
+  courseLabel,
+} from "@/modules/dining/api";
 import { TableProductPicker } from "./TableProductPicker";
 import { ComandaModal } from "./ComandaModal";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -44,7 +51,8 @@ export function TableAccountModal({
   const orderId = table?.current_order_id ?? null;
   const open = table !== null && orderId !== null;
   const { data: items } = useTableOrderItems(orderId);
-  const { setItemQty, removeItem, cancel } = useTableOrderMutations();
+  const { setItemQty, removeItem, cancel, setItemCourse, fireCourse } =
+    useTableOrderMutations();
   // Nombre del local para la cabecera (opcional) de la comanda de cocina (H45).
   const { data: brand } = useTicketBranding(open);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -55,6 +63,30 @@ export function TableAccountModal({
     () => (items ?? []).reduce((acc, it) => acc + it.qty * it.unit_price, 0),
     [items],
   );
+
+  // Agrupa las líneas por tiempo (course), en orden ascendente. Dentro de cada
+  // tiempo conserva el orden FIFO de carga que ya trae la query. Marca si el
+  // tiempo tiene ítems EN ESPERA (fired_at null) para ofrecer "Disparar".
+  const courseGroups = useMemo(() => {
+    const byCourse = new Map<number, TableOrderItem[]>();
+    for (const it of items ?? []) {
+      const c = it.course ?? 1;
+      const arr = byCourse.get(c);
+      if (arr) arr.push(it);
+      else byCourse.set(c, [it]);
+    }
+    return [...byCourse.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([course, list]) => ({
+        course,
+        items: list,
+        heldCount: list.filter((it) => it.fired_at === null).length,
+      }));
+  }, [items]);
+
+  // ¿Hay más de un tiempo en juego? Si sólo es Tiempo 1, no mostramos los
+  // encabezados de tiempo (no estorbar el flujo simple de mostrador/cafetería).
+  const showCourses = courseGroups.length > 1 || courseGroups.some((g) => g.course !== 1);
 
   async function changeQty(itemId: string, qty: number) {
     try {
@@ -67,6 +99,45 @@ export function TableAccountModal({
       });
     }
   }
+
+  async function changeCourse(itemId: string, course: number) {
+    try {
+      await setItemCourse.mutateAsync({ itemId, course });
+    } catch (e) {
+      toast({
+        title: "No se pudo cambiar el tiempo",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  // Dispara un tiempo a cocina (fire course): los ítems en espera de ese tiempo
+  // pasan al KDS/comanda. course=null dispara TODO lo que esté en espera.
+  async function fire(course: number | null) {
+    if (!orderId) return;
+    try {
+      const fired = await fireCourse.mutateAsync({ orderId, course });
+      toast({
+        title:
+          fired > 0
+            ? course === null
+              ? `Pedido disparado a cocina (${fired})`
+              : `${courseLabel(course)} disparado a cocina`
+            : "No había ítems en espera para disparar",
+        variant: fired > 0 ? "success" : "info",
+      });
+    } catch (e) {
+      toast({
+        title: "No se pudo disparar a cocina",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
+  // ¿Hay algún ítem en espera en todo el pedido? Habilita "Disparar todo".
+  const anyHeld = (items ?? []).some((it) => it.fired_at === null);
 
   async function doCancel() {
     if (!orderId) return;
@@ -117,8 +188,10 @@ export function TableAccountModal({
             </div>
           )}
 
-          {/* Líneas del pedido */}
-          <div className="max-h-[46vh] space-y-2 overflow-y-auto">
+          {/* Líneas del pedido — agrupadas por tiempo (course) cuando hay más de
+              un tiempo. Los ítems EN ESPERA (fired_at null) se marcan y el tiempo
+              ofrece "Disparar Tiempo N". */}
+          <div className="max-h-[46vh] space-y-3 overflow-y-auto">
             {(items ?? []).length === 0 ? (
               <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
                 Mesa abierta sin ítems. Tocá{" "}
@@ -126,56 +199,44 @@ export function TableAccountModal({
                 para cargar el pedido.
               </p>
             ) : (
-              items!.map((it) => (
-                <div
-                  key={it.id}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-foreground">
-                      {it.name}
+              courseGroups.map((g) => (
+                <div key={g.course} className="space-y-2">
+                  {/* Encabezado del tiempo + acción de disparar (sólo si aplica) */}
+                  {showCourses && (
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                      <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ninja-flame/15 px-1.5 text-[11px] font-bold text-ninja-flameSoft tabular-nums">
+                          {g.course}
+                        </span>
+                        {COURSE_LABELS[g.course] ?? `Tiempo ${g.course}`}
+                      </span>
+                      {g.heldCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => fire(g.course)}
+                          disabled={fireCourse.isPending}
+                          className="flex items-center gap-1.5 rounded-lg bg-ninja-flame px-2.5 py-1 text-xs font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-110 disabled:opacity-50"
+                          title={`Disparar ${courseLabel(g.course)} a cocina`}
+                        >
+                          <Flame size={13} /> Disparar Tiempo {g.course}
+                          <span className="tabular-nums opacity-80">
+                            ({g.heldCount})
+                          </span>
+                        </button>
+                      )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatCurrency(it.unit_price)} c/u
-                      {it.notes ? ` · ${it.notes}` : ""}
-                    </div>
-                  </div>
+                  )}
 
-                  {/* Controles de cantidad */}
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => changeQty(it.id, it.qty - 1)}
-                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      aria-label="Restar"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-8 text-center text-sm font-semibold tabular-nums">
-                      {formatQty(it.qty)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => changeQty(it.id, it.qty + 1)}
-                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      aria-label="Sumar"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-
-                  <div className="w-20 shrink-0 text-right price-hl font-price text-sm font-bold tabular-nums">
-                    {formatCurrency(it.qty * it.unit_price)}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => removeItem.mutate(it.id)}
-                    className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
-                    aria-label="Quitar"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {g.items.map((it) => (
+                    <ItemRow
+                      key={it.id}
+                      item={it}
+                      showCourse={showCourses}
+                      onQty={changeQty}
+                      onRemove={(id) => removeItem.mutate(id)}
+                      onCourse={changeCourse}
+                    />
+                  ))}
                 </div>
               ))
             )}
@@ -188,6 +249,18 @@ export function TableAccountModal({
               {formatCurrency(total)}
             </span>
           </div>
+
+          {/* Disparar TODO lo que esté en espera (cualquier tiempo) de una sola
+              vez. Sólo aparece si hay ítems en espera (fire course global). */}
+          {anyHeld && (
+            <Button
+              onClick={() => fire(null)}
+              disabled={fireCourse.isPending}
+              className="w-full"
+            >
+              <Flame size={16} /> Disparar todo a cocina
+            </Button>
+          )}
 
           {/* Comanda de cocina (H45): imprime la(s) comanda(s) por estación del
               pedido. Por defecto envía sólo lo nuevo a cocina/barra. */}
@@ -260,5 +333,102 @@ export function TableAccountModal({
         onConfirm={doCancel}
       />
     </>
+  );
+}
+
+// Una línea del pedido en la cuenta: nombre + precio, estado "en espera" (si el
+// ítem no fue disparado), selector de tiempo (course), cantidad, total y quitar.
+function ItemRow({
+  item,
+  showCourse,
+  onQty,
+  onRemove,
+  onCourse,
+}: {
+  item: TableOrderItem;
+  showCourse: boolean;
+  onQty: (itemId: string, qty: number) => void;
+  onRemove: (itemId: string) => void;
+  onCourse: (itemId: string, course: number) => void;
+}) {
+  const held = item.fired_at === null;
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+        held
+          ? "border-amber-400/40 bg-amber-400/[0.06]"
+          : "border-border bg-card"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-foreground">
+          {item.name}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <span>
+            {formatCurrency(item.unit_price)} c/u
+            {item.notes ? ` · ${item.notes}` : ""}
+          </span>
+          {held && (
+            <span className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
+              <Clock size={11} /> En espera · Tiempo {item.course}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Selector de tiempo (course): mover el ítem a otro tiempo. */}
+      {showCourse && (
+        <select
+          value={item.course}
+          onChange={(e) => onCourse(item.id, Number(e.target.value))}
+          aria-label="Tiempo del ítem"
+          title="Tiempo (course) del ítem"
+          className="h-7 shrink-0 rounded-md border border-border bg-background px-1.5 text-xs text-foreground outline-none transition focus:border-ninja-flameSoft"
+        >
+          {Array.from({ length: MAX_COURSE }, (_, i) => i + 1).map((c) => (
+            <option key={c} value={c}>
+              T{c}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {/* Controles de cantidad */}
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onQty(item.id, item.qty - 1)}
+          className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          aria-label="Restar"
+        >
+          <Minus size={14} />
+        </button>
+        <span className="w-8 text-center text-sm font-semibold tabular-nums">
+          {formatQty(item.qty)}
+        </span>
+        <button
+          type="button"
+          onClick={() => onQty(item.id, item.qty + 1)}
+          className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          aria-label="Sumar"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+
+      <div className="w-20 shrink-0 text-right price-hl font-price text-sm font-bold tabular-nums">
+        {formatCurrency(item.qty * item.unit_price)}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onRemove(item.id)}
+        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+        aria-label="Quitar"
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
   );
 }

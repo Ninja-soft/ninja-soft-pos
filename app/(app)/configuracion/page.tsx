@@ -113,7 +113,11 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   {
     title: "Comprobantes",
     sections: [
-      { key: "tickets", label: "Tickets", icon: ReceiptText, feature: "tickets_pro" },
+      // Tickets: NO se gatea el ingreso. El ticket PREDETERMINADO siempre se
+      // imprime y se envía (esté o no `tickets_pro` en el plan). Dentro de la
+      // sección, la PERSONALIZACIÓN (modelos custom) sí queda detrás de
+      // `tickets_pro` con su propio aviso de upgrade.
+      { key: "tickets", label: "Tickets", icon: ReceiptText },
       { key: "impresion", label: "Impresión", icon: Printer },
       { key: "email", label: "Email", icon: Mail, feature: "email_comprobantes" },
     ],

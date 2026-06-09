@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Eye, Mail, Pencil, Plus, Printer, Receipt, Trash2 } from "lucide-react";
+import { Copy, Eye, Mail, Pencil, Plus, Printer, Receipt, Sparkles, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
+import { useFeature } from "@/modules/saas/gating";
+import { useFeatureGate } from "@/components/saas/GatedAction";
 import {
   useClearActiveTemplate,
   useCreateTemplate,
@@ -71,39 +73,58 @@ export function TicketTemplatesCard() {
   const remove = useRemoveTemplate();
   const { data: smtp } = useTenantSmtpStatus();
 
+  // Personalización de tickets (modelos custom) detrás de `tickets_pro`. El
+  // ticket PREDETERMINADO siempre se imprime y se envía: lo que se gatea acá es
+  // CREAR / EDITAR / ACTIVAR modelos custom. `pro === false` => sin la feature
+  // (optimista: undefined mientras carga => no bloquea).
+  const pro = useFeature("tickets_pro");
+  const proLocked = pro === false;
+  // Gate compartido para las acciones de personalización: si falta la feature,
+  // `run` abre el UpgradeModal (zona de personalización) en vez de ejecutar.
+  const personalizeGate = useFeatureGate("tickets_pro", "Personalización de tickets");
+
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<TicketTemplate | null>(null);
   const [toDelete, setToDelete] = useState<TicketTemplate | null>(null);
 
   function openNew() {
-    setEditing(null);
-    setEditorOpen(true);
+    // Crear modelo custom = personalización (gateada). Sin la feature abre el
+    // UpgradeModal en lugar de abrir el editor.
+    personalizeGate.run(() => {
+      setEditing(null);
+      setEditorOpen(true);
+    });
   }
 
   function openEdit(t: TicketTemplate) {
-    setEditing(t);
-    setEditorOpen(true);
+    personalizeGate.run(() => {
+      setEditing(t);
+      setEditorOpen(true);
+    });
   }
 
   function duplicate(t: TicketTemplate) {
     if (!tenantId) return;
-    create.mutate(
-      {
-        tenantId,
-        input: {
-          name: `${t.name} (copia)`,
-          kind: t.kind as TemplateKind,
-          mode: (t.mode as TemplateMode) ?? "blocks",
-          paper: t.paper as "58" | "80" | "a4",
-          content: (t.content as unknown as TemplateContent) ?? { blocks: defaultSaleBlocks() },
-          show_ninjasoft_logo: Boolean(t.show_ninjasoft_logo),
+    // Duplicar = crear otro modelo custom (personalización gateada).
+    personalizeGate.run(() => {
+      create.mutate(
+        {
+          tenantId,
+          input: {
+            name: `${t.name} (copia)`,
+            kind: t.kind as TemplateKind,
+            mode: (t.mode as TemplateMode) ?? "blocks",
+            paper: t.paper as "58" | "80" | "a4",
+            content: (t.content as unknown as TemplateContent) ?? { blocks: defaultSaleBlocks() },
+            show_ninjasoft_logo: Boolean(t.show_ninjasoft_logo),
+          },
         },
-      },
-      {
-        onSuccess: () => toast({ title: "Modelo duplicado", variant: "success" }),
-        onError: () => toast({ title: "No se pudo duplicar", variant: "error" }),
-      },
-    );
+        {
+          onSuccess: () => toast({ title: "Modelo duplicado", variant: "success" }),
+          onError: () => toast({ title: "No se pudo duplicar", variant: "error" }),
+        },
+      );
+    });
   }
 
   const DEST_LABELS: Record<TemplateDestination, string> = {
@@ -112,7 +133,9 @@ export function TicketTemplatesCard() {
   };
 
   // Click en un destino: si ya está activo en ese modelo → lo desactiva (fallback
-  // al ticket clásico); si no, lo activa (y desactiva el anterior del destino).
+  // al ticket PREDETERMINADO); si no, lo activa (y desactiva el anterior del
+  // destino). DESACTIVAR (volver al default) NUNCA se gatea: el ticket default
+  // siempre debe poder usarse. ACTIVAR un modelo custom sí es personalización.
   function toggleActive(t: TicketTemplate, destination: TemplateDestination) {
     const col = destination === "print" ? t.print_active : t.email_active;
     if (col) {
@@ -121,7 +144,9 @@ export function TicketTemplatesCard() {
           toast({ title: `Sin modelo de ${DEST_LABELS[destination]}`, variant: "success" }),
         onError: () => toast({ title: "No se pudo desactivar", variant: "error" }),
       });
-    } else {
+      return;
+    }
+    personalizeGate.run(() => {
       // Al activar Email sin SMTP configurado: igual se activa, pero avisamos
       // que falta configurar el email del negocio para poder enviar. Quien
       // gestiona plantillas es owner/manager → `configured` es confiable acá.
@@ -143,7 +168,7 @@ export function TicketTemplatesCard() {
           onError: () => toast({ title: "No se pudo activar", variant: "error" }),
         },
       );
-    }
+    });
   }
 
   function del(t: TicketTemplate) {
@@ -180,14 +205,40 @@ export function TicketTemplatesCard() {
               </p>
             </div>
           </div>
-          <Button size="sm" onClick={openNew} disabled={!tenantId}>
-            <Plus size={15} /> Nuevo modelo
+          <Button
+            size="sm"
+            onClick={openNew}
+            disabled={!tenantId}
+            className={cn(proLocked && "opacity-70")}
+            title={
+              proLocked
+                ? "Personalización de tickets: mejorá tu plan para crear modelos custom"
+                : undefined
+            }
+          >
+            {proLocked ? <Sparkles size={15} /> : <Plus size={15} />} Nuevo modelo
           </Button>
         </div>
 
+        {/* Sin `tickets_pro`: el ticket PREDETERMINADO igual se imprime y se
+            envía. Lo único detrás del plan es la PERSONALIZACIÓN (modelos
+            custom). Aviso claro para que nadie crea que "no tiene tickets". */}
+        {proLocked && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-sm">
+            <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+            <p className="text-muted-foreground">
+              <span className="font-medium text-foreground">
+                El ticket predeterminado siempre se imprime y se envía por email.
+              </span>{" "}
+              Mejorá tu plan para personalizar tickets (modelos propios, logo,
+              leyendas, layout y A4).
+            </p>
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground">
           Un modelo activo para impresión y uno para email. Sin activo se usa el
-          ticket clásico.
+          ticket predeterminado.
         </p>
 
         <div className="space-y-1.5">
@@ -271,6 +322,11 @@ export function TicketTemplatesCard() {
         loading={remove.isPending}
         onConfirm={confirmDelete}
       />
+
+      {/* UpgradeModal de la zona de personalización (lo dispara personalizeGate
+          al intentar crear/editar/duplicar/activar un modelo custom sin la
+          feature). El ticket predeterminado nunca pasa por acá. */}
+      {personalizeGate.modal}
     </Card>
   );
 }

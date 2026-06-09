@@ -166,7 +166,7 @@ export default async function DashboardTeamPage() {
       </div>
 
       {/* Acceso rápido al POS — por encima de la suscripción. */}
-      <div className="flex justify-end">
+      <div className="mt-4 flex justify-end">
         <Link href="/dashboard" className={buttonVariants()}>
           Ir al POS
         </Link>

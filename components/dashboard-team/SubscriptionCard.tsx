@@ -509,6 +509,15 @@ export function SubscriptionCard() {
     !!aiAddon &&
     (aiAddon.source === "granted" || aiAddon.monthly_price_ars == null);
 
+  // Plan bonificado por NinjaSoft (regalado, sin cobro): hoy la única señal
+  // canónica que expone my_subscription() es is_lifetime (acceso vitalicio
+  // otorgado por invite code / internal_grant_access). No hay cobro recurrente,
+  // así que las acciones de "cancelar suscripción"/"dar de baja la cuenta" no
+  // tienen sentido para el dueño (si NinjaSoft quiere quitarlo, lo hace desde el
+  // panel interno). monthly_price_ars es el precio de catálogo (puede ser >0 en
+  // un vitalicio), por eso no sirve como señal de comp del plan.
+  const planComped = sub.is_lifetime;
+
   const isTrial = sub.status === "trial";
   const daysLeft = daysUntil(sub.current_period_end);
   // Mensaje principal de "días restantes" según el estado.
@@ -561,6 +570,7 @@ export function SubscriptionCard() {
                     icon: sub.plan.icon,
                   }}
                   size="md"
+                  align="center"
                 />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -769,6 +779,11 @@ export function SubscriptionCard() {
                 >
                   Reactivar
                 </Button>
+              ) : aiComped ? (
+                // Bonificado por NinjaSoft: es un regalo, no lo paga el dueño.
+                // No mostramos "Dar de baja": si NinjaSoft quiere quitarlo, lo
+                // hace desde el panel interno (no el cliente).
+                null
               ) : (
                 <Button
                   variant="ghost"
@@ -843,6 +858,11 @@ export function SubscriptionCard() {
       </Card>
 
       {/* ── Acciones discretas (cancelar / dar de baja) ── */}
+      {/* Plan bonificado (vitalicio, regalado por NinjaSoft): no hay cobro que
+          cancelar ni baja de suscripción que tenga sentido para el dueño.
+          Ocultamos las opciones de baja por completo; si NinjaSoft quiere
+          quitar el acceso, lo hace desde el panel interno. */}
+      {!planComped && (
       <details className="group mt-3">
         <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground transition hover:text-foreground">
           <ChevronDown
@@ -900,6 +920,7 @@ export function SubscriptionCard() {
           </div>
         </div>
       </details>
+      )}
 
       {/* ── Modal: selector comercial de planes ── */}
       <Modal

@@ -83,15 +83,24 @@ Deno.serve(async (req: Request) => {
       reqUrl.searchParams.get("type") || reqUrl.searchParams.get("topic") || "";
     let dataId =
       reqUrl.searchParams.get("data.id") || reqUrl.searchParams.get("id") || "";
+    // id de la NOTIFICACIÓN (top-level), distinto de data.id. MP lo mantiene
+    // estable entre reenvíos del MISMO evento y difiere entre eventos distintos:
+    // es la base de la idempotencia (BUG 8) del cobro 'authorized'.
+    let notifId =
+      reqUrl.searchParams.get("notification_id") ||
+      reqUrl.searchParams.get("id") ||
+      "";
     if (req.method === "POST") {
       try {
         const body = (await req.json()) as {
+          id?: string | number;
           type?: string;
           topic?: string;
           data?: { id?: string };
         };
         topic = body.type || body.topic || topic;
         dataId = body.data?.id || dataId;
+        if (body.id != null) notifId = String(body.id);
       } catch {
         // sin body JSON; seguimos con query.
       }
@@ -234,6 +243,64 @@ Deno.serve(async (req: Request) => {
 
     let newPeriodEnd: Date | null = null;
     let newPeriodStart: Date | null = null;
+    // BUG 4: true si reanchor pasó la sub a 'cancelled' (baja programada + período
+    // vencido). En ese caso no se acredita pago ni se avisa "recibimos tu pago".
+    let becameCancelled = false;
+
+    // ===========================================================================
+    // BUG 8 — Idempotencia del cobro 'authorized' ANTES de reanclar. MP reintenta
+    // las notificaciones; sin esta guarda, cada reenvío de un 'authorized'
+    // llamaba reanchor_subscription_period (avanzando el período +1 mes) ANTES de
+    // que la dedup del billing_record (por period_end) corriera → doble entrega =
+    // período +2 meses + billing_record fantasma. Ahora deduplicamos por id de
+    // EVENTO/PAGO de MP (no por period_end): la clave es topic + id de la
+    // notificación (estable entre reenvíos del MISMO evento, distinto entre
+    // eventos). Si ya procesamos este evento, NO reanclamos ni registramos cobro.
+    // claim_mp_webhook_event inserta-si-no-existe atómico y dice si es NUEVO.
+    // ===========================================================================
+    const eventKey = `${topic || "preapproval"}:${notifId || pre.id || dataId}`;
+    let chargeIsNew = true;
+    if (newStatus === "active") {
+      const { data: claimed, error: claimErr } = await admin.rpc(
+        "claim_mp_webhook_event",
+        {
+          p_event_key: eventKey,
+          p_topic: topic || null,
+          p_preapproval_id: pre.id ?? dataId,
+          p_tenant_id: tenantId,
+          p_mp_status: pre.status ?? null,
+        },
+      );
+      // Si el claim falla (DB), preferimos NO reanclar para no arriesgar el doble
+      // avance del período: el cobro se reflejará en el próximo evento/o el panel.
+      chargeIsNew = claimErr ? false : claimed === true;
+      if (claimErr) {
+        console.error("[mp_billing_webhook] claim_failed", claimErr);
+      }
+    }
+
+    if (newStatus === "active" && !chargeIsNew) {
+      // Evento 'authorized' ya procesado (reenvío de MP): NO reanclar ni registrar
+      // cobro. Sólo aseguramos el preapproval_id y respondemos 200 (idempotente).
+      await admin
+        .from("subscriptions")
+        .update({ mp_preapproval_id: pre.id ?? dataId })
+        .eq("id", sub.id);
+      await admin.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: null,
+        entity_type: "subscriptions",
+        entity_id: sub.id,
+        action: "subscription_webhook_duplicate",
+        after_data: {
+          preapproval_id: pre.id ?? dataId,
+          mp_status: pre.status,
+          event_key: eventKey,
+          skipped: "already_processed",
+        },
+      });
+      return ok();
+    }
 
     if (newStatus === "active") {
       // El preapproval_id se actualiza directo; el ESTADO y el PERÍODO los aplica
@@ -268,19 +335,29 @@ Deno.serve(async (req: Request) => {
         newPeriodStart = start;
         newPeriodEnd = end;
       } else {
-        // El RPC ya dejó status=active + período reanclado. Re-leemos el período
-        // efectivo para el billing_record y el copy.
+        // El RPC ya aplicó el estado + período. Re-leemos para el billing_record
+        // y el copy. OJO (BUG 4): si la baja estaba programada y el período venció,
+        // reanchor pasó la sub a 'cancelled' (no reactivó); en ese caso NO hay
+        // cobro que registrar — lo detectamos por el status fresco.
         const { data: fresh } = await admin
           .from("subscriptions")
-          .select("current_period_start, current_period_end")
+          .select("status, current_period_start, current_period_end")
           .eq("id", sub.id)
           .maybeSingle();
-        newPeriodStart = fresh?.current_period_start
-          ? new Date(fresh.current_period_start as string)
-          : null;
-        newPeriodEnd = fresh?.current_period_end
-          ? new Date(fresh.current_period_end as string)
-          : null;
+        if ((fresh?.status as string | undefined) === "cancelled") {
+          // Baja efectiva: el webhook no debe acreditar pago ni avisar "recibimos
+          // tu pago". Marcamos newPeriodEnd null para saltear el bloque de cobro.
+          becameCancelled = true;
+          newPeriodStart = null;
+          newPeriodEnd = null;
+        } else {
+          newPeriodStart = fresh?.current_period_start
+            ? new Date(fresh.current_period_start as string)
+            : null;
+          newPeriodEnd = fresh?.current_period_end
+            ? new Date(fresh.current_period_end as string)
+            : null;
+        }
       }
     } else {
       // paused/cancelled/pending → solo status (+ preapproval_id). El trigger SQL
@@ -300,10 +377,13 @@ Deno.serve(async (req: Request) => {
       after_data: {
         preapproval_id: pre.id ?? dataId,
         mp_status: pre.status,
-        status: newStatus,
+        // BUG 4: si reanchor canceló (baja programada + vencido), el estado
+        // efectivo es 'cancelled', no 'active'. Lo reflejamos en la auditoría.
+        status: becameCancelled ? "cancelled" : newStatus,
         prev_status: prevStatus,
-        reactivation: isReactivation,
-        anchored_to_previous_due: newStatus === "active",
+        reactivation: isReactivation && !becameCancelled,
+        anchored_to_previous_due: newStatus === "active" && !becameCancelled,
+        cancelled_on_reanchor: becameCancelled,
       },
     });
 

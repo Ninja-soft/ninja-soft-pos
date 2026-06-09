@@ -25,6 +25,7 @@ import {
   startOwnerSubscriptionCheckout,
   syncSubscriptionAmount,
   fetchSubscriptionPaymentMethod,
+  setSubscriptionPreapprovalPaused,
   type OwnerBillingSummary,
 } from "@/modules/saas/subscriptionBilling";
 import { useToast } from "@/components/ui/Toast";
@@ -287,6 +288,17 @@ export function SubscriptionCard() {
     }
   }
 
+  // Pausa / reanuda el cobro recurrente en Mercado Pago al cancelar / reactivar.
+  // Best-effort: la baja local (RPC) ya quedó; si MP no responde no rompemos el
+  // flujo (el dueño ve la baja igual). Esto es lo que FRENA el cobro de verdad.
+  async function setMpPausedSilently(action: "pause" | "resume") {
+    try {
+      await setSubscriptionPreapprovalPaused(action);
+    } catch {
+      /* la marca local cancel_at_period_end ya alcanza; MP se reintenta. */
+    }
+  }
+
   const startCheckout = useMutation({
     mutationFn: async () => {
       const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
@@ -394,6 +406,10 @@ export function SubscriptionCard() {
         p_cancel: cancel,
       });
       if (error) throw new Error(error.message ?? "error");
+      // Reflejar en Mercado Pago: cancelar ⇒ PAUSAR el preapproval (frena el
+      // cobro recurrente de verdad); deshacer ⇒ REANUDAR. Best-effort: la marca
+      // local ya quedó, no bloqueamos el éxito si MP no responde.
+      await setMpPausedSilently(cancel ? "pause" : "resume");
     },
     onSuccess: (_d, cancel) => {
       toast({
@@ -412,6 +428,9 @@ export function SubscriptionCard() {
         p_reason: reason,
       });
       if (error) throw new Error(error.message ?? "error");
+      // La baja de cuenta también programa cancel_at_period_end=true: PAUSAR el
+      // preapproval en MP para frenar el cobro recurrente. Best-effort.
+      await setMpPausedSilently("pause");
     },
     onSuccess: () => {
       toast({ title: "Solicitud de baja registrada", variant: "success" });

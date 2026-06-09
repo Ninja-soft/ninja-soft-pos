@@ -102,3 +102,35 @@ export async function fetchSubscriptionPaymentMethod(): Promise<SubscriptionPaym
   if (res?.error) throw new Error(res.error);
   return res;
 }
+
+// PAUSA / REANUDA / CANCELA el preapproval en Mercado Pago para que el cobro
+// recurrente FRENE (o retome) de verdad al cancelar/reactivar la suscripción.
+// El RPC SQL (set_cancel_at_period_end / request_account_closure) ya marcó el
+// estado local; esta función lo refleja en MP. Best-effort: no rompe el flujo si
+// no hay preapproval (trial) o si MP no responde — la baja local ya quedó. El
+// front la llama tras el RPC de cancelar/reactivar.
+//   • action "pause"  → status:"paused"    (default; baja a-fin-de-período)
+//   • action "resume" → status:"authorized" (deshacer la baja)
+//   • action "cancel" → status:"cancelled"  (cancelación dura)
+export async function setSubscriptionPreapprovalPaused(
+  action: "pause" | "resume" | "cancel" = "pause",
+): Promise<{ ok: boolean; reason?: string; mp_unavailable?: boolean }> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke(
+    "mp_subscription_pause",
+    { body: { action } },
+  );
+  if (error) throw error;
+  const res = data as {
+    ok?: boolean;
+    reason?: string;
+    mp_unavailable?: boolean;
+    error?: string;
+  };
+  if (res?.error) throw new Error(res.error);
+  return {
+    ok: Boolean(res?.ok),
+    reason: res?.reason,
+    mp_unavailable: res?.mp_unavailable,
+  };
+}

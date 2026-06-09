@@ -20,8 +20,11 @@
 // causa (invoke colapsa cualquier non-2xx a un error genérico sin cuerpo). El
 // chat real (no-test) NO cambia: sigue 502 ante error del proveedor.
 //
-// Contexto READ-ONLY scoped por tenant (nunca SQL libre): ventas hoy/7d, mes en
-// curso vs mes anterior + ticket promedio, medios de pago, cuenta corriente
+// Contexto READ-ONLY scoped por tenant (nunca SQL libre): snapshot agregado de
+// catálogo (cant. de productos, stock bajo, valor de inventario), clientes y
+// complementos activos vía RPC ai_tenant_snapshot (COUNT/SUM en SQL, cero filas
+// transferidas — seguro con cientos de miles de productos); ventas hoy/7d, mes
+// en curso vs mes anterior + ticket promedio, medios de pago, cuenta corriente
 // (deudores), estado de caja, devoluciones, suscripción, top productos, stock
 // bajo y estado de config. + guía fija de pantallas. System prompt cerrado al
 // POS. Proveedor Gemini | Claude según ai_config. Cuota mensual por tenant
@@ -628,6 +631,61 @@ async function buildContext(
   );
   const lines: string[] = [];
 
+  // ── Snapshot de catálogo / clientes / addons (agregados en SQL) ───────────
+  // Todo se calcula con COUNT/SUM dentro del RPC ai_tenant_snapshot (cero filas
+  // transferidas): seguro para tenants con cientos de miles de productos.
+  // Responde "¿cuántos productos tengo?", stock bajo, valor de inventario,
+  // cantidad de clientes y addons activos.
+  try {
+    const { data: snap, error: snapErr } = await admin.rpc("ai_tenant_snapshot", {
+      p_tenant_id: tenantId,
+    });
+    if (snapErr) throw snapErr;
+    const s = (snap ?? {}) as {
+      products_active?: number;
+      low_stock?: number;
+      inventory_value_cost?: number;
+      inventory_value_sale?: number;
+      customers_active?: number;
+      active_addons?: string[];
+    };
+    const prods = Number(s.products_active) || 0;
+    const low = Number(s.low_stock) || 0;
+    const invCost = Number(s.inventory_value_cost) || 0;
+    const invSale = Number(s.inventory_value_sale) || 0;
+    lines.push(
+      `Catálogo: ${prods} productos activos cargados` +
+        (low > 0 ? `, ${low} con stock bajo` : "") +
+        `. Valor de inventario: ${ars(invCost)} a costo / ${ars(invSale)} a precio de venta.`,
+    );
+    lines.push(`Clientes: ${Number(s.customers_active) || 0} clientes cargados.`);
+
+    // Addons activos: traducimos las claves a etiquetas legibles vía plan_addons.
+    const addonKeys = Array.isArray(s.active_addons)
+      ? s.active_addons.map((k) => String(k)).filter(Boolean)
+      : [];
+    if (addonKeys.length === 0) {
+      lines.push("Complementos activos: ninguno.");
+    } else {
+      const { data: addonRows } = await admin
+        .from("plan_addons")
+        .select("key, label")
+        .in("key", addonKeys);
+      const labelByKey = new Map<string, string>();
+      for (const a of addonRows ?? []) {
+        labelByKey.set(
+          String((a as { key?: string }).key ?? ""),
+          String((a as { label?: string }).label ?? ""),
+        );
+      }
+      const names = addonKeys.map((k) => labelByKey.get(k) || k);
+      lines.push(`Complementos activos: ${names.join(", ")}.`);
+    }
+  } catch (e) {
+    lines.push("(No se pudo cargar el resumen de catálogo y clientes.)");
+    console.error("buildContext snapshot error:", e);
+  }
+
   // ── Ventas hoy / 7 días ───────────────────────────────────────────────────
   try {
     const { data: todaySales } = await admin
@@ -783,6 +841,8 @@ async function buildContext(
   }
 
   // ── Productos con stock bajo (stock <= stock_min) ─────────────────────────
+  // El CONTEO global ya viene del snapshot (RPC). Acá solo listamos NOMBRES de
+  // hasta 10 para dar color; ventana acotada (500 filas) para no inflar.
   try {
     const { data: lowStock } = await admin
       .from("products")
@@ -800,11 +860,11 @@ async function buildContext(
       .map((p: { name?: string; stock?: number }) => `${p.name} (${p.stock})`);
     lines.push(
       low.length
-        ? `Productos con stock bajo: ${low.join(", ")}.`
-        : "Productos con stock bajo: ninguno.",
+        ? `Detalle de stock bajo (muestra): ${low.join(", ")}.`
+        : "Detalle de stock bajo: sin productos por debajo del mínimo.",
     );
   } catch (e) {
-    lines.push("(No se pudo cargar el stock bajo.)");
+    lines.push("(No se pudo cargar el detalle de stock bajo.)");
     console.error("buildContext low stock error:", e);
   }
 

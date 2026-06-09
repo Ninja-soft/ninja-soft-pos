@@ -11,14 +11,26 @@ import { Spinner } from "@/components/ui/Spinner";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-// Config pública del addon IA (avatar + texto comercial + precio). La trae el
-// RPC ai_public_config() — NO expone la api_key. Sirve para el explicador que
-// ve un dueño sin el complemento contratado.
+// Config pública del addon IA (avatar + proveedor activo + texto comercial +
+// precio). La trae el RPC ai_public_config() — NO expone la api_key. Sirve para
+// el explicador que ve un dueño sin el complemento contratado y para mostrar qué
+// IA está activa (provider) en el chat.
 type PublicCfg = {
   image_url: string;
+  provider: string;
   commercial_text: string;
   addon_price_ars: string;
 };
+
+// Nombre comercial legible del proveedor IA activo (provider de ai_config). Se
+// muestra como badge "Con tecnología de …" en el chat. Cualquier valor
+// desconocido cae a "IA".
+function providerLabel(provider: string): string {
+  const p = provider.trim().toLowerCase();
+  if (p === "gemini") return "Gemini";
+  if (p === "claude") return "Claude";
+  return "IA";
+}
 
 // Texto comercial de respaldo si la config no trae commercial_text y la llamada
 // {intro:true} tampoco devuelve nada (debería ser raro: la Edge Function ya
@@ -71,6 +83,7 @@ export function AssistantBubble() {
       const c = (data ?? {}) as Partial<PublicCfg>;
       return {
         image_url: String(c.image_url ?? ""),
+        provider: String(c.provider ?? ""),
         commercial_text: String(c.commercial_text ?? ""),
         addon_price_ars: String(c.addon_price_ars ?? ""),
       };
@@ -81,6 +94,8 @@ export function AssistantBubble() {
   const locked = available === false;
   // Imagen del proveedor activo (la que ve el cliente CON el addon).
   const providerImage = (publicCfg?.image_url ?? "").trim();
+  // Nombre legible de la IA activa (Gemini / Claude) para el badge del chat.
+  const aiLabel = providerLabel(publicCfg?.provider ?? "");
   // Ícono del círculo: sin addon → gif de marca; con addon → imagen del
   // proveedor activo (fallback al ícono Sparkles si no hubiera ninguna).
   const iconUrl = locked ? UNSCREEN_GIF : providerImage;
@@ -210,8 +225,8 @@ export function AssistantBubble() {
           aria-busy={!bubbleReady}
           className={`fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-ninjaGlow ring-1 backdrop-blur-xl transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:active:scale-100 ${
             locked
-              ? "bg-[#0d0822] text-ninja-flameSoft ring-ninja-flame/40"
-              : "bg-ninja-gradient text-ninja-voidViolet ring-white/10"
+              ? "bg-card text-primary ring-ninja-flame/40"
+              : "bg-ninja-gradient text-ninja-voidViolet ring-ninja-flame/20"
           }`}
         >
           {bubbleReady ? (
@@ -222,24 +237,32 @@ export function AssistantBubble() {
         </button>
       )}
 
-      {/* Panel: fondo casi sólido (no "liquid glass" translúcido) para que el
-          texto del chat sea siempre legible sobre cualquier pantalla detrás.
-          El blur queda solo como detalle en los bordes. */}
+      {/* Panel: fondo sólido del tema (popover) para que el texto del chat sea
+          siempre legible sobre cualquier pantalla detrás, en todos los temas
+          (dark/noir/light/sand). Acento flame en el borde; sin sombras paralelas
+          ni reflejos. El blur queda solo como detalle en los bordes. */}
       {open && (
-        <div className="fixed bottom-4 right-4 z-40 flex h-[min(560px,80dvh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-ninja-flame/15 bg-[#0d0822]/95 shadow-2xl ring-1 ring-black/40 backdrop-blur-xl">
+        <div className="fixed bottom-4 right-4 z-40 flex h-[min(560px,80dvh)] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-ninja-flame/20 bg-popover text-popover-foreground backdrop-blur-xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <span className="flex items-center gap-2 font-semibold text-foreground">
               <span
                 className={`grid h-7 w-7 place-items-center overflow-hidden rounded-lg ${
                   locked
-                    ? "bg-[#0d0822] text-ninja-flameSoft ring-1 ring-ninja-flame/30"
+                    ? "bg-secondary text-primary ring-1 ring-ninja-flame/30"
                     : "bg-ninja-gradient text-ninja-voidViolet"
                 }`}
               >
                 <BubbleAvatar url={iconUrl} size={28} iconSize={16} />
               </span>
               Asistente IA
+              {/* Badge del proveedor IA activo (solo con acceso). Indica qué
+                  modelo responde, sin exponer ninguna credencial. */}
+              {!locked && (
+                <span className="rounded-full border border-ninja-flame/30 bg-ninja-flame/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  {aiLabel}
+                </span>
+              )}
             </span>
             <button
               onClick={() => setOpen(false)}
@@ -254,13 +277,13 @@ export function AssistantBubble() {
             /* ── Modo bloqueado: explicador comercial + CTA ── */
             <div className="slim-scrollbar flex flex-1 flex-col overflow-y-auto p-5">
               <div className="flex flex-col items-center text-center">
-                <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-[#0d0822] text-ninja-flameSoft shadow-ninjaGlow ring-1 ring-ninja-flame/30">
+                <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-secondary text-primary ring-1 ring-ninja-flame/30">
                   <BubbleAvatar url={iconUrl} size={64} iconSize={30} />
                 </span>
                 <h3 className="mt-3 flex items-center gap-1.5 text-base font-semibold text-foreground">
                   <Lock size={14} /> Asistente IA
                 </h3>
-                <p className="mt-1 text-xs font-medium text-ninja-flameSoft">
+                <p className="mt-1 text-xs font-medium text-primary">
                   Todavía no lo tenés contratado
                 </p>
               </div>
@@ -315,7 +338,7 @@ export function AssistantBubble() {
                         "max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm leading-relaxed",
                         m.role === "user"
                           ? "bg-ninja-flame/25 text-foreground"
-                          : "border border-white/10 bg-[#1b1438] text-foreground",
+                          : "border border-border bg-secondary text-secondary-foreground",
                       )}
                     >
                       {m.content}
@@ -324,7 +347,7 @@ export function AssistantBubble() {
                 ))}
                 {send.isPending && (
                   <div className="flex justify-start">
-                    <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-[#1b1438] px-3 py-2.5">
+                    <div className="flex items-center gap-1 rounded-2xl border border-border bg-secondary px-3 py-2.5">
                       <Dot delay="0ms" />
                       <Dot delay="150ms" />
                       <Dot delay="300ms" />
@@ -359,7 +382,8 @@ export function AssistantBubble() {
                   </button>
                 </div>
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                  Powered by IA
+                  Con tecnología de{" "}
+                  <span className="font-medium text-primary">{aiLabel}</span>
                   {quota
                     ? ` • ${Math.max(0, quota.cap - quota.used).toLocaleString("es-AR")} tokens restantes este mes`
                     : ""}

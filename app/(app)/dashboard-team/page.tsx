@@ -172,22 +172,22 @@ export default async function DashboardTeamPage() {
         </Link>
       </div>
 
-      {/* Panel de suscripción interactivo (solo dueños: las RPC son owner-gated). */}
-      {isOwner && <SubscriptionCard />}
-
-      {/* Equipo (cliente: lista + invitar) */}
+      {/* Equipo (cliente: lista + invitar) — arriba de la suscripción. */}
       <TeamSection
         currentUserId={user.id}
         tenantId={tenant.id}
         canManage={["owner", "manager"].includes(membership.role)}
       />
 
-      {/* Accesos */}
+      {/* Apariencia — antes que la suscripción. */}
       <div className="mt-8 flex flex-wrap gap-3">
         <Link href="/configuracion" className={buttonVariants({ variant: "secondary" })}>
           <Palette size={16} /> Apariencia
         </Link>
       </div>
+
+      {/* Panel de suscripción interactivo (solo dueños: las RPC son owner-gated). */}
+      {isOwner && <SubscriptionCard />}
     </div>
   );
 }

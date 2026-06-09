@@ -119,33 +119,38 @@ export function UpgradeModal({
           {/* Tarjeta del plan destino: logo + nombre + nombre ninja + precio. */}
           {target ? (
             <div className="mt-5 rounded-xl border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4">
-              <div className="flex items-center gap-3">
-                {target.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={target.image_url}
-                    alt={target.name}
-                    className="h-11 w-11 shrink-0 rounded-lg border border-border object-cover"
-                  />
-                ) : (
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet">
-                    <Flame size={20} />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-[11px] uppercase tracking-wide text-ninja-flameSoft">
-                    Disponible desde
-                  </div>
-                  <div className="truncate font-bold leading-tight">
-                    Plan {target.name}
-                    {target.secondary_name ? (
-                      <span className="ml-1 font-normal text-muted-foreground">
-                        · {target.secondary_name}
-                      </span>
-                    ) : null}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {target.image_url ? (
+                    // Imagen del plan = banner rectangular (~2.5:1, con alpha).
+                    // object-contain en una caja apaisada para que se vea entera,
+                    // sin recortar ni deformar.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={target.image_url}
+                      alt={target.name}
+                      className="h-12 w-[5.25rem] shrink-0 rounded-lg border border-border bg-background/40 object-contain p-0.5"
+                    />
+                  ) : (
+                    <span className="grid h-12 w-[5.25rem] shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet">
+                      <Flame size={20} />
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] uppercase tracking-wide text-ninja-flameSoft">
+                      Disponible desde
+                    </div>
+                    <div className="truncate font-bold leading-tight">
+                      Plan {target.name}
+                      {target.secondary_name ? (
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          · {target.secondary_name}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
+                <div className="ml-auto shrink-0 text-right">
                   <div className="font-price text-lg font-black tabular-nums">
                     {fmtMoney(target.monthly_price_ars)}
                   </div>

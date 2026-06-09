@@ -17,6 +17,7 @@ import {
   TrendingUp,
   ShieldCheck,
   ChevronDown,
+  Gift,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -43,6 +44,8 @@ type Addon = {
   addon_key: string;
   label: string | null;
   status: string;
+  // 'granted' = bonificado por NinjaSoft (sin cobro); 'purchased' = pago.
+  source: string | null;
   cancel_at_period_end: boolean;
   current_period_end: string | null;
   monthly_price_ars: number | null;
@@ -478,6 +481,14 @@ export function SubscriptionCard() {
   const aiActive =
     aiAddon && (aiAddon.status === "active" || aiAddon.cancel_at_period_end);
   const aiPrice = (aiCfg?.addon_price_ars ?? "").trim();
+  // Bonificado por NinjaSoft: el addon fue regalado desde el panel interno
+  // (subscription_addons.source = 'granted', sin cobro). Un addon pago tiene
+  // source='purchased' y monthly_price_ars seteado; los grants nunca setean
+  // precio. Usamos `source` (flag canónico) con el precio nulo como respaldo
+  // por si el RPC aún no expone source.
+  const aiComped =
+    !!aiAddon &&
+    (aiAddon.source === "granted" || aiAddon.monthly_price_ars == null);
 
   const isTrial = sub.status === "trial";
   const daysLeft = daysUntil(sub.current_period_end);
@@ -712,9 +723,19 @@ export function SubscriptionCard() {
                         Se da de baja el {fmtDate(aiAddon?.current_period_end)}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-emerald-400">
-                        <Check size={12} /> Activo
-                        {aiPrice ? ` · ${fmtMoney(Number(aiPrice))}/mes` : ""}
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-emerald-400">
+                          <Check size={12} /> Activo
+                        </span>
+                        {aiComped ? (
+                          <span className="inline-flex items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                            <Gift size={10} /> Bonificado por NinjaSoft
+                          </span>
+                        ) : aiPrice ? (
+                          <span className="text-muted-foreground">
+                            · {fmtMoney(Number(aiPrice))}/mes
+                          </span>
+                        ) : null}
                       </span>
                     )}
                   </div>

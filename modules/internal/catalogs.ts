@@ -145,6 +145,20 @@ export const catalogsApi = {
     }));
   },
 
+  // Setear/cambiar el logo de una tienda de origen (catalog_stores.logo_url).
+  // La imagen se sube antes al bucket catalog-assets; acá persistimos la URL.
+  // Pasá null/"" para quitar el logo. Sólo staff interno (gateado server-side).
+  setStoreLogo: async (
+    storeKey: string,
+    logoUrl: string | null,
+  ): Promise<void> => {
+    const { error } = await db().rpc("internal_set_store_logo", {
+      p_store_key: storeKey,
+      p_logo_url: logoUrl,
+    });
+    if (error) throw error;
+  },
+
   // Crear/editar catálogo + sincronizar sus tiendas, vía RPC transaccional.
   saveCatalog: async (input: CatalogInput): Promise<string> => {
     const { data, error } = await db().rpc("internal_save_catalog", {

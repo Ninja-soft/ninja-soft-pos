@@ -18,6 +18,17 @@ export function useCatalogs() {
   });
 }
 
+export function useSetStoreLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { storeKey: string; logoUrl: string | null }) =>
+      catalogsApi.setStoreLogo(v.storeKey, v.logoUrl),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "catalog-stores"] });
+    },
+  });
+}
+
 export function useSaveCatalog() {
   const qc = useQueryClient();
   return useMutation({

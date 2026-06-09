@@ -3,7 +3,9 @@
 import { useRef, useState } from "react";
 import {
   Boxes,
+  ChevronDown,
   Gift,
+  ImagePlus,
   Package,
   Pencil,
   Plus,
@@ -17,13 +19,15 @@ import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { resizeToWebp } from "@/lib/utils/image";
 import { formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import {
   useCatalogs,
   useCatalogStores,
+  useSetStoreLogo,
 } from "@/modules/internal/catalogsHooks";
-import type { Catalog } from "@/modules/internal/catalogs";
+import { CATALOG_ASSETS_BUCKET, type Catalog } from "@/modules/internal/catalogs";
 import { CatalogEditorModal } from "./CatalogEditorModal";
 import { CatalogGrantsModal } from "./CatalogGrantsModal";
 
@@ -42,6 +46,48 @@ export function CatalogsManager() {
   const [uploading, setUploading] = useState(false);
   const [lastUpload, setLastUpload] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Foto/logo por tienda de origen: subo al bucket público catalog-assets y
+  // persisto la URL en catalog_stores.logo_url vía RPC (gateada a internal).
+  const setStoreLogo = useSetStoreLogo();
+  const [logoStoreKey, setLogoStoreKey] = useState<string | null>(null);
+  const storeLogoRef = useRef<HTMLInputElement>(null);
+
+  function pickStoreLogo(storeKey: string) {
+    setLogoStoreKey(storeKey);
+    storeLogoRef.current?.click();
+  }
+
+  async function onPickStoreLogo(file: File | undefined) {
+    const storeKey = logoStoreKey;
+    if (!file || !storeKey) {
+      setLogoStoreKey(null);
+      return;
+    }
+    try {
+      const supabase = createClient();
+      const webp = await resizeToWebp(file, 400, 0.9);
+      const path = `stores/${storeKey}-${crypto.randomUUID()}.webp`;
+      const up = await supabase.storage
+        .from(CATALOG_ASSETS_BUCKET)
+        .upload(path, webp, { contentType: "image/webp", upsert: false });
+      if (up.error) throw up.error;
+      const { data: pub } = supabase.storage
+        .from(CATALOG_ASSETS_BUCKET)
+        .getPublicUrl(path);
+      await setStoreLogo.mutateAsync({ storeKey, logoUrl: pub.publicUrl });
+      toast({ title: "Foto de la tienda actualizada", variant: "success" });
+    } catch (e) {
+      toast({
+        title: "No se pudo actualizar la foto",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    } finally {
+      setLogoStoreKey(null);
+      if (storeLogoRef.current) storeLogoRef.current.value = "";
+    }
+  }
 
   function openCreate() {
     setEditing(null);
@@ -100,35 +146,60 @@ export function CatalogsManager() {
           vendibles se arman agrupando estas tiendas.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(stores ?? []).map((s) => (
-            <Card key={s.key}>
-              <CardContent className="flex items-center gap-3 p-4">
-                <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-background">
-                  {s.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={s.logoUrl}
-                      alt={s.name}
-                      className="h-full w-full object-contain p-1"
-                    />
-                  ) : (
-                    <Store size={18} className="text-muted-foreground" />
-                  )}
-                </span>
-                <div className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-foreground">
-                    {s.name}
+          {(stores ?? []).map((s) => {
+            const busy =
+              setStoreLogo.isPending && logoStoreKey === s.key;
+            return (
+              <Card key={s.key}>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-background">
+                    {s.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={s.logoUrl}
+                        alt={s.name}
+                        className="h-full w-full object-contain p-1"
+                      />
+                    ) : (
+                      <Store size={18} className="text-muted-foreground" />
+                    )}
                   </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {s.productCount.toLocaleString("es-AR")} productos
-                    {s.lastImportAt &&
-                      ` · ${new Date(s.lastImportAt).toLocaleDateString("es-AR")}`}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {s.name}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {s.productCount.toLocaleString("es-AR")} productos
+                      {s.lastImportAt &&
+                        ` · ${new Date(s.lastImportAt).toLocaleDateString("es-AR")}`}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 px-2"
+                    loading={busy}
+                    disabled={setStoreLogo.isPending}
+                    onClick={() => pickStoreLogo(s.key)}
+                    title={s.logoUrl ? "Cambiar foto" : "Subir foto"}
+                  >
+                    {!busy && <ImagePlus size={14} />}
+                    <span className="hidden sm:inline">
+                      {s.logoUrl ? "Cambiar" : "Subir foto"}
+                    </span>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+        <input
+          ref={storeLogoRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => onPickStoreLogo(e.target.files?.[0])}
+        />
       </section>
 
       {/* Catálogos vendibles */}
@@ -241,16 +312,8 @@ export function CatalogsManager() {
         </Heading>
         <Card className="mt-3">
           <CardContent className="space-y-4 p-5">
-            <p className="text-sm text-muted-foreground">
-              Subí el Excel (una hoja por tienda) al almacenamiento seguro. La
-              carga masiva a la base la corre un{" "}
-              <strong>script server-side</strong> con la service key, porque el
-              archivo es enorme y no entra en una función web.
-            </p>
-
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                variant="secondary"
                 loading={uploading}
                 onClick={() => fileRef.current?.click()}
               >
@@ -263,28 +326,43 @@ export function CatalogsManager() {
                 hidden
                 onChange={(e) => onPickExcel(e.target.files?.[0])}
               />
-              {lastUpload && (
+              {lastUpload ? (
                 <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
                   <Check size={13} /> Subido: {lastUpload}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Una hoja por tienda. Se guarda en el almacenamiento seguro.
                 </span>
               )}
             </div>
 
-            <div className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Correr el import completo (server-side)
-              </p>
-              <pre className="overflow-x-auto rounded-md bg-background/70 p-3 text-xs leading-relaxed text-foreground">
+            <details className="group rounded-lg border border-border bg-muted/30">
+              <summary className="flex cursor-pointer list-none items-center gap-2 p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition hover:text-foreground">
+                <ChevronDown
+                  size={14}
+                  className="transition-transform group-open:rotate-180"
+                />
+                Ver detalles técnicos / correr el import server-side
+              </summary>
+              <div className="border-t border-border px-3 pb-3 pt-3">
+                <p className="mb-2 text-xs text-muted-foreground">
+                  La carga masiva a la base la corre un{" "}
+                  <strong>script server-side</strong> con la service key, porque
+                  el archivo es enorme y no entra en una función web.
+                </p>
+                <pre className="overflow-x-auto rounded-md bg-background/70 p-3 text-xs leading-relaxed text-foreground">
 {`SUPABASE_URL=…  SUPABASE_SERVICE_ROLE_KEY=…  \\
   node scripts/import_catalog.cjs <archivo.xlsx>`}
-              </pre>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Hace UPSERT batcheado en <code>catalog_products</code> por
-                (tienda, EAN), actualiza el conteo por tienda y notifica a los
-                negocios que compraron cada catálogo. El sample inicial ya está
-                cargado para la demo.
-              </p>
-            </div>
+                </pre>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Hace UPSERT batcheado en <code>catalog_products</code> por
+                  (tienda, EAN), actualiza el conteo por tienda y notifica a los
+                  negocios que compraron cada catálogo. El sample inicial ya está
+                  cargado para la demo.
+                </p>
+              </div>
+            </details>
           </CardContent>
         </Card>
       </section>

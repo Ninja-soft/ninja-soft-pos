@@ -10,24 +10,39 @@ import {
   COURSE_LABELS,
   KDS_STATIONS,
   KDS_STATION_LABELS,
-  type ComandaItem,
 } from "@/modules/dining/api";
-import { modifiersSummaryNoPrice } from "@/modules/products/modifiers";
+import {
+  useDeliveryComandaData,
+  useMarkDeliveryComandaPrinted,
+} from "@/modules/delivery/hooks";
+import {
+  DELIVERY_CHANNEL_LABELS,
+  type DeliveryChannel,
+  type DeliveryOrder,
+} from "@/modules/delivery/api";
+import { modifiersSummaryNoPrice, type SaleLineModifierGroup } from "@/modules/products/modifiers";
 import { webPrintCopies } from "@/lib/print/webPrint";
 import { formatQty } from "@/lib/utils/format";
 
-// F13 · H45 — Comanda impresa por estación desde la cuenta de la mesa (H44).
+// F13 · H45 (mesa) + H49 (delivery/takeaway) — Comanda impresa por estación.
 //
 // Es un ticket de COCINA (no de venta): SIN precios ni totales. Agrupa los ítems
-// del pedido por `station` (snapshot del producto, H46) y emite UNA comanda por
-// estación con ítems (cocina lo suyo, barra lo suyo). Ítems sin estación → una
+// DISPARADOS del pedido por `station` (snapshot del producto, H46) y emite UNA
+// comanda por estación (cocina lo suyo, barra lo suyo). Ítems sin estación → una
 // comanda "Sin estación". Reusa el flujo de impresión web de los tickets
 // (window.print + CSS print): la clase .comanda-print aísla el contenido y
 // .comanda-page fuerza un salto de página entre estaciones (ver globals.css).
 //
 // Evita re-imprimir: por defecto imprime sólo lo NUEVO (printed_at null). Al
-// imprimir, marca esas líneas como enviadas (mark_comanda_printed). "Reimprimir
-// todo" trae todas las líneas (no repisa la marca original).
+// imprimir, marca esas líneas como enviadas (mark_comanda_printed /
+// mark_delivery_comanda_printed). "Reimprimir todo" trae todas las líneas (no
+// repisa la marca original).
+//
+// FUENTE (`source`): el mismo modal sirve para MESA y DELIVERY/TAKEAWAY. Cambia
+// sólo (a) la RPC de datos/marcado y (b) el ENCABEZADO de la comanda: para mesa
+// "Mesa N · salón · mozo"; para delivery "DELIVERY/TAKEAWAY #1234 · cliente /
+// teléfono / dirección / horario prometido / cadete". El render por estación, el
+// filtro nuevo/reimprimir, el papel y la impresión son comunes.
 
 type Paper = "58" | "80";
 
@@ -42,14 +57,44 @@ function stationLabel(s: string | null): string {
   return KDS_STATION_LABELS[s as keyof typeof KDS_STATION_LABELS] ?? s;
 }
 
+// Forma mínima común de una línea de comanda (mesa o delivery) para el render.
+interface ComandaLine {
+  item_id: string;
+  name: string;
+  qty: number;
+  modifiers: SaleLineModifierGroup[];
+  notes: string | null;
+  station: string | null;
+  course: number;
+}
+
+// Datos del encabezado de la comanda. `kind` decide qué bloque se dibuja.
+type ComandaHeaderInfo =
+  | {
+      kind: "table";
+      tableLabel: string | null;
+      areaName: string | null;
+      waiterName: string | null;
+    }
+  | {
+      kind: "delivery";
+      sourceLabel: string; // "DELIVERY #1234" / "TAKEAWAY #1234"
+      channelLabel: string | null;
+      customerName: string | null;
+      customerPhone: string | null;
+      address: string | null;
+      promisedAt: string | null;
+      courierName: string | null;
+    };
+
 interface StationGroup {
   key: string; // station ?? "__none__"
   station: string | null;
-  items: ComandaItem[];
+  items: ComandaLine[];
 }
 
 // Agrupa las líneas por estación, respetando STATION_ORDER (sin estación al final).
-function groupByStation(items: ComandaItem[]): StationGroup[] {
+function groupByStation(items: ComandaLine[]): StationGroup[] {
   const map = new Map<string, StationGroup>();
   for (const it of items) {
     const key = it.station ?? "__none__";
@@ -64,21 +109,35 @@ function groupByStation(items: ComandaItem[]): StationGroup[] {
   });
 }
 
-export function ComandaModal({
-  open,
-  onOpenChange,
-  orderId,
-  // Estación de origen (opcional): si se abre desde una vista de estación, la
-  // comanda arranca filtrada a esa estación.
-  initialStation = null,
-  businessName,
-}: {
+// Props del modal: discriminadas por `source`. Mesa = el flujo original (H45).
+// Delivery = pasa el pedido para completar el encabezado con datos que no viajan
+// en la RPC (teléfono, horario prometido).
+type ComandaModalProps = {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   orderId: string | null;
-  initialStation?: string | null;
   businessName?: string | null;
-}) {
+} & (
+  | {
+      source?: "table";
+      // Estación de origen (opcional): si se abre desde una vista de estación, la
+      // comanda arranca filtrada a esa estación.
+      initialStation?: string | null;
+    }
+  | {
+      source: "delivery";
+      order: DeliveryOrder | null;
+    }
+);
+
+export function ComandaModal(props: ComandaModalProps) {
+  const { open, onOpenChange, orderId, businessName } = props;
+  const isDelivery = props.source === "delivery";
+  // Lectura de props específicas por fuente (narrowing sobre props.source).
+  const initialStation =
+    props.source === "delivery" ? null : props.initialStation ?? null;
+  const deliveryOrder = props.source === "delivery" ? props.order : null;
+
   const { toast } = useToast();
   // reprintAll=false → sólo lo nuevo (no enviado). true → todas las líneas.
   const [reprintAll, setReprintAll] = useState(false);
@@ -86,8 +145,71 @@ export function ComandaModal({
   const [stationFilter, setStationFilter] = useState<string | null>(initialStation);
   const [paper, setPaper] = useState<Paper>("80");
 
-  const { data: items, isLoading } = useComandaData(orderId, !reprintAll, open);
-  const markPrinted = useMarkComandaPrinted();
+  // Datos: una u otra RPC según la fuente. Sólo la habilitada hace fetch.
+  const tableData = useComandaData(orderId, !reprintAll, open && !isDelivery);
+  const deliveryData = useDeliveryComandaData(orderId, !reprintAll, open && isDelivery);
+  const markTable = useMarkComandaPrinted();
+  const markDelivery = useMarkDeliveryComandaPrinted();
+
+  const isLoading = isDelivery ? deliveryData.isLoading : tableData.isLoading;
+  const markPrinted = isDelivery ? markDelivery : markTable;
+
+  // Normaliza las líneas de cualquier fuente a la forma común del render.
+  const lines: ComandaLine[] = useMemo(() => {
+    if (isDelivery) {
+      return (deliveryData.data ?? []).map((it) => ({
+        item_id: it.item_id,
+        name: it.name,
+        qty: it.qty,
+        modifiers: it.modifiers ?? [],
+        notes: it.notes,
+        station: it.station,
+        course: it.course,
+      }));
+    }
+    return (tableData.data ?? []).map((it) => ({
+      item_id: it.item_id,
+      name: it.name,
+      qty: it.qty,
+      modifiers: it.modifiers ?? [],
+      notes: it.notes,
+      station: it.station,
+      course: it.course,
+    }));
+  }, [isDelivery, deliveryData.data, tableData.data]);
+
+  // Encabezado de la comanda. Mesa: del primer ítem de la RPC. Delivery: del
+  // primer ítem (source_label / canal / cliente / dirección / cadete) + el pedido
+  // (teléfono / horario prometido, que no viajan en la RPC).
+  const headerInfo: ComandaHeaderInfo | null = useMemo(() => {
+    if (isDelivery) {
+      const h = (deliveryData.data ?? [])[0] ?? null;
+      const sourceLabel =
+        h?.source_label ??
+        (deliveryOrder
+          ? `${deliveryOrder.order_type === "takeaway" ? "TAKEAWAY" : "DELIVERY"} #${deliveryOrder.id.replace(/-/g, "").slice(-4).toUpperCase()}`
+          : "PEDIDO");
+      const channel: DeliveryChannel | null =
+        h?.channel ?? deliveryOrder?.channel ?? null;
+      return {
+        kind: "delivery",
+        sourceLabel,
+        channelLabel: channel ? DELIVERY_CHANNEL_LABELS[channel] : null,
+        customerName: h?.customer_name ?? deliveryOrder?.customer_name ?? null,
+        customerPhone: deliveryOrder?.customer_phone ?? null,
+        address: h?.address ?? deliveryOrder?.address ?? null,
+        promisedAt: deliveryOrder?.promised_at ?? null,
+        courierName: h?.courier_name ?? deliveryOrder?.courier_name ?? null,
+      };
+    }
+    const h = (tableData.data ?? [])[0] ?? null;
+    return {
+      kind: "table",
+      tableLabel: h?.table_label ?? null,
+      areaName: h?.area_name ?? null,
+      waiterName: h?.waiter_name ?? null,
+    };
+  }, [isDelivery, deliveryData.data, tableData.data, deliveryOrder]);
 
   // Reset de estado al abrir/cerrar para que cada apertura empiece limpia.
   useEffect(() => {
@@ -99,14 +221,13 @@ export function ComandaModal({
 
   // Grupos por estación, ya filtrados por la estación elegida (si hay).
   const groups = useMemo(() => {
-    const all = groupByStation(items ?? []);
+    const all = groupByStation(lines);
     return stationFilter ? all.filter((g) => (g.station ?? null) === stationFilter) : all;
-  }, [items, stationFilter]);
+  }, [lines, stationFilter]);
 
   // Estaciones presentes en el pedido (para las pills de filtro).
-  const presentStations = useMemo(() => groupByStation(items ?? []), [items]);
+  const presentStations = useMemo(() => groupByStation(lines), [lines]);
 
-  const header = (items ?? [])[0] ?? null;
   const visibleItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const nothingToPrint = !isLoading && visibleItems.length === 0;
 
@@ -249,7 +370,7 @@ export function ComandaModal({
               <ComandaSheet
                 key={g.key}
                 group={g}
-                header={header}
+                header={headerInfo}
                 businessName={businessName ?? null}
                 printedAtLabel={printedAtLabel}
                 widthCls={widthCls}
@@ -277,9 +398,10 @@ export function ComandaModal({
   );
 }
 
-// Una comanda (hoja) de una estación: encabezado grande con la estación, mesa +
-// salón, hora y mozo; y la lista de ítems con cantidad + modificadores + notas.
-// Negro sobre blanco, angosto (térmica), SIN precios.
+// Una comanda (hoja) de una estación: encabezado grande con la estación, los
+// datos del pedido (mesa+salón+mozo para mesa; pedido+cliente/tel/dir/horario/
+// cadete para delivery), hora; y la lista de ítems con cantidad + modificadores +
+// notas. Negro sobre blanco, angosto (térmica), SIN precios.
 function ComandaSheet({
   group,
   header,
@@ -288,7 +410,7 @@ function ComandaSheet({
   widthCls,
 }: {
   group: StationGroup;
-  header: ComandaItem | null;
+  header: ComandaHeaderInfo | null;
   businessName: string | null;
   printedAtLabel: string;
   widthCls: string;
@@ -309,20 +431,13 @@ function ComandaSheet({
         {stationLabel(group.station)}
       </div>
 
-      {/* Mesa + salón + hora + mozo */}
+      {/* Datos del pedido + hora. Difiere por fuente. */}
       <div className="mt-2 space-y-0.5 text-[13px] leading-tight">
-        <div className="flex items-baseline justify-between">
-          <span className="text-base font-bold">
-            Mesa {header?.table_label ?? "—"}
-          </span>
-          {header?.area_name && (
-            <span className="text-neutral-600">{header.area_name}</span>
-          )}
-        </div>
-        <div className="flex items-baseline justify-between text-neutral-600">
-          <span>{printedAtLabel}</span>
-          {header?.waiter_name && <span>Mozo: {header.waiter_name}</span>}
-        </div>
+        {header?.kind === "delivery" ? (
+          <DeliveryHeaderBlock header={header} printedAtLabel={printedAtLabel} />
+        ) : (
+          <TableHeaderBlock header={header ?? null} printedAtLabel={printedAtLabel} />
+        )}
       </div>
 
       <div className="my-2 border-t border-dashed border-neutral-400" />
@@ -355,5 +470,70 @@ function ComandaSheet({
         })}
       </ul>
     </div>
+  );
+}
+
+// Encabezado de la comanda de MESA: "Mesa N" + salón + hora + mozo (H45).
+function TableHeaderBlock({
+  header,
+  printedAtLabel,
+}: {
+  header: Extract<ComandaHeaderInfo, { kind: "table" }> | null;
+  printedAtLabel: string;
+}) {
+  return (
+    <>
+      <div className="flex items-baseline justify-between">
+        <span className="text-base font-bold">Mesa {header?.tableLabel ?? "—"}</span>
+        {header?.areaName && <span className="text-neutral-600">{header.areaName}</span>}
+      </div>
+      <div className="flex items-baseline justify-between text-neutral-600">
+        <span>{printedAtLabel}</span>
+        {header?.waiterName && <span>Mozo: {header.waiterName}</span>}
+      </div>
+    </>
+  );
+}
+
+// Encabezado de la comanda de DELIVERY/TAKEAWAY: "DELIVERY/TAKEAWAY #1234" +
+// canal + cliente / teléfono / dirección / horario prometido / cadete + hora.
+function DeliveryHeaderBlock({
+  header,
+  printedAtLabel,
+}: {
+  header: Extract<ComandaHeaderInfo, { kind: "delivery" }>;
+  printedAtLabel: string;
+}) {
+  const promised = header.promisedAt
+    ? new Date(header.promisedAt).toLocaleString("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  return (
+    <>
+      <div className="flex items-baseline justify-between">
+        <span className="text-base font-bold uppercase">{header.sourceLabel}</span>
+        {header.channelLabel && (
+          <span className="text-neutral-600">{header.channelLabel}</span>
+        )}
+      </div>
+      {header.customerName && (
+        <div className="font-semibold">
+          {header.customerName}
+          {header.customerPhone ? (
+            <span className="font-normal text-neutral-600"> · {header.customerPhone}</span>
+          ) : null}
+        </div>
+      )}
+      {header.address && <div className="text-neutral-700">{header.address}</div>}
+      {promised && <div className="text-neutral-600">Promete: {promised}</div>}
+      {header.courierName && (
+        <div className="text-neutral-600">Cadete: {header.courierName}</div>
+      )}
+      <div className="text-neutral-600">{printedAtLabel}</div>
+    </>
   );
 }

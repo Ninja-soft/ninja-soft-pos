@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bike,
+  ChefHat,
   Clock,
   CreditCard,
   MapPin,
@@ -20,6 +21,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ComandaModal } from "@/components/dining/ComandaModal";
+import { useTicketBranding } from "@/modules/tickets/hooks";
 import {
   useDeliveryOrderItems,
   useDeliveryMutations,
@@ -53,9 +56,12 @@ export function DeliveryAccountModal({
   const open = order !== null;
   const { data: items } = useDeliveryOrderItems(orderId);
   const { setItemQty, removeItem, cancel, assignCourier } = useDeliveryMutations();
+  // Nombre del local para la cabecera (opcional) de la comanda de cocina (H49).
+  const { data: brand } = useTicketBranding(open);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [comandaOpen, setComandaOpen] = useState(false);
   const [courier, setCourier] = useState("");
 
   const isDelivery = order?.order_type === "delivery";
@@ -284,6 +290,18 @@ export function DeliveryAccountModal({
             </div>
           )}
 
+          {/* Comanda de cocina (H49): imprime la(s) comanda(s) por estación de las
+              líneas ya disparadas. Por defecto envía sólo lo nuevo a cocina/barra.
+              Disponible aunque el pedido esté cerrado (reimpresión). */}
+          <Button
+            variant="secondary"
+            onClick={() => setComandaOpen(true)}
+            disabled={(items ?? []).length === 0}
+            className="w-full"
+          >
+            <ChefHat size={16} /> Imprimir comanda
+          </Button>
+
           {/* Acciones: cobrar + cancelar */}
           {!closed && (
             <div className="flex flex-wrap items-center gap-2">
@@ -307,6 +325,17 @@ export function DeliveryAccountModal({
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         orderId={orderId}
+      />
+
+      {/* Comanda de cocina por estación (H49). Reusa el modal de mesa (H45) con
+          source="delivery": misma agrupación/impresión, encabezado del pedido. */}
+      <ComandaModal
+        source="delivery"
+        open={comandaOpen}
+        onOpenChange={setComandaOpen}
+        orderId={orderId}
+        order={order}
+        businessName={brand?.legal_name ?? null}
       />
 
       {/* Confirmación de cancelación */}

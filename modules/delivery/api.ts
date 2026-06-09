@@ -141,6 +141,32 @@ export interface DeliveryOrderItem {
   fired_at: string | null;
 }
 
+// ── Comanda impresa por estación (F13 · H49, espeja H45) ───────────────────────
+// Una línea disparada del pedido + el contexto de cabecera del delivery/takeaway
+// que devuelve delivery_comanda_items para armar la(s) comanda(s) de cocina. NO
+// lleva precios (es un ticket de preparación). HERMANO de ComandaItem (mesa),
+// pero el encabezado es el del pedido SIN mesa: `source_label` = "DELIVERY #1234"
+// / "TAKEAWAY #1234" + canal / cliente / dirección / cadete (el teléfono y el
+// horario prometido no viajan en la RPC; la UI los toma del DeliveryOrder).
+export interface DeliveryComandaItem {
+  item_id: string;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  modifiers: SaleLineModifierGroup[];
+  notes: string | null;
+  station: string | null;
+  course: number;
+  printed_at: string | null;
+  source_label: string;
+  channel: DeliveryChannel;
+  order_type: DeliveryOrderType;
+  courier_name: string | null;
+  customer_name: string | null;
+  address: string | null;
+  opened_at: string;
+}
+
 // Input para crear un pedido (alta desde el board).
 export interface CreateDeliveryInput {
   channel: DeliveryChannel;
@@ -315,6 +341,34 @@ export const deliveryApi = {
       p_order_id: orderId,
     } as never);
     if (error) throw error;
+  },
+
+  // Líneas disparadas del pedido + contexto para la comanda impresa (H49, espeja
+  // comanda_items de mesa). onlyNew=true trae sólo las no enviadas a cocina;
+  // false trae todas (reimprimir). RPC tenant-scoped (delivery_comanda_items).
+  comandaItems: async (
+    orderId: string,
+    onlyNew: boolean,
+  ): Promise<DeliveryComandaItem[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("delivery_comanda_items" as never, {
+      p_order_id: orderId,
+      p_only_new: onlyNew,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as DeliveryComandaItem[];
+  },
+
+  // Sella printed_at de las líneas impresas (las que aún eran null). Reimprimir no
+  // repisa la marca original (idempotente). RPC tenant-scoped.
+  markComandaPrinted: async (orderId: string, itemIds: string[]): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc(
+      "mark_delivery_comanda_printed" as never,
+      { p_order_id: orderId, p_item_ids: itemIds } as never,
+    );
+    if (error) throw error;
+    return ((data as { marked?: number } | null)?.marked ?? 0) as number;
   },
 };
 

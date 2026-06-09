@@ -67,6 +67,38 @@ export function useDeliveryOrderItems(orderId: string | null) {
   });
 }
 
+// ── Comanda impresa por estación (F13 · H49, espeja H45) ───────────────────────
+// Líneas disparadas del pedido + contexto para armar la(s) comanda(s) de cocina.
+// onlyNew = sólo lo nuevo (no enviado); false = reimprimir todo. enabled gatea el
+// fetch al abrir el modal. staleTime 0: se quiere el printed_at fresco cada vez.
+export function useDeliveryComandaData(
+  orderId: string | null,
+  onlyNew: boolean,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["delivery", "comanda", orderId, onlyNew ? "new" : "all"],
+    enabled: enabled && Boolean(orderId),
+    queryFn: () => deliveryApi.comandaItems(orderId!, onlyNew),
+    staleTime: 0,
+  });
+}
+
+export function useMarkDeliveryComandaPrinted() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { orderId: string; itemIds: string[] }) =>
+      deliveryApi.markComandaPrinted(v.orderId, v.itemIds),
+    // Tras marcar, refrescá la comanda (para que las nuevas dejen de aparecer) y
+    // la cuenta/KDS por consistencia.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["delivery", "comanda"] });
+      qc.invalidateQueries({ queryKey: ["delivery", "order-items"] });
+      qc.invalidateQueries({ queryKey: ["dining", "kds"] });
+    },
+  });
+}
+
 // ── Mutaciones del pedido de delivery ──────────────────────────────────────────
 export function useDeliveryMutations() {
   const qc = useQueryClient();

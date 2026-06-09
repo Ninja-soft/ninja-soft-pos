@@ -28,7 +28,17 @@ function fmtMoney(n: number | null | undefined): string {
   return `$${Number(n ?? 0).toLocaleString("es-AR")}`;
 }
 
-export function SuspendedGate({ email }: { email: string }) {
+// `cancelled` distingue la cuenta dada de baja / trial vencido (sin acceso) de
+// la suspendida por falta de pago: misma pantalla de bloqueo (solo se sale
+// pagando o cerrando sesión), pero el copy cambia para no decir "suspendida por
+// falta de pago" a quien nunca tuvo un pago pendiente.
+export function SuspendedGate({
+  email,
+  cancelled = false,
+}: {
+  email: string;
+  cancelled?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -71,11 +81,12 @@ export function SuspendedGate({ email }: { email: string }) {
         </div>
 
         <h1 className="text-2xl font-black tracking-tight text-foreground">
-          Cuenta suspendida
+          {cancelled ? "Cuenta sin plan activo" : "Cuenta suspendida"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Tu suscripción está suspendida por falta de pago. Para volver a usar el
-          sistema, reactivá tu plan pagando.
+          {cancelled
+            ? "Tu cuenta no tiene un plan activo (la prueba terminó o el plan se dio de baja). Activá un plan para volver a usar el sistema."
+            : "Tu suscripción está suspendida por falta de pago. Para volver a usar el sistema, reactivá tu plan pagando."}
         </p>
 
         {total != null && (
@@ -97,14 +108,15 @@ export function SuspendedGate({ email }: { email: string }) {
               loading={startCheckout.isPending}
               onClick={() => startCheckout.mutate()}
             >
-              <Zap size={16} /> Pagar y reactivar
+              <Zap size={16} /> {cancelled ? "Activar un plan" : "Pagar y reactivar"}
             </Button>
           ) : (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs text-amber-300">
               <Lock size={15} className="mt-0.5 shrink-0" />
               <span>
-                La cuenta de tu negocio está suspendida. Pedile al dueño que
-                ingrese para reactivar el plan y volver a usar el sistema.
+                {cancelled
+                  ? "La cuenta de tu negocio no tiene un plan activo. Pedile al dueño que ingrese para activar un plan y volver a usar el sistema."
+                  : "La cuenta de tu negocio está suspendida. Pedile al dueño que ingrese para reactivar el plan y volver a usar el sistema."}
               </span>
             </div>
           )}

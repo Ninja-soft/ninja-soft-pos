@@ -191,7 +191,12 @@ export function QrCheckoutModal({
       const extras = c
         ? [{ name: `Recargo ${c.label}`, amount: c.surcharge, kind: "surcharge" as const }]
         : [];
-      onApproved(status.mp_payment_id ?? intentId ?? "", amount, extras);
+      // El `reference` de la línea qr DEBE ser el intent id (uuid): create_sale lo
+      // resuelve contra mp_payment_intents.id para exigir status='approved',
+      // validar el monto y anclar sale_id (idempotencia real). Antes acá iba el
+      // mp_payment_id numérico, que NUNCA matcheaba el regex uuid del server →
+      // la validación quedaba inerte. El mp_payment_id solo sirve para logging.
+      onApproved(intentId ?? "", amount, extras);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
     }

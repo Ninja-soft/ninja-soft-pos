@@ -317,9 +317,12 @@ export function AppShell({
   const { data: diningEnabled } = useDiningEnabled();
   const showItem = (it: Item) => !it.requiresDining || Boolean(diningEnabled);
 
-  // Estado de la cuenta (suspensión / past_due). Lo setea el motor de dunning.
-  // `suspended` bloquea TODA la app del POS: ni montamos el shell, mostramos la
-  // pantalla de reactivación (de la que solo se sale pagando o cerrando sesión).
+  // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
+  // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni
+  // montamos el shell, mostramos la pantalla de reactivación (de la que solo se
+  // sale pagando o cerrando sesión). El gating real también vive en el server
+  // (assert_account_active en create_sale / open_cash_shift / devoluciones): la
+  // UI no es la única barrera.
   const { data: account } = useAccountStatus();
 
   async function signOut() {
@@ -416,13 +419,16 @@ export function AppShell({
     </nav>
   );
 
-  // Cuenta suspendida → no montamos el POS: pantalla de reactivación a pantalla
-  // completa. El InactivityGuard sigue activo (el auto-logout también corre acá).
-  if (account?.isSuspended) {
+  // Cuenta suspendida o cancelada → no montamos el POS: pantalla de reactivación
+  // a pantalla completa. El InactivityGuard sigue activo (el auto-logout también
+  // corre acá). `cancelled` ajusta el copy (trial vencido / baja, no "suspendida
+  // por falta de pago"), pero el bloqueo es el mismo: solo se sale pagando o
+  // cerrando sesión.
+  if (account?.isSuspended || account?.isCancelled) {
     return (
       <>
         <InactivityGuard />
-        <SuspendedGate email={email} />
+        <SuspendedGate email={email} cancelled={account?.isCancelled ?? false} />
       </>
     );
   }

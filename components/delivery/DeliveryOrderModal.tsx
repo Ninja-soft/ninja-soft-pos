@@ -7,13 +7,17 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useCustomers } from "@/modules/customers/hooks";
-import { useDeliveryMutations } from "@/modules/delivery/hooks";
+import {
+  useDeliveryMutations,
+  useDeliveryZones,
+} from "@/modules/delivery/hooks";
 import {
   DELIVERY_CHANNELS,
   DELIVERY_CHANNEL_LABELS,
   type DeliveryChannel,
   type DeliveryOrderType,
 } from "@/modules/delivery/api";
+import { formatCurrency } from "@/lib/utils/format";
 
 // Alta de un pedido de delivery / take away (F13 · H49). Elegí canal y tipo,
 // cliente (existente del catálogo o datos sueltos nombre+teléfono), dirección +
@@ -45,7 +49,14 @@ export function DeliveryOrderModal({
   const [addressRef, setAddressRef] = useState("");
   const [promisedAt, setPromisedAt] = useState(""); // datetime-local
   const [fee, setFee] = useState("");
+  const [zoneId, setZoneId] = useState<string>(""); // "" = sin zona
   const [notes, setNotes] = useState("");
+
+  // Zonas de envío activas del tenant (F13 · H49 follow-up). Si hay zonas, se
+  // ofrece un selector que autocompleta el costo de envío con la tarifa de la
+  // zona. Si no hay zonas cargadas, el campo de fee manual queda como hasta ahora.
+  const { data: zones } = useDeliveryZones(false);
+  const hasZones = (zones ?? []).length > 0;
 
   const { data: customers } = useCustomers(customerSearch);
   const showCustomerList =
@@ -63,7 +74,16 @@ export function DeliveryOrderModal({
     setAddressRef("");
     setPromisedAt("");
     setFee("");
+    setZoneId("");
     setNotes("");
+  }
+
+  // Al elegir una zona, autocompletá el costo de envío con su tarifa (queda
+  // editable: override manual). "" = sin zona (no toca el fee).
+  function pickZone(id: string) {
+    setZoneId(id);
+    const z = (zones ?? []).find((x) => x.id === id);
+    if (z) setFee(String(z.fee));
   }
 
   function pickCustomer(c: { id: string; name: string; phone: string | null; address: string | null }) {
@@ -110,6 +130,7 @@ export function DeliveryOrderModal({
         // datetime-local → ISO (local). Vacío = sin horario prometido.
         promised_at: promisedAt ? new Date(promisedAt).toISOString() : null,
         delivery_fee: orderType === "delivery" ? feeNum : 0,
+        zone_id: orderType === "delivery" && zoneId ? zoneId : null,
         notes: notes.trim() || null,
       });
       toast({ title: "Pedido creado", variant: "success" });
@@ -282,6 +303,29 @@ export function DeliveryOrderModal({
               placeholder="Timbre, piso, entre calles…"
             />
           </div>
+        )}
+
+        {/* Zona de envío (sólo delivery, si hay zonas cargadas). Al elegirla,
+            autocompleta el costo de envío con su tarifa (queda editable). */}
+        {orderType === "delivery" && hasZones && (
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-muted-foreground">
+              Zona de envío
+            </span>
+            <select
+              value={zoneId}
+              onChange={(e) => pickZone(e.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
+            >
+              <option value="">Sin zona</option>
+              {(zones ?? []).map((z) => (
+                <option key={z.id} value={z.id} className="bg-ninja-deepViolet">
+                  {z.name} · {formatCurrency(Number(z.fee))}
+                  {z.eta_minutes != null ? ` · ${z.eta_minutes} min` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
 
         {/* Horario prometido + costo de envío */}

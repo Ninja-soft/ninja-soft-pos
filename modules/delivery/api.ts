@@ -89,6 +89,25 @@ export function nextDeliveryStatus(
   return null;
 }
 
+// Zona de envío del tenant (F13 · H49 follow-up). El dueño define zonas con su
+// tarifa; al tomar un pedido de delivery se elige la zona → autocompleta el fee.
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  fee: number;
+  eta_minutes: number | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface DeliveryZoneInput {
+  name: string;
+  fee: number;
+  eta_minutes?: number | null;
+  is_active?: boolean;
+  sort_order?: number;
+}
+
 export interface DeliveryOrder {
   id: string;
   channel: DeliveryChannel;
@@ -101,6 +120,8 @@ export interface DeliveryOrder {
   promised_at: string | null;
   courier_name: string | null;
   delivery_fee: number;
+  // Zona de envío elegida (snapshot del fee queda en delivery_fee). null = sin zona.
+  zone_id: string | null;
   status: DeliveryStatus;
   sale_id: string | null;
   notes: string | null;
@@ -132,6 +153,9 @@ export interface CreateDeliveryInput {
   promised_at?: string | null;
   courier_name?: string | null;
   delivery_fee?: number;
+  // Zona de envío elegida (sólo delivery). El backend la guarda y, si no viene
+  // fee explícito, copia su tarifa. La UI igual autocompleta el fee al elegirla.
+  zone_id?: string | null;
   notes?: string | null;
 }
 
@@ -158,7 +182,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_orders" as never)
       .select(
-        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, status, sale_id, notes, created_at",
+        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at",
       )
       .is("deleted_at", null)
       .neq("status", "cancelado")
@@ -172,7 +196,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_orders" as never)
       .select(
-        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, status, sale_id, notes, created_at",
+        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at",
       )
       .eq("id", orderId)
       .maybeSingle();
@@ -231,6 +255,7 @@ export const deliveryApi = {
       p_courier_name: input.courier_name ?? null,
       p_delivery_fee: input.delivery_fee ?? 0,
       p_notes: input.notes ?? null,
+      p_zone_id: input.zone_id ?? null,
     } as never);
     if (error) throw error;
     return (data as { order_id: string }).order_id;
@@ -289,6 +314,64 @@ export const deliveryApi = {
     const { error } = await supabase.rpc("cancel_delivery_order" as never, {
       p_order_id: orderId,
     } as never);
+    if (error) throw error;
+  },
+};
+
+// ── Zonas de envío (F13 · H49 follow-up) ───────────────────────────────────────
+// CRUD por tabla directa con RLS: lectura por miembros del tenant, ESCRITURA sólo
+// owner/manager (la DB lo enforcea; espeja tenant_branding). Baja lógica
+// (deleted_at). Lo usa el manager de zonas (Configuración → Zonas de envío) y el
+// selector de zona en el alta de pedido. Tabla no tipada → cast (como dining).
+export const deliveryZonesApi = {
+  // Lista las zonas del tenant. includeInactive=false (default) sólo activas
+  // (para el selector del alta); true trae todas (para la gestión).
+  list: async (includeInactive = false): Promise<DeliveryZone[]> => {
+    const supabase = createClient();
+    let query = supabase
+      .from("delivery_zones" as never)
+      .select("id, name, fee, eta_minutes, is_active, sort_order")
+      .is("deleted_at", null);
+    if (!includeInactive) query = query.eq("is_active", true);
+    const { data, error } = await query.order("sort_order").order("name");
+    if (error) throw error;
+    return (data ?? []) as unknown as DeliveryZone[];
+  },
+
+  create: async (input: DeliveryZoneInput): Promise<DeliveryZone> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("delivery_zones" as never)
+      .insert({
+        name: input.name,
+        fee: input.fee,
+        eta_minutes: input.eta_minutes ?? null,
+        is_active: input.is_active ?? true,
+        sort_order: input.sort_order ?? 0,
+      } as never)
+      .select("id, name, fee, eta_minutes, is_active, sort_order")
+      .single();
+    if (error) throw error;
+    return data as unknown as DeliveryZone;
+  },
+
+  update: async (id: string, input: Partial<DeliveryZoneInput>): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("delivery_zones" as never)
+      .update(input as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // Baja lógica: los pedidos viejos conservan su zone_id (FK set null en físico,
+  // pero acá no borramos físico). Su delivery_fee ya está snapshotteado.
+  softDelete: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("delivery_zones" as never)
+      .update({ deleted_at: new Date().toISOString() } as never)
+      .eq("id", id);
     if (error) throw error;
   },
 };

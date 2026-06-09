@@ -4,9 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import {
   deliveryApi,
+  deliveryZonesApi,
   type CreateDeliveryInput,
   type AddDeliveryItemInput,
   type DeliveryStatus,
+  type DeliveryZoneInput,
 } from "./api";
 
 // ── Gating: pos_settings.delivery_enabled (F13 · H49) ──────────────────────────
@@ -111,6 +113,37 @@ export function useDeliveryMutations() {
     cancel: useMutation({
       mutationFn: (orderId: string) => deliveryApi.cancel(orderId),
       onSuccess: invKitchen,
+    }),
+  };
+}
+
+// ── Zonas de envío (F13 · H49 follow-up) ───────────────────────────────────────
+// Lista de zonas del tenant. includeInactive: true para la gestión (muestra
+// también las desactivadas); false (default) para el selector del alta.
+export function useDeliveryZones(includeInactive = false) {
+  return useQuery({
+    queryKey: ["delivery", "zones", includeInactive ? "all" : "active"],
+    queryFn: () => deliveryZonesApi.list(includeInactive),
+    staleTime: 30_000,
+  });
+}
+
+export function useDeliveryZoneMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["delivery", "zones"] });
+  return {
+    create: useMutation({
+      mutationFn: (i: DeliveryZoneInput) => deliveryZonesApi.create(i),
+      onSuccess: inv,
+    }),
+    update: useMutation({
+      mutationFn: (v: { id: string; patch: Partial<DeliveryZoneInput> }) =>
+        deliveryZonesApi.update(v.id, v.patch),
+      onSuccess: inv,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => deliveryZonesApi.softDelete(id),
+      onSuccess: inv,
     }),
   };
 }

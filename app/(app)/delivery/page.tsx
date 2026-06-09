@@ -22,6 +22,7 @@ import {
   useDeliveryOrders,
   useDeliveryItemTotals,
   useDeliveryMutations,
+  useDeliveryZones,
 } from "@/modules/delivery/hooks";
 import {
   DELIVERY_BOARD_COLUMNS,
@@ -48,6 +49,13 @@ export default function DeliveryPage() {
   const { data: orders, isLoading } = useDeliveryOrders();
   const { data: itemTotals } = useDeliveryItemTotals();
   const { setStatus } = useDeliveryMutations();
+  // Zonas (incl. inactivas) para resolver el nombre de la zona en las tarjetas.
+  const { data: zones } = useDeliveryZones(true);
+  const zoneNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const z of zones ?? []) m.set(z.id, z.name);
+    return m;
+  }, [zones]);
 
   const [newOpen, setNewOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -226,6 +234,7 @@ export default function DeliveryPage() {
                       key={o.id}
                       order={o}
                       total={totalFor(o)}
+                      zoneName={o.zone_id ? zoneNameById.get(o.zone_id) ?? null : null}
                       onOpen={() => setActiveId(o.id)}
                       onAdvance={() => advance(o)}
                       advancing={setStatus.isPending}
@@ -261,12 +270,14 @@ export default function DeliveryPage() {
 function OrderCard({
   order,
   total,
+  zoneName,
   onOpen,
   onAdvance,
   advancing,
 }: {
   order: DeliveryOrder;
   total: number;
+  zoneName: string | null;
   onOpen: () => void;
   onAdvance: () => void;
   advancing: boolean;
@@ -311,6 +322,13 @@ function OrderCard({
             <div className="flex items-start gap-1">
               <MapPin size={11} className="mt-0.5 shrink-0" />
               <span className="line-clamp-2">{order.address}</span>
+            </div>
+          )}
+          {isDelivery && zoneName && (
+            <div className="flex items-center gap-1">
+              <span className="rounded bg-ninja-flame/10 px-1.5 py-0.5 text-[11px] font-medium text-ninja-flameSoft">
+                {zoneName}
+              </span>
             </div>
           )}
           {order.promised_at && (

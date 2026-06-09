@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -32,7 +32,9 @@ import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { SalonesManager } from "@/components/dining/SalonesManager";
+import { ZonasManager } from "@/components/delivery/ZonasManager";
 import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import { ServicePacksManager } from "@/components/packs/ServicePacksManager";
 import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
 import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
@@ -51,6 +53,7 @@ type Section =
   | "pagos"
   | "operacion"
   | "salones"
+  | "zonas"
   | "profesionales"
   | "paquetes"
   | "clientes"
@@ -72,6 +75,10 @@ type SectionDef = {
   // gastronómico (pos_settings.dining_enabled · H43) está activo. No es gating
   // de plan: es un toggle del propio tenant, así que se oculta (no candado).
   requiresDining?: boolean;
+  // `requiresDelivery` (opcional): la sección sólo se muestra si delivery
+  // (pos_settings.delivery_enabled · H49) está activo. Mismo criterio que
+  // requiresDining: toggle del tenant, se oculta (no candado).
+  requiresDelivery?: boolean;
 };
 
 // Las secciones se agrupan en bloques temáticos para que el menú sea navegable
@@ -90,6 +97,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     sections: [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "salones", label: "Salones y mesas", icon: Utensils, requiresDining: true },
+      { key: "zonas", label: "Zonas de envío", icon: Bike, requiresDelivery: true },
       { key: "profesionales", label: "Profesionales (agenda)", icon: CalendarDays, feature: "agenda" },
       { key: "paquetes", label: "Paquetes y sesiones", icon: Package, feature: "packs" },
       { key: "escaner", label: "Escáner", icon: ScanLine },
@@ -243,16 +251,23 @@ function ConfiguracionInner() {
   const params = useSearchParams();
   // Modo gastronómico (H43): oculta la sección "Salones y mesas" si está apagado.
   const { data: diningEnabled } = useDiningEnabled();
+  // Delivery (H49): oculta la sección "Zonas de envío" si delivery está apagado.
+  const { data: deliveryEnabled } = useDeliveryEnabled();
   const initialSection = (() => {
     const q = params.get("seccion");
     return SECTIONS.some((s) => s.key === q) ? (q as Section) : "apariencia";
   })();
   const [section, setSection] = useState<Section>(initialSection);
 
-  // Grupos visibles: filtra las secciones gated por dining cuando está apagado.
+  // Grupos visibles: filtra las secciones gated por dining/delivery cuando están
+  // apagados (toggles del tenant, no gating de plan → se ocultan, sin candado).
   const visibleGroups = SECTION_GROUPS.map((g) => ({
     ...g,
-    sections: g.sections.filter((s) => !s.requiresDining || diningEnabled),
+    sections: g.sections.filter(
+      (s) =>
+        (!s.requiresDining || diningEnabled) &&
+        (!s.requiresDelivery || deliveryEnabled),
+    ),
   })).filter((g) => g.sections.length > 0);
 
   return (
@@ -482,6 +497,30 @@ function ConfiguracionInner() {
                   menú.
                 </p>
                 <SalonesManager />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Zonas de envío (F13 · H49 follow-up): CRUD de zonas con tarifa
+              automática. Al tomar un pedido de delivery, elegir la zona
+              autocompleta el costo de envío. Sólo visible con delivery activo.
+              Escritura RLS sólo owner/manager (la DB lo enforcea). */}
+          {section === "zonas" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Bike size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Zonas de envío</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Definí tus zonas de reparto (ej. Centro, Zona Norte) con su
+                  tarifa y tiempo estimado. Al tomar un pedido de delivery elegís
+                  la zona y el costo de envío se completa solo (igual lo podés
+                  ajustar a mano). El tablero de pedidos está en la sección{" "}
+                  <span className="font-medium text-foreground">Delivery</span> del
+                  menú.
+                </p>
+                <ZonasManager />
               </CardContent>
             </Card>
           )}

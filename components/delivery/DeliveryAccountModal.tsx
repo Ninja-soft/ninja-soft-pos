@@ -23,6 +23,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   useDeliveryOrderItems,
   useDeliveryMutations,
+  useDeliveryZones,
 } from "@/modules/delivery/hooks";
 import {
   DELIVERY_CHANNEL_LABELS,
@@ -69,6 +70,15 @@ export function DeliveryAccountModal({
   );
   const fee = isDelivery ? Number(order?.delivery_fee ?? 0) : 0;
   const total = itemsTotal + fee;
+
+  // Zona del pedido (incl. inactivas) para mostrar nombre + eta. Cache compartida
+  // con el board / la gestión (mismo queryKey). El fee real ya vive snapshotteado
+  // en order.delivery_fee (no se recalcula desde la zona).
+  const { data: zones } = useDeliveryZones(true);
+  const zone = useMemo(
+    () => (order?.zone_id ? (zones ?? []).find((z) => z.id === order.zone_id) ?? null : null),
+    [zones, order?.zone_id],
+  );
 
   async function changeQty(itemId: string, qty: number) {
     try {
@@ -167,6 +177,15 @@ export function DeliveryAccountModal({
                         {order.address_reference}
                       </span>
                     ) : null}
+                  </span>
+                </div>
+              )}
+              {isDelivery && zone && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin size={13} className="shrink-0" />
+                  <span>
+                    Zona: <span className="text-foreground">{zone.name}</span>
+                    {zone.eta_minutes != null ? ` · ${zone.eta_minutes} min` : ""}
                   </span>
                 </div>
               )}

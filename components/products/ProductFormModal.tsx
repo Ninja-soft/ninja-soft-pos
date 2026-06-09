@@ -412,15 +412,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             gastronómico activo: define a qué pantalla de cocina/barra va el
             producto cuando se carga a una mesa. Opcional ("sin estación"). */}
         {diningEnabled && (
-          <Disclosure title="Cocina / estación (KDS)">
+          <Disclosure title="Estación de cocina (KDS)">
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                A qué estación se envía este producto cuando se carga a una mesa:
-                aparece en la pantalla de cocina/barra (KDS) de esa estación.
-                Dejalo en “Sin estación” si no va a preparación.
+                Pantalla de cocina: a qué sector se envía este producto para
+                prepararlo (cocina, barra, cafetería…). Aparece en la comanda y
+                en la pantalla de cocina (KDS) cuando usás mesas o delivery.
+                Dejá “Sin estación” si no aplica.
               </p>
               <label className="block text-sm text-foreground">
-                Estación
+                Estación de cocina (KDS)
                 <select
                   {...register("station")}
                   className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"

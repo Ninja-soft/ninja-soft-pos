@@ -24,6 +24,7 @@ import {
   Banknote,
   Utensils,
   Bike,
+  ChevronDown,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -178,6 +179,19 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [diningEnabled, setDiningEnabled] = useState(false);
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
 
+  // Acordeón de la vista "operacion": cada grupo se colapsa para que la página
+  // no sea un scroll infinito. Por defecto sólo "Modo de operación" (lo nuevo e
+  // importante) queda abierto. Las Cards NO se desmontan al colapsar (se ocultan
+  // con `hidden`): el estado de cada input se preserva y el guardado no se rompe.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    operacion: true,
+    cobro: false,
+    productos: false,
+    comprobante: false,
+  });
+  const toggleGroup = (key: string) =>
+    setOpenGroups((p) => ({ ...p, [key]: !p[key] }));
+
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
   const { data: hasCatalog } = useHasCatalog();
@@ -273,7 +287,12 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       // Delivery (H49): el nav del POS y la vista /delivery leen este flag.
       qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
     },
-    onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
+    onError: (e) =>
+      toast({
+        title: "No se pudo guardar",
+        description: (e as Error)?.message ?? String(e),
+        variant: "error",
+      }),
   });
 
   if (!ctx || ctx.role !== "owner") return null;
@@ -303,7 +322,12 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       {/* ===================== Vista: OPERACIÓN Y PRODUCTOS ===================== */}
       {view === "operacion" && (
         <>
-          <GroupHeading icon={Utensils}>Modo de operación</GroupHeading>
+          <CollapsibleGroup
+            icon={Utensils}
+            title="Modo de operación"
+            open={openGroups.operacion ?? false}
+            onToggle={() => toggleGroup("operacion")}
+          >
 
       {/* Modo gastronómico (F13 · H43): habilita salones y mesas (vista de Salón).
           ADITIVO: con off, el POS mostrador queda idéntico. Con on, aparece la
@@ -357,7 +381,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         </CardContent>
       </Card>
 
-          <GroupHeading icon={Percent}>Reglas de cobro</GroupHeading>
+          </CollapsibleGroup>
+
+          <CollapsibleGroup
+            icon={Percent}
+            title="Reglas de cobro"
+            open={openGroups.cobro ?? false}
+            onToggle={() => toggleGroup("cobro")}
+          >
 
       {/* Descuento máximo por rol */}
       <Card>
@@ -554,7 +585,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         </CardContent>
       </Card>
 
-      <GroupHeading icon={PackageMinus}>Productos</GroupHeading>
+          </CollapsibleGroup>
+
+          <CollapsibleGroup
+            icon={PackageMinus}
+            title="Productos"
+            open={openGroups.productos ?? false}
+            onToggle={() => toggleGroup("productos")}
+          >
 
       {/* Venta en negativo */}
       <Card>
@@ -710,7 +748,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         </Card>
       )}
 
-      <GroupHeading icon={Hash}>Comprobante y listados</GroupHeading>
+          </CollapsibleGroup>
+
+          <CollapsibleGroup
+            icon={Hash}
+            title="Comprobante y listados"
+            open={openGroups.comprobante ?? false}
+            onToggle={() => toggleGroup("comprobante")}
+          >
 
       {/* Numeración del comprobante */}
       <Card>
@@ -780,6 +825,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           </span>
         </CardContent>
       </Card>
+          </CollapsibleGroup>
         </>
       )}
 
@@ -903,7 +949,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         </>
       )}
 
-      <div className="flex justify-end">
+      {/* Barra de guardado STICKY: queda fija al fondo de la sección mientras se
+          scrollea, así "Guardar cambios" siempre está accesible (con la página
+          larga el botón quedaba al final y el usuario no lo encontraba). El pb
+          extra deja aire para la burbuja IA en mobile sin que la tape. */}
+      <div className="sticky bottom-0 z-20 -mx-1 mt-2 flex items-center justify-end gap-3 border-t border-border bg-background/95 px-1 py-3 pr-20 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pr-1">
+        {save.isPending && (
+          <span className="text-xs text-muted-foreground">Guardando cambios…</span>
+        )}
         <Button disabled={save.isPending} onClick={() => save.mutate()}>
           {save.isPending ? "Guardando…" : "Guardar cambios"}
         </Button>
@@ -912,19 +965,41 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   );
 }
 
-// Subtítulo de grupo dentro del card: separa visualmente los bloques de cards
-// por dominio (Reglas de cobro / Productos / Comprobante y listados).
-function GroupHeading({
+// Grupo colapsable (acordeón) de la vista "operacion". El click en el encabezado
+// expande/colapsa sus Cards. El cuerpo NO se desmonta al colapsar: se oculta con
+// `hidden` para preservar el estado de los inputs y no romper el guardado.
+function CollapsibleGroup({
   icon: Icon,
+  title,
+  open,
+  onToggle,
   children,
 }: {
   icon: React.ElementType;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-      <Icon size={14} className="text-ninja-flameSoft" />
-      {children}
+    <div className="pt-2">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 transition hover:text-foreground"
+      >
+        <Icon size={14} className="text-ninja-flameSoft" />
+        <span className="flex-1">{title}</span>
+        <ChevronDown
+          size={16}
+          className={
+            "shrink-0 text-muted-foreground transition-transform " +
+            (open ? "rotate-180" : "")
+          }
+        />
+      </button>
+      <div className={open ? "mt-3 space-y-4" : "hidden"}>{children}</div>
     </div>
   );
 }

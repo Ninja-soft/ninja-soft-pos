@@ -249,16 +249,18 @@
 }
 
 /* ============================================================
-   Scrollbar global tematizado — fino, redondeado, en colores de marca.
+   Scrollbar global tematizado — fino, redondeado, acoplado al tema activo.
    Aplica a TODA la app (modales, registro, tiendita, paneles).
-   Track transparente; thumb violeta/flame suave que se intensifica al hover.
+   Track transparente; thumb derivado de los tokens del tema
+   (--muted-foreground para el reposo, --primary/--ring flame al hover) para
+   que cambie junto con [data-theme]. Sin sombras ni reflejos.
    WebKit/Blink (Chrome, Edge, Safari) vía pseudos + Firefox vía estándar.
    ============================================================ */
 :root {
-  /* Color base del thumb: violeta de marca translúcido (se ve bien en dark
-     y en claro). El track es transparente. */
-  --scrollbar-thumb: rgba(109, 74, 255, 0.35);
-  --scrollbar-thumb-hover: rgba(255, 75, 34, 0.55);
+  /* Thumb en reposo: texto atenuado del tema, translúcido, sobre track
+     transparente. Hover: acento flame del tema (--primary/--ring). */
+  --scrollbar-thumb: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--primary) 65%, transparent);
 }
 
 /* Firefox: scrollbar fino con color de marca (thumb + track). */

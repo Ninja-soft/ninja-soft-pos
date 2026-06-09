@@ -39,6 +39,50 @@ function providerLabel(provider: string): string {
   return "IA";
 }
 
+// Mapea un código de error de la Edge Function ai_assistant a un copy amigable.
+// La Edge devuelve { error, detail } con códigos estables (quota_exceeded,
+// addon_required, ai_not_configured, ai_disabled, ai_provider_error). El detail
+// es el fallback cuando el código no está mapeado.
+function friendlyAiError(code: string, detail?: string): string {
+  switch (code) {
+    case "quota_exceeded":
+      return "Alcanzaste el límite de uso de este mes.";
+    case "addon_required":
+      return detail || "Necesitás el complemento Asistente IA.";
+    case "ai_not_configured":
+      return "El asistente todavía no está configurado.";
+    case "ai_disabled":
+      return detail || "El Asistente IA está temporalmente desactivado.";
+    case "ai_provider_error":
+      return detail || "El asistente no pudo responder en este momento.";
+    default:
+      return detail || code || "El asistente no pudo responder.";
+  }
+}
+
+// Convierte el `error` de supabase.functions.invoke en un Error con mensaje
+// amigable. En un non-2xx, supabase-js deja data=null y el cuerpo real (JSON
+// { error, detail }) viaja en error.context (un Response). Sin leerlo, el chat
+// solo veía "Edge Function returned a non-2xx status code" y nunca mostraba
+// "Alcanzaste el límite" ni "Necesitás el complemento". Mismo patrón que
+// modules/tiendita/storefront.ts. Si no hay cuerpo legible, cae al mensaje
+// original del error.
+async function edgeErrorToMessage(error: unknown): Promise<string> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx) {
+    const body = (await ctx.json().catch(() => null)) as {
+      error?: string;
+      detail?: string;
+    } | null;
+    if (body?.error || body?.detail) {
+      return friendlyAiError(String(body.error ?? ""), body.detail);
+    }
+  }
+  return error instanceof Error
+    ? error.message
+    : "El asistente no pudo responder.";
+}
+
 // Texto comercial de respaldo si la config no trae commercial_text y la llamada
 // {intro:true} tampoco devuelve nada (debería ser raro: la Edge Function ya
 // tiene su propio default).
@@ -131,7 +175,7 @@ export function AssistantBubble() {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
         body: { intro: true },
       });
-      if (error) throw error;
+      if (error) throw new Error(await edgeErrorToMessage(error));
       const res = data as { reply?: string; locked?: boolean };
       return res?.reply ?? "";
     },
@@ -144,7 +188,12 @@ export function AssistantBubble() {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
         body: { messages: history },
       });
-      if (error) throw error;
+      // En un non-2xx (quota_exceeded 429, addon_required 403,
+      // ai_not_configured 400, ai_provider_error 502…) supabase-js deja
+      // error=FunctionsHttpError y data=null: el cuerpo real { error, detail }
+      // viaja en error.context. Lo leemos y mapeamos a un copy amigable; antes
+      // este path solo mostraba el genérico "non-2xx status code".
+      if (error) throw new Error(await edgeErrorToMessage(error));
       const res = data as {
         reply?: string;
         error?: string;
@@ -152,14 +201,10 @@ export function AssistantBubble() {
         quota?: { used: number; cap: number };
         tools_used?: string[];
       };
+      // Defensa en profundidad: si alguna vez la Edge devolviera un error en un
+      // cuerpo 200, igual lo mapeamos al mismo copy amigable.
       if (res?.error) {
-        if (res.error === "quota_exceeded")
-          throw new Error("Alcanzaste el límite de uso de este mes.");
-        if (res.error === "addon_required")
-          throw new Error(res.detail || "Necesitás el complemento Asistente IA.");
-        if (res.error === "ai_not_configured")
-          throw new Error("El asistente todavía no está configurado.");
-        throw new Error(res.detail || res.error);
+        throw new Error(friendlyAiError(res.error, res.detail));
       }
       if (res.quota) setQuota(res.quota);
       return {

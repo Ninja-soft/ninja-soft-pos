@@ -116,6 +116,58 @@ addEventListener("error", (e) => {
   (e as ErrorEvent).preventDefault();
 });
 
+// Zona horaria del negocio (Argentina). Las ventanas "hoy"/"mes" deben usar el
+// día/mes CIVIL argentino (UTC-03), no UTC: a las 22:00 AR, el día UTC ya pasó a
+// medianoche, así que "hoy" en UTC arranca a las 21:00 AR y excluye la tarde.
+const AR_TZ = "America/Argentina/Buenos_Aires";
+
+// Devuelve {year, month, day} del instante `d` expresado en hora argentina.
+function arYmd(d: Date): { year: number; month: number; day: number } {
+  // en-CA da formato YYYY-MM-DD, fácil de parsear.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: AR_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+// Offset de Argentina en minutos respecto de UTC para el instante `d` (hoy: -180;
+// se calcula dinámicamente por si alguna vez vuelve el horario de verano).
+function arOffsetMinutes(d: Date): number {
+  const tzName = new Intl.DateTimeFormat("en-US", {
+    timeZone: AR_TZ,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(d)
+    .find((p) => p.type === "timeZoneName")?.value; // ej. "GMT-3"
+  const m = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(tzName ?? "");
+  if (!m) return -180; // fallback AR estándar
+  const sign = m[1] === "-" ? -1 : 1;
+  return sign * (Number(m[2]) * 60 + Number(m[3] ?? "0"));
+}
+
+// Instante UTC correspondiente a las 00:00 (hora AR) del día civil argentino que
+// contiene a `d`. Ej.: 2026-06-08 23:36 AR → 2026-06-08 03:00 UTC.
+function arDayStartUtc(d: Date): Date {
+  const { year, month, day } = arYmd(d);
+  const offMin = arOffsetMinutes(d);
+  // Medianoche AR = (Y-M-D 00:00) − offset. Con offset -180, restar -180 = +180.
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - offMin * 60_000);
+}
+
+// Instante UTC correspondiente al 00:00 (hora AR) del primer día del mes civil
+// argentino que contiene a `d` (con `monthsAgo` desplaza meses hacia atrás).
+function arMonthStartUtc(d: Date, monthsAgo = 0): Date {
+  const { year, month } = arYmd(d);
+  // Normalizamos el mes objetivo (puede cruzar de año).
+  const target = new Date(Date.UTC(year, month - 1 - monthsAgo, 1, 0, 0, 0));
+  const offMin = arOffsetMinutes(target);
+  return new Date(target.getTime() - offMin * 60_000);
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
@@ -1039,17 +1091,16 @@ async function buildContext(
   tenantId: string,
 ): Promise<string> {
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setUTCHours(0, 0, 0, 0);
+  // Bordes "hoy"/"mes" en hora ARGENTINA (día/mes civil AR, no UTC): a las 22:00
+  // AR el día UTC ya rotó, así que un borde UTC arrancaría "hoy" a las 21:00 AR
+  // y dejaría afuera las ventas de la tarde. weekStart/days30Start son ventanas
+  // rodantes (now − N días): son agnósticas a la zona, quedan igual.
+  const todayStart = arDayStartUtc(now);
   const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const days30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  // Mes en curso (UTC) y mes anterior, para la comparación.
-  const monthStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  );
-  const prevMonthStart = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
-  );
+  // Mes en curso y mes anterior (día 1, 00:00 hora AR), para la comparación.
+  const monthStart = arMonthStartUtc(now, 0);
+  const prevMonthStart = arMonthStartUtc(now, 1);
   const lines: string[] = [];
 
   // ── Snapshot de catálogo / clientes / addons (agregados en SQL) ───────────
@@ -1155,17 +1206,12 @@ async function buildContext(
       (a: number, s: { total?: number }) => a + (Number(s.total) || 0),
       0,
     );
-    // Mismo tramo del mes anterior (día 1 → mismo "ahora" desplazado un mes), para
+    // Mismo tramo del mes anterior (día 1 AR → igual tiempo transcurrido), para
     // comparar manzanas con manzanas (mes corriente parcial vs igual tramo previo).
+    // Con bordes anclados en hora AR, el corte = inicio del mes previo + lo que va
+    // corrido del mes actual; así no se desfasa por la zona horaria.
     const prevCutoff = new Date(
-      Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth() - 1,
-        now.getUTCDate(),
-        now.getUTCHours(),
-        now.getUTCMinutes(),
-        now.getUTCSeconds(),
-      ),
+      prevMonthStart.getTime() + (now.getTime() - monthStart.getTime()),
     );
     const { data: prevSales } = await admin
       .from("sales")
@@ -1190,9 +1236,9 @@ async function buildContext(
   }
 
   // ── Ventas por medio de pago (últimos 7 días) ─────────────────────────────
-  // payments.method es el detalle por medio de pago. Filtramos por created_at
-  // del pago (aprox.: incluye pagos de ventas luego anuladas, marginal en este
-  // contexto orientativo). Etiquetas legibles en español.
+  // payments.method es el detalle por medio de pago. Join INNER a sales con
+  // status='completed' para NO contar pagos de ventas anuladas (consistente con
+  // ai_sales_summary group_by:'payment_method'). Etiquetas legibles en español.
   try {
     const methodLabels: Record<string, string> = {
       cash: "Efectivo",
@@ -1206,8 +1252,9 @@ async function buildContext(
     };
     const { data: pays } = await admin
       .from("payments")
-      .select("method, amount")
+      .select("method, amount, sales!inner(status)")
       .eq("tenant_id", tenantId)
+      .eq("sales.status", "completed")
       .gte("created_at", weekStart.toISOString())
       .limit(5000);
     const byMethod = new Map<string, number>();

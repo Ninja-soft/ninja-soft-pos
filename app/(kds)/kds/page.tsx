@@ -11,6 +11,7 @@ import {
   CircleDot,
   Clock,
   Flame,
+  Printer,
   RefreshCw,
   Undo2,
   Utensils,
@@ -21,6 +22,7 @@ import {
   useKdsTickets,
   useKdsMutations,
 } from "@/modules/dining/hooks";
+import { ComandaModal } from "@/components/dining/ComandaModal";
 import {
   KDS_STATIONS,
   KDS_STATION_LABELS,
@@ -197,6 +199,10 @@ function KdsInner() {
   const { data: items, isFetching, refetch } = useKdsTickets(activeStation);
   const { setStatus } = useKdsMutations();
 
+  // Comanda impresa (H45) desde el KDS: reimprime la comanda de una mesa. Si hay
+  // estación activa, la comanda arranca filtrada a esa estación.
+  const [comandaOrderId, setComandaOrderId] = useState<string | null>(null);
+
   // Tick local de 1s para que los timers avancen sin depender del refetch (~4s).
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -358,11 +364,24 @@ function KdsInner() {
                     <Utensils size={15} className="text-ninja-flameSoft" />
                     Mesa {g.tableLabel}
                   </span>
-                  {g.areaName && (
-                    <span className="text-xs text-muted-foreground">
-                      {g.areaName}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {g.areaName && (
+                      <span className="text-xs text-muted-foreground">
+                        {g.areaName}
+                      </span>
+                    )}
+                    {/* Imprimir comanda de esta mesa (H45). Reusa el modal de
+                        comanda; si hay estación activa, arranca filtrada a ella. */}
+                    <button
+                      type="button"
+                      onClick={() => setComandaOrderId(orderId)}
+                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                      aria-label="Imprimir comanda"
+                      title="Imprimir comanda"
+                    >
+                      <Printer size={14} />
+                    </button>
+                  </div>
                 </div>
                 {g.items.map((it) => (
                   <TicketCard
@@ -380,6 +399,16 @@ function KdsInner() {
           </div>
         )}
       </main>
+
+      {/* Comanda impresa por estación (H45) de la mesa elegida */}
+      <ComandaModal
+        open={comandaOrderId !== null}
+        onOpenChange={(o) => {
+          if (!o) setComandaOrderId(null);
+        }}
+        orderId={comandaOrderId}
+        initialStation={activeStation}
+      />
     </div>
   );
 }

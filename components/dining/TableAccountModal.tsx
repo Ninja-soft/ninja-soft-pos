@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CreditCard, Minus, Plus, ReceiptText, Trash2, X } from "lucide-react";
+import {
+  ChefHat,
+  CreditCard,
+  Minus,
+  Plus,
+  ReceiptText,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -11,9 +19,11 @@ import {
   useTableOrderItems,
   useTableOrderMutations,
 } from "@/modules/dining/hooks";
+import { useTicketBranding } from "@/modules/tickets/hooks";
 import type { DiningTable, TableStatus } from "@/modules/dining/api";
 import { TABLE_STATUS_LABELS } from "@/modules/dining/api";
 import { TableProductPicker } from "./TableProductPicker";
+import { ComandaModal } from "./ComandaModal";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 // Cuenta de una mesa ocupada (H44): ver/editar ítems, agregar, marcar "cuenta
@@ -32,17 +42,19 @@ export function TableAccountModal({
   const router = useRouter();
   const { toast } = useToast();
   const orderId = table?.current_order_id ?? null;
+  const open = table !== null && orderId !== null;
   const { data: items } = useTableOrderItems(orderId);
   const { setItemQty, removeItem, cancel } = useTableOrderMutations();
+  // Nombre del local para la cabecera (opcional) de la comanda de cocina (H45).
+  const { data: brand } = useTicketBranding(open);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [comandaOpen, setComandaOpen] = useState(false);
 
   const total = useMemo(
     () => (items ?? []).reduce((acc, it) => acc + it.qty * it.unit_price, 0),
     [items],
   );
-
-  const open = table !== null && orderId !== null;
 
   async function changeQty(itemId: string, qty: number) {
     try {
@@ -177,6 +189,17 @@ export function TableAccountModal({
             </span>
           </div>
 
+          {/* Comanda de cocina (H45): imprime la(s) comanda(s) por estación del
+              pedido. Por defecto envía sólo lo nuevo a cocina/barra. */}
+          <Button
+            variant="secondary"
+            onClick={() => setComandaOpen(true)}
+            disabled={(items ?? []).length === 0}
+            className="w-full"
+          >
+            <ChefHat size={16} /> Imprimir comanda
+          </Button>
+
           {/* Acciones */}
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={charge} className="flex-1">
@@ -215,6 +238,14 @@ export function TableAccountModal({
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         orderId={orderId}
+      />
+
+      {/* Comanda de cocina por estación (H45) */}
+      <ComandaModal
+        open={comandaOpen}
+        onOpenChange={setComandaOpen}
+        orderId={orderId}
+        businessName={brand?.legal_name ?? null}
       />
 
       {/* Confirmación de cancelación (libera la mesa, anula el pedido) */}

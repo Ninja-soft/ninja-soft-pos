@@ -339,6 +339,41 @@ html {
 }
 
 /* -----------------------------------------------------------------------------
+ * Comanda de cocina por estación (F13 · H45). Reusa el MISMO aislamiento de
+ * .ticket-print (solo lo marcado queda visible al imprimir), pero el contenedor
+ * agrupa VARIAS comandas (una por estación) y fuerza un salto de página entre
+ * ellas: cocina imprime su hoja, barra la suya. Negro sobre blanco, angosto.
+ * -------------------------------------------------------------------------- */
+@media print {
+  .comanda-print,
+  .comanda-print * {
+    visibility: visible;
+  }
+  .comanda-print {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+  /* Cada comanda (estación) en su propia hoja. La última no fuerza salto. */
+  .comanda-page {
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+  }
+  .comanda-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  @page {
+    margin: 6mm;
+  }
+}
+
+/* -----------------------------------------------------------------------------
  * Etiquetas de producto (hoja imprimible). En pantalla se ve como una grilla de
  * tarjetas; al imprimir, cada etiqueta es negro sobre blanco, con borde, para
  * que salga prolija en impresora común o de etiquetas. Reusa el aislamiento de

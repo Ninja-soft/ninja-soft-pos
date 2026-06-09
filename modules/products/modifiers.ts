@@ -218,3 +218,14 @@ export function modifiersSummary(groups: SaleLineModifierGroup[]): string {
   }
   return parts.join(", ");
 }
+
+// Igual que modifiersSummary pero SIN el delta de precio: "Frutilla, Crema,
+// Dulce de leche". Para la comanda de cocina (H45), que es un ticket de
+// preparación y no debe mostrar importes.
+export function modifiersSummaryNoPrice(groups: SaleLineModifierGroup[]): string {
+  const parts: string[] = [];
+  for (const g of groups) {
+    for (const o of g.options) parts.push(o.name);
+  }
+  return parts.join(", ");
+}

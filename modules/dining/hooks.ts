@@ -166,3 +166,31 @@ export function useKdsMutations() {
     }),
   };
 }
+
+// ── Comanda impresa por estación (F13 · H45) ───────────────────────────────────
+// Líneas del pedido + contexto para armar la(s) comanda(s) de cocina. onlyNew =
+// imprime sólo lo nuevo (no enviado); false = reimprimir todo. enabled gatea el
+// fetch al abrir el modal de comanda. Sin caché agresiva: se quiere el estado
+// fresco de printed_at cada vez que se abre.
+export function useComandaData(orderId: string | null, onlyNew: boolean, enabled: boolean) {
+  return useQuery({
+    queryKey: ["dining", "comanda", orderId, onlyNew ? "new" : "all"],
+    enabled: enabled && Boolean(orderId),
+    queryFn: () => tableOrdersApi.comandaItems(orderId!, onlyNew),
+    staleTime: 0,
+  });
+}
+
+export function useMarkComandaPrinted() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { orderId: string; itemIds: string[] }) =>
+      tableOrdersApi.markPrinted(v.orderId, v.itemIds),
+    // Tras marcar, refrescá la comanda (para que las nuevas dejen de aparecer)
+    // y la cuenta/KDS por consistencia.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dining", "comanda"] });
+      qc.invalidateQueries({ queryKey: ["dining", "order-items"] });
+    },
+  });
+}

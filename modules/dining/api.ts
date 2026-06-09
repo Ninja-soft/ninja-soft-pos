@@ -111,6 +111,25 @@ export interface TableOrder {
   notes: string | null;
 }
 
+// ── Comanda impresa por estación (F13 · H45) ───────────────────────────────────
+// Una línea del pedido + el contexto de cabecera (mesa / salón / mozo / hora de
+// apertura) que devuelve comanda_items para armar la(s) comanda(s) de cocina. La
+// comanda NO lleva precios: es un ticket de preparación, no un comprobante.
+export interface ComandaItem {
+  item_id: string;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  modifiers: SaleLineModifierGroup[];
+  notes: string | null;
+  station: string | null;
+  printed_at: string | null;
+  table_label: string;
+  area_name: string | null;
+  waiter_name: string | null;
+  opened_at: string;
+}
+
 export interface AreaInput {
   name: string;
   sort?: number;
@@ -265,6 +284,34 @@ export const tableOrdersApi = {
       .maybeSingle();
     if (error) throw error;
     return (data ?? null) as unknown as TableOrder | null;
+  },
+
+  // Líneas del pedido + contexto (mesa / salón / mozo / hora) para la comanda
+  // impresa (H45). onlyNew=true trae sólo las no enviadas a cocina (las nuevas);
+  // false trae todas (reimprimir). RPC tenant-scoped (comanda_items).
+  comandaItems: async (
+    orderId: string,
+    onlyNew: boolean,
+  ): Promise<ComandaItem[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("comanda_items" as never, {
+      p_order_id: orderId,
+      p_only_new: onlyNew,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as ComandaItem[];
+  },
+
+  // Sella printed_at de las líneas impresas (las que aún eran null). Reimprimir
+  // no repisa la marca original. RPC tenant-scoped (mark_comanda_printed).
+  markPrinted: async (orderId: string, itemIds: string[]): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("mark_comanda_printed" as never, {
+      p_order_id: orderId,
+      p_item_ids: itemIds,
+    } as never);
+    if (error) throw error;
+    return ((data as { marked?: number } | null)?.marked ?? 0) as number;
   },
 
   // Totales acumulados por pedido abierto del tenant (para mostrar en el grid de

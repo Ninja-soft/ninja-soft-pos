@@ -23,6 +23,7 @@ import {
   CreditCard,
   Banknote,
   Utensils,
+  Bike,
 } from "lucide-react";
 import {
   CUSTOMER_FIELDS,
@@ -63,6 +64,7 @@ type Settings = {
   allow_free_sale: boolean;
   staff_sees_own_only: boolean;
   dining_enabled: boolean;
+  delivery_enabled: boolean;
 };
 
 // Vista del card: el mismo settings/save se reparte en dos secciones de la
@@ -145,6 +147,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           allow_free_sale: true,
           staff_sees_own_only: false,
           dining_enabled: false,
+          delivery_enabled: false,
         }
       );
     },
@@ -173,6 +176,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [allowFreeSale, setAllowFreeSale] = useState(true);
   const [staffSeesOwnOnly, setStaffSeesOwnOnly] = useState(false);
   const [diningEnabled, setDiningEnabled] = useState(false);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
 
   // El control de sugerencias de precio vs catálogo SÓLO se muestra si el tenant
   // compró/recibió al menos un catálogo.
@@ -207,6 +211,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setAllowFreeSale(settings.allow_free_sale ?? true);
     setStaffSeesOwnOnly(settings.staff_sees_own_only ?? false);
     setDiningEnabled(settings.dining_enabled ?? false);
+    setDeliveryEnabled(settings.delivery_enabled ?? false);
   }, [settings]);
 
   const save = useMutation({
@@ -243,6 +248,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           allow_free_sale: allowFreeSale,
           staff_sees_own_only: staffSeesOwnOnly,
           dining_enabled: diningEnabled,
+          delivery_enabled: deliveryEnabled,
         } as never,
         { onConflict: "tenant_id" },
       );
@@ -264,6 +270,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       qc.invalidateQueries({ queryKey: ["catalog", "hint-setting"] });
       // Modo gastronómico (H43): el nav del POS y la vista de Salón leen el flag.
       qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
+      // Delivery (H49): el nav del POS y la vista /delivery leen este flag.
+      qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
     },
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
   });
@@ -318,6 +326,33 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             checked={diningEnabled}
             onCheckedChange={setDiningEnabled}
             label="Activar modo gastronómico (salones y mesas)"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Delivery y take away (F13 · H49): habilita el tablero de pedidos con
+          dirección, cadete y costo de envío. ADITIVO e INDEPENDIENTE de las
+          mesas: puede ir sin modo gastronómico. Aparece la sección Delivery en
+          el menú. El POS de mostrador no cambia. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="flex items-center gap-2 font-semibold">
+              <Bike size={16} className="text-ninja-flameSoft" /> Delivery y take away
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Habilita el tablero de pedidos de delivery y take away: canal,
+              cliente, dirección y referencia, horario prometido, cadete y costo
+              de envío, con estados (recibido → preparando → en camino →
+              entregado) y cobro desde el pedido. Aparece la sección{" "}
+              <span className="font-medium text-foreground">Delivery</span> en el
+              menú. No requiere mesas.
+            </p>
+          </div>
+          <Switch
+            checked={deliveryEnabled}
+            onCheckedChange={setDeliveryEnabled}
+            label="Activar delivery y take away (tablero de pedidos)"
           />
         </CardContent>
       </Card>

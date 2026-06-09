@@ -202,6 +202,9 @@ export function usePosMutations() {
         // Cobro de mesa atómico (H44): pedido a cerrar junto a la venta. Sólo el
         // cobro desde el Salón (/pos?table=) lo pasa; mostrador lo omite.
         tableOrderId?: string | null;
+        // Cobro de delivery atómico (H49): ESPEJA tableOrderId. Sólo el cobro
+        // desde el board (/pos?delivery=) lo pasa; mostrador/mesa lo omiten.
+        deliveryOrderId?: string | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -210,6 +213,7 @@ export function usePosMutations() {
           vars.customerId,
           vars.extras,
           vars.tableOrderId,
+          vars.deliveryOrderId,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

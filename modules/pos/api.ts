@@ -651,6 +651,12 @@ export const posApi = {
     // libera la mesa (sin close_dining_table aparte → no hay doble cobro por
     // concurrencia). Mostrador (sin mesa) NO lo pasa y el flujo es idéntico.
     tableOrderId?: string | null,
+    // Cobro de delivery atómico (F13 · H49): ESPEJA tableOrderId. Cuando viene,
+    // create_sale toma el delivery_order FOR UPDATE, aborta si ya está cobrado/
+    // cancelado y, al final, lo enlaza/marca 'entregado' EN LA MISMA transacción
+    // (sin cierre aparte → sin doble cobro). El costo de envío entra como LÍNEA
+    // del carrito (lo carga el POS): create_sale NO calcula el fee.
+    deliveryOrderId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("create_sale", {
@@ -661,9 +667,11 @@ export const posApi = {
       // Señal de gating (garantía/recargos). `p_extras` aún no está en los tipos
       // generados (no se regeneran): se castea el payload.
       p_extras: (extras ?? []) as unknown as Json,
-      // `p_table_order_id` aún no está en los tipos generados (no se regeneran):
-      // viaja en el cast del payload. undefined = mostrador (default null server).
+      // `p_table_order_id` / `p_delivery_order_id` aún no están en los tipos
+      // generados (no se regeneran): viajan en el cast del payload. undefined =
+      // mostrador (default null server). Sólo uno de los dos viene a la vez.
       ...(tableOrderId ? { p_table_order_id: tableOrderId } : {}),
+      ...(deliveryOrderId ? { p_delivery_order_id: deliveryOrderId } : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

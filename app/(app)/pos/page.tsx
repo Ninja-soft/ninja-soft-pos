@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Banknote,
+  Bike,
   CalendarDays,
   Lock,
   Minus,
@@ -75,6 +76,10 @@ import { useAppointment } from "@/modules/agenda/hooks";
 import { appointmentsApi } from "@/modules/agenda/api";
 import { useTableOrder, useTableOrderItems } from "@/modules/dining/hooks";
 import {
+  useDeliveryOrder,
+  useDeliveryOrderItems,
+} from "@/modules/delivery/hooks";
+import {
   OpenShiftModal,
   CloseShiftModal,
   PaymentModal,
@@ -122,6 +127,15 @@ function PosPageInner() {
   const { data: tableItems } = useTableOrderItems(tableOrderId);
   // Sólo una carga por pedido de mesa (no en cada render).
   const loadedTableRef = useRef<string | null>(null);
+  // Cobro de delivery (F13 · H49): /pos?delivery=<order_id>. ESPEJA el cobro de
+  // mesa: carga los ítems del pedido + el costo de envío como línea en el carrito
+  // y, al cobrar, create_sale (con p_delivery_order_id) toma el pedido FOR UPDATE,
+  // lo enlaza/marca 'entregado' y libera EN LA MISMA transacción.
+  const deliveryOrderId = searchParams.get("delivery");
+  const { data: deliveryOrder } = useDeliveryOrder(deliveryOrderId);
+  const { data: deliveryItems } = useDeliveryOrderItems(deliveryOrderId);
+  // Sólo una carga por pedido de delivery (no en cada render).
+  const loadedDeliveryRef = useRef<string | null>(null);
   const [search, setSearch] = useState("");
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
@@ -596,6 +610,54 @@ function PosPageInner() {
     router.replace("/pos");
   }
 
+  // Cobro de delivery (H49): al llegar con ?delivery=<order_id>, cargá los ítems
+  // del pedido + el COSTO DE ENVÍO como línea libre, UNA sola vez. ESPEJA el
+  // cobro de mesa. Las líneas con producto se agregan como producto (descuentan
+  // stock al cobrar si corresponde); las libres como monto libre. El envío entra
+  // como una línea "Costo de envío" (así el total lo incluye por el camino normal;
+  // create_sale NO calcula el fee). Si el pedido ya fue cobrado/cancelado, no
+  // carga nada. Pre-selecciona el cliente del pedido si lo tiene.
+  useEffect(() => {
+    const o = deliveryOrder;
+    if (!o) return;
+    if (loadedDeliveryRef.current === o.id) return;
+    if (deliveryItems === undefined) return; // ítems aún cargando
+    if (o.sale_id || o.status === "entregado" || o.status === "cancelado") {
+      loadedDeliveryRef.current = o.id;
+      return;
+    }
+    loadedDeliveryRef.current = o.id;
+    clear();
+    for (const it of deliveryItems ?? []) {
+      const qty = it.qty > 0 ? it.qty : 1;
+      if (it.product_id) {
+        addProduct(
+          { id: it.product_id, name: it.name, sku: null, price: it.unit_price, unit: "un" },
+          qty,
+        );
+      } else {
+        addFreeAmount({ name: it.name, amount: it.unit_price * qty });
+      }
+    }
+    // Costo de envío como línea (sólo delivery con fee > 0). Lo cobra el POS;
+    // create_sale lo recibe ya en el carrito, no lo calcula.
+    if (o.order_type === "delivery" && Number(o.delivery_fee) > 0) {
+      addFreeAmount({ name: "Costo de envío", amount: Number(o.delivery_fee) });
+    }
+    if (o.customer_id && o.customer_name) {
+      setCustomer({ id: o.customer_id, name: o.customer_name });
+    }
+  }, [deliveryOrder, deliveryItems, clear, addProduct, addFreeAmount]);
+
+  // Sale del modo "cobro de delivery": limpia el carrito y el query param (el
+  // pedido sigue abierto — el cajero canceló el cobro, no el pedido).
+  function exitDeliveryMode() {
+    loadedDeliveryRef.current = null;
+    clear();
+    setCustomer(null);
+    router.replace("/pos");
+  }
+
   // Recompra rápida (H40): al entrar con ?repeat=<customerId>, cargá los ítems de
   // la última venta del cliente UNA sola vez. Resuelve el precio ACTUAL de cada
   // producto (lista mostrador) y omite los dados de baja (con aviso). Las líneas
@@ -921,6 +983,10 @@ function PosPageInner() {
         // (toma el pedido FOR UPDATE → sin doble cobro por dos pestañas). Ya NO
         // se llama tableOrdersApi.close por separado.
         tableOrderId: tableOrderId ?? null,
+        // Cobro de delivery (H49): ESPEJA mesa. Con /pos?delivery=, create_sale
+        // toma el delivery_order FOR UPDATE, lo enlaza/marca 'entregado' y libera
+        // en la misma transacción (sin cierre aparte → sin doble cobro).
+        deliveryOrderId: deliveryOrderId ?? null,
       });
       setPaymentModal(false);
       clear();
@@ -946,6 +1012,13 @@ function PosPageInner() {
         loadedTableRef.current = null;
         router.replace("/pos");
       }
+      // Cobro de delivery (H49): el cierre del pedido (enlazar venta, marcar
+      // 'entregado') ya ocurrió ATÓMICAMENTE dentro de create_sale (vía
+      // deliveryOrderId). Acá sólo limpiamos el modo y volvemos al POS.
+      if (deliveryOrderId) {
+        loadedDeliveryRef.current = null;
+        router.replace("/pos");
+      }
       // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
       flashPaidScreen(change ?? 0);
       toast({
@@ -959,6 +1032,8 @@ function PosPageInner() {
       const msg = e instanceof Error ? e.message : "";
       const title = msg.includes("table_order_not_open")
         ? "La mesa ya fue cobrada o cerrada"
+        : msg.includes("delivery_order_not_open")
+          ? "El pedido ya fue cobrado o cancelado"
         : msg.includes("qr_already_charged")
           ? "Este cobro QR ya fue registrado"
           : msg.includes("qr_not_allowed")
@@ -1097,6 +1172,36 @@ function PosPageInner() {
             </button>
           </div>
         )}
+        {/* Cobro de delivery (H49): banner con el pedido cargado (ítems + envío).
+            Al confirmar, la venta queda enlazada y el pedido pasa a entregado. */}
+        {deliveryOrder &&
+          !deliveryOrder.sale_id &&
+          deliveryOrder.status !== "entregado" &&
+          deliveryOrder.status !== "cancelado" && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-400/30 bg-sky-400/[0.08] px-4 py-3">
+              <span className="flex min-w-0 items-center gap-2.5 text-sm">
+                <Bike size={18} className="shrink-0 text-sky-300" />
+                <span className="min-w-0">
+                  <span className="block font-semibold text-foreground">
+                    Cobrando {deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}
+                    {deliveryOrder.customer_name ? ` · ${deliveryOrder.customer_name}` : ""}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    Pedido cargado desde el tablero (incluye el costo de envío).
+                    Sumá lo que falte y cobrá; al confirmar, el pedido queda
+                    entregado.
+                  </span>
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={exitDeliveryMode}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <X size={14} /> Cancelar cobro del pedido
+              </button>
+            </div>
+          )}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
             Punto de venta

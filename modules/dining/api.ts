@@ -106,6 +106,12 @@ export interface KdsTicketItem {
   course: number;
   created_at: string;
   ready_at: string | null;
+  // Origen del ítem (F13 · H49): 'mesa' o 'delivery'. `source_label` es la
+  // etiqueta de cabecera de la tarjeta/columna del KDS: "Mesa 5" para mesa,
+  // "DELIVERY #1234" / "TAKEAWAY #1234" para delivery/takeaway. Para mesa,
+  // table_id/area_name vienen poblados; para delivery van null.
+  source: "mesa" | "delivery";
+  source_label: string;
 }
 
 export interface TableOrder {

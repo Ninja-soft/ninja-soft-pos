@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  Bike,
   Check,
   ChefHat,
   CircleDot,
@@ -257,12 +258,19 @@ function KdsInner() {
     }
   }
 
-  // Agrupa los ítems por mesa/pedido (encabezado de columna). Conserva el orden
-  // FIFO que ya trae la RPC: la primera vez que aparece una mesa fija su posición.
+  // Agrupa los ítems por pedido (encabezado de columna). Conserva el orden FIFO
+  // que ya trae la RPC: la primera vez que aparece un pedido fija su posición.
+  // El pedido puede ser de MESA o de DELIVERY/TAKEAWAY (F13 · H49): `source` y
+  // `source_label` ("Mesa 5" / "DELIVERY #1234") vienen de la RPC unificada.
   const groups = useMemo(() => {
     const byOrder = new Map<
       string,
-      { tableLabel: string; areaName: string | null; items: KdsTicketItem[] }
+      {
+        label: string;
+        areaName: string | null;
+        source: "mesa" | "delivery";
+        items: KdsTicketItem[];
+      }
     >();
     for (const it of items ?? []) {
       const g = byOrder.get(it.order_id);
@@ -270,8 +278,9 @@ function KdsInner() {
         g.items.push(it);
       } else {
         byOrder.set(it.order_id, {
-          tableLabel: it.table_label,
+          label: it.source_label,
           areaName: it.area_name,
+          source: it.source,
           items: [it],
         });
       }
@@ -372,8 +381,12 @@ function KdsInner() {
               >
                 <div className="flex items-center justify-between px-1">
                   <span className="flex items-center gap-1.5 text-base font-bold">
-                    <Utensils size={15} className="text-ninja-flameSoft" />
-                    Mesa {g.tableLabel}
+                    {g.source === "delivery" ? (
+                      <Bike size={15} className="text-sky-300" />
+                    ) : (
+                      <Utensils size={15} className="text-ninja-flameSoft" />
+                    )}
+                    {g.label}
                   </span>
                   <div className="flex items-center gap-2">
                     {g.areaName && (
@@ -381,17 +394,20 @@ function KdsInner() {
                         {g.areaName}
                       </span>
                     )}
-                    {/* Imprimir comanda de esta mesa (H45). Reusa el modal de
-                        comanda; si hay estación activa, arranca filtrada a ella. */}
-                    <button
-                      type="button"
-                      onClick={() => setComandaOrderId(orderId)}
-                      className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                      aria-label="Imprimir comanda"
-                      title="Imprimir comanda"
-                    >
-                      <Printer size={14} />
-                    </button>
+                    {/* Imprimir comanda (H45): sólo para mesa (la comanda impresa
+                        de delivery es follow-up). El KDS de delivery muestra el
+                        pedido igual; sólo no ofrece el modal de comanda de mesa. */}
+                    {g.source === "mesa" && (
+                      <button
+                        type="button"
+                        onClick={() => setComandaOrderId(orderId)}
+                        className="grid h-7 w-7 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        aria-label="Imprimir comanda"
+                        title="Imprimir comanda"
+                      >
+                        <Printer size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 {g.items.map((it) => (

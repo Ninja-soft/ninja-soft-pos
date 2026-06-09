@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  Bike,
   Building2,
   CalendarDays,
   ChevronDown,
@@ -53,6 +54,7 @@ import {
 import { AssistantBubble } from "@/components/ai/AssistantBubble";
 import { useFeature } from "@/modules/saas/gating";
 import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
@@ -69,6 +71,10 @@ type Item = {
   // Sólo visible con el modo gastronómico (pos_settings.dining_enabled · H43)
   // activo. No es gating de plan: es un toggle del tenant → se oculta, sin candado.
   requiresDining?: boolean;
+  // Sólo visible con delivery activo (pos_settings.delivery_enabled · H49). Igual
+  // que requiresDining: toggle del tenant, se oculta sin candado. Independiente
+  // de las mesas (delivery puede ir sin modo gastronómico de mesas).
+  requiresDelivery?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -92,6 +98,10 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Salón (F13 · H44). Sólo visible con el modo gastronómico activo (H43);
         // se oculta cuando dining_enabled = false (no es gating de plan).
         { href: "/salon", label: "Salón", icon: Utensils, requiresDining: true },
+        // Delivery y take away (F13 · H49). Sólo visible con delivery activo
+        // (pos_settings.delivery_enabled); independiente del modo gastronómico de
+        // mesas (puede ir sin mesas).
+        { href: "/delivery", label: "Delivery", icon: Bike, requiresDelivery: true },
         // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
         // defecto; un plan puede apagarla y el ítem queda con candado.
         { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
@@ -313,9 +323,13 @@ export function AppShell({
   const isInternal = shell?.isInternal ?? false;
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
 
-  // Modo gastronómico (H43): oculta los ítems con requiresDining si está apagado.
+  // Modo gastronómico (H43) y delivery (H49): oculta los ítems con requiresDining
+  // / requiresDelivery si su toggle del tenant está apagado.
   const { data: diningEnabled } = useDiningEnabled();
-  const showItem = (it: Item) => !it.requiresDining || Boolean(diningEnabled);
+  const { data: deliveryEnabled } = useDeliveryEnabled();
+  const showItem = (it: Item) =>
+    (!it.requiresDining || Boolean(diningEnabled)) &&
+    (!it.requiresDelivery || Boolean(deliveryEnabled));
 
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni

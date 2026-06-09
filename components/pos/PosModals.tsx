@@ -676,6 +676,7 @@ export function PaymentModal({
   hasCustomer = false,
   initialWarrantyId = "",
   splitItems = [],
+  deliveryFee = 0,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -697,6 +698,12 @@ export function PaymentModal({
   // Ítems del carrito para "Dividir cuenta → por ítem" (F13 · H44). La página POS
   // mapea sus líneas a { id, label, amount }. Vacío = no se ofrece el modo ítem.
   splitItems?: SplitItem[];
+  // Costo de envío AUTORITATIVO del pedido de delivery (F13 · H49 · Bug 🟠). NO es
+  // una línea del carrito: lo agrega create_sale desde delivery_orders.delivery_fee
+  // (inviolable). Acá se suma al total a cobrar (payTotal) para que el cajero vea/
+  // cobre productos + envío y el total mostrado COINCIDA con el v_total del server
+  // (sin insufficient_payment en el flujo honesto). 0 = no es cobro de delivery.
+  deliveryFee?: number;
 }) {
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allPlans } = usePaymentPlans();
@@ -854,7 +861,12 @@ export function PaymentModal({
     rounding > 0 ? Math.round(x / rounding) * rounding : x;
   // Total de productos (con garantía/recargos), redondeado. La propina NO se
   // redondea ni forma parte de este total: se suma al cobro como un agregado.
-  const productsTotal = applyRound(base + warrantyPrima + planSurcharge + methodSurcharge);
+  // El costo de envío (delivery) se suma DESPUÉS del redondeo y NO se descuenta:
+  // espeja exactamente create_sale (v_total = round(items - desc) + fee), así el
+  // payTotal coincide con el v_total del server y no hay insufficient_payment.
+  const deliveryFeeAmount = Math.max(0, deliveryFee || 0);
+  const productsTotal =
+    applyRound(base + warrantyPrima + planSurcharge + methodSurcharge) + deliveryFeeAmount;
   const tip = Math.max(0, Number(tipAmount) || 0);
   // Lo que el cliente paga = productos + propina. El cajero recibe ambos.
   const payTotal = productsTotal + tip;
@@ -1139,9 +1151,20 @@ export function PaymentModal({
           </div>
         </div>
 
-        {/* Resumen de extras (garantía + recargo de plan + propina) */}
-        {(extras.some((e) => e.kind === "warranty" || e.kind === "surcharge") || tip > 0) && (
+        {/* Resumen de extras (envío + garantía + recargo de plan + propina) */}
+        {(extras.some((e) => e.kind === "warranty" || e.kind === "surcharge") ||
+          tip > 0 ||
+          deliveryFeeAmount > 0) && (
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1">
+            {/* Envío (H49 · Bug 🟠): informativo. El monto lo fija el server desde
+                delivery_orders; acá sólo se suma al total a cobrar. NO es ítem del
+                carrito (lo agrega create_sale como línea autoritativa). */}
+            {deliveryFeeAmount > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>Envío</span>
+                <span>+{formatCurrency(deliveryFeeAmount)}</span>
+              </div>
+            )}
             {extras
               .filter((e) => e.kind === "warranty" || e.kind === "surcharge")
               .map((e) => (

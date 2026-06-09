@@ -610,13 +610,16 @@ function PosPageInner() {
     router.replace("/pos");
   }
 
-  // Cobro de delivery (H49): al llegar con ?delivery=<order_id>, cargá los ítems
-  // del pedido + el COSTO DE ENVÍO como línea libre, UNA sola vez. ESPEJA el
-  // cobro de mesa. Las líneas con producto se agregan como producto (descuentan
-  // stock al cobrar si corresponde); las libres como monto libre. El envío entra
-  // como una línea "Costo de envío" (así el total lo incluye por el camino normal;
-  // create_sale NO calcula el fee). Si el pedido ya fue cobrado/cancelado, no
-  // carga nada. Pre-selecciona el cliente del pedido si lo tiene.
+  // Cobro de delivery (H49 · Bug 🟠): al llegar con ?delivery=<order_id>, cargá los
+  // ítems del pedido al carrito UNA sola vez. ESPEJA el cobro de mesa. Las líneas
+  // con producto se agregan como producto (descuentan stock al cobrar si
+  // corresponde); las libres como monto libre. El COSTO DE ENVÍO ya NO se inyecta
+  // como línea del carrito: lo agrega create_sale como línea AUTORITATIVA desde
+  // delivery_orders.delivery_fee (inviolable, no se puede quitar del carrito para
+  // pagar $0). El POS sólo lo suma al total a cobrar (deliveryFee → PaymentModal)
+  // para que el cajero cobre productos + envío y el total coincida con el v_total
+  // del server. Si el pedido ya fue cobrado/cancelado, no carga nada. Pre-selecciona
+  // el cliente del pedido si lo tiene.
   useEffect(() => {
     const o = deliveryOrder;
     if (!o) return;
@@ -639,15 +642,24 @@ function PosPageInner() {
         addFreeAmount({ name: it.name, amount: it.unit_price * qty });
       }
     }
-    // Costo de envío como línea (sólo delivery con fee > 0). Lo cobra el POS;
-    // create_sale lo recibe ya en el carrito, no lo calcula.
-    if (o.order_type === "delivery" && Number(o.delivery_fee) > 0) {
-      addFreeAmount({ name: "Costo de envío", amount: Number(o.delivery_fee) });
-    }
     if (o.customer_id && o.customer_name) {
       setCustomer({ id: o.customer_id, name: o.customer_name });
     }
   }, [deliveryOrder, deliveryItems, clear, addProduct, addFreeAmount]);
+
+  // Costo de envío a cobrar (Bug 🟠): sólo en cobro de delivery activo, tipo
+  // 'delivery', con el pedido aún abierto y fee > 0. Es lo que ve/suma el cajero en
+  // PaymentModal (payTotal) por encima de los ítems del carrito. El monto REAL que
+  // se cobra/asienta lo fija create_sale desde delivery_orders.delivery_fee (este
+  // valor del UI sólo refleja el mismo dato del pedido; el server es inviolable).
+  // 0 = no aplica (mostrador, mesa, takeaway o pedido ya cerrado).
+  const deliveryFee = useMemo(() => {
+    const o = deliveryOrder;
+    if (!deliveryOrderId || !o) return 0;
+    if (o.sale_id || o.status === "entregado" || o.status === "cancelado") return 0;
+    if (o.order_type !== "delivery") return 0;
+    return Math.max(0, Number(o.delivery_fee) || 0);
+  }, [deliveryOrderId, deliveryOrder]);
 
   // Sale del modo "cobro de delivery": limpia el carrito y el query param (el
   // pedido sigue abierto — el cajero canceló el cobro, no el pedido).
@@ -1187,9 +1199,9 @@ function PosPageInner() {
                     {deliveryOrder.customer_name ? ` · ${deliveryOrder.customer_name}` : ""}
                   </span>
                   <span className="block text-xs text-muted-foreground">
-                    Pedido cargado desde el tablero (incluye el costo de envío).
-                    Sumá lo que falte y cobrá; al confirmar, el pedido queda
-                    entregado.
+                    Pedido cargado desde el tablero. El costo de envío se suma al
+                    total a cobrar. Sumá lo que falte y cobrá; al confirmar, el
+                    pedido queda entregado.
                   </span>
                 </span>
               </span>
@@ -1806,6 +1818,7 @@ function PosPageInner() {
         hasCustomer={customer !== null}
         initialWarrantyId={offeredWarrantyId}
         splitItems={splitItems}
+        deliveryFee={deliveryFee}
       />
       <QrCheckoutModal
         open={qrOpen}

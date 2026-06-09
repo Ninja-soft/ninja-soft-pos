@@ -651,11 +651,12 @@ export const posApi = {
     // libera la mesa (sin close_dining_table aparte → no hay doble cobro por
     // concurrencia). Mostrador (sin mesa) NO lo pasa y el flujo es idéntico.
     tableOrderId?: string | null,
-    // Cobro de delivery atómico (F13 · H49): ESPEJA tableOrderId. Cuando viene,
-    // create_sale toma el delivery_order FOR UPDATE, aborta si ya está cobrado/
-    // cancelado y, al final, lo enlaza/marca 'entregado' EN LA MISMA transacción
-    // (sin cierre aparte → sin doble cobro). El costo de envío entra como LÍNEA
-    // del carrito (lo carga el POS): create_sale NO calcula el fee.
+    // Cobro de delivery atómico (F13 · H49 · Bug 🟠): ESPEJA tableOrderId. Cuando
+    // viene, create_sale toma el delivery_order FOR UPDATE, aborta si ya está
+    // cobrado/cancelado y, al final, lo enlaza/marca 'entregado' EN LA MISMA
+    // transacción (sin cierre aparte → sin doble cobro). El costo de envío lo
+    // agrega create_sale como LÍNEA AUTORITATIVA desde delivery_orders.delivery_fee
+    // (server-side, inviolable): el POS ya NO lo manda como ítem del carrito.
     deliveryOrderId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();

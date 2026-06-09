@@ -52,6 +52,20 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Si se desactiva, no se pueden cargar descuentos manuales durante el cobro.",
     minPlan: "Pro",
   },
+  agenda: {
+    desc: "Agenda y turnos: agenda de servicios por profesional (peluquería, estética, servicios) para reservar turnos y cobrarlos desde el POS.",
+    impact: "Desactivada, no se pueden agendar turnos ni cobrar servicios desde la agenda; el negocio opera sólo por mostrador.",
+    // Hoy es básica (incluida en todo plan; un plan puede apagarla). La idea
+    // comercial diferida (ver ADR-026) es moverla a Pro+ como diferenciador.
+    minPlan: "Start",
+  },
+  packs: {
+    desc: "Paquetes y sesiones: bonos de sesiones prepagas por cliente (p. ej. 10 sesiones), que el POS acredita y consume al cobrar.",
+    impact: "Desactivado, no se pueden vender packs de sesiones ni llevar el saldo de sesiones del cliente.",
+    // Igual que agenda: hoy básica; candidata a Pro+ en el rediseño de planes
+    // (ver ADR-026).
+    minPlan: "Start",
+  },
 
   // ── Pagos ─────────────────────────────────────────────────────────────────
   efectivo: {

@@ -161,6 +161,24 @@ Ver [`docs/04-database.md`](docs/04-database.md) y el agente `supabase-architect
 
 Toda nueva funcionalidad, módulo o medio de pago se agrega como **check en la tabla `features`** y se marca por plan en **`plans.limits.modules`** según análisis comercial. El **gating real** (`tenant_has_feature` / `tenant_has_feature_for` + los triggers correspondientes, p. ej. el de `payments` para medios de pago) **debe cubrirla**: la UI nunca es la única barrera. La UI la muestra en la **matriz interna del editor de planes** y en la **comparación de planes** (`lib/saas/planComparison.ts`). Para medios de pago, la feature key coincide con `payment_providers.key` y se mapea en `payment_method_plan_key(method)`; el espejo de UI vive en `components/pos/PosModals.tsx` (`PROVIDER_FEATURE`). Sumá también su copy en `lib/saas/featureInfo.ts` (desc / impact / minPlan).
 
+**Toda función nueva DEBE** (checklist, sin saltarse ningún paso):
+
+1. **Key en `features`** (migración versionada con `is_basic` y `grupo` correctos).
+2. **Marcada por plan en `plans.limits.modules`** según análisis comercial.
+3. **Gating real server-side**: `tenant_has_feature_for(tenant, key)` en el trigger / RPC / policy RLS que escribe el dato. **La UI NUNCA es la única barrera** — si sólo está en el front, no está gateada.
+4. **Copy en `lib/saas/featureInfo.ts`** (desc / impact / minPlan).
+5. **Aparece en la comparación de planes** (`lib/saas/planComparison.ts`, derivado de la matriz; nada hardcodeado por nivel).
+
+**Clasificá la función** en una de estas categorías y respetá su tratamiento:
+
+- **BASE** — siempre on; es parte de pagar cualquier plan. Se marca `is_basic=true` (entra por defecto en todo plan salvo apagado explícito `modules[key]=false`). Ej.: `pos`, `caja`, `stock`, `productos`, `clientes`, `panel_dueno`, `devoluciones`.
+- **OPTIONAL** — gateada por plan (`is_basic=false`, se activa por nivel comercial). Ej.: `garantias`, `cuenta_corriente`, `listas_precios`, `variantes`, `tickets_pro`.
+- **ADDON** — no entra por plan; se contrata por negocio (tabla de addons). Ej.: `asistente_ia`. No se gatea por `modules`.
+- **FLAG-OPERATIVO** — elección del dueño según su rubro, gratis y sin costo de plan; es un switch operativo (`pos_settings`), no una feature de plan. Ej.: mesas/KDS/comandas, delivery propio, venta libre, PLU, scanner.
+- **MARKETING-FUTURO** — prometida en la comparación pero **la función todavía no existe**, por lo que no se puede enforce hoy (sólo copy/marketing). Ej.: `promociones`, `facturacion_afip`, `roles_permisos` (granular), `metricas_avanzadas`, `backup`, `api_publica`, `soporte_prioritario`. Documentá la deuda en el decision-log.
+
+**Fuente de verdad de la matriz:** el **editor de planes en internal** (`components/internal/plans/PlanEditorModal.tsx` → `FeatureMatrix`), que lee `features` + `plans.limits.modules`. Lo que se vea ahí es lo que el cliente recibe; `planComparison.ts` y el panel del dueño derivan de los mismos datos.
+
 ---
 
 ## 7. Antes de empezar a trabajar

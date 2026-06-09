@@ -883,6 +883,63 @@ Conciliación **read-only** en el cliente: el POS ya guarda el `intent_id` en `p
 
 ---
 
+## ADR-026 — Auditoría de feature-gating: clasificación de features y reclasificación a BASE
+
+**Fecha:** 2026-06-09
+**Estado:** Accepted
+**Autor:** Claude
+**Decisión tomada por:** Lucas Ponzoni
+
+### Contexto
+
+El sistema gatea funcionalidades por `plans.limits.modules` + el catálogo `features` (semántica: una feature está incluida si `modules[key]=true`, o si está ausente pero `is_basic=true` → fallback). El enforcement real vive server-side en `tenant_has_feature` / `tenant_has_feature_for` dentro de triggers/RPCs. Se hizo una auditoría completa de qué se gatea de verdad vs. qué es sólo decorativo en la UI.
+
+Hallazgos:
+
+- **Bug:** `panel_dueno` figuraba como feature de plan (`is_basic=false`, marcada en planes Pro+) pero su acceso no estaba realmente gateado: era **decorativa**. La UI la mostraba como diferencial de plan sin que ningún `tenant_has_feature` la respaldara. Lo mismo aplicaba a `devoluciones` como "valor de plan" cuando en la práctica es parte del piso operativo.
+- **OPTIONAL bien gateadas (server-side):** `descuentos`, `garantias`, `cuenta_corriente`, `listas_precios` (en `create_sale` / triggers). Enforcement recién agregado por el agente de DB para: `tickets_pro`, `grupos_clientes`, `personalizacion_marca`, `variantes`, `catalogo_publico` y los gateways de tarjeta.
+- **SOLO-MARKETING (la función no existe, no se puede enforce hoy):** `promociones`, `facturacion_afip`, `roles_permisos` (granular), `metricas_avanzadas`, `backup`, `api_publica`, `soporte_prioritario`. Aparecen en la comparación pero no hay código que las haga cumplir. (La auditoría sí se graba para todos los tenants, sin vista tenant-facing.)
+- **Módulos nuevos sin key de plan diferenciada:** `agenda` y `packs` existen en `features` con `is_basic=true` (on para todos) y, hasta hoy, sin copy en `featureInfo`. `asistente_ia` se gatea como ADDON (correcto). La suite de Gastronomía (mesas/KDS/comanda/cursos/división/modificadores) y Delivery (board/zonas) son **flags operativos del dueño** (`pos_settings.dining_enabled` / `delivery_enabled`), no features de plan.
+
+### Decisión
+
+1. **Reclasificar a BASE** (`is_basic=true`, incluidas en todo plan) a `panel_dueno` y `devoluciones`: son piso de "pagar cualquier plan", no diferenciales. Esto elimina el gating decorativo.
+2. **Mantener el enforcement server-side** recién agregado para las OPTIONAL listadas arriba (la UI nunca es la única barrera).
+3. **Documentar la deuda MARKETING-FUTURO**: las features prometidas sin función quedan registradas; antes de venderlas como gateadas hay que implementar el enforcement.
+4. **Agregar copy** de `agenda` y `packs` en `lib/saas/featureInfo.ts` (hoy `minPlan: Start` porque son básicas).
+5. **Formalizar la taxonomía** de features en `CLAUDE.md` §6: BASE / OPTIONAL / ADDON / FLAG-OPERATIVO / MARKETING-FUTURO, con el checklist de los 5 pasos obligatorios (key en `features`, marca por plan, gating server-side, copy en `featureInfo`, aparición en la comparación).
+
+### Alternativas consideradas
+
+- **Dejar `panel_dueno`/`devoluciones` como OPTIONAL e implementar su gating real:** comercialmente no tiene sentido cobrar el panel del dueño ni las devoluciones aparte; son esperables en cualquier plan. Descartada.
+- **Borrar las features MARKETING-FUTURO de la comparación:** se prefieren conservar como roadmap visible, pero marcadas como deuda en este ADR para no confundir "prometido" con "gateado".
+
+### Decisiones diferidas (follow-up)
+
+- **Convertir Gastronomía y Delivery en diferenciadores de plan (Business+):** crear keys `gastronomia` y `delivery` en `features` y gatear sus RPCs con `tenant_has_feature_for`, manteniendo el flag operativo del dueño como capa adicional (el negocio elige activarlo si su plan lo incluye). Hoy son sólo flags operativos gratuitos. **No se crean keys nuevas en este PR** (es trabajo de migración/RPC de otro agente); por eso no se agregan a `featureInfo` todavía.
+- **Mover `agenda` y `packs` a Pro+** como diferenciadores (hoy `is_basic=true`), con su gating server-side.
+
+### Distribución sugerida de los 4 planes (referencia comercial)
+
+- **Start:** sólo BASE (pos, caja, stock, productos, clientes, categorías, reportes, efectivo, transferencia, notificaciones, email_comprobantes, **panel_dueno**, **devoluciones**).
+- **Pro:** Start + `agenda`, `packs`, `descuentos`, `tickets_pro`, `grupos_clientes`, `variantes`, `catalogo_publico`, `personalizacion_marca`, Mercado Pago.
+- **Business:** Pro + Gastronomía, Delivery, `garantias`, `cuenta_corriente`, `listas_precios`, `multi_sucursal`, `metricas_avanzadas`, gateways de tarjeta restantes.
+- **Enterprise:** todo (incluye `api_publica`, `backup`, `soporte_prioritario`, `roles_permisos` granular cuando existan).
+
+### Consecuencias
+
+- **Positivas:** se cierra el gating decorativo de `panel_dueno`; la taxonomía deja explícito qué se puede vender como gateado y qué no; el checklist evita que una feature nueva quede sin enforcement server-side.
+- **Negativas:** `agenda`/`packs`/Gastronomía/Delivery siguen siendo "gratis para todos" hasta ejecutar la decisión diferida; la comparación muestra features MARKETING-FUTURO aún sin enforce.
+- **Seguimiento:** ejecutar las decisiones diferidas (keys `gastronomia`/`delivery`, mover `agenda`/`packs` a Pro+) y, antes de vender cualquier MARKETING-FUTURO como diferencial, implementar su gating real.
+
+### Referencias
+
+- `lib/saas/featureInfo.ts`, `lib/saas/planComparison.ts`, `components/internal/plans/PlanEditorModal.tsx`.
+- `CLAUDE.md` §6 (Convención de features de plan).
+- Migraciones: `20260608110000_features_plans_addons.sql`, `20260608150000_plans_overhaul.sql`, `20260608540000_agenda.sql`, `20260608560000_service_packs.sql`, `20260608410000_writefeature_gating.sql`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

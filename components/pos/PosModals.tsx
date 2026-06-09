@@ -236,6 +236,22 @@ function SplitPaymentSection({
   // mandar lo no asignado a la última línea automáticamente.
   const [autoAssignRest, setAutoAssignRest] = useState(true);
 
+  // BUG 18: el modo "por ítem" no tiene sentido (ni salida) sin ítems para
+  // asignar — cumpliendo el contrato del prop `splitItems` ("Vacío = no se ofrece
+  // el modo ítem"). Sin esto, elegir "por ítem" con 0 ítems y destildar
+  // "ítems sin asignar → última línea" dejaba el split trabado, sin poder cuadrar.
+  const hasItems = items.length > 0;
+  const availableModes = useMemo(
+    () => (hasItems ? SPLIT_MODES : SPLIT_MODES.filter((m) => m.value !== "item")),
+    [hasItems],
+  );
+
+  // Defensa: si los ítems desaparecen mientras el modo es "por ítem", volver a un
+  // modo válido (partes iguales) para no quedar atrapados en un estado sin salida.
+  useEffect(() => {
+    if (!hasItems && mode === "item") setMode("equal");
+  }, [hasItems, mode]);
+
   const isCardMethod = (m: SalePaymentInput["method"]) => m === "debit" || m === "credit";
 
   // Ajusta el array de líneas a `count`, preservando las existentes y rellenando
@@ -398,7 +414,7 @@ function SplitPaymentSection({
           Modo de división
         </label>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {SPLIT_MODES.map((m) => (
+          {availableModes.map((m) => (
             <button
               key={m.value}
               type="button"
@@ -639,7 +655,7 @@ function SplitPaymentSection({
           <span className="tabular-nums">{formatCurrency(Math.abs(remaining))}</span>
         </div>
         {change > 0 && (
-          <div className="flex justify-between border-t border-border pt-1 text-ninja-lavender">
+          <div className="flex justify-between border-t border-border pt-1 text-muted-foreground">
             <span>Vuelto (efectivo)</span>
             <span className="tabular-nums font-semibold text-foreground">{formatCurrency(change)}</span>
           </div>
@@ -794,13 +810,16 @@ export function PaymentModal({
     return allPlans.filter((p: PaymentPlan) => p.base === planBase && isPlanActive(p));
   }, [planBase, allPlans]);
 
-  // En modo "dividir cuenta" no hay plan ni recargo de medio único: el cobro se
-  // reparte en N líneas sobre el total ya calculado (cada línea elige su medio sin
-  // recargo). Por eso el recargo de plan/medio se neutraliza con split activo, así
-  // el total a repartir queda determinístico (= productos + garantía + propina).
-  const selectedPlan = splitOn
-    ? null
-    : (allPlans ?? []).find((p: PaymentPlan) => p.id === planId) ?? null;
+  // Plan de cuotas seleccionado (débito/crédito) y su recargo. NO se neutraliza al
+  // activar "dividir cuenta": si el cajero eligió "Crédito 3 cuotas (+15%)", ese
+  // recargo debe seguir cobrándose. Antes se forzaba a null con split → se cobraba
+  // de menos sin aviso (plata perdida). Ahora el recargo se preserva: se suma al
+  // total que el split reparte (productsTotal) y entra como ítem en `extras`. El
+  // selector de plan sólo se muestra en cobro simple, pero la SELECCIÓN persiste:
+  // al activar split se le avisa al cajero con un banner que el recargo está
+  // incluido y se le ofrece un botón "Quitar recargo" (setPlanId("")) para dividir
+  // sin recargo si lo prefiere (ver BUG 6). Nunca se cobra de menos en silencio.
+  const selectedPlan = (allPlans ?? []).find((p: PaymentPlan) => p.id === planId) ?? null;
   const planSurcharge = selectedPlan
     ? Math.round(((base * Number(selectedPlan.surcharge_pct)) / 100) * 100) / 100
     : 0;
@@ -876,12 +895,19 @@ export function PaymentModal({
   // Atribución de comisión (H39): profesional/vendedor de la venta.
   if (professionalId) extras.push({ kind: "professional", id: professionalId });
 
-  // Medios para "Dividir cuenta": sólo dinero real (efectivo/tarjeta/QR/etc.). Se
-  // excluyen vale (store_credit) y cuenta corriente (account): repartir parte en
-  // saldo o fiado necesitaría validación server extra (límite/saldo por línea) y
-  // no es el caso de uso de la división de cuenta gastronómica → follow-up.
+  // Medios para "Dividir cuenta": sólo dinero real con cobro directo por línea
+  // (efectivo / débito / crédito / transferencia). Se excluyen:
+  //  · store_credit (vale) y account (cuenta corriente): repartir saldo o fiado
+  //    necesitaría validación server extra (límite/saldo por línea) y no es el
+  //    caso de uso de la división gastronómica → follow-up.
+  //  · qr ("QR / Terminal", BUG 7): requiere flujo de aprobación con intent
+  //    (referencia + QR real); una línea de split lo manda sin reference y el
+  //    backend no genera QR. No tiene sentido por línea → no se ofrece.
   const splitMethods = useMemo(
-    () => methods.filter((m) => m.value !== "store_credit" && m.value !== "account"),
+    () =>
+      methods.filter(
+        (m) => m.value !== "store_credit" && m.value !== "account" && m.value !== "qr",
+      ),
     [methods],
   );
   // El cobro dividido sólo se ofrece si hay total > 0 y al menos un medio de
@@ -914,6 +940,34 @@ export function PaymentModal({
               className="h-5 w-5 accent-ninja-flame"
             />
           </label>
+        )}
+
+        {/* BUG 6: aviso de recargo por cuotas al dividir. Si el cajero había
+            elegido un plan con recargo (p. ej. "Crédito 3 cuotas (+15%)") y activa
+            "dividir cuenta", el recargo NO se silencia: sigue incluido en el total
+            que se reparte (y se cobra). El selector de plan no se muestra en modo
+            dividir, así que avisamos explícitamente y damos un botón para quitarlo
+            si el cajero prefiere repartir sin recargo. Antes esto se perdía y se
+            cobraba de menos sin que nadie se enterara. */}
+        {splitOn && canSplit && selectedPlan && planSurcharge > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-ninja-flame/40 bg-ninja-flame/10 p-3">
+            <div className="flex-1 text-sm">
+              <p className="font-semibold text-ninja-flameSoft">
+                Recargo por cuotas incluido en el total
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                El recargo de “{selectedPlan.label}” (+{formatCurrency(planSurcharge)}) se
+                reparte dentro del total a dividir. Quitalo si querés dividir sin recargo.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPlanId("")}
+              className="shrink-0 rounded-lg border border-ninja-flame/50 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/15"
+            >
+              Quitar recargo
+            </button>
+          </div>
         )}
 
         {splitOn && canSplit && (
@@ -1118,7 +1172,7 @@ export function PaymentModal({
               value={received}
               onChange={(e) => setReceived(e.target.value)}
             />
-            <p className="text-sm text-ninja-lavender">
+            <p className="text-sm text-muted-foreground">
               Vuelto:{" "}
               <span className="font-semibold text-foreground">
                 {formatCurrency(change)}

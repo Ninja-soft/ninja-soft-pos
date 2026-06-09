@@ -52,6 +52,7 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as {
     is_internal?: boolean;
+    internal_level?: string;
     current_tenant_id?: string;
   };
   const isInternal = meta.is_internal === true;
@@ -65,12 +66,36 @@ Deno.serve(async (req: Request) => {
   // El dueño suele ser TAMBIÉN staff (is_internal): si no manda tenant_id en el
   // body, cae a su current_tenant_id (gestiona su propia suscripción). Mismo fix
   // que mp_subscription_checkout/manage.
-  const tenantId = isInternal
-    ? String(b.tenant_id ?? "").trim() || String(meta.current_tenant_id ?? "").trim()
-    : String(meta.current_tenant_id ?? "").trim();
+  const ownTenant = String(meta.current_tenant_id ?? "").trim();
+  const bodyTenant = String(b.tenant_id ?? "").trim();
+  const tenantId = isInternal ? bodyTenant || ownTenant : ownTenant;
   if (!tenantId) return json({ error: "missing_tenant" }, 400);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // BUG 2 (escalada multi-tenant): el path interno hace un PUT al preapproval que
+  // CAMBIA EL MONTO del cobro de CUALQUIER tenant. Sólo niveles con privilegio
+  // real (admin/super_admin) pueden apuntar a OTRO tenant; 'support' NO.
+  // Espejamos el guard de internal_set_subscription_status. El dueño que gestiona
+  // SU propio tenant (bodyTenant vacío → ownTenant) no toca esta barrera.
+  const internalLevel = (meta.internal_level ?? "").trim();
+  const internalPrivileged =
+    internalLevel === "" ||
+    internalLevel === "admin" ||
+    internalLevel === "super_admin" ||
+    internalLevel === "superadmin";
+  const targetsOtherTenant = bodyTenant !== "" && bodyTenant !== ownTenant;
+  if (isInternal && targetsOtherTenant && !internalPrivileged) {
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "subscriptions",
+      entity_id: null,
+      action: "subscription_amount_forbidden",
+      after_data: { internal_level: internalLevel || null, reason: "insufficient_level" },
+    });
+    return json({ error: "forbidden" }, 403);
+  }
 
   if (!isInternal) {
     const { data: mem } = await admin

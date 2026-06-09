@@ -70,6 +70,7 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as {
     is_internal?: boolean;
+    internal_level?: string;
     current_tenant_id?: string;
   };
   const isInternal = meta.is_internal === true;
@@ -89,10 +90,38 @@ Deno.serve(async (req: Request) => {
   // El dueño suele ser TAMBIÉN staff (is_internal): si no manda tenant_id en el
   // body (la card del dueño no lo manda), cae a su current_tenant_id. El staff
   // que gestiona OTRO tenant sí manda tenant_id. (Mismo fix que las otras mp_*.)
-  const tenantId = isInternal
-    ? String(b.tenant_id ?? "").trim() || String(meta.current_tenant_id ?? "").trim()
-    : String(meta.current_tenant_id ?? "").trim();
+  const ownTenant = String(meta.current_tenant_id ?? "").trim();
+  const bodyTenant = String(b.tenant_id ?? "").trim();
+  const tenantId = isInternal ? bodyTenant || ownTenant : ownTenant;
   if (!tenantId) return json({ error: "missing_tenant" }, 400);
+
+  // BUG 2 (escalada multi-tenant): el path interno puede ESCRIBIR en MP
+  // (pausar/cancelar/reanudar el cobro) de CUALQUIER tenant. Sólo lo permitimos a
+  // niveles con privilegio real (admin / super_admin). 'support' NO. Espejamos el
+  // guard de internal_set_subscription_status (RPC): coalesce(level,'admin')==='support'
+  // → forbidden (interno legacy sin nivel = admin). El dueño NO interno que
+  // gestiona SU PROPIO tenant (bodyTenant vacío → ownTenant) no toca esta barrera.
+  // Un interno que apunta a OTRO tenant (bodyTenant distinto del suyo) SÍ debe ser
+  // admin+. Auditamos el rechazo.
+  const internalLevel = (meta.internal_level ?? "").trim();
+  const internalPrivileged =
+    internalLevel === "" /* legacy = admin */ ||
+    internalLevel === "admin" ||
+    internalLevel === "super_admin" ||
+    internalLevel === "superadmin";
+  const targetsOtherTenant = bodyTenant !== "" && bodyTenant !== ownTenant;
+  if (isInternal && targetsOtherTenant && !internalPrivileged) {
+    const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "subscriptions",
+      entity_id: null,
+      action: "subscription_pause_forbidden",
+      after_data: { action, internal_level: internalLevel || null, reason: "insufficient_level" },
+    });
+    return json({ error: "forbidden" }, 403);
+  }
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 

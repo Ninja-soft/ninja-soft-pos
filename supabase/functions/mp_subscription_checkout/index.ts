@@ -72,6 +72,7 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as {
     is_internal?: boolean;
+    internal_level?: string;
     current_tenant_id?: string;
   };
   const isInternal = meta.is_internal === true;
@@ -92,9 +93,9 @@ Deno.serve(async (req: Request) => {
   //     current_tenant_id. Antes esto devolvía missing_tenant y rompía el pago.
   //   • dueño (is_internal=false): SIEMPRE su current_tenant_id (ignora el body
   //     para no permitir crear preapprovals de otros tenants).
-  const tenantId = isInternal
-    ? String(b.tenant_id ?? meta.current_tenant_id ?? "").trim()
-    : String(meta.current_tenant_id ?? "").trim();
+  const ownTenant = String(meta.current_tenant_id ?? "").trim();
+  const bodyTenant = String(b.tenant_id ?? "").trim();
+  const tenantId = isInternal ? bodyTenant || ownTenant : ownTenant;
   if (!tenantId) {
     return fail("missing_tenant", 400, {
       isInternal,
@@ -104,6 +105,31 @@ Deno.serve(async (req: Request) => {
   }
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // BUG 2 (escalada multi-tenant): el path interno puede crear un preapproval que
+  // COBRA a CUALQUIER tenant. Sólo niveles con privilegio real (admin/super_admin)
+  // pueden apuntar a OTRO tenant; 'support' NO. Espejamos el guard de
+  // internal_set_subscription_status: coalesce(level,'admin')==='support' →
+  // forbidden (interno legacy sin nivel = admin). El dueño que paga SU propio
+  // tenant (bodyTenant vacío → ownTenant) no toca esta barrera.
+  const internalLevel = (meta.internal_level ?? "").trim();
+  const internalPrivileged =
+    internalLevel === "" ||
+    internalLevel === "admin" ||
+    internalLevel === "super_admin" ||
+    internalLevel === "superadmin";
+  const targetsOtherTenant = bodyTenant !== "" && bodyTenant !== ownTenant;
+  if (isInternal && targetsOtherTenant && !internalPrivileged) {
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "subscriptions",
+      entity_id: null,
+      action: "subscription_checkout_forbidden",
+      after_data: { internal_level: internalLevel || null, reason: "insufficient_level" },
+    });
+    return fail("forbidden", 403, { internal_level: internalLevel || null });
+  }
 
   // Autorización del path dueño: debe ser owner activo del tenant.
   if (!isInternal) {
@@ -131,10 +157,12 @@ Deno.serve(async (req: Request) => {
     ?.access_token;
   if (!accessToken) return fail("platform_not_configured", 400);
 
-  // Suscripción del tenant + plan (para reason/frecuencia).
+  // Suscripción del tenant + plan (para reason/frecuencia) + preapproval previo
+  // (BUG 6: hay que cancelarlo antes de crear uno nuevo, si no MP sigue cobrando
+  // por el viejo → doble cobro).
   const { data: sub, error: subErr } = await admin
     .from("subscriptions")
-    .select("id, billing_cycle, plans(name)")
+    .select("id, billing_cycle, mp_preapproval_id, plans(name)")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (subErr) return fail("subscription_lookup_failed", 400, subErr as PgError);
@@ -203,6 +231,59 @@ Deno.serve(async (req: Request) => {
     payerEmail = (au?.user?.email ?? "").trim();
   }
   if (!payerEmail) return fail("no_owner_email", 400, { tenantId, isInternal });
+
+  // BUG 6 (re-checkout huérfana = riesgo de doble cobro): si ya existe un
+  // preapproval, NO lo dejamos vivo al crear otro. Lo consultamos; si sigue
+  // 'authorized' o 'paused' (puede seguir cobrando), lo CANCELAMOS (PUT
+  // status=cancelled) antes de crear el nuevo. Si está cancelled/expired o el GET
+  // falla (preapproval viejo/inexistente), no hay nada que cancelar y seguimos.
+  // No abortamos el checkout por un fallo al cancelar el viejo (best-effort), pero
+  // lo auditamos para visibilidad.
+  const prevPreId = String(sub.mp_preapproval_id ?? "").trim();
+  if (prevPreId) {
+    try {
+      const gp = await fetch(
+        `https://api.mercadopago.com/preapproval/${prevPreId}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      if (gp.ok) {
+        const prev = (await gp.json()) as { status?: string };
+        if (prev.status === "authorized" || prev.status === "paused") {
+          const cp = await fetch(
+            `https://api.mercadopago.com/preapproval/${prevPreId}`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ status: "cancelled" }),
+            },
+          );
+          await admin.from("audit_logs").insert({
+            tenant_id: tenantId,
+            actor_user_id: user.id,
+            entity_type: "subscriptions",
+            entity_id: sub.id,
+            action: cp.ok
+              ? "subscription_prev_preapproval_cancelled"
+              : "subscription_prev_preapproval_cancel_failed",
+            after_data: {
+              preapproval_id: prevPreId,
+              prev_status: prev.status,
+              ok: cp.ok,
+              detail: cp.ok ? null : (await cp.text()).slice(0, 300),
+            },
+          });
+        }
+      }
+    } catch (e) {
+      console.error(
+        "[mp_subscription_checkout] prev_preapproval_cancel_error",
+        String(e).slice(0, 200),
+      );
+    }
+  }
 
   const notificationUrl = `${url}/functions/v1/mp_billing_webhook`;
 

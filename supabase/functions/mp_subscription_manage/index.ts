@@ -59,6 +59,7 @@ Deno.serve(async (req: Request) => {
 
   const meta = (user.app_metadata ?? {}) as {
     is_internal?: boolean;
+    internal_level?: string;
     current_tenant_id?: string;
   };
   const isInternal = meta.is_internal === true;
@@ -73,12 +74,37 @@ Deno.serve(async (req: Request) => {
   // body (la UI del panel del dueño no lo manda), cae a su current_tenant_id —
   // gestiona su propia suscripción. El staff que gestiona OTRO tenant sí manda
   // tenant_id. (Mismo fix que mp_subscription_checkout.)
-  const tenantId = isInternal
-    ? String(b.tenant_id ?? "").trim() || String(meta.current_tenant_id ?? "").trim()
-    : String(meta.current_tenant_id ?? "").trim();
+  const ownTenant = String(meta.current_tenant_id ?? "").trim();
+  const bodyTenant = String(b.tenant_id ?? "").trim();
+  const tenantId = isInternal ? bodyTenant || ownTenant : ownTenant;
   if (!tenantId) return json({ error: "missing_tenant" }, 400);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+  // BUG 2 (escalada multi-tenant): el path interno expone el estado del medio de
+  // pago + manage_url (init_point) de CUALQUIER tenant. Aunque es lectura, el
+  // init_point permite gestionar la tarjeta del pagador, así que lo limitamos a
+  // niveles con privilegio real (admin/super_admin); 'support' NO. Espejamos el
+  // guard de internal_set_subscription_status. El dueño que mira SU propio tenant
+  // (bodyTenant vacío → ownTenant) no toca esta barrera.
+  const internalLevel = (meta.internal_level ?? "").trim();
+  const internalPrivileged =
+    internalLevel === "" ||
+    internalLevel === "admin" ||
+    internalLevel === "super_admin" ||
+    internalLevel === "superadmin";
+  const targetsOtherTenant = bodyTenant !== "" && bodyTenant !== ownTenant;
+  if (isInternal && targetsOtherTenant && !internalPrivileged) {
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "subscriptions",
+      entity_id: null,
+      action: "subscription_manage_forbidden",
+      after_data: { internal_level: internalLevel || null, reason: "insufficient_level" },
+    });
+    return json({ error: "forbidden" }, 403);
+  }
 
   if (!isInternal) {
     const { data: mem } = await admin

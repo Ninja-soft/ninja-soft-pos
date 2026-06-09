@@ -15,6 +15,10 @@ import {
   Car,
   Wrench,
   Briefcase,
+  UtensilsCrossed,
+  Beer,
+  Drumstick,
+  Bike,
 } from "lucide-react";
 
 // Qué vende el negocio (paso 1 del wizard). Filtra qué ítems del preset se
@@ -51,7 +55,20 @@ export type PresetKey =
   | "estetica"
   | "lavadero"
   | "taller"
-  | "servicios";
+  | "servicios"
+  // F13 · H47 — presets gastronómicos que enganchan la suite de gastronomía
+  // (mesas/cocina/delivery). Activan dining_enabled/delivery_enabled y siembran
+  // salón + mesas / zona de envío en la RPC apply_industry_preset.
+  | "restaurante"
+  | "resto_bar"
+  | "rotiseria"
+  | "dark_kitchen";
+
+// F13 · H47 — qué módulo de gastronomía activa cada preset. La RPC lo aplica de
+// verdad (dining_enabled / delivery_enabled + salón/zona); acá sólo lo declaramos
+// para que la tarjeta del wizard muestre "Incluye mesas y cocina (KDS)" /
+// "Incluye delivery". Vacío/ausente = preset que no toca la suite gastronómica.
+export type PresetEnable = "dining" | "delivery";
 
 export interface PresetDef {
   key: PresetKey;
@@ -66,6 +83,10 @@ export interface PresetDef {
   categories: string[];
   // Un par de ítems de muestra a modo de ejemplo en la tarjeta.
   sampleItems: string[];
+  // F13 · H47 — módulos de gastronomía que el preset deja activados (la RPC los
+  // enciende de verdad). La tarjeta muestra un hint por cada uno. Ausente = no
+  // toca la suite gastronómica (presets clásicos: heladería, peluquería, etc.).
+  enables?: PresetEnable[];
 }
 
 export const PRESETS: PresetDef[] = [
@@ -141,7 +162,65 @@ export const PRESETS: PresetDef[] = [
     categories: ["Servicios", "Consultoría"],
     sampleItems: ["Hora de consultoría", "Visita técnica", "Servicio mensual"],
   },
+
+  // ── Gastronomía (F13 · H47) — enganchan la suite: mesas/cocina (KDS) y/o
+  // delivery. Los nombres de categorías e ítems DEBEN coincidir con el SQL de
+  // apply_industry_preset (migración 20260608760000_gastro_presets).
+  {
+    key: "restaurante",
+    label: "Restaurante (salón)",
+    desc: "Mesas con cocina: entradas, principales y postres. Comandas al KDS.",
+    icon: UtensilsCrossed,
+    nature: "products",
+    categories: ["Entradas", "Principales", "Postres", "Bebidas"],
+    sampleItems: ["Empanada", "Milanesa con papas", "Flan", "Gaseosa lata"],
+    enables: ["dining"],
+  },
+  {
+    key: "resto_bar",
+    label: "Resto-bar",
+    desc: "Salón + barra + delivery: para compartir, principales, tragos y cervezas.",
+    icon: Beer,
+    nature: "products",
+    categories: [
+      "Para compartir",
+      "Principales",
+      "Tragos",
+      "Cervezas",
+      "Postres",
+    ],
+    sampleItems: ["Picada", "Bife de chorizo", "Fernet con cola", "Cerveza pinta"],
+    enables: ["dining", "delivery"],
+  },
+  {
+    key: "rotiseria",
+    label: "Rotisería",
+    desc: "Mostrador + delivery: pollo, empanadas y guarniciones. Zona de envío lista.",
+    icon: Drumstick,
+    nature: "products",
+    categories: ["Rotisería", "Empanadas", "Guarniciones", "Bebidas"],
+    sampleItems: ["Pollo al spiedo", "Docena de empanadas", "Papas fritas"],
+    enables: ["delivery"],
+  },
+  {
+    key: "dark_kitchen",
+    label: "Cocina oculta (delivery)",
+    desc: "Solo delivery: hamburguesas, pizzas y acompañamientos. Sin mostrador.",
+    icon: Bike,
+    nature: "products",
+    categories: ["Hamburguesas", "Pizzas", "Acompañamientos", "Bebidas"],
+    sampleItems: ["Hamburguesa completa", "Pizza muzzarella", "Papas fritas"],
+    enables: ["delivery"],
+  },
 ];
+
+// F13 · H47 — etiqueta para el hint de la tarjeta del wizard según el módulo de
+// gastronomía que el preset activa. La RPC enciende dining/delivery + salón/zona;
+// acá sólo decimos qué muestra la UI.
+export const PRESET_ENABLE_LABELS: Record<PresetEnable, string> = {
+  dining: "Incluye mesas y cocina (KDS)",
+  delivery: "Incluye delivery",
+};
 
 // Presets visibles según lo que el negocio dijo que vende (paso 1). Un preset de
 // servicios no tiene sentido si el dueño eligió "sólo productos" (y viceversa);

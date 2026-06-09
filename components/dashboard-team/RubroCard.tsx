@@ -114,9 +114,11 @@ export function RubroCard() {
             <div className="min-w-0">
               <p className="text-sm font-semibold">¿Empezás de cero?</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Elegí un preset de rubro (heladería, peluquería, cafetería…) y
-                sembramos categorías y productos de muestra, listos como botones
-                rápidos del POS. No duplica lo que ya tengas.
+                Elegí un preset de rubro (heladería, peluquería, cafetería,
+                restaurante, rotisería…) y sembramos categorías y productos de
+                muestra, listos como botones rápidos del POS. Los rubros
+                gastronómicos además activan mesas/cocina o delivery. No duplica
+                lo que ya tengas.
               </p>
             </div>
           </div>

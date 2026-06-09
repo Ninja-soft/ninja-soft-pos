@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import {
   PRESETS,
+  PRESET_ENABLE_LABELS,
   SELLS_OPTIONS,
   presetsForSells,
   type ApplyPresetResult,
@@ -258,6 +259,18 @@ export function IndustryPresetWizard({
                       </span>
                     ))}
                   </span>
+                  {p.enables && p.enables.length > 0 && (
+                    <span className="mt-2 flex flex-wrap gap-1">
+                      {p.enables.map((e) => (
+                        <span
+                          key={e}
+                          className="rounded-full bg-ninja-flame/12 px-2 py-0.5 text-[11px] font-medium text-ninja-flameSoft"
+                        >
+                          {PRESET_ENABLE_LABELS[e]}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -318,6 +331,23 @@ export function IndustryPresetWizard({
                     {chosen.sampleItems.join(" · ")}…
                   </dd>
                 </div>
+                {chosen.enables && chosen.enables.length > 0 && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Operación gastronómica
+                    </dt>
+                    <dd className="mt-1 flex flex-wrap gap-1">
+                      {chosen.enables.map((e) => (
+                        <span
+                          key={e}
+                          className="rounded-full bg-ninja-flame/12 px-2 py-0.5 text-xs font-medium text-ninja-flameSoft"
+                        >
+                          {PRESET_ENABLE_LABELS[e]}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
 

@@ -30,6 +30,17 @@
 // POS. Proveedor Gemini | Claude según ai_config. Cuota mensual por tenant
 // configurable (ai_config.monthly_quota, ai_usage). NO deployar (lo hace el
 // controller).
+//
+// FUNCTION-CALLING (Gemini): además del contexto base, el chat real con Gemini
+// expone un catálogo CURADO de herramientas de SOLO LECTURA (RPCs ai_*, todas
+// tenant-scoped y EXECUTE solo service_role) para drill-down: search_products,
+// sales_summary, top_products, list_customers, cash_status, stock_report,
+// business_overview. Loop multi-turno (cap 5): si el modelo responde
+// functionCall, la edge fn ejecuta la RPC con su admin client pasando SIEMPRE el
+// tenant_id resuelto SERVER-SIDE (jamás del modelo) y devuelve functionResponse;
+// repite hasta texto final. Ninguna tool toca datos sensibles (platform_secrets,
+// tokens/credenciales de Mercado Pago, claves, contraseñas, datos de otros
+// tenants). Respuesta incluye tools_used. (Claude usa solo el contexto base.)
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -169,6 +180,383 @@ Para conectar Mercado Pago o configurar el email de comprobantes, andá a Config
 type ProviderResult =
   | { ok: true; reply: string; tokens: number }
   | { ok: false; status: number; error: string; detail: string };
+
+// =============================================================================
+// Function-calling (tool use) de Gemini — acceso de SOLO LECTURA a TODOS los
+// datos NO sensibles del negocio del tenant.
+//
+// Catálogo CURADO de herramientas read-only. Cada una mapea a una RPC `ai_*`
+// (SECURITY DEFINER, EXECUTE solo service_role, scoped por p_tenant_id) que se
+// invoca con el admin client de la edge function pasando SIEMPRE el tenant_id
+// resuelto SERVER-SIDE del usuario autenticado — NUNCA un tenant que venga del
+// modelo. El modelo solo elige QUÉ tool y con qué parámetros SEGUROS (query
+// string, period, limit, flags booleanos). Ninguna tool toca platform_secrets,
+// tokens/credenciales de Mercado Pago, claves API, contraseñas ni datos de
+// otros tenants. Límites clampeados también en SQL (defensa en profundidad).
+// =============================================================================
+
+// Declaraciones de funciones para Gemini (subset del schema OpenAPI). El
+// tenant_id NO es un parámetro: lo inyecta la edge function server-side.
+const TOOL_DECLARATIONS = [
+  {
+    name: "search_products",
+    description:
+      "Busca productos del catálogo del negocio por nombre, SKU o código de " +
+      "barras. Devuelve nombre, precio, costo, stock, stock mínimo, categoría y " +
+      "código de barras. Usala para preguntas sobre un producto puntual, su " +
+      "precio o su stock. Máximo 25 resultados.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "Texto a buscar en nombre/SKU/código de barras. Vacío para listar.",
+        },
+        only_low_stock: {
+          type: "boolean",
+          description: "Si es true, solo productos con stock bajo el mínimo.",
+        },
+        limit: { type: "integer", description: "Cantidad de filas (1-50)." },
+      },
+    },
+  },
+  {
+    name: "sales_summary",
+    description:
+      "Resumen de ventas (cantidad, monto total y ticket promedio) para un " +
+      "período. Opcionalmente desglosa por día, por medio de pago o por " +
+      "categoría de producto. Usala para '¿cuánto vendí hoy/esta semana/este " +
+      "mes?' y comparativas.",
+    parameters: {
+      type: "object",
+      properties: {
+        period: {
+          type: "string",
+          description: "Período: today, yesterday, week (7 días) o month.",
+          enum: ["today", "yesterday", "week", "month"],
+        },
+        group_by: {
+          type: "string",
+          description:
+            "Desglose opcional: day, payment_method o category. Omitir para totales.",
+          enum: ["day", "payment_method", "category"],
+        },
+      },
+    },
+  },
+  {
+    name: "top_products",
+    description:
+      "Productos más vendidos (por unidades) en un período, con unidades y " +
+      "monto. Usala para '¿qué es lo que más vendo?'.",
+    parameters: {
+      type: "object",
+      properties: {
+        period: {
+          type: "string",
+          description: "Período: today, yesterday, week o month.",
+          enum: ["today", "yesterday", "week", "month"],
+        },
+        limit: { type: "integer", description: "Cantidad de productos (1-50)." },
+      },
+    },
+  },
+  {
+    name: "list_customers",
+    description:
+      "Lista clientes con su saldo de cuenta corriente (positivo = debe) y " +
+      "contacto (email/teléfono). Usala para deudores, saldo de un cliente o " +
+      "buscar un cliente por nombre. Máximo 25 resultados.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Buscar por nombre del cliente." },
+        only_debtors: {
+          type: "boolean",
+          description: "Si es true, solo clientes con saldo deudor.",
+        },
+        limit: { type: "integer", description: "Cantidad de filas (1-50)." },
+      },
+    },
+  },
+  {
+    name: "cash_status",
+    description:
+      "Estado de la caja: turnos abiertos, monto de apertura y efectivo " +
+      "esperado en caja (apertura + ingresos − egresos + ventas en efectivo). " +
+      "Usala para '¿cómo está la caja?' o '¿cuánto debería tener en caja?'.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "stock_report",
+    description:
+      "Reporte de stock: valor de inventario a costo y a precio de venta, " +
+      "cantidad de productos con stock bajo y un detalle de productos (los de " +
+      "menor stock primero). Usala para inventario y faltantes.",
+    parameters: {
+      type: "object",
+      properties: {
+        only_low: {
+          type: "boolean",
+          description: "Si es true, solo productos con stock bajo el mínimo.",
+        },
+        limit: { type: "integer", description: "Cantidad de filas (1-50)." },
+      },
+    },
+  },
+  {
+    name: "business_overview",
+    description:
+      "Panorama general del negocio: cantidad de productos activos, productos " +
+      "con stock bajo, valor de inventario, cantidad de clientes y complementos " +
+      "activos. Usala como vista global antes de profundizar.",
+    parameters: { type: "object", properties: {} },
+  },
+];
+
+// Periodos válidos para las tools de ventas (defensa: si el modelo manda algo
+// raro, la RPC igual cae a un default seguro, pero clampeamos acá también).
+const VALID_PERIODS = new Set(["today", "yesterday", "week", "month"]);
+const VALID_GROUP_BY = new Set(["day", "payment_method", "category"]);
+
+// Clampa un límite numérico propuesto por el modelo a [1, 50] con un default.
+function clampLimit(raw: unknown, def: number): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return def;
+  return Math.min(n, 50);
+}
+
+// Ejecuta la tool pedida por el modelo contra su RPC `ai_*`. SIEMPRE inyecta el
+// `tenantId` resuelto server-side; el modelo NUNCA puede elegir el tenant. Los
+// parámetros del modelo se sanean (query truncada, period/group_by validados,
+// limit clampeado) antes de tocar la base. Devuelve el jsonb del RPC o un sobre
+// { error } legible (que también se le pasa al modelo como functionResponse).
+async function runTool(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  tenantId: string,
+  name: string,
+  // deno-lint-ignore no-explicit-any
+  args: Record<string, any>,
+): Promise<unknown> {
+  const a = args ?? {};
+  const query =
+    typeof a.query === "string" ? a.query.slice(0, 120).trim() || null : null;
+  try {
+    switch (name) {
+      case "search_products": {
+        const { data, error } = await admin.rpc("ai_search_products", {
+          p_tenant_id: tenantId,
+          p_query: query,
+          p_only_low_stock: a.only_low_stock === true,
+          p_limit: clampLimit(a.limit, 25),
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "sales_summary": {
+        const period = VALID_PERIODS.has(String(a.period))
+          ? String(a.period)
+          : "today";
+        const groupBy = VALID_GROUP_BY.has(String(a.group_by))
+          ? String(a.group_by)
+          : null;
+        const { data, error } = await admin.rpc("ai_sales_summary", {
+          p_tenant_id: tenantId,
+          p_period: period,
+          p_group_by: groupBy,
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "top_products": {
+        const period = VALID_PERIODS.has(String(a.period))
+          ? String(a.period)
+          : "week";
+        const { data, error } = await admin.rpc("ai_top_products", {
+          p_tenant_id: tenantId,
+          p_period: period,
+          p_limit: clampLimit(a.limit, 10),
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "list_customers": {
+        const { data, error } = await admin.rpc("ai_list_customers", {
+          p_tenant_id: tenantId,
+          p_query: query,
+          p_only_debtors: a.only_debtors === true,
+          p_limit: clampLimit(a.limit, 25),
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "cash_status": {
+        const { data, error } = await admin.rpc("ai_cash_status", {
+          p_tenant_id: tenantId,
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "stock_report": {
+        const { data, error } = await admin.rpc("ai_stock_report", {
+          p_tenant_id: tenantId,
+          p_only_low: a.only_low === true,
+          p_limit: clampLimit(a.limit, 25),
+        });
+        if (error) throw error;
+        return data;
+      }
+      case "business_overview": {
+        const { data, error } = await admin.rpc("ai_business_overview", {
+          p_tenant_id: tenantId,
+        });
+        if (error) throw error;
+        return data;
+      }
+      default:
+        return { error: `tool_desconocida: ${name}` };
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`runTool ${name} failed:`, msg);
+    return { error: "No se pudo obtener el dato.", detail: msg.slice(0, 200) };
+  }
+}
+
+// Tipos mínimos del wire de Gemini (contents/parts) para el loop con tools.
+type GeminiPart = {
+  text?: string;
+  functionCall?: { name: string; id?: string; args?: Record<string, unknown> };
+  functionResponse?: { name: string; id?: string; response: unknown };
+};
+type GeminiContent = { role: string; parts: GeminiPart[] };
+
+// Resultado del loop de function-calling: texto final + qué tools se usaron +
+// tokens acumulados de todas las vueltas.
+type ToolLoopResult =
+  | { ok: true; reply: string; tokens: number; toolsUsed: string[] }
+  | { ok: false; status: number; error: string; detail: string };
+
+// Loop multi-turno de function-calling de Gemini (cap 5 iteraciones). En cada
+// vuelta: manda contents + tools; si el modelo responde con functionCall(s),
+// ejecuta la(s) RPC(s) con el tenantId server-side, agrega el turno del modelo
+// y el turno role:"user" con los functionResponse, y repite. Cuando el modelo
+// devuelve texto (sin functionCall), termina. Misma robustez que callProvider
+// (non-2xx, cuerpo inesperado, timeout → ai_provider_error). El tope de
+// iteraciones evita loops infinitos si el modelo insiste en llamar tools.
+async function callGeminiWithTools(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  tenantId: string,
+  model: string,
+  apiKey: string,
+  systemPrompt: string,
+  messages: { role: string; content: string }[],
+): Promise<ToolLoopResult> {
+  const contents: GeminiContent[] = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+  const toolsUsed: string[] = [];
+  let tokens = 0;
+  const MAX_ITERS = 5;
+
+  for (let iter = 0; iter < MAX_ITERS; iter++) {
+    let r: Response;
+    try {
+      r = await withTimeout(
+        fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+            model,
+          )}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-goog-api-key": apiKey,
+            },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents,
+              tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
+              generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+            }),
+          },
+        ),
+        30_000,
+        "gemini",
+      );
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("gemini(tools) fetch failed:", detail);
+      return { ok: false, status: 502, error: "ai_provider_error", detail: detail.slice(0, 300) };
+    }
+    if (!r.ok) {
+      const detail = providerErrText(await safeText(r), model);
+      console.error("gemini(tools) non-200:", r.status, detail);
+      return { ok: false, status: 502, error: "ai_provider_error", detail };
+    }
+    const data = (await safeJson(r)) as {
+      candidates?: {
+        content?: { parts?: GeminiPart[]; role?: string };
+        finishReason?: string;
+      }[];
+      promptFeedback?: { blockReason?: string };
+      usageMetadata?: { totalTokenCount?: number };
+    } | null;
+    tokens += data?.usageMetadata?.totalTokenCount ?? 0;
+    const cand = data?.candidates?.[0];
+    const parts = cand?.content?.parts ?? [];
+    const calls = parts.filter((p) => p.functionCall);
+
+    if (calls.length === 0) {
+      // No hay tool: respuesta final en texto.
+      const text = parts.map((p) => p.text ?? "").join("").trim();
+      if (!text) {
+        const reason =
+          data?.promptFeedback?.blockReason || cand?.finishReason || "sin_contenido";
+        console.error("gemini(tools) empty:", reason);
+        return {
+          ok: false,
+          status: 502,
+          error: "ai_provider_error",
+          detail: `El proveedor no devolvió texto (motivo: ${reason}).`,
+        };
+      }
+      return { ok: true, reply: text, tokens, toolsUsed };
+    }
+
+    // El modelo pidió una o más tools: las ejecutamos y respondemos.
+    contents.push({ role: "model", parts });
+    const responseParts: GeminiPart[] = [];
+    for (const p of calls) {
+      const fc = p.functionCall!;
+      toolsUsed.push(fc.name);
+      const result = await runTool(admin, tenantId, fc.name, fc.args ?? {});
+      responseParts.push({
+        functionResponse: {
+          name: fc.name,
+          ...(fc.id ? { id: fc.id } : {}),
+          // Gemini espera response como objeto; envolvemos en { result }.
+          response: { result },
+        },
+      });
+    }
+    contents.push({ role: "user", parts: responseParts });
+  }
+
+  // Se agotaron las iteraciones sin texto final: cortamos con un aviso claro en
+  // vez de dejar al usuario sin respuesta.
+  console.error("gemini(tools) max iters reached");
+  return {
+    ok: false,
+    status: 502,
+    error: "ai_provider_error",
+    detail: "El asistente consultó varios datos pero no cerró una respuesta. Probá reformular.",
+  };
+}
 
 // Llama al proveedor (Gemini | Claude) con la config dada y devuelve un
 // resultado tipado. Centraliza la robustez (non-2xx, cuerpo inesperado,
@@ -529,26 +917,56 @@ Deno.serve(async (req: Request) => {
     // ── Contexto READ-ONLY scoped por tenant ────────────────────────────────
     const context = await buildContext(admin, tenantId);
 
+    // Solo Gemini tiene function-calling habilitado (tools de drill-down). Con
+    // Claude se usa el contexto base (single-shot). Lo anticipamos para ajustar
+    // el system prompt: con tools, le indicamos que puede consultar datos finos.
+    const useTools = provider === "gemini";
+
     const systemPrompt =
       "Sos el asistente de NinjaPos, un sistema POS. Respondé SOLO sobre el uso " +
-      "del sistema y los datos del negocio que se te dan en el contexto. No " +
-      "inventes datos. Español rioplatense. Si te preguntan algo fuera del POS, " +
-      "redirigí amablemente. Usá '•' no '—'.\n\n" +
+      "del sistema y los datos del negocio. No inventes datos. Español " +
+      "rioplatense. Si te preguntan algo fuera del POS, redirigí amablemente. " +
+      "Usá '•' no '—'.\n\n" +
+      (useTools
+        ? "Tenés HERRAMIENTAS de solo lectura para consultar datos reales del " +
+          "negocio cuando el contexto no alcanza: search_products (buscar " +
+          "productos/precio/stock), sales_summary (ventas por período, con " +
+          "desglose por día/medio de pago/categoría), top_products (más " +
+          "vendidos), list_customers (clientes y deudas), cash_status (caja) y " +
+          "stock_report (inventario). Usalas para preguntas puntuales (un " +
+          "producto, un cliente, un período específico). Para panoramas generales " +
+          "alcanza con el contexto de abajo. Nunca inventes números: si no los " +
+          "tenés, usá una herramienta o decí que no hay datos.\n\n"
+        : "") +
       "=== CONTEXTO DEL NEGOCIO ===\n" +
       context +
       "\n\n=== GUÍA DE PANTALLAS ===\n" +
       HELP_GUIDE;
 
     // ── Llamada al proveedor ────────────────────────────────────────────────
-    // Robustez centralizada en callProvider: cualquier respuesta non-2xx o
-    // cuerpo inesperado se traduce a `ai_provider_error` (502) con el detalle
-    // truncado. Nunca se deja escapar un throw al runtime.
-    const out = await callProvider(provider, model, apiKey, systemPrompt, messages);
+    // Gemini: loop de function-calling (cap 5) — el modelo puede pedir tools de
+    // solo lectura (RPCs ai_*) que se ejecutan con el tenantId server-side.
+    // Claude: single-shot con contexto base. En ambos casos la robustez
+    // (non-2xx, cuerpo inesperado, timeout) se traduce a ai_provider_error (502)
+    // sin dejar escapar throws al runtime.
+    const out = useTools
+      ? await callGeminiWithTools(
+          admin,
+          tenantId,
+          model,
+          apiKey,
+          systemPrompt,
+          messages,
+        )
+      : await callProvider(provider, model, apiKey, systemPrompt, messages);
     if (!out.ok) {
       return json({ error: out.error, detail: out.detail }, out.status);
     }
     const reply = out.reply;
     let tokens = out.tokens;
+    // Tools usadas (únicas) en esta respuesta, para microcopy en el front.
+    const toolsUsed =
+      "toolsUsed" in out ? [...new Set(out.toolsUsed)] : [];
 
     if (!reply.trim()) {
       return json(
@@ -588,6 +1006,9 @@ Deno.serve(async (req: Request) => {
     return json({
       reply: reply.trim(),
       quota: { used: usedTokens + tokens, cap: monthlyCap },
+      // Nombres de las tools consultadas (vacío si respondió solo con contexto).
+      // El front lo usa para un microcopy "consulté tus datos".
+      tools_used: toolsUsed,
     });
   } catch (e) {
     return json({ error: "internal", detail: String(e) }, 500);

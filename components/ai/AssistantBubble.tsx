@@ -9,7 +9,14 @@ import { cn } from "@/lib/utils/cn";
 import { useToast } from "@/components/ui/Toast";
 import { Spinner } from "@/components/ui/Spinner";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+// `consultedData` marca respuestas del asistente que usaron herramientas de
+// solo lectura (function-calling) para traer datos reales del negocio. El front
+// lo muestra como un microcopy sutil bajo la respuesta.
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  consultedData?: boolean;
+};
 
 // Config pública del addon IA (avatar + proveedor activo + texto comercial +
 // precio). La trae el RPC ai_public_config() — NO expone la api_key. Sirve para
@@ -131,7 +138,9 @@ export function AssistantBubble() {
   });
 
   const send = useMutation({
-    mutationFn: async (history: ChatMessage[]): Promise<string> => {
+    mutationFn: async (
+      history: ChatMessage[],
+    ): Promise<{ reply: string; consultedData: boolean }> => {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
         body: { messages: history },
       });
@@ -141,6 +150,7 @@ export function AssistantBubble() {
         error?: string;
         detail?: string;
         quota?: { used: number; cap: number };
+        tools_used?: string[];
       };
       if (res?.error) {
         if (res.error === "quota_exceeded")
@@ -152,10 +162,16 @@ export function AssistantBubble() {
         throw new Error(res.detail || res.error);
       }
       if (res.quota) setQuota(res.quota);
-      return res?.reply ?? "";
+      return {
+        reply: res?.reply ?? "",
+        consultedData: Array.isArray(res.tools_used) && res.tools_used.length > 0,
+      };
     },
-    onSuccess: (reply) => {
-      setMessages((m) => [...m, { role: "assistant", content: reply }]);
+    onSuccess: ({ reply, consultedData }) => {
+      setMessages((m) => [
+        ...m,
+        { role: "assistant", content: reply, consultedData },
+      ]);
     },
     onError: (e) => {
       // Saca el último turno fallido del usuario para que pueda reintentar.
@@ -329,8 +345,8 @@ export function AssistantBubble() {
                   <div
                     key={i}
                     className={cn(
-                      "flex",
-                      m.role === "user" ? "justify-end" : "justify-start",
+                      "flex flex-col",
+                      m.role === "user" ? "items-end" : "items-start",
                     )}
                   >
                     <div
@@ -343,6 +359,14 @@ export function AssistantBubble() {
                     >
                       {m.content}
                     </div>
+                    {/* Microcopy: la respuesta usó datos reales del negocio
+                        (function-calling consultó las RPCs de solo lectura). */}
+                    {m.role === "assistant" && m.consultedData && (
+                      <span className="mt-1 flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
+                        <Sparkles size={10} className="text-primary" />
+                        Consulté los datos de tu negocio
+                      </span>
+                    )}
                   </div>
                 ))}
                 {send.isPending && (

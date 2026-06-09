@@ -199,6 +199,9 @@ export function usePosMutations() {
         discountTotal: number;
         customerId?: string | null;
         extras?: SaleExtraInput[];
+        // Cobro de mesa atómico (H44): pedido a cerrar junto a la venta. Sólo el
+        // cobro desde el Salón (/pos?table=) lo pasa; mostrador lo omite.
+        tableOrderId?: string | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -206,6 +209,7 @@ export function usePosMutations() {
           vars.discountTotal,
           vars.customerId,
           vars.extras,
+          vars.tableOrderId,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

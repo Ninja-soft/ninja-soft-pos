@@ -645,6 +645,12 @@ export const posApi = {
     discountTotal: number,
     customerId?: string | null,
     extras?: SaleExtraInput[],
+    // Cobro de mesa atómico (F13 · H44): pedido de mesa a cerrar EN LA MISMA
+    // transacción que la venta. Cuando viene, create_sale toma el pedido FOR
+    // UPDATE, valida que esté abierto y, al final, lo enlaza/marca 'cobrada' y
+    // libera la mesa (sin close_dining_table aparte → no hay doble cobro por
+    // concurrencia). Mostrador (sin mesa) NO lo pasa y el flujo es idéntico.
+    tableOrderId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("create_sale", {
@@ -655,6 +661,9 @@ export const posApi = {
       // Señal de gating (garantía/recargos). `p_extras` aún no está en los tipos
       // generados (no se regeneran): se castea el payload.
       p_extras: (extras ?? []) as unknown as Json,
+      // `p_table_order_id` aún no está en los tipos generados (no se regeneran):
+      // viaja en el cast del payload. undefined = mostrador (default null server).
+      ...(tableOrderId ? { p_table_order_id: tableOrderId } : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

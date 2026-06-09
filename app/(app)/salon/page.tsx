@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChefHat, LayoutGrid, Settings, Users, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -45,15 +45,27 @@ export default function SalonPage() {
   // El listado se refresca async tras abrir la mesa; mientras tanto conservamos el
   // current_order_id que ya teníamos (de la RPC open) si la versión del listado
   // todavía no lo trae, para que la cuenta abra sin esperar el refetch.
+  //
+  // BUG 13 — pero si OTRO mozo cerró/cobró la mesa (live.status === 'libre'), NO
+  // reusar el order viejo: ese fallback dejaba el modal abierto sobre un pedido ya
+  // cobrado (order fantasma). En ese caso devolvemos null → un efecto cierra el
+  // modal. El fallback sólo aplica cuando la mesa SIGUE ocupada y el snapshot
+  // todavía no trajo el current_order_id (ventana breve tras abrir).
   const activeLive = useMemo(() => {
     if (!activeTable) return null;
     const live = (tables ?? []).find((t) => t.id === activeTable.id);
     if (!live) return activeTable;
-    return {
-      ...live,
-      current_order_id: live.current_order_id ?? activeTable.current_order_id,
-    };
+    if (live.status === "libre") return null; // la mesa fue liberada por otro
+    const orderId = live.current_order_id ?? activeTable.current_order_id;
+    if (!orderId) return null; // sin pedido vigente → no abrir sobre nada
+    return { ...live, current_order_id: orderId };
   }, [activeTable, tables]);
+
+  // Si la mesa activa dejó de tener un pedido vigente (la liberó/cobró otro mozo),
+  // limpiamos la selección para que el modal de cuenta se cierre solo.
+  useEffect(() => {
+    if (activeTable && activeLive === null) setActiveTable(null);
+  }, [activeTable, activeLive]);
 
   const visibleTables = useMemo(() => {
     const list = tables ?? [];

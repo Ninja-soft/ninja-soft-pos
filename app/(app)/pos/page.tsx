@@ -74,7 +74,6 @@ import { resolvePrice } from "@/lib/prices/resolve";
 import { useAppointment } from "@/modules/agenda/hooks";
 import { appointmentsApi } from "@/modules/agenda/api";
 import { useTableOrder, useTableOrderItems } from "@/modules/dining/hooks";
-import { tableOrdersApi } from "@/modules/dining/api";
 import {
   OpenShiftModal,
   CloseShiftModal,
@@ -917,6 +916,11 @@ function PosPageInner() {
         discountTotal,
         customerId: customer?.id ?? null,
         extras: saleExtras,
+        // Cobro de mesa (H44): atómico. Cuando se cobra una mesa (/pos?table=),
+        // create_sale cierra el pedido y libera la mesa EN LA MISMA transacción
+        // (toma el pedido FOR UPDATE → sin doble cobro por dos pestañas). Ya NO
+        // se llama tableOrdersApi.close por separado.
+        tableOrderId: tableOrderId ?? null,
       });
       setPaymentModal(false);
       clear();
@@ -933,15 +937,12 @@ function PosPageInner() {
         loadedApptRef.current = null;
         router.replace("/pos");
       }
-      // Cobro de mesa (H44): cerrá la mesa (enlaza la venta, marca el pedido
-      // 'cobrada' y libera la mesa). Best-effort: si falla, la venta ya quedó
-      // registrada y la mesa puede cerrarse luego desde el Salón.
+      // Cobro de mesa (H44): el cierre de la mesa (enlazar venta, marcar el
+      // pedido 'cobrada' y liberar la mesa) ya ocurrió ATÓMICAMENTE dentro de
+      // create_sale (vía tableOrderId). No hay close_dining_table aparte: eso
+      // permitía un doble cobro si dos pestañas veían la mesa abierta. Acá sólo
+      // limpiamos el modo de cobro de mesa y volvemos al POS.
       if (tableOrderId) {
-        try {
-          await tableOrdersApi.close(tableOrderId, res.sale_id);
-        } catch (closeErr) {
-          console.warn("No se pudo cerrar la mesa:", closeErr);
-        }
         loadedTableRef.current = null;
         router.replace("/pos");
       }
@@ -956,7 +957,13 @@ function PosPageInner() {
       setTicketOpen(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      const title = msg.includes("feature_not_in_plan: descuentos")
+      const title = msg.includes("table_order_not_open")
+        ? "La mesa ya fue cobrada o cerrada"
+        : msg.includes("qr_already_charged")
+          ? "Este cobro QR ya fue registrado"
+          : msg.includes("qr_not_allowed")
+            ? "El cobro con QR no está incluido en tu plan"
+            : msg.includes("feature_not_in_plan: descuentos")
         ? "Los descuentos no están incluidos en tu plan"
         : msg.includes("feature_not_in_plan: garantias")
           ? "La garantía extendida no está incluida en tu plan"
@@ -1425,7 +1432,11 @@ function PosPageInner() {
             ))}
           </div>
 
-          <div className="mt-3 space-y-2 border-t border-border pt-3">
+          {/* pb-20 en mobile: deja aire bajo los controles (Cobrar / QR /
+              toggle de ticket) para que la burbuja flotante del Asistente IA
+              (fixed bottom-4 right-4) no los tape. En lg el carrito es columna
+              lateral con espacio de sobra → sin padding extra. */}
+          <div className="mt-3 space-y-2 border-t border-border pt-3 pb-20 lg:pb-0">
             {/* Oferta contextual de garantía extendida (H28): aparece cuando hay
                 un producto con garantía de fábrica en el carrito. Descartable. */}
             {offerWarranty && (

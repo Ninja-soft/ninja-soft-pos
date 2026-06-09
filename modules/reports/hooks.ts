@@ -25,3 +25,58 @@ export function useStaffProductivity(fromISO: string, toISO: string) {
     queryFn: () => reportsApi.staffProductivity(fromISO, toISO),
   });
 }
+
+// ── Reportes gastronómicos (F13 · H52) ──────────────────────────────────────
+// Un hook por RPC. `enabled` gatea el fetch según el modo operativo del tenant
+// (dining_enabled / delivery_enabled): si el negocio no usa mesas/delivery no se
+// consultan. Las RPCs devuelven agregados coherentes (vacío/0 sin datos).
+
+export function useGastroTablesReport(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["reports", "gastro-tables", fromISO, toISO],
+    queryFn: () => reportsApi.gastroTables(fromISO, toISO),
+    enabled,
+  });
+}
+
+export function useGastroKitchenReport(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["reports", "gastro-kitchen", fromISO, toISO],
+    queryFn: () => reportsApi.gastroKitchen(fromISO, toISO),
+    enabled,
+  });
+}
+
+export function useGastroDeliveryReport(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["reports", "gastro-delivery", fromISO, toISO],
+    queryFn: () => reportsApi.gastroDelivery(fromISO, toISO),
+    enabled,
+  });
+}
+
+// Top ítems sale de mesa + delivery: se muestra si el tenant usa cualquiera de
+// los dos modos (dining_enabled || delivery_enabled).
+export function useGastroTopItemsReport(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["reports", "gastro-top-items", fromISO, toISO],
+    queryFn: () => reportsApi.gastroTopItems(fromISO, toISO),
+    enabled,
+  });
+}

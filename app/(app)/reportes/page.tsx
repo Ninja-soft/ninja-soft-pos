@@ -22,7 +22,19 @@ import {
   useSalesReport,
   useWarrantyReport,
   useStaffProductivity,
+  useGastroTablesReport,
+  useGastroKitchenReport,
+  useGastroDeliveryReport,
+  useGastroTopItemsReport,
 } from "@/modules/reports/hooks";
+import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useDeliveryEnabled } from "@/modules/delivery/hooks";
+import {
+  DELIVERY_CHANNEL_LABELS,
+  DELIVERY_TYPE_LABELS,
+  type DeliveryChannel,
+  type DeliveryOrderType,
+} from "@/modules/delivery/api";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
@@ -40,6 +52,12 @@ const REPORTS = [
   { key: "warranties", label: "Garantías y comisiones" },
   { key: "staff", label: "Productividad del staff" },
   { key: "low_stock", label: "Stock bajo" },
+  // Gastronomía (F13 · H52): sólo se ofrecen en el menú si el tenant usa
+  // mesas/delivery (gateadas más abajo por dining/delivery).
+  { key: "gastro_tables", label: "Gastro · Mesas y salón" },
+  { key: "gastro_kitchen", label: "Gastro · Tiempos de cocina" },
+  { key: "gastro_delivery", label: "Gastro · Delivery" },
+  { key: "gastro_top_items", label: "Gastro · Top ítems" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
 const DEFAULT_VIS: Record<ReportKey, boolean> = {
@@ -52,6 +70,10 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   warranties: true,
   staff: true,
   low_stock: true,
+  gastro_tables: true,
+  gastro_kitchen: true,
+  gastro_delivery: true,
+  gastro_top_items: true,
 };
 
 export default function ReportesPage() {
@@ -73,13 +95,23 @@ export default function ReportesPage() {
   // mirando esta tabla (+ export XLSX).
   const { data: staff } = useStaffProductivity(fromISO, toISO);
 
+  // ── Gastronomía (F13 · H52): la sección sólo aparece si el tenant usa mesas
+  // o delivery. Cada RPC se consulta gateada por su modo (top ítems = cualquiera).
+  const { data: diningEnabled = false } = useDiningEnabled();
+  const { data: deliveryEnabled = false } = useDeliveryEnabled();
+  const showGastro = diningEnabled || deliveryEnabled;
+  const { data: gTables } = useGastroTablesReport(fromISO, toISO, diningEnabled);
+  const { data: gKitchen } = useGastroKitchenReport(fromISO, toISO, showGastro);
+  const { data: gDelivery } = useGastroDeliveryReport(fromISO, toISO, deliveryEnabled);
+  const { data: gTop } = useGastroTopItemsReport(fromISO, toISO, showGastro);
+
   async function exportReporte() {
     if (!data) return;
     const tag = `${format(range?.from ?? new Date(), "yyyy-MM-dd")}_${format(
       range?.to ?? range?.from ?? new Date(),
       "yyyy-MM-dd",
     )}`;
-    await exportXlsx(`reporte-ventas-${tag}`, [
+    const sheets: Parameters<typeof exportXlsx>[1] = [
       {
         name: "Resumen",
         title: `Reporte de ventas · ${tag}`,
@@ -207,7 +239,121 @@ export default function ReportesPage() {
           tips: (staff ?? []).reduce((a, r) => a + r.tips, 0),
         },
       },
-    ]);
+    ];
+
+    // ── Hojas de gastronomía (F13 · H52): se agregan sólo si el tenant usa el
+    // modo correspondiente. El export ya está gateado por export_xlsx (botón).
+    if (diningEnabled && gTables) {
+      sheets.push({
+        name: "Gastro · Salones",
+        columns: [
+          { header: "Salón", key: "area", width: 24 },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: gTables.by_area,
+        totals: {
+          total: gTables.by_area.reduce((a, r) => a + r.total, 0),
+          orders: gTables.by_area.reduce((a, r) => a + r.orders, 0),
+        },
+      });
+      sheets.push({
+        name: "Gastro · Mesas",
+        columns: [
+          { header: "Mesa", key: "table_label", width: 16 },
+          { header: "Salón", key: "area", width: 20 },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: gTables.by_table,
+        totals: {
+          total: gTables.by_table.reduce((a, r) => a + r.total, 0),
+          orders: gTables.by_table.reduce((a, r) => a + r.orders, 0),
+        },
+      });
+      sheets.push({
+        name: "Gastro · Mozos",
+        columns: [
+          { header: "Mozo", key: "waiter", width: 24 },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: gTables.by_waiter,
+        totals: {
+          total: gTables.by_waiter.reduce((a, r) => a + r.total, 0),
+          orders: gTables.by_waiter.reduce((a, r) => a + r.orders, 0),
+        },
+      });
+    }
+    if (showGastro && gKitchen) {
+      sheets.push({
+        name: "Gastro · Cocina",
+        title: "Tiempos de preparación por estación (segundos)",
+        columns: [
+          { header: "Estación", key: "station", width: 20 },
+          { header: "Ítems", key: "items", type: "number" },
+          { header: "Prom. (s)", key: "avg_seconds", type: "number" },
+          { header: "Mín. (s)", key: "min_seconds", type: "number" },
+          { header: "Máx. (s)", key: "max_seconds", type: "number" },
+        ],
+        rows: gKitchen.by_station,
+      });
+    }
+    if (deliveryEnabled && gDelivery) {
+      sheets.push({
+        name: "Gastro · Delivery canal",
+        columns: [
+          { header: "Canal", key: "channel", width: 20 },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Envíos", key: "delivery_fees", type: "money" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: gDelivery.by_channel.map((r) => ({
+          channel: DELIVERY_CHANNEL_LABELS[r.channel as DeliveryChannel] ?? r.channel,
+          orders: r.orders,
+          total: r.total,
+          delivery_fees: r.delivery_fees,
+          avg_ticket: r.avg_ticket,
+        })),
+        totals: {
+          total: gDelivery.total,
+          delivery_fees: gDelivery.delivery_fees,
+        },
+      });
+      sheets.push({
+        name: "Gastro · Delivery zona",
+        columns: [
+          { header: "Zona", key: "zone", width: 22 },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Envíos", key: "delivery_fees", type: "money" },
+          { header: "Ticket prom.", key: "avg_ticket", type: "money" },
+        ],
+        rows: gDelivery.by_zone,
+        totals: {
+          total: gDelivery.by_zone.reduce((a, r) => a + r.total, 0),
+          delivery_fees: gDelivery.by_zone.reduce((a, r) => a + r.delivery_fees, 0),
+        },
+      });
+    }
+    if (showGastro && gTop) {
+      sheets.push({
+        name: "Gastro · Top ítems",
+        columns: [
+          { header: "Ítem", key: "name", width: 28 },
+          { header: "Cantidad", key: "qty", type: "number" },
+          { header: "Importe", key: "total", type: "money" },
+        ],
+        rows: gTop.top,
+        totals: { total: gTop.top.reduce((a, r) => a + r.total, 0) },
+      });
+    }
+
+    await exportXlsx(`reporte-ventas-${tag}`, sheets);
   }
 
   const [vis, setVis] = useState<Record<ReportKey, boolean>>(DEFAULT_VIS);
@@ -292,8 +438,33 @@ export default function ReportesPage() {
         label: p.name,
         value: p.stock,
       })),
+      // ── Gastronomía (F13 · H52) ──────────────────────────────────────────
+      gastro_area: (gTables?.by_area ?? []).map<ReportChartDatum>((r) => ({
+        label: r.area,
+        value: r.total,
+        secondary: r.orders,
+      })),
+      // Tiempo promedio por estación (en minutos para que el gráfico sea legible).
+      gastro_kitchen: (gKitchen?.by_station ?? []).map<ReportChartDatum>((r) => ({
+        label: r.station,
+        value: Math.round((r.avg_seconds / 60) * 10) / 10,
+        secondary: r.items,
+      })),
+      gastro_delivery_channel: (gDelivery?.by_channel ?? []).map<ReportChartDatum>(
+        (r) => ({
+          label:
+            DELIVERY_CHANNEL_LABELS[r.channel as DeliveryChannel] ?? r.channel,
+          value: r.total,
+          secondary: r.orders,
+        }),
+      ),
+      gastro_top_items: (gTop?.top ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+        label: r.name,
+        value: r.qty,
+        secondary: r.total,
+      })),
     };
-  }, [data, warranty, staff, lowStock]);
+  }, [data, warranty, staff, lowStock, gTables, gKitchen, gDelivery, gTop]);
 
   return (
     <>
@@ -357,7 +528,14 @@ export default function ReportesPage() {
             </DropdownTrigger>
             <DropdownContent align="end" className="w-60">
               <DropdownLabel>Reportes a mostrar</DropdownLabel>
-              {REPORTS.map((r) => (
+              {REPORTS.filter((r) => {
+                // Los toggles gastro sólo se ofrecen si el tenant usa el modo.
+                if (r.key === "gastro_tables") return diningEnabled;
+                if (r.key === "gastro_delivery") return deliveryEnabled;
+                if (r.key === "gastro_kitchen" || r.key === "gastro_top_items")
+                  return showGastro;
+                return true;
+              }).map((r) => (
                 <div
                   key={r.key}
                   className="flex items-center justify-between gap-3 px-2 py-1.5 text-sm"
@@ -588,9 +766,237 @@ export default function ReportesPage() {
             )}
           </div>
         )}
+
+        {/* ── Gastronomía (F13 · H52): mesas/salón, cocina (KDS), delivery y top
+             ítems. Sólo si el tenant usa mesas o delivery. ──────────────────── */}
+        {showGastro && (
+          <div className="mt-12">
+            <Eyebrow>Operación gastronómica</Eyebrow>
+            <Display className="mt-2 text-2xl md:text-3xl">Gastronomía</Display>
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              {diningEnabled && vis.gastro_tables && (
+                <ReportSection
+                  id="gastro_tables"
+                  title="Mesas y salón"
+                  chartData={chart.gastro_area}
+                  chartTypes={["bar", "pie"]}
+                  valueName="Vendido"
+                  className="lg:col-span-2"
+                  table={
+                    <div className="space-y-6 p-4">
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por salón
+                        </p>
+                        <BareTable
+                          cols={["Salón", "Vendido", "Pedidos", "Ticket prom."]}
+                          rows={(gTables?.by_area ?? []).map((r) => [
+                            r.area,
+                            formatCurrency(r.total),
+                            String(r.orders),
+                            formatCurrency(r.avg_ticket),
+                          ])}
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por mesa (rotación = pedidos cerrados)
+                        </p>
+                        <BareTable
+                          cols={["Mesa", "Salón", "Vendido", "Pedidos", "Ticket prom."]}
+                          rows={(gTables?.by_table ?? []).map((r) => [
+                            r.table_label,
+                            r.area,
+                            formatCurrency(r.total),
+                            String(r.orders),
+                            formatCurrency(r.avg_ticket),
+                          ])}
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por mozo
+                        </p>
+                        <BareTable
+                          cols={["Mozo", "Vendido", "Pedidos", "Ticket prom."]}
+                          rows={(gTables?.by_waiter ?? []).map((r) => [
+                            r.waiter,
+                            formatCurrency(r.total),
+                            String(r.orders),
+                            formatCurrency(r.avg_ticket),
+                          ])}
+                        />
+                      </div>
+                    </div>
+                  }
+                />
+              )}
+              {vis.gastro_kitchen && (
+                <ReportSection
+                  id="gastro_kitchen"
+                  title="Tiempos de cocina (KDS)"
+                  chartData={chart.gastro_kitchen}
+                  chartTypes={["bar"]}
+                  valueFormat="number"
+                  valueName="Min. promedio"
+                  table={
+                    <div className="p-4">
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        {gKitchen && gKitchen.items > 0
+                          ? `${gKitchen.items} ítems · promedio global ${formatDuration(
+                              gKitchen.avg_seconds,
+                            )}`
+                          : "Sin datos en el período"}
+                      </p>
+                      <BareTable
+                        cols={["Estación", "Ítems", "Prom.", "Mín.", "Máx."]}
+                        rows={(gKitchen?.by_station ?? []).map((r) => [
+                          r.station,
+                          String(r.items),
+                          formatDuration(r.avg_seconds),
+                          formatDuration(r.min_seconds),
+                          formatDuration(r.max_seconds),
+                        ])}
+                      />
+                    </div>
+                  }
+                />
+              )}
+              {deliveryEnabled && vis.gastro_delivery && (
+                <ReportSection
+                  id="gastro_delivery"
+                  title="Delivery / take away"
+                  chartData={chart.gastro_delivery_channel}
+                  chartTypes={["bar", "pie"]}
+                  valueName="Vendido"
+                  table={
+                    <div className="space-y-6 p-4">
+                      <p className="text-sm text-muted-foreground">
+                        {gDelivery && gDelivery.orders > 0
+                          ? `${gDelivery.orders} pedidos · envíos ${formatCurrency(
+                              gDelivery.delivery_fees,
+                            )} · ticket prom. ${formatCurrency(gDelivery.avg_ticket)}`
+                          : "Sin datos en el período"}
+                      </p>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por canal
+                        </p>
+                        <BareTable
+                          cols={["Canal", "Pedidos", "Vendido", "Envíos"]}
+                          rows={(gDelivery?.by_channel ?? []).map((r) => [
+                            DELIVERY_CHANNEL_LABELS[r.channel as DeliveryChannel] ??
+                              r.channel,
+                            String(r.orders),
+                            formatCurrency(r.total),
+                            formatCurrency(r.delivery_fees),
+                          ])}
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por zona
+                        </p>
+                        <BareTable
+                          cols={["Zona", "Pedidos", "Vendido", "Envíos"]}
+                          rows={(gDelivery?.by_zone ?? []).map((r) => [
+                            r.zone,
+                            String(r.orders),
+                            formatCurrency(r.total),
+                            formatCurrency(r.delivery_fees),
+                          ])}
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por tipo
+                        </p>
+                        <BareTable
+                          cols={["Tipo", "Pedidos", "Vendido"]}
+                          rows={(gDelivery?.by_type ?? []).map((r) => [
+                            DELIVERY_TYPE_LABELS[r.order_type as DeliveryOrderType] ??
+                              r.order_type,
+                            String(r.orders),
+                            formatCurrency(r.total),
+                          ])}
+                        />
+                      </div>
+                    </div>
+                  }
+                />
+              )}
+              {vis.gastro_top_items && (
+                <ReportSection
+                  id="gastro_top_items"
+                  title="Top ítems (mesa + delivery)"
+                  chartData={chart.gastro_top_items}
+                  chartTypes={["bar", "pie"]}
+                  valueFormat="number"
+                  valueName="Cantidad"
+                  className="lg:col-span-2"
+                  table={
+                    <div className="space-y-6 p-4">
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Top ítems
+                        </p>
+                        <BareTable
+                          cols={["Ítem", "Cantidad", "Importe"]}
+                          rows={(gTop?.top ?? []).map((r) => [
+                            r.name,
+                            formatQty(r.qty),
+                            formatCurrency(r.total),
+                          ])}
+                        />
+                      </div>
+                      <div className="grid gap-6 sm:grid-cols-2">
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Por estación
+                          </p>
+                          <BareTable
+                            cols={["Estación", "Cant.", "Importe"]}
+                            rows={(gTop?.by_station ?? []).map((r) => [
+                              r.station,
+                              formatQty(r.qty),
+                              formatCurrency(r.total),
+                            ])}
+                          />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Por curso / tiempo
+                          </p>
+                          <BareTable
+                            cols={["Tiempo", "Cant.", "Importe"]}
+                            rows={(gTop?.by_course ?? []).map((r) => [
+                              `Tiempo ${r.course}`,
+                              formatQty(r.qty),
+                              formatCurrency(r.total),
+                            ])}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  }
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
+}
+
+// Formatea una duración en segundos como "Xm Ys" (o "Ys" si < 1 min). Para los
+// tiempos de cocina del reporte gastro (H52).
+function formatDuration(seconds: number | null | undefined): string {
+  const s = Math.max(0, Math.round(seconds ?? 0));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rest = s % 60;
+  return rest === 0 ? `${m}m` : `${m}m ${rest}s`;
 }
 
 // Tabla "desnuda" (sin card ni header): el chrome lo aporta ReportSection.

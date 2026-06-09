@@ -25,6 +25,68 @@ export interface WarrantyReport {
   qty: number;
 }
 
+// ── Reportes gastronómicos (F13 · H52) ──────────────────────────────────────
+// Cuatro RPCs SECURITY DEFINER tenant-scoped (gastro_*_report) agregan EN SQL la
+// operación gastro del período. No están en los tipos generados (no se regeneran):
+// se castean args + payload, como sales_report/staff_productivity.
+
+export interface GastroTablesReport {
+  total: number;
+  orders: number;
+  avg_ticket: number;
+  by_area: { area: string; total: number; orders: number; avg_ticket: number }[];
+  by_table: {
+    table_label: string;
+    area: string;
+    total: number;
+    orders: number;
+    avg_ticket: number;
+  }[];
+  by_waiter: { waiter: string; total: number; orders: number; avg_ticket: number }[];
+}
+
+export interface GastroKitchenReport {
+  items: number;
+  avg_seconds: number;
+  min_seconds: number;
+  max_seconds: number;
+  by_station: {
+    station: string;
+    items: number;
+    avg_seconds: number;
+    min_seconds: number;
+    max_seconds: number;
+  }[];
+}
+
+export interface GastroDeliveryReport {
+  orders: number;
+  total: number;
+  delivery_fees: number;
+  avg_ticket: number;
+  by_channel: {
+    channel: string;
+    orders: number;
+    total: number;
+    delivery_fees: number;
+    avg_ticket: number;
+  }[];
+  by_zone: {
+    zone: string;
+    orders: number;
+    total: number;
+    delivery_fees: number;
+    avg_ticket: number;
+  }[];
+  by_type: { order_type: string; orders: number; total: number }[];
+}
+
+export interface GastroTopItemsReport {
+  top: { name: string; qty: number; total: number }[];
+  by_station: { station: string; qty: number; total: number }[];
+  by_course: { course: number; qty: number; total: number }[];
+}
+
 // Productividad por profesional (H39): una fila por profesional con actividad en
 // el período. Lo calcula la RPC staff_productivity (SECURITY DEFINER, tenant-
 // scoped; respeta pos_settings.staff_sees_own_only).
@@ -119,5 +181,60 @@ export const reportsApi = {
     } as never);
     if (error) throw error;
     return (data ?? []) as unknown as StaffProductivityRow[];
+  },
+
+  // ── Reportes gastronómicos (F13 · H52) ────────────────────────────────────
+  // Las RPCs gastro_*_report no están en los tipos generados → cast de args y
+  // payload (mismo criterio que staff_productivity). Devuelven jsonb agregado.
+  gastroTables: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<GastroTablesReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("gastro_tables_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return data as unknown as GastroTablesReport;
+  },
+
+  gastroKitchen: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<GastroKitchenReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("gastro_kitchen_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return data as unknown as GastroKitchenReport;
+  },
+
+  gastroDelivery: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<GastroDeliveryReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("gastro_delivery_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return data as unknown as GastroDeliveryReport;
+  },
+
+  gastroTopItems: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<GastroTopItemsReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("gastro_top_items_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return data as unknown as GastroTopItemsReport;
   },
 };

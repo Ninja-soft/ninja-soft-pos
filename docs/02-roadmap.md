@@ -716,13 +716,13 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [x] Bloqueo de mesas por evento, mantenimiento o configuración del salón. — *Estado `reservada` en `dining_tables`: una reserva con mesa asignada la bloquea; al sentar pasa a ocupada, al cancelar/no_show vuelve a libre. (Bloqueo manual por mantenimiento ya existía vía `bloqueada`.)*
   - [x] *Criterio:* una reserva bloquea mesa/sector, luego se convierte en mesa ocupada y conserva cliente/seña. — *`seat_reservation` reusa `open_dining_table` (abre la mesa → ocupada), enlaza `table_order_id`, marca la reserva `sentada` y conserva cliente/comensales/seña (snapshot en la reserva + notas del pedido). Probado por SQL (crear → confirmar → sentar → cancelar/no_show, con ROLLBACK).*
 
-- [ ] **H52 — Reportes gastronómicos y operación.**
-  - [ ] Ventas por mozo, mesa, sector, estación, canal, producto, modificador y horario.
-  - [ ] Tiempos: pedido a cocina, preparación, listo a entregado, rotación de mesa.
-  - [ ] Top productos/modificadores, cancelaciones, reimpresiones y comandas demoradas.
-  - [ ] Margen por plato si hay recetas.
-  - [ ] Export XLSX con filtros por canal/sector/estación.
-  - [ ] *Criterio:* el owner identifica cuellos de botella de cocina/barra y productos con más margen.
+- [~] **H52 — Reportes gastronómicos y operación.** — *Núcleo (local). RPCs tenant-scoped `gastro_tables_report` / `gastro_kitchen_report` / `gastro_delivery_report` / `gastro_top_items_report` (SECURITY DEFINER, search_path fijo, agregan EN SQL) + sección "Gastronomía" en `/reportes` (gateada por `dining_enabled || delivery_enabled`) con tabla/chart por sub-bloque, estados vacíos y export XLSX (gateado por `export_xlsx`). Migración `20260609130000_gastro_reports.sql`. Probado por SQL (datos sintéticos + cleanup).*
+  - [x] Ventas por mozo, mesa, sector, estación, canal, producto. — *`gastro_tables_report` (salón/mesa/mozo + ticket prom. + rotación = pedidos cerrados), `gastro_delivery_report` (canal/zona/tipo), `gastro_top_items_report` (estación/curso). Modificador y horario fino → follow-up.*
+  - [x] Tiempos: pedido a cocina (pendiente→listo) por estación y global, rotación de mesa. — *`gastro_kitchen_report` (avg/min/máx de `created_at`→`kds_ready_at`, mesa + delivery). "Listo→entregado", cancelaciones/reimpresiones/comandas demoradas → follow-up.*
+  - [x] Top productos por estación y curso/tiempo. — *`gastro_top_items_report` (qty + importe, mesa + delivery).*
+  - [ ] Margen por plato si hay recetas. — *Follow-up: requiere recetas/costo de mercadería (H50).*
+  - [x] Export XLSX. — *Hojas gastro por salón/mesa/mozo/cocina/delivery(canal,zona)/top, gateadas por export_xlsx + el modo del tenant.*
+  - [ ] *Criterio:* el owner identifica cuellos de botella de cocina/barra y productos con más margen. — *Cuellos de cocina/barra ✓ (tiempos por estación). Margen por plato → H50 (recetas).*
 
 ### F9 — Motor de promociones PRO
 

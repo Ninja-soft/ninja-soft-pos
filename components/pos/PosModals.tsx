@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -71,6 +72,53 @@ const METHOD_PLAN_BASE: Partial<Record<SalePaymentInput["method"], string>> = {
   debit: "debito",
   credit: "credito",
 };
+
+// ── División de cuenta (F13 · H44) ──────────────────────────────────────────────
+// Ítem del pedido/carrito tal como lo recibe el modal para repartir "por ítem".
+// Se mantiene desacoplado del store del carrito: la página POS mapea sus líneas a
+// esta forma mínima (id estable + etiqueta + monto de la línea ya calculado).
+export interface SplitItem {
+  id: string;
+  label: string;
+  amount: number; // subtotal de la línea (cant × precio − descuento)
+}
+
+type SplitMode = "equal" | "amount" | "percent" | "item";
+
+const SPLIT_MODES: { value: SplitMode; label: string }[] = [
+  { value: "equal", label: "Partes iguales" },
+  { value: "amount", label: "Por monto" },
+  { value: "percent", label: "Por porcentaje" },
+  { value: "item", label: "Por ítem" },
+];
+
+// Una línea de cobro del split: medio + monto (en pesos) + (opcional) recibido en
+// efectivo para el vuelto + voucher de tarjeta. Para "por ítem" guarda además el
+// conjunto de ítems asignados (su monto = suma de esos ítems).
+interface SplitLine {
+  method: SalePaymentInput["method"];
+  amount: number;
+  received: string; // sólo efectivo; string para el input controlado
+  voucherLote: string;
+  voucherCupon: string;
+  voucherAuth: string;
+  itemIds: string[]; // sólo modo "por ítem"
+}
+
+const centsOf = (n: number | string) => Math.round((Number(n) || 0) * 100);
+const fromCents = (c: number) => Math.round(c) / 100;
+
+function emptyLine(method: SalePaymentInput["method"]): SplitLine {
+  return {
+    method,
+    amount: 0,
+    received: "",
+    voucherLote: "",
+    voucherCupon: "",
+    voucherAuth: "",
+    itemIds: [],
+  };
+}
 
 export function OpenShiftModal({
   open,
@@ -151,6 +199,456 @@ export function CloseShiftModal({
   );
 }
 
+// Sección "Dividir cuenta" (F13 · H44). Recibe el TOTAL autoritativo a repartir
+// (`total` = el mismo payTotal que el server valida: productos redondeados +
+// propina) y los métodos de pago ya gateados (misma lista del cobro normal). Arma
+// N líneas de pago que suman EXACTO el total y las emite vía onPaymentsChange para
+// que el modal padre las mande como p_payments en UN solo create_sale.
+//
+// Modos: partes iguales (N comensales), por monto, por porcentaje, por ítem. El
+// remanente de redondeo va a la última línea para que la suma cuadre al centavo.
+// El gateo de medios es el mismo que el cobro simple (lista `methods` heredada);
+// no se aplican recargos por línea (el split reparte el total ya calculado) — eso
+// queda como follow-up. Cada línea lleva su medio y, en tarjeta, su voucher.
+function SplitPaymentSection({
+  total,
+  methods,
+  items,
+  voucherRequired,
+  onPaymentsChange,
+}: {
+  total: number;
+  methods: { value: SalePaymentInput["method"]; label: string }[];
+  items: SplitItem[];
+  // Si el negocio exige voucher de tarjeta, las líneas de débito/crédito deben
+  // completarlo para poder confirmar.
+  voucherRequired: boolean;
+  // Reporta al padre: las líneas válidas (null si aún no cuadran) + el vuelto.
+  onPaymentsChange: (result: { payments: SalePaymentInput[]; change: number } | null) => void;
+}) {
+  const totalCents = centsOf(total);
+  const firstMethod = methods[0]?.value ?? "cash";
+
+  const [mode, setMode] = useState<SplitMode>("equal");
+  const [diners, setDiners] = useState(2);
+  const [lines, setLines] = useState<SplitLine[]>([emptyLine(firstMethod), emptyLine(firstMethod)]);
+  // Modo "por ítem": si quedan ítems sin asignar, NO se puede cobrar. Toggle para
+  // mandar lo no asignado a la última línea automáticamente.
+  const [autoAssignRest, setAutoAssignRest] = useState(true);
+
+  const isCardMethod = (m: SalePaymentInput["method"]) => m === "debit" || m === "credit";
+
+  // Ajusta el array de líneas a `count`, preservando las existentes y rellenando
+  // con el primer medio disponible. Se usa al cambiar la cantidad de líneas.
+  const resize = (count: number) =>
+    setLines((prev) => {
+      const next = prev.slice(0, count);
+      while (next.length < count) next.push(emptyLine(firstMethod));
+      return next;
+    });
+
+  const setLine = (i: number, patch: Partial<SplitLine>) =>
+    setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+
+  // Cantidad de líneas según el modo: "partes iguales" la fija la cantidad de
+  // comensales; los otros modos usan el largo del array (botón +/− línea).
+  const count = mode === "equal" ? Math.max(1, diners) : Math.max(1, lines.length);
+
+  // Mantener lines sincronizado con `count` en modo "partes iguales".
+  useEffect(() => {
+    if (mode === "equal" && lines.length !== count) resize(count);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, count]);
+
+  // Reparte `totalCents` en `count` partes iguales (el resto, a las primeras
+  // líneas) → array de montos en centavos que suma EXACTO el total.
+  const equalShares = useMemo(() => {
+    const baseShare = Math.floor(totalCents / count);
+    const rem = totalCents - baseShare * count;
+    return Array.from({ length: count }, (_, i) => baseShare + (i < rem ? 1 : 0));
+  }, [totalCents, count]);
+
+  // Monto (en centavos) de cada línea según el modo. Devuelve también si la
+  // configuración del modo es válida (suma exacta, ítems asignados, etc.).
+  const computed = useMemo((): { amountsCents: number[]; ok: boolean; assignedCents: number } => {
+    if (mode === "equal") {
+      return { amountsCents: equalShares, ok: true, assignedCents: totalCents };
+    }
+    if (mode === "amount") {
+      const amountsCents = lines.map((l) => centsOf(l.amount));
+      const assigned = amountsCents.reduce((a, b) => a + b, 0);
+      return { amountsCents, ok: assigned === totalCents, assignedCents: assigned };
+    }
+    if (mode === "percent") {
+      // % por línea → centavos. La última línea absorbe el ajuste de redondeo
+      // para que la suma sea exacta. Válido sólo si los % suman 100.
+      const pctSum = lines.reduce((a, l) => a + (Number(l.amount) || 0), 0);
+      const amountsCents = lines.map((l) => Math.round(((Number(l.amount) || 0) / 100) * totalCents));
+      const drift = totalCents - amountsCents.reduce((a, b) => a + b, 0);
+      const last = amountsCents.length - 1;
+      if (last >= 0) amountsCents[last] = (amountsCents[last] ?? 0) + drift;
+      return {
+        amountsCents,
+        ok: Math.abs(pctSum - 100) < 0.001,
+        assignedCents: amountsCents.reduce((a, b) => a + b, 0),
+      };
+    }
+    // mode === "item": cada línea = suma de los ítems asignados. La última línea
+    // absorbe la diferencia con el total (propina/recargos/redondeo que no son
+    // ítems del carrito) para cuadrar exacto.
+    const byId = new Map(items.map((it) => [it.id, centsOf(it.amount)]));
+    const assignedIds = new Set<string>();
+    const rawCents = lines.map((l) => {
+      let s = 0;
+      for (const id of l.itemIds) {
+        if (assignedIds.has(id)) continue;
+        assignedIds.add(id);
+        s += byId.get(id) ?? 0;
+      }
+      return s;
+    });
+    const unassigned = items.filter((it) => !assignedIds.has(it.id));
+    const unassignedCents = unassigned.reduce((a, it) => a + (byId.get(it.id) ?? 0), 0);
+    const amountsCents = [...rawCents];
+    const lastIdx = amountsCents.length - 1;
+    if (autoAssignRest && lastIdx >= 0) {
+      // El no asignado + la diferencia con el total → última línea.
+      amountsCents[lastIdx] = totalCents - rawCents.slice(0, -1).reduce((a, b) => a + b, 0);
+    }
+    const sum = amountsCents.reduce((a, b) => a + b, 0);
+    const ok = (autoAssignRest || unassignedCents === 0) && sum === totalCents;
+    return { amountsCents, ok, assignedCents: sum };
+  }, [mode, equalShares, lines, totalCents, items, autoAssignRest]);
+
+  // Vuelto: por cada línea de efectivo, lo recibido por encima de su monto.
+  const change = useMemo(() => {
+    let c = 0;
+    lines.forEach((l, i) => {
+      if (l.method === "cash") {
+        const recv = centsOf(l.received);
+        if (recv > 0) c += Math.max(0, recv - (computed.amountsCents[i] ?? 0));
+      }
+    });
+    return fromCents(c);
+  }, [lines, computed.amountsCents]);
+
+  // Voucher de tarjeta completo por línea (si el negocio lo exige).
+  const voucherOkFor = (l: SplitLine) =>
+    !voucherRequired ||
+    !isCardMethod(l.method) ||
+    (l.voucherLote.trim() !== "" && l.voucherCupon.trim() !== "" && l.voucherAuth.trim() !== "");
+  const allVouchersOk = lines.slice(0, count).every(voucherOkFor);
+
+  // Emite el resultado al padre (memo estable por contenido). null = no cuadra.
+  useEffect(() => {
+    // Defensa: ninguna línea puede quedar negativa (p. ej. un descuento mayor que
+    // los ítems de las primeras líneas dejaría la última en negativo). Si pasa, el
+    // split no es válido y el cajero debe reasignar.
+    const allNonNeg = computed.amountsCents.slice(0, count).every((c) => c >= 0);
+    const usable = computed.ok && allNonNeg && allVouchersOk && totalCents > 0;
+    if (!usable) {
+      onPaymentsChange(null);
+      return;
+    }
+    // Una línea de pago por cada parte. Se descartan las de monto 0 (p. ej. una
+    // línea al 0%): un pago de $0 no aporta y ensucia el reporte. La suma de las
+    // que quedan sigue siendo EXACTA (sólo se quitan ceros).
+    const payments: SalePaymentInput[] = lines
+      .slice(0, count)
+      .map((l, i) => {
+        const amt = fromCents(computed.amountsCents[i] ?? 0);
+        const hasVoucher =
+          isCardMethod(l.method) &&
+          (voucherRequired ||
+            l.voucherLote.trim() !== "" ||
+            l.voucherCupon.trim() !== "" ||
+            l.voucherAuth.trim() !== "");
+        return {
+          method: l.method,
+          amount: amt,
+          ...(hasVoucher
+            ? {
+                card_voucher: {
+                  lote: l.voucherLote.trim(),
+                  cupon: l.voucherCupon.trim(),
+                  autorizacion: l.voucherAuth.trim(),
+                },
+              }
+            : {}),
+        };
+      })
+      .filter((p) => p.amount > 0);
+    if (payments.length === 0) {
+      onPaymentsChange(null);
+      return;
+    }
+    onPaymentsChange({ payments, change });
+    // onPaymentsChange es estable (useCallback en el padre).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computed, allVouchersOk, totalCents, lines, count, change, voucherRequired]);
+
+  const assigned = fromCents(computed.assignedCents);
+  const remaining = fromCents(totalCents - computed.assignedCents);
+
+  return (
+    <div className="space-y-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.05] p-3">
+      {/* Modo de división */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-ninja-flameSoft">
+          Modo de división
+        </label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {SPLIT_MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMode(m.value)}
+              className={
+                mode === m.value
+                  ? "rounded-lg border border-ninja-flame bg-ninja-flame/15 px-2 py-2 text-xs font-semibold text-ninja-flameSoft"
+                  : "rounded-lg border border-border bg-card px-2 py-2 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40"
+              }
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Partes iguales: cantidad de comensales */}
+      {mode === "equal" && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground">Comensales</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Quitar comensal"
+              onClick={() => setDiners((d) => Math.max(1, d - 1))}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-border text-foreground hover:bg-muted"
+            >
+              −
+            </button>
+            <span className="w-8 text-center text-sm font-semibold tabular-nums">{count}</span>
+            <button
+              type="button"
+              aria-label="Agregar comensal"
+              onClick={() => setDiners((d) => Math.min(20, d + 1))}
+              className="grid h-9 w-9 place-items-center rounded-lg border border-border text-foreground hover:bg-muted"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Líneas de cobro */}
+      <div className="space-y-2">
+        {lines.slice(0, count).map((l, i) => (
+          <div key={i} className="rounded-lg border border-border bg-card/60 p-2.5">
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ninja-flame/15 text-xs font-bold text-ninja-flameSoft">
+                {i + 1}
+              </span>
+              <select
+                value={l.method}
+                onChange={(e) => setLine(i, { method: e.target.value as SalePaymentInput["method"] })}
+                aria-label={`Medio de pago línea ${i + 1}`}
+                className="h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+              >
+                {methods.map((m) => (
+                  <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {mode === "amount" ? (
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  aria-label={`Monto línea ${i + 1}`}
+                  value={l.amount || ""}
+                  onChange={(e) => setLine(i, { amount: Number(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="w-28 text-right"
+                />
+              ) : mode === "percent" ? (
+                <div className="flex w-28 items-center gap-1">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    aria-label={`Porcentaje línea ${i + 1}`}
+                    value={l.amount || ""}
+                    onChange={(e) => setLine(i, { amount: Number(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="text-right"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              ) : (
+                <span className="w-28 text-right text-sm font-semibold tabular-nums">
+                  {formatCurrency(fromCents(computed.amountsCents[i] ?? 0))}
+                </span>
+              )}
+            </div>
+
+            {/* Por ítem: chips de asignación. Tap = asignar/quitar de esta línea
+                (un ítem va a una sola línea). */}
+            {mode === "item" && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {items.map((it) => {
+                  const ownerIdx = lines.findIndex((ln) => ln.itemIds.includes(it.id));
+                  const mine = ownerIdx === i;
+                  const takenByOther = ownerIdx !== -1 && ownerIdx !== i;
+                  return (
+                    <button
+                      key={it.id}
+                      type="button"
+                      onClick={() =>
+                        setLines((prev) =>
+                          prev.map((ln, idx) => {
+                            if (idx === i) {
+                              return mine
+                                ? { ...ln, itemIds: ln.itemIds.filter((x) => x !== it.id) }
+                                : { ...ln, itemIds: [...ln.itemIds, it.id] };
+                            }
+                            // Sacar el ítem de cualquier otra línea (exclusivo).
+                            return ln.itemIds.includes(it.id)
+                              ? { ...ln, itemIds: ln.itemIds.filter((x) => x !== it.id) }
+                              : ln;
+                          }),
+                        )
+                      }
+                      className={
+                        mine
+                          ? "rounded-full border border-ninja-flame bg-ninja-flame/20 px-2 py-1 text-[11px] font-semibold text-ninja-flameSoft"
+                          : takenByOther
+                            ? "rounded-full border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground/50"
+                            : "rounded-full border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground transition hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      {it.label} · {formatCurrency(it.amount)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Recibido / vuelto por línea de efectivo */}
+            {l.method === "cash" && (
+              <div className="mt-2 flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  aria-label={`Recibido línea ${i + 1}`}
+                  value={l.received}
+                  onChange={(e) => setLine(i, { received: e.target.value })}
+                  placeholder="Recibido (opcional)"
+                  className="flex-1"
+                />
+              </div>
+            )}
+
+            {/* Voucher de tarjeta por línea (cuando el negocio lo exige) */}
+            {voucherRequired && isCardMethod(l.method) && (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <Input
+                  aria-label={`Lote línea ${i + 1}`}
+                  inputMode="numeric"
+                  value={l.voucherLote}
+                  onChange={(e) => setLine(i, { voucherLote: e.target.value })}
+                  placeholder="Lote"
+                />
+                <Input
+                  aria-label={`Cupón línea ${i + 1}`}
+                  inputMode="numeric"
+                  value={l.voucherCupon}
+                  onChange={(e) => setLine(i, { voucherCupon: e.target.value })}
+                  placeholder="Cupón"
+                />
+                <Input
+                  aria-label={`Autorización línea ${i + 1}`}
+                  inputMode="numeric"
+                  value={l.voucherAuth}
+                  onChange={(e) => setLine(i, { voucherAuth: e.target.value })}
+                  placeholder="Autoriz."
+                />
+              </div>
+            )}
+
+            {/* Quitar línea (modos no-iguales con más de 1 línea) */}
+            {mode !== "equal" && count > 1 && (
+              <div className="mt-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => setLines((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-xs font-medium text-muted-foreground transition hover:text-red-300"
+                >
+                  Quitar línea
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Agregar línea (modos no-iguales) */}
+      {mode !== "equal" && (
+        <button
+          type="button"
+          onClick={() => setLines((prev) => [...prev, emptyLine(firstMethod)])}
+          className="w-full rounded-lg border border-dashed border-ninja-flameSoft/40 px-3 py-2 text-xs font-medium text-ninja-flameSoft transition hover:bg-ninja-flame/10"
+        >
+          + Agregar línea de pago
+        </button>
+      )}
+
+      {/* Por ítem: asignar lo no asignado a la última línea */}
+      {mode === "item" && (
+        <label className="flex cursor-pointer items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>Ítems sin asignar → última línea</span>
+          <input
+            type="checkbox"
+            checked={autoAssignRest}
+            onChange={(e) => setAutoAssignRest(e.target.checked)}
+            className="h-4 w-4 accent-ninja-flame"
+          />
+        </label>
+      )}
+
+      {/* Totales del split */}
+      <div className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+        <div className="flex justify-between text-muted-foreground">
+          <span>Total a repartir</span>
+          <span className="tabular-nums">{formatCurrency(total)}</span>
+        </div>
+        <div className="flex justify-between text-muted-foreground">
+          <span>Asignado</span>
+          <span className="tabular-nums">{formatCurrency(assigned)}</span>
+        </div>
+        <div
+          className={
+            Math.abs(remaining) < 0.005
+              ? "flex justify-between font-semibold text-emerald-300"
+              : "flex justify-between font-semibold text-amber-300"
+          }
+        >
+          <span>{remaining >= 0 ? "Restante" : "Sobra"}</span>
+          <span className="tabular-nums">{formatCurrency(Math.abs(remaining))}</span>
+        </div>
+        {change > 0 && (
+          <div className="flex justify-between border-t border-border pt-1 text-ninja-lavender">
+            <span>Vuelto (efectivo)</span>
+            <span className="tabular-nums font-semibold text-foreground">{formatCurrency(change)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PaymentModal({
   open,
   onOpenChange,
@@ -161,6 +659,7 @@ export function PaymentModal({
   storeCreditBalance = 0,
   hasCustomer = false,
   initialWarrantyId = "",
+  splitItems = [],
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -179,6 +678,9 @@ export function PaymentModal({
   // Plan de garantía pre-seleccionado por la oferta contextual (H28). Al abrir,
   // el modal arranca con esta garantía elegida; el cajero puede cambiarla.
   initialWarrantyId?: string;
+  // Ítems del carrito para "Dividir cuenta → por ítem" (F13 · H44). La página POS
+  // mapea sus líneas a { id, label, amount }. Vacío = no se ofrece el modo ítem.
+  splitItems?: SplitItem[];
 }) {
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allPlans } = usePaymentPlans();
@@ -202,6 +704,19 @@ export function PaymentModal({
   const [voucherLote, setVoucherLote] = useState("");
   const [voucherCupon, setVoucherCupon] = useState("");
   const [voucherAuth, setVoucherAuth] = useState("");
+  // Dividir cuenta (F13 · H44): el cobro se reparte en N líneas de pago que suman
+  // el total. Cuando está activo, el cobro va por `splitResult` (no por el medio
+  // único de arriba). `splitResult` = null mientras las líneas no cuadren.
+  const [splitOn, setSplitOn] = useState(false);
+  const [splitResult, setSplitResult] = useState<{
+    payments: SalePaymentInput[];
+    change: number;
+  } | null>(null);
+  // Callback estable para que SplitPaymentSection no re-emita en loop.
+  const handleSplitChange = useCallback(
+    (r: { payments: SalePaymentInput[]; change: number } | null) => setSplitResult(r),
+    [],
+  );
 
   // Reset al abrir (el modal queda montado entre ventas). La garantía arranca con
   // la pre-seleccionada por la oferta contextual (H28), si la hay.
@@ -217,6 +732,8 @@ export function PaymentModal({
       setTipAmount("");
       setTipMethod("cash");
       setProfessionalId("");
+      setSplitOn(false);
+      setSplitResult(null);
     }
   }, [open, initialWarrantyId]);
 
@@ -277,7 +794,13 @@ export function PaymentModal({
     return allPlans.filter((p: PaymentPlan) => p.base === planBase && isPlanActive(p));
   }, [planBase, allPlans]);
 
-  const selectedPlan = (allPlans ?? []).find((p: PaymentPlan) => p.id === planId) ?? null;
+  // En modo "dividir cuenta" no hay plan ni recargo de medio único: el cobro se
+  // reparte en N líneas sobre el total ya calculado (cada línea elige su medio sin
+  // recargo). Por eso el recargo de plan/medio se neutraliza con split activo, así
+  // el total a repartir queda determinístico (= productos + garantía + propina).
+  const selectedPlan = splitOn
+    ? null
+    : (allPlans ?? []).find((p: PaymentPlan) => p.id === planId) ?? null;
   const planSurcharge = selectedPlan
     ? Math.round(((base * Number(selectedPlan.surcharge_pct)) / 100) * 100) / 100
     : 0;
@@ -297,7 +820,7 @@ export function PaymentModal({
       )
     : 0;
   const methodSurcharge =
-    !selectedPlan && methodSurchargePct > 0
+    !splitOn && !selectedPlan && methodSurchargePct > 0
       ? Math.round(((base * methodSurchargePct) / 100) * 100) / 100
       : 0;
 
@@ -353,6 +876,18 @@ export function PaymentModal({
   // Atribución de comisión (H39): profesional/vendedor de la venta.
   if (professionalId) extras.push({ kind: "professional", id: professionalId });
 
+  // Medios para "Dividir cuenta": sólo dinero real (efectivo/tarjeta/QR/etc.). Se
+  // excluyen vale (store_credit) y cuenta corriente (account): repartir parte en
+  // saldo o fiado necesitaría validación server extra (límite/saldo por línea) y
+  // no es el caso de uso de la división de cuenta gastronómica → follow-up.
+  const splitMethods = useMemo(
+    () => methods.filter((m) => m.value !== "store_credit" && m.value !== "account"),
+    [methods],
+  );
+  // El cobro dividido sólo se ofrece si hay total > 0 y al menos un medio de
+  // dinero real. El botón confirmar usará splitResult cuando splitOn esté activo.
+  const canSplit = payTotal > 0 && splitMethods.length > 0;
+
   return (
     <Modal
       open={open}
@@ -361,7 +896,39 @@ export function PaymentModal({
       description={`Total: ${formatCurrency(payTotal)}`}
     >
       <div className="space-y-4">
-        {/* Medio de pago */}
+        {/* Dividir cuenta (F13 · H44): toggle. Con on, el cobro se reparte en N
+            líneas de pago (partes iguales / monto / % / ítem) que suman el total
+            y van como p_payments en UN solo create_sale (una venta, la mesa se
+            cierra igual). Aditivo: con off, el cobro simple queda idéntico. */}
+        {canSplit && (
+          <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border px-3 py-2.5">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Users size={16} className="text-ninja-flameSoft" />
+              Dividir cuenta
+            </span>
+            <input
+              type="checkbox"
+              checked={splitOn}
+              onChange={(e) => setSplitOn(e.target.checked)}
+              aria-label="Dividir cuenta"
+              className="h-5 w-5 accent-ninja-flame"
+            />
+          </label>
+        )}
+
+        {splitOn && canSplit && (
+          <SplitPaymentSection
+            total={payTotal}
+            methods={splitMethods}
+            items={splitItems}
+            voucherRequired={Boolean(posSettings?.requireCardVoucher)}
+            onPaymentsChange={handleSplitChange}
+          />
+        )}
+
+        {/* Medio de pago (cobro simple). En modo dividir, lo reemplaza la sección
+            de división (cada línea elige su medio). */}
+        {!splitOn && (
         <div>
           <label className="mb-2 block text-sm font-medium text-muted-foreground">
             Medio de pago
@@ -378,6 +945,7 @@ export function PaymentModal({
             ))}
           </select>
         </div>
+        )}
 
         {/* Profesional / vendedor (H39): atribuye la comisión de la venta. Sólo
             aparece si el negocio cargó profesionales. Opcional. */}
@@ -402,8 +970,9 @@ export function PaymentModal({
           </div>
         )}
 
-        {/* Plan de pago (débito / crédito) con recargo (H14 / H27) */}
-        {methodPlans.length > 0 && (
+        {/* Plan de pago (débito / crédito) con recargo (H14 / H27). Sólo en cobro
+            simple; el modo dividir reparte el total ya calculado sin planes. */}
+        {!splitOn && methodPlans.length > 0 && (
           <div>
             <label className="mb-2 block text-sm font-medium text-muted-foreground">
               Plan de pago
@@ -426,8 +995,9 @@ export function PaymentModal({
 
         {/* Voucher de tarjeta (H27): lote / cupón / nº de autorización. Sólo en
             débito/crédito cuando el negocio activó require_card_voucher. Los 3
-            campos son obligatorios; se guardan junto al pago de la venta. */}
-        {voucherRequired && (
+            campos son obligatorios; se guardan junto al pago de la venta. En modo
+            dividir, el voucher se pide por línea de tarjeta dentro del split. */}
+        {!splitOn && voucherRequired && (
           <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3">
             <div className="mb-2 text-sm font-medium text-ninja-flameSoft">
               Voucher de tarjeta
@@ -539,7 +1109,7 @@ export function PaymentModal({
           </div>
         )}
 
-        {method === "cash" && (
+        {!splitOn && method === "cash" && (
           <>
             <Input
               label="Recibido"
@@ -561,29 +1131,49 @@ export function PaymentModal({
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button
-            loading={loading}
-            disabled={voucherRequired && !voucherComplete}
-            onClick={() =>
-              onConfirm(
-                [
-                  {
-                    method,
-                    amount: payTotal,
-                    // Voucher de tarjeta: se adjunta si es obligatorio o si el
-                    // cajero cargó algún dato (siempre en débito/crédito).
-                    ...(isCardMethod && (voucherRequired || voucherHasData)
-                      ? { card_voucher: voucher }
-                      : {}),
-                  },
-                ],
-                extras.length > 0 ? extras : [],
-                change,
-              )
-            }
-          >
-            Confirmar venta
-          </Button>
+          {splitOn ? (
+            // Cobro dividido: usa las líneas del split (suman EXACTO payTotal). Se
+            // bloquea hasta que cuadren (splitResult != null). Una sola venta: el
+            // padre manda estas líneas como p_payments en un create_sale.
+            <Button
+              loading={loading}
+              disabled={!splitResult}
+              onClick={() =>
+                splitResult &&
+                onConfirm(
+                  splitResult.payments,
+                  extras.length > 0 ? extras : [],
+                  splitResult.change,
+                )
+              }
+            >
+              Confirmar venta dividida
+            </Button>
+          ) : (
+            <Button
+              loading={loading}
+              disabled={voucherRequired && !voucherComplete}
+              onClick={() =>
+                onConfirm(
+                  [
+                    {
+                      method,
+                      amount: payTotal,
+                      // Voucher de tarjeta: se adjunta si es obligatorio o si el
+                      // cajero cargó algún dato (siempre en débito/crédito).
+                      ...(isCardMethod && (voucherRequired || voucherHasData)
+                        ? { card_voucher: voucher }
+                        : {}),
+                    },
+                  ],
+                  extras.length > 0 ? extras : [],
+                  change,
+                )
+              }
+            >
+              Confirmar venta
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

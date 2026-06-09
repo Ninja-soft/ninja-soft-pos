@@ -688,6 +688,20 @@ function PosPageInner() {
   const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
   const hasShift = Boolean(shift);
 
+  // Ítems para "Dividir cuenta → por ítem" (F13 · H44): cada línea del carrito con
+  // su subtotal (las cubiertas por pack van en 0). El modal reparte el total; la
+  // suma de ítems cubre la porción de productos y el split ajusta la diferencia
+  // (descuento/redondeo/extras/propina) en la última línea para cuadrar exacto.
+  const splitItems = useMemo(
+    () =>
+      lines.map((l) => ({
+        id: l.lineId,
+        label: l.variantLabel ? `${l.name} (${l.variantLabel})` : l.name,
+        amount: lineSubtotal(l),
+      })),
+    [lines],
+  );
+
   // Publica el estado a la pantalla del cliente (H25) en cada cambio relevante.
   // Prioridad de fase: pago recibido (paidView) > cobro QR activo (displayQr) >
   // carrito con ítems > idle. El payload solo lleva datos de la venta en curso.
@@ -1675,6 +1689,7 @@ function PosPageInner() {
         storeCreditBalance={scBalance ?? 0}
         hasCustomer={customer !== null}
         initialWarrantyId={offeredWarrantyId}
+        splitItems={splitItems}
       />
       <QrCheckoutModal
         open={qrOpen}

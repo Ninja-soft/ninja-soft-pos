@@ -19,7 +19,14 @@ import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-export type TableStatus = "libre" | "ocupada" | "cuenta_pedida" | "bloqueada";
+export type TableStatus =
+  | "libre"
+  | "ocupada"
+  | "cuenta_pedida"
+  | "bloqueada"
+  // 'reservada' (F13 · H51): una reserva con mesa asignada la bloquea hasta que
+  // el cliente llegue y se siente (→ ocupada) o se cancele / no_show (→ libre).
+  | "reservada";
 
 export interface DiningArea {
   id: string;
@@ -514,6 +521,7 @@ export const TABLE_STATUS_LABELS: Record<TableStatus, string> = {
   ocupada: "Ocupada",
   cuenta_pedida: "Cuenta pedida",
   bloqueada: "Bloqueada",
+  reservada: "Reservada",
 };
 
 // Estilo del tile de mesa por estado (tonos del tema ninja). Libre = ninja-flame
@@ -523,6 +531,8 @@ export const TABLE_STATUS_TILE: Record<TableStatus, string> = {
   ocupada: "border-amber-400/40 bg-amber-400/[0.08] hover:border-amber-400",
   cuenta_pedida: "border-sky-400/40 bg-sky-400/[0.08] hover:border-sky-400",
   bloqueada: "border-border bg-muted/40 opacity-70",
+  // Reservada (H51): violeta apagado, distinto de libre (no invita a abrir).
+  reservada: "border-purple-400/40 bg-purple-400/[0.08] hover:border-purple-400",
 };
 
 export const TABLE_STATUS_DOT: Record<TableStatus, string> = {
@@ -530,4 +540,5 @@ export const TABLE_STATUS_DOT: Record<TableStatus, string> = {
   ocupada: "bg-amber-400",
   cuenta_pedida: "bg-sky-400",
   bloqueada: "bg-muted-foreground",
+  reservada: "bg-purple-400",
 };

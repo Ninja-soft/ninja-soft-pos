@@ -91,6 +91,16 @@ export default function SalonPage() {
       toast({ title: `Mesa ${t.label} bloqueada`, variant: "info" });
       return;
     }
+    // Reservada (H51): la mesa está tomada por una reserva. Se ocupa al SENTAR la
+    // reserva desde la agenda (no abriéndola suelta acá, que perdería el enlace).
+    if (t.status === "reservada") {
+      toast({
+        title: `Mesa ${t.label} reservada`,
+        description: "Sentá la reserva desde la sección Reservas.",
+        variant: "info",
+      });
+      return;
+    }
     if (t.status === "libre") {
       // Abrir la mesa: crea el pedido y la marca ocupada; luego abrir la cuenta.
       // Usamos el order_id que devuelve la RPC (el listado se refresca async, así
@@ -206,7 +216,7 @@ export default function SalonPage() {
 
       {/* Leyenda de estados */}
       <div className="mb-5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {(["libre", "ocupada", "cuenta_pedida", "bloqueada"] as TableStatus[]).map((s) => (
+        {(["libre", "ocupada", "cuenta_pedida", "reservada", "bloqueada"] as TableStatus[]).map((s) => (
           <span key={s} className="flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${TABLE_STATUS_DOT[s]}`} />
             {TABLE_STATUS_LABELS[s]}

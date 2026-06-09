@@ -24,7 +24,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
-| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway — núcleo, local) |
+| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas — núcleo, local) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
@@ -709,12 +709,12 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [ ] Alertas de insumos críticos y reporte de margen por plato.
   - [ ] *Criterio:* vender 10 combos descuenta insumos configurados y muestra margen estimado.
 
-- [ ] **H51 — Reservas gastronómicas, waitlist y ocupación.**
-  - [ ] Reservas por mesa/sector/capacidad, fecha, hora, duración estimada y seña opcional.
-  - [ ] Lista de espera con prioridad y aviso por WhatsApp/email futuro.
-  - [ ] Turnover de mesas: tiempo sentado, tiempo sin ordenar, tiempo desde cuenta pedida.
-  - [ ] Bloqueo de mesas por evento, mantenimiento o configuración del salón.
-  - [ ] *Criterio:* una reserva bloquea mesa/sector, luego se convierte en mesa ocupada y conserva cliente/seña.
+- [~] **H51 — Reservas gastronómicas, waitlist y ocupación.** — *Núcleo local: agenda de reservas con sentar y seña. `dining_reservations` + RPCs `create_reservation` / `set_reservation_status` / `cancel_reservation` / `seat_reservation` (SECURITY DEFINER tenant-scoped, search_path fijo) en `supabase/migrations/20260609120000_dining_reservations.sql`. UI `/reservas` (agenda hoy / próx. 7 días, alta con picker de cliente optimizado, confirmar / cancelar / no-show / sentar), gateada por `dining_enabled` (toggle del dueño, no plan), nav en AppShell.*
+  - [x] Reservas por mesa/sector/capacidad, fecha, hora, duración estimada y seña opcional. — *`dining_reservations`: area_id/table_id/party_size/reserved_at/duration_minutes/deposit_amount; alta en `ReservationModal`.*
+  - [ ] Lista de espera con prioridad y aviso por WhatsApp/email futuro. — *Follow-up (waitlist + recordatorio automático al cliente; reservas online públicas también).*
+  - [ ] Turnover de mesas: tiempo sentado, tiempo sin ordenar, tiempo desde cuenta pedida. — *Follow-up.*
+  - [x] Bloqueo de mesas por evento, mantenimiento o configuración del salón. — *Estado `reservada` en `dining_tables`: una reserva con mesa asignada la bloquea; al sentar pasa a ocupada, al cancelar/no_show vuelve a libre. (Bloqueo manual por mantenimiento ya existía vía `bloqueada`.)*
+  - [x] *Criterio:* una reserva bloquea mesa/sector, luego se convierte en mesa ocupada y conserva cliente/seña. — *`seat_reservation` reusa `open_dining_table` (abre la mesa → ocupada), enlaza `table_order_id`, marca la reserva `sentada` y conserva cliente/comensales/seña (snapshot en la reserva + notas del pedido). Probado por SQL (crear → confirmar → sentar → cancelar/no_show, con ROLLBACK).*
 
 - [ ] **H52 — Reportes gastronómicos y operación.**
   - [ ] Ventas por mozo, mesa, sector, estación, canal, producto, modificador y horario.

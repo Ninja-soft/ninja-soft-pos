@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bike,
   Building2,
+  CalendarClock,
   CalendarDays,
   ChevronDown,
   KeyRound,
@@ -98,6 +99,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Salón (F13 · H44). Sólo visible con el modo gastronómico activo (H43);
         // se oculta cuando dining_enabled = false (no es gating de plan).
         { href: "/salon", label: "Salón", icon: Utensils, requiresDining: true },
+        // Reservas (F13 · H51). Parte de la suite de mesas: misma puerta que Salón
+        // (pos_settings.dining_enabled · H43); se oculta sin candado (no es plan).
+        { href: "/reservas", label: "Reservas", icon: CalendarClock, requiresDining: true },
         // Delivery y take away (F13 · H49). Sólo visible con delivery activo
         // (pos_settings.delivery_enabled); independiente del modo gastronómico de
         // mesas (puede ir sin mesas).

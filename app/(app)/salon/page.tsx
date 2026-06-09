@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { LayoutGrid, Settings, Users, Utensils } from "lucide-react";
+import { ChefHat, LayoutGrid, Settings, Users, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
@@ -143,11 +143,22 @@ export default function SalonPage() {
             <Utensils size={26} className="text-ninja-flameSoft" /> Salón
           </Display>
         </div>
-        <Link href="/configuracion?seccion=salones">
-          <Button variant="secondary" size="sm">
-            <LayoutGrid size={16} /> Salones y mesas
+        <div className="flex flex-wrap items-center gap-2">
+          {/* KDS (F13 · H46): se abre en una pantalla aparte (monitor de cocina/
+              barra). Está en una página ya gateada por modo gastronómico. */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => window.open("/kds", "_blank", "noopener")}
+          >
+            <ChefHat size={16} /> Cocina (KDS)
           </Button>
-        </Link>
+          <Link href="/configuracion?seccion=salones">
+            <Button variant="secondary" size="sm">
+              <LayoutGrid size={16} /> Salones y mesas
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filtro por salón (pills). Sólo si hay más de un salón. */}

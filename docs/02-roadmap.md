@@ -24,7 +24,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
-| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 Planificación |
+| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo por estación, H46 KDS — núcleo, local) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
@@ -649,7 +649,7 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [ ] Reglas por modo: cobrar antes/después, imprimir comanda al enviar/cobrar, pedir nombre de cliente, pedir mesa, pedir teléfono/dirección.
   - [ ] *Criterio:* un tenant cambia de cafetería de mostrador a cafetería con mesas sin tocar código ni migraciones manuales.
 
-- [~] **H44 — Mesas, salones y comandas de salón.** — *Núcleo hecho (local, pendiente de push): migración `20260608580000_dining_tables` (`dining_areas`, `dining_tables`, `table_orders`, `table_order_items`, RLS por tenant + RPCs tenant-scoped con guard de miembro activo y auditoría). CRUD de salones/mesas en Configuración → "Salones y mesas". Vista de **Salón** (`/salon`): grid de mesas por salón, color por estado (libre/ocupada/cuenta_pedida/bloqueada), capacidad y total vivo; tap libre → abrir + cargar, tap ocupada → ver/editar cuenta, agregar ítems (picker de productos + ítem libre), cancelar o cobrar. **Cobrar mesa** reusa el POS: `/pos?table=<order_id>` carga los ítems al carrito y, al confirmar, `close_dining_table` enlaza la venta, marca el pedido 'cobrada' y libera la mesa (espeja el cobro de turno · H38). Probado por SQL (abrir → cargar → editar/quitar → cobrar con create_sale → cerrar). **Follow-up (NO en este PR):** división de cuenta, mover/unir/transferir mesas, comanda impresa + ruteo (H45), KDS (H46), reservas (H51), propina por mesa.*
+- [~] **H44 — Mesas, salones y comandas de salón.** — *Núcleo hecho (local, pendiente de push): migración `20260608580000_dining_tables` (`dining_areas`, `dining_tables`, `table_orders`, `table_order_items`, RLS por tenant + RPCs tenant-scoped con guard de miembro activo y auditoría). CRUD de salones/mesas en Configuración → "Salones y mesas". Vista de **Salón** (`/salon`): grid de mesas por salón, color por estado (libre/ocupada/cuenta_pedida/bloqueada), capacidad y total vivo; tap libre → abrir + cargar, tap ocupada → ver/editar cuenta, agregar ítems (picker de productos + ítem libre), cancelar o cobrar. **Cobrar mesa** reusa el POS: `/pos?table=<order_id>` carga los ítems al carrito y, al confirmar, `close_dining_table` enlaza la venta, marca el pedido 'cobrada' y libera la mesa (espeja el cobro de turno · H38). Probado por SQL (abrir → cargar → editar/quitar → cobrar con create_sale → cerrar). **Follow-up (NO en este PR):** división de cuenta, mover/unir/transferir mesas, comanda impresa (H45 print), reservas (H51), propina por mesa. **Ya hechos después:** ruteo por estación (H45 mínimo) y KDS / pantalla de cocina (H46).*
   - [x] Configuración visual de salones/sectores (salón principal, terraza, barra, etc.) — CRUD en Configuración.
   - [x] Mesas con número/nombre, capacidad, estado y mozo asignado. (posición/forma → follow-up).
   - [x] Estados de mesa núcleo: libre, ocupada, cuenta pedida, bloqueada. (esperando pedido/en cocina/servida/limpieza/reservada → con KDS/reservas).
@@ -658,22 +658,22 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [ ] Propina sugerida y propina libre. — *Base de propina en H39; propina por mesa → follow-up.*
   - [ ] *Criterio:* un mozo abre mesa 12, carga pedido, envía comanda, divide la cuenta en dos pagos y libera la mesa. — *Abrir/cargar/cobrar/liberar OK; comanda (H45) y división → follow-up.*
 
-- [ ] **H45 — Comandas impresas y ruteo por estación.**
-  - [ ] Comanda antes del pago para restaurante/cafetería cuando corresponda.
-  - [ ] Ruteo por estación: cocina caliente, cocina fría, barra, cafetería, heladería, parrilla, despacho, postres.
-  - [ ] Impresora por estación y fallback a cola si falla.
-  - [ ] Comanda con mesa/pedido, mozo/cajero, hora, ítems, modificadores, notas, alergias, prioridad y modo de entrega.
-  - [ ] Reimpresión, cancelación parcial, agregado posterior y marca de "ya enviado".
-  - [ ] Separación de comandas por estación sin duplicar ítems.
-  - [ ] *Criterio:* café va a barra, tostado a cocina y helado a estación heladería en tickets separados, con el mismo pedido.
+- [~] **H45 — Comandas impresas y ruteo por estación.** — *Ruteo por estación hecho (local, pendiente de push): `products.station` (cocina/barra/cafeteria/parrilla/postres/despacho + "sin estación"), elegible en la ficha del producto (sección plegable "Cocina / estación (KDS)", visible con modo gastronómico). Al cargar un ítem a una mesa, `add_table_order_item` **snapshotea** la estación en `table_order_items.station` (ruteo fijo). Eso alimenta el KDS (H46), que separa por estación sin duplicar ítems. **Follow-up (NO en este PR):** comanda IMPRESA antes del pago, impresora por estación + fallback a cola, reimpresión/cancelación parcial con re-impresión, prioridad y modo de entrega en la comanda, marca "ya enviado". Default de estación por categoría → follow-up.*
+  - [ ] Comanda antes del pago para restaurante/cafetería cuando corresponda. — *Follow-up (impresa).*
+  - [x] Ruteo por estación: cocina, barra, cafetería, parrilla, postres, despacho. — *`products.station` + snapshot en la línea; el KDS agrupa por estación.* (cocina fría/heladería como estaciones extra → follow-up; la lista es ampliable sin migración.)
+  - [ ] Impresora por estación y fallback a cola si falla. — *Follow-up (H45 print).*
+  - [~] Comanda con mesa/pedido, mozo/cajero, hora, ítems, modificadores, notas, alergias, prioridad y modo de entrega. — *El KDS ya muestra mesa/pedido, hora (timer), ítems, modificadores y notas; comanda impresa + alergias/prioridad/modo → follow-up.*
+  - [ ] Reimpresión, cancelación parcial, agregado posterior y marca de "ya enviado". — *Follow-up.*
+  - [x] Separación de comandas por estación sin duplicar ítems. — *`kds_tickets(p_station)` filtra por estación; cada línea va a una sola estación.*
+  - [ ] *Criterio:* café va a barra, tostado a cocina y helado a estación heladería en tickets separados, con el mismo pedido. — *Ruteo/separación por estación OK en pantalla (KDS); tickets IMPRESOS separados → follow-up.*
 
-- [ ] **H46 — KDS / pantalla de cocina y barra.**
-  - [ ] Vista KDS por estación con tarjetas de pedido en tiempo real.
-  - [ ] Estados: nuevo, aceptado, preparando, listo, entregado, demorado, cancelado.
-  - [ ] Timers por estación, SLA configurable y alertas visuales por demora.
-  - [ ] Agrupación por mesa/pedido, por estación, por curso/plato o por orden de llegada.
-  - [ ] Modo offline local con cola de sincronización cuando la red cae.
-  - [ ] *Criterio:* cocina marca un plato como listo y el mozo/caja ve el cambio sin recargar.
+- [~] **H46 — KDS / pantalla de cocina y barra.** — *Núcleo hecho (local, pendiente de push): migración `20260608590000_kds` (`table_order_items.kds_status`/`kds_ready_at` + `products.station`; RPCs tenant-scoped `kds_tickets`/`set_item_kds_status` con guard de miembro activo). Pantalla **`/kds`** en route group propio (fullscreen, alto contraste, sin AppShell — para un monitor en cocina/barra; se abre con `window.open('/kds')` desde el Salón). Muestra los ítems de pedidos de mesa ABIERTOS pendientes/preparando/listo **agrupados por estación** (tabs `?station=` + "Todas") y dentro por mesa/pedido; cada tarjeta: mesa/salón, cantidad + ítem, modificadores, notas y **timer** desde la carga, con **alertas por demora** (>5 min ámbar, >10 min rojo). Botones para avanzar estado (pendiente → preparando → listo → entregado; "entregado" lo saca de la vista) y retroceder. **Tiempo real por polling** (`useQuery` con `refetchInterval` ~4s sobre `kds_tickets`, tenant-scoped por RLS). Probado por SQL (ítem con estación → aparece en `kds_tickets` de esa estación; avanzar a listo sella `ready_at`; entregado lo saca). **Follow-up (NO en este PR):** comanda IMPRESA por estación (H45 print), SLA configurable avanzado, cancelación parcial con re-impresión, KDS de barra físicamente separado, modo offline con cola de sincronización.*
+  - [x] Vista KDS por estación con tarjetas de pedido en tiempo real. — *`/kds`, polling ~4s, tabs por estación.*
+  - [~] Estados: nuevo, aceptado, preparando, listo, entregado, demorado, cancelado. — *Núcleo: pendiente → preparando → listo → entregado; "demorado" se refleja visualmente por el timer (ámbar/rojo). Aceptado/cancelado finos → follow-up.*
+  - [~] Timers por estación, SLA configurable y alertas visuales por demora. — *Timer por ítem + alertas a 5/10 min hechas; SLA configurable por estación → follow-up.*
+  - [~] Agrupación por mesa/pedido, por estación, por curso/plato o por orden de llegada. — *Por estación (tabs) y por mesa/pedido (columnas), orden de llegada FIFO. Por curso/plato → con H47.*
+  - [ ] Modo offline local con cola de sincronización cuando la red cae. — *Follow-up.*
+  - [x] *Criterio:* cocina marca un plato como listo y el mozo/caja ve el cambio sin recargar. — *`set_item_kds_status` + polling: el estado se refresca solo (~4s) en el KDS y la cuenta de la mesa se invalida.*
 
 - [ ] **H47 — Menú gastronómico, modificadores y cursos.**
   - [ ] Menú por horario/canal: desayuno, almuerzo, merienda, cena, happy hour, delivery.

@@ -55,6 +55,10 @@ export const ProductSchema = z.object({
     .union([z.coerce.number().min(0).max(100), z.literal(""), z.null()])
     .transform((v) => (v === "" || v == null ? null : v))
     .optional(),
+  // Estación de preparación (F13 · H45 ruteo): a qué pantalla del KDS va el
+  // producto (cocina/barra/cafeteria/parrilla/postres/despacho). "" → null = sin
+  // estación. El POS/Salón snapshotea esto en la línea del pedido al cargarla.
+  station: optionalText(20),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

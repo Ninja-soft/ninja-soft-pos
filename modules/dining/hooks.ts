@@ -6,10 +6,12 @@ import {
   areasApi,
   tablesApi,
   tableOrdersApi,
+  kdsApi,
   type AreaInput,
   type TableInput,
   type TableStatus,
   type AddItemInput,
+  type KdsStatus,
 } from "./api";
 
 // ── Modo gastronómico (H43): pos_settings.dining_enabled ───────────────────────
@@ -131,6 +133,36 @@ export function useTableOrderMutations() {
     cancel: useMutation({
       mutationFn: (orderId: string) => tableOrdersApi.cancel(orderId),
       onSuccess: inv,
+    }),
+  };
+}
+
+// ── KDS / pantalla de cocina (F13 · H46) ───────────────────────────────────────
+// Tiempo real por polling: refetch cada ~4s sobre kds_tickets (tenant-scoped por
+// RLS). station null/'' = todas las estaciones. refetchOnWindowFocus para que al
+// volver a la pantalla esté fresco. La pantalla es de monitoreo: mantiene los
+// datos previos entre fetches (placeholderData) para no parpadear.
+export function useKdsTickets(station: string | null) {
+  return useQuery({
+    queryKey: ["dining", "kds", station ?? "all"],
+    queryFn: () => kdsApi.tickets(station),
+    refetchInterval: 4_000,
+    refetchOnWindowFocus: true,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useKdsMutations() {
+  const qc = useQueryClient();
+  return {
+    setStatus: useMutation({
+      mutationFn: (v: { itemId: string; status: KdsStatus }) =>
+        kdsApi.setStatus(v.itemId, v.status),
+      // Refrescá todas las vistas KDS (cualquier estación) y la cuenta de la mesa.
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ["dining", "kds"] });
+        qc.invalidateQueries({ queryKey: ["dining", "order-items"] });
+      },
     }),
   };
 }

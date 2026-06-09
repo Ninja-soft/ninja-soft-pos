@@ -49,6 +49,58 @@ export interface TableOrderItem {
   notes: string | null;
 }
 
+// ── Estaciones de preparación (F13 · H45 ruteo + H46 KDS) ──────────────────────
+// A qué estación va un producto. Lista fija razonable; null = "sin estación" (no
+// va a ninguna pantalla de preparación). Se elige en la ficha del producto y se
+// snapshotea en table_order_items.station al cargar el ítem (ruteo fijo).
+export const KDS_STATIONS = [
+  "cocina",
+  "barra",
+  "cafeteria",
+  "parrilla",
+  "postres",
+  "despacho",
+] as const;
+export type KdsStation = (typeof KDS_STATIONS)[number];
+
+export const KDS_STATION_LABELS: Record<KdsStation, string> = {
+  cocina: "Cocina",
+  barra: "Barra",
+  cafeteria: "Cafetería",
+  parrilla: "Parrilla",
+  postres: "Postres",
+  despacho: "Despacho",
+};
+
+// Estado de preparación de una línea en el KDS.
+export type KdsStatus = "pendiente" | "preparando" | "listo" | "entregado";
+
+export const KDS_STATUS_LABELS: Record<KdsStatus, string> = {
+  pendiente: "Pendiente",
+  preparando: "Preparando",
+  listo: "Listo",
+  entregado: "Entregado",
+};
+
+// Una línea activa en el KDS (lo que devuelve kds_tickets): la línea + mesa/salón
+// + hora de carga para la tarjeta y el timer.
+export interface KdsTicketItem {
+  item_id: string;
+  order_id: string;
+  table_id: string;
+  table_label: string;
+  area_name: string | null;
+  product_id: string | null;
+  name: string;
+  qty: number;
+  modifiers: SaleLineModifierGroup[];
+  notes: string | null;
+  station: string | null;
+  kds_status: KdsStatus;
+  created_at: string;
+  ready_at: string | null;
+}
+
 export interface TableOrder {
   id: string;
   table_id: string;
@@ -295,6 +347,44 @@ export const tableOrdersApi = {
     } as never);
     if (error) throw error;
   },
+};
+
+// ── KDS / pantalla de cocina (F13 · H46) ───────────────────────────────────────
+// Lee los ítems activos por estación (pedidos abiertos, no entregados) y avanza
+// su estado. Va por RPCs SECURITY DEFINER tenant-scoped (kds_tickets /
+// set_item_kds_status). Las columnas KDS no están en los tipos generados: cast.
+
+export const kdsApi = {
+  // Ítems activos de una estación (null/'' = todas), orden FIFO. La RPC ya filtra
+  // por tenant (RLS + guard) y excluye 'entregado'.
+  tickets: async (station: string | null): Promise<KdsTicketItem[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("kds_tickets" as never, {
+      p_station: station ?? null,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as KdsTicketItem[];
+  },
+
+  // Avanza/retrocede el estado de preparación de una línea. 'listo' sella ready_at;
+  // 'entregado' la saca del KDS.
+  setStatus: async (itemId: string, status: KdsStatus): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_item_kds_status" as never, {
+      p_item_id: itemId,
+      p_status: status,
+    } as never);
+    if (error) throw error;
+  },
+};
+
+// Próximo estado al avanzar la tarjeta (pendiente → preparando → listo →
+// entregado). 'entregado' no avanza más (queda fuera de la vista).
+export const KDS_NEXT_STATUS: Record<KdsStatus, KdsStatus | null> = {
+  pendiente: "preparando",
+  preparando: "listo",
+  listo: "entregado",
+  entregado: null,
 };
 
 // ── Helpers de estado (UI) ─────────────────────────────────────────────────────

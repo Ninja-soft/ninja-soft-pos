@@ -15,6 +15,8 @@ import {
   type ProductOutput,
 } from "@/modules/products/schemas";
 import { flattenCategories, type Product } from "@/modules/products/api";
+import { KDS_STATIONS, KDS_STATION_LABELS } from "@/modules/dining/api";
+import { useDiningEnabled } from "@/modules/dining/hooks";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
@@ -50,6 +52,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { create, update } = useProductMutations();
   const { data: plu } = usePluSettings();
   const pluEnabled = plu?.enabled ?? false;
+  // Modo gastronómico (H43): sólo entonces tiene sentido rutear a una estación.
+  const { data: diningEnabled } = useDiningEnabled();
   const [newCat, setNewCat] = useState("");
   const [newBrand, setNewBrand] = useState("");
 
@@ -112,6 +116,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         favorite_order: product?.favorite_order ?? 0,
         service_duration_min: product?.service_duration_min ?? "",
         commission_pct: product?.commission_pct ?? "",
+        station: product?.station ?? "",
       });
     }
   }, [open, product, reset]);
@@ -402,6 +407,35 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             </div>
           </div>
         </Disclosure>
+
+        {/* Estación de preparación (F13 · H45 ruteo → H46 KDS). Sólo con el modo
+            gastronómico activo: define a qué pantalla de cocina/barra va el
+            producto cuando se carga a una mesa. Opcional ("sin estación"). */}
+        {diningEnabled && (
+          <Disclosure title="Cocina / estación (KDS)">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                A qué estación se envía este producto cuando se carga a una mesa:
+                aparece en la pantalla de cocina/barra (KDS) de esa estación.
+                Dejalo en “Sin estación” si no va a preparación.
+              </p>
+              <label className="block text-sm text-foreground">
+                Estación
+                <select
+                  {...register("station")}
+                  className="mt-1 h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+                >
+                  <option value="">Sin estación</option>
+                  {KDS_STATIONS.map((s) => (
+                    <option key={s} value={s} className="bg-ninja-deepViolet">
+                      {KDS_STATION_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </Disclosure>
+        )}
 
         {active && (
           <ProductImages productId={active.id} tenantId={active.tenant_id} />

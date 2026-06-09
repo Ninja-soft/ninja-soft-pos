@@ -124,6 +124,29 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (owned) return json({ error: "already_owned" }, 409);
 
+  // BUG 12 (anti doble cobro): si ya hay un intent PENDING reciente para este
+  // (tenant, catalog) con un checkout válido, lo REUTILIZAMOS en vez de crear
+  // otro. Así, refrescar/reintentar la compra no genera N preferencias pagables
+  // en paralelo (MP cobraría cada una y sólo una da acceso → plata sin
+  // contrapartida). Ventana corta: las preferencias de MP caducan, así que un
+  // pending viejo no se reaprovecha. El índice parcial único
+  // catalog_payment_intents_one_pending_idx es la red de seguridad ante carreras.
+  const reuseSince = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { data: pendingIntent } = await admin
+    .from("catalog_payment_intents")
+    .select("id, init_point")
+    .eq("tenant_id", tenantId)
+    .eq("catalog_id", catalogId)
+    .eq("status", "pending")
+    .gte("created_at", reuseSince)
+    .not("init_point", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (pendingIntent?.init_point) {
+    return json({ intent_id: pendingIntent.id, init_point: pendingIntent.init_point, reused: true });
+  }
+
   // Access Token de la cuenta de NinjaSoft (cobra la plataforma).
   const { data: plat, error: platErr } = await admin
     .from("platform_secrets")
@@ -142,7 +165,26 @@ Deno.serve(async (req: Request) => {
     .insert({ tenant_id: tenantId, catalog_id: catalogId, amount })
     .select("id")
     .single();
-  if (intErr || !intent) return fail("intent_failed", 500, intErr as PgError);
+  if (intErr || !intent) {
+    // BUG 12: carrera contra el índice parcial único (un solo pending por
+    // (tenant, catalog)). Si otro request creó el intent entre nuestro SELECT de
+    // reutilización y este INSERT, devolvemos ese pending en vez de fallar.
+    if ((intErr as PgError)?.code === "23505") {
+      const { data: existing } = await admin
+        .from("catalog_payment_intents")
+        .select("id, init_point")
+        .eq("tenant_id", tenantId)
+        .eq("catalog_id", catalogId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing?.init_point) {
+        return json({ intent_id: existing.id, init_point: existing.init_point, reused: true });
+      }
+    }
+    return fail("intent_failed", 500, intErr as PgError);
+  }
 
   const notificationUrl = `${url}/functions/v1/catalog_purchase_webhook?intent=${intent.id}`;
 

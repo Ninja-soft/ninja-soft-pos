@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: intent } = await admin
       .from("mp_payment_intents")
-      .select("id, tenant_id, status")
+      .select("id, tenant_id, status, amount")
       .eq("id", intentId)
       .maybeSingle();
     if (!intent) return ok();
@@ -78,16 +78,35 @@ Deno.serve(async (req: Request) => {
     const pay = (await payRes.json()) as {
       status?: string;
       external_reference?: string;
+      transaction_amount?: number;
     };
 
-    // Antifraude: el pago tiene que referenciar ESTE intent.
+    // Antifraude #1: el pago tiene que referenciar ESTE intent.
     if (pay.external_reference !== intentId) return ok();
 
     const status = MP_STATUS[pay.status ?? ""] ?? "pending";
+
+    // Antifraude #2: para acreditar, el monto pagado tiene que coincidir con el
+    // esperado (tolerancia de centavos). Si difiere, NO acreditamos: dejamos el
+    // intent en pending y logueamos (posible manipulación del precio).
+    if (status === "approved") {
+      const paid = Number(pay.transaction_amount ?? NaN);
+      const expected = Number(intent.amount);
+      if (!Number.isFinite(paid) || Math.abs(paid - expected) > 0.01) {
+        console.error("[mp_webhook] amount_mismatch, leaving pending (NOT crediting)", {
+          intentId,
+          paid,
+          expected,
+        });
+        return ok();
+      }
+    }
+
     await admin
       .from("mp_payment_intents")
       .update({ status, mp_payment_id: String(paymentId) })
-      .eq("id", intentId);
+      .eq("id", intentId)
+      .neq("status", "approved");
 
     return ok();
   } catch {

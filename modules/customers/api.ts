@@ -393,6 +393,38 @@ export const customersApi = {
     return (data ?? []) as Customer[];
   },
 
+  // Selector de cliente del POS — BAJO CONSUMO DE DATOS.
+  //
+  // Sin búsqueda: trae sólo los N clientes más recientes (created_at desc), no el
+  // padrón entero. Con búsqueda: filtra server-side por nombre / documento /
+  // teléfono (ilike saneado) con un límite chico. Reemplaza el list() de hasta
+  // 200 filas en cada apertura del modal.
+  forPicker: async (search?: string, limit = 10): Promise<Customer[]> => {
+    const supabase = createClient();
+    const s = sanitizeIlike(search);
+    if (!s) {
+      // Recientes: los últimos cargados (proxy de "últimos usados" sin join).
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data ?? []) as Customer[];
+    }
+    // Búsqueda server-side por nombre / documento / teléfono, limitada.
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .is("deleted_at", null)
+      .or(`name.ilike.%${s}%,document_number.ilike.%${s}%,phone.ilike.%${s}%`)
+      .order("name")
+      .limit(20);
+    if (error) throw error;
+    return (data ?? []) as Customer[];
+  },
+
   // Listado paginado server-side (.range + count exact). Búsqueda server-side por
   // nombre o documento (ilike, saneada). Carga solo la página pedida.
   listPaged: async (params: {
@@ -436,6 +468,9 @@ export const customersApi = {
     email?: string | null;
     document_type?: string | null;
     document_number?: string | null;
+    // Fecha de nacimiento (ISO yyyy-mm-dd). El alta rápida desde el DNI escaneado
+    // la trae parseada del PDF417 (H31); se persiste igual que el alta completa.
+    birth_date?: string | null;
   }): Promise<{ id: string; name: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -446,6 +481,7 @@ export const customersApi = {
         email: input.email?.trim() || null,
         document_type: input.document_type?.trim() || null,
         document_number: input.document_number?.trim() || null,
+        birth_date: input.birth_date?.trim() || null,
         is_active: true,
       })
       .select("id, name")

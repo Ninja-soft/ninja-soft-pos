@@ -16,6 +16,18 @@ export function useCustomers(search: string) {
   });
 }
 
+// Selector de cliente del POS (bajo consumo): sin búsqueda trae sólo los más
+// recientes; con búsqueda filtra server-side con límite. keepPreviousData evita
+// el parpadeo de la lista mientras se tipea (el caller pasa el término ya
+// debounced).
+export function useCustomersForPicker(search: string) {
+  return useQuery({
+    queryKey: ["customers", "picker", search],
+    queryFn: () => customersApi.forPicker(search),
+    placeholderData: keepPreviousData,
+  });
+}
+
 // Listado paginado server-side de clientes. keepPreviousData evita parpadeos al
 // cambiar de página o tipear (debounce desde la página).
 export function useCustomersPaged(params: {
@@ -112,6 +124,7 @@ export function useCustomerMutations() {
         email?: string | null;
         document_type?: string | null;
         document_number?: string | null;
+        birth_date?: string | null;
       }) => customersApi.createQuick(input),
       onSuccess: invalidate,
     }),

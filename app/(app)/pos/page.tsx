@@ -36,11 +36,12 @@ import {
 } from "@/modules/products/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import {
-  useCustomers,
+  useCustomersForPicker,
   useStoreCreditBalance,
   useCustomerMutations,
   useCustomerLastSaleItems,
 } from "@/modules/customers/hooks";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { DniScanModal } from "@/components/customers/DniScanModal";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
@@ -266,7 +267,11 @@ function PosPageInner() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
-  const { data: customers } = useCustomers(custSearch);
+  // Selector de cliente (bajo consumo de datos): sin término trae sólo los
+  // recientes; al tipear, busca server-side con límite. Debounce para no pegar
+  // al server por tecla.
+  const custSearchDebounced = useDebouncedValue(custSearch, 300);
+  const { data: customers } = useCustomersForPicker(custSearchDebounced);
   const { createQuick } = useCustomerMutations();
 
   // Alta rápida de cliente desde el DNI escaneado (H31): crea un cliente mínimo
@@ -278,6 +283,9 @@ function PosPageInner() {
         name: d.nombreCompleto,
         document_type: "dni",
         document_number: d.dni,
+        // Fecha de nacimiento parseada del DNI (H31). Antes se mostraba en la
+        // preview pero no viajaba al insert: el cliente quedaba sin cumpleaños.
+        birth_date: d.fechaNac,
       });
       setCustomer({ id: created.id, name: created.name });
       setDniOpen(false);
@@ -1130,7 +1138,10 @@ function PosPageInner() {
 
   return (
     <>
-      <div className="mx-auto max-w-7xl px-6 py-6">
+      {/* overflow-x-hidden: red de seguridad para que NINGÚN modo (mostrador /
+          mesa / delivery / turno) genere scroll lateral en mobile aunque un hijo
+          se pase de ancho. El layout real se controla con min-w-0 en las columnas. */}
+      <div className="mx-auto max-w-7xl overflow-x-hidden px-6 py-6">
         {/* Cobro desde un turno (H38): banner con el servicio cargado. Se puede
             agregar productos extra antes de cobrar; al cobrar, la venta queda
             enlazada al turno. */}
@@ -1194,7 +1205,7 @@ function PosPageInner() {
               <span className="flex min-w-0 items-center gap-2.5 text-sm">
                 <Bike size={18} className="shrink-0 text-sky-300" />
                 <span className="min-w-0">
-                  <span className="block font-semibold text-foreground">
+                  <span className="block break-words font-semibold text-foreground">
                     Cobrando {deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}
                     {deliveryOrder.customer_name ? ` · ${deliveryOrder.customer_name}` : ""}
                   </span>
@@ -1258,7 +1269,11 @@ function PosPageInner() {
 
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Búsqueda + productos */}
-        <section>
+        {/* min-w-0: un grid item arranca con min-width:auto, así que su contenido
+            (grilla, banners largos) puede ensanchar la columna por encima del
+            viewport y generar scroll lateral en mobile. min-w-0 deja que la
+            columna se achique a la pantalla. */}
+        <section className="min-w-0">
           <div className="relative">
             <Search
               size={16}
@@ -1423,7 +1438,9 @@ function PosPageInner() {
         </section>
 
         {/* Carrito */}
-        <aside className="flex h-[calc(100vh-7rem)] flex-col rounded-lg border border-border bg-card p-4">
+        {/* min-w-0: ídem section — evita que el carrito empuje el ancho de la
+            columna en mobile (scroll lateral). */}
+        <aside className="flex h-[calc(100vh-7rem)] min-w-0 flex-col rounded-lg border border-border bg-card p-4">
           <h2 className="font-display text-lg font-bold">Carrito</h2>
           <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
             {lines.length === 0 && (
@@ -1730,10 +1747,19 @@ function PosPageInner() {
         </div>
       </div>
 
-      <Modal open={custOpen} onOpenChange={setCustOpen} title="Cliente de la venta">
+      <Modal
+        open={custOpen}
+        onOpenChange={(o) => {
+          setCustOpen(o);
+          // Al cerrar, limpiá el término para que la próxima apertura muestre los
+          // recientes (y no pegue al server con la última búsqueda).
+          if (!o) setCustSearch("");
+        }}
+        title="Cliente de la venta"
+      >
         <div className="space-y-3">
           <Input
-            placeholder="Buscar por nombre, documento…"
+            placeholder="Buscar por nombre, documento o teléfono…"
             value={custSearch}
             onChange={(e) => setCustSearch(e.target.value)}
             autoFocus
@@ -1760,6 +1786,12 @@ function PosPageInner() {
               <span>Consumidor final</span>
               {!customer && <span className="text-xs text-emerald-400">Actual</span>}
             </button>
+            {/* Encabezado contextual: sin término muestra los recientes (no todo
+                el padrón → bajo consumo); al tipear, los resultados de la
+                búsqueda server-side. */}
+            <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {custSearch.trim() ? "Resultados" : "Recientes"}
+            </p>
             {customers?.map((c) => (
               <button
                 key={c.id}
@@ -1779,13 +1811,15 @@ function PosPageInner() {
                   )}
                 </span>
                 {customer?.id === c.id && (
-                  <span className="text-xs text-emerald-400">Actual</span>
+                  <span className="shrink-0 text-xs text-emerald-400">Actual</span>
                 )}
               </button>
             ))}
             {customers?.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Sin clientes. Cargalos en la sección Clientes.
+                {custSearch.trim()
+                  ? "Sin resultados. Probá con otro nombre, documento o teléfono."
+                  : "Sin clientes recientes. Buscá por nombre, documento o teléfono o cargalos en Clientes."}
               </p>
             )}
           </div>

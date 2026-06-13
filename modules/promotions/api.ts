@@ -30,10 +30,13 @@ export interface PromotionInput {
   scope_product_id?: string | null;
   action_type: PromoActionType;
   action_value: number;
+  // Sólo para NxM (H54): N (lleva) y M (paga).
+  buy_qty?: number | null;
+  pay_qty?: number | null;
 }
 
 const COLS =
-  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value";
+  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty";
 
 // Normaliza el input al payload de la tabla (limpia el alcance no usado).
 function toRow(input: PromotionInput): Record<string, unknown> {
@@ -54,6 +57,9 @@ function toRow(input: PromotionInput): Record<string, unknown> {
     scope_product_id: scope === "product" ? input.scope_product_id ?? null : null,
     action_type: input.action_type,
     action_value: Math.max(0, Number(input.action_value) || 0),
+    // NxM: sólo si el tipo es 'nxm'; si no, null (coherencia con el CHECK).
+    buy_qty: input.action_type === "nxm" ? input.buy_qty ?? null : null,
+    pay_qty: input.action_type === "nxm" ? input.pay_qty ?? null : null,
   };
 }
 

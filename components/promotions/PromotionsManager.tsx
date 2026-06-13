@@ -106,8 +106,12 @@ function PromoRow({
 }) {
   const action =
     promo.action_type === "percent"
-      ? `${promo.action_value}%`
-      : formatCurrency(promo.action_value);
+      ? `${promo.action_value}% off`
+      : promo.action_type === "amount"
+        ? `${formatCurrency(promo.action_value)} off`
+        : promo.action_type === "nxm"
+          ? `${promo.buy_qty}x${promo.pay_qty}`
+          : `precio ${formatCurrency(promo.action_value)}`;
   const scopeLabel =
     promo.scope === "cart"
       ? "todo el carrito"
@@ -126,7 +130,7 @@ function PromoRow({
           )}
         </div>
         <div className="text-xs text-muted-foreground">
-          {action} off · {scopeLabel}
+          {action} · {scopeLabel}
           {promo.min_amount > 0 ? ` · desde ${formatCurrency(promo.min_amount)}` : ""}
         </div>
       </div>
@@ -175,8 +179,13 @@ function PromotionFormModal({
   const [minAmount, setMinAmount] = useState("0");
   const [scope, setScope] = useState<"cart" | "category">("cart");
   const [categoryId, setCategoryId] = useState("");
-  const [actionType, setActionType] = useState<"percent" | "amount">("percent");
+  const [actionType, setActionType] = useState<
+    "percent" | "amount" | "nxm" | "fixed_price"
+  >("percent");
   const [actionValue, setActionValue] = useState("10");
+  // NxM (H54): N (lleva) y M (paga).
+  const [buyQty, setBuyQty] = useState("2");
+  const [payQty, setPayQty] = useState("1");
 
   // Hidrata al abrir (edición) o limpia (alta).
   useEffect(() => {
@@ -194,6 +203,8 @@ function PromotionFormModal({
       setCategoryId(promo.scope_category_id ?? "");
       setActionType(promo.action_type);
       setActionValue(String(promo.action_value));
+      setBuyQty(String(promo.buy_qty ?? 2));
+      setPayQty(String(promo.pay_qty ?? 1));
     } else {
       setName("");
       setIsActive(true);
@@ -207,6 +218,8 @@ function PromotionFormModal({
       setCategoryId("");
       setActionType("percent");
       setActionValue("10");
+      setBuyQty("2");
+      setPayQty("1");
     }
   }, [open, promo]);
 
@@ -222,12 +235,18 @@ function PromotionFormModal({
       toast({ title: "Poné un nombre", variant: "error" });
       return;
     }
+    const n = Math.trunc(Number(buyQty) || 0);
+    const m = Math.trunc(Number(payQty) || 0);
     if (actionType === "percent" && (value <= 0 || value > 100)) {
       toast({ title: "El porcentaje debe estar entre 1 y 100", variant: "error" });
       return;
     }
-    if (actionType === "amount" && value <= 0) {
+    if ((actionType === "amount" || actionType === "fixed_price") && value <= 0) {
       toast({ title: "El monto debe ser mayor a 0", variant: "error" });
+      return;
+    }
+    if (actionType === "nxm" && !(m >= 1 && n > m)) {
+      toast({ title: "En NxM, “lleva” debe ser mayor que “paga” (y paga ≥ 1)", variant: "error" });
       return;
     }
     if (scope === "category" && !categoryId) {
@@ -246,7 +265,9 @@ function PromotionFormModal({
       scope,
       scope_category_id: scope === "category" ? categoryId : null,
       action_type: actionType,
-      action_value: value,
+      action_value: actionType === "nxm" ? 0 : value,
+      buy_qty: actionType === "nxm" ? n : null,
+      pay_qty: actionType === "nxm" ? m : null,
     };
     try {
       if (promo) await update.mutateAsync({ id: promo.id, input });
@@ -277,26 +298,59 @@ function PromotionFormModal({
         />
 
         {/* Acción */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">
-            Descuento
+            Tipo de descuento
             <select
               value={actionType}
-              onChange={(e) => setActionType(e.target.value as "percent" | "amount")}
+              onChange={(e) =>
+                setActionType(
+                  e.target.value as "percent" | "amount" | "nxm" | "fixed_price",
+                )
+              }
               className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
             >
               <option value="percent">Porcentaje (%)</option>
               <option value="amount">Monto fijo ($)</option>
+              <option value="nxm">NxM (2x1, 3x2…)</option>
+              <option value="fixed_price">Precio fijo (combo)</option>
             </select>
           </label>
-          <Input
-            label={actionType === "percent" ? "Valor (%)" : "Valor ($)"}
-            type="number"
-            min="0"
-            step={actionType === "percent" ? "1" : "0.01"}
-            value={actionValue}
-            onChange={(e) => setActionValue(e.target.value)}
-          />
+          {actionType === "nxm" ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                label="Lleva (N)"
+                type="number"
+                min="2"
+                step="1"
+                value={buyQty}
+                onChange={(e) => setBuyQty(e.target.value)}
+              />
+              <Input
+                label="Paga (M)"
+                type="number"
+                min="1"
+                step="1"
+                value={payQty}
+                onChange={(e) => setPayQty(e.target.value)}
+              />
+            </div>
+          ) : (
+            <Input
+              label={
+                actionType === "percent"
+                  ? "Valor (%)"
+                  : actionType === "fixed_price"
+                    ? "Precio del combo ($)"
+                    : "Valor ($)"
+              }
+              type="number"
+              min="0"
+              step={actionType === "percent" ? "1" : "0.01"}
+              value={actionValue}
+              onChange={(e) => setActionValue(e.target.value)}
+            />
+          )}
         </div>
 
         {/* Alcance */}

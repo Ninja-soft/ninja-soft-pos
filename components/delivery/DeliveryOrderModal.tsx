@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bike, Search, ShoppingBag, UserPlus, X } from "lucide-react";
+import { Bike, Coffee, Search, ShoppingBag, UserPlus, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -156,12 +156,12 @@ export function DeliveryOrderModal({
       title="Nuevo pedido"
     >
       <div className="space-y-4">
-        {/* Tipo: delivery / takeaway */}
+        {/* Tipo: delivery / takeaway / mostrador */}
         <div>
           <span className="mb-1.5 block text-sm font-medium text-muted-foreground">
             Tipo de pedido
           </span>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={() => setOrderType("delivery")}
@@ -183,6 +183,17 @@ export function DeliveryOrderModal({
               }
             >
               <ShoppingBag size={16} /> Take away
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderType("mostrador")}
+              className={
+                orderType === "mostrador"
+                  ? "flex items-center justify-center gap-2 rounded-lg border border-ninja-flame bg-ninja-flame/[0.08] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:border-ninja-flameSoft/40"
+              }
+            >
+              <Coffee size={16} /> Mostrador
             </button>
           </div>
         </div>

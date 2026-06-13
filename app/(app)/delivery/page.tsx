@@ -59,10 +59,10 @@ export default function DeliveryPage() {
 
   const [newOpen, setNewOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-  // Filtro de tipo: todos / delivery / takeaway.
-  const [typeFilter, setTypeFilter] = useState<"all" | "delivery" | "takeaway">(
-    "all",
-  );
+  // Filtro de tipo: todos / delivery / takeaway / mostrador.
+  const [typeFilter, setTypeFilter] = useState<
+    "all" | "delivery" | "takeaway" | "mostrador"
+  >("all");
 
   // Pedido activo re-derivado del listado vivo (refleja cambios de estado). Si el
   // pedido desapareció (cancelado por otro), devolvemos null → el modal se cierra.
@@ -81,13 +81,17 @@ export default function DeliveryPage() {
   // Columnas a mostrar: unión de delivery + takeaway según el filtro. Con "all",
   // usamos las columnas de delivery (en_camino) + "listo" si hay takeaways.
   const columns: DeliveryStatus[] = useMemo(() => {
-    if (typeFilter === "takeaway") return TAKEAWAY_BOARD_COLUMNS;
+    // Mostrador usa las mismas columnas que takeaway (con "listo").
+    if (typeFilter === "takeaway" || typeFilter === "mostrador")
+      return TAKEAWAY_BOARD_COLUMNS;
     if (typeFilter === "delivery") return DELIVERY_BOARD_COLUMNS;
-    const hasTakeaway = (orders ?? []).some((o) => o.order_type === "takeaway");
+    const hasListo = (orders ?? []).some(
+      (o) => o.order_type === "takeaway" || o.order_type === "mostrador",
+    );
     const hasDelivery = (orders ?? []).some((o) => o.order_type === "delivery");
     const cols: DeliveryStatus[] = ["recibido", "preparando"];
     if (hasDelivery) cols.push("en_camino");
-    if (hasTakeaway) cols.push("listo");
+    if (hasListo) cols.push("listo");
     cols.push("entregado");
     return cols;
   }, [orders, typeFilter]);
@@ -179,6 +183,7 @@ export default function DeliveryPage() {
             { k: "all" as const, label: "Todos" },
             { k: "delivery" as const, label: "Delivery" },
             { k: "takeaway" as const, label: "Take away" },
+            { k: "mostrador" as const, label: "Mostrador" },
           ]
         ).map((f) => (
           <button

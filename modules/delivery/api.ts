@@ -32,11 +32,14 @@ export const DELIVERY_CHANNEL_LABELS: Record<DeliveryChannel, string> = {
   delivery_propio: "Delivery propio",
 };
 
-export type DeliveryOrderType = "delivery" | "takeaway";
+export type DeliveryOrderType = "delivery" | "takeaway" | "mostrador";
 
 export const DELIVERY_TYPE_LABELS: Record<DeliveryOrderType, string> = {
   delivery: "Delivery",
   takeaway: "Take away",
+  // Mostrador (F13 · H48): pedido de barra/cafetería/heladería. Retira el
+  // cliente, sin dirección ni envío; flujo de estados igual que takeaway.
+  mostrador: "Mostrador",
 };
 
 // Estados posibles (el schema admite el unión de ambos tipos). Para delivery:
@@ -79,7 +82,7 @@ export function nextDeliveryStatus(
   type: DeliveryOrderType,
   status: DeliveryStatus,
 ): DeliveryStatus | null {
-  if (type === "takeaway") {
+  if (type === "takeaway" || type === "mostrador") {
     if (status === "recibido") return "preparando";
     if (status === "preparando") return "listo";
     return null;

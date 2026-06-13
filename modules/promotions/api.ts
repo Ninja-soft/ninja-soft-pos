@@ -11,10 +11,11 @@ import type {
   Promotion,
   PromoScope,
   PromoActionType,
+  PromoVolumeTier,
   SimSale,
 } from "@/lib/promotions/engine";
 
-export type { Promotion, PromoScope, PromoActionType, SimSale };
+export type { Promotion, PromoScope, PromoActionType, PromoVolumeTier, SimSale };
 
 export interface PromotionInput {
   name: string;
@@ -34,10 +35,12 @@ export interface PromotionInput {
   // Sólo para NxM (H54): N (lleva) y M (paga).
   buy_qty?: number | null;
   pay_qty?: number | null;
+  // Sólo para % por volumen escalonado (H54): tramos cantidad → %.
+  volume_tiers?: PromoVolumeTier[] | null;
 }
 
 const COLS =
-  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty";
+  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers";
 
 // Normaliza el input al payload de la tabla (limpia el alcance no usado).
 function toRow(input: PromotionInput): Record<string, unknown> {
@@ -61,7 +64,27 @@ function toRow(input: PromotionInput): Record<string, unknown> {
     // NxM: sólo si el tipo es 'nxm'; si no, null (coherencia con el CHECK).
     buy_qty: input.action_type === "nxm" ? input.buy_qty ?? null : null,
     pay_qty: input.action_type === "nxm" ? input.pay_qty ?? null : null,
+    // Volumen escalonado: sólo si el tipo es 'volume_tier'. Sanitiza cada tramo
+    // (min_qty entero ≥ 1, pct en (0, 100]) y los ordena por min_qty asc; si no
+    // queda ninguno válido, null (la DB rechaza el array vacío para este tipo).
+    volume_tiers:
+      input.action_type === "volume_tier"
+        ? sanitizeTiers(input.volume_tiers)
+        : null,
   };
+}
+
+function sanitizeTiers(
+  tiers: PromoVolumeTier[] | null | undefined,
+): PromoVolumeTier[] | null {
+  const clean = (tiers ?? [])
+    .map((t) => ({
+      min_qty: Math.trunc(Number(t?.min_qty) || 0),
+      pct: Number(t?.pct) || 0,
+    }))
+    .filter((t) => t.min_qty >= 1 && t.pct > 0 && t.pct <= 100)
+    .sort((a, b) => a.min_qty - b.min_qty);
+  return clean.length > 0 ? clean : null;
 }
 
 export const promotionsApi = {

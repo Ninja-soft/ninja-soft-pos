@@ -120,7 +120,11 @@ function PromoRow({
           ? `${promo.buy_qty}x${promo.pay_qty}`
           : promo.action_type === "second_item"
             ? `2º al ${promo.action_value}%`
-            : `precio ${formatCurrency(promo.action_value)}`;
+            : promo.action_type === "volume_tier"
+              ? `por volumen: ${(promo.volume_tiers ?? [])
+                  .map((t) => `${t.min_qty}+→${t.pct}%`)
+                  .join(", ")}`
+              : `precio ${formatCurrency(promo.action_value)}`;
   const scopeLabel =
     promo.scope === "cart"
       ? "todo el carrito"
@@ -197,12 +201,18 @@ function PromotionFormModal({
   const [scope, setScope] = useState<"cart" | "category">("cart");
   const [categoryId, setCategoryId] = useState("");
   const [actionType, setActionType] = useState<
-    "percent" | "amount" | "nxm" | "fixed_price" | "second_item"
+    "percent" | "amount" | "nxm" | "fixed_price" | "second_item" | "volume_tier"
   >("percent");
   const [actionValue, setActionValue] = useState("10");
   // NxM (H54): N (lleva) y M (paga).
   const [buyQty, setBuyQty] = useState("2");
   const [payQty, setPayQty] = useState("1");
+  // % por volumen escalonado (H54): tramos cantidad → %. Editados como strings
+  // para no pelear con el input; se sanitizan al guardar.
+  const [tiers, setTiers] = useState<{ minQty: string; pct: string }[]>([
+    { minQty: "3", pct: "10" },
+    { minQty: "6", pct: "15" },
+  ]);
 
   // Hidrata al abrir (edición) o limpia (alta).
   useEffect(() => {
@@ -222,6 +232,14 @@ function PromotionFormModal({
       setActionValue(String(promo.action_value));
       setBuyQty(String(promo.buy_qty ?? 2));
       setPayQty(String(promo.pay_qty ?? 1));
+      setTiers(
+        promo.volume_tiers && promo.volume_tiers.length > 0
+          ? promo.volume_tiers.map((t) => ({
+              minQty: String(t.min_qty),
+              pct: String(t.pct),
+            }))
+          : [{ minQty: "3", pct: "10" }],
+      );
     } else {
       setName("");
       setIsActive(true);
@@ -237,6 +255,10 @@ function PromotionFormModal({
       setActionValue("10");
       setBuyQty("2");
       setPayQty("1");
+      setTiers([
+        { minQty: "3", pct: "10" },
+        { minQty: "6", pct: "15" },
+      ]);
     }
   }, [open, promo]);
 
@@ -244,6 +266,24 @@ function PromotionFormModal({
 
   function toggleDay(d: number) {
     setDays((ds) => (ds.includes(d) ? ds.filter((x) => x !== d) : [...ds, d]));
+  }
+
+  // ── Tramos de % por volumen ──────────────────────────────────────────────
+  function setTier(i: number, patch: Partial<{ minQty: string; pct: string }>) {
+    setTiers((ts) => ts.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  }
+  function addTier() {
+    setTiers((ts) => [...ts, { minQty: "", pct: "" }]);
+  }
+  function removeTier(i: number) {
+    setTiers((ts) => (ts.length > 1 ? ts.filter((_, idx) => idx !== i) : ts));
+  }
+  // Tramos válidos y ordenados por cantidad (lo que viaja al input/DB).
+  function cleanTiers() {
+    return tiers
+      .map((t) => ({ min_qty: Math.trunc(Number(t.minQty) || 0), pct: Number(t.pct) || 0 }))
+      .filter((t) => t.min_qty >= 1 && t.pct > 0 && t.pct <= 100)
+      .sort((a, b) => a.min_qty - b.min_qty);
   }
 
   async function save() {
@@ -269,6 +309,14 @@ function PromotionFormModal({
       toast({ title: "En NxM, “lleva” debe ser mayor que “paga” (y paga ≥ 1)", variant: "error" });
       return;
     }
+    const validTiers = cleanTiers();
+    if (actionType === "volume_tier" && validTiers.length === 0) {
+      toast({
+        title: "Cargá al menos un tramo (cantidad ≥ 1 y % entre 1 y 100)",
+        variant: "error",
+      });
+      return;
+    }
     if (scope === "category" && !categoryId) {
       toast({ title: "Elegí la categoría del alcance", variant: "error" });
       return;
@@ -285,9 +333,10 @@ function PromotionFormModal({
       scope,
       scope_category_id: scope === "category" ? categoryId : null,
       action_type: actionType,
-      action_value: actionType === "nxm" ? 0 : value,
+      action_value: actionType === "nxm" || actionType === "volume_tier" ? 0 : value,
       buy_qty: actionType === "nxm" ? n : null,
       pay_qty: actionType === "nxm" ? m : null,
+      volume_tiers: actionType === "volume_tier" ? validTiers : null,
     };
     try {
       if (promo) await update.mutateAsync({ id: promo.id, input });
@@ -330,7 +379,8 @@ function PromotionFormModal({
                     | "amount"
                     | "nxm"
                     | "fixed_price"
-                    | "second_item",
+                    | "second_item"
+                    | "volume_tier",
                 )
               }
               className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
@@ -340,9 +390,56 @@ function PromotionFormModal({
               <option value="nxm">NxM (2x1, 3x2…)</option>
               <option value="fixed_price">Precio fijo (combo)</option>
               <option value="second_item">2º ítem al X%</option>
+              <option value="volume_tier">% por volumen (escalonado)</option>
             </select>
           </label>
-          {actionType === "nxm" ? (
+          {actionType === "volume_tier" ? (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                A más unidades del alcance, mayor descuento. Aplica el % del tramo
+                más alto que el carrito alcance.
+              </div>
+              {tiers.map((t, i) => (
+                <div key={i} className="flex items-end gap-2">
+                  <Input
+                    label={i === 0 ? "Desde (un.)" : undefined}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={t.minQty}
+                    onChange={(e) => setTier(i, { minQty: e.target.value })}
+                    className="flex-1"
+                  />
+                  <Input
+                    label={i === 0 ? "Descuento (%)" : undefined}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={t.pct}
+                    onChange={(e) => setTier(i, { pct: e.target.value })}
+                    className="flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeTier(i)}
+                    disabled={tiers.length <= 1}
+                    className="mb-1 rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-destructive disabled:opacity-40"
+                    title="Quitar tramo"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addTier}
+                className="text-xs font-medium text-ninja-flameSoft transition hover:underline"
+              >
+                + Agregar tramo
+              </button>
+            </div>
+          ) : actionType === "nxm" ? (
             <div className="grid grid-cols-2 gap-2">
               <Input
                 label="Lleva (N)"

@@ -14,14 +14,24 @@
 
 export type PromoScope = "cart" | "category" | "product";
 // percent / amount (H53) + nxm (2x1, 3x2…), fixed_price (precio fijo del alcance:
-// combo/pack) y second_item ("2º al X%": en cada par del alcance, el más barato
-// con `action_value`% off) (H54).
+// combo/pack), second_item ("2º al X%": en cada par del alcance, el más barato
+// con `action_value`% off) y volume_tier (% por volumen escalonado: el % sube por
+// tramos de cantidad del alcance) (H54).
 export type PromoActionType =
   | "percent"
   | "amount"
   | "nxm"
   | "fixed_price"
-  | "second_item";
+  | "second_item"
+  | "volume_tier";
+
+// Un tramo de la promo por volumen: a partir de `min_qty` unidades del alcance,
+// se aplica `pct`% de descuento sobre la base del alcance. Califica el tramo más
+// alto cuyo `min_qty` no supera la cantidad del carrito (ver volumeTierDiscount).
+export interface PromoVolumeTier {
+  min_qty: number;
+  pct: number;
+}
 
 export interface Promotion {
   id: string;
@@ -55,6 +65,8 @@ export interface Promotion {
   // Sólo para nxm: N (lleva) y M (paga). N > M ≥ 1. null en los demás tipos.
   buy_qty: number | null;
   pay_qty: number | null;
+  // Sólo para volume_tier: tramos de cantidad → %. null en los demás tipos.
+  volume_tiers: PromoVolumeTier[] | null;
 }
 
 // Línea del carrito reducida a lo que el motor necesita. `lineTotal` alimenta las
@@ -148,6 +160,32 @@ function nxmDiscount(promo: Promotion, lines: PromoCartLine[]): number {
   return disc;
 }
 
+// Cantidad total de unidades del alcance (suma de cantidades; soporta peso/kg).
+function scopedQty(promo: Promotion, lines: PromoCartLine[]): number {
+  return scopedLines(promo, lines).reduce(
+    (acc, l) => acc + Math.max(0, l.quantity || 0),
+    0,
+  );
+}
+
+// Descuento "% por volumen escalonado": según la cantidad del alcance, aplica el
+// % del tramo que MÁS conviene entre los que califican (min_qty ≤ cantidad). Así
+// es robusto ante tramos mal ordenados: el cliente nunca recibe menos del mejor
+// tramo al que tiene derecho. Descuento = base del alcance × % / 100.
+function volumeTierDiscount(promo: Promotion, lines: PromoCartLine[]): number {
+  const tiers = promo.volume_tiers ?? [];
+  if (tiers.length === 0) return 0;
+  const qty = scopedQty(promo, lines);
+  let pct = 0;
+  for (const t of tiers) {
+    const minQty = t?.min_qty ?? 0;
+    const tierPct = t?.pct ?? 0;
+    if (minQty >= 1 && qty >= minQty && tierPct > pct) pct = tierPct;
+  }
+  if (pct <= 0) return 0;
+  return (scopeBase(promo, lines) * pct) / 100;
+}
+
 // Descuento "2º ítem al X%": agrupa las unidades del alcance en PARES (ordenadas
 // por precio); en cada par, el más barato recibe `action_value`% de descuento.
 function secondItemDiscount(promo: Promotion, lines: PromoCartLine[]): number {
@@ -182,6 +220,9 @@ export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number 
       break;
     case "second_item":
       raw = secondItemDiscount(promo, lines);
+      break;
+    case "volume_tier":
+      raw = volumeTierDiscount(promo, lines);
       break;
     default:
       raw = 0;

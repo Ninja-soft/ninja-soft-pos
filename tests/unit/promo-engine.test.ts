@@ -35,6 +35,7 @@ function base(p: Partial<Promotion>): Promotion {
     action_value: 10,
     buy_qty: null,
     pay_qty: null,
+    volume_tiers: null,
     ...p,
   };
 }
@@ -154,6 +155,56 @@ describe("promoDiscount — H54 (NxM y precio fijo)", () => {
         one,
       ),
     ).toBe(0);
+  });
+  it("volumen escalonado: aplica el % del tramo más alto que califica", () => {
+    const tiers = [
+      { min_qty: 3, pct: 10 },
+      { min_qty: 6, pct: 15 },
+    ];
+    // 5 unidades del producto A a 1000 c/u (base 5000). Califica el tramo de 3+
+    // (10%), no el de 6+ → 500.
+    const five: PromoCartLine[] = [
+      { productId: "prodA", categoryId: "catX", unitPrice: 1000, quantity: 5, lineTotal: 5000 },
+    ];
+    expect(
+      promoDiscount(base({ action_type: "volume_tier", action_value: 0, volume_tiers: tiers }), five),
+    ).toBe(500);
+    // 6 unidades (base 6000) → salta al tramo 6+ (15%) → 900.
+    const six: PromoCartLine[] = [
+      { productId: "prodA", categoryId: "catX", unitPrice: 1000, quantity: 6, lineTotal: 6000 },
+    ];
+    expect(
+      promoDiscount(base({ action_type: "volume_tier", action_value: 0, volume_tiers: tiers }), six),
+    ).toBe(900);
+  });
+  it("volumen escalonado: por debajo del primer tramo no descuenta", () => {
+    const tiers = [{ min_qty: 3, pct: 10 }];
+    const two: PromoCartLine[] = [
+      { productId: "prodA", categoryId: "catX", unitPrice: 1000, quantity: 2, lineTotal: 2000 },
+    ];
+    expect(
+      promoDiscount(base({ action_type: "volume_tier", action_value: 0, volume_tiers: tiers }), two),
+    ).toBe(0);
+  });
+  it("volumen escalonado: cuenta sólo las unidades del alcance (categoría)", () => {
+    const tiers = [{ min_qty: 3, pct: 20 }];
+    // 3 de catX (base 3000) + 5 de catY (no cuentan para el tramo ni la base).
+    const mix: PromoCartLine[] = [
+      { productId: "a", categoryId: "catX", unitPrice: 1000, quantity: 3, lineTotal: 3000 },
+      { productId: "b", categoryId: "catY", unitPrice: 100, quantity: 5, lineTotal: 500 },
+    ];
+    expect(
+      promoDiscount(
+        base({
+          action_type: "volume_tier",
+          action_value: 0,
+          scope: "category",
+          scope_category_id: "catX",
+          volume_tiers: tiers,
+        }),
+        mix,
+      ),
+    ).toBe(600); // 3000 × 20%
   });
 });
 

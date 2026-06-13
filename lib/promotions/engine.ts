@@ -13,9 +13,15 @@
 // persistirlo en la venta) es follow-up: este módulo sólo decide.
 
 export type PromoScope = "cart" | "category" | "product";
-// percent / amount (H53) + nxm (2x1, 3x2…) y fixed_price (precio fijo del
-// alcance: combo/pack) (H54).
-export type PromoActionType = "percent" | "amount" | "nxm" | "fixed_price";
+// percent / amount (H53) + nxm (2x1, 3x2…), fixed_price (precio fijo del alcance:
+// combo/pack) y second_item ("2º al X%": en cada par del alcance, el más barato
+// con `action_value`% off) (H54).
+export type PromoActionType =
+  | "percent"
+  | "amount"
+  | "nxm"
+  | "fixed_price"
+  | "second_item";
 
 export interface Promotion {
   id: string;
@@ -142,6 +148,19 @@ function nxmDiscount(promo: Promotion, lines: PromoCartLine[]): number {
   return disc;
 }
 
+// Descuento "2º ítem al X%": agrupa las unidades del alcance en PARES (ordenadas
+// por precio); en cada par, el más barato recibe `action_value`% de descuento.
+function secondItemDiscount(promo: Promotion, lines: PromoCartLine[]): number {
+  const pct = promo.action_value || 0;
+  if (pct <= 0) return 0;
+  const prices = scopedUnitPrices(promo, lines); // ascendente
+  const pairs = Math.floor(prices.length / 2);
+  let disc = 0;
+  // El más barato de cada par es prices[2*i] (lista ascendente).
+  for (let i = 0; i < pairs; i++) disc += ((prices[2 * i] ?? 0) * pct) / 100;
+  return disc;
+}
+
 // Descuento en dinero que produce la promo (acotado a la base; nunca negativo).
 export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number {
   const base = scopeBase(promo, lines);
@@ -160,6 +179,9 @@ export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number 
       break;
     case "nxm":
       raw = nxmDiscount(promo, lines);
+      break;
+    case "second_item":
+      raw = secondItemDiscount(promo, lines);
       break;
     default:
       raw = 0;

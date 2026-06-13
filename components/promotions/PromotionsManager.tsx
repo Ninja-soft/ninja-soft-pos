@@ -118,7 +118,9 @@ function PromoRow({
         ? `${formatCurrency(promo.action_value)} off`
         : promo.action_type === "nxm"
           ? `${promo.buy_qty}x${promo.pay_qty}`
-          : `precio ${formatCurrency(promo.action_value)}`;
+          : promo.action_type === "second_item"
+            ? `2º al ${promo.action_value}%`
+            : `precio ${formatCurrency(promo.action_value)}`;
   const scopeLabel =
     promo.scope === "cart"
       ? "todo el carrito"
@@ -195,7 +197,7 @@ function PromotionFormModal({
   const [scope, setScope] = useState<"cart" | "category">("cart");
   const [categoryId, setCategoryId] = useState("");
   const [actionType, setActionType] = useState<
-    "percent" | "amount" | "nxm" | "fixed_price"
+    "percent" | "amount" | "nxm" | "fixed_price" | "second_item"
   >("percent");
   const [actionValue, setActionValue] = useState("10");
   // NxM (H54): N (lleva) y M (paga).
@@ -252,7 +254,10 @@ function PromotionFormModal({
     }
     const n = Math.trunc(Number(buyQty) || 0);
     const m = Math.trunc(Number(payQty) || 0);
-    if (actionType === "percent" && (value <= 0 || value > 100)) {
+    if (
+      (actionType === "percent" || actionType === "second_item") &&
+      (value <= 0 || value > 100)
+    ) {
       toast({ title: "El porcentaje debe estar entre 1 y 100", variant: "error" });
       return;
     }
@@ -320,7 +325,12 @@ function PromotionFormModal({
               value={actionType}
               onChange={(e) =>
                 setActionType(
-                  e.target.value as "percent" | "amount" | "nxm" | "fixed_price",
+                  e.target.value as
+                    | "percent"
+                    | "amount"
+                    | "nxm"
+                    | "fixed_price"
+                    | "second_item",
                 )
               }
               className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
@@ -329,6 +339,7 @@ function PromotionFormModal({
               <option value="amount">Monto fijo ($)</option>
               <option value="nxm">NxM (2x1, 3x2…)</option>
               <option value="fixed_price">Precio fijo (combo)</option>
+              <option value="second_item">2º ítem al X%</option>
             </select>
           </label>
           {actionType === "nxm" ? (
@@ -355,13 +366,17 @@ function PromotionFormModal({
               label={
                 actionType === "percent"
                   ? "Valor (%)"
-                  : actionType === "fixed_price"
-                    ? "Precio del combo ($)"
-                    : "Valor ($)"
+                  : actionType === "second_item"
+                    ? "Descuento 2º ítem (%)"
+                    : actionType === "fixed_price"
+                      ? "Precio del combo ($)"
+                      : "Valor ($)"
               }
               type="number"
               min="0"
-              step={actionType === "percent" ? "1" : "0.01"}
+              step={
+                actionType === "percent" || actionType === "second_item" ? "1" : "0.01"
+              }
               value={actionValue}
               onChange={(e) => setActionValue(e.target.value)}
             />

@@ -172,4 +172,30 @@ export const promotionsApi = {
     if (error) throw error;
     return (data ?? []) as unknown as SimSale[];
   },
+
+  // Reporte de performance (F9 · H56): por promo de DESCUENTO que aplicó en el
+  // período, ventas que la usaron + descuento otorgado + facturación. Read-only.
+  performance: async (fromISO: string, toISO: string): Promise<PromotionPerfReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("promotion_performance" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+    } as never);
+    if (error) throw error;
+    return (data ?? { rows: [], count: 0, total_discount: 0, total_sold: 0 }) as unknown as PromotionPerfReport;
+  },
 };
+
+export interface PromotionPerfRow {
+  promo_id: string;
+  promo_name: string;
+  count: number;
+  total_discount: number;
+  total_sold: number;
+}
+export interface PromotionPerfReport {
+  rows: PromotionPerfRow[];
+  count: number;
+  total_discount: number;
+  total_sold: number;
+}

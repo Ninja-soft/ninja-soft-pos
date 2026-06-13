@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LineChart, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { BarChart3, LineChart, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { PromotionSimModal } from "@/components/promotions/PromotionSimModal";
+import { PromotionPerfModal } from "@/components/promotions/PromotionPerfModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -27,6 +28,7 @@ export function PromotionsManager() {
   const [creating, setCreating] = useState(false);
   const [delTarget, setDelTarget] = useState<Promotion | null>(null);
   const [simPromo, setSimPromo] = useState<Promotion | null>(null);
+  const [perfOpen, setPerfOpen] = useState(false);
 
   async function doDelete() {
     if (!delTarget) return;
@@ -47,8 +49,8 @@ export function PromotionsManager() {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         Definí promociones por condiciones (vigencia, día/horario, monto mínimo,
-        alcance) y su descuento. El POS aplicará la que más convenga al carrito
-        (la aplicación en la venta llega en una próxima etapa).
+        alcance, medio de pago) y su acción. El POS aplica la que más conviene al
+        carrito y suma los regalos; mirá el impacto con “Rendimiento”.
       </p>
 
       {isLoading ? (
@@ -71,9 +73,14 @@ export function PromotionsManager() {
         </div>
       )}
 
-      <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
-        <Plus size={15} /> Nueva promoción
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
+          <Plus size={15} /> Nueva promoción
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setPerfOpen(true)}>
+          <BarChart3 size={15} /> Rendimiento
+        </Button>
+      </div>
 
       <PromotionFormModal
         open={creating || editing !== null}
@@ -96,6 +103,7 @@ export function PromotionsManager() {
       />
 
       <PromotionSimModal promo={simPromo} onClose={() => setSimPromo(null)} />
+      <PromotionPerfModal open={perfOpen} onClose={() => setPerfOpen(false)} />
     </div>
   );
 }

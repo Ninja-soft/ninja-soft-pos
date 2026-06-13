@@ -37,10 +37,13 @@ export interface PromotionInput {
   pay_qty?: number | null;
   // Sólo para % por volumen escalonado (H54): tramos cantidad → %.
   volume_tiers?: PromoVolumeTier[] | null;
+  // Condición por medio de pago (H54): si está seteado, la promo sólo aplica con
+  // ese medio. null/"" = cualquier medio.
+  payment_method?: string | null;
 }
 
 const COLS =
-  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers";
+  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers, payment_method";
 
 // Normaliza el input al payload de la tabla (limpia el alcance no usado).
 function toRow(input: PromotionInput): Record<string, unknown> {
@@ -71,6 +74,8 @@ function toRow(input: PromotionInput): Record<string, unknown> {
       input.action_type === "volume_tier"
         ? sanitizeTiers(input.volume_tiers)
         : null,
+    // Condición por medio de pago: "" o ausente → null (cualquier medio).
+    payment_method: input.payment_method ? input.payment_method : null,
   };
 }
 

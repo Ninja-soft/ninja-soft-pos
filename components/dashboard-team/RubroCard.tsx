@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Sparkles, Store } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { cn } from "@/lib/utils/cn";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { useMyTenant, useSetMyIndustry } from "@/modules/tenants/hooks";
@@ -26,14 +28,29 @@ export function RubroCard() {
   const { toast } = useToast();
   const { data: ctx } = useMyTenant();
   const setIndustry = useSetMyIndustry();
+  // Rubro pendiente de confirmar (el cambio pasa por un aviso, ver más abajo).
+  const [pending, setPending] = useState<string | null>(null);
 
   if (!ctx || !ctx.canManage) return null;
   const current = ctx.industry;
 
+  // Tap en un rubro distinto: NO cambia directo. Abre un aviso que aclara qué
+  // hace (y qué NO hace) el cambio de rubro, porque es un punto que confunde:
+  // cambiar de rubro sólo adapta las FUNCIONES del POS — los productos, precios y
+  // categorías son independientes del rubro y NO se tocan.
   function choose(v: string) {
     if (v === current || setIndustry.isPending) return;
+    setPending(v);
+  }
+
+  function confirmChange() {
+    if (!pending) return;
+    const v = pending;
     setIndustry.mutate(v, {
-      onSuccess: () => toast({ title: "Rubro actualizado", variant: "success" }),
+      onSuccess: () => {
+        setPending(null);
+        toast({ title: "Rubro actualizado", variant: "success" });
+      },
       onError: () => toast({ title: "No se pudo actualizar", variant: "error" }),
     });
   }
@@ -127,6 +144,29 @@ export function RubroCard() {
           </div>
         </div>
       </CardContent>
+
+      {/* Aviso al cambiar de rubro: aclara que sólo se adaptan las funciones del
+          POS y que el catálogo (productos/precios/categorías) NO se modifica.
+          Resuelve la confusión de "cambiar de rubro me transfiere los productos":
+          el rubro y el catálogo son independientes. */}
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(o) => !o && setPending(null)}
+        title={
+          pending
+            ? `Cambiar a ${VERTICAL_LABELS[pending as keyof typeof VERTICAL_LABELS] ?? pending}`
+            : "Cambiar de rubro"
+        }
+        description={
+          "Cambiar de rubro sólo adapta las FUNCIONES del POS (mesas/comandas, " +
+          "balanza, venta rápida, etc.). Tus productos, precios y categorías son " +
+          "independientes del rubro y NO se modifican: tu catálogo queda intacto. " +
+          "Si querés un catálogo distinto, agregá o eliminá productos a mano."
+        }
+        confirmLabel="Cambiar rubro"
+        loading={setIndustry.isPending}
+        onConfirm={confirmChange}
+      />
     </Card>
   );
 }

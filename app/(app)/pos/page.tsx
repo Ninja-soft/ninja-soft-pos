@@ -1207,7 +1207,9 @@ function PosPageInner() {
       setTicketOpen(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      const title = msg.includes("table_order_not_open")
+      const title = msg.includes("account_inactive")
+        ? "Tu suscripción venció. Renovala para volver a cobrar."
+        : msg.includes("table_order_not_open")
         ? "La mesa ya fue cobrada o cerrada"
         : msg.includes("delivery_order_not_open")
           ? "El pedido ya fue cobrado o cancelado"

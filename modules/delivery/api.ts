@@ -137,6 +137,8 @@ export interface DeliveryOrderItem {
   unit_price: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia del ítem (F13 · H47): destacada en KDS y comanda.
+  allergens: string | null;
   course: number;
   fired_at: string | null;
 }
@@ -155,6 +157,8 @@ export interface DeliveryComandaItem {
   qty: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia destacada en la comanda impresa (F13 · H47).
+  allergens: string | null;
   station: string | null;
   course: number;
   printed_at: string | null;
@@ -194,6 +198,8 @@ export interface AddDeliveryItemInput {
   unit_price: number;
   modifiers?: SaleLineModifierGroup[];
   notes?: string | null;
+  // Alergia/intolerancia del ítem (F13 · H47): se resalta en KDS y comanda.
+  allergens?: string | null;
   course?: number;
   hold?: boolean;
 }
@@ -235,7 +241,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_order_items" as never)
       .select(
-        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, course, fired_at",
+        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at",
       )
       .eq("order_id", orderId)
       .order("created_at");
@@ -299,6 +305,7 @@ export const deliveryApi = {
       p_notes: input.notes ?? null,
       p_course: input.course ?? 1,
       p_hold: input.hold ?? false,
+      p_allergens: input.allergens ?? null,
     } as never);
     if (error) throw error;
     return data as unknown as string;

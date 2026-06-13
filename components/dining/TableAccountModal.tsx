@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ChefHat,
   Clock,
   CreditCard,
@@ -372,6 +373,12 @@ function ItemRow({
           {held && (
             <span className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
               <Clock size={11} /> En espera · Tiempo {item.course}
+            </span>
+          )}
+          {/* Alergia/intolerancia (F13 · H47): destacada en rojo. */}
+          {item.allergens && (
+            <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-red-300">
+              <AlertTriangle size={11} /> Alergia: {item.allergens}
             </span>
           )}
         </div>

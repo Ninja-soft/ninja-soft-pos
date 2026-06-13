@@ -20,7 +20,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟢 Funcional (H7–H10b + Tiendita) |
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
-| **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 Planificación |
+| **F9** | Motor de promociones PRO | 4–6 semanas | 🟡 En progreso (H53 núcleo: motor declarativo puro + admin de promos; falta wiring en POS) |
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
@@ -728,11 +728,11 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
 
 Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo, Shopify POS) en promociones. Motor **declarativo** (reglas sin código), evaluado en el carrito en tiempo real, auditable y combinable. Configurable 100% por el dueño desde el panel.
 
-- [ ] **H53 — Núcleo del motor de reglas.**
-  - [ ] Modelo declarativo: **condiciones** (productos, categorías, marcas, cantidad, monto, cliente/segmento, día/horario, canal, sucursal, medio de pago) → **acciones** (% descuento, monto fijo, precio fijo, producto bonificado, envío/recargo).
-  - [ ] Evaluación en el carrito en vivo, con prioridad, **combinables o exclusivas**, y tope de descuento.
-  - [ ] Vigencia por fecha/horario (usa el calendario unificado de TX).
-  - [ ] *Criterio:* "Miércoles 30% en bebidas de 18 a 21hs" se configura sin código y aplica solo en ese rango.
+- [~] **H53 — Núcleo del motor de reglas.** — *Arrancado: motor declarativo (puro + testeado) + definición de promos + admin. Falta la evaluación EN EL POS (aplicar al carrito + persistir en la venta → toca el POS/`create_sale`, follow-up) y los tipos avanzados (NxM, segmentos, combinables) de H54/H55.*
+  - [~] Modelo declarativo: **condiciones** (productos, categorías, marcas, cantidad, monto, cliente/segmento, día/horario, canal, sucursal, medio de pago) → **acciones** (% descuento, monto fijo, precio fijo, producto bonificado, envío/recargo). — *v1 hecho (local): tabla `promotions` (migración `20260609210000_promotions`, aplicada en remoto, RLS owner/manager) con condiciones **monto mínimo + alcance (carrito/categoría/producto) + día de semana + franja horaria + vigencia por fecha** y acciones **% / monto fijo**. Motor PURO y testeado en `lib/promotions/engine.ts` (`evaluateCart`/`promoApplies`/`promoDiscount` + `tests/unit/promo-engine.test.ts`). Admin en **Configuración → "Promociones"** (`PromotionsManager`: alta/edición/baja con todas las condiciones + acción). **Follow-up:** marca/cliente-segmento/canal/sucursal/medio de pago como condiciones, y precio fijo/producto bonificado/recargo como acciones (H54).*
+  - [~] Evaluación en el carrito en vivo, con prioridad, **combinables o exclusivas**, y tope de descuento. — *El motor elige la promo de **mayor descuento** (exclusiva, desempate por prioridad) y acota el monto fijo a la base — LÓGICA hecha y testeada. **Wiring en el POS (aplicar el descuento al carrito en vivo + persistir en `create_sale`) = follow-up** (toca el hot path del POS/cobro). Combinables/apilables = H54.*
+  - [x] Vigencia por fecha/horario (usa el calendario unificado de TX). — *Vigencia por fecha (`valid_from`/`valid_to`), día de semana y franja horaria (minutos), resuelta por el motor contra el contexto local AR. Inputs de fecha/hora en el admin.*
+  - [~] *Criterio:* "Miércoles 30% en bebidas de 18 a 21hs" se configura sin código y aplica solo en ese rango. — *Se **configura** sin código (admin: 30% / categoría Bebidas / día miércoles / 18:00–21:00) y el motor lo evalúa correcto (probado por test). El "**aplica** en la venta" depende del wiring en el POS (follow-up).*
 
 - [ ] **H54 — Catálogo de tipos de promoción.**
   - [ ] **2x1 / 3x2 / NxM**, **% por volumen** (escalonado), **combos/bundles** a precio especial, **descuento por segundo ítem**, **precio por pack**, **regalo por compra** (gift with purchase), **descuento por medio de pago**, **happy hour**, **liquidación por temporada**.

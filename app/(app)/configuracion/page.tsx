@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -33,6 +33,7 @@ import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { SalonesManager } from "@/components/dining/SalonesManager";
 import { MenusManager } from "@/components/dining/MenusManager";
+import { PromotionsManager } from "@/components/promotions/PromotionsManager";
 import { ZonasManager } from "@/components/delivery/ZonasManager";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -64,7 +65,8 @@ type Section =
   | "pantalla-cliente"
   | "hardware"
   | "precios"
-  | "garantias";
+  | "garantias"
+  | "promociones";
 
 type SectionDef = {
   key: Section;
@@ -112,6 +114,10 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     title: "Cobro",
     sections: [
       { key: "pagos", label: "Medios de pago", icon: CreditCard },
+      // Promociones (F9 · H53): por ahora SIN gating de plan — es sólo la
+      // DEFINICIÓN (todavía no se aplica en el POS). El gating por `promociones`
+      // se sumará cuando la aplicación en la venta esté lista.
+      { key: "promociones", label: "Promociones", icon: Percent },
       { key: "precios", label: "Listas de precios", icon: BadgeDollarSign, feature: "listas_precios" },
       { key: "devoluciones", label: "Devoluciones", icon: RotateCcw, feature: "devoluciones" },
       { key: "garantias", label: "Garantías extendidas", icon: ShieldCheck, feature: "garantias" },
@@ -607,6 +613,20 @@ function ConfiguracionInner() {
 
           {/* Centro de diagnóstico de hardware (F10 · H26) */}
           {section === "hardware" && <HardwareCard />}
+
+          {/* Promociones (F9 · H53): definición de promos (condiciones → acción).
+              Escritura RLS sólo owner/manager. La aplicación en el POS es follow-up. */}
+          {section === "promociones" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Percent size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Promociones</span>
+                </div>
+                <PromotionsManager />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Listas de precios por canal (escritura protegida por RLS) */}
           {section === "precios" && <PriceListsCard />}

@@ -75,7 +75,17 @@ import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
 import { useAppointment } from "@/modules/agenda/hooks";
 import { appointmentsApi } from "@/modules/agenda/api";
-import { useTableOrder, useTableOrderItems } from "@/modules/dining/hooks";
+import {
+  useTableOrder,
+  useTableOrderItems,
+  useDiningEnabled,
+} from "@/modules/dining/hooks";
+import {
+  useMenus,
+  useActiveMenuIds,
+  useMenuProductIds,
+} from "@/modules/menus/hooks";
+import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
 import {
   useDeliveryOrder,
   useDeliveryOrderItems,
@@ -201,17 +211,44 @@ function PosPageInner() {
 
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const { data: categories } = useCategories();
+
+  // Menús por horario (F13 · H47): sólo en modo gastronómico. El cajero puede
+  // filtrar la carta a un menú (Desayuno, Almuerzo…). Default "Todos" (no esconde
+  // nada); seleccionar un menú deja sólo sus productos asignados. Los hooks no
+  // consultan en tenants sin modo gastronómico (enabled).
+  const { data: diningEnabled } = useDiningEnabled();
+  const [menuFilter, setMenuFilter] = useState<string | null>(null);
+  const { data: menus } = useMenus(Boolean(diningEnabled));
+  const { data: activeMenuIds } = useActiveMenuIds(Boolean(diningEnabled));
+  const { data: menuProductIds } = useMenuProductIds(menuFilter);
+  const activeMenuSet = useMemo(
+    () => new Set<string>(activeMenuIds ?? []),
+    [activeMenuIds],
+  );
+  // Set de productos del menú seleccionado (para filtrar la grilla). Null cuando
+  // no hay menú elegido ("Todos").
+  const menuProductSet = useMemo<Set<string> | null>(
+    () => (menuFilter ? new Set<string>(menuProductIds ?? []) : null),
+    [menuFilter, menuProductIds],
+  );
+
   // El filtro por categoría es por sub-árbol (la categoría + sus descendientes):
   // elegir un rubro padre muestra también los productos de sus sub-rubros. Se
-  // resuelve en cliente, así que la query al server va sin categoría.
+  // resuelve en cliente, así que la query al server va sin categoría. El filtro
+  // por menú se aplica encima (ambos combinan).
   const { data: allProducts } = useProducts(search);
   const products = useMemo(() => {
-    if (!categoryFilter) return allProducts;
-    const ids = subtreeIds(categories ?? [], categoryFilter);
-    return (allProducts ?? []).filter(
-      (p) => p.category_id && ids.has(p.category_id),
-    );
-  }, [allProducts, categories, categoryFilter]);
+    if (!categoryFilter && !menuProductSet) return allProducts;
+    let list = allProducts ?? [];
+    if (categoryFilter) {
+      const ids = subtreeIds(categories ?? [], categoryFilter);
+      list = list.filter((p: Product) => p.category_id && ids.has(p.category_id));
+    }
+    if (menuProductSet) {
+      list = list.filter((p: Product) => menuProductSet.has(p.id));
+    }
+    return list;
+  }, [allProducts, categories, categoryFilter, menuProductSet]);
   // Ruta "Rubro › Sub-rubro › …" de la categoría activa, para el encabezado de
   // la grilla de productos (da contexto al filtrar profundo).
   const categoryPath = useMemo(() => {
@@ -314,7 +351,7 @@ function PosPageInner() {
   // Favoritos (H36): botones rápidos grandes arriba de la grilla. Se muestran
   // cuando no se está buscando ni filtrando por categoría (pantalla de cobro
   // rápido sin búsqueda). Independiente del rubro: si hay favoritos, aparecen.
-  const showFavorites = !search.trim() && !categoryFilter;
+  const showFavorites = !search.trim() && !categoryFilter && !menuFilter;
   const { data: favorites } = useFavoriteProducts(showFavorites);
 
   // ----- Pantalla del cliente / doble pantalla (F10 · H25) -----
@@ -1310,6 +1347,19 @@ function PosPageInner() {
               <Banknote size={16} /> Venta libre (monto manual)
             </Button>
           )}
+          {/* Filtro por menú (F13 · H47): sólo en modo gastronómico y con menús
+              cargados. Filtra la carta al menú elegido; marca el vigente ahora. */}
+          {!search.trim() && diningEnabled && (menus ?? []).length > 0 && (
+            <div className="mt-3">
+              <MenuFilterBar
+                menus={menus ?? []}
+                activeIds={activeMenuSet}
+                selected={menuFilter}
+                onSelect={setMenuFilter}
+              />
+            </div>
+          )}
+
           {/* Navegador de categorías: raíces como pestañas + drill-down a
               sub-categorías (filtra por sub-árbol). Disponible para cualquier
               rubro que tenga categorías cargadas. */}
@@ -1335,7 +1385,7 @@ function PosPageInner() {
             />
           )}
 
-          {showFrequent && !categoryFilter && topProducts && topProducts.length > 0 && (
+          {showFrequent && !categoryFilter && !menuFilter && topProducts && topProducts.length > 0 && (
             <div className="mt-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <Star size={13} className="text-ninja-flameSoft" /> Frecuentes

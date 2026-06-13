@@ -745,8 +745,8 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
   - [ ] **Gift cards** y saldo a favor.
   - [ ] *Criterio:* un cliente "VIP" recibe automáticamente un precio/beneficio distinto en el POS.
 
-- [ ] **H56 — Gobierno, simulación y reporte de promociones.**
-  - [ ] **Simulador**: previsualizar el efecto de una promo sobre ventas históricas antes de activarla.
+- [~] **H56 — Gobierno, simulación y reporte de promociones.** — *Arrancado por el simulador (ver sub-ítem). Falta tope/aprobación, reporte de performance y export.*
+  - [x] **Simulador**: previsualizar el efecto de una promo sobre ventas históricas antes de activarla. — *Hecho (local). Botón **"Simular impacto"** por promo en Configuración → "Promociones" (`PromotionSimModal`): elegís un rango y corre la promo (con el motor PURO, aun en borrador/inactiva) contra las ventas del período → muestra **tickets analizados / tickets con la promo / descuento total estimado / % sobre lo vendido**. Read-only, no modifica nada. Backend: RPC `promotion_sim_data(p_from, p_to, p_limit)` (SECURITY DEFINER, filtro explícito por tenant; arma por venta el contexto AR + líneas con categoría; cap 5000; migración `20260609230000_promotion_sim_data`, aplicada en remoto). Función pura `simulatePromotion` en `lib/promotions/engine.ts` + test. **Follow-up:** desglose por día/producto y guardar simulaciones.*
   - [ ] **Tope de impacto** y aprobación (rol manager/owner), todo auditado.
   - [ ] **Reporte de performance** por promoción (uso, descuento otorgado, margen, incremental).
   - [ ] Export en **XLSX** (ver TX) y al catálogo/canales.

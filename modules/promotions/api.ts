@@ -11,9 +11,10 @@ import type {
   Promotion,
   PromoScope,
   PromoActionType,
+  SimSale,
 } from "@/lib/promotions/engine";
 
-export type { Promotion, PromoScope, PromoActionType };
+export type { Promotion, PromoScope, PromoActionType, SimSale };
 
 export interface PromotionInput {
   name: string;
@@ -119,5 +120,18 @@ export const promotionsApi = {
       .update({ deleted_at: new Date().toISOString() } as never)
       .eq("id", id);
     if (error) throw error;
+  },
+
+  // Datos históricos para el simulador (F9 · H56): ventas del período (las más
+  // recientes, hasta `limit`) con su contexto AR + líneas, listas para el motor.
+  simData: async (fromISO: string, toISO: string, limit = 1000): Promise<SimSale[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("promotion_sim_data" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+      p_limit: limit,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as SimSale[];
   },
 };

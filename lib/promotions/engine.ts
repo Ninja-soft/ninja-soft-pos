@@ -195,3 +195,47 @@ export function evaluateCart(
   if (!best) return null;
   return { promotionId: best.promo.id, name: best.promo.name, discount: best.discount };
 }
+
+// ── Simulador (F9 · H56) ──────────────────────────────────────────────────────
+// Corre UNA promo contra ventas históricas para previsualizar su impacto ANTES de
+// activarla: cuántos tickets habrían tenido la promo y cuánto descuento total.
+// Cada venta histórica trae su contexto (día/hora/fecha local AR, resuelto por la
+// RPC) y sus líneas. PURO: no consulta nada, sólo agrega.
+
+export interface SimSale {
+  weekday: number;
+  minutes: number;
+  date: string;
+  lines: PromoCartLine[];
+}
+
+export interface SimResult {
+  ticketsAnalyzed: number;
+  ticketsWithPromo: number; // tickets donde la promo habría aplicado (descuento > 0)
+  totalDiscount: number; // descuento total estimado
+  totalSold: number; // total vendido del período (suma de subtotales)
+}
+
+// Simula la promo IGNORANDO su flag is_active (se previsualiza aunque esté en
+// borrador). Igual respeta el resto de las condiciones (fecha/día/hora/min/alcance).
+export function simulatePromotion(promo: Promotion, sales: SimSale[]): SimResult {
+  const draft: Promotion = { ...promo, is_active: true };
+  let ticketsWithPromo = 0;
+  let totalDiscount = 0;
+  let totalSold = 0;
+  for (const s of sales) {
+    totalSold += cartSubtotal(s.lines);
+    const ctx: PromoContext = { weekday: s.weekday, minutes: s.minutes, date: s.date };
+    if (!promoApplies(draft, s.lines, ctx)) continue;
+    const d = promoDiscount(draft, s.lines);
+    if (d <= 0) continue;
+    ticketsWithPromo += 1;
+    totalDiscount += d;
+  }
+  return {
+    ticketsAnalyzed: sales.length,
+    ticketsWithPromo,
+    totalDiscount: Math.round(totalDiscount * 100) / 100,
+    totalSold: Math.round(totalSold * 100) / 100,
+  };
+}

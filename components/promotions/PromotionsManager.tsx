@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { LineChart, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { PromotionSimModal } from "@/components/promotions/PromotionSimModal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -25,6 +26,7 @@ export function PromotionsManager() {
   const [editing, setEditing] = useState<Promotion | null>(null);
   const [creating, setCreating] = useState(false);
   const [delTarget, setDelTarget] = useState<Promotion | null>(null);
+  const [simPromo, setSimPromo] = useState<Promotion | null>(null);
 
   async function doDelete() {
     if (!delTarget) return;
@@ -61,6 +63,7 @@ export function PromotionsManager() {
             <PromoRow
               key={p.id}
               promo={p}
+              onSim={() => setSimPromo(p)}
               onEdit={() => setEditing(p)}
               onDelete={() => setDelTarget(p)}
             />
@@ -91,16 +94,20 @@ export function PromotionsManager() {
         loading={remove.isPending}
         onConfirm={doDelete}
       />
+
+      <PromotionSimModal promo={simPromo} onClose={() => setSimPromo(null)} />
     </div>
   );
 }
 
 function PromoRow({
   promo,
+  onSim,
   onEdit,
   onDelete,
 }: {
   promo: Promotion;
+  onSim: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -134,6 +141,14 @@ function PromoRow({
           {promo.min_amount > 0 ? ` · desde ${formatCurrency(promo.min_amount)}` : ""}
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onSim}
+        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+        title="Simular impacto"
+      >
+        <LineChart size={15} />
+      </button>
       <button
         type="button"
         onClick={onEdit}

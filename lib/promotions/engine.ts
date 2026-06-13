@@ -13,7 +13,9 @@
 // persistirlo en la venta) es follow-up: este módulo sólo decide.
 
 export type PromoScope = "cart" | "category" | "product";
-export type PromoActionType = "percent" | "amount";
+// percent / amount (H53) + nxm (2x1, 3x2…) y fixed_price (precio fijo del
+// alcance: combo/pack) (H54).
+export type PromoActionType = "percent" | "amount" | "nxm" | "fixed_price";
 
 export interface Promotion {
   id: string;
@@ -35,15 +37,28 @@ export interface Promotion {
   scope: PromoScope;
   scope_category_id: string | null;
   scope_product_id: string | null;
-  // Acción: % sobre el alcance, o monto fijo (acotado a la base del alcance).
+  // Acción:
+  //  - percent: % de `action_value` sobre la base del alcance.
+  //  - amount: monto fijo `action_value` (acotado a la base).
+  //  - fixed_price: el alcance pasa a costar `action_value` (combo/pack);
+  //    descuento = base − action_value (acotado, ≥ 0).
+  //  - nxm: "lleva buy_qty, paga pay_qty" sobre las unidades del alcance;
+  //    descuento = (unidades gratis) × precio de las unidades MÁS BARATAS.
   action_type: PromoActionType;
   action_value: number;
+  // Sólo para nxm: N (lleva) y M (paga). N > M ≥ 1. null en los demás tipos.
+  buy_qty: number | null;
+  pay_qty: number | null;
 }
 
-// Línea del carrito reducida a lo que el motor necesita.
+// Línea del carrito reducida a lo que el motor necesita. `lineTotal` alimenta las
+// acciones agregadas (percent/amount/fixed_price); `unitPrice`/`quantity` el NxM
+// (que razona por unidad). El caller (POS) ya tiene todos estos datos.
 export interface PromoCartLine {
   productId: string | null;
   categoryId: string | null;
+  unitPrice: number;
+  quantity: number;
   // Importe de la línea ya neto de su descuento de línea (qty*precio - desc).
   lineTotal: number;
 }
@@ -101,14 +116,54 @@ export function promoApplies(
   return true;
 }
 
+// Precios unitarios de TODAS las unidades del alcance (una entrada por unidad),
+// ordenados ascendente. Para NxM: las unidades gratis son las más baratas.
+function scopedUnitPrices(promo: Promotion, lines: PromoCartLine[]): number[] {
+  const prices: number[] = [];
+  for (const l of scopedLines(promo, lines)) {
+    const q = Math.max(0, Math.trunc(l.quantity || 0));
+    for (let i = 0; i < q; i++) prices.push(l.unitPrice || 0);
+  }
+  return prices.sort((a, b) => a - b);
+}
+
+// Descuento de un NxM ("lleva N, paga M") sobre las unidades del alcance: por
+// cada grupo de N unidades, (N−M) salen gratis (las más baratas).
+function nxmDiscount(promo: Promotion, lines: PromoCartLine[]): number {
+  const n = Math.trunc(promo.buy_qty || 0);
+  const m = Math.trunc(promo.pay_qty || 0);
+  if (n < 2 || m < 1 || m >= n) return 0;
+  const prices = scopedUnitPrices(promo, lines);
+  const sets = Math.floor(prices.length / n);
+  const freeUnits = sets * (n - m);
+  // Las `freeUnits` unidades más baratas (prices ya viene ascendente).
+  let disc = 0;
+  for (let i = 0; i < freeUnits && i < prices.length; i++) disc += prices[i] ?? 0;
+  return disc;
+}
+
 // Descuento en dinero que produce la promo (acotado a la base; nunca negativo).
 export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number {
   const base = scopeBase(promo, lines);
   if (base <= 0) return 0;
-  const raw =
-    promo.action_type === "percent"
-      ? (base * (promo.action_value || 0)) / 100
-      : promo.action_value || 0;
+  let raw: number;
+  switch (promo.action_type) {
+    case "percent":
+      raw = (base * (promo.action_value || 0)) / 100;
+      break;
+    case "amount":
+      raw = promo.action_value || 0;
+      break;
+    case "fixed_price":
+      // El alcance pasa a costar action_value; descuento = lo que sobra.
+      raw = base - (promo.action_value || 0);
+      break;
+    case "nxm":
+      raw = nxmDiscount(promo, lines);
+      break;
+    default:
+      raw = 0;
+  }
   const capped = Math.min(Math.max(raw, 0), base);
   // Redondeo a 2 decimales para evitar ruido de punto flotante.
   return Math.round(capped * 100) / 100;

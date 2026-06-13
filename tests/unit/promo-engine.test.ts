@@ -31,13 +31,15 @@ function base(p: Partial<Promotion>): Promotion {
     scope_product_id: null,
     action_type: "percent",
     action_value: 10,
+    buy_qty: null,
+    pay_qty: null,
     ...p,
   };
 }
 
 const cart: PromoCartLine[] = [
-  { productId: "prodA", categoryId: "catX", lineTotal: 1000 },
-  { productId: "prodB", categoryId: "catY", lineTotal: 500 },
+  { productId: "prodA", categoryId: "catX", unitPrice: 1000, quantity: 1, lineTotal: 1000 },
+  { productId: "prodB", categoryId: "catY", unitPrice: 500, quantity: 1, lineTotal: 500 },
 ];
 
 describe("cartSubtotal", () => {
@@ -67,6 +69,62 @@ describe("promoDiscount", () => {
         cart,
       ),
     ).toBe(100); // 10% de 1000
+  });
+});
+
+describe("promoDiscount — H54 (NxM y precio fijo)", () => {
+  // 4 unidades de $100 en una categoría: 2x1 → 2 unidades gratis = $200.
+  const fourUnits: PromoCartLine[] = [
+    { productId: "p", categoryId: "catX", unitPrice: 100, quantity: 4, lineTotal: 400 },
+  ];
+  it("2x1 libera la mitad (unidades más baratas)", () => {
+    expect(
+      promoDiscount(
+        base({ action_type: "nxm", buy_qty: 2, pay_qty: 1, scope: "category", scope_category_id: "catX" }),
+        fourUnits,
+      ),
+    ).toBe(200); // 4/2 = 2 sets, cada set libera 1 → 2 gratis × $100
+  });
+  it("3x2 sobre 6 unidades libera 2", () => {
+    const six: PromoCartLine[] = [
+      { productId: "p", categoryId: "catX", unitPrice: 100, quantity: 6, lineTotal: 600 },
+    ];
+    expect(
+      promoDiscount(
+        base({ action_type: "nxm", buy_qty: 3, pay_qty: 2, scope: "category", scope_category_id: "catX" }),
+        six,
+      ),
+    ).toBe(200); // 6/3 = 2 sets, cada set libera 1 → 2 gratis
+  });
+  it("NxM libera las unidades MÁS BARATAS", () => {
+    const mixed: PromoCartLine[] = [
+      { productId: "a", categoryId: "catX", unitPrice: 300, quantity: 1, lineTotal: 300 },
+      { productId: "b", categoryId: "catX", unitPrice: 100, quantity: 1, lineTotal: 100 },
+    ];
+    // 2x1 sobre 2 unidades → 1 gratis = la de $100.
+    expect(
+      promoDiscount(
+        base({ action_type: "nxm", buy_qty: 2, pay_qty: 1, scope: "category", scope_category_id: "catX" }),
+        mixed,
+      ),
+    ).toBe(100);
+  });
+  it("NxM sin grupos completos no descuenta", () => {
+    const one: PromoCartLine[] = [
+      { productId: "p", categoryId: "catX", unitPrice: 100, quantity: 1, lineTotal: 100 },
+    ];
+    expect(
+      promoDiscount(
+        base({ action_type: "nxm", buy_qty: 2, pay_qty: 1, scope: "category", scope_category_id: "catX" }),
+        one,
+      ),
+    ).toBe(0);
+  });
+  it("precio fijo: el alcance pasa a costar action_value", () => {
+    // Carrito base 1500, precio fijo 1200 → descuento 300.
+    expect(promoDiscount(base({ action_type: "fixed_price", action_value: 1200 }), cart)).toBe(300);
+    // Precio fijo mayor que la base → no descuenta (no encarece).
+    expect(promoDiscount(base({ action_type: "fixed_price", action_value: 2000 }), cart)).toBe(0);
   });
 });
 

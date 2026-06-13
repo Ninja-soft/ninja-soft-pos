@@ -82,7 +82,10 @@ export interface GastroDeliveryReport {
 }
 
 export interface GastroTopItemsReport {
-  top: { name: string; qty: number; total: number }[];
+  // `cost` y `margin` (F13 · H52): costo estimado del plato según su receta
+  // (H50, `product_recipes`) por la cantidad vendida, y margen = total − cost.
+  // cost = 0 cuando el producto no tiene receta cargada (margen no significativo).
+  top: { name: string; qty: number; total: number; cost: number; margin: number }[];
   by_station: { station: string; qty: number; total: number }[];
   by_course: { course: number; qty: number; total: number }[];
 }

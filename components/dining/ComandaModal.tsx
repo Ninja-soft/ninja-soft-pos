@@ -64,6 +64,8 @@ interface ComandaLine {
   qty: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia (F13 · H47): se imprime DESTACADA (recuadro + ⚠).
+  allergens: string | null;
   station: string | null;
   course: number;
 }
@@ -163,6 +165,7 @@ export function ComandaModal(props: ComandaModalProps) {
         qty: it.qty,
         modifiers: it.modifiers ?? [],
         notes: it.notes,
+        allergens: it.allergens,
         station: it.station,
         course: it.course,
       }));
@@ -173,6 +176,7 @@ export function ComandaModal(props: ComandaModalProps) {
       qty: it.qty,
       modifiers: it.modifiers ?? [],
       notes: it.notes,
+      allergens: it.allergens,
       station: it.station,
       course: it.course,
     }));
@@ -460,6 +464,13 @@ function ComandaSheet({
                 </span>
               </div>
               {mods && <div className="pl-7 text-[13px]">— {mods}</div>}
+              {/* ALERGIA (F13 · H47): recuadro negro + ⚠ + MAYÚSCULAS. En la
+                  térmica (B/N) "destacar" = borde grueso + negrita, no color. */}
+              {it.allergens && (
+                <div className="ml-7 mt-1 border-2 border-black px-1.5 py-0.5 text-[13px] font-extrabold uppercase leading-tight">
+                  ⚠ Alergia: {it.allergens}
+                </div>
+              )}
               {it.notes && (
                 <div className="mt-0.5 pl-7 text-[13px] font-semibold">
                   ▸ {it.notes}

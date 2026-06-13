@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, Bike, CalendarDays, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -32,6 +32,7 @@ import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager
 import { RubroCard } from "@/components/dashboard-team/RubroCard";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { SalonesManager } from "@/components/dining/SalonesManager";
+import { MenusManager } from "@/components/dining/MenusManager";
 import { ZonasManager } from "@/components/delivery/ZonasManager";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -53,6 +54,7 @@ type Section =
   | "pagos"
   | "operacion"
   | "salones"
+  | "menus"
   | "zonas"
   | "profesionales"
   | "paquetes"
@@ -97,6 +99,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     sections: [
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "salones", label: "Salones y mesas", icon: Utensils, requiresDining: true },
+      { key: "menus", label: "Menús por horario", icon: Clock, requiresDining: true },
       { key: "zonas", label: "Zonas de envío", icon: Bike, requiresDelivery: true },
       { key: "profesionales", label: "Profesionales (agenda)", icon: CalendarDays, feature: "agenda" },
       { key: "paquetes", label: "Paquetes y sesiones", icon: Package, feature: "packs" },
@@ -497,6 +500,30 @@ function ConfiguracionInner() {
                   menú.
                 </p>
                 <SalonesManager />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Menús por horario (F13 · H47): el dueño arma cartas por franja
+              (desayuno/almuerzo/cena/happy hour) con su horario y sus productos.
+              El resolver marca el menú vigente ahora; el POS lo consume para
+              filtrar la carta (follow-up). Sólo visible con modo gastronómico.
+              Escritura RLS sólo owner/manager (la DB lo enforcea). */}
+          {section === "menus" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Clock size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Menús por horario</span>
+                </div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Definí cartas por franja (ej. Desayuno, Almuerzo, Happy hour,
+                  Cena) con su horario y los productos que incluyen. Un menú sin
+                  horario está disponible siempre. El menú vigente según la hora se
+                  marca como{" "}
+                  <span className="font-medium text-foreground">Activo ahora</span>.
+                </p>
+                <MenusManager />
               </CardContent>
             </Card>
           )}

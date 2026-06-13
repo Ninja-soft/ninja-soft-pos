@@ -22,6 +22,7 @@ import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
 import { VariantsEditor } from "@/components/products/VariantsEditor";
 import { ModifiersEditor } from "@/components/products/ModifiersEditor";
+import { RecipeEditor } from "@/components/products/RecipeEditor";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import {
   useCategories,
@@ -598,6 +599,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               Guardá el producto primero; después podés cargar los grupos de
               modificadores (ej. Sabores, Toppings) acá mismo.
+            </p>
+          )}
+        </Disclosure>
+
+        {/* Receta / escandallo (F13 · H50): insumos del plato con su costo, para
+            ver costo + margen estimado. Sección plegable; se edita una vez creado
+            el producto (igual que modificadores). No descuenta stock al vender. */}
+        <Disclosure title="Receta / escandallo (costo y margen)">
+          {active ? (
+            <RecipeEditor productId={active.id} salePrice={active.price} />
+          ) : (
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Guardá el producto primero; después podés cargar la receta (insumos y
+              costos) acá mismo.
             </p>
           )}
         </Disclosure>

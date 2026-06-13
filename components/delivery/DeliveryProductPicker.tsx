@@ -35,6 +35,12 @@ export function DeliveryProductPicker({
   const [freeName, setFreeName] = useState("");
   const [freeAmount, setFreeAmount] = useState("");
 
+  // Nota y ALERGIA del próximo ítem (F13 · H47). Se aplican al ítem que se agrega
+  // y se limpian después (una alergia es de UN ítem; no debe arrastrarse). La
+  // cocina ve la nota y, destacada en rojo, la alergia.
+  const [note, setNote] = useState("");
+  const [allergen, setAllergen] = useState("");
+
   const list = useMemo(
     () => (products ?? []).filter((p) => p.is_active),
     [products],
@@ -54,7 +60,11 @@ export function DeliveryProductPicker({
         name,
         qty: 1,
         unit_price: price,
+        notes: note.trim() || null,
+        allergens: allergen.trim() || null,
       });
+      setNote("");
+      setAllergen("");
       toast({ title: `${name} agregado`, variant: "success" });
     } catch (e) {
       toast({
@@ -79,9 +89,13 @@ export function DeliveryProductPicker({
         name: freeName.trim() || "Ítem",
         qty: 1,
         unit_price: amount,
+        notes: note.trim() || null,
+        allergens: allergen.trim() || null,
       });
       setFreeName("");
       setFreeAmount("");
+      setNote("");
+      setAllergen("");
       toast({ title: "Ítem agregado", variant: "success" });
     } catch (e) {
       toast({
@@ -106,6 +120,24 @@ export function DeliveryProductPicker({
             placeholder="Buscar producto por nombre, SKU o código…"
             autoFocus
             className="h-11 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+          />
+        </div>
+
+        {/* Nota y ALERGIA del próximo ítem (F13 · H47). Opcionales: se aplican al
+            ítem que se agrega y se limpian después. La alergia va a un campo
+            aparte para que la cocina la vea DESTACADA. */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Input
+            label="Nota del ítem"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Ej. sin cebolla, bien cocido"
+          />
+          <Input
+            label="⚠ Alergia / intolerancia"
+            value={allergen}
+            onChange={(e) => setAllergen(e.target.value)}
+            placeholder="Ej. sin TACC, maní, lactosa"
           />
         </div>
 

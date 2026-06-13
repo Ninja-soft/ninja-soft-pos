@@ -54,6 +54,9 @@ export interface TableOrderItem {
   unit_price: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia del ítem (F13 · H47): texto libre corto que la cocina ve
+  // DESTACADO en rojo en el KDS y la comanda. null = sin alergia.
+  allergens: string | null;
   // Cursos / despacho por tiempos (F13 · H47): `course` = tiempo al que pertenece
   // el ítem (1=entrada, 2=principal, 3=postre…). `fired_at` = cuándo se disparó a
   // cocina; null = "en espera" (no fue al KDS/comanda todavía).
@@ -107,6 +110,8 @@ export interface KdsTicketItem {
   qty: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia destacada en la tarjeta del KDS (F13 · H47).
+  allergens: string | null;
   station: string | null;
   kds_status: KdsStatus;
   // Tiempo (course) del ítem para que la cocina vea la secuencia (F13 · H47).
@@ -142,6 +147,8 @@ export interface ComandaItem {
   qty: number;
   modifiers: SaleLineModifierGroup[];
   notes: string | null;
+  // Alergia/intolerancia destacada en la comanda impresa (F13 · H47).
+  allergens: string | null;
   station: string | null;
   // Tiempo (course) del ítem para etiquetar/agrupar la comanda por tiempo.
   course: number;
@@ -172,6 +179,8 @@ export interface AddItemInput {
   unit_price: number;
   modifiers?: SaleLineModifierGroup[];
   notes?: string | null;
+  // Alergia/intolerancia del ítem (F13 · H47): se resalta en KDS y comanda.
+  allergens?: string | null;
   // Cursos / despacho por tiempos (F13 · H47). course default 1; hold=true deja
   // el ítem "en espera" (no va a cocina hasta dispararlo). Omitidos = flujo
   // rápido actual (Tiempo 1, se manda a cocina al toque).
@@ -318,7 +327,7 @@ export const tableOrdersApi = {
     const { data, error } = await supabase
       .from("table_order_items" as never)
       .select(
-        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, course, fired_at",
+        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at",
       )
       .eq("order_id", orderId)
       .order("created_at");
@@ -411,6 +420,7 @@ export const tableOrdersApi = {
       p_notes: input.notes ?? null,
       p_course: input.course ?? 1,
       p_hold: input.hold ?? false,
+      p_allergens: input.allergens ?? null,
     } as never);
     if (error) throw error;
     return data as unknown as string;

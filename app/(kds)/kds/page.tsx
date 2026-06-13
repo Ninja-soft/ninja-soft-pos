@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   Bike,
   Check,
@@ -149,6 +150,14 @@ function TicketCard({
       {/* Modificadores y notas: lo que cocina/barra necesita ver */}
       {mods && (
         <p className="text-sm font-medium text-foreground/90">{mods}</p>
+      )}
+      {/* ALERGIA / intolerancia (F13 · H47): lo más visible de la tarjeta — rojo,
+          en negrita y con ⚠. Es seguridad alimentaria, no una nota más. */}
+      {item.allergens && (
+        <p className="flex items-start gap-1.5 rounded-md border border-red-500/60 bg-red-500/15 px-2 py-1 text-sm font-bold uppercase tracking-wide text-red-200">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>Alergia: {item.allergens}</span>
+        </p>
       )}
       {item.notes && (
         <p className="rounded-md bg-amber-400/10 px-2 py-1 text-sm font-medium text-amber-200">

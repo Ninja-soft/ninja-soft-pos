@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   Bike,
   ChefHat,
   Clock,
@@ -375,6 +376,12 @@ function ItemRow({
           {formatCurrency(item.unit_price)} c/u
           {item.notes ? ` · ${item.notes}` : ""}
         </div>
+        {/* Alergia/intolerancia (F13 · H47): destacada en rojo. */}
+        {item.allergens && (
+          <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-red-300">
+            <AlertTriangle size={11} /> Alergia: {item.allergens}
+          </span>
+        )}
       </div>
 
       {!readOnly && (

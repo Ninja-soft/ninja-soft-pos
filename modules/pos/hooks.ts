@@ -205,6 +205,8 @@ export function usePosMutations() {
         // Cobro de delivery atómico (H49): ESPEJA tableOrderId. Sólo el cobro
         // desde el board (/pos?delivery=) lo pasa; mostrador/mesa lo omiten.
         deliveryOrderId?: string | null;
+        // Promoción aplicada (F9 · H53): descuento calculado por el motor.
+        promo?: { discount: number; id: string | null; name: string | null } | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -214,6 +216,7 @@ export function usePosMutations() {
           vars.extras,
           vars.tableOrderId,
           vars.deliveryOrderId,
+          vars.promo,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

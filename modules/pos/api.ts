@@ -658,8 +658,14 @@ export const posApi = {
     // agrega create_sale como LÍNEA AUTORITATIVA desde delivery_orders.delivery_fee
     // (server-side, inviolable): el POS ya NO lo manda como ítem del carrito.
     deliveryOrderId?: string | null,
+    // Promoción aplicada (F9 · H53): descuento calculado por el motor en el POS.
+    // Va en un canal SEPARADO del descuento manual: create_sale lo resta del
+    // total pero NO lo pasa por el gating de 'descuentos' ni por el tope de
+    // descuento por rol. Sólo se manda si descontó algo (> 0).
+    promo?: { discount: number; id: string | null; name: string | null } | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
+    const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
       p_payments: payments as unknown as Json,
@@ -673,6 +679,14 @@ export const posApi = {
       // mostrador (default null server). Sólo uno de los dos viene a la vez.
       ...(tableOrderId ? { p_table_order_id: tableOrderId } : {}),
       ...(deliveryOrderId ? { p_delivery_order_id: deliveryOrderId } : {}),
+      // Promoción (F9): sólo si descontó algo.
+      ...(promoDisc > 0
+        ? {
+            p_promo_discount: promoDisc,
+            p_promo_id: promo?.id ?? undefined,
+            p_promo_name: promo?.name ?? undefined,
+          }
+        : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

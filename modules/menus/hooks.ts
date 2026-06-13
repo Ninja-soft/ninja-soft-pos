@@ -10,18 +10,24 @@ import {
 // Menús por horario (F13 · H47). CRUD + ventanas + asignación de productos +
 // "menú activo ahora". Invalida la lista tras cada mutación.
 
-export function useMenus() {
-  return useQuery({ queryKey: ["menus", "list"], queryFn: () => menusApi.list() });
+export function useMenus(enabled = true) {
+  return useQuery({
+    queryKey: ["menus", "list"],
+    queryFn: () => menusApi.list(),
+    enabled,
+  });
 }
 
 // Ids de los menús vigentes ahora (hora local AR). refetch cada minuto para que
-// el cambio de franja (mediodía, etc.) se note sin recargar.
-export function useActiveMenuIds() {
+// el cambio de franja (mediodía, etc.) se note sin recargar. `enabled` permite
+// que el POS no consulte en tenants sin modo gastronómico.
+export function useActiveMenuIds(enabled = true) {
   return useQuery({
     queryKey: ["menus", "active"],
     queryFn: () => menusApi.activeIds(),
     refetchInterval: 60_000,
     staleTime: 30_000,
+    enabled,
   });
 }
 

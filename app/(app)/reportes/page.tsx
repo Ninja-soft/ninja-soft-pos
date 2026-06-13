@@ -347,6 +347,8 @@ export default function ReportesPage() {
           { header: "Ítem", key: "name", width: 28 },
           { header: "Cantidad", key: "qty", type: "number" },
           { header: "Importe", key: "total", type: "money" },
+          { header: "Costo (receta)", key: "cost", type: "money" },
+          { header: "Margen", key: "margin", type: "money" },
         ],
         rows: gTop.top,
         totals: { total: gTop.top.reduce((a, r) => a + r.total, 0) },
@@ -941,11 +943,14 @@ export default function ReportesPage() {
                           Top ítems
                         </p>
                         <BareTable
-                          cols={["Ítem", "Cantidad", "Importe"]}
+                          cols={["Ítem", "Cantidad", "Importe", "Margen"]}
                           rows={(gTop?.top ?? []).map((r) => [
                             r.name,
                             formatQty(r.qty),
                             formatCurrency(r.total),
+                            // Margen sólo significativo si el producto tiene receta
+                            // cargada (cost > 0); si no, "—" (H50/H52).
+                            r.cost > 0 ? formatCurrency(r.margin) : "—",
                           ])}
                         />
                       </div>

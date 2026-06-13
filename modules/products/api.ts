@@ -7,7 +7,13 @@ import type {
   ProductOutput,
   StockAdjustInput,
 } from "./schemas";
-import { StockAdjustSchema, MermaSchema, type MermaInput } from "./schemas";
+import {
+  StockAdjustSchema,
+  MermaSchema,
+  type MermaInput,
+  ProductionSchema,
+  type ProductionInput,
+} from "./schemas";
 
 export interface ProductsPageParams {
   page: number; // 1-based
@@ -388,6 +394,23 @@ export const productsApi = {
       p_product_id: productId,
       p_qty: parsed.qty,
       p_loss_reason: parsed.reason,
+      p_notes: parsed.notes ?? undefined,
+    } as never);
+    if (error) throw error;
+    return data as number;
+  },
+
+  // Registra una producción / batch (F13 · H50): SUMA `qty` al stock del producto
+  // preparado vía register_production. Devuelve el nuevo stock. RPC no tipada → cast.
+  registerProduction: async (
+    productId: string,
+    input: ProductionInput,
+  ): Promise<number> => {
+    const supabase = createClient();
+    const parsed = ProductionSchema.parse(input);
+    const { data, error } = await supabase.rpc("register_production" as never, {
+      p_product_id: productId,
+      p_qty: parsed.qty,
       p_notes: parsed.notes ?? undefined,
     } as never);
     if (error) throw error;

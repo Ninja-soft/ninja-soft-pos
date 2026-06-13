@@ -22,6 +22,7 @@ import type {
   ProductOutput,
   StockAdjustInput,
   MermaInput,
+  ProductionInput,
 } from "./schemas";
 
 // Estado del PLU del tenant (habilitado / modo / si ya se preguntó).
@@ -246,6 +247,12 @@ export function useProductMutations() {
     registerWaste: useMutation({
       mutationFn: (vars: { id: string; input: MermaInput }) =>
         productsApi.registerWaste(vars.id, vars.input),
+      onSuccess: invalidate,
+    }),
+    // Producción / batch (F13 · H50): suma stock del producto preparado.
+    registerProduction: useMutation({
+      mutationFn: (vars: { id: string; input: ProductionInput }) =>
+        productsApi.registerProduction(vars.id, vars.input),
       onSuccess: invalidate,
     }),
   };

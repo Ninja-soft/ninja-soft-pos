@@ -6,6 +6,7 @@ import {
   FolderTree,
   History,
   PackageMinus,
+  PackagePlus,
   Pencil,
   Plus,
   Search,
@@ -26,6 +27,7 @@ import { GatedButton } from "@/components/saas/GatedAction";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { MermaModal } from "@/components/products/MermaModal";
+import { ProductionModal } from "@/components/products/ProductionModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { BrandsModal } from "@/components/products/BrandsModal";
@@ -60,6 +62,7 @@ export default function ProductosPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [mermaOpen, setMermaOpen] = useState(false);
+  const [productionOpen, setProductionOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [brandsOpen, setBrandsOpen] = useState(false);
@@ -136,6 +139,10 @@ export default function ProductosPage() {
   function openMerma(p: Product) {
     setSelected(p);
     setMermaOpen(true);
+  }
+  function openProduction(p: Product) {
+    setSelected(p);
+    setProductionOpen(true);
   }
   function openHistory(p: Product) {
     setSelected(p);
@@ -419,6 +426,13 @@ export default function ProductosPage() {
                           <PackageMinus size={16} />
                         </button>
                         <button
+                          onClick={() => openProduction(p)}
+                          title="Registrar producción"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-emerald-300"
+                        >
+                          <PackagePlus size={16} />
+                        </button>
+                        <button
                           onClick={() => openHistory(p)}
                           title="Historial de stock"
                           className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
@@ -470,6 +484,11 @@ export default function ProductosPage() {
       <MermaModal
         open={mermaOpen}
         onOpenChange={setMermaOpen}
+        product={selected}
+      />
+      <ProductionModal
+        open={productionOpen}
+        onOpenChange={setProductionOpen}
         product={selected}
       />
       <StockHistoryModal

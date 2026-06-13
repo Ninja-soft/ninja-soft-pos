@@ -122,3 +122,12 @@ export const MermaSchema = z.object({
   notes: optionalText(200),
 });
 export type MermaInput = z.input<typeof MermaSchema>;
+
+// ── Producción / batch (F13 · H50) ───────────────────────────────────────────
+// Registrar una preparación previa: suma `qty` al stock del producto preparado
+// (reason='production'). No tiene sub-motivos (a diferencia de la merma).
+export const ProductionSchema = z.object({
+  qty: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+  notes: optionalText(200),
+});
+export type ProductionInput = z.input<typeof ProductionSchema>;

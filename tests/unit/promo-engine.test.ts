@@ -4,9 +4,11 @@ import {
   promoApplies,
   promoDiscount,
   cartSubtotal,
+  simulatePromotion,
   type Promotion,
   type PromoCartLine,
   type PromoContext,
+  type SimSale,
 } from "@/lib/promotions/engine";
 
 // F9 · H53 — el motor de promociones es PURO: estos tests fijan su contrato
@@ -176,5 +178,47 @@ describe("evaluateCart — elige la mejor", () => {
   it("ignora las que no aplican y devuelve null si ninguna sirve", () => {
     const promos = [base({ is_active: false }), base({ min_amount: 99999 })];
     expect(evaluateCart(cart, promos, ctx)).toBeNull();
+  });
+});
+
+describe("simulatePromotion — H56", () => {
+  const sales: SimSale[] = [
+    // Miércoles (3), 13:00, $1500 → 10% = $150.
+    { weekday: 3, minutes: 13 * 60, date: "2026-06-10", lines: cart },
+    // Martes (2): si la promo es sólo miércoles, no aplica.
+    { weekday: 2, minutes: 13 * 60, date: "2026-06-09", lines: cart },
+    // Ticket chico que no llega al mínimo.
+    {
+      weekday: 3,
+      minutes: 13 * 60,
+      date: "2026-06-10",
+      lines: [{ productId: "x", categoryId: "z", unitPrice: 100, quantity: 1, lineTotal: 100 }],
+    },
+  ];
+
+  it("cuenta tickets, descuento total y total vendido (promo simple)", () => {
+    const r = simulatePromotion(base({ action_type: "percent", action_value: 10 }), sales);
+    expect(r.ticketsAnalyzed).toBe(3);
+    expect(r.ticketsWithPromo).toBe(3); // 10% sin condiciones aplica a los 3
+    expect(r.totalDiscount).toBe(310); // 150 + 150 + 10
+    expect(r.totalSold).toBe(3100); // 1500 + 1500 + 100
+  });
+
+  it("respeta las condiciones de la promo (sólo miércoles + mínimo)", () => {
+    const r = simulatePromotion(
+      base({ action_type: "percent", action_value: 10, days_of_week: [3], min_amount: 1000 }),
+      sales,
+    );
+    // Sólo el primer ticket (miércoles y ≥ 1000). El martes y el chico quedan fuera.
+    expect(r.ticketsWithPromo).toBe(1);
+    expect(r.totalDiscount).toBe(150);
+  });
+
+  it("simula aunque la promo esté inactiva (borrador)", () => {
+    const r = simulatePromotion(
+      base({ is_active: false, action_type: "amount", action_value: 100 }),
+      sales,
+    );
+    expect(r.ticketsWithPromo).toBe(3);
   });
 });

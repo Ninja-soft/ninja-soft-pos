@@ -15,6 +15,7 @@ import {
   ScanBarcode,
   Search,
   Star,
+  Tag,
   Ticket,
   User,
   Utensils,
@@ -86,6 +87,12 @@ import {
   useMenuProductIds,
 } from "@/modules/menus/hooks";
 import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
+import { useActivePromotions } from "@/modules/promotions/hooks";
+import {
+  evaluateCart,
+  type PromoCartLine,
+  type PromoContext,
+} from "@/lib/promotions/engine";
 import {
   useDeliveryOrder,
   useDeliveryOrderItems,
@@ -220,6 +227,8 @@ function PosPageInner() {
   const [menuFilter, setMenuFilter] = useState<string | null>(null);
   const { data: menus } = useMenus(Boolean(diningEnabled));
   const { data: activeMenuIds } = useActiveMenuIds(Boolean(diningEnabled));
+  // Promociones activas (F9 · H53): el motor las evalúa contra el carrito.
+  const { data: activePromos } = useActivePromotions();
   const { data: menuProductIds } = useMenuProductIds(menuFilter);
   const activeMenuSet = useMemo(
     () => new Set<string>(activeMenuIds ?? []),
@@ -800,7 +809,38 @@ function PosPageInner() {
   }, [repeatCustomerId, repeatSale]);
 
   const subtotal = cartSubtotal(lines);
-  const rawTotal = Math.max(0, subtotal - discountTotal);
+
+  // Promoción aplicable (F9 · H53): el motor elige la mejor promo ACTIVA para el
+  // carrito según el contexto (día/hora local AR). v1: alcance carrito/producto
+  // (la categoría por línea llega en un follow-up → categoryId null acá). Sólo
+  // informa y descuenta; create_sale revalida y persiste el monto.
+  const promoResult = useMemo(() => {
+    if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
+    const promoLines: PromoCartLine[] = lines.map((l) => ({
+      productId: l.productId,
+      categoryId: null,
+      unitPrice: l.unitPrice,
+      quantity: l.quantity,
+      lineTotal: lineSubtotal(l),
+    }));
+    const arNow = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
+    );
+    const ctx: PromoContext = {
+      weekday: arNow.getDay(),
+      minutes: arNow.getHours() * 60 + arNow.getMinutes(),
+      date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
+    };
+    return evaluateCart(promoLines, activePromos, ctx);
+  }, [activePromos, lines]);
+
+  // Descuento de promo acotado a lo que queda tras el descuento manual (el server
+  // reaplica la misma cota en create_sale).
+  const promoDiscount = promoResult
+    ? Math.min(promoResult.discount, Math.max(0, subtotal - discountTotal))
+    : 0;
+
+  const rawTotal = Math.max(0, subtotal - discountTotal - promoDiscount);
   // Redondeo del total al múltiplo configurado (H30). El server reaplica el
   // mismo redondeo de forma autoritativa en create_sale.
   const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
@@ -1044,6 +1084,11 @@ function PosPageInner() {
         // toma el delivery_order FOR UPDATE, lo enlaza/marca 'entregado' y libera
         // en la misma transacción (sin cierre aparte → sin doble cobro).
         deliveryOrderId: deliveryOrderId ?? null,
+        // Promoción aplicada (F9 · H53): canal aparte del descuento manual.
+        promo:
+          promoResult && promoDiscount > 0
+            ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
+            : null,
       });
       setPaymentModal(false);
       clear();
@@ -1716,6 +1761,19 @@ function PosPageInner() {
                 />
               )}
             </div>
+            {/* Promoción aplicada (F9 · H53): el motor elige la mejor promo activa
+                para el carrito y la descuenta. Aparte del descuento manual. */}
+            {promoResult && promoDiscount > 0 && (
+              <div className="flex items-center justify-between gap-2 text-sm text-emerald-400">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Tag size={13} className="shrink-0" />
+                  <span className="truncate">{promoResult.name}</span>
+                </span>
+                <span className="shrink-0 font-medium tabular-nums">
+                  −{formatCurrency(promoDiscount)}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between pt-1">
               <span className="font-display text-lg font-bold">Total</span>
               <span className="price-hl font-price tabular-nums text-3xl font-black">

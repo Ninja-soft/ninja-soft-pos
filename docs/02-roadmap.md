@@ -701,8 +701,8 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [ ] Integración futura con PedidosYa, Rappi, Mercado Libre/Tienda Nube cuando aplique. — *Follow-up.*
   - [x] *Criterio:* una rotisería toma pedido telefónico, cocina lo prepara, despacho lo marca en camino y caja lo concilia. — *Alta telefónica → KDS prepara → board marca "en camino" → cobro atómico desde el pedido (caja). Probado por SQL.*
 
-- [ ] **H50 — Inventario gastronómico, recetas y merma básica.**
-  - [ ] Recetas/escandallo por producto: ingredientes, cantidad, unidad y costo estimado.
+- [~] **H50 — Inventario gastronómico, recetas y merma básica.** — *Arrancado: receta/escandallo + costo y margen por plato (ver sub-ítems). Falta descuento de insumos al vender, producción/batch, merma y alertas.*
+  - [x] Recetas/escandallo por producto: ingredientes, cantidad, unidad y costo estimado. — *Hecho (local). Migración `20260609160000_product_recipes` (aplicada en remoto): tabla `product_recipes` (ingrediente texto + qty + unit + unit_cost, RLS por tenant, una policy como el resto del dominio de producto). UI: sección plegable **"Receta / escandallo (costo y margen)"** en la ficha del producto (`RecipeEditor`, espeja `ModifiersEditor`): filas ingrediente/cantidad/unidad/costo-unitario, costo por línea, y resumen **costo del plato + precio + margen** ($ y %, rojo si se vende bajo costo) calculado en vivo. Helpers puros y testeados (`recipeCost`/`marginAmount`/`marginPct` en `modules/products/recipes.ts` + `tests/unit/recipe-cost.test.ts`). Modelo v1: ingrediente como texto libre; vincularlo a un producto de stock → follow-up (habilita el descuento al vender).*
   - [ ] Descuento de insumos al vender cuando el tenant lo active.
   - [ ] Producción/preparación previa: batch de helado, masa, prep de cocina, stock de barra.
   - [ ] Merma: vencido, roto, devolución, preparación fallida.

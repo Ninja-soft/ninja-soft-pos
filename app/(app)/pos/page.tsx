@@ -183,6 +183,7 @@ function PosPageInner() {
     name: string;
     sku: string | null;
     price: number;
+    categoryId?: string | null;
   } | null>(null);
   const [weighGrams, setWeighGrams] = useState("");
   const [serialProduct, setSerialProduct] = useState<{
@@ -191,6 +192,7 @@ function PosPageInner() {
     sku: string | null;
     price: number;
     warrantyMonths?: number;
+    categoryId?: string | null;
   } | null>(null);
   const [serialChoice, setSerialChoice] = useState("");
   const [serialOther, setSerialOther] = useState("");
@@ -200,6 +202,7 @@ function PosPageInner() {
     sku: string | null;
     price: number;
     warrantyMonths?: number;
+    categoryId?: string | null;
   } | null>(null);
   // Producto con modificadores (H37) pendiente de elegir opciones en el picker.
   const [modifierProduct, setModifierProduct] = useState<{
@@ -208,6 +211,7 @@ function PosPageInner() {
     sku: string | null;
     price: number;
     warrantyMonths?: number;
+    categoryId?: string | null;
   } | null>(null);
   // IDs de productos del tenant que tienen modificadores → rutean al picker.
   const { data: withMods } = useProductsWithModifiers();
@@ -434,6 +438,10 @@ function PosPageInner() {
     is_serialized?: boolean;
     has_variants?: boolean;
     warranty_months?: number;
+    // Categoría del producto (F9 · H53 alcance por categoría): viaja a la línea
+    // del carrito para que el motor matchee promos de categoría. Puede faltar en
+    // orígenes que no la traen (pedido/turno) → null.
+    categoryId?: string | null;
   }) {
     if (p.has_variants) {
       setVariantProduct({
@@ -442,6 +450,7 @@ function PosPageInner() {
         sku: p.sku,
         price: p.price,
         warrantyMonths: p.warranty_months ?? 0,
+        categoryId: p.categoryId ?? null,
       });
     } else if (p.is_serialized) {
       setSerialProduct({
@@ -450,6 +459,7 @@ function PosPageInner() {
         sku: p.sku,
         price: p.price,
         warrantyMonths: p.warranty_months ?? 0,
+        categoryId: p.categoryId ?? null,
       });
       setSerialChoice("");
       setSerialOther("");
@@ -462,6 +472,7 @@ function PosPageInner() {
         sku: p.sku,
         price: priceFor(p.id, null, p.price),
         warrantyMonths: p.warranty_months ?? 0,
+        categoryId: p.categoryId ?? null,
       });
     } else if (p.unit === "kg") {
       setWeighProduct({
@@ -469,6 +480,7 @@ function PosPageInner() {
         name: p.name,
         sku: p.sku,
         price: priceFor(p.id, null, p.price),
+        categoryId: p.categoryId ?? null,
       });
       setWeighGrams("");
     } else {
@@ -492,6 +504,7 @@ function PosPageInner() {
       is_serialized: p.is_serialized,
       has_variants: p.has_variants,
       warranty_months: p.warranty_months ?? undefined,
+      categoryId: p.category_id,
     });
   }
   // Cantidad rápida (×2/×6/×12) para un favorito por unidad simple: suma qty de
@@ -505,6 +518,7 @@ function PosPageInner() {
         price: priceFor(p.id, null, p.price),
         unit: p.unit,
         warrantyMonths: p.warranty_months ?? 0,
+        categoryId: p.category_id,
       },
       qty,
     );
@@ -512,7 +526,13 @@ function PosPageInner() {
   // Peso rápido (½ kg / 1 kg) para un favorito por peso.
   function favQuickWeight(p: Product, kg: number) {
     addWeighed(
-      { id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price) },
+      {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        price: priceFor(p.id, null, p.price),
+        categoryId: p.category_id,
+      },
       kg,
     );
   }
@@ -781,6 +801,7 @@ function PosPageInner() {
               price: priceFor(p.id, null, p.price),
               unit: p.unit,
               warrantyMonths: p.warranty_months ?? 0,
+              categoryId: p.category_id,
             },
             qty,
           );
@@ -811,14 +832,14 @@ function PosPageInner() {
   const subtotal = cartSubtotal(lines);
 
   // Promoción aplicable (F9 · H53): el motor elige la mejor promo ACTIVA para el
-  // carrito según el contexto (día/hora local AR). v1: alcance carrito/producto
-  // (la categoría por línea llega en un follow-up → categoryId null acá). Sólo
-  // informa y descuenta; create_sale revalida y persiste el monto.
+  // carrito según el contexto (día/hora local AR). Alcance carrito/producto/
+  // categoría (la categoría viaja con cada línea desde que se agrega al carrito).
+  // Sólo informa y descuenta; create_sale revalida y persiste el monto.
   const promoResult = useMemo(() => {
     if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
     const promoLines: PromoCartLine[] = lines.map((l) => ({
       productId: l.productId,
-      categoryId: null,
+      categoryId: l.categoryId ?? null,
       unitPrice: l.unitPrice,
       quantity: l.quantity,
       lineTotal: lineSubtotal(l),
@@ -925,6 +946,7 @@ function PosPageInner() {
             variantId: variant.id,
             variantLabel: variantLabel(variant),
             warrantyMonths: p.warranty_months ?? 0,
+            categoryId: p.category_id,
           });
         } else {
           pickProduct({
@@ -936,6 +958,7 @@ function PosPageInner() {
             is_serialized: p.is_serialized,
             has_variants: p.has_variants,
             warranty_months: p.warranty_months,
+            categoryId: p.category_id,
           });
         }
       } else {
@@ -1449,6 +1472,7 @@ function PosPageInner() {
                         is_serialized: p.is_serialized,
                         has_variants: p.has_variants,
                         warranty_months: p.warranty_months,
+                        categoryId: p.category_id,
                       })
                     }
                     className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
@@ -1494,6 +1518,7 @@ function PosPageInner() {
                     is_serialized: p.is_serialized,
                     has_variants: p.has_variants,
                     warranty_months: p.warranty_months,
+                    categoryId: p.category_id,
                   })
                 }
                 className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
@@ -2034,6 +2059,7 @@ function PosPageInner() {
             variantId,
             variantLabel: label,
             warrantyMonths: variantProduct.warrantyMonths ?? 0,
+            categoryId: variantProduct.categoryId ?? null,
           });
           setVariantProduct(null);
         }}
@@ -2051,6 +2077,7 @@ function PosPageInner() {
             modifiers,
             modifiersLabel,
             warrantyMonths: modifierProduct.warrantyMonths ?? 0,
+            categoryId: modifierProduct.categoryId ?? null,
           });
           setModifierProduct(null);
         }}

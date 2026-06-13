@@ -6,6 +6,10 @@ import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 export interface CartLine {
   lineId: string; // id local de la línea (estable; soporta ítems sin producto)
   productId: string | null; // null = ítem de monto libre (venta rápida)
+  // Categoría del producto (F9 · H53 alcance por categoría): viaja con la línea
+  // para que el motor de promociones pueda matchear promos de categoría en el POS.
+  // null en ítems sin producto (venta rápida/pack) o si el origen no la trae.
+  categoryId?: string | null;
   name: string;
   sku: string | null;
   unitPrice: number;
@@ -40,6 +44,7 @@ interface CartState {
       price: number;
       unit?: string;
       warrantyMonths?: number;
+      categoryId?: string | null;
     },
     // Cantidad a sumar (H36: botones de cantidad rápida +1/+2/x6/x12). Default 1.
     qty?: number,
@@ -52,13 +57,21 @@ interface CartState {
     variantId: string;
     variantLabel: string;
     warrantyMonths?: number;
+    categoryId?: string | null;
   }) => void;
   addWeighed: (
-    p: { id: string; name: string; sku: string | null; price: number },
+    p: { id: string; name: string; sku: string | null; price: number; categoryId?: string | null },
     weight: number,
   ) => void;
   addSerialized: (
-    p: { id: string; name: string; sku: string | null; price: number; warrantyMonths?: number },
+    p: {
+      id: string;
+      name: string;
+      sku: string | null;
+      price: number;
+      warrantyMonths?: number;
+      categoryId?: string | null;
+    },
     serial: string,
   ) => void;
   // Agrega un producto con modificadores (H37). unitPrice = base + suma de deltas
@@ -72,6 +85,7 @@ interface CartState {
     modifiers: SaleLineModifierGroup[];
     modifiersLabel: string;
     warrantyMonths?: number;
+    categoryId?: string | null;
   }) => void;
   addFreeAmount: (p: { name?: string; amount: number }) => void;
   // Vende un pack (H41): línea por su precio que, al confirmar, acredita las
@@ -114,6 +128,7 @@ export const useCartStore = create<CartState>((set) => ({
           {
             lineId: crypto.randomUUID(),
             productId: p.id,
+            categoryId: p.categoryId ?? null,
             name: p.name,
             sku: p.sku,
             unitPrice: p.price,
@@ -145,6 +160,7 @@ export const useCartStore = create<CartState>((set) => ({
           {
             lineId: crypto.randomUUID(),
             productId: p.id,
+            categoryId: p.categoryId ?? null,
             name: p.name,
             sku: p.sku,
             unitPrice: p.price,
@@ -178,6 +194,7 @@ export const useCartStore = create<CartState>((set) => ({
           {
             lineId: crypto.randomUUID(),
             productId: p.id,
+            categoryId: p.categoryId ?? null,
             name: p.name,
             sku: p.sku,
             unitPrice: p.price,
@@ -195,6 +212,7 @@ export const useCartStore = create<CartState>((set) => ({
         {
           lineId: crypto.randomUUID(),
           productId: p.id,
+          categoryId: p.categoryId ?? null,
           name: p.name,
           sku: p.sku,
           unitPrice: p.price,
@@ -215,6 +233,7 @@ export const useCartStore = create<CartState>((set) => ({
         {
           lineId: crypto.randomUUID(),
           productId: p.id,
+          categoryId: p.categoryId ?? null,
           name: p.name,
           sku: p.sku,
           unitPrice: p.price,

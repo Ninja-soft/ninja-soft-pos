@@ -745,12 +745,12 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
   - [ ] **Gift cards** y saldo a favor.
   - [ ] *Criterio:* un cliente "VIP" recibe automáticamente un precio/beneficio distinto en el POS.
 
-- [~] **H56 — Gobierno, simulación y reporte de promociones.** — *Arrancado por el simulador (ver sub-ítem). Falta tope/aprobación, reporte de performance y export.*
+- [~] **H56 — Gobierno, simulación y reporte de promociones.** — *Hechos el simulador, el **reporte de performance** y su **export XLSX** (ver sub-ítems). Falta sólo **tope/aprobación**.*
   - [x] **Simulador**: previsualizar el efecto de una promo sobre ventas históricas antes de activarla. — *Hecho (local). Botón **"Simular impacto"** por promo en Configuración → "Promociones" (`PromotionSimModal`): elegís un rango y corre la promo (con el motor PURO, aun en borrador/inactiva) contra las ventas del período → muestra **tickets analizados / tickets con la promo / descuento total estimado / % sobre lo vendido**. Read-only, no modifica nada. Backend: RPC `promotion_sim_data(p_from, p_to, p_limit)` (SECURITY DEFINER, filtro explícito por tenant; arma por venta el contexto AR + líneas con categoría; cap 5000; migración `20260609230000_promotion_sim_data`, aplicada en remoto). Función pura `simulatePromotion` en `lib/promotions/engine.ts` + test. **Follow-up:** desglose por día/producto y guardar simulaciones.*
   - [ ] **Tope de impacto** y aprobación (rol manager/owner), todo auditado.
-  - [ ] **Reporte de performance** por promoción (uso, descuento otorgado, margen, incremental).
-  - [ ] Export en **XLSX** (ver TX) y al catálogo/canales.
-  - [ ] *Criterio:* el dueño ve cuánto descuento otorgó cada promo y su impacto en margen.
+  - [x] **Reporte de performance** por promoción (uso, descuento otorgado, margen, incremental). — *Hecho. Botón **"Rendimiento"** en Configuración → "Promociones" (`PromotionPerfModal`): por período, por promo de descuento → ventas que la usaron + descuento otorgado + facturación + % sobre lo vendido + totales. RPC `promotion_performance(p_from, p_to)` (SECURITY DEFINER, tenant-scoped; migración `20260609300000_promotion_performance`, aplicada en remoto). **Follow-up:** margen (necesita costo por ítem de la venta) e incremental; las promos de **regalo** todavía no se trackean acá (no setean `promo_id`).*
+  - [x] Export en **XLSX** (ver TX) y al catálogo/canales. — *Export XLSX del reporte de rendimiento (reusa `lib/utils/xlsx`). Export al catálogo/canales → fuera de alcance (no hay integración de canales aún).*
+  - [~] *Criterio:* el dueño ve cuánto descuento otorgó cada promo y su impacto en margen. — *Ve cuánto descuento otorgó cada promo (uso + descuento + facturación + % sobre vendido) y lo exporta. El **margen** por promo es follow-up (requiere costo por ítem).*
 
 ### F14 — Motor comercial enterprise
 

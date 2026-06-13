@@ -9,6 +9,11 @@ import {
   useProductModifiers,
   useSaveProductModifiers,
 } from "@/modules/products/modifiers";
+import {
+  MODIFIER_PRESETS,
+  findModifierPreset,
+  type ModifierPreset,
+} from "@/lib/gastro/modifierPresets";
 
 // Fila editable de opción (en memoria mientras se edita).
 interface OptionRow {
@@ -44,6 +49,25 @@ function emptyGroup(): GroupRow {
     min_select: "0",
     max_select: "1",
     options: [emptyOption()],
+  };
+}
+
+// Materializa un preset gastronómico (H47) como un GroupRow editable: clona el
+// grupo + sus opciones (con el precio sugerido). Tras insertarlo es un grupo más:
+// el dueño lo ajusta y guarda con el flujo normal.
+function presetToGroup(preset: ModifierPreset): GroupRow {
+  return {
+    key: uid(),
+    name: preset.group.name,
+    required: preset.group.required,
+    min_select: String(preset.group.min_select),
+    max_select: preset.group.max_select == null ? "" : String(preset.group.max_select),
+    options: preset.group.options.map((o) => ({
+      key: uid(),
+      name: o.name,
+      price_delta: String(o.price_delta ?? 0),
+      is_active: true,
+    })),
   };
 }
 
@@ -300,15 +324,39 @@ export function ModifiersEditor({ productId }: { productId: string }) {
         ))}
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => setGroups((gs) => [...gs, emptyGroup()])}
-        >
-          <Plus size={15} /> Agregar grupo
-        </Button>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setGroups((gs) => [...gs, emptyGroup()])}
+          >
+            <Plus size={15} /> Agregar grupo
+          </Button>
+          {/* Presets gastronómicos (H47): insertan un grupo listo (punto de
+              cocción, tipo de leche, sabores, extras…) para editar y guardar. */}
+          <select
+            aria-label="Agregar un preset gastronómico"
+            value=""
+            onChange={(e) => {
+              const preset = findModifierPreset(e.target.value);
+              if (preset) {
+                setGroups((gs) => [...gs, presetToGroup(preset)]);
+                toast({ title: `Preset “${preset.label}” agregado`, variant: "success" });
+              }
+              e.target.value = "";
+            }}
+            className="h-9 rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft"
+          >
+            <option value="">+ Preset gastronómico…</option>
+            {MODIFIER_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label} · {p.hint}
+              </option>
+            ))}
+          </select>
+        </div>
         <Button type="button" size="sm" onClick={persist} loading={save.isPending}>
           Guardar modificadores
         </Button>

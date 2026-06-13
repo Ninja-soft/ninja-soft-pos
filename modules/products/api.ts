@@ -83,6 +83,28 @@ export const productsApi = {
     return (data ?? []) as unknown as Product[];
   },
 
+  // Cantidad de productos ACTIVOS del tenant (head count, sin traer filas). Lo usa
+  // el aviso de "vaciar catálogo" para mostrar cuántos se van a dar de baja.
+  activeCount: async (): Promise<number> => {
+    const supabase = createClient();
+    const { count, error } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .is("deleted_at", null);
+    if (error) throw error;
+    return count ?? 0;
+  },
+
+  // Vaciar catálogo: da de baja LÓGICA todos los productos del tenant (RPC server-
+  // side, owner/manager, auditada). Devuelve cuántos se dieron de baja. Acción
+  // destructiva desde la UI: el catálogo del POS queda vacío.
+  emptyCatalog: async (): Promise<number> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("empty_my_catalog" as never);
+    if (error) throw error;
+    return (data as number) ?? 0;
+  },
+
   // Productos ACTIVOS por una lista de ids (H40 — recompra rápida). Filtra los
   // dados de baja (deleted_at) e inactivos: el POS usa esto para resolver el
   // precio actual al "repetir última venta" y omitir lo que ya no se vende.

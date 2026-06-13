@@ -25,6 +25,27 @@ import type {
   ProductionInput,
 } from "./schemas";
 
+// Cantidad de productos activos del tenant (para el aviso de "vaciar catálogo").
+export function useActiveProductCount() {
+  return useQuery({
+    queryKey: ["products", "active-count"],
+    queryFn: () => productsApi.activeCount(),
+    staleTime: 30_000,
+  });
+}
+
+// Vaciar catálogo: da de baja lógica TODOS los productos del tenant. Invalida
+// todo lo que cuelga de productos para que el POS/listados queden vacíos.
+export function useEmptyCatalog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => productsApi.emptyCatalog(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
 // Estado del PLU del tenant (habilitado / modo / si ya se preguntó).
 export function usePluSettings() {
   return useQuery({

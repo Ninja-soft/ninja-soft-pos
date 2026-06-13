@@ -128,6 +128,33 @@ describe("promoDiscount — H54 (NxM y precio fijo)", () => {
     // Precio fijo mayor que la base → no descuenta (no encarece).
     expect(promoDiscount(base({ action_type: "fixed_price", action_value: 2000 }), cart)).toBe(0);
   });
+  it("2º ítem al 50%: el más barato de cada par con descuento", () => {
+    const four: PromoCartLine[] = [
+      { productId: "a", categoryId: "catX", unitPrice: 300, quantity: 1, lineTotal: 300 },
+      { productId: "b", categoryId: "catX", unitPrice: 200, quantity: 1, lineTotal: 200 },
+      { productId: "c", categoryId: "catX", unitPrice: 100, quantity: 1, lineTotal: 100 },
+      { productId: "d", categoryId: "catX", unitPrice: 100, quantity: 1, lineTotal: 100 },
+    ];
+    // Ordenado: [100,100,200,300]. Pares (100,100) y (200,300). Los más baratos
+    // de cada par: 100 y 200 → 50% = 50 + 100 = 150.
+    expect(
+      promoDiscount(
+        base({ action_type: "second_item", action_value: 50, scope: "category", scope_category_id: "catX" }),
+        four,
+      ),
+    ).toBe(150);
+  });
+  it("2º ítem con una sola unidad no descuenta (no hay par)", () => {
+    const one: PromoCartLine[] = [
+      { productId: "a", categoryId: "catX", unitPrice: 300, quantity: 1, lineTotal: 300 },
+    ];
+    expect(
+      promoDiscount(
+        base({ action_type: "second_item", action_value: 50, scope: "category", scope_category_id: "catX" }),
+        one,
+      ),
+    ).toBe(0);
+  });
 });
 
 describe("promoApplies — condiciones", () => {

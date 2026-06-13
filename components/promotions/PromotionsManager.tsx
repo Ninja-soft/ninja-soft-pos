@@ -131,6 +131,14 @@ function PromoRow({
       : promo.scope === "category"
         ? "una categoría"
         : "un producto";
+  const methodLabel: Record<string, string> = {
+    cash: "efectivo",
+    transfer: "transferencia",
+    debit: "débito",
+    credit: "crédito",
+    qr: "QR",
+  };
+  const payCond = promo.payment_method ? methodLabel[promo.payment_method] ?? promo.payment_method : null;
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -145,6 +153,7 @@ function PromoRow({
         <div className="text-xs text-muted-foreground">
           {action} · {scopeLabel}
           {promo.min_amount > 0 ? ` · desde ${formatCurrency(promo.min_amount)}` : ""}
+          {payCond ? ` · sólo ${payCond}` : ""}
         </div>
       </div>
       <button
@@ -200,6 +209,8 @@ function PromotionFormModal({
   const [minAmount, setMinAmount] = useState("0");
   const [scope, setScope] = useState<"cart" | "category">("cart");
   const [categoryId, setCategoryId] = useState("");
+  // Condición por medio de pago (H54): "" = cualquiera; si no, exige ese medio.
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [actionType, setActionType] = useState<
     "percent" | "amount" | "nxm" | "fixed_price" | "second_item" | "volume_tier"
   >("percent");
@@ -228,6 +239,7 @@ function PromotionFormModal({
       setMinAmount(String(promo.min_amount));
       setScope(promo.scope === "category" ? "category" : "cart");
       setCategoryId(promo.scope_category_id ?? "");
+      setPaymentMethod(promo.payment_method ?? "");
       setActionType(promo.action_type);
       setActionValue(String(promo.action_value));
       setBuyQty(String(promo.buy_qty ?? 2));
@@ -251,6 +263,7 @@ function PromotionFormModal({
       setMinAmount("0");
       setScope("cart");
       setCategoryId("");
+      setPaymentMethod("");
       setActionType("percent");
       setActionValue("10");
       setBuyQty("2");
@@ -337,6 +350,7 @@ function PromotionFormModal({
       buy_qty: actionType === "nxm" ? n : null,
       pay_qty: actionType === "nxm" ? m : null,
       volume_tiers: actionType === "volume_tier" ? validTiers : null,
+      payment_method: paymentMethod || null,
     };
     try {
       if (promo) await update.mutateAsync({ id: promo.id, input });
@@ -511,6 +525,24 @@ function PromotionFormModal({
             </label>
           )}
         </div>
+
+        {/* Condición por medio de pago (H54): el descuento se aplica al cobrar con
+            ese medio (ej. "10% en efectivo"). "Cualquiera" = sin condición. */}
+        <label className="text-xs font-medium text-muted-foreground">
+          Sólo con este medio de pago
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+          >
+            <option value="">Cualquier medio</option>
+            <option value="cash">Efectivo</option>
+            <option value="transfer">Transferencia</option>
+            <option value="debit">Débito</option>
+            <option value="credit">Crédito</option>
+            <option value="qr">QR / Terminal</option>
+          </select>
+        </label>
 
         <Input
           label="Monto mínimo del carrito (0 = sin mínimo)"

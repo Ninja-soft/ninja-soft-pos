@@ -861,6 +861,46 @@ function PosPageInner() {
     ? Math.min(promoResult.discount, Math.max(0, subtotal - discountTotal))
     : 0;
 
+  // Promo método-AGNÓSTICA del carrito (ya restada en rawTotal/base). El modal de
+  // cobro la recibe como punto de partida; si al elegir el medio aparece una promo
+  // por medio de pago mayor, baja más el total (ver promoForMethod).
+  const cartPromo =
+    promoResult && promoDiscount > 0
+      ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
+      : null;
+
+  // Mejor promo CONSIDERANDO el medio de pago (F9 · H54). Reevalúa el motor con el
+  // medio en contexto: las promos por medio (payment_method) recién acá pueden
+  // aplicar, junto a las método-agnósticas. Devuelve el descuento ya acotado (igual
+  // que promoDiscount). El modal lo usa para recalcular el total al elegir el medio.
+  const promoForMethod = useCallback(
+    (method: string): { discount: number; id: string | null; name: string | null } | null => {
+      if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
+      const promoLines: PromoCartLine[] = lines.map((l) => ({
+        productId: l.productId,
+        categoryId: l.categoryId ?? null,
+        unitPrice: l.unitPrice,
+        quantity: l.quantity,
+        lineTotal: lineSubtotal(l),
+      }));
+      const arNow = new Date(
+        new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
+      );
+      const ctx: PromoContext = {
+        weekday: arNow.getDay(),
+        minutes: arNow.getHours() * 60 + arNow.getMinutes(),
+        date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
+        paymentMethod: method,
+      };
+      const r = evaluateCart(promoLines, activePromos, ctx);
+      if (!r) return null;
+      const capped = Math.min(r.discount, Math.max(0, subtotal - discountTotal));
+      if (capped <= 0) return null;
+      return { discount: capped, id: r.promotionId, name: r.name };
+    },
+    [activePromos, lines, subtotal, discountTotal],
+  );
+
   const rawTotal = Math.max(0, subtotal - discountTotal - promoDiscount);
   // Redondeo del total al múltiplo configurado (H30). El server reaplica el
   // mismo redondeo de forma autoritativa en create_sale.
@@ -1038,6 +1078,10 @@ function PosPageInner() {
     }[],
     extras?: PaymentExtra[],
     change?: number,
+    // Promo FINAL resuelta por el modal de cobro (F9 · H54): puede diferir de la
+    // promo del carrito si el medio elegido habilita una promo por medio de pago
+    // mayor. Si el caller no la pasa (QR, repetir venta), se usa la del carrito.
+    appliedPromo?: { discount: number; id: string | null; name: string | null } | null,
   ) {
     try {
       const items = lines.map((l) => ({
@@ -1107,11 +1151,15 @@ function PosPageInner() {
         // toma el delivery_order FOR UPDATE, lo enlaza/marca 'entregado' y libera
         // en la misma transacción (sin cierre aparte → sin doble cobro).
         deliveryOrderId: deliveryOrderId ?? null,
-        // Promoción aplicada (F9 · H53): canal aparte del descuento manual.
+        // Promoción aplicada (F9 · H53/H54): canal aparte del descuento manual. Se
+        // prioriza la promo final del modal (puede incluir una promo por medio de
+        // pago); si no llegó, se cae a la promo método-agnóstica del carrito.
         promo:
-          promoResult && promoDiscount > 0
-            ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
-            : null,
+          appliedPromo && appliedPromo.discount > 0
+            ? appliedPromo
+            : promoResult && promoDiscount > 0
+              ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
+              : null,
       });
       setPaymentModal(false);
       clear();
@@ -1986,6 +2034,8 @@ function PosPageInner() {
         initialWarrantyId={offeredWarrantyId}
         splitItems={splitItems}
         deliveryFee={deliveryFee}
+        cartPromo={cartPromo}
+        promoForMethod={promoForMethod}
       />
       <QrCheckoutModal
         open={qrOpen}

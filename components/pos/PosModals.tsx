@@ -677,6 +677,8 @@ export function PaymentModal({
   initialWarrantyId = "",
   splitItems = [],
   deliveryFee = 0,
+  cartPromo = null,
+  promoForMethod,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -688,6 +690,9 @@ export function PaymentModal({
     // Vuelto en efectivo (recibido - total). Lo usa la pantalla del cliente (H25)
     // para mostrar el vuelto tras cobrar. 0 cuando no es efectivo.
     change?: number,
+    // Promo FINAL aplicada (F9 · H54): la del carrito o, si el medio elegido
+    // habilita una promo por medio de pago mayor, esa. El POS la manda a create_sale.
+    appliedPromo?: { discount: number; id: string | null; name: string | null } | null,
   ) => void;
   loading: boolean;
   storeCreditBalance?: number;
@@ -704,6 +709,15 @@ export function PaymentModal({
   // cobre productos + envío y el total mostrado COINCIDA con el v_total del server
   // (sin insufficient_payment en el flujo honesto). 0 = no es cobro de delivery.
   deliveryFee?: number;
+  // Promo método-AGNÓSTICA del carrito (F9 · H54): ya está restada en `base`. Es
+  // el punto de partida; el descuento por medio se mide contra ésta.
+  cartPromo?: { discount: number; id: string | null; name: string | null } | null;
+  // Reevalúa la mejor promo para un medio de pago dado (F9 · H54). Devuelve el
+  // descuento ya acotado (≥ cartPromo). El modal resta el EXTRA respecto de
+  // cartPromo del total y manda la promo final a onConfirm. null = sin promos.
+  promoForMethod?: (
+    method: string,
+  ) => { discount: number; id: string | null; name: string | null } | null;
 }) {
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allPlans } = usePaymentPlans();
@@ -850,6 +864,18 @@ export function PaymentModal({
       ? Math.round(((base * methodSurchargePct) / 100) * 100) / 100
       : 0;
 
+  // Promo final según el medio (F9 · H54). En cobro simple se reevalúa la mejor
+  // promo con el medio elegido en contexto (habilita las promos por medio); en
+  // cobro dividido se usa la promo método-agnóstica del carrito (las promos por
+  // medio no aplican a un cobro repartido). `base` ya tiene restada la del carrito,
+  // así que sólo restamos el EXTRA que aporta la promo del medio sobre aquélla.
+  const appliedPromo = useMemo(
+    () => (!splitOn && promoForMethod ? promoForMethod(method) : cartPromo),
+    [splitOn, promoForMethod, method, cartPromo],
+  );
+  const cartPromoDiscount = cartPromo?.discount ?? 0;
+  const methodPromoExtra = Math.max(0, (appliedPromo?.discount ?? 0) - cartPromoDiscount);
+
   const wplan = (wplans ?? []).find((p: WarrantyPlan) => p.id === warrantyId) ?? null;
   const warrantyPrima = wplan
     ? Number(wplan.price_pct) > 0
@@ -866,7 +892,8 @@ export function PaymentModal({
   // payTotal coincide con el v_total del server y no hay insufficient_payment.
   const deliveryFeeAmount = Math.max(0, deliveryFee || 0);
   const productsTotal =
-    applyRound(base + warrantyPrima + planSurcharge + methodSurcharge) + deliveryFeeAmount;
+    applyRound(base - methodPromoExtra + warrantyPrima + planSurcharge + methodSurcharge) +
+    deliveryFeeAmount;
   const tip = Math.max(0, Number(tipAmount) || 0);
   // Lo que el cliente paga = productos + propina. El cajero recibe ambos.
   const payTotal = productsTotal + tip;
@@ -1151,10 +1178,12 @@ export function PaymentModal({
           </div>
         </div>
 
-        {/* Resumen de extras (envío + garantía + recargo de plan + propina) */}
+        {/* Resumen de extras (envío + garantía + recargo de plan + propina +
+            descuento por medio de pago) */}
         {(extras.some((e) => e.kind === "warranty" || e.kind === "surcharge") ||
           tip > 0 ||
-          deliveryFeeAmount > 0) && (
+          deliveryFeeAmount > 0 ||
+          methodPromoExtra > 0) && (
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1">
             {/* Envío (H49 · Bug 🟠): informativo. El monto lo fija el server desde
                 delivery_orders; acá sólo se suma al total a cobrar. NO es ítem del
@@ -1177,6 +1206,14 @@ export function PaymentModal({
               <div className="flex justify-between text-muted-foreground">
                 <span>Propina</span>
                 <span>+{formatCurrency(tip)}</span>
+              </div>
+            )}
+            {/* Descuento por medio de pago (F9 · H54): extra sobre la promo del
+                carrito al elegir este medio. */}
+            {methodPromoExtra > 0 && (
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                <span className="truncate">{appliedPromo?.name ?? "Descuento por medio"}</span>
+                <span>−{formatCurrency(methodPromoExtra)}</span>
               </div>
             )}
             <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1">
@@ -1221,6 +1258,7 @@ export function PaymentModal({
                   splitResult.payments,
                   extras.length > 0 ? extras : [],
                   splitResult.change,
+                  appliedPromo,
                 )
               }
             >
@@ -1245,6 +1283,7 @@ export function PaymentModal({
                   ],
                   extras.length > 0 ? extras : [],
                   change,
+                  appliedPromo,
                 )
               }
             >

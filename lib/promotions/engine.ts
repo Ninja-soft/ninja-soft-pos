@@ -67,6 +67,12 @@ export interface Promotion {
   pay_qty: number | null;
   // Sólo para volume_tier: tramos de cantidad → %. null en los demás tipos.
   volume_tiers: PromoVolumeTier[] | null;
+  // CONDICIÓN por medio de pago (H54): si está seteado (ej. 'cash'), la promo SÓLO
+  // aplica cuando se paga con ese medio. null = cualquier medio (como hasta hoy).
+  // El medio del cobro llega por PromoContext.paymentMethod (lo resuelve el modal
+  // al elegir el medio); en la evaluación del carrito (sin medio aún) estas promos
+  // no aplican. Es una condición, ortogonal al action_type.
+  payment_method: string | null;
 }
 
 // Línea del carrito reducida a lo que el motor necesita. `lineTotal` alimenta las
@@ -86,6 +92,10 @@ export interface PromoContext {
   weekday: number; // 0=domingo..6=sábado
   minutes: number; // minutos del día (0..1440)
   date: string; // YYYY-MM-DD
+  // Medio de pago elegido (H54): habilita las promos condicionadas por medio.
+  // undefined/null = todavía no se eligió (evaluación del carrito) → las promos
+  // con payment_method no aplican; las método-agnósticas sí.
+  paymentMethod?: string | null;
 }
 
 export interface PromoResult {
@@ -128,6 +138,10 @@ export function promoApplies(
     return false;
   if (promo.time_from != null && ctx.minutes < promo.time_from) return false;
   if (promo.time_to != null && ctx.minutes >= promo.time_to) return false;
+  // Condición por medio de pago (H54): si la promo exige un medio, sólo aplica
+  // cuando el contexto trae ese mismo medio (lo setea el modal al elegirlo). Sin
+  // medio en contexto (evaluación del carrito), las promos por medio no aplican.
+  if (promo.payment_method && ctx.paymentMethod !== promo.payment_method) return false;
   if (cartSubtotal(lines) < (promo.min_amount || 0)) return false;
   // Debe haber algo en el alcance para descontar.
   if (scopeBase(promo, lines) <= 0) return false;

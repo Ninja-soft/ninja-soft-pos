@@ -36,6 +36,7 @@ function base(p: Partial<Promotion>): Promotion {
     buy_qty: null,
     pay_qty: null,
     volume_tiers: null,
+    payment_method: null,
     ...p,
   };
 }
@@ -235,6 +236,43 @@ describe("promoApplies — condiciones", () => {
     expect(
       promoApplies(base({ scope: "product", scope_product_id: "no-existe" }), cart, ctx),
     ).toBe(false);
+  });
+  it("condición por medio de pago: sólo aplica con ese medio en contexto", () => {
+    const cashPromo = base({ payment_method: "cash" });
+    // Sin medio en contexto (evaluación del carrito) → no aplica.
+    expect(promoApplies(cashPromo, cart, ctx)).toBe(false);
+    // Otro medio → no aplica.
+    expect(promoApplies(cashPromo, cart, { ...ctx, paymentMethod: "credit" })).toBe(false);
+    // El medio correcto → aplica.
+    expect(promoApplies(cashPromo, cart, { ...ctx, paymentMethod: "cash" })).toBe(true);
+    // Promo sin condición de medio aplica con o sin medio.
+    expect(promoApplies(base({ payment_method: null }), cart, ctx)).toBe(true);
+    expect(
+      promoApplies(base({ payment_method: null }), cart, { ...ctx, paymentMethod: "cash" }),
+    ).toBe(true);
+  });
+});
+
+describe("evaluateCart — condición por medio de pago (H54)", () => {
+  it("la promo por medio sólo gana cuando se paga con ese medio", () => {
+    const promos = [
+      base({ id: "agn", action_type: "percent", action_value: 10 }), // 150, siempre
+      base({ id: "cash", action_type: "percent", action_value: 20, payment_method: "cash" }), // 300, sólo efectivo
+    ];
+    // Sin medio (carrito): sólo la agnóstica → 150.
+    expect(evaluateCart(cart, promos, ctx)).toEqual({ promotionId: "agn", name: "Promo", discount: 150 });
+    // Pagando en efectivo: gana la de efectivo → 300.
+    expect(evaluateCart(cart, promos, { ...ctx, paymentMethod: "cash" })).toEqual({
+      promotionId: "cash",
+      name: "Promo",
+      discount: 300,
+    });
+    // Pagando con crédito: la de efectivo no aplica → vuelve la agnóstica (150).
+    expect(evaluateCart(cart, promos, { ...ctx, paymentMethod: "credit" })).toEqual({
+      promotionId: "agn",
+      name: "Promo",
+      discount: 150,
+    });
   });
 });
 

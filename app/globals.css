@@ -349,9 +349,35 @@ html {
   .comanda-print * {
     visibility: visible;
   }
+  /* La comanda se renderiza DENTRO de un modal de Radix (fixed + max-height +
+   * overflow-hidden + scroll interno). Si la dejábamos `position: fixed`, escapaba
+   * el modal pero el navegador la RECORTABA a una sola página (los fixed no
+   * paginan) → se imprimía sólo el encabezado y se perdían ítems/notas/alergias.
+   * Solución: SOLO cuando hay una comanda en pantalla (`:has`), ocultamos el resto
+   * de la app y LIBERAMOS al modal y su contenedor de scroll de toda restricción,
+   * para que el contenido fluya en el documento y pagine de verdad. */
+  body:has(.comanda-print) > *:not(:has(.comanda-print)) {
+    display: none !important;
+  }
+  body:has(.comanda-print) [role="dialog"] {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    max-height: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  body:has(.comanda-print) [role="dialog"] > div {
+    overflow: visible !important;
+    max-height: none !important;
+    padding: 0 !important;
+  }
   .comanda-print {
-    position: fixed;
-    inset: 0;
+    position: static;
     margin: 0;
     padding: 0;
     width: 100%;

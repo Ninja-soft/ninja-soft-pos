@@ -969,6 +969,9 @@ function PosPageInner() {
   }
 
   // Lector USB/Bluetooth (HID): escanea en cualquier parte del POS y agrega.
+  // Se DESACTIVA mientras el modal de escaneo de DNI está abierto: ese modal tiene
+  // su propio useScanner y, si éste sigue activo, intercepta el PDF417 del DNI como
+  // si fuera un código de producto (findByCode → "Sin producto") y pisa la lectura.
   useScanner(async (code) => {
     try {
       const res = await productsApi.findByCode(code);
@@ -1009,6 +1012,7 @@ function PosPageInner() {
       setSearch(code);
     }
   }, {
+    enabled: !dniOpen,
     prefix: posSettings?.scannerPrefix ?? "",
     suffix: posSettings?.scannerSuffix ?? "",
     beep: posSettings?.scannerBeep ?? true,

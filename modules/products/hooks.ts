@@ -25,6 +25,18 @@ import type {
   ProductionInput,
 } from "./schemas";
 
+// Productos ACTIVOS por ids (F9 · H54 — regalo por compra): el POS resuelve los
+// productos de regalo (nombre/sku/stock) para armar la línea a $0 y chequear stock.
+export function useProductsByIds(ids: string[]) {
+  const key = [...new Set(ids)].sort();
+  return useQuery({
+    queryKey: ["products", "by-ids", key],
+    queryFn: () => productsApi.getByIds(key),
+    enabled: key.length > 0,
+    staleTime: 30_000,
+  });
+}
+
 // Cantidad de productos activos del tenant (para el aviso de "vaciar catálogo").
 export function useActiveProductCount() {
   return useQuery({

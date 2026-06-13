@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { useCategories } from "@/modules/products/hooks";
+import { useCategories, useProducts } from "@/modules/products/hooks";
 import {
   usePromotions,
   usePromotionMutations,
@@ -124,7 +124,9 @@ function PromoRow({
               ? `por volumen: ${(promo.volume_tiers ?? [])
                   .map((t) => `${t.min_qty}+→${t.pct}%`)
                   .join(", ")}`
-              : `precio ${formatCurrency(promo.action_value)}`;
+              : promo.action_type === "gift"
+                ? `regalo ×${promo.gift_qty ?? 1}`
+                : `precio ${formatCurrency(promo.action_value)}`;
   const scopeLabel =
     promo.scope === "cart"
       ? "todo el carrito"
@@ -198,6 +200,8 @@ function PromotionFormModal({
   const { toast } = useToast();
   const { create, update } = usePromotionMutations();
   const { data: categories } = useCategories();
+  // Productos para el selector de "regalo por compra" (H54).
+  const { data: giftProducts } = useProducts("");
 
   const [name, setName] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -212,12 +216,15 @@ function PromotionFormModal({
   // Condición por medio de pago (H54): "" = cualquiera; si no, exige ese medio.
   const [paymentMethod, setPaymentMethod] = useState("");
   const [actionType, setActionType] = useState<
-    "percent" | "amount" | "nxm" | "fixed_price" | "second_item" | "volume_tier"
+    "percent" | "amount" | "nxm" | "fixed_price" | "second_item" | "volume_tier" | "gift"
   >("percent");
   const [actionValue, setActionValue] = useState("10");
   // NxM (H54): N (lleva) y M (paga).
   const [buyQty, setBuyQty] = useState("2");
   const [payQty, setPayQty] = useState("1");
+  // Regalo por compra (H54): producto a regalar + cantidad.
+  const [giftProductId, setGiftProductId] = useState("");
+  const [giftQty, setGiftQty] = useState("1");
   // % por volumen escalonado (H54): tramos cantidad → %. Editados como strings
   // para no pelear con el input; se sanitizan al guardar.
   const [tiers, setTiers] = useState<{ minQty: string; pct: string }[]>([
@@ -244,6 +251,8 @@ function PromotionFormModal({
       setActionValue(String(promo.action_value));
       setBuyQty(String(promo.buy_qty ?? 2));
       setPayQty(String(promo.pay_qty ?? 1));
+      setGiftProductId(promo.gift_product_id ?? "");
+      setGiftQty(String(promo.gift_qty ?? 1));
       setTiers(
         promo.volume_tiers && promo.volume_tiers.length > 0
           ? promo.volume_tiers.map((t) => ({
@@ -268,6 +277,8 @@ function PromotionFormModal({
       setActionValue("10");
       setBuyQty("2");
       setPayQty("1");
+      setGiftProductId("");
+      setGiftQty("1");
       setTiers([
         { minQty: "3", pct: "10" },
         { minQty: "6", pct: "15" },
@@ -276,6 +287,7 @@ function PromotionFormModal({
   }, [open, promo]);
 
   const catList = useMemo(() => categories ?? [], [categories]);
+  const giftList = useMemo(() => giftProducts ?? [], [giftProducts]);
 
   function toggleDay(d: number) {
     setDays((ds) => (ds.includes(d) ? ds.filter((x) => x !== d) : [...ds, d]));
@@ -330,6 +342,10 @@ function PromotionFormModal({
       });
       return;
     }
+    if (actionType === "gift" && !giftProductId) {
+      toast({ title: "Elegí el producto a regalar", variant: "error" });
+      return;
+    }
     if (scope === "category" && !categoryId) {
       toast({ title: "Elegí la categoría del alcance", variant: "error" });
       return;
@@ -346,11 +362,16 @@ function PromotionFormModal({
       scope,
       scope_category_id: scope === "category" ? categoryId : null,
       action_type: actionType,
-      action_value: actionType === "nxm" || actionType === "volume_tier" ? 0 : value,
+      action_value:
+        actionType === "nxm" || actionType === "volume_tier" || actionType === "gift"
+          ? 0
+          : value,
       buy_qty: actionType === "nxm" ? n : null,
       pay_qty: actionType === "nxm" ? m : null,
       volume_tiers: actionType === "volume_tier" ? validTiers : null,
       payment_method: paymentMethod || null,
+      gift_product_id: actionType === "gift" ? giftProductId : null,
+      gift_qty: actionType === "gift" ? Math.max(1, Math.trunc(Number(giftQty) || 1)) : null,
     };
     try {
       if (promo) await update.mutateAsync({ id: promo.id, input });
@@ -394,7 +415,8 @@ function PromotionFormModal({
                     | "nxm"
                     | "fixed_price"
                     | "second_item"
-                    | "volume_tier",
+                    | "volume_tier"
+                    | "gift",
                 )
               }
               className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
@@ -405,9 +427,44 @@ function PromotionFormModal({
               <option value="fixed_price">Precio fijo (combo)</option>
               <option value="second_item">2º ítem al X%</option>
               <option value="volume_tier">% por volumen (escalonado)</option>
+              <option value="gift">Regalo por compra</option>
             </select>
           </label>
-          {actionType === "volume_tier" ? (
+          {actionType === "gift" ? (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                Al cumplir las condiciones de abajo (monto mínimo, alcance, día/
+                hora…), el cliente se lleva GRATIS este producto. Si no hay stock,
+                no se agrega.
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Producto de regalo
+                  <select
+                    value={giftProductId}
+                    onChange={(e) => setGiftProductId(e.target.value)}
+                    className="mt-0.5 h-10 w-full rounded-lg border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
+                  >
+                    <option value="">Elegí…</option>
+                    {giftList.map((p: { id: string; name: string }) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Input
+                  label="Cantidad"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={giftQty}
+                  onChange={(e) => setGiftQty(e.target.value)}
+                  className="w-20"
+                />
+              </div>
+            </div>
+          ) : actionType === "volume_tier" ? (
             <div className="space-y-2">
               <div className="text-xs text-muted-foreground">
                 A más unidades del alcance, mayor descuento. Aplica el % del tramo

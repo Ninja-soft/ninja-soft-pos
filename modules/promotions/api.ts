@@ -40,10 +40,13 @@ export interface PromotionInput {
   // Condición por medio de pago (H54): si está seteado, la promo sólo aplica con
   // ese medio. null/"" = cualquier medio.
   payment_method?: string | null;
+  // Sólo para action_type='gift' (H54): producto a regalar y cantidad.
+  gift_product_id?: string | null;
+  gift_qty?: number | null;
 }
 
 const COLS =
-  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers, payment_method";
+  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers, payment_method, gift_product_id, gift_qty";
 
 // Normaliza el input al payload de la tabla (limpia el alcance no usado).
 function toRow(input: PromotionInput): Record<string, unknown> {
@@ -76,6 +79,13 @@ function toRow(input: PromotionInput): Record<string, unknown> {
         : null,
     // Condición por medio de pago: "" o ausente → null (cualquier medio).
     payment_method: input.payment_method ? input.payment_method : null,
+    // Regalo: sólo si el tipo es 'gift'. Producto + cantidad (≥ 1).
+    gift_product_id:
+      input.action_type === "gift" ? input.gift_product_id ?? null : null,
+    gift_qty:
+      input.action_type === "gift"
+        ? Math.max(1, Math.trunc(Number(input.gift_qty) || 1))
+        : null,
   };
 }
 

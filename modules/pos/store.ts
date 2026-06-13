@@ -31,6 +31,10 @@ export interface CartLine {
   // línea no se cobra (lineSubtotal = 0) y create_sale consume una sesión. Se
   // conserva unitPrice para mostrar el valor tachado ("cubierto por el pack").
   packCreditId?: string | null;
+  // Línea de REGALO por compra (F9 · H54): promotions.id que la generó. Es un
+  // producto a $0 que el motor agrega solo al cumplirse las condiciones; se quita
+  // sola si el carrito deja de calificar. No editable por el cajero.
+  giftPromoId?: string | null;
 }
 
 interface CartState {
@@ -101,6 +105,19 @@ interface CartState {
   setLineDiscount: (lineId: string, discount: number) => void;
   removeLine: (lineId: string) => void;
   setDiscountTotal: (amount: number) => void;
+  // Reconcilia las líneas de REGALO (F9 · H54) con lo que el motor calcula: agrega
+  // las que faltan, actualiza cantidad/producto, y quita las que ya no aplican.
+  // Una línea de regalo por promo (identidad por giftPromoId). Las líneas normales
+  // no se tocan. unitPrice siempre 0 (es un regalo).
+  syncGiftLines: (
+    gifts: {
+      promoId: string;
+      productId: string;
+      name: string;
+      sku: string | null;
+      quantity: number;
+    }[],
+  ) => void;
   clear: () => void;
 }
 
@@ -315,6 +332,46 @@ export const useCartStore = create<CartState>((set) => ({
       lines: state.lines.filter((l) => l.lineId !== lineId),
     })),
   setDiscountTotal: (amount) => set({ discountTotal: amount }),
+  syncGiftLines: (gifts) =>
+    set((state) => {
+      const desired = new Map(gifts.map((g) => [g.promoId, g]));
+      const seen = new Set<string>();
+      const next: CartLine[] = [];
+      for (const l of state.lines) {
+        if (l.giftPromoId) {
+          const g = desired.get(l.giftPromoId);
+          if (!g) continue; // el carrito dejó de calificar → se quita el regalo
+          seen.add(l.giftPromoId);
+          next.push({
+            ...l,
+            productId: g.productId,
+            name: g.name,
+            sku: g.sku,
+            unitPrice: 0,
+            quantity: g.quantity,
+            discount: 0,
+          });
+        } else {
+          next.push(l);
+        }
+      }
+      // Regalos nuevos (promo que recién empezó a aplicar): al final del carrito.
+      for (const g of gifts) {
+        if (seen.has(g.promoId)) continue;
+        next.push({
+          lineId: crypto.randomUUID(),
+          productId: g.productId,
+          giftPromoId: g.promoId,
+          name: g.name,
+          sku: g.sku,
+          unitPrice: 0,
+          quantity: g.quantity,
+          discount: 0,
+          unit: "un",
+        });
+      }
+      return { lines: next };
+    }),
   clear: () => set({ lines: [], discountTotal: 0 }),
 }));
 

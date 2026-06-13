@@ -7,6 +7,7 @@ import {
   Banknote,
   Bike,
   CalendarDays,
+  Gift,
   Lock,
   Minus,
   MonitorSmartphone,
@@ -29,6 +30,7 @@ import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
+  useProductsByIds,
   useTopProducts,
   useFavoriteProducts,
   useProductSerials,
@@ -90,6 +92,8 @@ import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
 import { useActivePromotions } from "@/modules/promotions/hooks";
 import {
   evaluateCart,
+  evaluateGifts,
+  type Promotion,
   type PromoCartLine,
   type PromoContext,
 } from "@/lib/promotions/engine";
@@ -405,6 +409,8 @@ function PosPageInner() {
   const addPack = useCartStore((s) => s.addPack);
   const coverLineWithPack = useCartStore((s) => s.coverLineWithPack);
   const uncoverLine = useCartStore((s) => s.uncoverLine);
+  // Regalo por compra (H54): el motor reconcilia las líneas de regalo del carrito.
+  const syncGiftLines = useCartStore((s) => s.syncGiftLines);
 
   // Lista de precios 'mostrador' activa (si existe): el precio unitario al
   // agregar al carrito se resuelve contra esta lista. Sin lista → precio base.
@@ -900,6 +906,77 @@ function PosPageInner() {
     },
     [activePromos, lines, subtotal, discountTotal],
   );
+
+  // ── Regalo por compra (F9 · H54) ─────────────────────────────────────────────
+  // Promos de regalo activas → ids de los productos a regalar, para traer su
+  // nombre/sku/stock y poder armar la línea a $0 y chequear stock.
+  const giftProductIds = useMemo(
+    () =>
+      (activePromos ?? [])
+        .filter((p: Promotion) => p.action_type === "gift" && p.gift_product_id)
+        .map((p: Promotion) => p.gift_product_id as string),
+    [activePromos],
+  );
+  const { data: giftProductsData } = useProductsByIds(giftProductIds);
+  const giftProductById = useMemo(() => {
+    const m = new Map<string, Product>();
+    for (const p of giftProductsData ?? []) m.set(p.id, p);
+    return m;
+  }, [giftProductsData]);
+
+  // Regalos a aplicar según el motor: evalúa SOLO con las líneas NO-regalo (para
+  // que un regalo no se dispare a sí mismo) y descarta los que no tienen stock.
+  const desiredGifts = useMemo(() => {
+    if (!activePromos || activePromos.length === 0) return [];
+    const realLines = lines.filter((l) => !l.giftPromoId);
+    if (realLines.length === 0) return [];
+    const promoLines: PromoCartLine[] = realLines.map((l) => ({
+      productId: l.productId,
+      categoryId: l.categoryId ?? null,
+      unitPrice: l.unitPrice,
+      quantity: l.quantity,
+      lineTotal: lineSubtotal(l),
+    }));
+    const arNow = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
+    );
+    const ctx: PromoContext = {
+      weekday: arNow.getDay(),
+      minutes: arNow.getHours() * 60 + arNow.getMinutes(),
+      date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
+    };
+    const out: {
+      promoId: string;
+      productId: string;
+      name: string;
+      sku: string | null;
+      quantity: number;
+    }[] = [];
+    for (const g of evaluateGifts(promoLines, activePromos, ctx)) {
+      const p = giftProductById.get(g.giftProductId);
+      if (!p) continue; // producto no disponible / dado de baja
+      // Guard de stock: si controla stock y no alcanza, no se ofrece el regalo.
+      if (p.track_stock && Number(p.stock ?? 0) < g.giftQty) continue;
+      out.push({ promoId: g.promotionId, productId: p.id, name: p.name, sku: p.sku, quantity: g.giftQty });
+    }
+    return out;
+  }, [activePromos, lines, giftProductById]);
+
+  // Reconcilia las líneas de regalo con lo deseado. Sólo llama al store ante un
+  // cambio real (la evaluación ignora las líneas de regalo, así que agregarlas/
+  // quitarlas no altera `desiredGifts` → no hay loop).
+  useEffect(() => {
+    const current = lines
+      .filter((l) => l.giftPromoId)
+      .map((l) => `${l.giftPromoId}:${l.productId}:${l.quantity}`)
+      .sort()
+      .join("|");
+    const wanted = desiredGifts
+      .map((g) => `${g.promoId}:${g.productId}:${g.quantity}`)
+      .sort()
+      .join("|");
+    if (current !== wanted) syncGiftLines(desiredGifts);
+  }, [desiredGifts, lines, syncGiftLines]);
 
   const rawTotal = Math.max(0, subtotal - discountTotal - promoDiscount);
   // Redondeo del total al múltiplo configurado (H30). El server reaplica el
@@ -1629,7 +1706,14 @@ function PosPageInner() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">{l.name}</span>
+                    <span className="block text-sm font-medium text-foreground">
+                      {l.name}
+                      {l.giftPromoId && (
+                        <span className="ml-1.5 inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                          <Gift size={11} /> Regalo
+                        </span>
+                      )}
+                    </span>
                     {l.variantLabel && (
                       <span className="block text-xs font-medium text-ninja-flameSoft">
                         {l.variantLabel}
@@ -1646,15 +1730,19 @@ function PosPageInner() {
                       </span>
                     )}
                   </span>
-                  <button
-                    onClick={() => removeLine(l.lineId)}
-                    className="text-muted-foreground hover:text-red-300"
-                  >
-                    <X size={15} />
-                  </button>
+                  {!l.giftPromoId && (
+                    <button
+                      onClick={() => removeLine(l.lineId)}
+                      className="text-muted-foreground hover:text-red-300"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
                 </div>
                 <div className="mt-2 flex items-center justify-between">
-                  {l.unit === "kg" ? (
+                  {l.giftPromoId ? (
+                    <span className="text-sm text-muted-foreground">×{l.quantity}</span>
+                  ) : l.unit === "kg" ? (
                     <span className="text-sm text-muted-foreground">
                       {formatQty(l.quantity)} kg × {formatCurrency(l.unitPrice)}/kg
                     </span>
@@ -1675,13 +1763,8 @@ function PosPageInner() {
                       </button>
                     </div>
                   )}
-                  {l.packCreditId ? (
-                    <span className="flex items-center gap-1.5 text-sm font-semibold">
-                      <span className="text-xs font-normal text-muted-foreground line-through">
-                        {formatCurrency(l.unitPrice * l.quantity)}
-                      </span>
-                      <span className="text-emerald-300">Gratis</span>
-                    </span>
+                  {l.packCreditId || l.giftPromoId ? (
+                    <span className="text-sm font-semibold text-emerald-300">Gratis</span>
                   ) : (
                     <span className="text-sm font-semibold">
                       {formatCurrency(lineSubtotal(l))}
@@ -1690,7 +1773,7 @@ function PosPageInner() {
                 </div>
                 {/* Cantidades rápidas en la línea (H36): suma de un toque sin
                     teclear. Sólo para ítems por unidad (los de peso usan kg). */}
-                {l.unit !== "kg" && !l.packCreditId && (
+                {l.unit !== "kg" && !l.packCreditId && !l.giftPromoId && (
                   <div className="mt-2 flex gap-1.5">
                     {[2, 6, 12].map((q) => (
                       <button

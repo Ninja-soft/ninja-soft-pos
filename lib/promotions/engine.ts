@@ -23,7 +23,11 @@ export type PromoActionType =
   | "nxm"
   | "fixed_price"
   | "second_item"
-  | "volume_tier";
+  | "volume_tier"
+  // gift = regalo por compra: al cumplir las condiciones, se regala `gift_qty`
+  // unidades del producto `gift_product_id`. NO descuenta (agrega un ítem a $0);
+  // se evalúa aparte de la mejor promo de descuento (ver evaluateGifts).
+  | "gift";
 
 // Un tramo de la promo por volumen: a partir de `min_qty` unidades del alcance,
 // se aplica `pct`% de descuento sobre la base del alcance. Califica el tramo más
@@ -73,6 +77,10 @@ export interface Promotion {
   // al elegir el medio); en la evaluación del carrito (sin medio aún) estas promos
   // no aplican. Es una condición, ortogonal al action_type.
   payment_method: string | null;
+  // Sólo para action_type='gift' (H54): producto a regalar y cuántas unidades.
+  // null en los demás tipos.
+  gift_product_id: string | null;
+  gift_qty: number | null;
 }
 
 // Línea del carrito reducida a lo que el motor necesita. `lineTotal` alimenta las
@@ -271,6 +279,38 @@ export function evaluateCart(
   }
   if (!best) return null;
   return { promotionId: best.promo.id, name: best.promo.name, discount: best.discount };
+}
+
+// Regalo por compra (H54). A diferencia del descuento, NO compite por "la mejor":
+// es un mecanismo aparte que puede CONVIVIR con una promo de descuento y con otros
+// regalos. Devuelve TODAS las promos de regalo cuyas condiciones se cumplen (el
+// caller agrega una línea a $0 por cada una). Las líneas de regalo NO deben venir
+// en `lines` (el caller las excluye) para que un regalo no se dispare a sí mismo.
+export interface GiftResult {
+  promotionId: string;
+  name: string;
+  giftProductId: string;
+  giftQty: number;
+}
+
+export function evaluateGifts(
+  lines: PromoCartLine[],
+  promos: Promotion[],
+  ctx: PromoContext,
+): GiftResult[] {
+  const out: GiftResult[] = [];
+  for (const promo of promos) {
+    if (promo.action_type !== "gift") continue;
+    if (!promo.gift_product_id) continue;
+    if (!promoApplies(promo, lines, ctx)) continue;
+    out.push({
+      promotionId: promo.id,
+      name: promo.name,
+      giftProductId: promo.gift_product_id,
+      giftQty: Math.max(1, Math.trunc(promo.gift_qty || 1)),
+    });
+  }
+  return out;
 }
 
 // ── Simulador (F9 · H56) ──────────────────────────────────────────────────────

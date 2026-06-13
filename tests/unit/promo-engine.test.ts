@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   evaluateCart,
+  evaluateGifts,
   promoApplies,
   promoDiscount,
   cartSubtotal,
@@ -37,6 +38,8 @@ function base(p: Partial<Promotion>): Promotion {
     pay_qty: null,
     volume_tiers: null,
     payment_method: null,
+    gift_product_id: null,
+    gift_qty: null,
     ...p,
   };
 }
@@ -273,6 +276,44 @@ describe("evaluateCart — condición por medio de pago (H54)", () => {
       name: "Promo",
       discount: 150,
     });
+  });
+});
+
+describe("evaluateGifts — regalo por compra (H54)", () => {
+  it("devuelve el regalo cuando se cumplen las condiciones", () => {
+    const promos = [
+      base({
+        id: "g1",
+        action_type: "gift",
+        gift_product_id: "prodGift",
+        gift_qty: 2,
+        min_amount: 1000,
+      }),
+    ];
+    const gifts = evaluateGifts(cart, promos, ctx);
+    expect(gifts).toEqual([
+      { promotionId: "g1", name: "Promo", giftProductId: "prodGift", giftQty: 2 },
+    ]);
+  });
+  it("no devuelve el regalo si no se cumple la condición (monto mínimo)", () => {
+    const promos = [
+      base({ action_type: "gift", gift_product_id: "prodGift", gift_qty: 1, min_amount: 5000 }),
+    ];
+    expect(evaluateGifts(cart, promos, ctx)).toEqual([]);
+  });
+  it("convive con una promo de descuento (son listas separadas)", () => {
+    const promos = [
+      base({ id: "d", action_type: "percent", action_value: 10 }),
+      base({ id: "g", action_type: "gift", gift_product_id: "prodGift", gift_qty: 1 }),
+    ];
+    // El descuento lo elige evaluateCart; el regalo lo da evaluateGifts. Conviven.
+    expect(evaluateCart(cart, promos, ctx)?.promotionId).toBe("d");
+    expect(evaluateGifts(cart, promos, ctx).map((g) => g.promotionId)).toEqual(["g"]);
+  });
+  it("una promo de regalo no descuenta (promoDiscount = 0)", () => {
+    expect(
+      promoDiscount(base({ action_type: "gift", gift_product_id: "prodGift", gift_qty: 1 }), cart),
+    ).toBe(0);
   });
 });
 

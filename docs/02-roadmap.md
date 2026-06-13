@@ -720,9 +720,9 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [x] Ventas por mozo, mesa, sector, estación, canal, producto. — *`gastro_tables_report` (salón/mesa/mozo + ticket prom. + rotación = pedidos cerrados), `gastro_delivery_report` (canal/zona/tipo), `gastro_top_items_report` (estación/curso). Modificador y horario fino → follow-up.*
   - [x] Tiempos: pedido a cocina (pendiente→listo) por estación y global, rotación de mesa. — *`gastro_kitchen_report` (avg/min/máx de `created_at`→`kds_ready_at`, mesa + delivery). "Listo→entregado", cancelaciones/reimpresiones/comandas demoradas → follow-up.*
   - [x] Top productos por estación y curso/tiempo. — *`gastro_top_items_report` (qty + importe, mesa + delivery).*
-  - [ ] Margen por plato si hay recetas. — *Follow-up: requiere recetas/costo de mercadería (H50).*
+  - [x] Margen por plato si hay recetas. — *Hecho (local). `gastro_top_items_report` suma `cost` + `margin` por ítem del top: joinea el costo de receta (`product_recipes`, H50) por `product_id` y agrega `cost = qty × costo unitario`, `margin = importe − costo` (migración `20260609180000_gastro_top_margin`, aplicada en remoto, aditiva sobre el jsonb). El reporte (/reportes → "Top ítems") muestra columna **Margen** (sólo cuando el producto tiene receta; si no, "—") y el export XLSX agrega Costo (receta) + Margen. Productos sin receta → costo 0.*
   - [x] Export XLSX. — *Hojas gastro por salón/mesa/mozo/cocina/delivery(canal,zona)/top, gateadas por export_xlsx + el modo del tenant.*
-  - [ ] *Criterio:* el owner identifica cuellos de botella de cocina/barra y productos con más margen. — *Cuellos de cocina/barra ✓ (tiempos por estación). Margen por plato → H50 (recetas).*
+  - [x] *Criterio:* el owner identifica cuellos de botella de cocina/barra y productos con más margen. — *Cuellos de cocina/barra ✓ (tiempos por estación, `gastro_kitchen_report`). Productos con más margen ✓ (columna Margen en el top de ítems, derivada de las recetas H50).*
 
 ### F9 — Motor de promociones PRO
 

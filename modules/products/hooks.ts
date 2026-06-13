@@ -17,7 +17,12 @@ import {
   type ProductsPageParams,
   type VariantRow,
 } from "./api";
-import type { CategoryInput, ProductOutput, StockAdjustInput } from "./schemas";
+import type {
+  CategoryInput,
+  ProductOutput,
+  StockAdjustInput,
+  MermaInput,
+} from "./schemas";
 
 // Estado del PLU del tenant (habilitado / modo / si ya se preguntó).
 export function usePluSettings() {
@@ -235,6 +240,12 @@ export function useProductMutations() {
     adjust: useMutation({
       mutationFn: (vars: { id: string; input: StockAdjustInput }) =>
         productsApi.adjustStock(vars.id, vars.input),
+      onSuccess: invalidate,
+    }),
+    // Merma tipada (F13 · H50): descuenta stock con sub-motivo.
+    registerWaste: useMutation({
+      mutationFn: (vars: { id: string; input: MermaInput }) =>
+        productsApi.registerWaste(vars.id, vars.input),
       onSuccess: invalidate,
     }),
   };

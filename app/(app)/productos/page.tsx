@@ -5,6 +5,7 @@ import {
   Download,
   FolderTree,
   History,
+  PackageMinus,
   Pencil,
   Plus,
   Search,
@@ -24,6 +25,7 @@ import { useToast } from "@/components/ui/Toast";
 import { GatedButton } from "@/components/saas/GatedAction";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
+import { MermaModal } from "@/components/products/MermaModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { BrandsModal } from "@/components/products/BrandsModal";
@@ -57,6 +59,7 @@ export default function ProductosPage() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [mermaOpen, setMermaOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [brandsOpen, setBrandsOpen] = useState(false);
@@ -129,6 +132,10 @@ export default function ProductosPage() {
   function openAdjust(p: Product) {
     setSelected(p);
     setAdjustOpen(true);
+  }
+  function openMerma(p: Product) {
+    setSelected(p);
+    setMermaOpen(true);
   }
   function openHistory(p: Product) {
     setSelected(p);
@@ -405,6 +412,13 @@ export default function ProductosPage() {
                           <SlidersHorizontal size={16} />
                         </button>
                         <button
+                          onClick={() => openMerma(p)}
+                          title="Registrar merma"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-amber-300"
+                        >
+                          <PackageMinus size={16} />
+                        </button>
+                        <button
                           onClick={() => openHistory(p)}
                           title="Historial de stock"
                           className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
@@ -451,6 +465,11 @@ export default function ProductosPage() {
       <StockAdjustModal
         open={adjustOpen}
         onOpenChange={setAdjustOpen}
+        product={selected}
+      />
+      <MermaModal
+        open={mermaOpen}
+        onOpenChange={setMermaOpen}
         product={selected}
       />
       <StockHistoryModal

@@ -7,7 +7,7 @@ import type {
   ProductOutput,
   StockAdjustInput,
 } from "./schemas";
-import { StockAdjustSchema } from "./schemas";
+import { StockAdjustSchema, MermaSchema, type MermaInput } from "./schemas";
 
 export interface ProductsPageParams {
   page: number; // 1-based
@@ -370,6 +370,26 @@ export const productsApi = {
       p_reason: parsed.reason,
       p_notes: parsed.notes ?? undefined,
     });
+    if (error) throw error;
+    return data as number;
+  },
+
+  // Registra una merma tipada (F13 · H50): descuenta `qty` del stock con el
+  // sub-motivo (vencido/roto/preparación fallida/devolución/otro) vía
+  // register_stock_waste. Devuelve el nuevo stock. La RPC no está en los tipos
+  // generados → cast (la DB + RLS validan).
+  registerWaste: async (
+    productId: string,
+    input: MermaInput,
+  ): Promise<number> => {
+    const supabase = createClient();
+    const parsed = MermaSchema.parse(input);
+    const { data, error } = await supabase.rpc("register_stock_waste" as never, {
+      p_product_id: productId,
+      p_qty: parsed.qty,
+      p_loss_reason: parsed.reason,
+      p_notes: parsed.notes ?? undefined,
+    } as never);
     if (error) throw error;
     return data as number;
   },

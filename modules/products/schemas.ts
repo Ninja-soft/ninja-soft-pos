@@ -94,3 +94,31 @@ export const StockAdjustSchema = z.object({
   notes: optionalText(200),
 });
 export type StockAdjustInput = z.input<typeof StockAdjustSchema>;
+
+// ── Merma tipada (F13 · H50) ─────────────────────────────────────────────────
+// Sub-motivos de pérdida de stock. Se registran con register_stock_waste, que
+// descuenta el stock e inserta el movimiento con reason='loss' + loss_reason.
+export const WASTE_REASONS = [
+  "vencido",
+  "roto",
+  "preparacion_fallida",
+  "devolucion",
+  "otro",
+] as const;
+export const WASTE_REASON_LABELS: Record<
+  (typeof WASTE_REASONS)[number],
+  string
+> = {
+  vencido: "Vencido",
+  roto: "Roto / dañado",
+  preparacion_fallida: "Preparación fallida",
+  devolucion: "Devolución (descarte)",
+  otro: "Otro",
+};
+
+export const MermaSchema = z.object({
+  qty: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+  reason: z.enum(WASTE_REASONS),
+  notes: optionalText(200),
+});
+export type MermaInput = z.input<typeof MermaSchema>;

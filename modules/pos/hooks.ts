@@ -207,6 +207,8 @@ export function usePosMutations() {
         deliveryOrderId?: string | null;
         // Promoción aplicada (F9 · H53): descuento calculado por el motor.
         promo?: { discount: number; id: string | null; name: string | null } | null;
+        // Cupón aplicado (F9 · H54): sólo el id; create_sale valida y consume.
+        couponId?: string | null;
       }) =>
         posApi.createSale(
           vars.items,
@@ -217,6 +219,7 @@ export function usePosMutations() {
           vars.tableOrderId,
           vars.deliveryOrderId,
           vars.promo,
+          vars.couponId,
         ),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["products"] });

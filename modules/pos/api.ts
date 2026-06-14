@@ -663,6 +663,11 @@ export const posApi = {
     // total pero NO lo pasa por el gating de 'descuentos' ni por el tope de
     // descuento por rol. Sólo se manda si descontó algo (> 0).
     promo?: { discount: number; id: string | null; name: string | null } | null,
+    // Cupón aplicado (F9 · H54): sólo el ID. create_sale valida el cupón, calcula
+    // el descuento de forma AUTORITATIVA (lock de la fila), lo resta del total
+    // (bypass del gating de 'descuentos' y del tope por rol) y registra el canje
+    // (used_count + redemption) EN LA MISMA transacción — a prueba de concurrencia.
+    couponId?: string | null,
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
@@ -687,6 +692,8 @@ export const posApi = {
             p_promo_name: promo?.name ?? undefined,
           }
         : {}),
+      // Cupón (F9 · H54): sólo el id; create_sale calcula y valida el resto.
+      ...(couponId ? { p_coupon_id: couponId } : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

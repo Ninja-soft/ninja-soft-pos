@@ -90,6 +90,7 @@ import {
 } from "@/modules/menus/hooks";
 import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
 import { useActivePromotions } from "@/modules/promotions/hooks";
+import { couponsApi } from "@/modules/coupons/api";
 import {
   evaluateCart,
   evaluateGifts,
@@ -121,6 +122,30 @@ import {
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+
+// Mensajes legibles para los rechazos de validate_coupon (F9 · H54).
+function couponReasonMsg(reason?: string): string {
+  switch (reason) {
+    case "not_found":
+      return "Cupón inexistente";
+    case "inactive":
+      return "El cupón está inactivo";
+    case "not_yet":
+      return "El cupón todavía no está vigente";
+    case "expired":
+      return "El cupón está vencido";
+    case "usage_exceeded":
+      return "El cupón alcanzó su límite de usos";
+    case "customer_exceeded":
+      return "Este cliente ya usó el cupón el máximo de veces";
+    case "needs_customer":
+      return "Elegí un cliente para usar este cupón";
+    case "min_amount":
+      return "El carrito no llega al monto mínimo del cupón";
+    default:
+      return "No se pudo aplicar el cupón";
+  }
+}
 
 function PosPageInner() {
   const { toast } = useToast();
@@ -318,6 +343,16 @@ function PosPageInner() {
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
   const [dniOpen, setDniOpen] = useState(false);
+  // Cupón (F9 · H54): texto del input + cupón aplicado (validado server-side). El
+  // descuento se recalcula en vivo; create_sale lo revalida y consume al cobrar.
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    coupon_id: string;
+    code: string;
+    discount_type: "percent" | "amount";
+    discount_value: number;
+    min_amount: number;
+  } | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
@@ -867,11 +902,54 @@ function PosPageInner() {
     ? Math.min(promoResult.discount, Math.max(0, subtotal - discountTotal))
     : 0;
 
+  // Cupón (F9 · H54): descuento en vivo (misma fórmula que el server), acotado a lo
+  // que queda tras el descuento manual. Es EXCLUYENTE con la promo de descuento: si
+  // hay un cupón con descuento, la promo se suprime (el cajero eligió el cupón). Los
+  // regalos sí conviven. create_sale revalida y calcula el monto de forma autoritativa.
+  const couponDiscount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    if (subtotal < (appliedCoupon.min_amount ?? 0)) return 0;
+    const raw =
+      appliedCoupon.discount_type === "percent"
+        ? (subtotal * appliedCoupon.discount_value) / 100
+        : appliedCoupon.discount_value;
+    return Math.round(Math.min(Math.max(raw, 0), Math.max(0, subtotal - discountTotal)) * 100) / 100;
+  }, [appliedCoupon, subtotal, discountTotal]);
+  const promoActive = couponDiscount <= 0;
+  const effectivePromoDiscount = promoActive ? promoDiscount : 0;
+
+  async function applyCoupon() {
+    const code = couponInput.trim();
+    if (!code) return;
+    try {
+      const v = await couponsApi.validate(code, subtotal, customer?.id ?? null);
+      if (!v.ok || !v.coupon_id) {
+        toast({ title: couponReasonMsg(v.reason), variant: "error" });
+        return;
+      }
+      setAppliedCoupon({
+        coupon_id: v.coupon_id,
+        code: v.code ?? code,
+        discount_type: v.discount_type ?? "percent",
+        discount_value: v.discount_value ?? 0,
+        min_amount: v.min_amount ?? 0,
+      });
+      setCouponInput("");
+      toast({ title: `Cupón ${v.code ?? code} aplicado`, variant: "success" });
+    } catch (e) {
+      toast({
+        title: "No se pudo validar el cupón",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
+  }
+
   // Promo método-AGNÓSTICA del carrito (ya restada en rawTotal/base). El modal de
   // cobro la recibe como punto de partida; si al elegir el medio aparece una promo
   // por medio de pago mayor, baja más el total (ver promoForMethod).
   const cartPromo =
-    promoResult && promoDiscount > 0
+    promoActive && promoResult && promoDiscount > 0
       ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
       : null;
 
@@ -881,6 +959,8 @@ function PosPageInner() {
   // que promoDiscount). El modal lo usa para recalcular el total al elegir el medio.
   const promoForMethod = useCallback(
     (method: string): { discount: number; id: string | null; name: string | null } | null => {
+      // Cupón activo ⇒ promo suprimida (excluyentes).
+      if (couponDiscount > 0) return null;
       if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
       const promoLines: PromoCartLine[] = lines.map((l) => ({
         productId: l.productId,
@@ -904,7 +984,7 @@ function PosPageInner() {
       if (capped <= 0) return null;
       return { discount: capped, id: r.promotionId, name: r.name };
     },
-    [activePromos, lines, subtotal, discountTotal],
+    [activePromos, lines, subtotal, discountTotal, couponDiscount],
   );
 
   // ── Regalo por compra (F9 · H54) ─────────────────────────────────────────────
@@ -978,7 +1058,7 @@ function PosPageInner() {
     if (current !== wanted) syncGiftLines(desiredGifts);
   }, [desiredGifts, lines, syncGiftLines]);
 
-  const rawTotal = Math.max(0, subtotal - discountTotal - promoDiscount);
+  const rawTotal = Math.max(0, subtotal - discountTotal - effectivePromoDiscount - couponDiscount);
   // Redondeo del total al múltiplo configurado (H30). El server reaplica el
   // mismo redondeo de forma autoritativa en create_sale.
   const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
@@ -1234,18 +1314,24 @@ function PosPageInner() {
         deliveryOrderId: deliveryOrderId ?? null,
         // Promoción aplicada (F9 · H53/H54): canal aparte del descuento manual. Se
         // prioriza la promo final del modal (puede incluir una promo por medio de
-        // pago); si no llegó, se cae a la promo método-agnóstica del carrito.
-        promo:
-          appliedPromo && appliedPromo.discount > 0
+        // pago); si no llegó, se cae a la promo método-agnóstica del carrito. Si
+        // hay cupón, la promo se suprime (excluyentes).
+        promo: !promoActive
+          ? null
+          : appliedPromo && appliedPromo.discount > 0
             ? appliedPromo
             : promoResult && promoDiscount > 0
               ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
               : null,
+        // Cupón (F9 · H54): sólo el id; create_sale lo valida, calcula y consume.
+        couponId: couponDiscount > 0 ? appliedCoupon?.coupon_id ?? null : null,
       });
       setPaymentModal(false);
       clear();
       setCustomer(null);
       setOfferedWarrantyId("");
+      setAppliedCoupon(null);
+      setCouponInput("");
       // Cobro desde turno (H38): enlazá la venta al turno y marcalo 'realizado'.
       // Best-effort: si el enlace falla, la venta igual quedó registrada.
       if (appointmentId) {
@@ -1286,6 +1372,22 @@ function PosPageInner() {
       const msg = e instanceof Error ? e.message : "";
       const title = msg.includes("account_inactive")
         ? "Tu suscripción venció. Renovala para volver a cobrar."
+        : msg.includes("coupon_usage_exceeded")
+          ? "El cupón alcanzó su límite de usos"
+        : msg.includes("coupon_customer_exceeded")
+          ? "Este cliente ya usó el cupón el máximo de veces"
+        : msg.includes("coupon_needs_customer")
+          ? "Elegí un cliente para usar este cupón"
+        : msg.includes("coupon_min_amount")
+          ? "El carrito no llega al monto mínimo del cupón"
+        : msg.includes("coupon_expired")
+          ? "El cupón está vencido"
+        : msg.includes("coupon_not_yet_valid")
+          ? "El cupón todavía no está vigente"
+        : msg.includes("coupon_inactive")
+          ? "El cupón está inactivo"
+        : msg.includes("coupon_not_found")
+          ? "El cupón ya no existe"
         : msg.includes("table_order_not_open")
         ? "La mesa ya fue cobrada o cerrada"
         : msg.includes("delivery_order_not_open")
@@ -1924,8 +2026,9 @@ function PosPageInner() {
               )}
             </div>
             {/* Promoción aplicada (F9 · H53): el motor elige la mejor promo activa
-                para el carrito y la descuenta. Aparte del descuento manual. */}
-            {promoResult && promoDiscount > 0 && (
+                para el carrito y la descuenta. Aparte del descuento manual. Se
+                oculta si hay un cupón (excluyentes). */}
+            {promoActive && promoResult && promoDiscount > 0 && (
               <div className="flex items-center justify-between gap-2 text-sm text-emerald-400">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <Tag size={13} className="shrink-0" />
@@ -1934,6 +2037,56 @@ function PosPageInner() {
                 <span className="shrink-0 font-medium tabular-nums">
                   −{formatCurrency(promoDiscount)}
                 </span>
+              </div>
+            )}
+            {/* Cupón (F9 · H54): ingresar un código o ver el aplicado. El descuento
+                lo revalida y consume create_sale al cobrar (atómico). */}
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5 text-emerald-400">
+                  <Ticket size={13} className="shrink-0" />
+                  <span className="truncate">Cupón {appliedCoupon.code}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppliedCoupon(null);
+                      setCouponInput("");
+                    }}
+                    className="text-muted-foreground transition hover:text-red-300"
+                    title="Quitar cupón"
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+                {couponDiscount > 0 ? (
+                  <span className="shrink-0 font-medium tabular-nums text-emerald-400">
+                    −{formatCurrency(couponDiscount)}
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    falta el mínimo
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") applyCoupon();
+                  }}
+                  placeholder="Código de cupón"
+                  className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm uppercase text-foreground outline-none placeholder:normal-case focus:border-ninja-flameSoft"
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!couponInput.trim()}
+                  onClick={applyCoupon}
+                >
+                  Aplicar
+                </Button>
               </div>
             )}
             <div className="flex items-center justify-between pt-1">

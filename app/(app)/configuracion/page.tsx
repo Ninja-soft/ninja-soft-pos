@@ -34,6 +34,7 @@ import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { SalonesManager } from "@/components/dining/SalonesManager";
 import { MenusManager } from "@/components/dining/MenusManager";
 import { PromotionsManager } from "@/components/promotions/PromotionsManager";
+import { CouponsManager } from "@/components/coupons/CouponsManager";
 import { ZonasManager } from "@/components/delivery/ZonasManager";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -624,6 +625,20 @@ function ConfiguracionInner() {
                   <span className="font-semibold">Promociones</span>
                 </div>
                 <PromotionsManager />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Cupones (F9 · H54): códigos de descuento con tope de uso (enforce
+              atómico en create_sale). Escritura RLS sólo owner/manager. */}
+          {section === "promociones" && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="mb-3 flex items-center gap-2">
+                  <Percent size={18} className="text-ninja-flameSoft" />
+                  <span className="font-semibold">Cupones</span>
+                </div>
+                <CouponsManager />
               </CardContent>
             </Card>
           )}

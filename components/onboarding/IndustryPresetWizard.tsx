@@ -50,6 +50,9 @@ export function IndustryPresetWizard({
   const [step, setStep] = useState<Step>(1);
   const [sells, setSells] = useState<SellsMode | null>(null);
   const [preset, setPreset] = useState<PresetKey | null>(null);
+  // ¿Precargar productos de muestra? El dueño lo decide en el paso 3 (default
+  // sí). En "no", la RPC aplica defaults/gastronomía pero no siembra catálogo.
+  const [seedCatalog, setSeedCatalog] = useState(true);
   const [result, setResult] = useState<ApplyPresetResult | null>(null);
 
   // Al abrir/cerrar, arrancamos siempre desde cero (sin arrastrar estado).
@@ -58,6 +61,7 @@ export function IndustryPresetWizard({
     setStep(1);
     setSells(null);
     setPreset(null);
+    setSeedCatalog(true);
     setResult(null);
   }, [open]);
 
@@ -81,12 +85,13 @@ export function IndustryPresetWizard({
   async function onApply() {
     if (!preset || !sells) return;
     try {
-      const res = await apply.mutateAsync({ preset, sells });
+      const res = await apply.mutateAsync({ preset, sells, seedCatalog });
       setResult(res);
       toast({
-        title: "Catálogo listo",
-        description:
-          res.items_created > 0
+        title: seedCatalog ? "Catálogo listo" : "Configuración aplicada",
+        description: !seedCatalog
+          ? "No precargamos productos de muestra, como pediste."
+          : res.items_created > 0
             ? `Sumamos ${res.items_created} ítem${res.items_created === 1 ? "" : "s"} y ${res.categories_created} categoría${res.categories_created === 1 ? "" : "s"}.`
             : "Ya tenías todo cargado: no duplicamos nada.",
         variant: "success",
@@ -159,7 +164,12 @@ export function IndustryPresetWizard({
           </span>
           <h3 className="font-display text-xl font-bold">¡Todo listo!</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            {result.items_created > 0 ? (
+            {!seedCatalog ? (
+              <>
+                Aplicamos la configuración del rubro sin precargar productos de
+                muestra, como pediste. Tu catálogo quedó intacto.
+              </>
+            ) : result.items_created > 0 ? (
               <>
                 Cargamos{" "}
                 <span className="font-semibold text-foreground">
@@ -351,14 +361,59 @@ export function IndustryPresetWizard({
               </dl>
             </div>
 
-            <div className="flex items-start gap-2 rounded-lg border border-ninja-flame/20 bg-ninja-flame/[0.06] p-3 text-xs text-muted-foreground">
-              <Sparkles size={15} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
-              <p>
-                Se agregan como <span className="font-medium text-foreground">botones rápidos</span> del
-                POS. Si ya tenés productos o categorías con estos nombres, no se
-                duplican. Después editás precios, nombres y stock a gusto.
+            {/* ¿Precargar productos de muestra? El dueño decide: con catálogo
+                propio suele preferir sólo la configuración (defaults/gastronomía)
+                sin ítems de prueba. */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                ¿Precargamos productos de muestra?
               </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSeedCatalog(true)}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition",
+                    seedCatalog
+                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                      : "border-border hover:border-ninja-flameSoft/40",
+                  )}
+                >
+                  <span className="text-sm font-semibold">Sí, precargar</span>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Sembramos las categorías e ítems de muestra como botones
+                    rápidos del POS. Los podés borrar después de un toque.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSeedCatalog(false)}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition",
+                    !seedCatalog
+                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
+                      : "border-border hover:border-ninja-flameSoft/40",
+                  )}
+                >
+                  <span className="text-sm font-semibold">No, sólo configurar</span>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Aplica los ajustes del rubro (y mesas/delivery si corresponde)
+                    sin tocar tu catálogo.
+                  </p>
+                </button>
+              </div>
             </div>
+
+            {seedCatalog && (
+              <div className="flex items-start gap-2 rounded-lg border border-ninja-flame/20 bg-ninja-flame/[0.06] p-3 text-xs text-muted-foreground">
+                <Sparkles size={15} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
+                <p>
+                  Se agregan como <span className="font-medium text-foreground">botones rápidos</span> del
+                  POS. Si ya tenés productos o categorías con estos nombres, no se
+                  duplican. Después editás precios, nombres y stock a gusto.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="secondary" onClick={() => onOpenChange(false)}>

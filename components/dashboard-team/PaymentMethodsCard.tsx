@@ -48,7 +48,7 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point", "pagos360"]);
+const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point", "pagos360", "payway"]);
 
 // Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
 // del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
@@ -58,7 +58,7 @@ const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
 // Proveedores cuyo switch Sandbox cambia de verdad el ambiente de la Edge
 // (MODO → merchants.preprod.playdigital.com.ar · Pagos360 → api.sandbox.pagos360.com).
 // Sólo para estos se muestra el toggle; en el resto no haría nada.
-const SANDBOX_PROVIDERS = new Set(["modo", "pagos360"]);
+const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway"]);
 
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
@@ -162,6 +162,19 @@ const PROVIDER_INFO: Record<string, Explain> = {
     recargo:
       "Si ponés un %, se suma al total al cobrar por este medio.",
   },
+  payway: {
+    activa:
+      "Habilita el botón Cobrar con link en el POS: se genera el Formulario de pago de Payway y el cliente paga ahí con tarjeta (crédito/débito).",
+    conexion:
+      "Pegá tus llaves de Payway (API Key pública y privada) y tu Nº de comercio (site). Con el switch Sandbox activado se usa el ambiente de prueba de Payway/Decidir (sin plata real).",
+    pasos: [
+      "En el POS tocás Cobrar con link · Payway.",
+      "El cliente escanea el QR o abre el link y paga en el formulario de Payway.",
+      "Al aprobarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo:
+      "Si ponés un %, se suma al total al cobrar por este medio.",
+  },
   modo: {
     activa:
       "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
@@ -193,6 +206,9 @@ export function PaymentMethodsCard() {
   const [token, setToken] = useState("");
   const [mbApiKey, setMbApiKey] = useState("");
   const [p360ApiKey, setP360ApiKey] = useState("");
+  const [pwPublic, setPwPublic] = useState("");
+  const [pwPrivate, setPwPrivate] = useState("");
+  const [pwSite, setPwSite] = useState("");
   const [mbToken, setMbToken] = useState("");
   // MODO: credenciales de comercio (client_id + client_secret, store_id opcional).
   const [modoClientId, setModoClientId] = useState("");
@@ -396,6 +412,9 @@ export function PaymentMethodsCard() {
               setToken("");
               setMbApiKey("");
               setP360ApiKey("");
+              setPwPublic("");
+              setPwPrivate("");
+              setPwSite("");
               setMbToken("");
               setModoClientId("");
               setModoClientSecret("");
@@ -517,6 +536,76 @@ export function PaymentMethodsCard() {
                   : connectingConnected
                     ? "Actualizar credenciales"
                     : "Conectar MODO"}
+              </Button>
+            </>
+          ) : connectKey === "payway" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-success">
+                  <Check size={16} /> Payway está conectado.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá tus llaves de Payway (Panel de comercio → Credenciales) y
+                  tu Nº de comercio (site). Si son de prueba, activá el switch
+                  Sandbox del medio. Se guardan cifradas del lado del servidor.
+                </p>
+              )}
+              <Input
+                label="API Key pública"
+                name="payway_public_apikey"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={pwPublic}
+                onChange={(e) => setPwPublic(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu public API Key"}
+              />
+              <Input
+                label="API Key privada"
+                type="password"
+                name="payway_private_apikey"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={pwPrivate}
+                onChange={(e) => setPwPrivate(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu private API Key"}
+              />
+              <Input
+                label="Nº de comercio (site)"
+                name="payway_site"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={pwSite}
+                onChange={(e) => setPwSite(e.target.value)}
+                placeholder="Ej: 00097002"
+              />
+              <Button
+                className="w-full"
+                disabled={
+                  connect.isPending ||
+                  pwPublic.trim().length < 10 ||
+                  pwPrivate.trim().length < 10 ||
+                  pwSite.trim().length < 4
+                }
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "payway",
+                    secrets: {
+                      public_apikey: pwPublic.trim(),
+                      private_apikey: pwPrivate.trim(),
+                      site: pwSite.trim(),
+                    },
+                  })
+                }
+              >
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar credenciales"
+                    : "Conectar Payway"}
               </Button>
             </>
           ) : connectKey === "pagos360" ? (

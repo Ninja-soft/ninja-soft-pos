@@ -58,6 +58,7 @@ function qrErrorCopy(code: string, providerName: string): string {
     case "mobbex_error":
     case "modo_error":
     case "pagos360_error":
+    case "payway_error":
       return `${providerName} devolvió un error al crear el cobro. Probá de nuevo en unos segundos.`;
     case "modo_unreachable":
       return "No pudimos comunicarnos con MODO. Revisá tu conexión y probá de nuevo.";
@@ -83,7 +84,7 @@ export function QrCheckoutModal({
     amount: number,
     extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
-  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360";
+  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -96,7 +97,8 @@ export function QrCheckoutModal({
   // sí ofrecen la selección de tarjeta/cuota desde el POS.
   // MODO y Pagos360 resuelven medio/cuotas en su propia app/checkout hosted →
   // el POS no muestra selección de planes y auto-arranca con el monto base.
-  const selfManaged = provider === "modo" || provider === "pagos360";
+  const selfManaged =
+    provider === "modo" || provider === "pagos360" || provider === "payway";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -152,7 +154,9 @@ export function QrCheckoutModal({
           ? posApi.createModoQr
           : provider === "pagos360"
             ? posApi.createPagos360Link
-            : posApi.createMpQr;
+            : provider === "payway"
+              ? posApi.createPaywayLink
+              : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
@@ -224,7 +228,9 @@ export function QrCheckoutModal({
         ? posApi.pagos360IntentStatus(intentId!)
         : provider === "modo"
           ? posApi.modoIntentStatus(intentId!)
-          : posApi.mpIntentStatus(intentId!),
+          : provider === "payway"
+            ? posApi.paywayIntentStatus(intentId!)
+            : posApi.mpIntentStatus(intentId!),
     enabled: open && phase === "waiting" && Boolean(intentId),
     refetchInterval: 3000,
   });

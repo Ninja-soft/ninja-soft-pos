@@ -1,0 +1,22 @@
+-- =============================================================================
+-- 20260710140000_mp_point  (F8 · H15 — resto: Mercado Point, tarjeta presencial)
+--
+-- Cobro presencial con lectores Mercado Point vía la Point Integration API de
+-- Mercado Pago, reutilizando la conexión MP del tenant (payment_secrets
+-- provider_key='mercadopago', OAuth o token manual — NO pide credenciales
+-- nuevas). La Edge Function mp_point (actions: devices / create / status /
+-- cancel) crea el payment intent EN el dispositivo y el POS sondea el estado.
+--
+-- Este archivo sólo agrega la traza del dispositivo al intent:
+--   * mp_payment_intents.point_device_id — device Point donde se empujó el
+--     cobro (necesario para cancelar y para conciliación). Para intents Point,
+--     preference_id guarda el payment_intent_id de la Point API (comentario en
+--     la Edge) e init_point queda vacío (no hay QR).
+--
+-- Gating: reutiliza la feature 'mercadopago_point' (ya en features + planes +
+-- payment_method_plan_key). El enforcement corre en la Edge (crea el intent
+-- sólo con tenant_has_feature_for). La venta se registra como debit/credit
+-- (sin gating fino por diseño: el posnet propio tampoco lo tiene).
+-- =============================================================================
+
+alter table mp_payment_intents add column if not exists point_device_id text;

@@ -27,6 +27,10 @@ const ALLOWED = new Set([
   "fiserv",
   "mobbex",
   "pagos360",
+  // H21c — Nave: el backend ya acepta credenciales (paridad con el resto de
+  // proveedores del catálogo); la integración de cobro sigue pendiente y la UI
+  // lo muestra como "Próximamente".
+  "nave",
 ]);
 
 Deno.serve(async (req: Request) => {

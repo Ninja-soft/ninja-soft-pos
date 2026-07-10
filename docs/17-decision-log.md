@@ -940,6 +940,32 @@ Hallazgos:
 
 ---
 
+## ADR-027 — Mercado Point por Point Integration API reutilizando la conexión MP del tenant
+
+**Fecha:** 2026-07-10 · **Estado:** aceptada · **Hito:** F8 · H15 (resto)
+
+### Contexto
+
+H15 dejó pendiente el cobro presencial con lectores Mercado Point. Las alternativas eran (a) integrar la Point Integration API de Mercado Pago con las credenciales MP que el tenant ya conecta (OAuth/token, `payment_secrets` provider `mercadopago`), o (b) pedir credenciales propias por proveedor como hace Mobbex/MODO.
+
+### Decisión
+
+(a): la Edge Function `mp_point` (actions `devices` / `pdv` / `create` / `status` / `cancel`) reutiliza el token MP del tenant (con el mismo refresh OAuth de `mp_create_qr`). El cobro se empuja AL lector (modo PDV) con `external_reference` = intent local (`mp_payment_intents`, `provider_key='mercadopago_point'`, nueva columna `point_device_id`; `preference_id` guarda el payment_intent_id de la Point API). El POS sondea `status`; sólo se acredita con verificación independiente contra `/v1/payments` (estado `approved` + monto exacto — patrón conservador de `modo_webhook`). La venta se registra como `debit`/`credit` según `payment_type_id` real; las cuotas las elige el cliente en el lector (como MODO), por eso Point no tiene grid de planes ni recargo propio en Medios de pago. Gating de plan server-side en `create` (`tenant_has_feature_for('mercadopago_point')`); la feature/planes/`payment_method_plan_key` ya existían.
+
+### Consecuencias
+
+- Un negocio con MP conectado habilita Point con un switch (sin credenciales nuevas); el lector se elige por caja (se recuerda el último en `localStorage`).
+- Conciliación: los intents Point comparten `mp_payment_intents`, así que el modal "Cobros QR" de /ventas los cruza igual que MP/Mobbex/MODO.
+- **Pendiente de validación con lector físico real** (criterio del roadmap: "cobro real en sandbox"): el dialecto de la Point API está implementado según documentación pública; el primer cobro en vivo puede requerir ajustes menores.
+- Nave quedó con el backend de credenciales listo (`set_payment_secret` ALLOWED) pero **sin integración de cobro** (H21c): la UI lo mantiene como "Próximamente", igual que Payway/Getnet/Fiserv/Pagos360 (deuda MARKETING-FUTURO ya registrada en ADR-026).
+
+### Referencias
+
+- `supabase/functions/mp_point/index.ts`, `supabase/migrations/20260710140000_mp_point.sql`.
+- `components/pos/PointCheckoutModal.tsx`, `app/(app)/pos/page.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`, `modules/pos/api.ts`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

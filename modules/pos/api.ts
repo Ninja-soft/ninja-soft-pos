@@ -563,6 +563,76 @@ export const posApi = {
     };
   },
 
+  // ── Mercado Point (H15 resto): cobro presencial en el lector ───────────────
+  // Todas pasan por la Edge mp_point (usa la conexión MP del tenant; gating de
+  // plan server-side en create). El POS sondea pointIntentStatus hasta approved.
+  pointDevices: async (): Promise<{ id: string; operating_mode: string }[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_point", {
+      body: { action: "devices" },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return (data as { devices: { id: string; operating_mode: string }[] }).devices;
+  },
+
+  pointSetPdv: async (deviceId: string): Promise<void> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_point", {
+      body: { action: "pdv", device_id: deviceId },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+  },
+
+  createPointIntent: async (
+    deviceId: string,
+    amount: number,
+  ): Promise<{ intent_id: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_point", {
+      body: { action: "create", device_id: deviceId, amount },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string };
+  },
+
+  pointIntentStatus: async (
+    intentId: string,
+  ): Promise<{
+    status: string;
+    mp_payment_id: string | null;
+    card_type: "debit" | "credit" | null;
+  }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_point", {
+      body: { action: "status", intent_id: intentId },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as {
+      status: string;
+      mp_payment_id: string | null;
+      card_type: "debit" | "credit" | null;
+    };
+  },
+
+  cancelPointIntent: async (intentId: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("mp_point", {
+      body: { action: "cancel", intent_id: intentId },
+    });
+  },
+
   // Conciliación: intents de cobro QR (MP + Mobbex) cruzados con la venta que
   // los referenció (payments.reference = intent.id). Un intent "approved" sin
   // venta = plata cobrada sin ticket → hay que revisarlo.

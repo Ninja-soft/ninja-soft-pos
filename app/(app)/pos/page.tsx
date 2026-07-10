@@ -2221,14 +2221,17 @@ function PosPageInner() {
                 type="button"
                 disabled={!hasShift || lines.length === 0}
                 onClick={() => ensureCustomer() && setQrPaywayOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#01a39a]/40 bg-[#01a39a]/10 px-4 py-3 font-semibold text-[#02786f] transition hover:bg-[#01a39a]/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#2b4a8f] px-4 py-3 font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
+                  {/* Marca payway en blanco (el asset es navy sobre transparente:
+                      se invierte para que viva sobre el botón navy sólido, sin
+                      cajita blanca de fondo). */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/img/medios_de_pago/payway_cube.webp"
                     alt="Payway"
-                    className="h-full w-full object-contain p-0.5"
+                    className="h-full w-full object-contain [filter:brightness(0)_invert(1)]"
                   />
                 </span>
                 Cobrar con link · Payway

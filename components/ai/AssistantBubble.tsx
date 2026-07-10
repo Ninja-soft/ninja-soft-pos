@@ -110,11 +110,14 @@ export function AssistantBubble() {
   const listRef = useRef<HTMLDivElement>(null);
 
   // ¿Este tenant tiene acceso real al asistente? (addon / flag / beta).
+  // Un error del RPC se propaga para que React Query reintente: antes se
+  // devolvía false y un fallo transitorio (p. ej. refresh de token al cargar)
+  // dejaba la burbuja "bloqueada" 5 minutos aunque el addon estuviera activo.
   const { data: available, isLoading: availableLoading } = useQuery({
     queryKey: ["ai-available"],
     queryFn: async (): Promise<boolean> => {
       const { data, error } = await supabase.rpc("ai_available");
-      if (error) return false;
+      if (error) throw error;
       return data === true;
     },
     staleTime: 5 * 60_000,

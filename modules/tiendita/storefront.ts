@@ -50,17 +50,32 @@ function db(): AnyDb {
 export const storefrontApi = {
   // Catálogos activos + estado de acceso del tenant (una consulta a catalogs por
   // RLS — sólo ve los activos — y otra a sus compras/grants).
+  //
+  // IMPORTANTE: las compras se filtran por el tenant ACTIVO del JWT. La RLS de
+  // tenant_catalog_purchases deja pasar TODAS las filas a staff interno
+  // (is_internal()), así que sin este filtro un usuario interno veía como
+  // "bonificado" un catálogo regalado a OTRO negocio y el alta luego fallaba
+  // con catalog_not_owned (el gate server-side sí es por tenant exacto).
   listCatalogs: async (): Promise<StorefrontCatalog[]> => {
     const supabase = db();
+    const {
+      data: { session },
+    } = await (supabase as ReturnType<typeof createClient>).auth.getSession();
+    const tenantId =
+      (session?.user?.app_metadata as { current_tenant_id?: string } | undefined)
+        ?.current_tenant_id ?? null;
     const [{ data: cats, error }, { data: purchases }] = await Promise.all([
       supabase
         .from("catalogs")
         .select("id, name, description, cover_url, price_ars, product_count")
         .eq("is_active", true)
         .order("name"),
-      supabase
-        .from("tenant_catalog_purchases")
-        .select("catalog_id, source"),
+      tenantId
+        ? supabase
+            .from("tenant_catalog_purchases")
+            .select("catalog_id, source")
+            .eq("tenant_id", tenantId)
+        : Promise.resolve({ data: [] }),
     ]);
     if (error) throw error;
 

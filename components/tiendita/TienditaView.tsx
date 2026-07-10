@@ -43,6 +43,22 @@ const CHECKOUT_ERRORS: Record<string, string> = {
   forbidden: "Solo el dueño de la cuenta puede comprar catálogos.",
 };
 
+// Mensajes honestos para los códigos de error del alta de producto
+// (add_catalog_product_to_tenant). Antes se colapsaba todo a un toast genérico
+// y un "catalog_not_owned" (catálogo no comprado/bonificado para ESTE negocio)
+// era indistinguible de un error real de red.
+const ADD_ERRORS: Record<string, string> = {
+  catalog_not_owned:
+    "Este negocio no tiene el catálogo habilitado (ni comprado ni bonificado). Revisá en Tiendita que figure como tuyo.",
+  catalog_product_not_found: "Ese producto ya no está en el catálogo.",
+  no_tenant: "Tu sesión no tiene un negocio activo. Cerrá sesión y volvé a entrar.",
+};
+
+function addErrorDetail(e: unknown): string | undefined {
+  const raw = (e as { message?: string })?.message ?? "";
+  return ADD_ERRORS[raw] ?? (raw || undefined);
+}
+
 export function TienditaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -195,7 +211,7 @@ function CatalogCard({
           </div>
         )}
         {catalog.owned && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 backdrop-blur">
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-success backdrop-blur">
             <Check size={12} />
             {catalog.source === "granted" ? "Acceso de regalo" : "Comprado"}
           </span>
@@ -282,8 +298,12 @@ function CatalogAccess({
           variant: "success",
         });
       },
-      onError: () =>
-        toast({ title: "No se pudo agregar el producto", variant: "error" }),
+      onError: (e) =>
+        toast({
+          title: "No se pudo agregar el producto",
+          description: addErrorDetail(e),
+          variant: "error",
+        }),
     });
   }
 
@@ -346,7 +366,7 @@ function CatalogAccess({
       <div className="mt-6">
         {isError ? (
           <Card>
-            <CardContent className="p-8 text-center text-sm text-red-300">
+            <CardContent className="p-8 text-center text-sm text-danger">
               No se pudo buscar en el catálogo. Reintentá en un momento.
             </CardContent>
           </Card>

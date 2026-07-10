@@ -55,10 +55,20 @@ const config: Config = {
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
-        // Paleta de marca (valores fijos). Ver UI-NinjaSof.md §9.
+        // Estado temado (texto legible sobre el fondo del tema; pastel en
+        // oscuro, tinta en claro). Tripletas RGB en globals.css.
+        success: "rgb(var(--status-success) / <alpha-value>)",
+        danger: "rgb(var(--status-danger) / <alpha-value>)",
+        warning: "rgb(var(--status-warning) / <alpha-value>)",
+        info: "rgb(var(--status-info) / <alpha-value>)",
+        // Paleta de marca. Ver UI-NinjaSof.md §9. Los tonos pensados para
+        // LEERSE sobre el fondo (flameSoft/softWhite/lavender/slate) son
+        // adaptativos por tema vía CSS vars (tripletas RGB en globals.css):
+        // en oscuro conservan el hex histórico, en claro se hunden para no
+        // quedar lavados/ilegibles. El resto es fijo de marca.
         ninja: {
           flame: "#FF4B22",
-          flameSoft: "#FF6A1A",
+          flameSoft: "rgb(var(--ninja-flame-soft) / <alpha-value>)",
           flameDeep: "#E63E18",
           gold: "#FFD21F",
           goldSoft: "#FFE45C",
@@ -67,9 +77,9 @@ const config: Config = {
           deepViolet: "#140D35",
           midViolet: "#2B1A67",
           brightViolet: "#6D4AFF",
-          softWhite: "#F7F7FF",
-          lavender: "#B8AEDC",
-          slate: "#7F75A6",
+          softWhite: "rgb(var(--ninja-soft-white) / <alpha-value>)",
+          lavender: "rgb(var(--ninja-lavender) / <alpha-value>)",
+          slate: "rgb(var(--ninja-slate) / <alpha-value>)",
           black: "#04020D",
         },
       },

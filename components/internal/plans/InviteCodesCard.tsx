@@ -53,7 +53,7 @@ function codeStatus(c: InviteCode): {
     };
   return {
     label: "Activo",
-    cls: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+    cls: "border-emerald-400/30 bg-emerald-400/10 text-success",
     expired: false,
   };
 }
@@ -248,7 +248,7 @@ export function InviteCodesCard() {
                           <button
                             onClick={() => setDeleteTarget(c)}
                             title="Eliminar"
-                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -319,7 +319,7 @@ export function InviteCodesCard() {
                 <option
                   key={p.key}
                   value={p.key}
-                  className="bg-ninja-deepViolet"
+                  className="bg-popover text-popover-foreground"
                 >
                   {p.name}
                 </option>

@@ -335,7 +335,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                   </span>
                 )}
                 {detail.isLifetime && (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-warning">
                     <InfinityIcon size={12} /> Vitalicio
                   </span>
                 )}
@@ -389,7 +389,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               }}
             >
               {planOptions.map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}
@@ -664,7 +664,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               onChange={(e) => setGrantPlan(e.target.value)}
             >
               {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}
@@ -727,7 +727,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               onChange={(e) => setGrantPlan(e.target.value)}
             >
               {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}

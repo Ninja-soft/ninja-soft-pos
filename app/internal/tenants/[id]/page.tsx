@@ -216,7 +216,7 @@ export default function InternalTenantDetail({
               }
             >
               {STATUSES.map((s) => (
-                <option key={s.key} value={s.key} className="bg-ninja-deepViolet">
+                <option key={s.key} value={s.key} className="bg-popover text-popover-foreground">
                   {s.name}
                 </option>
               ))}
@@ -236,7 +236,7 @@ export default function InternalTenantDetail({
               }
             >
               {VERTICALS.map((v) => (
-                <option key={v} value={v} className="bg-ninja-deepViolet">
+                <option key={v} value={v} className="bg-popover text-popover-foreground">
                   {VERTICAL_LABELS[v]}
                 </option>
               ))}
@@ -318,7 +318,7 @@ export default function InternalTenantDetail({
         <CardContent className="flex flex-wrap items-center gap-4 p-5">
           {hasAiAddon ? (
             <>
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-emerald-300">
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-success">
                 <Check size={15} /> Asistente IA activo (regalado)
               </span>
               <Button
@@ -387,7 +387,7 @@ export default function InternalTenantDetail({
           </Heading>
           <Card className="mt-3">
             <CardContent className="p-5">
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+              <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 px-4 py-3 text-sm text-warning">
                 <ShieldAlert size={16} className="mt-0.5 shrink-0" />
                 <span>
                   Esto genera un magic link de un solo uso para el dueño del negocio.{" "}
@@ -506,7 +506,7 @@ export default function InternalTenantDetail({
                     wrap(noteMut.remove.mutateAsync(n.id), "Nota eliminada")
                   }
                   title="Eliminar nota"
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                 >
                   <Trash2 size={15} />
                 </button>

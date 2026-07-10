@@ -276,7 +276,7 @@ export function ScannerCard() {
                       <td className="py-2 pr-3">{c.format}</td>
                       <td className="py-2">
                         {c.duplicate && (
-                          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-500">
+                          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-warning">
                             duplicado
                           </span>
                         )}

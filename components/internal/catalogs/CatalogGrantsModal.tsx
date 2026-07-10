@@ -171,7 +171,7 @@ export function CatalogGrantsModal({
                           <Gift size={11} /> Bonificado
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-emerald-400">
+                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 font-medium text-success">
                           <BadgeCheck size={11} /> Pagado
                           {g.pricePaid != null && ` · ${formatCurrency(g.pricePaid)}`}
                         </span>

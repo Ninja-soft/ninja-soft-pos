@@ -298,7 +298,7 @@ export function ReservationModal({
             >
               <option value="">Cualquiera</option>
               {(areas ?? []).map((a) => (
-                <option key={a.id} value={a.id} className="bg-ninja-deepViolet">
+                <option key={a.id} value={a.id} className="bg-popover text-popover-foreground">
                   {a.name}
                 </option>
               ))}
@@ -315,7 +315,7 @@ export function ReservationModal({
             >
               <option value="">Sin asignar</option>
               {tableOptions.map((t) => (
-                <option key={t.id} value={t.id} className="bg-ninja-deepViolet">
+                <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
                   {t.label}
                 </option>
               ))}

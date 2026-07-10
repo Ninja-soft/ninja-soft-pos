@@ -34,12 +34,12 @@ export function ImportPreview<R>({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400/10 px-2.5 py-1 font-medium text-emerald-300">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400/10 px-2.5 py-1 font-medium text-success">
           <CheckCircle2 size={15} />
           {validCount} {entityPlural} {validCount === 1 ? "válido" : "válidos"}
         </span>
         {invalidCount > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-red-400/10 px-2.5 py-1 font-medium text-red-300">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-red-400/10 px-2.5 py-1 font-medium text-danger">
             <AlertTriangle size={15} />
             {invalidCount} con {invalidCount === 1 ? "error" : "errores"}
           </span>
@@ -84,7 +84,7 @@ export function ImportPreview<R>({
                       className={cn(
                         "px-2 py-1.5",
                         c.align === "right" && "text-right",
-                        bad ? "text-red-200" : "text-foreground",
+                        bad ? "text-danger" : "text-foreground",
                       )}
                     >
                       {c.cell(row.data) || (
@@ -96,7 +96,7 @@ export function ImportPreview<R>({
                           {row.errors.map((e, ei) => (
                             <li
                               key={ei}
-                              className="flex items-start gap-1 text-[11px] font-normal text-red-300"
+                              className="flex items-start gap-1 text-[11px] font-normal text-danger"
                             >
                               <AlertTriangle
                                 size={11}

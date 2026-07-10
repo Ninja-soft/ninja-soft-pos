@@ -397,7 +397,7 @@ export function PaymentMethodsCard() {
           {connectKey === "modo" ? (
             <>
               {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                <p className="flex items-center gap-2 text-sm text-success">
                   <Check size={16} /> MODO está conectado.
                 </p>
               ) : (
@@ -466,7 +466,7 @@ export function PaymentMethodsCard() {
           ) : connectKey === "mobbex" ? (
             <>
               {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                <p className="flex items-center gap-2 text-sm text-success">
                   <Check size={16} /> Mobbex está conectado.
                 </p>
               ) : (
@@ -518,7 +518,7 @@ export function PaymentMethodsCard() {
           ) : (
             <>
               {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-emerald-400">
+                <p className="flex items-center gap-2 text-sm text-success">
                   <Check size={16} /> Tu cuenta de Mercado Pago está conectada.
                 </p>
               ) : (
@@ -749,7 +749,7 @@ function PaymentMethodRow({
               onClick={onConnect}
               className={
                 connected
-                  ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:underline"
+                  ? "inline-flex items-center gap-1 text-xs font-semibold text-success hover:underline"
                   : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
               }
             >
@@ -890,7 +890,7 @@ function PaymentMethodRow({
                 onClick={onConnect}
                 className={
                   connected
-                    ? "inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"
+                    ? "inline-flex items-center gap-1 text-xs font-semibold text-success"
                     : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
                 }
               >

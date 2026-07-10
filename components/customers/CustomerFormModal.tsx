@@ -194,7 +194,7 @@ export function CustomerFormModal({
             <select className={selectCls} {...register("document_type")}>
               <option value="">—</option>
               {DOC_TYPES.map((d) => (
-                <option key={d} value={d} className="bg-ninja-deepViolet">
+                <option key={d} value={d} className="bg-popover text-popover-foreground">
                   {DOC_TYPE_LABELS[d]}
                 </option>
               ))}
@@ -216,7 +216,7 @@ export function CustomerFormModal({
           <select className={selectCls} {...register("iva_condition")}>
             <option value="">—</option>
             {IVA_CONDITIONS.map((c) => (
-              <option key={c} value={c} className="bg-ninja-deepViolet">
+              <option key={c} value={c} className="bg-popover text-popover-foreground">
                 {IVA_LABELS[c]}
               </option>
             ))}
@@ -274,7 +274,7 @@ export function CustomerFormModal({
           <select className={selectCls} {...register("group_id")}>
             <option value="">Sin grupo</option>
             {(groups ?? []).map((g) => (
-              <option key={g.id} value={g.id} className="bg-ninja-deepViolet">
+              <option key={g.id} value={g.id} className="bg-popover text-popover-foreground">
                 {g.name}
               </option>
             ))}

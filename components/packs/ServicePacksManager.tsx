@@ -122,7 +122,7 @@ function PackModal({
           >
             <option value="">Genérico (cualquier servicio)</option>
             {(products ?? []).map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name}
               </option>
             ))}
@@ -268,7 +268,7 @@ export function ServicePacksManager() {
                 <button
                   type="button"
                   onClick={() => del(p)}
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
                   aria-label="Eliminar"
                 >
                   <Trash2 size={15} />

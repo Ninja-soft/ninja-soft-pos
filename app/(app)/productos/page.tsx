@@ -288,7 +288,7 @@ export default function ProductosPage() {
           >
             <option value="">Todas las categorías</option>
             {(categories ?? []).map((c) => (
-              <option key={c.id} value={c.id} className="bg-ninja-deepViolet">
+              <option key={c.id} value={c.id} className="bg-popover text-popover-foreground">
                 {c.name}
               </option>
             ))}
@@ -300,7 +300,7 @@ export default function ProductosPage() {
           >
             <option value="">Todas las marcas</option>
             {(brands ?? []).map((b) => (
-              <option key={b.id} value={b.id} className="bg-ninja-deepViolet">
+              <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
                 {b.name}
               </option>
             ))}
@@ -334,7 +334,7 @@ export default function ProductosPage() {
               )}
               {isError && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-red-300">
+                  <td colSpan={5} className="px-4 py-10 text-center text-danger">
                     Error al cargar.{" "}
                     <button onClick={() => refetch()} className="underline">
                       Reintentar
@@ -421,14 +421,14 @@ export default function ProductosPage() {
                         <button
                           onClick={() => openMerma(p)}
                           title="Registrar merma"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-amber-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-warning"
                         >
                           <PackageMinus size={16} />
                         </button>
                         <button
                           onClick={() => openProduction(p)}
                           title="Registrar producción"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-emerald-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-success"
                         >
                           <PackagePlus size={16} />
                         </button>
@@ -449,7 +449,7 @@ export default function ProductosPage() {
                         <button
                           onClick={() => onDelete(p)}
                           title="Eliminar"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                         >
                           <Trash2 size={16} />
                         </button>

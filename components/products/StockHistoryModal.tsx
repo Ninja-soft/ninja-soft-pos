@@ -65,8 +65,8 @@ export function StockHistoryModal({ open, onOpenChange, product }: Props) {
                   <span
                     className={
                       positive
-                        ? "font-mono font-semibold text-emerald-300"
-                        : "font-mono font-semibold text-red-300"
+                        ? "font-mono font-semibold text-success"
+                        : "font-mono font-semibold text-danger"
                     }
                   >
                     {positive ? "+" : ""}

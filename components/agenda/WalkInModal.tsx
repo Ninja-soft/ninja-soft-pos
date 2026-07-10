@@ -114,7 +114,7 @@ export function WalkInModal({
           >
             <option value="">Sin asignar</option>
             {(professionals ?? []).map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name}
               </option>
             ))}
@@ -132,7 +132,7 @@ export function WalkInModal({
           >
             <option value="">Elegí un servicio…</option>
             {services.map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name} — {formatCurrency(p.price)}
               </option>
             ))}

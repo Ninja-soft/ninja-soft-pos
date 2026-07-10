@@ -12,10 +12,10 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelada",
 };
 const STATUS_COLOR: Record<string, string> = {
-  trial: "text-yellow-400",
-  active: "text-emerald-400",
-  past_due: "text-orange-400",
-  suspended: "text-red-400",
+  trial: "text-warning",
+  active: "text-success",
+  past_due: "text-warning",
+  suspended: "text-danger",
   cancelled: "text-muted-foreground",
 };
 

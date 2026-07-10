@@ -166,7 +166,7 @@ export function AppointmentModal({
           >
             <option value="">Sin asignar</option>
             {(professionals ?? []).map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name}
               </option>
             ))}
@@ -187,7 +187,7 @@ export function AppointmentModal({
             {productOptions.services.length > 0 && (
               <optgroup label="Servicios">
                 {productOptions.services.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                  <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                     {p.name} — {formatCurrency(p.price)}
                     {p.service_duration_min ? ` · ${p.service_duration_min}min` : ""}
                   </option>
@@ -197,7 +197,7 @@ export function AppointmentModal({
             {productOptions.others.length > 0 && (
               <optgroup label="Otros productos">
                 {productOptions.others.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                  <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                     {p.name} — {formatCurrency(p.price)}
                   </option>
                 ))}
@@ -272,7 +272,7 @@ export function AppointmentModal({
           >
             <option value="">Sin cliente</option>
             {(customers ?? []).map((c) => (
-              <option key={c.id} value={c.id} className="bg-ninja-deepViolet">
+              <option key={c.id} value={c.id} className="bg-popover text-popover-foreground">
                 {c.name}
                 {c.document_number ? ` (${c.document_number})` : ""}
               </option>

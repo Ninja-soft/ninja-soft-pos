@@ -172,7 +172,7 @@ export default function AgendaPage() {
             >
               <option value="">Todos los profesionales</option>
               {(professionals ?? []).map((p) => (
-                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}

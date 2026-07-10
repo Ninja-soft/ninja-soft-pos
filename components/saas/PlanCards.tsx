@@ -191,8 +191,8 @@ function PlanCardItem({
         selected
           ? "border-ninja-flame bg-ninja-flame/[0.06] ring-2 ring-ninja-flame/40"
           : recommended
-            ? "border-ninja-flame/45 bg-white/[0.03] shadow-ninjaGlow"
-            : "border-white/10 bg-white/[0.03]",
+            ? "border-ninja-flame/45 bg-muted/60 shadow-ninjaGlow"
+            : "border-border bg-muted/60",
       )}
     >
       {recommended && (
@@ -226,7 +226,7 @@ function PlanCardItem({
               "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition",
               selected
                 ? "border-ninja-flame bg-ninja-flame text-white"
-                : "border-white/25",
+                : "border-muted-foreground/40",
             )}
             aria-hidden
           >
@@ -243,11 +243,11 @@ function PlanCardItem({
           <span className="text-sm text-ninja-lavender">/mes</span>
         </div>
         {isContact ? (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
             Pago inmediato · se activa al pagar
           </span>
         ) : (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
             {trialLabel(plan.trialDays)} · sin tarjeta
           </span>
         )}

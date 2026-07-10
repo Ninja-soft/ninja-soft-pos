@@ -73,22 +73,22 @@ const STATE_META: Record<
   ok: {
     label: "OK",
     icon: CheckCircle2,
-    cls: "bg-emerald-500/15 text-emerald-500",
+    cls: "bg-emerald-500/15 text-success",
   },
   warn: {
     label: "Advertencia",
     icon: AlertTriangle,
-    cls: "bg-amber-500/15 text-amber-500",
+    cls: "bg-amber-500/15 text-warning",
   },
   unavailable: {
     label: "No disponible",
     icon: XCircle,
-    cls: "bg-rose-500/15 text-rose-500",
+    cls: "bg-rose-500/15 text-danger",
   },
   connector: {
     label: "Requiere conector local",
     icon: Usb,
-    cls: "bg-sky-500/15 text-sky-500",
+    cls: "bg-sky-500/15 text-info",
   },
   info: { label: "Info", icon: MinusCircle, cls: "bg-muted text-muted-foreground" },
 };
@@ -497,7 +497,7 @@ export function HardwareCard() {
                         <td className="px-3 py-1.5">{c.format}</td>
                         <td className="px-3 py-1.5">
                           {c.duplicate && (
-                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-500">
+                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-warning">
                               dup
                             </span>
                           )}

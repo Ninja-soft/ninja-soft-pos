@@ -23,6 +23,11 @@
 /* ---------- Void (violeta) — tema principal ---------- */
 :root,
 [data-theme="ninja-dark"] {
+  /* Widgets nativos (popup de <select>, date/time pickers, scrollbars,
+     autofill) NO leen nuestras CSS vars: siguen color-scheme. Sin esto,
+     con el navegador/OS en oscuro los selects quedaban oscuros aun en
+     tema claro (y viceversa). Cada bloque de tema declara el suyo. */
+  color-scheme: dark;
   --background: #0a0518;
   --foreground: #f4f2ff;
   --card: rgba(22, 15, 48, 0.72);
@@ -43,10 +48,24 @@
   --input: rgba(255, 255, 255, 0.08);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.05);
+  /* Marca adaptativa (tripletas RGB para soportar alpha en Tailwind). Estos
+     tonos existen para LEERSE sobre el fondo del tema: en oscuro son los hex
+     históricos del brand book; en claro se oscurecen para mantener contraste. */
+  --ninja-flame-soft: 255 106 26;
+  --ninja-lavender: 184 174 220;
+  --ninja-soft-white: 247 247 255;
+  --ninja-slate: 127 117 166;
+  /* Estado (texto sobre el fondo del tema): en oscuro tonos pastel 300,
+     en claro tintas 700 para mantener contraste. */
+  --status-success: 110 231 183;
+  --status-danger: 252 165 165;
+  --status-warning: 252 211 77;
+  --status-info: 125 211 252;
 }
 
 /* ---------- Noir (carbón neutro) ---------- */
 [data-theme="ninja-noir"] {
+  color-scheme: dark;
   --background: #0b0c0f;
   --foreground: #f2f3f5;
   --card: rgba(255, 255, 255, 0.04);
@@ -67,10 +86,19 @@
   --input: rgba(255, 255, 255, 0.07);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.045);
+  --ninja-flame-soft: 255 106 26;
+  --ninja-lavender: 184 174 220;
+  --ninja-soft-white: 247 247 255;
+  --ninja-slate: 127 117 166;
+  --status-success: 110 231 183;
+  --status-danger: 252 165 165;
+  --status-warning: 252 211 77;
+  --status-info: 125 211 252;
 }
 
 /* ---------- Lavanda (claro) ---------- */
 [data-theme="ninja-light"] {
+  color-scheme: light;
   --background: #f6f5fc;
   --foreground: #15111f;
   --card: #ffffff;
@@ -91,10 +119,21 @@
   --input: #e2dcf1;
   --ring: #ff6a1a;
   --pattern: rgba(30, 22, 60, 0.06);
+  /* Sobre fondo claro los tonos "para oscuro" se hunden: flameSoft baja a un
+     naranja profundo legible y lavender/softWhite/slate pasan a tintas. */
+  --ninja-flame-soft: 209 56 15;
+  --ninja-lavender: 107 99 136;
+  --ninja-soft-white: 21 17 31;
+  --ninja-slate: 92 84 120;
+  --status-success: 4 120 87;
+  --status-danger: 185 28 28;
+  --status-warning: 180 83 9;
+  --status-info: 3 105 161;
 }
 
 /* ---------- Arena (claro cálido) ---------- */
 [data-theme="ninja-sand"] {
+  color-scheme: light;
   --background: #fbf7f1;
   --foreground: #211a12;
   --card: #ffffff;
@@ -115,6 +154,14 @@
   --input: #e7dcc9;
   --ring: #ff6a1a;
   --pattern: rgba(60, 40, 20, 0.06);
+  --ninja-flame-soft: 209 56 15;
+  --ninja-lavender: 122 107 87;
+  --ninja-soft-white: 33 26 18;
+  --ninja-slate: 110 96 76;
+  --status-success: 4 120 87;
+  --status-danger: 185 28 28;
+  --status-warning: 180 83 9;
+  --status-info: 3 105 161;
 }
 
 @layer base {

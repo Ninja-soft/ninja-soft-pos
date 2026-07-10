@@ -86,7 +86,7 @@ export function AccountsReceivableModal({
                 <div
                   className={
                     b.k === "b90plus" && data.totals.b90plus > 0
-                      ? "font-price text-base font-black tabular-nums text-red-400"
+                      ? "font-price text-base font-black tabular-nums text-danger"
                       : "font-price text-base font-black tabular-nums text-foreground"
                   }
                 >
@@ -131,7 +131,7 @@ export function AccountsReceivableModal({
                   <td
                     className={
                       r.overdue > 0
-                        ? "px-3 py-2 text-right font-semibold tabular-nums text-red-400"
+                        ? "px-3 py-2 text-right font-semibold tabular-nums text-danger"
                         : "px-3 py-2 text-right tabular-nums text-muted-foreground"
                     }
                   >
@@ -149,7 +149,7 @@ export function AccountsReceivableModal({
                   <td
                     className={
                       r.b90plus
-                        ? "px-3 py-2 text-right tabular-nums text-red-400"
+                        ? "px-3 py-2 text-right tabular-nums text-danger"
                         : "px-3 py-2 text-right tabular-nums text-muted-foreground"
                     }
                   >
@@ -170,7 +170,7 @@ export function AccountsReceivableModal({
                   <td
                     className={
                       data.totals.overdue > 0
-                        ? "px-3 py-2 text-right font-semibold tabular-nums text-red-400"
+                        ? "px-3 py-2 text-right font-semibold tabular-nums text-danger"
                         : "px-3 py-2 text-right tabular-nums"
                     }
                   >

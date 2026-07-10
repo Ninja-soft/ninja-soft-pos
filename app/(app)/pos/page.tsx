@@ -1541,7 +1541,7 @@ function PosPageInner() {
           deliveryOrder.status !== "cancelado" && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-400/30 bg-sky-400/[0.08] px-4 py-3">
               <span className="flex min-w-0 items-center gap-2.5 text-sm">
-                <Bike size={18} className="shrink-0 text-sky-300" />
+                <Bike size={18} className="shrink-0 text-info" />
                 <span className="min-w-0">
                   <span className="block break-words font-semibold text-foreground">
                     Cobrando {deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}
@@ -1580,7 +1580,7 @@ function PosPageInner() {
             <span
               className={
                 hasShift
-                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-emerald-300"
+                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-success"
                   : "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
               }
             >
@@ -1811,7 +1811,7 @@ function PosPageInner() {
                     <span className="block text-sm font-medium text-foreground">
                       {l.name}
                       {l.giftPromoId && (
-                        <span className="ml-1.5 inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                        <span className="ml-1.5 inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-success">
                           <Gift size={11} /> Regalo
                         </span>
                       )}
@@ -1835,7 +1835,7 @@ function PosPageInner() {
                   {!l.giftPromoId && (
                     <button
                       onClick={() => removeLine(l.lineId)}
-                      className="text-muted-foreground hover:text-red-300"
+                      className="text-muted-foreground hover:text-danger"
                     >
                       <X size={15} />
                     </button>
@@ -1866,7 +1866,7 @@ function PosPageInner() {
                     </div>
                   )}
                   {l.packCreditId || l.giftPromoId ? (
-                    <span className="text-sm font-semibold text-emerald-300">Gratis</span>
+                    <span className="text-sm font-semibold text-success">Gratis</span>
                   ) : (
                     <span className="text-sm font-semibold">
                       {formatCurrency(lineSubtotal(l))}
@@ -1895,7 +1895,7 @@ function PosPageInner() {
                     tiene un pack que cubre esta línea con sesión disponible. */}
                 {l.packCreditId ? (
                   <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-success">
                       <Package size={13} /> Cubierto por el pack
                     </span>
                     <button
@@ -1914,7 +1914,7 @@ function PosPageInner() {
                       <button
                         type="button"
                         onClick={() => coverLineWithPack(l.lineId, credit.id)}
-                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/10"
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-success transition hover:bg-emerald-400/10"
                       >
                         <Package size={13} /> Usar sesión del pack ({credit.sessions_left} restantes)
                       </button>
@@ -1957,7 +1957,7 @@ function PosPageInner() {
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 {customer && (scBalance ?? 0) > 0 && (
-                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-success">
                     vale {formatCurrency(scBalance ?? 0)}
                   </span>
                 )}
@@ -2029,7 +2029,7 @@ function PosPageInner() {
                 para el carrito y la descuenta. Aparte del descuento manual. Se
                 oculta si hay un cupón (excluyentes). */}
             {promoActive && promoResult && promoDiscount > 0 && (
-              <div className="flex items-center justify-between gap-2 text-sm text-emerald-400">
+              <div className="flex items-center justify-between gap-2 text-sm text-success">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <Tag size={13} className="shrink-0" />
                   <span className="truncate">{promoResult.name}</span>
@@ -2043,7 +2043,7 @@ function PosPageInner() {
                 lo revalida y consume create_sale al cobrar (atómico). */}
             {appliedCoupon ? (
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex min-w-0 items-center gap-1.5 text-emerald-400">
+                <span className="flex min-w-0 items-center gap-1.5 text-success">
                   <Ticket size={13} className="shrink-0" />
                   <span className="truncate">Cupón {appliedCoupon.code}</span>
                   <button
@@ -2052,14 +2052,14 @@ function PosPageInner() {
                       setAppliedCoupon(null);
                       setCouponInput("");
                     }}
-                    className="text-muted-foreground transition hover:text-red-300"
+                    className="text-muted-foreground transition hover:text-danger"
                     title="Quitar cupón"
                   >
                     <X size={13} />
                   </button>
                 </span>
                 {couponDiscount > 0 ? (
-                  <span className="shrink-0 font-medium tabular-nums text-emerald-400">
+                  <span className="shrink-0 font-medium tabular-nums text-success">
                     −{formatCurrency(couponDiscount)}
                   </span>
                 ) : (
@@ -2207,7 +2207,7 @@ function PosPageInner() {
               className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
             >
               <span>Consumidor final</span>
-              {!customer && <span className="text-xs text-emerald-400">Actual</span>}
+              {!customer && <span className="text-xs text-success">Actual</span>}
             </button>
             {/* Encabezado contextual: sin término muestra los recientes (no todo
                 el padrón → bajo consumo); al tipear, los resultados de la
@@ -2234,7 +2234,7 @@ function PosPageInner() {
                   )}
                 </span>
                 {customer?.id === c.id && (
-                  <span className="shrink-0 text-xs text-emerald-400">Actual</span>
+                  <span className="shrink-0 text-xs text-success">Actual</span>
                 )}
               </button>
             ))}

@@ -48,16 +48,27 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const intentId = reqUrl.searchParams.get("intent") ?? "";
-  if (!intentId) return new Response("ok", { status: 200 });
-
-  const { data: row } = await admin
+  // Correlación por prefijo corto (?i=<12 hex del intent>): el validador de
+  // notifications_url de Payway limita la URL a ~100 caracteres, así que el
+  // UUID entero no entra. Se resuelve contra los intents payway PENDIENTES
+  // recientes; con ambigüedad (prefijo repetido) no se acredita.
+  const shortRef = (reqUrl.searchParams.get("i") ?? "").toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(shortRef)) {
+    return new Response("ok", { status: 200 });
+  }
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: pendings } = await admin
     .from("mp_payment_intents")
     .select("id, tenant_id, status, amount, preference_id")
-    .eq("id", intentId)
     .eq("provider_key", "payway")
-    .maybeSingle();
-  // Intent desconocido o ya resuelto → 200 igual (Payway reintenta si no).
+    .eq("status", "pending")
+    .gte("created_at", since)
+    .limit(200);
+  const matches = (pendings ?? []).filter(
+    (p) => String(p.id).replace(/-/g, "").toLowerCase().startsWith(shortRef),
+  );
+  if (matches.length !== 1) return new Response("ok", { status: 200 });
+  const row = matches[0];
   if (!row || row.status !== "pending" || !row.preference_id) {
     return new Response("ok", { status: 200 });
   }
@@ -79,8 +90,27 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   const base = methodRow?.sandbox ? V2.sandbox : V2.prod;
 
+  // El payment_id REAL viene en el cuerpo de la notificación (el hash del
+  // checkout guardado en preference_id no es consultable). Se aceptan las
+  // formas conocidas del payload; sin id no se acredita (conservador).
+  let notifiedId: string | null = null;
+  try {
+    const body = (await req.json()) as Record<string, unknown>;
+    const cand =
+      body.payment_id ??
+      body.id ??
+      (body.payment as { id?: unknown } | undefined)?.id ??
+      (Array.isArray(body.payments)
+        ? (body.payments[0] as { id?: unknown } | undefined)?.id
+        : undefined);
+    if (cand != null && /^[0-9]+$/.test(String(cand))) notifiedId = String(cand);
+  } catch {
+    /* cuerpo no-JSON: se ignora */
+  }
+  if (!notifiedId) return new Response("ok", { status: 200 });
+
   // Verificación independiente (nunca confiar en el cuerpo del webhook).
-  const r = await fetch(`${base}/payments/${row.preference_id}`, {
+  const r = await fetch(`${base}/payments/${notifiedId}`, {
     headers: { apikey: sec.private_apikey },
   });
   if (!r.ok) return new Response("ok", { status: 200 });
@@ -95,13 +125,20 @@ Deno.serve(async (req: Request) => {
       .from("mp_payment_intents")
       .update({
         status: amountOk ? "approved" : "rejected",
-        mp_payment_id: String(row.preference_id),
+        mp_payment_id: notifiedId,
       })
       .eq("id", row.id);
   } else if (["rejected", "annulled", "voided"].includes(state)) {
     await admin
       .from("mp_payment_intents")
-      .update({ status: "rejected" })
+      .update({ status: "rejected", mp_payment_id: notifiedId })
+      .eq("id", row.id);
+  } else {
+    // Estado intermedio: guardamos el payment_id para que el poll del POS
+    // (Edge payway action status) pueda re-verificar más tarde.
+    await admin
+      .from("mp_payment_intents")
+      .update({ mp_payment_id: notifiedId })
       .eq("id", row.id);
   }
   return new Response("ok", { status: 200 });

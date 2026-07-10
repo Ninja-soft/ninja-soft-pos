@@ -153,8 +153,14 @@ Deno.serve(async (req: Request) => {
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
     // El webhook re-verifica contra la API; el retorno del cliente es una
-    // pantalla neutra servida por payway_webhook (GET).
+    // pantalla neutra servida por payway_webhook (GET). OJO (validado contra
+    // producción, 2026-07-10): el validador de URLs rechaza las de MÁS DE
+    // ~100 caracteres y las de más de un query param (el '&' o un UUID entero
+    // disparan param_required) → cada URL lleva UN parámetro CORTO. La
+    // correlación usa los primeros 12 hex del intent (?i=), que el webhook
+    // resuelve contra los intents payway pendientes.
     const backBase = `${url}/functions/v1/payway_webhook`;
+    const shortRef = intent.id.replace(/-/g, "").slice(0, 12);
     const r = await fetch(`${base.checkout}/link`, {
       method: "POST",
       headers: pwHeaders,
@@ -164,9 +170,9 @@ Deno.serve(async (req: Request) => {
         currency: "ARS",
         total_price: Math.round(amount * 100) / 100,
         site: sec.site,
-        success_url: `${backBase}?view=success&intent=${intent.id}`,
-        cancel_url: `${backBase}?view=cancel&intent=${intent.id}`,
-        notifications_url: `${backBase}?intent=${intent.id}`,
+        success_url: `${backBase}?view=success`,
+        cancel_url: `${backBase}?view=cancel`,
+        notifications_url: `${backBase}?i=${shortRef}`,
         template_id: 1,
         installments: [1],
         plan_gobierno: false,
@@ -182,16 +188,24 @@ Deno.serve(async (req: Request) => {
         .eq("id", intent.id);
       return json({ error: "payway_error", detail: detail.slice(0, 300) }, 502);
     }
+    // Producción devuelve { payment_link: "https://live.decidir.com/web/checkout/<HASH>" }
+    // (validado 2026-07-10 con credenciales reales). El HASH identifica el
+    // checkout pero NO es consultable por /payments: la confirmación llega por
+    // el webhook (notifications_url) con el payment_id real.
     const pr = (await r.json()) as {
+      payment_link?: string;
       payment_id?: number | string;
       id?: number | string;
       link?: string;
       url?: string;
     };
-    const paymentId = pr.payment_id ?? pr.id;
-    // Algunas versiones devuelven el link armado; si no, se construye con el id.
     const initPoint =
-      pr.link || pr.url || (paymentId ? `${base.web}/${paymentId}` : "");
+      pr.payment_link ||
+      pr.link ||
+      pr.url ||
+      (pr.payment_id ?? pr.id ? `${base.web}/${pr.payment_id ?? pr.id}` : "");
+    const paymentId =
+      pr.payment_id ?? pr.id ?? (initPoint ? initPoint.split("/").pop() : null);
     if (!paymentId || !initPoint) {
       await admin
         .from("mp_payment_intents")
@@ -226,11 +240,20 @@ Deno.serve(async (req: Request) => {
       return json({ status: row.status, mp_payment_id: row.mp_payment_id });
     }
 
-    const r = await fetch(`${base.v2}/payments/${row.preference_id}`, {
+    // El hash del checkout NO es consultable en /payments: la confirmación la
+    // trae el webhook (notifications_url) con el payment_id real. Si el webhook
+    // dejó un id numérico sin resolver el estado, re-verificamos acá; si no,
+    // seguimos pendientes (el POS sondea y el webhook resuelve).
+    const numericId = /^[0-9]+$/.test(String(row.mp_payment_id ?? ""))
+      ? String(row.mp_payment_id)
+      : null;
+    if (!numericId) {
+      return json({ status: "pending", mp_payment_id: null });
+    }
+    const r = await fetch(`${base.v2}/payments/${numericId}`, {
       headers: { apikey: sec.private_apikey },
     });
     if (r.status === 404) {
-      // El pago todavía no se procesó en el formulario.
       return json({ status: "pending", mp_payment_id: null });
     }
     if (!r.ok) {

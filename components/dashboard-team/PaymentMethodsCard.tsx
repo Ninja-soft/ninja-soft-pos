@@ -215,6 +215,10 @@ export function PaymentMethodsCard() {
   const [pwPublic, setPwPublic] = useState("");
   const [pwPrivate, setPwPrivate] = useState("");
   const [pwSite, setPwSite] = useState("");
+  // Ambiente elegido al conectar (solo proveedores con sandbox real). Se
+  // precarga con el valor actual del medio y se guarda junto a las credenciales:
+  // es el momento natural para decidirlo (antes vivía escondido en el detalle).
+  const [connEnv, setConnEnv] = useState<"prod" | "test">("prod");
   const [mbToken, setMbToken] = useState("");
   // MODO: credenciales de comercio (client_id + client_secret, store_id opcional).
   const [modoClientId, setModoClientId] = useState("");
@@ -350,6 +354,21 @@ export function PaymentMethodsCard() {
       });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      // Ambiente elegido en el modal (solo proveedores con sandbox real): se
+      // persiste junto con las credenciales.
+      if (!vars.clear && SANDBOX_PROVIDERS.has(vars.provider_key)) {
+        const cur = byKey.get(vars.provider_key);
+        await supabase.from("tenant_payment_methods").upsert(
+          {
+            tenant_id: tenantId,
+            provider_key: vars.provider_key,
+            enabled: cur?.enabled ?? false,
+            sandbox: connEnv === "test",
+            surcharge_pct: cur?.surcharge_pct ?? 0,
+          },
+          { onConflict: "tenant_id,provider_key" },
+        );
+      }
     },
     onSuccess: () => {
       toast({ title: "Listo", variant: "success" });
@@ -421,6 +440,7 @@ export function PaymentMethodsCard() {
               setPwPublic("");
               setPwPrivate("");
               setPwSite("");
+              setConnEnv(byKey.get(p.key)?.sandbox ? "test" : "prod");
               setMbToken("");
               setModoClientId("");
               setModoClientSecret("");
@@ -516,6 +536,35 @@ export function PaymentMethodsCard() {
                 onChange={(e) => setModoProcessor(e.target.value)}
                 placeholder="Ej: P1293 (viene en el email de MODO)"
               />
+              {SANDBOX_PROVIDERS.has(connectKey!) && (
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("prod")}
+                      className={
+                        connEnv === "prod"
+                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Producción (cobros reales)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("test")}
+                      className={
+                        connEnv === "test"
+                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Prueba (sandbox)
+                    </button>
+                  </div>
+                </div>
+              )}
               <Button
                 className="w-full"
                 disabled={
@@ -588,6 +637,35 @@ export function PaymentMethodsCard() {
                 onChange={(e) => setPwSite(e.target.value)}
                 placeholder="Ej: 00097002"
               />
+              {SANDBOX_PROVIDERS.has(connectKey!) && (
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("prod")}
+                      className={
+                        connEnv === "prod"
+                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Producción (cobros reales)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("test")}
+                      className={
+                        connEnv === "test"
+                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Prueba (sandbox)
+                    </button>
+                  </div>
+                </div>
+              )}
               <Button
                 className="w-full"
                 disabled={
@@ -639,6 +717,35 @@ export function PaymentMethodsCard() {
                 onChange={(e) => setP360ApiKey(e.target.value)}
                 placeholder={connectingConnected ? "•••••• (configurada)" : "Tu API Key"}
               />
+              {SANDBOX_PROVIDERS.has(connectKey!) && (
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("prod")}
+                      className={
+                        connEnv === "prod"
+                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Producción (cobros reales)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConnEnv("test")}
+                      className={
+                        connEnv === "test"
+                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                      }
+                    >
+                      Prueba (sandbox)
+                    </button>
+                  </div>
+                </div>
+              )}
               <Button
                 className="w-full"
                 disabled={connect.isPending || p360ApiKey.trim().length < 10}
@@ -917,6 +1024,14 @@ function PaymentMethodRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate font-semibold">{p.name}</span>
+            {SANDBOX_PROVIDERS.has(p.key) && m?.sandbox && !soon && (
+              <span
+                title="Este medio apunta al ambiente de PRUEBA del proveedor (sin cobros reales). Lo cambiás al conectar o en el detalle."
+                className="inline-flex shrink-0 items-center rounded-ninjaFull border border-warning/50 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning"
+              >
+                Prueba
+              </span>
+            )}
             {locked && (
               <span
                 title={lockTip}

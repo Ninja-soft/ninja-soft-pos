@@ -186,7 +186,9 @@ export function QrCheckoutModal({
     queryFn: () =>
       provider === "pagos360"
         ? posApi.pagos360IntentStatus(intentId!)
-        : posApi.mpIntentStatus(intentId!),
+        : provider === "modo"
+          ? posApi.modoIntentStatus(intentId!)
+          : posApi.mpIntentStatus(intentId!),
     enabled: open && phase === "waiting" && Boolean(intentId),
     refetchInterval: 3000,
   });

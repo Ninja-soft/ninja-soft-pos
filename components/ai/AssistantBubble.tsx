@@ -129,9 +129,14 @@ export function AssistantBubble() {
     queryKey: ["ai-public-config"],
     queryFn: async (): Promise<PublicCfg | null> => {
       // El RPC ai_public_config aún no está en los tipos generados → cast.
-      const rpc = supabase.rpc as unknown as (
-        fn: string,
-      ) => Promise<{ data: unknown; error: unknown }>;
+      // OJO: bind(supabase) es obligatorio — asignar el método a una variable
+      // le pierde el `this` y el RPC explotaba con TypeError, dejando la
+      // burbuja SIEMPRE con el ícono genérico en vez del logo del proveedor.
+      const rpc = (
+        supabase.rpc as unknown as (
+          fn: string,
+        ) => Promise<{ data: unknown; error: unknown }>
+      ).bind(supabase);
       const { data, error } = await rpc("ai_public_config");
       if (error) return null;
       const c = (data ?? {}) as Partial<PublicCfg>;
@@ -294,7 +299,7 @@ export function AssistantBubble() {
           }`}
         >
           {bubbleReady ? (
-            <BubbleAvatar url={iconUrl} size={56} iconSize={24} />
+            <BubbleAvatar url={iconUrl} size={56} iconSize={24} contain={!locked} />
           ) : (
             <Spinner size={22} className="border-ninja-voidViolet/40 border-t-ninja-voidViolet" />
           )}
@@ -317,7 +322,7 @@ export function AssistantBubble() {
                     : "bg-ninja-gradient text-ninja-voidViolet"
                 }`}
               >
-                <BubbleAvatar url={iconUrl} size={28} iconSize={16} />
+                <BubbleAvatar url={iconUrl} size={28} iconSize={16} contain={!locked} />
               </span>
               Asistente IA
               {/* Badge del proveedor IA activo (solo con acceso). Indica qué
@@ -475,10 +480,15 @@ function BubbleAvatar({
   url,
   size,
   iconSize,
+  contain = false,
 }: {
   url: string;
   size: number;
   iconSize: number;
+  // true para LOGOS de proveedor (Gemini/Claude): centrado con aire dentro del
+  // círculo (object-contain + inset) en vez de cover, que recorta/descentra
+  // cualquier logo no cuadrado. El gif de marca (sin addon) sigue a full-bleed.
+  contain?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
   if (url && !broken) {
@@ -489,7 +499,11 @@ function BubbleAvatar({
         alt="Asistente IA"
         width={size}
         height={size}
-        className="h-full w-full object-cover"
+        className={
+          contain
+            ? "h-full w-full object-contain object-center p-[12%]"
+            : "h-full w-full object-cover"
+        }
         onError={() => setBroken(true)}
       />
     );

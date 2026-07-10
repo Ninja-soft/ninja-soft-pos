@@ -55,6 +55,11 @@ const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point
 // cuotas/recargos los resuelve el lector (sin grid de planes ni recargo acá).
 const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
 
+// Proveedores cuyo switch Sandbox cambia de verdad el ambiente de la Edge
+// (MODO → merchants.preprod.playdigital.com.ar · Pagos360 → api.sandbox.pagos360.com).
+// Sólo para estos se muestra el toggle; en el resto no haría nada.
+const SANDBOX_PROVIDERS = new Set(["modo", "pagos360"]);
+
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
   cash: "/img/medios_de_pago/Cash_cube.webp",
@@ -403,6 +408,7 @@ export function PaymentMethodsCard() {
             onSaveSurcharge={(pct) =>
               save.mutate({ provider_key: p.key, surcharge_pct: pct })
             }
+            onSaveSandbox={(v) => save.mutate({ provider_key: p.key, sandbox: v })}
           />
         ))}
       </div>
@@ -733,6 +739,7 @@ function PaymentMethodRow({
   onOpenPlans,
   onSaveEnabled,
   onSaveSurcharge,
+  onSaveSandbox,
   mpConnected = false,
 }: {
   provider: Provider;
@@ -748,6 +755,7 @@ function PaymentMethodRow({
   onOpenPlans: () => void;
   onSaveEnabled: (v: boolean) => void;
   onSaveSurcharge: (pct: number) => void;
+  onSaveSandbox: (v: boolean) => void;
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -1045,6 +1053,28 @@ function PaymentMethodRow({
               </button>
             )}
           </div>
+
+          {/* Ambiente de prueba: sólo proveedores donde el toggle cambia la URL
+              de la Edge (MODO preprod / Pagos360 sandbox). Con credenciales de
+              prueba tiene que estar prendido; con credenciales productivas,
+              apagado. */}
+          {SANDBOX_PROVIDERS.has(p.key) && !soon && !locked && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-ninja-flame/[0.05] p-3">
+              <div className="min-w-0 text-xs">
+                <p className="font-semibold">Ambiente de prueba (Sandbox)</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Prendido usa el ambiente de prueba de {p.name} (credenciales de
+                  test, sin plata real). Apagalo cuando cargues las credenciales
+                  productivas.
+                </p>
+              </div>
+              <Switch
+                checked={m?.sandbox ?? true}
+                onCheckedChange={onSaveSandbox}
+                label={`Sandbox ${p.name}`}
+              />
+            </div>
+          )}
 
           {info ? (
             <>

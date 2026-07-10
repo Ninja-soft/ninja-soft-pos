@@ -17,10 +17,18 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
   mobbex: "Mobbex",
+  modo: "MODO",
+  pagos360: "Pagos360",
+  payway: "Payway",
+  mercadopago_point: "Mercado Point",
 };
 const PROVIDER_LOGOS: Record<string, string> = {
   mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
   mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
+  modo: "/img/medios_de_pago/Modo_cube.webp",
+  pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
+  payway: "/img/medios_de_pago/payway_cube.webp",
+  mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",

@@ -60,6 +60,12 @@ const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
 // Sólo para estos se muestra el toggle; en el resto no haría nada.
 const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway"]);
 
+// Proveedores donde el grid de "Planes" (cuotas por tarjeta + recargo) SÍ se
+// aplica en el POS antes de generar el cobro. MODO/Pagos360/Payway resuelven
+// las cuotas en su propia app/checkout hosted: para esos el grid es inerte y
+// no se ofrece (su recargo se configura con el % plano del medio).
+const PLANS_PROVIDERS = new Set(["mercadopago", "mobbex"]);
+
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
   cash: "/img/medios_de_pago/Cash_cube.webp",
@@ -854,9 +860,10 @@ function PaymentMethodRow({
   const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
   const info = PROVIDER_INFO[p.key];
   // Medios con grid de planes: el recargo se configura ahí, no en la fila.
-  const hasPlans =
-    IMPLEMENTED.has(p.key) && p.kind !== "manual" && !USES_MP_CONNECTION.has(p.key);
+  const hasPlans = PLANS_PROVIDERS.has(p.key) && p.kind !== "manual";
   // Point: cuotas/recargo se resuelven en el lector → sin input de recargo.
+  // Con grid de planes, el recargo vive en el grid. El resto (modo/pagos360/
+  // payway y manuales) usa el % plano del medio, que el POS aplica al cobrar.
   const hideSurcharge = hasPlans || USES_MP_CONNECTION.has(p.key);
 
   // Gating por plan. Optimista mientras `features` es undefined (no parpadea).

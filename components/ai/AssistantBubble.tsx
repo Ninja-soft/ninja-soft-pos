@@ -295,13 +295,15 @@ export function AssistantBubble() {
           className={`fixed bottom-4 right-4 z-40 grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-ninjaGlow ring-1 backdrop-blur-xl transition hover:brightness-110 active:scale-95 disabled:cursor-default disabled:active:scale-100 ${
             locked
               ? "bg-card text-primary ring-ninja-flame/40"
-              : "bg-ninja-gradient text-ninja-voidViolet ring-ninja-flame/20"
+              : // Con addon: fondo NEUTRO del tema. El logo del proveedor
+                // (Gemini multicolor) pelea contra el gradiente flame naranja.
+                "bg-popover text-primary ring-border"
           }`}
         >
           {bubbleReady ? (
             <BubbleAvatar url={iconUrl} size={56} iconSize={24} contain={!locked} />
           ) : (
-            <Spinner size={22} className="border-ninja-voidViolet/40 border-t-ninja-voidViolet" />
+            <Spinner size={22} className="border-muted-foreground/30 border-t-primary" />
           )}
         </button>
       )}
@@ -319,7 +321,7 @@ export function AssistantBubble() {
                 className={`grid h-7 w-7 place-items-center overflow-hidden rounded-lg ${
                   locked
                     ? "bg-secondary text-primary ring-1 ring-ninja-flame/30"
-                    : "bg-ninja-gradient text-ninja-voidViolet"
+                    : "bg-secondary text-primary ring-1 ring-border"
                 }`}
               >
                 <BubbleAvatar url={iconUrl} size={28} iconSize={16} contain={!locked} />

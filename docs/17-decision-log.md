@@ -966,6 +966,30 @@ H15 dejó pendiente el cobro presencial con lectores Mercado Point. Las alternat
 
 ---
 
+## ADR-028 — Pagos360 por polling server-side (sin webhook obligatorio)
+
+**Fecha:** 2026-07-10 · **Estado:** aceptada · **Hito:** F8 · H21
+
+### Contexto
+
+Pagos360 notifica pagos por webhooks configurados a nivel cuenta (panel), no por solicitud — exigirlo complica el alta de cada comercio. MP/Mobbex/MODO actualizan `mp_payment_intents` vía webhook propio y el POS sólo lee la fila local.
+
+### Decisión
+
+La Edge `pagos360` expone `create` (payment_request con `external_reference` = intent local, `checkout_url` como `init_point`) y `status`, que **sincroniza contra la API de Pagos360 en cada poll del POS** (patrón `mp_point`): sólo acredita con `state=paid` y monto exacto. `QrCheckoutModal` gana el provider `pagos360` (self-managed: medio/cuotas se eligen en el checkout hosted; sin grid de planes) y el poll usa la Edge en vez de la fila local. Sandbox: `tenant_payment_methods.sandbox` decide `api.sandbox.pagos360.com` vs producción — el flujo completo es probable sin plata real. La venta se registra como `method='qr'` → el trigger de `payments` resuelve el provider del intent y exige la feature `pagos360` (gating fino ya mapeado).
+
+### Consecuencias
+
+- Alta simple: API Key + switch sandbox; sin configuración de webhooks.
+- El costo es un GET a Pagos360 cada 3 s mientras el modal espera (acotado a la vida del cobro).
+- **Pendiente:** validar contra el sandbox real de Pagos360 con una API Key propia (criterio del roadmap, mismo estado que MODO/H16).
+
+### Referencias
+
+- `supabase/functions/pagos360/index.ts`, `components/pos/QrCheckoutModal.tsx`, `modules/pos/api.ts`, `app/(app)/pos/page.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

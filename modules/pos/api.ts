@@ -633,6 +633,38 @@ export const posApi = {
     });
   },
 
+  // ── Pagos360 (H21): link de pago / checkout hosted ─────────────────────────
+  // create devuelve el checkout_url como init_point (QR + "Abrir link de pago").
+  // Sin webhook: el estado se sondea vía la Edge (sincroniza contra Pagos360).
+  createPagos360Link: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("pagos360", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  pagos360IntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("pagos360", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
   // Conciliación: intents de cobro QR (MP + Mobbex) cruzados con la venta que
   // los referenció (payments.reference = intent.id). Un intent "approved" sin
   // venta = plata cobrada sin ticket → hay que revisarlo.

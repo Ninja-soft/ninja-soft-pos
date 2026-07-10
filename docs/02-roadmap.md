@@ -411,7 +411,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [ ] **H18** — **Getnet**.
   - [ ] **H19** — **Fiserv / Posnet / Clover**.
   - [~] **H20** — **Mobbex** como **orquestador** (abstrae varios proveedores; opcional según convenga). — *Cobro por QR funcionando con cuenta real (validado 2026-06-04): conexión por API Key + Access Token, checkout hosted → QR, planes del grid (cuotas + interés) aplicados en el checkout de Mobbex (`installments`), webhook actualiza el intent y la venta se registra. Edge Functions `mobbex_create_qr` + `mobbex_webhook`. Conciliación básica en el modal "Cobros QR" de /ventas.*
-  - [ ] **H21** — **Pagos360** (links de pago / cobranzas).
+  - [~] **H21** — **Pagos360** (links de pago / cobranzas). — *Transaccionable (2026-07-10, ADR-028): Edge `pagos360` (create/status), botón "Cobrar con link · Pagos360" en el POS, checkout hosted como QR + link, conexión por API Key, soporte de **sandbox de Pagos360** vía el switch Sandbox del medio, conciliación compartida en "Cobros QR". Sin webhook: el POS sondea y la Edge sincroniza contra la API (sólo acredita con `state=paid` + monto exacto). Falta validar con cuenta real/sandbox propia (patrón H16).*
   - [ ] **H21c** — **Nave (Banco Galicia)** (billetera/QR + links de cobro). Ya está en el catálogo de medios de pago (logo + "Próximamente") y el backend de credenciales lo acepta (`set_payment_secret`, 2026-07-10); falta la integración de cobro.
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 

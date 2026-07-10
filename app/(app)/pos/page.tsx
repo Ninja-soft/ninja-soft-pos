@@ -199,6 +199,8 @@ function PosPageInner() {
   const [qrModoOpen, setQrModoOpen] = useState(false);
   // Cobro presencial con lector Mercado Point (H15 resto).
   const [pointOpen, setPointOpen] = useState(false);
+  // Link de pago Pagos360 (H21).
+  const [qrPagos360Open, setQrPagos360Open] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
   useEffect(() => {
@@ -335,6 +337,11 @@ function PosPageInner() {
   const pointFeature = useFeature("mercadopago_point");
   const { data: point } = useProviderMethod("mercadopago_point");
   const pointReady = Boolean(point?.enabled && mp?.connected && pointFeature !== false);
+  const pagos360Feature = useFeature("pagos360");
+  const { data: pagos360 } = useProviderMethod("pagos360");
+  const pagos360Ready = Boolean(
+    pagos360?.enabled && pagos360?.connected && pagos360Feature !== false,
+  );
   const { data: posSettings } = usePosSettings();
   // Oferta contextual de garantía (H28): planes activos del tenant + flag para
   // des/activar la oferta automática (Configuración → Operación). Default on.
@@ -2184,6 +2191,24 @@ function PosPageInner() {
                 Cobrar con Point · tarjeta
               </button>
             )}
+            {pagos360Ready && (
+              <button
+                type="button"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => ensureCustomer() && setQrPagos360Open(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-ninja-brightViolet/40 bg-ninja-brightViolet/10 px-4 py-3 font-semibold text-ninja-lavender transition hover:bg-ninja-brightViolet/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/Pagos360_cube.webp"
+                    alt="Pagos360"
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </span>
+                Cobrar con link · Pagos360
+              </button>
+            )}
             <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
               <span>Imprimir ticket al cobrar</span>
               <Switch
@@ -2349,6 +2374,18 @@ function PosPageInner() {
           // La tarjeta real (débito/crédito) la informa la API de MP al
           // aprobar; las cuotas las eligió el cliente en el lector.
           handleSale([{ method: cardType, amount, reference }], []);
+        }}
+      />
+      <QrCheckoutModal
+        open={qrPagos360Open}
+        onOpenChange={setQrPagos360Open}
+        base={total}
+        provider="pagos360"
+        providerName="Pagos360"
+        onQrState={handleQrState}
+        onApproved={(reference, amount, extras) => {
+          setQrPagos360Open(false);
+          handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />
       <TicketModal

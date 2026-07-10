@@ -48,7 +48,7 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point"]);
+const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point", "pagos360"]);
 
 // Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
 // del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
@@ -144,6 +144,19 @@ const PROVIDER_INFO: Record<string, Explain> = {
     recargo:
       "Los recargos/cuotas los maneja Mercado Pago en el lector; acá no se configura un % aparte.",
   },
+  pagos360: {
+    activa:
+      "Habilita el botón Cobrar con link en el POS: se genera una solicitud de pago de Pagos360 y el cliente paga desde el link/QR (tarjeta, débito, DEBIN o efectivo según tu cuenta).",
+    conexion:
+      "Pegá tu API Key de Pagos360 (Panel → Configuración → Credenciales). Con el switch Sandbox activado se usa el entorno de prueba de Pagos360 (sin plata real).",
+    pasos: [
+      "En el POS tocás Cobrar con link · Pagos360.",
+      "El cliente escanea el QR o abre el link y paga en el checkout de Pagos360.",
+      "Al acreditarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo:
+      "Si ponés un %, se suma al total al cobrar por este medio.",
+  },
   modo: {
     activa:
       "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
@@ -174,6 +187,7 @@ export function PaymentMethodsCard() {
   const [connectKey, setConnectKey] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [mbApiKey, setMbApiKey] = useState("");
+  const [p360ApiKey, setP360ApiKey] = useState("");
   const [mbToken, setMbToken] = useState("");
   // MODO: credenciales de comercio (client_id + client_secret, store_id opcional).
   const [modoClientId, setModoClientId] = useState("");
@@ -375,6 +389,7 @@ export function PaymentMethodsCard() {
               setConnectKey(p.key);
               setToken("");
               setMbApiKey("");
+              setP360ApiKey("");
               setMbToken("");
               setModoClientId("");
               setModoClientSecret("");
@@ -480,6 +495,48 @@ export function PaymentMethodsCard() {
                   : connectingConnected
                     ? "Actualizar credenciales"
                     : "Conectar MODO"}
+              </Button>
+            </>
+          ) : connectKey === "pagos360" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-success">
+                  <Check size={16} /> Pagos360 está conectado.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá tu API Key de Pagos360 (Panel → Configuración →
+                  Credenciales). Se guarda cifrada del lado del servidor. Con el
+                  switch Sandbox del medio activado se usa el entorno de prueba
+                  de Pagos360.
+                </p>
+              )}
+              <Input
+                label="API Key"
+                type="password"
+                name="pagos360_api_key"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={p360ApiKey}
+                onChange={(e) => setP360ApiKey(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu API Key"}
+              />
+              <Button
+                className="w-full"
+                disabled={connect.isPending || p360ApiKey.trim().length < 10}
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "pagos360",
+                    secrets: { api_key: p360ApiKey.trim() },
+                  })
+                }
+              >
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar API Key"
+                    : "Conectar Pagos360"}
               </Button>
             </>
           ) : connectKey === "mobbex" ? (

@@ -2133,12 +2133,12 @@ function PosPageInner() {
                 onClick={() => ensureCustomer() && setQrOpen(true)}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/img/medios_de_pago/mercado_pago_cube.webp"
                     alt="Mercado Pago"
-                    className="h-full w-full object-contain p-0.5"
+                    className="h-full w-full object-contain"
                   />
                 </span>
                 Cobrar con QR · Mercado Pago
@@ -2187,12 +2187,12 @@ function PosPageInner() {
                 onClick={() => ensureCustomer() && setPointOpen(true)}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/img/medios_de_pago/mercado_pago_cube.webp"
                     alt="Mercado Point"
-                    className="h-full w-full object-contain p-0.5"
+                    className="h-full w-full object-contain"
                   />
                 </span>
                 Cobrar con Point · tarjeta
@@ -2205,12 +2205,12 @@ function PosPageInner() {
                 onClick={() => ensureCustomer() && setQrPagos360Open(true)}
                 className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-ninja-brightViolet/40 bg-ninja-brightViolet/10 px-4 py-3 font-semibold text-ninja-lavender transition hover:bg-ninja-brightViolet/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src="/img/medios_de_pago/Pagos360_cube.webp"
                     alt="Pagos360"
-                    className="h-full w-full object-contain p-0.5"
+                    className="h-full w-full object-contain"
                   />
                 </span>
                 Cobrar con link · Pagos360

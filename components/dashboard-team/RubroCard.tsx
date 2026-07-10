@@ -61,6 +61,29 @@ export function RubroCard() {
   const [emptyOpen, setEmptyOpen] = useState(false);
   const [confirmWord, setConfirmWord] = useState("");
 
+  // Apaga los flags operativos de gastronomía (pos_settings). Se dispara al
+  // confirmar un cambio a rubro NO gastronómico con mesas/delivery prendidos.
+  // (Hook: tiene que declararse ANTES del early return de abajo.)
+  const gastroOff = useMutation({
+    mutationFn: async () => {
+      if (!ctx) return;
+      const supabase = createClient();
+      const { error } = await supabase.from("pos_settings").upsert(
+        {
+          tenant_id: ctx.tenantId,
+          dining_enabled: false,
+          delivery_enabled: false,
+        } as never,
+        { onConflict: "tenant_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
+      qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
+    },
+  });
+
   if (!ctx || !ctx.canManage) return null;
   const current = ctx.industry;
   const count = productCount ?? 0;
@@ -87,28 +110,6 @@ export function RubroCard() {
     if (v === current || setIndustry.isPending) return;
     setPending(v);
   }
-
-  // Apaga los flags operativos de gastronomía (pos_settings). Se dispara al
-  // confirmar un cambio a rubro NO gastronómico con mesas/delivery prendidos.
-  const gastroOff = useMutation({
-    mutationFn: async () => {
-      if (!ctx) return;
-      const supabase = createClient();
-      const { error } = await supabase.from("pos_settings").upsert(
-        {
-          tenant_id: ctx.tenantId,
-          dining_enabled: false,
-          delivery_enabled: false,
-        } as never,
-        { onConflict: "tenant_id" },
-      );
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
-      qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
-    },
-  });
 
   // ¿El cambio pendiente apaga la gastronomía? (rubro no gastro + algo prendido)
   const pendingTurnsGastroOff =

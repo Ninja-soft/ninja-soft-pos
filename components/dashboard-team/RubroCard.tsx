@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Sparkles, Store, Trash2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Modal } from "@/components/ui/Modal";
@@ -13,6 +15,12 @@ import { cn } from "@/lib/utils/cn";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { useMyTenant, useSetMyIndustry } from "@/modules/tenants/hooks";
 import { useActiveProductCount, useEmptyCatalog } from "@/modules/products/hooks";
+import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useDeliveryEnabled } from "@/modules/delivery/hooks";
+import {
+  usePresetSampleCount,
+  useDeletePresetSamples,
+} from "@/modules/onboarding/hooks";
 import {
   VERTICALS,
   VERTICAL_LABELS,
@@ -28,17 +36,53 @@ const FEATURE_LABELS: Record<string, string> = {
   tables: "Mesas y comandas",
 };
 
+// Verticales que usan la suite gastronómica (mesas/cocina/delivery). Al cambiar
+// a un rubro que NO está acá, los flags operativos dining/delivery se apagan
+// (si estaban prendidos): es lo que el dueño espera — "soy textil, no quiero ver
+// Salón ni Delivery". Se pueden volver a prender en Operación y productos.
+const GASTRO_VERTICALS = new Set(["restaurante", "heladeria", "cafeteria", "panaderia"]);
+
 export function RubroCard() {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const { data: ctx } = useMyTenant();
   const setIndustry = useSetMyIndustry();
   const { data: productCount } = useActiveProductCount();
   const emptyCatalog = useEmptyCatalog();
+  const { data: diningOn } = useDiningEnabled();
+  const { data: deliveryOn } = useDeliveryEnabled();
+  // Productos de muestra sembrados por presets: si hay, ofrecemos borrarlos.
+  const { data: sampleCount } = usePresetSampleCount();
+  const deleteSamples = useDeletePresetSamples();
+  const [samplesOpen, setSamplesOpen] = useState(false);
   // Rubro pendiente de confirmar (el cambio pasa por un aviso, ver más abajo).
   const [pending, setPending] = useState<string | null>(null);
   // Vaciar catálogo: modal de confirmación que exige escribir VACIAR.
   const [emptyOpen, setEmptyOpen] = useState(false);
   const [confirmWord, setConfirmWord] = useState("");
+
+  // Apaga los flags operativos de gastronomía (pos_settings). Se dispara al
+  // confirmar un cambio a rubro NO gastronómico con mesas/delivery prendidos.
+  // (Hook: tiene que declararse ANTES del early return de abajo.)
+  const gastroOff = useMutation({
+    mutationFn: async () => {
+      if (!ctx) return;
+      const supabase = createClient();
+      const { error } = await supabase.from("pos_settings").upsert(
+        {
+          tenant_id: ctx.tenantId,
+          dining_enabled: false,
+          delivery_enabled: false,
+        } as never,
+        { onConflict: "tenant_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dining", "enabled"] });
+      qc.invalidateQueries({ queryKey: ["delivery", "enabled"] });
+    },
+  });
 
   if (!ctx || !ctx.canManage) return null;
   const current = ctx.industry;
@@ -67,13 +111,38 @@ export function RubroCard() {
     setPending(v);
   }
 
+  // ¿El cambio pendiente apaga la gastronomía? (rubro no gastro + algo prendido)
+  const pendingTurnsGastroOff =
+    pending !== null &&
+    !GASTRO_VERTICALS.has(pending) &&
+    Boolean(diningOn || deliveryOn);
+
   function confirmChange() {
     if (!pending) return;
     const v = pending;
+    const turnOff = pendingTurnsGastroOff;
     setIndustry.mutate(v, {
       onSuccess: () => {
         setPending(null);
-        toast({ title: "Rubro actualizado", variant: "success" });
+        if (turnOff) {
+          gastroOff.mutate(undefined, {
+            onSuccess: () =>
+              toast({
+                title: "Rubro actualizado",
+                description:
+                  "Mesas/cocina y delivery quedaron apagados. Podés reactivarlos en Operación y productos.",
+                variant: "success",
+              }),
+            onError: () =>
+              toast({
+                title: "Rubro actualizado, pero no se pudo apagar la gastronomía",
+                description: "Apagala a mano en Operación y productos.",
+                variant: "error",
+              }),
+          });
+        } else {
+          toast({ title: "Rubro actualizado", variant: "success" });
+        }
       },
       onError: () => toast({ title: "No se pudo actualizar", variant: "error" }),
     });
@@ -163,8 +232,17 @@ export function RubroCard() {
               </p>
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <IndustryPresetButton size="sm" />
+            {(sampleCount ?? 0) > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSamplesOpen(true)}
+              >
+                <Trash2 size={14} /> Borrar productos de prueba ({sampleCount})
+              </Button>
+            )}
           </div>
         </div>
 
@@ -220,11 +298,46 @@ export function RubroCard() {
           "Cambiar de rubro sólo adapta las FUNCIONES del POS (mesas/comandas, " +
           "balanza, venta rápida, etc.). Tus productos, precios y categorías son " +
           "independientes del rubro y NO se modifican: tu catálogo queda intacto. " +
-          "Si querés un catálogo distinto, agregá o eliminá productos a mano."
+          "Si querés un catálogo distinto, agregá o eliminá productos a mano." +
+          (pendingTurnsGastroOff
+            ? " Como este rubro no es gastronómico, mesas/cocina y delivery se " +
+              "apagan (los reactivás cuando quieras en Operación y productos)."
+            : "")
         }
         confirmLabel="Cambiar rubro"
         loading={setIndustry.isPending}
         onConfirm={confirmChange}
+      />
+
+      {/* Borrar productos de prueba: baja lógica SOLO de los ítems sembrados por
+          presets (from_preset != null). No toca los productos propios del dueño. */}
+      <ConfirmDialog
+        open={samplesOpen}
+        onOpenChange={setSamplesOpen}
+        title={`Borrar ${sampleCount ?? 0} producto${(sampleCount ?? 0) === 1 ? "" : "s"} de prueba`}
+        description={
+          "Da de baja únicamente los productos de muestra que sembró la " +
+          "configuración rápida por rubro. Tus productos propios, ventas y " +
+          "categorías no se tocan."
+        }
+        confirmLabel="Borrar productos de prueba"
+        loading={deleteSamples.isPending}
+        onConfirm={() =>
+          deleteSamples.mutate(undefined, {
+            onSuccess: (n) => {
+              setSamplesOpen(false);
+              toast({
+                title:
+                  n > 0
+                    ? `Listo: ${n} producto${n === 1 ? "" : "s"} de prueba dado${n === 1 ? "" : "s"} de baja`
+                    : "No había productos de prueba para borrar",
+                variant: "success",
+              });
+            },
+            onError: () =>
+              toast({ title: "No se pudieron borrar", variant: "error" }),
+          })
+        }
       />
 
       {/* Confirmación de vaciar catálogo: acción irreversible desde la UI, así que

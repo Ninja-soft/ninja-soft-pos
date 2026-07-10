@@ -19,6 +19,9 @@ import {
   Beer,
   Drumstick,
   Bike,
+  Store,
+  ShoppingCart,
+  Shirt,
 } from "lucide-react";
 
 // Qué vende el negocio (paso 1 del wizard). Filtra qué ítems del preset se
@@ -48,6 +51,10 @@ export const SELLS_OPTIONS: {
 ];
 
 export type PresetKey =
+  // Comercio general (los rubros más comunes del POS: kiosco/minimarket/retail).
+  | "kiosco"
+  | "minimarket"
+  | "retail"
   | "heladeria"
   | "cafeteria"
   | "panaderia"
@@ -90,6 +97,33 @@ export interface PresetDef {
 }
 
 export const PRESETS: PresetDef[] = [
+  {
+    key: "kiosco",
+    label: "Kiosco",
+    desc: "Golosinas, bebidas, cigarrillos y snacks. Venta rápida al mostrador.",
+    icon: Store,
+    nature: "products",
+    categories: ["Golosinas", "Bebidas", "Cigarrillos", "Snacks"],
+    sampleItems: ["Alfajor", "Gaseosa lata", "Cigarrillos box", "Papas fritas"],
+  },
+  {
+    key: "minimarket",
+    label: "Minimarket / almacén",
+    desc: "Almacén, bebidas, lácteos y limpieza. Ideal autoservicio chico.",
+    icon: ShoppingCart,
+    nature: "products",
+    categories: ["Almacén", "Bebidas", "Lácteos", "Limpieza"],
+    sampleItems: ["Arroz 1 kg", "Gaseosa 1.5L", "Leche 1L", "Lavandina 1L"],
+  },
+  {
+    key: "retail",
+    label: "Retail / indumentaria",
+    desc: "Ropa, calzado y accesorios. Pensado para trabajar con variantes.",
+    icon: Shirt,
+    nature: "products",
+    categories: ["Indumentaria", "Calzado", "Accesorios"],
+    sampleItems: ["Remera", "Pantalón", "Zapatillas", "Gorra"],
+  },
   {
     key: "heladeria",
     label: "Heladería",

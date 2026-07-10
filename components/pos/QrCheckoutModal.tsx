@@ -29,6 +29,43 @@ function planText(p: PaymentPlan) {
 // (por botón, con el total ya calculado). El recargo del plan se suma al monto.
 // MODO resuelve las cuotas en su propia app (las elige el cliente) → el POS sólo
 // manda el monto base y no muestra la pantalla de selección de tarjeta/cuota.
+// Código de error estable de una Edge de cobro. posApi lanza Error(code) cuando
+// la Edge devolvió 200 con { error }, y FunctionsHttpError (cuerpo real en
+// error.context) cuando devolvió non-2xx: acá se lee de donde venga.
+async function edgeErrorCode(e: unknown): Promise<{ code: string; detail?: string }> {
+  const ctx = (e as { context?: Response })?.context;
+  if (ctx) {
+    const body = (await ctx.json().catch(() => null)) as {
+      error?: string;
+      detail?: string;
+    } | null;
+    if (body?.error) return { code: body.error, detail: body.detail };
+  }
+  return { code: e instanceof Error ? e.message : "" };
+}
+
+// Copy honesto por código y proveedor (antes todo caía a un genérico que
+// mencionaba a Mercado Pago aunque el cobro fuera de MODO/Mobbex/Pagos360).
+function qrErrorCopy(code: string, providerName: string): string {
+  switch (code) {
+    case "not_connected":
+      return `Conectá ${providerName} en Configuración → Medios de pago.`;
+    case "payment_method_not_allowed":
+      return `Tu plan no incluye ${providerName}. Mejorá tu plan para cobrar con este medio.`;
+    case "modo_no_token":
+      return "MODO rechazó las credenciales del comercio (Username/Password). Verificá que el ambiente coincida con el switch Sandbox o consultá a MODO si falta activarlas.";
+    case "mp_error":
+    case "mobbex_error":
+    case "modo_error":
+    case "pagos360_error":
+      return `${providerName} devolvió un error al crear el cobro. Probá de nuevo en unos segundos.`;
+    case "modo_unreachable":
+      return "No pudimos comunicarnos con MODO. Revisá tu conexión y probá de nuevo.";
+    default:
+      return `No se pudo generar el cobro con ${providerName}.`;
+  }
+}
+
 export function QrCheckoutModal({
   open,
   onOpenChange,
@@ -66,6 +103,7 @@ export function QrCheckoutModal({
   const [amount, setAmount] = useState(base);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const firedRef = useRef(false);
   const startedRef = useRef(false);
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
@@ -121,15 +159,12 @@ export function QrCheckoutModal({
         setInitPoint(r.init_point);
         setPhase("waiting");
       })
-      .catch((e) => {
+      .catch(async (e) => {
+        const { code } = await edgeErrorCode(e);
+        const msg = qrErrorCopy(code, providerName);
+        setErrorMsg(msg);
         setPhase("error");
-        toast({
-          title:
-            e instanceof Error && e.message === "not_connected"
-              ? `Conectá ${providerName} en Configuración`
-              : "No se pudo generar el QR",
-          variant: "error",
-        });
+        toast({ title: msg, variant: "error" });
       });
   }
 
@@ -151,6 +186,7 @@ export function QrCheckoutModal({
     setAmount(base);
     setIntentId(null);
     setInitPoint("");
+    setErrorMsg("");
     firedRef.current = false;
     startedRef.current = false;
     chosenRef.current = null;
@@ -390,8 +426,8 @@ export function QrCheckoutModal({
         {phase === "error" && (
           <div className="space-y-3 py-6">
             <div className="text-sm text-muted-foreground">
-              No se pudo generar el QR. Revisá que Mercado Pago esté conectado en
-              Configuración → Medios de pago.
+              {errorMsg ||
+                `No se pudo generar el cobro con ${providerName}. Revisá la conexión del medio en Configuración → Medios de pago.`}
             </div>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cerrar

@@ -193,6 +193,7 @@ export function PaymentMethodsCard() {
   const [modoClientId, setModoClientId] = useState("");
   const [modoClientSecret, setModoClientSecret] = useState("");
   const [modoStoreId, setModoStoreId] = useState("");
+  const [modoProcessor, setModoProcessor] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -394,6 +395,7 @@ export function PaymentMethodsCard() {
               setModoClientId("");
               setModoClientSecret("");
               setModoStoreId("");
+              setModoProcessor("");
               setShowManual(false);
             }}
             onOpenPlans={() => setPlansProvider({ key: p.key, name: p.name })}
@@ -436,23 +438,24 @@ export function PaymentMethodsCard() {
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Pegá las credenciales de comercio de MODO (Client ID y Client
-                  Secret; Store ID si tenés varias sucursales). Se guardan
-                  cifradas del lado del servidor.
+                  Pegá las credenciales que te mandó MODO por email (Username y
+                  Password; Store ID sólo si tenés varias sucursales). Si son de
+                  ambiente de prueba (terminan en “-preprod”), activá el switch
+                  Sandbox del medio. Se guardan cifradas del lado del servidor.
                 </p>
               )}
               <Input
-                label="Client ID"
+                label="Username"
                 name="modo_client_id"
                 autoComplete="off"
                 data-1p-ignore
                 data-lpignore="true"
                 value={modoClientId}
                 onChange={(e) => setModoClientId(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID"}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Username de MODO"}
               />
               <Input
-                label="Client Secret"
+                label="Password"
                 type="password"
                 name="modo_client_secret"
                 autoComplete="new-password"
@@ -460,7 +463,7 @@ export function PaymentMethodsCard() {
                 data-lpignore="true"
                 value={modoClientSecret}
                 onChange={(e) => setModoClientSecret(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret"}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Password de MODO"}
               />
               <Input
                 label="Store ID (opcional)"
@@ -471,6 +474,16 @@ export function PaymentMethodsCard() {
                 value={modoStoreId}
                 onChange={(e) => setModoStoreId(e.target.value)}
                 placeholder="Sólo si tenés varias sucursales"
+              />
+              <Input
+                label="Processor code (opcional)"
+                name="modo_processor_code"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={modoProcessor}
+                onChange={(e) => setModoProcessor(e.target.value)}
+                placeholder="Ej: P1293 (viene en el email de MODO)"
               />
               <Button
                 className="w-full"
@@ -483,9 +496,12 @@ export function PaymentMethodsCard() {
                   connect.mutate({
                     provider_key: "modo",
                     secrets: {
-                      client_id: modoClientId.trim(),
-                      client_secret: modoClientSecret.trim(),
+                      username: modoClientId.trim(),
+                      password: modoClientSecret.trim(),
                       ...(modoStoreId.trim() ? { store_id: modoStoreId.trim() } : {}),
+                      ...(modoProcessor.trim()
+                        ? { processor_code: modoProcessor.trim() }
+                        : {}),
                     },
                   })
                 }

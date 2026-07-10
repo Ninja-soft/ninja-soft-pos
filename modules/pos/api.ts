@@ -651,6 +651,23 @@ export const posApi = {
     return data as { intent_id: string; init_point: string };
   },
 
+  // Estado del intent MODO sincronizado server-side (Edge modo_create_qr,
+  // action status): MODO no tiene webhook por intención, así que el poll del
+  // POS consulta la API real en cada tick (patrón pagos360).
+  modoIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("modo_create_qr", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
   pagos360IntentStatus: async (
     id: string,
   ): Promise<{ status: string; mp_payment_id: string | null }> => {

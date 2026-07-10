@@ -205,8 +205,11 @@ export function QrCheckoutModal({
     if (!open || loadingAll || startedRef.current) return;
     if (selfManaged) {
       startedRef.current = true;
-      chosenRef.current = null;
-      startQr(base);
+      // El medio puede definir un recargo % plano (input de Medios de pago):
+      // se aplica acá porque el checkout hosted cobra el monto que le mandemos.
+      const sc = round2((base * globalPct) / 100);
+      chosenRef.current = sc > 0 ? { label: "Recargo", surcharge: sc } : null;
+      startQr(round2(base + sc));
     } else if (globalMode) {
       startedRef.current = true;
       const sc = round2((base * globalPct) / 100);
@@ -278,12 +281,17 @@ export function QrCheckoutModal({
   const selecting =
     phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
 
+  // Logo del proveedor REAL del cobro (antes todo lo no mapeado caía al logo
+  // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
+  const PROVIDER_LOGOS: Record<string, string> = {
+    mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
+    mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
+    modo: "/img/medios_de_pago/Modo_cube.webp",
+    pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
+    payway: "/img/medios_de_pago/payway_cube.webp",
+  };
   const providerLogo =
-    provider === "mobbex"
-      ? "/img/medios_de_pago/Mobbex_cube.webp"
-      : provider === "modo"
-        ? "/img/medios_de_pago/Modo_cube.webp"
-        : "/img/medios_de_pago/mercado_pago_cube.webp";
+    PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={`Cobrar con QR · ${providerName}`}>

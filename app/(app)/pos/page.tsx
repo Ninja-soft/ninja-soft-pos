@@ -66,6 +66,7 @@ import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
+import { PointCheckoutModal } from "@/components/pos/PointCheckoutModal";
 import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
 import { ModifierPickerModal } from "@/components/pos/ModifierPickerModal";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
@@ -196,6 +197,8 @@ function PosPageInner() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrMobbexOpen, setQrMobbexOpen] = useState(false);
   const [qrModoOpen, setQrModoOpen] = useState(false);
+  // Cobro presencial con lector Mercado Point (H15 resto).
+  const [pointOpen, setPointOpen] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
   useEffect(() => {
@@ -326,6 +329,12 @@ function PosPageInner() {
   const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected && mobbexFeature !== false);
   const { data: modo } = useProviderMethod("modo");
   const modoReady = Boolean(modo?.enabled && modo?.connected && modoFeature !== false);
+  // Mercado Point: usa la CONEXIÓN de Mercado Pago (mp.connected, sin
+  // credenciales propias) + su propio enabled en Medios de pago + la feature
+  // de plan 'mercadopago_point'. El enforcement real corre en la Edge mp_point.
+  const pointFeature = useFeature("mercadopago_point");
+  const { data: point } = useProviderMethod("mercadopago_point");
+  const pointReady = Boolean(point?.enabled && mp?.connected && pointFeature !== false);
   const { data: posSettings } = usePosSettings();
   // Oferta contextual de garantía (H28): planes activos del tenant + flag para
   // des/activar la oferta automática (Configuración → Operación). Default on.
@@ -2157,6 +2166,24 @@ function PosPageInner() {
                 Cobrar con QR · MODO
               </button>
             )}
+            {pointReady && (
+              <button
+                type="button"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => ensureCustomer() && setPointOpen(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/mercado_pago_cube.webp"
+                    alt="Mercado Point"
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </span>
+                Cobrar con Point · tarjeta
+              </button>
+            )}
             <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
               <span>Imprimir ticket al cobrar</span>
               <Switch
@@ -2311,6 +2338,17 @@ function PosPageInner() {
         onApproved={(reference, amount, extras) => {
           setQrModoOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
+        }}
+      />
+      <PointCheckoutModal
+        open={pointOpen}
+        onOpenChange={setPointOpen}
+        base={total}
+        onApproved={(reference, amount, cardType) => {
+          setPointOpen(false);
+          // La tarjeta real (débito/crédito) la informa la API de MP al
+          // aprobar; las cuotas las eligió el cliente en el lector.
+          handleSale([{ method: cardType, amount, reference }], []);
         }}
       />
       <TicketModal

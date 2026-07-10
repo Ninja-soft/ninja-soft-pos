@@ -48,7 +48,12 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo"]);
+const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point"]);
+
+// Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
+// del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
+// cuotas/recargos los resuelve el lector (sin grid de planes ni recargo acá).
+const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
 
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
@@ -125,6 +130,19 @@ const PROVIDER_INFO: Record<string, Explain> = {
       "Al acreditarse, la venta se cierra sola y queda registrada.",
     ],
     recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
+  },
+  mercadopago_point: {
+    activa:
+      "Habilita el botón Cobrar con Point en el POS: el cobro se envía a tu lector Mercado Point y el cliente paga con tarjeta ahí.",
+    conexion:
+      "Usa tu conexión de Mercado Pago (no pide credenciales nuevas). Vinculá el lector a tu cuenta desde la app de MP y ponelo en modo PDV (el POS te lo ofrece).",
+    pasos: [
+      "En el POS tocás Cobrar con Point y elegís el lector.",
+      "El cliente pasa o apoya la tarjeta en el Point (las cuotas se eligen ahí).",
+      "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
+    ],
+    recargo:
+      "Los recargos/cuotas los maneja Mercado Pago en el lector; acá no se configura un % aparte.",
   },
   modo: {
     activa:
@@ -350,6 +368,7 @@ export function PaymentMethodsCard() {
             method={byKey.get(p.key)}
             plans={plans}
             features={features}
+            mpConnected={Boolean(byKey.get("mercadopago")?.config?.connected)}
             isOpen={expanded.has(p.key)}
             onToggleExpand={() => toggleExpand(p.key)}
             onConnect={() => {
@@ -641,10 +660,13 @@ function PaymentMethodRow({
   onOpenPlans,
   onSaveEnabled,
   onSaveSurcharge,
+  mpConnected = false,
 }: {
   provider: Provider;
   method: Method | undefined;
   plans: PlanForUpgrade[];
+  // Conexión de la fila de Mercado Pago (para medios que la reutilizan: Point).
+  mpConnected?: boolean;
   // Features activas del tenant. undefined mientras carga (optimista: no bloquea).
   features: Record<string, boolean> | undefined;
   isOpen: boolean;
@@ -656,11 +678,16 @@ function PaymentMethodRow({
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  const connected = Boolean(m?.config?.connected);
+  const connected = USES_MP_CONNECTION.has(p.key)
+    ? mpConnected
+    : Boolean(m?.config?.connected);
   const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
   const info = PROVIDER_INFO[p.key];
   // Medios con grid de planes: el recargo se configura ahí, no en la fila.
-  const hasPlans = IMPLEMENTED.has(p.key) && p.kind !== "manual";
+  const hasPlans =
+    IMPLEMENTED.has(p.key) && p.kind !== "manual" && !USES_MP_CONNECTION.has(p.key);
+  // Point: cuotas/recargo se resuelven en el lector → sin input de recargo.
+  const hideSurcharge = hasPlans || USES_MP_CONNECTION.has(p.key);
 
   // Gating por plan. Optimista mientras `features` es undefined (no parpadea).
   // Sólo gateamos medios IMPLEMENTADOS (no `soon`): ahí el switch se podía
@@ -744,6 +771,19 @@ function PaymentMethodRow({
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock size={13} /> Próximamente
             </span>
+          ) : USES_MP_CONNECTION.has(p.key) ? (
+            connected ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
+                <Check size={13} /> Vía Mercado Pago
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                title="Conectá Mercado Pago para usar Point"
+              >
+                <Link2 size={13} /> Requiere conectar MP
+              </span>
+            )
           ) : (
             <button
               onClick={onConnect}
@@ -790,7 +830,7 @@ function PaymentMethodRow({
         {/* Recargo (oculto en medios con planes: se configura en el grid) */}
         <div
           className={
-            hasPlans
+            hideSurcharge
               ? "hidden"
               : "hidden shrink-0 flex-col items-end gap-0.5 md:flex"
           }
@@ -884,6 +924,24 @@ function PaymentMethodRow({
             ) : soon ? (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock size={13} /> Próximamente
+              </span>
+            ) : USES_MP_CONNECTION.has(p.key) ? (
+              <span
+                className={
+                  connected
+                    ? "inline-flex items-center gap-1 text-xs font-semibold text-success"
+                    : "inline-flex items-center gap-1 text-xs text-muted-foreground"
+                }
+              >
+                {connected ? (
+                  <>
+                    <Check size={13} /> Vía Mercado Pago
+                  </>
+                ) : (
+                  <>
+                    <Link2 size={13} /> Requiere conectar MP
+                  </>
+                )}
               </span>
             ) : (
               <button

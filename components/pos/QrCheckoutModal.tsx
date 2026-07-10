@@ -46,7 +46,7 @@ export function QrCheckoutModal({
     amount: number,
     extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
-  provider?: "mercadopago" | "mobbex" | "modo";
+  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -57,7 +57,9 @@ export function QrCheckoutModal({
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
   // pantalla de planes y auto-arranca con el monto base. Mercado Pago y Mobbex
   // sí ofrecen la selección de tarjeta/cuota desde el POS.
-  const selfManaged = provider === "modo";
+  // MODO y Pagos360 resuelven medio/cuotas en su propia app/checkout hosted →
+  // el POS no muestra selección de planes y auto-arranca con el monto base.
+  const selfManaged = provider === "modo" || provider === "pagos360";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -110,7 +112,9 @@ export function QrCheckoutModal({
         ? posApi.createMobbexQr
         : provider === "modo"
           ? posApi.createModoQr
-          : posApi.createMpQr;
+          : provider === "pagos360"
+            ? posApi.createPagos360Link
+            : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
@@ -176,8 +180,13 @@ export function QrCheckoutModal({
   }, [open, loadingAll, globalMode, globalPct, activePlans.length]);
 
   const { data: status } = useQuery({
-    queryKey: ["mp-intent", intentId],
-    queryFn: () => posApi.mpIntentStatus(intentId!),
+    queryKey: ["mp-intent", provider, intentId],
+    // MP/Mobbex/MODO actualizan el intent por webhook → basta leer la fila.
+    // Pagos360 no exige webhook: la Edge sincroniza contra su API en cada poll.
+    queryFn: () =>
+      provider === "pagos360"
+        ? posApi.pagos360IntentStatus(intentId!)
+        : posApi.mpIntentStatus(intentId!),
     enabled: open && phase === "waiting" && Boolean(intentId),
     refetchInterval: 3000,
   });

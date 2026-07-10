@@ -201,6 +201,8 @@ function PosPageInner() {
   const [pointOpen, setPointOpen] = useState(false);
   // Link de pago Pagos360 (H21).
   const [qrPagos360Open, setQrPagos360Open] = useState(false);
+  // Formulario de pago Payway (H17).
+  const [qrPaywayOpen, setQrPaywayOpen] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
   useEffect(() => {
@@ -341,6 +343,11 @@ function PosPageInner() {
   const { data: pagos360 } = useProviderMethod("pagos360");
   const pagos360Ready = Boolean(
     pagos360?.enabled && pagos360?.connected && pagos360Feature !== false,
+  );
+  const paywayFeature = useFeature("payway");
+  const { data: payway } = useProviderMethod("payway");
+  const paywayReady = Boolean(
+    payway?.enabled && payway?.connected && paywayFeature !== false,
   );
   const { data: posSettings } = usePosSettings();
   // Oferta contextual de garantía (H28): planes activos del tenant + flag para
@@ -2209,6 +2216,24 @@ function PosPageInner() {
                 Cobrar con link · Pagos360
               </button>
             )}
+            {paywayReady && (
+              <button
+                type="button"
+                disabled={!hasShift || lines.length === 0}
+                onClick={() => ensureCustomer() && setQrPaywayOpen(true)}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#01a39a]/40 bg-[#01a39a]/10 px-4 py-3 font-semibold text-[#02786f] transition hover:bg-[#01a39a]/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/img/medios_de_pago/payway_cube.webp"
+                    alt="Payway"
+                    className="h-full w-full object-contain p-0.5"
+                  />
+                </span>
+                Cobrar con link · Payway
+              </button>
+            )}
             <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
               <span>Imprimir ticket al cobrar</span>
               <Switch
@@ -2385,6 +2410,18 @@ function PosPageInner() {
         onQrState={handleQrState}
         onApproved={(reference, amount, extras) => {
           setQrPagos360Open(false);
+          handleSale([{ method: "qr", amount, reference }], extras);
+        }}
+      />
+      <QrCheckoutModal
+        open={qrPaywayOpen}
+        onOpenChange={setQrPaywayOpen}
+        base={total}
+        provider="payway"
+        providerName="Payway"
+        onQrState={handleQrState}
+        onApproved={(reference, amount, extras) => {
+          setQrPaywayOpen(false);
           handleSale([{ method: "qr", amount, reference }], extras);
         }}
       />

@@ -651,6 +651,36 @@ export const posApi = {
     return data as { intent_id: string; init_point: string };
   },
 
+  // ── Payway (H17): formulario de pago hosted ────────────────────────────────
+  createPaywayLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("payway", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  paywayIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("payway", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
   // Estado del intent MODO sincronizado server-side (Edge modo_create_qr,
   // action status): MODO no tiene webhook por intención, así que el poll del
   // POS consulta la API real en cada tick (patrón pagos360).

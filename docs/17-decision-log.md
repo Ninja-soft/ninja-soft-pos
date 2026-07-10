@@ -990,6 +990,32 @@ La Edge `pagos360` expone `create` (payment_request con `external_reference` = i
 
 ---
 
+## ADR-029 — Payway por Formulario de pago hosted (checkout-payment-button)
+
+**Fecha:** 2026-07-10 · **Estado:** aceptada · **Hito:** F8 · H17
+
+### Contexto
+
+Payway/Prisma es gateway de tarjetas e-commerce: el flujo clásico exige tokenizar la tarjeta (PCI, datos sensibles en el front). Para un POS de mostrador eso no aplica; lo que sí aplica es su **Formulario de pago hosted** ("checkout payment button"), documentado en el SDK oficial `payway-ar/sdk-node-ventaonline`, con **sandbox público** (`developers.decidir.com`).
+
+### Decisión
+
+Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header y `public_apikey`/`site` en el body → `{web}/checkout/{payment_id}` como `init_point`) y `status` (GET `{v2}/payments/{payment_id}`; sólo acredita con `approved` + **monto exacto en centavos** — v2 informa centavos). `payway_webhook` (verify_jwt=false) recibe `notifications_url` pero **nunca acredita a ciegas**: re-verifica contra la API con la apikey del tenant; su GET sirve la pantalla neutra de retorno del cliente (`success_url`/`cancel_url`). El POS reusa `QrCheckoutModal` (self-managed) y el canal `method='qr'` (gating fino por intent ya mapeado). Credenciales: API Key pública + privada + Nº de comercio (`site`); ambiente por el switch Sandbox del medio.
+
+### Consecuencias
+
+- Cobro con tarjeta vía link/QR sin PCI en NinjaPos (la tarjeta se ingresa en el form de Payway).
+- Doble camino de confirmación (webhook re-verificado + polling) sin depender de configuración de webhooks en el panel del comercio.
+- **Pendiente:** validar con credenciales de sandbox propias del comercio (mismo estado que MODO/Pagos360: el dialecto viene del SDK oficial, falta el cobro de prueba).
+- `installments:[1]` en v1: los planes de cuotas de Payway (template/cc del comercio) quedan para el follow-up de cuotas (H58/F14).
+
+### Referencias
+
+- `supabase/functions/payway/index.ts`, `supabase/functions/payway_webhook/index.ts`, `components/pos/QrCheckoutModal.tsx`, `modules/pos/api.ts`, `app/(app)/pos/page.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`.
+- SDK oficial: github.com/payway-ar/sdk-node-ventaonline (endpoints, headers, payload y URLs de formulario).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

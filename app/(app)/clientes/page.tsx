@@ -186,7 +186,7 @@ export default function ClientesPage() {
               )}
               {isError && !isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-red-300">
+                  <td colSpan={5} className="px-4 py-10 text-center text-danger">
                     Error al cargar.{" "}
                     <button onClick={() => refetch()} className="underline">
                       Reintentar
@@ -238,7 +238,7 @@ export default function ClientesPage() {
                       <button
                         onClick={() => setDelTarget(c)}
                         title="Eliminar"
-                        className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                       >
                         <Trash2 size={16} />
                       </button>

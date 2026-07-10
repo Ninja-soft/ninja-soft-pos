@@ -254,7 +254,7 @@ export function CustomerHistoryModal({
                       </span>
                       <span className="shrink-0 text-right">
                         {c.expired && !exhausted ? (
-                          <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                          <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-warning">
                             Vencido
                           </span>
                         ) : exhausted ? (
@@ -311,7 +311,7 @@ export function CustomerHistoryModal({
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Recordar por WhatsApp"
-                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-emerald-300"
+                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-success"
                           >
                             <MessageCircle size={15} />
                           </a>
@@ -360,7 +360,7 @@ export function CustomerHistoryModal({
                   <span
                     className={
                       s.status === "voided"
-                        ? "text-xs text-red-300"
+                        ? "text-xs text-danger"
                         : "text-xs text-muted-foreground"
                     }
                   >

@@ -126,7 +126,7 @@ export function ZClosuresHistory() {
                         ? "text-muted-foreground"
                         : z.difference > 0
                           ? "text-emerald-400"
-                          : "text-red-300")
+                          : "text-danger")
                     }
                   >
                     {formatCurrency(z.difference)}

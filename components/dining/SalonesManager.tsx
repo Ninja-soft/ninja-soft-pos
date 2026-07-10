@@ -319,7 +319,7 @@ export function SalonesManager() {
                         <button
                           type="button"
                           onClick={() => delArea(area)}
-                          className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+                          className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
                           aria-label="Eliminar salón"
                         >
                           <Trash2 size={14} />
@@ -363,7 +363,7 @@ export function SalonesManager() {
                           <button
                             type="button"
                             onClick={() => delTable(t)}
-                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+                            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
                             aria-label="Eliminar mesa"
                           >
                             <Trash2 size={14} />

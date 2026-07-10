@@ -45,7 +45,7 @@ function discountState(
   if (d.valid_from > today)
     return {
       label: "Programado",
-      cls: "bg-sky-400/15 text-sky-300",
+      cls: "bg-sky-400/15 text-info",
     };
   if (d.valid_until && d.valid_until < today)
     return {
@@ -54,7 +54,7 @@ function discountState(
     };
   return {
     label: "Vigente",
-    cls: "bg-emerald-400/15 text-emerald-300",
+    cls: "bg-emerald-400/15 text-success",
   };
 }
 
@@ -306,7 +306,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
 
           {/* Trial info */}
           {isTrial && (
-            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-red-400/30 bg-red-400/5 text-red-300" : "border-yellow-400/30 bg-yellow-400/5 text-yellow-300"}`}>
+            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-red-400/30 bg-red-400/5 text-danger" : "border-yellow-400/30 bg-yellow-400/5 text-warning"}`}>
               <div className="flex items-center gap-1.5 font-medium">
                 <Clock size={14} />
                 {trialExpired ? "Trial vencido" : "En período de prueba"}
@@ -342,14 +342,14 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("converted")}
-                  className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-success transition hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   Convertir a pago
                 </button>
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("lost")}
-                  className="rounded border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs font-medium text-red-300 transition hover:bg-red-400/20 disabled:opacity-50"
+                  className="rounded border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs font-medium text-danger transition hover:bg-red-400/20 disabled:opacity-50"
                 >
                   Marcar perdido
                 </button>
@@ -362,8 +362,8 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
             <div
               className={`rounded-lg border p-3 text-sm ${
                 overdueDays > 0
-                  ? "border-red-400/30 bg-red-400/5 text-red-300"
-                  : "border-emerald-400/30 bg-emerald-400/5 text-emerald-300"
+                  ? "border-red-400/30 bg-red-400/5 text-danger"
+                  : "border-emerald-400/30 bg-emerald-400/5 text-success"
               }`}
             >
               <div className="flex items-center gap-1.5 font-medium">
@@ -496,7 +496,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                       <button
                         onClick={() => setRemoveId(d.id)}
                         title="Dar de baja"
-                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                       >
                         <Trash2 size={15} />
                       </button>

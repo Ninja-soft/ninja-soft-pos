@@ -371,13 +371,13 @@ function ItemRow({
             {item.notes ? ` · ${item.notes}` : ""}
           </span>
           {held && (
-            <span className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
+            <span className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
               <Clock size={11} /> En espera · Tiempo {item.course}
             </span>
           )}
           {/* Alergia/intolerancia (F13 · H47): destacada en rojo. */}
           {item.allergens && (
-            <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-red-300">
+            <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-danger">
               <AlertTriangle size={11} /> Alergia: {item.allergens}
             </span>
           )}
@@ -431,7 +431,7 @@ function ItemRow({
       <button
         type="button"
         onClick={() => onRemove(item.id)}
-        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+        className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
         aria-label="Quitar"
       >
         <Trash2 size={15} />

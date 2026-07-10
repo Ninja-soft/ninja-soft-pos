@@ -644,7 +644,7 @@ function TakeProductsStep({
                 <button
                   type="button"
                   aria-label="Quitar producto"
-                  className="ml-1 text-muted-foreground hover:text-red-300"
+                  className="ml-1 text-muted-foreground hover:text-danger"
                   onClick={() => setQty(l.productId, 0)}
                 >
                   <X size={15} />

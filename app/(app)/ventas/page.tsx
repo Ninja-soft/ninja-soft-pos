@@ -221,7 +221,7 @@ export default function VentasPage() {
               )}
               {isError && !isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-red-300">
+                  <td colSpan={6} className="px-4 py-10 text-center text-danger">
                     Error al cargar.{" "}
                     <button onClick={() => refetch()} className="underline">
                       Reintentar
@@ -251,11 +251,11 @@ export default function VentasPage() {
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5">
                       {s.status === "voided" ? (
-                        <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300">
+                        <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger">
                           Anulada
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                        <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success">
                           Completada
                         </span>
                       )}
@@ -307,7 +307,7 @@ export default function VentasPage() {
                         <button
                           onClick={() => setVoidTarget({ id: s.id, number: s.number })}
                           title="Anular"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                         >
                           <Ban size={16} />
                         </button>

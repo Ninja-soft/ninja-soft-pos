@@ -103,7 +103,7 @@ export default function LoginPage({
       </CardHeader>
       <CardContent>
         {inactivityLogout && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-warning">
             <Clock size={16} className="mt-0.5 shrink-0" />
             <span>
               Tu sesión se cerró por inactividad. Volvé a iniciar sesión para

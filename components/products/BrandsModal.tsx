@@ -146,7 +146,7 @@ export function BrandsModal({ open, onOpenChange }: Props) {
                     </button>
                     <button
                       onClick={() => setDeleteTarget(b)}
-                      className="rounded p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                      className="rounded p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                       title="Eliminar"
                     >
                       <Trash2 size={14} />

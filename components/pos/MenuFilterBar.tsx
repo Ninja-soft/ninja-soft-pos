@@ -67,7 +67,7 @@ function Chip({
       {label}
       {now && (
         <span
-          className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
+          className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
           title="Menú vigente ahora"
         >
           <Clock size={9} /> ahora

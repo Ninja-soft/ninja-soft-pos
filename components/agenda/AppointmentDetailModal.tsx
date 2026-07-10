@@ -148,7 +148,7 @@ export function AppointmentDetailModal({
             </span>
           )}
           {a.sale_id && a.sales?.number != null && (
-            <div className="flex items-center gap-2 text-emerald-300">
+            <div className="flex items-center gap-2 text-success">
               <Receipt size={15} className="shrink-0" />
               <span>Cobrado · Venta #{a.sales.number}</span>
             </div>
@@ -157,7 +157,7 @@ export function AppointmentDetailModal({
             <p className="border-t border-border pt-2 text-muted-foreground">{a.notes}</p>
           )}
           {a.status === "cancelado" && a.cancel_reason && (
-            <p className="border-t border-border pt-2 text-red-300">
+            <p className="border-t border-border pt-2 text-danger">
               Motivo: {a.cancel_reason}
             </p>
           )}

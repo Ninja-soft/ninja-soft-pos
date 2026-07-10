@@ -635,7 +635,7 @@ export function SubscriptionCard() {
             </div>
 
             {sub.cancel_at_period_end && !closureRequested && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-300">
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-warning">
                 <AlertTriangle size={14} className="shrink-0" />
                 Tu suscripción se cancela el {fmtDate(sub.current_period_end)}. Vas
                 a mantener el acceso hasta esa fecha.
@@ -1029,7 +1029,7 @@ export function SubscriptionCard() {
         className="max-w-md"
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-300">
+          <div className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-danger">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <div>
               Esto solicita el cierre de tu cuenta. Mantenés el acceso hasta el fin

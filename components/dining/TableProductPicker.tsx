@@ -187,7 +187,7 @@ export function TableProductPicker({
               onClick={() => setHold(true)}
               className={
                 hold
-                  ? "flex items-center gap-1 rounded-md bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-300"
+                  ? "flex items-center gap-1 rounded-md bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-warning"
                   : "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-muted-foreground transition hover:text-foreground"
               }
             >

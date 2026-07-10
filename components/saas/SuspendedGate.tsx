@@ -111,7 +111,7 @@ export function SuspendedGate({
               <Zap size={16} /> {cancelled ? "Activar un plan" : "Pagar y reactivar"}
             </Button>
           ) : (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs text-amber-300">
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-xs text-warning">
               <Lock size={15} className="mt-0.5 shrink-0" />
               <span>
                 {cancelled

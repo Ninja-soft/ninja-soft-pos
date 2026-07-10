@@ -299,7 +299,7 @@ function OrderCard({
         <div className="flex items-start justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
             {isDelivery ? (
-              <Bike size={14} className="shrink-0 text-sky-300" />
+              <Bike size={14} className="shrink-0 text-info" />
             ) : (
               <ShoppingBag size={14} className="shrink-0 text-ninja-flameSoft" />
             )}

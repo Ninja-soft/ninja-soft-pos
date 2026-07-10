@@ -31,9 +31,9 @@ const STATUS_LABELS: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   const cls =
     status === "approved"
-      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+      ? "border-emerald-500/40 bg-emerald-500/10 text-success"
       : status === "rejected"
-        ? "border-red-400/40 bg-red-400/10 text-red-300"
+        ? "border-red-400/40 bg-red-400/10 text-danger"
         : "border-border bg-muted text-muted-foreground";
   return (
     <span
@@ -164,7 +164,7 @@ export function QrIntentsModal({
           Aprobado: <strong>{formatCurrency(approvedTotal)}</strong>
         </span>
         {orphans.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-medium text-red-300">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-medium text-danger">
             <AlertTriangle size={14} /> {orphans.length} aprobado
             {orphans.length > 1 ? "s" : ""} sin venta • revisar
           </span>
@@ -233,11 +233,11 @@ export function QrIntentsModal({
                       <span className="font-mono text-xs">
                         {formatSaleNumber(i.saleNumber, numFmt)}
                         {i.saleStatus === "voided" && (
-                          <span className="ml-1 text-red-300">(anulada)</span>
+                          <span className="ml-1 text-danger">(anulada)</span>
                         )}
                       </span>
                     ) : i.status === "approved" ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-300">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-danger">
                         <AlertTriangle size={12} /> Sin venta
                       </span>
                     ) : (

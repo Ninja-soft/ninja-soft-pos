@@ -135,7 +135,7 @@ export default function InternalAuditPage() {
             )}
             {isError && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-red-300">
+                <td colSpan={6} className="px-4 py-10 text-center text-danger">
                   Error al cargar.{" "}
                   <button onClick={() => refetch()} className="underline">
                     Reintentar

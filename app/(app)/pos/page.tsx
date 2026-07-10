@@ -1541,7 +1541,7 @@ function PosPageInner() {
           deliveryOrder.status !== "cancelado" && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-400/30 bg-sky-400/[0.08] px-4 py-3">
               <span className="flex min-w-0 items-center gap-2.5 text-sm">
-                <Bike size={18} className="shrink-0 text-sky-300" />
+                <Bike size={18} className="shrink-0 text-info" />
                 <span className="min-w-0">
                   <span className="block break-words font-semibold text-foreground">
                     Cobrando {deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}
@@ -1580,7 +1580,7 @@ function PosPageInner() {
             <span
               className={
                 hasShift
-                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-emerald-300"
+                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-success"
                   : "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
               }
             >
@@ -1835,7 +1835,7 @@ function PosPageInner() {
                   {!l.giftPromoId && (
                     <button
                       onClick={() => removeLine(l.lineId)}
-                      className="text-muted-foreground hover:text-red-300"
+                      className="text-muted-foreground hover:text-danger"
                     >
                       <X size={15} />
                     </button>
@@ -1866,7 +1866,7 @@ function PosPageInner() {
                     </div>
                   )}
                   {l.packCreditId || l.giftPromoId ? (
-                    <span className="text-sm font-semibold text-emerald-300">Gratis</span>
+                    <span className="text-sm font-semibold text-success">Gratis</span>
                   ) : (
                     <span className="text-sm font-semibold">
                       {formatCurrency(lineSubtotal(l))}
@@ -1895,7 +1895,7 @@ function PosPageInner() {
                     tiene un pack que cubre esta línea con sesión disponible. */}
                 {l.packCreditId ? (
                   <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-success">
                       <Package size={13} /> Cubierto por el pack
                     </span>
                     <button
@@ -1914,7 +1914,7 @@ function PosPageInner() {
                       <button
                         type="button"
                         onClick={() => coverLineWithPack(l.lineId, credit.id)}
-                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/10"
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-success transition hover:bg-emerald-400/10"
                       >
                         <Package size={13} /> Usar sesión del pack ({credit.sessions_left} restantes)
                       </button>
@@ -2052,7 +2052,7 @@ function PosPageInner() {
                       setAppliedCoupon(null);
                       setCouponInput("");
                     }}
-                    className="text-muted-foreground transition hover:text-red-300"
+                    className="text-muted-foreground transition hover:text-danger"
                     title="Quitar cupón"
                   >
                     <X size={13} />

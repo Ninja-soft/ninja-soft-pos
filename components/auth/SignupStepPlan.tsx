@@ -134,7 +134,7 @@ export function SignupStepPlan({
                   </span>
                 ) : null}
                 {aiTrialDays > 0 && (
-                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-success">
                     {aiTrialDays} días gratis
                   </span>
                 )}

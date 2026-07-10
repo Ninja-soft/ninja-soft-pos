@@ -600,7 +600,7 @@ function SplitPaymentSection({
                 <button
                   type="button"
                   onClick={() => setLines((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="text-xs font-medium text-muted-foreground transition hover:text-red-300"
+                  className="text-xs font-medium text-muted-foreground transition hover:text-danger"
                 >
                   Quitar línea
                 </button>
@@ -647,8 +647,8 @@ function SplitPaymentSection({
         <div
           className={
             Math.abs(remaining) < 0.005
-              ? "flex justify-between font-semibold text-emerald-300"
-              : "flex justify-between font-semibold text-amber-300"
+              ? "flex justify-between font-semibold text-success"
+              : "flex justify-between font-semibold text-warning"
           }
         >
           <span>{remaining >= 0 ? "Restante" : "Sobra"}</span>

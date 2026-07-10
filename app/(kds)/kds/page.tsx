@@ -57,19 +57,19 @@ function tone(mins: number, status: KdsStatus) {
   if (status === "listo") {
     return {
       card: "border-emerald-400/50 bg-emerald-400/[0.08]",
-      timer: "text-emerald-300",
+      timer: "text-success",
     };
   }
   if (mins >= LATE_MIN) {
     return {
       card: "border-red-500/60 bg-red-500/[0.10] animate-pulse",
-      timer: "text-red-300",
+      timer: "text-danger",
     };
   }
   if (mins >= WARN_MIN) {
     return {
       card: "border-amber-400/50 bg-amber-400/[0.08]",
-      timer: "text-amber-300",
+      timer: "text-warning",
     };
   }
   return { card: "border-border bg-card", timer: "text-muted-foreground" };
@@ -154,13 +154,13 @@ function TicketCard({
       {/* ALERGIA / intolerancia (F13 · H47): lo más visible de la tarjeta — rojo,
           en negrita y con ⚠. Es seguridad alimentaria, no una nota más. */}
       {item.allergens && (
-        <p className="flex items-start gap-1.5 rounded-md border border-red-500/60 bg-red-500/15 px-2 py-1 text-sm font-bold uppercase tracking-wide text-red-200">
+        <p className="flex items-start gap-1.5 rounded-md border border-red-500/60 bg-red-500/15 px-2 py-1 text-sm font-bold uppercase tracking-wide text-danger">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>Alergia: {item.allergens}</span>
         </p>
       )}
       {item.notes && (
-        <p className="rounded-md bg-amber-400/10 px-2 py-1 text-sm font-medium text-amber-200">
+        <p className="rounded-md bg-amber-400/10 px-2 py-1 text-sm font-medium text-warning">
           {item.notes}
         </p>
       )}
@@ -391,7 +391,7 @@ function KdsInner() {
                 <div className="flex items-center justify-between px-1">
                   <span className="flex items-center gap-1.5 text-base font-bold">
                     {g.source === "delivery" ? (
-                      <Bike size={15} className="text-sky-300" />
+                      <Bike size={15} className="text-info" />
                     ) : (
                       <Utensils size={15} className="text-ninja-flameSoft" />
                     )}

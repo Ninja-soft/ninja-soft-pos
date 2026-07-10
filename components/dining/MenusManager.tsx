@@ -65,7 +65,7 @@ export function MenusManager() {
           activeNames.map((n: string) => (
             <span
               key={n}
-              className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-300"
+              className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-success"
             >
               {n}
             </span>
@@ -213,7 +213,7 @@ function MenuCard({ menu, active }: { menu: Menu; active: boolean }) {
           Activo
         </label>
         {active && (
-          <span className="mb-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+          <span className="mb-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-success">
             Vigente ahora
           </span>
         )}

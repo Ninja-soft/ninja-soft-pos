@@ -217,8 +217,8 @@ export default function CajaPage() {
                       <span
                         className={
                           m.type === "expense" || m.type === "sale_void"
-                            ? "text-red-300"
-                            : "text-emerald-300"
+                            ? "text-danger"
+                            : "text-success"
                         }
                       >
                         {formatCurrency(m.amount)}

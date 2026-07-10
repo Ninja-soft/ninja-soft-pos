@@ -369,7 +369,7 @@ export function QrCheckoutModal({
 
         {phase === "rejected" && (
           <div className="space-y-3 py-6">
-            <div className="text-lg font-bold text-red-300">Pago rechazado o cancelado</div>
+            <div className="text-lg font-bold text-danger">Pago rechazado o cancelado</div>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cerrar
             </Button>

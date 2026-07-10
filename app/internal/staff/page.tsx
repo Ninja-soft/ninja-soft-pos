@@ -198,7 +198,7 @@ export default function InternalStaffPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setLevelMut.mutate({ user_id: s.id, level: null })}
-                          className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                          className="rounded-md p-1.5 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                           title="Quitar del staff"
                         >
                           <Trash2 size={15} />

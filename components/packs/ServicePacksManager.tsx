@@ -268,7 +268,7 @@ export function ServicePacksManager() {
                 <button
                   type="button"
                   onClick={() => del(p)}
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-red-300"
+                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
                   aria-label="Eliminar"
                 >
                   <Trash2 size={15} />

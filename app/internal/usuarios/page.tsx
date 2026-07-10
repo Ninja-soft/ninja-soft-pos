@@ -198,13 +198,13 @@ export default function InternalUsersPage() {
                   <td className="px-4 py-3">
                     {u.suspended_at ? (
                       <span
-                        className="inline-flex rounded-full border border-red-400/40 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-red-300"
+                        className="inline-flex rounded-full border border-red-400/40 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger"
                         title={`Suspendido ${formatRelative(u.suspended_at)}`}
                       >
                         Suspendido
                       </span>
                     ) : (
-                      <span className="inline-flex rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                      <span className="inline-flex rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-success">
                         Activo
                       </span>
                     )}
@@ -222,8 +222,8 @@ export default function InternalUsersPage() {
                             title={u.suspended_at ? "Reactivar cuenta" : "Suspender cuenta"}
                             className={
                               u.suspended_at
-                                ? "rounded-md p-2 text-muted-foreground transition hover:bg-emerald-500/15 hover:text-emerald-300"
-                                : "rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-red-300"
+                                ? "rounded-md p-2 text-muted-foreground transition hover:bg-emerald-500/15 hover:text-success"
+                                : "rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                             }
                           >
                             {u.suspended_at ? <RotateCcw size={16} /> : <Ban size={16} />}

@@ -303,7 +303,7 @@ export function QrCheckoutModal({
                             +{p.surcharge_pct}% ({formatCurrency(sc)})
                           </span>
                         ) : (
-                          <span className="text-[11px] text-emerald-400">sin recargo</span>
+                          <span className="text-[11px] text-success">sin recargo</span>
                         )}
                       </button>
                     );
@@ -361,7 +361,7 @@ export function QrCheckoutModal({
         )}
 
         {phase === "approved" && (
-          <div className="py-8 text-emerald-400">
+          <div className="py-8 text-success">
             <div className="text-lg font-bold">¡Pago aprobado!</div>
             <div className="text-sm text-muted-foreground">Registrando la venta…</div>
           </div>

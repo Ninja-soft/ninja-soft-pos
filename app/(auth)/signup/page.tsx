@@ -109,11 +109,11 @@ function FiscalAndCode({
               Condición frente al IVA
             </label>
             <select className={ivaSelectCls} defaultValue="" {...register("ivaCondition")}>
-              <option value="" className="bg-ninja-deepViolet">
+              <option value="" className="bg-popover text-popover-foreground">
                 Seleccionar…
               </option>
               {IVA_CONDITIONS.map((c) => (
-                <option key={c} value={c} className="bg-ninja-deepViolet">
+                <option key={c} value={c} className="bg-popover text-popover-foreground">
                   {IVA_CONDITION_LABELS[c]}
                 </option>
               ))}

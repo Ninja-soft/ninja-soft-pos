@@ -240,7 +240,7 @@ export function BlockingNotificationBanner() {
 
   return (
     <div className="flex items-center gap-3 border-b border-red-700/40 bg-red-700/15 px-4 py-2.5 text-sm text-foreground">
-      <Bell size={16} className="shrink-0 text-red-400" />
+      <Bell size={16} className="shrink-0 text-danger" />
       <span className="min-w-0 flex-1 font-medium">{blocking.title}</span>
       <button
         type="button"

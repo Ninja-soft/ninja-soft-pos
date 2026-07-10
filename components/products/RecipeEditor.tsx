@@ -199,7 +199,7 @@ export function RecipeEditor({
         <div>
           <div className="text-xs text-muted-foreground">Margen</div>
           <div
-            className={`font-price font-bold tabular-nums ${margin < 0 ? "text-red-400" : "text-emerald-400"}`}
+            className={`font-price font-bold tabular-nums ${margin < 0 ? "text-danger" : "text-success"}`}
           >
             {formatCurrency(margin)}
             {mpct != null && (

@@ -75,7 +75,7 @@ export function SuspendedGate({
       <div className="w-full max-w-lg rounded-ninjaXl border border-red-500/30 bg-card/80 p-6 shadow-ninjaSoft backdrop-blur-xl sm:p-8">
         <div className="mb-5 flex items-center gap-3">
           <Isotype className="h-9 w-auto" />
-          <span className="grid h-10 w-10 place-items-center rounded-full border border-red-500/40 bg-red-500/10 text-red-400">
+          <span className="grid h-10 w-10 place-items-center rounded-full border border-red-500/40 bg-red-500/10 text-danger">
             <ShieldAlert size={20} />
           </span>
         </div>

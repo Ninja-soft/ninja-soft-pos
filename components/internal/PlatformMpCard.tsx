@@ -138,7 +138,7 @@ export function PlatformMpCard() {
               {save.isPending ? "Guardando…" : "Guardar"}
             </Button>
             {status?.updated_at && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+              <span className="inline-flex items-center gap-1 text-xs text-success">
                 <Check size={13} /> Actualizado{" "}
                 {new Date(status.updated_at).toLocaleString("es-AR")}
               </span>

@@ -107,10 +107,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const STATUS_TONE: Record<string, string> = {
   trial: "border-ninja-brightViolet/40 bg-ninja-brightViolet/10 text-ninja-brightViolet",
-  active: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
-  past_due: "border-amber-500/40 bg-amber-500/10 text-amber-400",
-  suspended: "border-red-500/40 bg-red-500/10 text-red-400",
-  cancelled: "border-red-500/40 bg-red-500/10 text-red-400",
+  active: "border-emerald-500/40 bg-emerald-500/10 text-success",
+  past_due: "border-amber-500/40 bg-amber-500/10 text-warning",
+  suspended: "border-red-500/40 bg-red-500/10 text-danger",
+  cancelled: "border-red-500/40 bg-red-500/10 text-danger",
 };
 const AI_ADDON_KEYS = ["ai_assistant", "asistente_ia"];
 
@@ -527,7 +527,7 @@ export function SubscriptionCard() {
   } else if (sub.cancel_at_period_end) {
     periodLine = {
       label: `Acceso hasta el ${fmtDate(sub.current_period_end)} (no se renueva)`,
-      tone: "text-amber-400",
+      tone: "text-warning",
     };
   } else if (daysLeft != null) {
     periodLine = isTrial
@@ -536,7 +536,7 @@ export function SubscriptionCard() {
             daysLeft === 0
               ? "Tu prueba termina hoy"
               : `Te ${daysLeft === 1 ? "queda 1 día" : `quedan ${daysLeft} días`} de prueba gratis`,
-          tone: daysLeft <= 3 ? "text-amber-400" : "text-ninja-brightViolet",
+          tone: daysLeft <= 3 ? "text-warning" : "text-ninja-brightViolet",
         }
       : {
           label:
@@ -615,7 +615,7 @@ export function SubscriptionCard() {
               <div className="flex items-center gap-2">
                 <span
                   className={`inline-flex items-center gap-1.5 text-sm ${
-                    recentChange ? "text-emerald-400" : "text-muted-foreground"
+                    recentChange ? "text-success" : "text-muted-foreground"
                   }`}
                 >
                   {recentChange ? (
@@ -748,12 +748,12 @@ export function SubscriptionCard() {
                   <div className="font-medium">Asistente IA</div>
                   <div className="text-xs">
                     {aiAddon?.cancel_at_period_end ? (
-                      <span className="text-amber-400">
+                      <span className="text-warning">
                         Se da de baja el {fmtDate(aiAddon?.current_period_end)}
                       </span>
                     ) : (
                       <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 text-emerald-400">
+                        <span className="inline-flex items-center gap-1 text-success">
                           <Check size={12} /> Activo
                         </span>
                         {aiComped ? (
@@ -936,7 +936,7 @@ export function SubscriptionCard() {
           columnsClassName="sm:grid-cols-2 lg:grid-cols-4"
           renderCta={(p, isCompared) =>
             isCompared ? (
-              <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-emerald-400">
+              <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-success">
                 <Check size={14} /> Tu plan actual
               </span>
             ) : (

@@ -23,6 +23,11 @@
 /* ---------- Void (violeta) — tema principal ---------- */
 :root,
 [data-theme="ninja-dark"] {
+  /* Widgets nativos (popup de <select>, date/time pickers, scrollbars,
+     autofill) NO leen nuestras CSS vars: siguen color-scheme. Sin esto,
+     con el navegador/OS en oscuro los selects quedaban oscuros aun en
+     tema claro (y viceversa). Cada bloque de tema declara el suyo. */
+  color-scheme: dark;
   --background: #0a0518;
   --foreground: #f4f2ff;
   --card: rgba(22, 15, 48, 0.72);
@@ -60,6 +65,7 @@
 
 /* ---------- Noir (carbón neutro) ---------- */
 [data-theme="ninja-noir"] {
+  color-scheme: dark;
   --background: #0b0c0f;
   --foreground: #f2f3f5;
   --card: rgba(255, 255, 255, 0.04);
@@ -92,6 +98,7 @@
 
 /* ---------- Lavanda (claro) ---------- */
 [data-theme="ninja-light"] {
+  color-scheme: light;
   --background: #f6f5fc;
   --foreground: #15111f;
   --card: #ffffff;
@@ -126,6 +133,7 @@
 
 /* ---------- Arena (claro cálido) ---------- */
 [data-theme="ninja-sand"] {
+  color-scheme: light;
   --background: #fbf7f1;
   --foreground: #211a12;
   --card: #ffffff;

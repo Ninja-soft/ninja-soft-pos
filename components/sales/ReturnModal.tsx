@@ -58,10 +58,10 @@ type Refund = "cash" | "store_credit";
 // Paleta del destino de stock (reusada por el badge y la tarjeta explicativa).
 function destTone(d: string): string {
   return d === "resale"
-    ? "bg-emerald-400/15 text-emerald-400"
+    ? "bg-emerald-400/15 text-success"
     : d === "warehouse"
-      ? "bg-sky-400/15 text-sky-400"
-      : "bg-amber-400/15 text-amber-400";
+      ? "bg-sky-400/15 text-info"
+      : "bg-amber-400/15 text-warning";
 }
 
 // Devolución PRO — flujo por pasos. El motivo fija el destino de stock; la
@@ -324,7 +324,7 @@ export function ReturnModal({
                 {saleCustomerId ? (
                   <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-sm">
                     <span className="flex items-center gap-2">
-                      <UserPlus size={15} className="text-emerald-400" />
+                      <UserPlus size={15} className="text-success" />
                       Vale para el cliente de la venta:{" "}
                       <strong>{saleCustomerName ?? "cliente"}</strong>
                     </span>
@@ -449,7 +449,7 @@ function ExchangeResultView({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-emerald-400">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-success">
           <Check size={18} />
         </span>
         <div className="text-sm">
@@ -476,7 +476,7 @@ function ExchangeResultView({
           <span
             className={cn(
               "font-price font-bold tabular-nums",
-              charged ? "text-ninja-flameSoft" : surplus ? "text-emerald-400" : "text-muted-foreground",
+              charged ? "text-ninja-flameSoft" : surplus ? "text-success" : "text-muted-foreground",
             )}
           >
             {formatCurrency(charged ? result.difference : result.surplus)}
@@ -502,7 +502,7 @@ function ExchangeResultView({
             {result.voucher_code}
           </div>
           {surplus && result.surplus_to === "store_credit" && (
-            <div className="mt-0.5 text-xs text-emerald-400">
+            <div className="mt-0.5 text-xs text-success">
               Saldo a favor {formatCurrency(result.surplus)} — canjeable en el POS
             </div>
           )}
@@ -539,7 +539,7 @@ function Stepper({
                   active
                     ? "border-ninja-flame bg-ninja-flame/15 text-ninja-flameSoft"
                     : done
-                      ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-400"
+                      ? "border-emerald-400/40 bg-emerald-400/15 text-success"
                       : "border-border bg-muted/40 text-muted-foreground",
                 )}
               >
@@ -707,7 +707,7 @@ function ReasonStep({
         >
           <option value="">Elegí un motivo…</option>
           {reasons.map((r) => (
-            <option key={r.id} value={r.id} className="bg-ninja-deepViolet">
+            <option key={r.id} value={r.id} className="bg-popover text-popover-foreground">
               {r.label}
             </option>
           ))}
@@ -930,7 +930,7 @@ function VoucherCustomerPicker({
       <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-2 text-sm">
-            <UserPlus size={15} className="text-emerald-400" />
+            <UserPlus size={15} className="text-success" />
             Vale para <strong>{selected.name}</strong>
           </span>
           <button
@@ -999,7 +999,7 @@ function VoucherCustomerPicker({
   return (
     <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] p-3.5">
       <div className="mb-2.5 flex items-center gap-2 text-sm font-medium">
-        <Ticket size={15} className="text-amber-400" />
+        <Ticket size={15} className="text-warning" />
         El vale necesita un cliente
       </div>
       {creating ? (
@@ -1027,7 +1027,7 @@ function VoucherCustomerPicker({
               >
                 <option value="">—</option>
                 {DOC_TYPES.map((d) => (
-                  <option key={d} value={d} className="bg-ninja-deepViolet">
+                  <option key={d} value={d} className="bg-popover text-popover-foreground">
                     {DOC_TYPE_LABELS[d]}
                   </option>
                 ))}
@@ -1188,7 +1188,7 @@ function ReturnResult({
   return (
     <div className="space-y-4">
       <div className="no-print flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-emerald-400">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-success">
           <Check size={18} />
         </span>
         <div className="text-sm">

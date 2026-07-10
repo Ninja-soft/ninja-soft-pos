@@ -216,7 +216,7 @@ export default function InternalTenantDetail({
               }
             >
               {STATUSES.map((s) => (
-                <option key={s.key} value={s.key} className="bg-ninja-deepViolet">
+                <option key={s.key} value={s.key} className="bg-popover text-popover-foreground">
                   {s.name}
                 </option>
               ))}
@@ -236,7 +236,7 @@ export default function InternalTenantDetail({
               }
             >
               {VERTICALS.map((v) => (
-                <option key={v} value={v} className="bg-ninja-deepViolet">
+                <option key={v} value={v} className="bg-popover text-popover-foreground">
                   {VERTICAL_LABELS[v]}
                 </option>
               ))}

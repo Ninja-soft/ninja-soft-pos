@@ -271,10 +271,10 @@ function DestinationBadge({ destination }: { destination: StockDestination }) {
   const meta = STOCK_DESTINATIONS.find((d) => d.value === destination);
   const tone =
     destination === "resale"
-      ? "bg-emerald-400/15 text-emerald-400"
+      ? "bg-emerald-400/15 text-success"
       : destination === "warehouse"
-        ? "bg-sky-400/15 text-sky-400"
-        : "bg-amber-400/15 text-amber-400";
+        ? "bg-sky-400/15 text-info"
+        : "bg-amber-400/15 text-warning";
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
       {meta?.label ?? destination}

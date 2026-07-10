@@ -289,7 +289,7 @@ export function ExchangeFlow({
                 A cobrar {formatCurrency(difference)}
               </span>
             ) : difference < -0.001 ? (
-              <span className="text-emerald-400">
+              <span className="text-success">
                 Sobrante {formatCurrency(surplus)}
               </span>
             ) : (
@@ -349,7 +349,7 @@ function Stepper({
                   active
                     ? "border-ninja-flame bg-ninja-flame/15 text-ninja-flameSoft"
                     : done
-                      ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-400"
+                      ? "border-emerald-400/40 bg-emerald-400/15 text-success"
                       : "border-border bg-muted/40 text-muted-foreground",
                 )}
               >
@@ -467,10 +467,10 @@ function ReasonStep({
 }) {
   const tone =
     destination === "resale"
-      ? "bg-emerald-400/15 text-emerald-400"
+      ? "bg-emerald-400/15 text-success"
       : destination === "warehouse"
-        ? "bg-sky-400/15 text-sky-400"
-        : "bg-amber-400/15 text-amber-400";
+        ? "bg-sky-400/15 text-info"
+        : "bg-amber-400/15 text-warning";
   return (
     <div className="space-y-3">
       <div>
@@ -484,7 +484,7 @@ function ReasonStep({
         >
           <option value="">Elegí un motivo…</option>
           {reasons.map((r) => (
-            <option key={r.id} value={r.id} className="bg-ninja-deepViolet">
+            <option key={r.id} value={r.id} className="bg-popover text-popover-foreground">
               {r.label}
             </option>
           ))}
@@ -708,7 +708,7 @@ function DifferenceStep({
               difference > 0.001
                 ? "text-ninja-flameSoft"
                 : difference < -0.001
-                  ? "text-emerald-400"
+                  ? "text-success"
                   : "text-muted-foreground",
             )}
           >
@@ -795,7 +795,7 @@ function DifferenceStep({
         {customer ? (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-sm">
             <span className="flex items-center gap-2">
-              <UserPlus size={15} className="text-emerald-400" />
+              <UserPlus size={15} className="text-success" />
               <strong>{customer.name}</strong>
             </span>
             {!customer.locked && (

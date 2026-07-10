@@ -134,7 +134,7 @@ export function VoucherRedeemModal({
               <VoucherStatus status={found.status} />
             </div>
             {needsCustomer && (
-              <p className="mt-2 text-xs text-amber-400">
+              <p className="mt-2 text-xs text-warning">
                 Este vale no tiene cliente. Elegí un cliente en la venta para acreditarle el saldo.
               </p>
             )}
@@ -160,10 +160,10 @@ export function VoucherRedeemModal({
 
 function VoucherStatus({ status }: { status: VoucherLookup["status"] }) {
   const map: Record<VoucherLookup["status"], { label: string; cls: string }> = {
-    active: { label: "Disponible", cls: "bg-emerald-400/15 text-emerald-400" },
+    active: { label: "Disponible", cls: "bg-emerald-400/15 text-success" },
     redeemed: { label: "Ya canjeado", cls: "bg-muted text-muted-foreground" },
     void: { label: "Anulado", cls: "bg-muted text-muted-foreground" },
-    expired: { label: "Vencido", cls: "bg-amber-400/15 text-amber-400" },
+    expired: { label: "Vencido", cls: "bg-amber-400/15 text-warning" },
   };
   const m = map[status];
   return (

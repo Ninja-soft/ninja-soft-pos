@@ -517,7 +517,7 @@ export default function InternalNotificacionesPage() {
                             title="Borrar notificación"
                             aria-label="Borrar notificación"
                             onClick={() => setToDelete(n)}
-                            className="inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-red-500"
+                            className="inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-danger"
                           >
                             <Trash2 size={15} />
                           </button>

@@ -160,7 +160,7 @@ export function CustomerHistoryModal({
               <div
                 className={
                   data.creditBalance > 0
-                    ? "font-price text-lg font-black tabular-nums text-emerald-400"
+                    ? "font-price text-lg font-black tabular-nums text-success"
                     : "font-price text-lg font-black tabular-nums text-foreground"
                 }
               >
@@ -172,7 +172,7 @@ export function CustomerHistoryModal({
               <div
                 className={
                   data.accountDebt > 0
-                    ? "font-price text-lg font-black tabular-nums text-red-400"
+                    ? "font-price text-lg font-black tabular-nums text-danger"
                     : "font-price text-lg font-black tabular-nums text-foreground"
                 }
               >
@@ -180,7 +180,7 @@ export function CustomerHistoryModal({
               </div>
               {data.accountDebt > 0 && data.nextDue != null && (
                 data.nextDue < startOfToday() ? (
-                  <div className="mt-1 text-xs text-red-400">
+                  <div className="mt-1 text-xs text-danger">
                     Vencido desde {formatDueDate(data.nextDue)}
                   </div>
                 ) : (
@@ -262,7 +262,7 @@ export function CustomerHistoryModal({
                             Sin sesiones
                           </span>
                         ) : (
-                          <span className="font-price text-base font-black tabular-nums text-emerald-400">
+                          <span className="font-price text-base font-black tabular-nums text-success">
                             {c.sessions_left}
                             <span className="ml-1 text-xs font-medium text-muted-foreground">
                               {c.sessions_left === 1 ? "sesión" : "sesiones"}

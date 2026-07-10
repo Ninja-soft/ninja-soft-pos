@@ -125,7 +125,7 @@ export function ZClosuresHistory() {
                       (z.difference === 0
                         ? "text-muted-foreground"
                         : z.difference > 0
-                          ? "text-emerald-400"
+                          ? "text-success"
                           : "text-danger")
                     }
                   >

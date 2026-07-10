@@ -160,7 +160,7 @@ export function UpgradeModal({
               {/* Qué desbloquea (impact) — refuerzo del valor. */}
               {info?.impact && (
                 <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <Check size={13} className="mt-0.5 shrink-0 text-emerald-400" />
+                  <Check size={13} className="mt-0.5 shrink-0 text-success" />
                   <span>Al mejorar, se activa {featureLabel.toLowerCase()} y todo lo del plan {target.name}.</span>
                 </p>
               )}

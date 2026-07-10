@@ -472,7 +472,7 @@ function SplitPaymentSection({
                 className="h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
               >
                 {methods.map((m) => (
-                  <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
+                  <option key={m.value} value={m.value} className="bg-popover text-popover-foreground">
                     {m.label}
                   </option>
                 ))}
@@ -1032,7 +1032,7 @@ export function PaymentModal({
             className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
           >
             {methods.map((m) => (
-              <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
+              <option key={m.value} value={m.value} className="bg-popover text-popover-foreground">
                 {m.label}
               </option>
             ))}
@@ -1054,7 +1054,7 @@ export function PaymentModal({
             >
               <option value="">Sin asignar (sin comisión)</option>
               {(professionals ?? []).map((p) => (
-                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                   {p.name}
                   {p.commission_pct != null ? ` · ${Number(p.commission_pct)}%` : ""}
                 </option>
@@ -1077,7 +1077,7 @@ export function PaymentModal({
             >
               <option value="">Sin plan / recargo</option>
               {methodPlans.map((p) => (
-                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                   {p.label}
                   {Number(p.surcharge_pct) > 0 ? ` (+${Number(p.surcharge_pct)}%)` : ""}
                 </option>
@@ -1139,7 +1139,7 @@ export function PaymentModal({
             >
               <option value="">Sin garantía extendida</option>
               {(wplans ?? []).map((p: WarrantyPlan) => (
-                <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+                <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                   {p.label} ({p.months} meses · {formatCurrency(Number(p.price))})
                 </option>
               ))}
@@ -1170,7 +1170,7 @@ export function PaymentModal({
               className="h-11 w-40 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
             >
               {TIP_METHODS.map((m) => (
-                <option key={m.value} value={m.value} className="bg-ninja-deepViolet">
+                <option key={m.value} value={m.value} className="bg-popover text-popover-foreground">
                   {m.label}
                 </option>
               ))}
@@ -1211,7 +1211,7 @@ export function PaymentModal({
             {/* Descuento por medio de pago (F9 · H54): extra sobre la promo del
                 carrito al elegir este medio. */}
             {methodPromoExtra > 0 && (
-              <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+              <div className="flex justify-between text-success">
                 <span className="truncate">{appliedPromo?.name ?? "Descuento por medio"}</span>
                 <span>−{formatCurrency(methodPromoExtra)}</span>
               </div>

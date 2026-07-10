@@ -374,7 +374,7 @@ function KdsInner() {
       <main className="flex-1 p-4">
         {totalActive === 0 ? (
           <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
-            <Check size={34} className="text-emerald-400" />
+            <Check size={34} className="text-success" />
             <p className="text-sm text-muted-foreground">
               {activeStation
                 ? `No hay pedidos pendientes en ${KDS_STATION_LABELS[activeStation as keyof typeof KDS_STATION_LABELS] ?? activeStation}.`

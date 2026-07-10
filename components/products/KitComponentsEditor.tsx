@@ -122,7 +122,7 @@ export function KitComponentsEditor({ kitId }: { kitId: string }) {
           {products
             ?.filter((p) => p.id !== kitId && !p.is_kit)
             .map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name}
               </option>
             ))}

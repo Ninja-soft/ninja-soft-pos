@@ -90,7 +90,7 @@ export default function OnboardingPage() {
                   {...register("industry")}
                 >
                   {INDUSTRIES.map((key) => (
-                    <option key={key} value={key} className="bg-ninja-deepViolet">
+                    <option key={key} value={key} className="bg-popover text-popover-foreground">
                       {INDUSTRY_LABELS[key]}
                     </option>
                   ))}

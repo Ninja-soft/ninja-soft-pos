@@ -389,7 +389,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               }}
             >
               {planOptions.map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}
@@ -664,7 +664,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               onChange={(e) => setGrantPlan(e.target.value)}
             >
               {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}
@@ -727,7 +727,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
               onChange={(e) => setGrantPlan(e.target.value)}
             >
               {(globalPlans ?? []).map((p) => (
-                <option key={p.key} value={p.key} className="bg-ninja-deepViolet">
+                <option key={p.key} value={p.key} className="bg-popover text-popover-foreground">
                   {p.name}
                 </option>
               ))}

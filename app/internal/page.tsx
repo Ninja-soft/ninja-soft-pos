@@ -19,10 +19,10 @@ import { TenantSearchTable } from "@/components/internal/TenantSearchTable";
 import { formatCurrency } from "@/lib/utils/format";
 
 const STATUS_COLOR: Record<string, string> = {
-  trial: "text-yellow-400",
-  active: "text-emerald-400",
-  past_due: "text-orange-400",
-  suspended: "text-red-400",
+  trial: "text-warning",
+  active: "text-success",
+  past_due: "text-warning",
+  suspended: "text-danger",
   cancelled: "text-muted-foreground",
 };
 
@@ -152,19 +152,19 @@ export default async function InternalHomePage() {
           label="En prueba"
           value={nTrial}
           icon={<TrendingUp size={18} />}
-          color="text-yellow-400"
+          color="text-warning"
         />
         <KpiCard
           label="Activos"
           value={nActive}
           icon={<BarChart3 size={18} />}
-          color="text-emerald-400"
+          color="text-success"
         />
         <KpiCard
           label="Con problemas"
           value={nProblemas}
           icon={<AlertTriangle size={18} />}
-          color={nProblemas > 0 ? "text-orange-400" : undefined}
+          color={nProblemas > 0 ? "text-warning" : undefined}
           sub={nProblemas > 0 ? `${nPastDue} pago pend. · ${nSuspended} susp.` : undefined}
         />
         <KpiCard
@@ -185,14 +185,14 @@ export default async function InternalHomePage() {
           label="Conversión trial→paid"
           value={convRate !== null ? `${convRate}%` : null}
           icon={<BarChart3 size={18} />}
-          color={convRate !== null && convRate >= 50 ? "text-emerald-400" : "text-orange-400"}
+          color={convRate !== null && convRate >= 50 ? "text-success" : "text-warning"}
           sub={`${nActive} activos · ${nCancelled} cancelados`}
         />
         <KpiCard
           label="Churn 30d"
           value={churnRate !== null ? `${churnRate}%` : null}
           icon={<TrendingUp size={18} />}
-          color={churnRate !== null && churnRate > 0 ? "text-red-400" : "text-emerald-400"}
+          color={churnRate !== null && churnRate > 0 ? "text-danger" : "text-success"}
           sub={`${cancelled30d} baja${cancelled30d === 1 ? "" : "s"} · 30d`}
           title="Aproximado: cancelaciones de los últimos 30 días sobre la base activa."
         />
@@ -257,7 +257,7 @@ export default async function InternalHomePage() {
 
       {/* ── Alertas ── */}
       {nProblemas > 0 && (
-        <div className="mt-4 flex items-start gap-3 rounded-lg border border-orange-400/30 bg-orange-400/5 p-4 text-sm text-orange-300">
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-orange-400/30 bg-orange-400/5 p-4 text-sm text-warning">
           <AlertTriangle size={18} className="mt-0.5 shrink-0" />
           <div>
             <span className="font-semibold">
@@ -265,7 +265,7 @@ export default async function InternalHomePage() {
             </span>{" "}
             {nPastDue > 0 && `${nPastDue} con pago pendiente. `}
             {nSuspended > 0 && `${nSuspended} suspendido${nSuspended > 1 ? "s" : ""}. `}
-            <Link href="/internal/tenants" className="underline hover:text-orange-200">
+            <Link href="/internal/tenants" className="underline hover:text-foreground">
               Ver negocios
             </Link>
           </div>

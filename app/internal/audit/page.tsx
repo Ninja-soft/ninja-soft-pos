@@ -72,7 +72,7 @@ export default function InternalAuditPage() {
         >
           <option value="">Todos los negocios</option>
           {(tenants ?? []).map((t) => (
-            <option key={t.id} value={t.id} className="bg-ninja-deepViolet">
+            <option key={t.id} value={t.id} className="bg-popover text-popover-foreground">
               {t.name}
             </option>
           ))}
@@ -84,7 +84,7 @@ export default function InternalAuditPage() {
         >
           <option value="">Todas las entidades</option>
           {(entityTypes ?? []).map((et) => (
-            <option key={et} value={et} className="bg-ninja-deepViolet">
+            <option key={et} value={et} className="bg-popover text-popover-foreground">
               {et}
             </option>
           ))}

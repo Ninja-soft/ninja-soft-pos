@@ -288,7 +288,7 @@ export default function ProductosPage() {
           >
             <option value="">Todas las categorías</option>
             {(categories ?? []).map((c) => (
-              <option key={c.id} value={c.id} className="bg-ninja-deepViolet">
+              <option key={c.id} value={c.id} className="bg-popover text-popover-foreground">
                 {c.name}
               </option>
             ))}
@@ -300,7 +300,7 @@ export default function ProductosPage() {
           >
             <option value="">Todas las marcas</option>
             {(brands ?? []).map((b) => (
-              <option key={b.id} value={b.id} className="bg-ninja-deepViolet">
+              <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
                 {b.name}
               </option>
             ))}

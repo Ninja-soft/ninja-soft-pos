@@ -252,7 +252,7 @@ export function CatalogsManager() {
                         className={cn(
                           "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase",
                           c.isActive
-                            ? "bg-emerald-500/15 text-emerald-400"
+                            ? "bg-emerald-500/15 text-success"
                             : "bg-muted text-muted-foreground",
                         )}
                       >
@@ -327,7 +327,7 @@ export function CatalogsManager() {
                 onChange={(e) => onPickExcel(e.target.files?.[0])}
               />
               {lastUpload ? (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-xs text-success">
                   <Check size={13} /> Subido: {lastUpload}
                 </span>
               ) : (

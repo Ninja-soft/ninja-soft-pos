@@ -111,7 +111,7 @@ export default function InternalTenantsPage() {
         >
           <option value="">Todos los estados</option>
           {Object.entries(STATUS_LABELS).map(([k, label]) => (
-            <option key={k} value={k} className="bg-ninja-deepViolet">
+            <option key={k} value={k} className="bg-popover text-popover-foreground">
               {label}
             </option>
           ))}
@@ -123,7 +123,7 @@ export default function InternalTenantsPage() {
         >
           <option value="">Todos los planes</option>
           {plans.map(([key, name]) => (
-            <option key={key} value={key} className="bg-ninja-deepViolet">
+            <option key={key} value={key} className="bg-popover text-popover-foreground">
               {name}
             </option>
           ))}
@@ -136,7 +136,7 @@ export default function InternalTenantsPage() {
         >
           <option value="">Todos los flags</option>
           {(flagsCatalog ?? []).map((f) => (
-            <option key={f.key} value={f.key} className="bg-ninja-deepViolet">
+            <option key={f.key} value={f.key} className="bg-popover text-popover-foreground">
               {f.key}
             </option>
           ))}

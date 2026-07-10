@@ -86,7 +86,7 @@ export function StockAdjustModal({ open, onOpenChange, product }: Props) {
             {...register("reason")}
           >
             {ADJUST_REASONS.map((r) => (
-              <option key={r} value={r} className="bg-ninja-deepViolet">
+              <option key={r} value={r} className="bg-popover text-popover-foreground">
                 {ADJUST_REASON_LABELS[r]}
               </option>
             ))}

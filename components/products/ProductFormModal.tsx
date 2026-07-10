@@ -241,7 +241,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           >
             <option value="">Sin categoría</option>
             {flattenCategories(categories ?? []).map(({ cat, depth }) => (
-              <option key={cat.id} value={cat.id} className="bg-ninja-deepViolet">
+              <option key={cat.id} value={cat.id} className="bg-popover text-popover-foreground">
                 {`${"  ".repeat(depth)}${depth > 0 ? "› " : ""}${cat.name}`}
               </option>
             ))}
@@ -275,7 +275,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           >
             <option value="">Sin marca</option>
             {brands?.map((b) => (
-              <option key={b.id} value={b.id} className="bg-ninja-deepViolet">
+              <option key={b.id} value={b.id} className="bg-popover text-popover-foreground">
                 {b.name}
               </option>
             ))}
@@ -429,7 +429,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 >
                   <option value="">Sin estación</option>
                   {KDS_STATIONS.map((s) => (
-                    <option key={s} value={s} className="bg-ninja-deepViolet">
+                    <option key={s} value={s} className="bg-popover text-popover-foreground">
                       {KDS_STATION_LABELS[s]}
                     </option>
                   ))}

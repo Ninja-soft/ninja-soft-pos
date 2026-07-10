@@ -28,9 +28,9 @@ const VARIANT = {
   success: {
     icon: CheckCircle2,
     ring: "ring-emerald-500/20",
-    iconCls: "text-emerald-400",
+    iconCls: "text-success",
   },
-  error: { icon: XCircle, ring: "ring-red-500/20", iconCls: "text-red-400" },
+  error: { icon: XCircle, ring: "ring-red-500/20", iconCls: "text-danger" },
   info: { icon: Info, ring: "ring-ninja-flameSoft/25", iconCls: "text-ninja-flameSoft" },
 } as const;
 

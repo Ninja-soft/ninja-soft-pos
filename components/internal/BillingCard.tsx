@@ -595,7 +595,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
               className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
             >
               {Object.entries(MEDIUM_LABELS).map(([k, v]) => (
-                <option key={k} value={k} className="bg-ninja-deepViolet">
+                <option key={k} value={k} className="bg-popover text-popover-foreground">
                   {v}
                 </option>
               ))}

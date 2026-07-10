@@ -619,9 +619,9 @@ function StatusChip({ email }: { email: SystemEmail }) {
   const label = STATUS_LABELS[email.status] ?? email.status;
   const cls =
     email.status === "sent"
-      ? "bg-emerald-500/12 text-emerald-400"
+      ? "bg-emerald-500/12 text-success"
       : email.status === "failed"
-        ? "bg-red-500/12 text-red-400"
+        ? "bg-red-500/12 text-danger"
         : "bg-muted text-muted-foreground";
   return (
     <span

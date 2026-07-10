@@ -92,7 +92,7 @@ export function MermaModal({ open, onOpenChange, product }: Props) {
             {...register("reason")}
           >
             {WASTE_REASONS.map((r) => (
-              <option key={r} value={r} className="bg-ninja-deepViolet">
+              <option key={r} value={r} className="bg-popover text-popover-foreground">
                 {WASTE_REASON_LABELS[r]}
               </option>
             ))}

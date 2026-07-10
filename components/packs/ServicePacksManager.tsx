@@ -122,7 +122,7 @@ function PackModal({
           >
             <option value="">Genérico (cualquier servicio)</option>
             {(products ?? []).map((p) => (
-              <option key={p.id} value={p.id} className="bg-ninja-deepViolet">
+              <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
                 {p.name}
               </option>
             ))}

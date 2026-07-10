@@ -319,7 +319,7 @@ export function InviteCodesCard() {
                 <option
                   key={p.key}
                   value={p.key}
-                  className="bg-ninja-deepViolet"
+                  className="bg-popover text-popover-foreground"
                 >
                   {p.name}
                 </option>

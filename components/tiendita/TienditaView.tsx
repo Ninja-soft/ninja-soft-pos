@@ -237,7 +237,7 @@ function CatalogCard({
         <div className="mt-4 flex items-end justify-between gap-3 pt-1">
           {catalog.owned ? (
             <>
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-400">
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
                 <Check size={15} /> Ya tenés acceso
               </span>
               <Button size="sm" onClick={onAccess}>
@@ -437,7 +437,7 @@ function CatalogAccess({
 
                     <div className="flex shrink-0 items-center">
                       {isAdded ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-400">
+                        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-success">
                           <Check size={14} /> Agregado
                         </span>
                       ) : (

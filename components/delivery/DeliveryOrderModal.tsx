@@ -330,7 +330,7 @@ export function DeliveryOrderModal({
             >
               <option value="">Sin zona</option>
               {(zones ?? []).map((z) => (
-                <option key={z.id} value={z.id} className="bg-ninja-deepViolet">
+                <option key={z.id} value={z.id} className="bg-popover text-popover-foreground">
                   {z.name} · {formatCurrency(Number(z.fee))}
                   {z.eta_minutes != null ? ` · ${z.eta_minutes} min` : ""}
                 </option>

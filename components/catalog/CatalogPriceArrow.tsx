@@ -47,9 +47,9 @@ export function CatalogPriceArrow({
   // Verde = más barato que el mercado (ventaja). Rojo = más caro. Neutro = igual.
   const color =
     cmp.direction === "below"
-      ? "text-emerald-400"
+      ? "text-success"
       : cmp.direction === "above"
-        ? "text-red-400"
+        ? "text-danger"
         : "text-muted-foreground";
 
   // Frase principal del tooltip según la dirección.

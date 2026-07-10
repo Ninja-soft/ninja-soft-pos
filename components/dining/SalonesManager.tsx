@@ -180,7 +180,7 @@ function TableModal({
           >
             <option value="">Sin salón</option>
             {areas.map((a) => (
-              <option key={a.id} value={a.id} className="bg-ninja-deepViolet">
+              <option key={a.id} value={a.id} className="bg-popover text-popover-foreground">
                 {a.name}
               </option>
             ))}

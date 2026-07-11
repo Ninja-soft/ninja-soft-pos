@@ -144,6 +144,8 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_amount" }, 400);
     }
     const title = String(b.title ?? "Venta NinjaPos").slice(0, 120);
+    // Cuotas elegidas en el checkout propio del POS (Planes del negocio).
+    const installments = Math.min(36, Math.max(1, Math.trunc(Number(b.installments)) || 1));
 
     const { data: intent, error: intErr } = await admin
       .from("mp_payment_intents")
@@ -174,7 +176,7 @@ Deno.serve(async (req: Request) => {
         cancel_url: `${backBase}?view=cancel`,
         notifications_url: `${backBase}?i=${shortRef}`,
         template_id: 1,
-        installments: [1],
+        installments: [installments],
         plan_gobierno: false,
         public_apikey: sec.public_apikey,
         auth_3ds: false,

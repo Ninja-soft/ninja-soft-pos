@@ -64,7 +64,7 @@ const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway"]);
 // aplica en el POS antes de generar el cobro. MODO/Pagos360/Payway resuelven
 // las cuotas en su propia app/checkout hosted: para esos el grid es inerte y
 // no se ofrece (su recargo se configura con el % plano del medio).
-const PLANS_PROVIDERS = new Set(["mercadopago", "mobbex"]);
+const PLANS_PROVIDERS = new Set(["mercadopago", "mobbex", "payway"]);
 
 // Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
 const PROVIDER_LOGO: Record<string, string> = {
@@ -170,7 +170,7 @@ const PROVIDER_INFO: Record<string, Explain> = {
   },
   payway: {
     activa:
-      "Habilita el botón Cobrar con link en el POS: se genera el Formulario de pago de Payway y el cliente paga ahí con tarjeta (crédito/débito).",
+      "Habilita el botón Cobrar con link en el POS: elegís tarjeta y cuotas de TUS planes (con su recargo) y se genera el pago de Payway; el cliente paga desde el link/QR.",
     conexion:
       "Pegá tus llaves de Payway (API Key pública y privada) y tu Nº de comercio (site). Con el switch Sandbox activado se usa el ambiente de prueba de Payway/Decidir (sin plata real).",
     pasos: [
@@ -453,7 +453,6 @@ export function PaymentMethodsCard() {
             onSaveSurcharge={(pct) =>
               save.mutate({ provider_key: p.key, surcharge_pct: pct })
             }
-            onSaveSandbox={(v) => save.mutate({ provider_key: p.key, sandbox: v })}
           />
         ))}
       </div>
@@ -941,7 +940,6 @@ function PaymentMethodRow({
   onOpenPlans,
   onSaveEnabled,
   onSaveSurcharge,
-  onSaveSandbox,
   mpConnected = false,
 }: {
   provider: Provider;
@@ -957,7 +955,6 @@ function PaymentMethodRow({
   onOpenPlans: () => void;
   onSaveEnabled: (v: boolean) => void;
   onSaveSurcharge: (pct: number) => void;
-  onSaveSandbox: (v: boolean) => void;
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -1264,28 +1261,6 @@ function PaymentMethodRow({
               </button>
             )}
           </div>
-
-          {/* Ambiente de prueba: sólo proveedores donde el toggle cambia la URL
-              de la Edge (MODO preprod / Pagos360 sandbox). Con credenciales de
-              prueba tiene que estar prendido; con credenciales productivas,
-              apagado. */}
-          {SANDBOX_PROVIDERS.has(p.key) && !soon && !locked && (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-ninja-flame/[0.05] p-3">
-              <div className="min-w-0 text-xs">
-                <p className="font-semibold">Ambiente de prueba (Sandbox)</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  Prendido usa el ambiente de prueba de {p.name} (credenciales de
-                  test, sin plata real). Apagalo cuando cargues las credenciales
-                  productivas.
-                </p>
-              </div>
-              <Switch
-                checked={m?.sandbox ?? true}
-                onCheckedChange={onSaveSandbox}
-                label={`Sandbox ${p.name}`}
-              />
-            </div>
-          )}
 
           {info ? (
             <>

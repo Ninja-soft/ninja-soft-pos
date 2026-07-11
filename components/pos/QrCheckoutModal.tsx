@@ -97,8 +97,10 @@ export function QrCheckoutModal({
   // sí ofrecen la selección de tarjeta/cuota desde el POS.
   // MODO y Pagos360 resuelven medio/cuotas en su propia app/checkout hosted →
   // el POS no muestra selección de planes y auto-arranca con el monto base.
-  const selfManaged =
-    provider === "modo" || provider === "pagos360" || provider === "payway";
+  // Payway usa el checkout PROPIO del POS: el cajero elige tarjeta y cuotas de
+  // los Planes del negocio (con recargo) y esa cuota viaja al formulario
+  // hosted (installments).
+  const selfManaged = provider === "modo" || provider === "pagos360";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -109,6 +111,8 @@ export function QrCheckoutModal({
   const firedRef = useRef(false);
   const startedRef = useRef(false);
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
+  // Cuotas del plan elegido (solo Payway: viajan al formulario hosted).
+  const instRef = useRef<number>(1);
 
   const { data: plans = [], isLoading } = useProviderPlans(open ? provider : null);
   // Config del medio: modo "recargo único" + su %.
@@ -155,7 +159,8 @@ export function QrCheckoutModal({
           : provider === "pagos360"
             ? posApi.createPagos360Link
             : provider === "payway"
-              ? posApi.createPaywayLink
+              ? (a: number, t: string) =>
+                  posApi.createPaywayLink(a, t, instRef.current)
               : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
@@ -175,10 +180,12 @@ export function QrCheckoutModal({
   function pickPlan(p: PaymentPlan) {
     const sc = round2((base * (Number(p.surcharge_pct) || 0)) / 100);
     chosenRef.current = sc > 0 ? { label: p.label, surcharge: sc } : null;
+    instRef.current = Math.max(1, Number(p.installments) || 1);
     startQr(round2(base + sc));
   }
   function payNoPlan() {
     chosenRef.current = null;
+    instRef.current = 1;
     startQr(base);
   }
 
@@ -192,6 +199,7 @@ export function QrCheckoutModal({
     setInitPoint("");
     setErrorMsg("");
     firedRef.current = false;
+    instRef.current = 1;
     startedRef.current = false;
     chosenRef.current = null;
   }, [open, base]);

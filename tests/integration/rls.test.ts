@@ -98,10 +98,28 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
     // la feature en ambos tenants vía addon activo (paso 2 de la cadena de
     // resolución), sin montar un plan/suscripción. Se hace con el admin
     // (service_role, saltea RLS); se limpia en el teardown.
-    const { error: addonErr } = await admin.from("subscription_addons").insert([
-      { tenant_id: ctx.tenantA, addon_key: "listas_precios", status: "active", source: "granted" },
-      { tenant_id: ctx.tenantB, addon_key: "listas_precios", status: "active", source: "granted" },
-    ]);
+    // Ídem para el resto de features de escritura gateadas server-side
+    // (mig. 20260609100000: ticket_templates → tickets_pro, customer_groups →
+    // grupos_clientes, tenant_branding → personalizacion_marca,
+    // product_variants → variantes). Esta suite valida AISLAMIENTO, no el
+    // gating por plan: se habilitan todas vía addon activo.
+    const GATED_FEATURES = [
+      "listas_precios",
+      "tickets_pro",
+      "grupos_clientes",
+      "personalizacion_marca",
+      "variantes",
+    ];
+    const { error: addonErr } = await admin.from("subscription_addons").insert(
+      [ctx.tenantA, ctx.tenantB].flatMap((t) =>
+        GATED_FEATURES.map((key) => ({
+          tenant_id: t,
+          addon_key: key,
+          status: "active",
+          source: "granted",
+        })),
+      ),
+    );
     if (addonErr) throw addonErr;
 
     const ownerA = await makeUser(admin, `owner-a-${STAMP}@test.local`, ctx.tenantA, "owner");

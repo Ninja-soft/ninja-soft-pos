@@ -9,6 +9,15 @@ port = 54321
 schemas = ["public", "storage", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
+# CLI >= 2.106.0 (breaking, 2026-06-11): el start local REVOCA los privilegios
+# Data API por defecto de las tablas nuevas de `public` y este flag pasó a
+# false. Sin esto, la suite RLS de CI muere en el setup con "permission denied
+# for table tenants" (el service_role local queda sin GRANTs). El flag está
+# deprecado (se elimina 2026-10-30): la salida durable es una migración con
+# GRANTs explícitos para anon/authenticated/service_role que preserve los
+# revokes del hardening (20260608400000) — pendiente de aplicar también en
+# remoto. Este archivo NO afecta producción.
+auto_expose_new_tables = true
 
 [db]
 port = 54322

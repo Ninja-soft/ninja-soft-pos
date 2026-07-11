@@ -132,6 +132,10 @@ Deno.serve(async (req: Request) => {
   };
 
   // ── create ─────────────────────────────────────────────────────────────────
+  // Checkout PROPIO (H17b): ya no se usa el formulario hosted de Payway. El
+  // POS recibe como init_point la página pública /pagar/{intent} de la app
+  // (marca del negocio, cuotas de los Planes, tarjeta). El cobro real lo hace
+  // payway_checkout (action pay) con el token del navegador.
   if (action === "create") {
     const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
       p_tenant: tenantId,
@@ -143,9 +147,17 @@ Deno.serve(async (req: Request) => {
     if (!Number.isFinite(amount) || amount <= 0) {
       return json({ error: "invalid_amount" }, 400);
     }
-    const title = String(b.title ?? "Venta NinjaPos").slice(0, 120);
-    // Cuotas elegidas en el checkout propio del POS (Planes del negocio).
-    const installments = Math.min(36, Math.max(1, Math.trunc(Number(b.installments)) || 1));
+    // Origen de la app que abre el checkout (multi-dominio: lo manda el POS).
+    let origin = "";
+    try {
+      const o = new URL(String(b.origin ?? ""));
+      if (o.protocol !== "https:" && o.hostname !== "localhost") {
+        return json({ error: "invalid_origin" }, 400);
+      }
+      origin = o.origin;
+    } catch {
+      return json({ error: "invalid_origin" }, 400);
+    }
 
     const { data: intent, error: intErr } = await admin
       .from("mp_payment_intents")
@@ -154,73 +166,10 @@ Deno.serve(async (req: Request) => {
       .single();
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
-    // El webhook re-verifica contra la API; el retorno del cliente es una
-    // pantalla neutra servida por payway_webhook (GET). OJO (validado contra
-    // producción, 2026-07-10): el validador de URLs rechaza las de MÁS DE
-    // ~100 caracteres y las de más de un query param (el '&' o un UUID entero
-    // disparan param_required) → cada URL lleva UN parámetro CORTO. La
-    // correlación usa los primeros 12 hex del intent (?i=), que el webhook
-    // resuelve contra los intents payway pendientes.
-    const backBase = `${url}/functions/v1/payway_webhook`;
-    const shortRef = intent.id.replace(/-/g, "").slice(0, 12);
-    const r = await fetch(`${base.checkout}/link`, {
-      method: "POST",
-      headers: pwHeaders,
-      body: JSON.stringify({
-        origin_platform: "NinjaPos",
-        payment_description: title,
-        currency: "ARS",
-        total_price: Math.round(amount * 100) / 100,
-        site: sec.site,
-        success_url: `${backBase}?view=success`,
-        cancel_url: `${backBase}?view=cancel`,
-        notifications_url: `${backBase}?i=${shortRef}`,
-        template_id: 1,
-        installments: [installments],
-        plan_gobierno: false,
-        public_apikey: sec.public_apikey,
-        auth_3ds: false,
-      }),
-    });
-    if (!r.ok) {
-      const detail = await r.text();
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", intent.id);
-      return json({ error: "payway_error", detail: detail.slice(0, 300) }, 502);
-    }
-    // Producción devuelve { payment_link: "https://live.decidir.com/web/checkout/<HASH>" }
-    // (validado 2026-07-10 con credenciales reales). El HASH identifica el
-    // checkout pero NO es consultable por /payments: la confirmación llega por
-    // el webhook (notifications_url) con el payment_id real.
-    const pr = (await r.json()) as {
-      payment_link?: string;
-      payment_id?: number | string;
-      id?: number | string;
-      link?: string;
-      url?: string;
-    };
-    const initPoint =
-      pr.payment_link ||
-      pr.link ||
-      pr.url ||
-      (pr.payment_id ?? pr.id ? `${base.web}/${pr.payment_id ?? pr.id}` : "");
-    const paymentId =
-      pr.payment_id ?? pr.id ?? (initPoint ? initPoint.split("/").pop() : null);
-    if (!paymentId || !initPoint) {
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", intent.id);
-      return json(
-        { error: "payway_error", detail: JSON.stringify(pr).slice(0, 300) },
-        502,
-      );
-    }
+    const initPoint = `${origin}/pagar/${intent.id}`;
     await admin
       .from("mp_payment_intents")
-      .update({ preference_id: String(paymentId), init_point: initPoint })
+      .update({ init_point: initPoint })
       .eq("id", intent.id);
     return json({ intent_id: intent.id, init_point: initPoint });
   }
@@ -239,7 +188,13 @@ Deno.serve(async (req: Request) => {
     if (!row) return json({ error: "intent_not_found" }, 404);
 
     if (row.status !== "pending") {
-      return json({ status: row.status, mp_payment_id: row.mp_payment_id });
+      // amount: el checkout propio puede haber sumado recargo de cuotas — el
+      // POS registra la venta por el TOTAL final.
+      return json({
+        status: row.status,
+        mp_payment_id: row.mp_payment_id,
+        amount: Number(row.amount),
+      });
     }
 
     // El hash del checkout NO es consultable en /payments: la confirmación la

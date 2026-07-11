@@ -11,6 +11,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **F8 · H17b — Checkout propio de la tienda para Payway.** Al cobrar con Payway, el QR ya no manda al formulario del proveedor: abre **`/pagar/{intent}` de tu propia tienda** — página pública con **tu logo y tu color** (`tenant_branding`), donde el cliente elige **tarjeta y cuotas de TUS Planes** (recargo en vivo, "N cuotas de $X") y carga la tarjeta en un form pensado para el celular. **PCI-friendly**: el número de tarjeta viaja del navegador **directo a Payway** (tokens con la API Key pública) — NinjaPos nunca ve ni guarda datos de tarjeta; el cobro corre server-side (Edge `payway_checkout`) con el **monto recalculado en el backend** (jamás se confía en el cliente), `payment_method_id` por marca y montos en centavos. La venta se registra sola por el **total final** (el recargo de cuotas entra como extra); los rechazos del emisor dejan reintentar con otra tarjeta sin regenerar el QR. El switch Sandbox se eliminó del detalle (queda sólo al cargar credenciales + chip PRUEBA). Verificado contra producción real: create → página propia; info público con marca y planes; guard `plan_not_available` server-side; rechazo controlado 402.
+
+### Added
+
 - **F8 · H17 — Payway/Prisma: formulario de pago hosted desde el POS.** Nuevo botón **"Cobrar con link · Payway"**: se genera el Formulario de pago de Payway (checkout-payment-button, dialecto del **SDK oficial** `payway-ar/sdk-node-ventaonline`) y el cliente paga ahí con tarjeta; al aprobarse, la venta se cierra sola por el canal QR (conciliación en "Cobros QR"). Doble confirmación conservadora: polling server-side (`GET /api/v2/payments/{id}`, **monto verificado en centavos**) + `payway_webhook` que **re-verifica contra la API** antes de acreditar (nunca confía en el cuerpo de la notificación) y sirve la pantalla de retorno del cliente. Conexión por **API Key pública/privada + Nº de comercio (site)**; **sandbox público de Payway/Decidir** vía el switch Sandbox del medio. Gating de plan server-side (`payway` en la Edge + trigger por intent). ADR-029; roadmap H17 → transaccionable.
 
 ### Changed

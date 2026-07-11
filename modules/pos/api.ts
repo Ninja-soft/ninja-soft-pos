@@ -655,13 +655,17 @@ export const posApi = {
   createPaywayLink: async (
     amount: number,
     title: string,
-    // Cuotas elegidas en el checkout propio del POS (Planes del negocio):
-    // el formulario hosted de Payway ofrece exactamente esa cuota.
-    installments = 1,
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
+    // El QR abre el checkout PROPIO de la tienda (/pagar/{intent}): el cliente
+    // elige tarjeta y cuotas ahí. origin = dominio actual (multi-dominio).
     const { data, error } = await supabase.functions.invoke("payway", {
-      body: { action: "create", amount, title, installments },
+      body: {
+        action: "create",
+        amount,
+        title,
+        origin: window.location.origin,
+      },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -672,7 +676,7 @@ export const posApi = {
 
   paywayIntentStatus: async (
     id: string,
-  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+  ): Promise<{ status: string; mp_payment_id: string | null; amount?: number }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("payway", {
       body: { action: "status", intent_id: id },

@@ -43,9 +43,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  // Catálogo público por slug: /c/<slug> es accesible sin sesión.
+  // Catálogo público por slug (/c/<slug>) y checkout de cobro del cliente
+  // (/pagar/<intent>, H17b): accesibles sin sesión — los abre el CLIENTE
+  // final desde su celular.
   const isPublic =
-    PUBLIC_PATHS.includes(pathname) || pathname.startsWith("/c/");
+    PUBLIC_PATHS.includes(pathname) ||
+    pathname.startsWith("/c/") ||
+    pathname.startsWith("/pagar/");
 
   // Sin sesión en ruta protegida → login.
   if (!user && !isPublic) {

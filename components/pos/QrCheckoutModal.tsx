@@ -95,12 +95,12 @@ export function QrCheckoutModal({
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
   // pantalla de planes y auto-arranca con el monto base. Mercado Pago y Mobbex
   // sí ofrecen la selección de tarjeta/cuota desde el POS.
-  // MODO y Pagos360 resuelven medio/cuotas en su propia app/checkout hosted →
-  // el POS no muestra selección de planes y auto-arranca con el monto base.
-  // Payway usa el checkout PROPIO del POS: el cajero elige tarjeta y cuotas de
-  // los Planes del negocio (con recargo) y esa cuota viaja al formulario
-  // hosted (installments).
-  const selfManaged = provider === "modo" || provider === "pagos360";
+  // MODO y Pagos360 resuelven medio/cuotas en su propia app/checkout hosted.
+  // Payway abre el checkout PROPIO de la tienda (/pagar/{intent}): el CLIENTE
+  // elige tarjeta y cuotas ahí (Planes del negocio, recargo en vivo) → acá se
+  // auto-arranca con el monto base y el total final viene en el poll.
+  const selfManaged =
+    provider === "modo" || provider === "pagos360" || provider === "payway";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -159,8 +159,7 @@ export function QrCheckoutModal({
           : provider === "pagos360"
             ? posApi.createPagos360Link
             : provider === "payway"
-              ? (a: number, t: string) =>
-                  posApi.createPaywayLink(a, t, instRef.current)
+              ? posApi.createPaywayLink
               : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
@@ -251,20 +250,34 @@ export function QrCheckoutModal({
     if (status.status === "approved") {
       firedRef.current = true;
       setPhase("approved");
+      // Payway (checkout propio): el cliente pudo elegir cuotas con recargo →
+      // el total final viene en el poll y la venta se registra por ese monto.
+      const polled = (status as { amount?: number }).amount;
+      const finalAmount =
+        provider === "payway" && typeof polled === "number" ? polled : amount;
       const c = chosenRef.current;
-      const extras = c
-        ? [{ name: `Recargo ${c.label}`, amount: c.surcharge, kind: "surcharge" as const }]
-        : [];
+      const extras =
+        provider === "payway" && finalAmount > amount
+          ? [
+              {
+                name: "Recargo cuotas",
+                amount: round2(finalAmount - amount),
+                kind: "surcharge" as const,
+              },
+            ]
+          : c
+            ? [{ name: `Recargo ${c.label}`, amount: c.surcharge, kind: "surcharge" as const }]
+            : [];
       // El `reference` de la línea qr DEBE ser el intent id (uuid): create_sale lo
       // resuelve contra mp_payment_intents.id para exigir status='approved',
       // validar el monto y anclar sale_id (idempotencia real). Antes acá iba el
       // mp_payment_id numérico, que NUNCA matcheaba el regex uuid del server →
       // la validación quedaba inerte. El mp_payment_id solo sirve para logging.
-      onApproved(intentId ?? "", amount, extras);
+      onApproved(intentId ?? "", finalAmount, extras);
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
     }
-  }, [status, onApproved, intentId, amount]);
+  }, [status, onApproved, intentId, amount, provider]);
 
   // Espeja el QR de cobro activo a la pantalla del cliente (H25): cuando el QR
   // está listo (waiting), publica init_point + monto; en cualquier otro caso

@@ -170,7 +170,7 @@ const PROVIDER_INFO: Record<string, Explain> = {
   },
   payway: {
     activa:
-      "Habilita el botón Cobrar con link en el POS: elegís tarjeta y cuotas de TUS planes (con su recargo) y se genera el pago de Payway; el cliente paga desde el link/QR.",
+      "Habilita el botón Cobrar con link en el POS: el QR abre el checkout de TU tienda (tu logo y tus colores) donde el cliente carga la tarjeta y elige cuotas de tus Planes (con su recargo). Procesa Payway por atrás.",
     conexion:
       "Pegá tus llaves de Payway (API Key pública y privada) y tu Nº de comercio (site). Con el switch Sandbox activado se usa el ambiente de prueba de Payway/Decidir (sin plata real).",
     pasos: [

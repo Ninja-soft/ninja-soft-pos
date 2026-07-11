@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { brandLogo } from "@/modules/pos/planConstants";
 
 type Plan = {
   brand: string | null;
@@ -255,25 +256,41 @@ export default function PagarPage() {
             {/* Tarjeta y cuotas */}
             <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold">Tarjeta</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(info.brands ?? []).map((br) => (
-                  <button
-                    key={br}
-                    type="button"
-                    onClick={() => {
-                      setBrand(br);
-                      setInstallments(1);
-                    }}
-                    className="rounded-full border px-3 py-1.5 text-sm font-medium transition"
-                    style={
-                      brand === br
-                        ? { borderColor: accent, color: accent, background: `${accent}14` }
-                        : { borderColor: "#d4d4d4", color: "#525252" }
-                    }
-                  >
-                    {BRAND_LABELS[br] ?? br}
-                  </button>
-                ))}
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {(info.brands ?? []).map((br) => {
+                  const logo = brandLogo(br);
+                  const active = brand === br;
+                  return (
+                    <button
+                      key={br}
+                      type="button"
+                      onClick={() => {
+                        setBrand(br);
+                        setInstallments(1);
+                      }}
+                      title={BRAND_LABELS[br] ?? br}
+                      className="flex h-14 items-center justify-center rounded-xl border bg-white p-2 transition"
+                      style={
+                        active
+                          ? { borderColor: accent, boxShadow: `0 0 0 2px ${accent}55` }
+                          : { borderColor: "#e5e5e5" }
+                      }
+                    >
+                      {logo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={logo}
+                          alt={BRAND_LABELS[br] ?? br}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-semibold text-neutral-600">
+                          {BRAND_LABELS[br] ?? br}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               <p className="mt-4 text-sm font-semibold">Cuotas</p>

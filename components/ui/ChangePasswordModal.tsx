@@ -98,8 +98,9 @@ export function ChangePasswordModal({
       return;
     }
 
-    const { error: err } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    // Email con la plantilla propia (Resend/SMTP), no el mailer de Supabase.
+    const { error: err } = await supabase.functions.invoke("send_password_recovery", {
+      body: { email: user.email, origin: window.location.origin },
     });
     setResetLoading(false);
     if (err) {

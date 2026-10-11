@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ShieldCheck } from "lucide-react";
+import { Clock, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { LoginSchema, type LoginInput } from "@/modules/auth/schemas";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +19,12 @@ import {
 } from "@/components/ui/Card";
 import { Accent, Eyebrow } from "@/components/ui/Typography";
 
-export default function LoginInternalPage() {
+export default function LoginInternalPage({
+  searchParams,
+}: {
+  searchParams?: { reason?: string };
+}) {
+  const inactivityLogout = searchParams?.reason === "inactivity";
   const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
   const {
@@ -63,6 +68,12 @@ export default function LoginInternalPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {inactivityLogout && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-warning">
+            <Clock size={16} className="mt-0.5 shrink-0" />
+            <span>Tu sesión se cerró por inactividad. Volvé a iniciar sesión para continuar.</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <Input
             label="Email"

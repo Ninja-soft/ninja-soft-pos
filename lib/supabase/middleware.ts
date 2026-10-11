@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
+import { IDLE_COOKIE, isIdleExpired } from "@/lib/auth/idle";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -50,6 +51,31 @@ export async function updateSession(request: NextRequest) {
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/c/") ||
     pathname.startsWith("/pagar/");
+
+  // Inactividad (8 h): la marca vive en una cookie que escribe el
+  // InactivityGuard. Se corta acá, antes de renderizar, para que una sesión
+  // vencida nunca muestre el panel ni por un instante.
+  const idle = request.cookies.get(IDLE_COOKIE)?.value;
+  if (!user && idle) {
+    // Sin sesión, una marca vieja no debe cortar el próximo login.
+    response.cookies.delete(IDLE_COOKIE);
+  }
+  if (user && isIdleExpired(idle, Date.now())) {
+    await supabase.auth.signOut();
+    const target = isPublic
+      ? response
+      : (() => {
+          const url = request.nextUrl.clone();
+          url.pathname = pathname.startsWith("/internal") ? "/login-internal" : "/login";
+          url.search = "?reason=inactivity";
+          const r = NextResponse.redirect(url);
+          // signOut limpió las cookies de sesión en `response`: copiarlas.
+          response.cookies.getAll().forEach((c) => r.cookies.set(c));
+          return r;
+        })();
+    target.cookies.delete(IDLE_COOKIE);
+    return target;
+  }
 
   // Sin sesión en ruta protegida → login.
   if (!user && !isPublic) {

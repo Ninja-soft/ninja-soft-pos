@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { IDLE_COOKIE, INACTIVITY_MS, parseIdle } from "@/lib/auth/idle";
 
 // =============================================================================
 // Auto-logout por inactividad. Si no hay USO real durante INACTIVITY_MS (8 h),
@@ -10,26 +11,19 @@ import { createClient } from "@/lib/supabase/client";
 //
 // • Escucha actividad real: mousedown / keydown / click / touchstart / scroll.
 //   (Deliberadamente NO mousemove: lo dispara cualquier roce; usamos eventos de
-//   intención. La escritura a localStorage va con debounce igual.)
-// • Persiste el último timestamp de actividad en localStorage para que cerrar y
-//   reabrir la pestaña dentro de las 8 h mantenga la sesión; pero si pasaron más
-//   de 8 h (incluso con la pestaña cerrada), al volver se deslogea de una.
-// • El timer se resetea en cada actividad. La escritura a storage va con debounce
+//   intención.)
+// • Persiste el último timestamp de actividad en la cookie IDLE_COOKIE: cerrar y
+//   reabrir dentro de las 8 h mantiene la sesión; pasadas las 8 h el MIDDLEWARE
+//   corta antes de renderizar (lib/supabase/middleware.ts) y este guard cubre la
+//   pestaña que queda abierta.
+// • El timer se resetea en cada actividad. La escritura va con debounce
 //   (no en cada evento) para no castigar el scroll.
 //
 // Solo se monta en el shell de la app (no en /login): ver dónde se instancia.
 // =============================================================================
 
-// 8 horas. Configurable por constante (única fuente de verdad del umbral).
-export const INACTIVITY_MS = 8 * 60 * 60 * 1000;
-
-// Cada cuánto, como mucho, persistimos el "última actividad" a localStorage.
-const STORAGE_DEBOUNCE_MS = 30 * 1000;
-
-// Clave de storage. Por-usuario no hace falta: al desloguear se limpia y el
-// próximo login arranca fresco; además el valor solo adelanta el logout, nunca
-// concede acceso.
-const STORAGE_KEY = "ninja:last-activity";
+// Cada cuánto, como mucho, reescribimos la cookie de última actividad.
+const WRITE_DEBOUNCE_MS = 30 * 1000;
 
 const ACTIVITY_EVENTS = [
   "mousedown",
@@ -43,15 +37,21 @@ function now(): number {
   return Date.now();
 }
 
+// La marca vive en una cookie (no en localStorage) para que el middleware la
+// lea y corte una sesión vencida ANTES de renderizar el panel. Es compartida
+// entre pestañas por naturaleza. Sólo adelanta el logout, nunca concede acceso.
 function readLastActivity(): number | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
+  const m = document.cookie.match(new RegExp(`(?:^|; )${IDLE_COOKIE}=([^;]*)`));
+  return parseIdle(m?.[1]);
+}
+
+function writeLastActivity(ts: number) {
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${IDLE_COOKIE}=${ts}; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax${secure}`;
+}
+
+function clearLastActivity() {
+  document.cookie = `${IDLE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 export function InactivityGuard() {
@@ -67,17 +67,14 @@ export function InactivityGuard() {
     async function logout() {
       if (loggingOutRef.current) return;
       loggingOutRef.current = true;
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch {
-        /* storage no disponible: seguimos con el signOut igual */
-      }
+      clearLastActivity();
       try {
         await createClient().auth.signOut();
       } catch {
         /* aunque falle el signOut remoto, igual mandamos a login */
       }
-      router.push("/login?reason=inactivity");
+      const login = location.pathname.startsWith("/internal") ? "/login-internal" : "/login";
+      router.push(`${login}?reason=inactivity`);
       router.refresh();
     }
 
@@ -88,25 +85,22 @@ export function InactivityGuard() {
         void logout();
         return;
       }
-      timerRef.current = setTimeout(() => void logout(), remaining);
+      // Al vencer el timer, otra pestaña pudo haber marcado actividad: releer.
+      timerRef.current = setTimeout(() => evaluate(), remaining);
     }
 
     // Marca actividad: actualiza el timer siempre; persiste con debounce.
     function markActivity() {
       const ts = now();
       scheduleFrom(ts);
-      if (ts - lastWriteRef.current >= STORAGE_DEBOUNCE_MS) {
+      if (ts - lastWriteRef.current >= WRITE_DEBOUNCE_MS) {
         lastWriteRef.current = ts;
-        try {
-          localStorage.setItem(STORAGE_KEY, String(ts));
-        } catch {
-          /* sin storage: el timer en memoria sigue funcionando */
-        }
+        writeLastActivity(ts);
       }
     }
 
     // Al montar o al volver a la pestaña: si ya pasó el umbral (contemplando el
-    // tiempo con la pestaña cerrada vía storage), desloguear; si no, reprogramar.
+    // tiempo con la pestaña cerrada vía cookie), desloguear; si no, reprogramar.
     function evaluate() {
       const last = readLastActivity();
       if (last != null && now() - last >= INACTIVITY_MS) {
@@ -118,11 +112,7 @@ export function InactivityGuard() {
       if (last == null) {
         const ts = now();
         lastWriteRef.current = ts;
-        try {
-          localStorage.setItem(STORAGE_KEY, String(ts));
-        } catch {
-          /* sin storage */
-        }
+        writeLastActivity(ts);
       }
     }
 
@@ -136,14 +126,6 @@ export function InactivityGuard() {
       window.addEventListener(ev, markActivity, { passive: true });
     }
     document.addEventListener("visibilitychange", onVisibility);
-    // Otra pestaña con actividad → respetamos su marca más reciente.
-    window.addEventListener("storage", (e) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        const n = Number(e.newValue);
-        if (Number.isFinite(n)) scheduleFrom(n);
-      }
-    });
-
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       for (const ev of ACTIVITY_EVENTS) {

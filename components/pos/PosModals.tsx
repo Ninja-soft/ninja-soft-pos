@@ -17,6 +17,7 @@ import {
 import { useGating } from "@/modules/saas/gating";
 import type { CardVoucher, PaymentPlan } from "@/modules/pos/api";
 import type { WarrantyPlan } from "@/modules/products/api";
+import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
 
 // Extra del cobro que emite el PaymentModal hacia el POS. `kind` decide qué hace
 // create_sale (ver SaleExtraInput): warranty/surcharge entran como ítem de venta;
@@ -45,27 +46,10 @@ const TIP_METHODS: { value: string; label: string }[] = [
 const ALL_METHODS: { value: SalePaymentInput["method"]; label: string; providers: string[] }[] = [
   { value: "cash",     label: "Efectivo",       providers: ["cash"] },
   { value: "transfer", label: "Transferencia",   providers: ["transfer"] },
-  { value: "debit",    label: "Débito",          providers: ["mercadopago_point", "payway", "getnet", "fiserv", "mobbex"] },
-  { value: "credit",   label: "Crédito",         providers: ["mercadopago_point", "payway", "getnet", "fiserv", "mobbex"] },
+  { value: "debit",    label: "Débito",          providers: ["mercadopago_point", "payway", "payway_point", "getnet", "getnet_point", "nave_point", "fiserv", "mobbex"] },
+  { value: "credit",   label: "Crédito",         providers: ["mercadopago_point", "payway", "payway_point", "getnet", "getnet_point", "nave_point", "fiserv", "mobbex"] },
   { value: "qr",       label: "QR / Terminal",   providers: ["mercadopago", "mobbex", "modo", "pagos360"] },
 ];
-
-// Feature de plan por proveedor (espejo de payment_method_plan_key en SQL).
-// Un proveedor sin entrada NO está gateado por plan. El backend (trigger en
-// payments + Edge de QR) bloquea de verdad; esto solo evita ofrecer en la UI un
-// medio que el plan no permite. La feature key coincide con payment_providers.key.
-const PROVIDER_FEATURE: Record<string, string> = {
-  mercadopago: "mercado_pago",
-  // Mercado Point tiene su propia feature (MP online ≠ Point presencial).
-  mercadopago_point: "mercadopago_point",
-  modo: "modo",
-  mobbex: "mobbex",
-  payway: "payway",
-  getnet: "getnet",
-  fiserv: "fiserv",
-  pagos360: "pagos360",
-  nave: "nave",
-};
 
 // Base del plan según el método seleccionado.
 const METHOD_PLAN_BASE: Partial<Record<SalePaymentInput["method"], string>> = {

@@ -20,24 +20,11 @@ import {
   firstPlanWithFeature,
   type PlanForUpgrade,
 } from "@/modules/saas/gating";
+import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
 
-// Feature de plan por proveedor (espejo de payment_method_plan_key en SQL y de
-// PROVIDER_FEATURE en components/pos/PosModals.tsx). Un proveedor sin entrada NO
-// está gateado por plan. El backend (trigger en payments + Edge de QR) es el
-// bloqueo real; este mapa sólo decide qué medio se puede ACTIVAR en config.
-// La feature key coincide con payment_providers.key.
-const PROVIDER_FEATURE: Record<string, string> = {
-  mercadopago: "mercado_pago",
-  // Mercado Point tiene su propia feature (MP online ≠ Point presencial).
-  mercadopago_point: "mercadopago_point",
-  modo: "modo",
-  mobbex: "mobbex",
-  payway: "payway",
-  getnet: "getnet",
-  fiserv: "fiserv",
-  pagos360: "pagos360",
-  nave: "nave",
-};
+// PROVIDER_FEATURE (lib/payments/providerFeature.ts) decide qué medio se puede
+// ACTIVAR en config; el bloqueo real es el trigger en payments + las Edge.
+
 
 const KIND_LABELS: Record<string, string> = {
   manual: "Lo cobrás vos",

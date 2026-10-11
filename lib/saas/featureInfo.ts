@@ -4,6 +4,10 @@
 //   - impact: qué implica desactivarlo en el plan.
 //   - minPlan: plan global más bajo donde la funcionalidad viene incluida
 //              (referencia comercial; "Add-on" cuando no viene en ningún plan).
+//   - requires: features de plan de las que depende (deben estar activas en el
+//              mismo plan para que esta funcione). El editor de planes lo avisa.
+//   - needs:   requisito operativo que no es de plan (p. ej. conectar la cuenta
+//              del proveedor). Se muestra como "Requiere: …".
 //
 // `minPlan` se calculó a partir de la matriz real de planes globales
 // (Start → Pro → Business → Enterprise) tomando el primer plan donde el módulo
@@ -13,6 +17,8 @@ export interface FeatureInfo {
   desc: string;
   impact: string;
   minPlan: string;
+  requires?: string[];
+  needs?: string;
 }
 
 export const FEATURE_INFO: Record<string, FeatureInfo> = {
@@ -89,7 +95,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   mercado_pago: {
-    desc: "Cobros con Mercado Pago: integra MP (QR, point, link) como medio de pago y permite conectar la cuenta del negocio.",
+    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio y cobra desde el celular del cliente. El Point (terminal) es una función aparte.",
     impact: "Sin esto no se puede cobrar con Mercado Pago ni vincular la cuenta del comercio.",
     minPlan: "Pro",
   },
@@ -97,21 +103,40 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con Mercado Point: terminal presencial de Mercado Pago para cobrar con tarjeta en el mostrador.",
     impact: "Desactivado, no se puede usar la terminal Point de Mercado Pago como medio de cobro.",
     minPlan: "Pro",
+    needs: "Conectar la cuenta de Mercado Pago (la misma conexión sirve para QR, link y Point).",
   },
   payway: {
-    desc: "Cobros con Payway (Prisma): pasarela de tarjetas de crédito y débito a través de Payway.",
+    desc: "Cobros con Payway (Prisma) por link de pago y QR: el cliente paga con tarjeta y cuotas desde su celular. El Point (terminal) es una función aparte.",
     impact: "Sin esto Payway no figura como medio de pago disponible al cobrar.",
     minPlan: "Pro",
   },
   getnet: {
-    desc: "Cobros con Getnet: pasarela de pago con tarjetas vía Getnet (Santander).",
+    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente. El Point (terminal) es una función aparte.",
     impact: "Desactivado, no se puede cobrar con Getnet desde el POS.",
     minPlan: "Pro",
   },
   nave: {
-    desc: "Cobros con Nave: medio de pago de Nave (Banco Galicia) integrado al POS.",
+    desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",
     impact: "Sin esto Nave no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
+  },
+  payway_point: {
+    desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
+    impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de Payway y habilitar la integración de terminales con Payway.",
+  },
+  getnet_point: {
+    desc: "Cobros con el Point de Getnet: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
+    impact: "Desactivado, la terminal de Getnet no queda integrada al cobro del POS.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de Getnet y habilitar la integración de terminales con Getnet.",
+  },
+  nave_point: {
+    desc: "Cobros con el Point de Nave: el POS manda el monto a la terminal Nave y el cliente paga con tarjeta, contactless o QR.",
+    impact: "Desactivado, la terminal de Nave no queda integrada al cobro del POS.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point).",
   },
   fiserv: {
     desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",
@@ -261,6 +286,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
 };
+
+// Dependencias directas de plan de una feature (vacío si no depende de otra).
+export function featureRequires(key: string): string[] {
+  return FEATURE_INFO[key]?.requires ?? [];
+}
 
 // Fallback para una key sin copy explícita (no debería pasar con el catálogo
 // actual, pero evita undefined si se agrega una feature nueva en la DB).

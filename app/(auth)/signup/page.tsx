@@ -31,6 +31,7 @@ import { GoogleButton } from "@/components/auth/GoogleButton";
 import { SignupStepBusiness } from "@/components/auth/SignupStepBusiness";
 import { SignupStepPlan } from "@/components/auth/SignupStepPlan";
 import type { Vertical } from "@/lib/verticals/config";
+import { callbackUrl } from "@/lib/auth/redirect";
 import { cn } from "@/lib/utils/cn";
 
 const ivaSelectCls =
@@ -225,7 +226,7 @@ function SignupWizard() {
     const origin = window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${origin}/signup?step=2` },
+      options: { redirectTo: callbackUrl(origin, "/signup?step=2") },
     });
     if (error) {
       setGoogleLoading(false);

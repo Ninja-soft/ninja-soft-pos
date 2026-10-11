@@ -111,9 +111,9 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 // ⚠️ MANTENER EN ESPEJO con lib/email/receiptTemplates.ts (mismo markup/estilos).
 // Deno no puede importar desde lib/ en nuestros deploys single-file, por eso esta
 // copia vive acá; el PREVIEW del cliente usa la versión de lib/.
-const NINJA_LOGO_URL = "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordmark.webp";
+const NINJA_LOGO_URL = "https://pos.soft.ninja/brand/ninjasoft-wordmark.webp";
 // Wordmark dark-mode de NinjaPos (texto "pos" blanco → solo sobre fondo oscuro).
-const NINJA_LOGO_DARK_URL = "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp";
+const NINJA_LOGO_DARK_URL = "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm";
 const FOOTER_TEXT = "Enviado con NinjaPos";
 const ATTACH_NOTE = "Tu comprobante va adjunto en PDF a este email.";
 

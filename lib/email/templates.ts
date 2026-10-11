@@ -17,9 +17,9 @@ const BASE_VARS = ["negocio", "logo_url"];
 
 // Wordmark de NinjaPos para el header (sobre fondo claro) y para el footer oscuro.
 const NINJA_LOGO_LIGHT =
-  "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-light-mode.webp";
+  "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Dark_majzi0";
 const NINJA_LOGO_DARK =
-  "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp";
+  "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm";
 
 /**
  * Envoltorio branded de NinjaPos: tarjeta blanca con el logo claro arriba, un
@@ -65,7 +65,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>¡Hola {{nombre}}! 🎉</p>" +
         "<p>Creamos tu cuenta en <b>NinjaPos</b>. Ya podés entrar y empezar a configurar <b>{{negocio}}</b>.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Ingresar a NinjaPos"),
+        ctaButton("https://pos.soft.ninja/login", "Ingresar a NinjaPos"),
     ),
   },
   {
@@ -90,7 +90,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>Hola {{nombre}} 👋</p>" +
         "<p>Te damos la bienvenida a <b>{{negocio}}</b>. Ya podés empezar a usar el sistema y vender en minutos.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Empezar ahora"),
+        ctaButton("https://pos.soft.ninja/login", "Empezar ahora"),
     ),
   },
   {
@@ -117,7 +117,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>¡Listo! Empezó tu prueba gratis de <b>NinjaPos</b> para <b>{{negocio}}</b>.</p>" +
         "<p>Tenés <b>{{dias}} días</b> con todo desbloqueado (hasta el {{vence}}). Probá el punto de venta, cargá tus productos y sumá a tu equipo.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Explorar NinjaPos"),
+        ctaButton("https://pos.soft.ninja/login", "Explorar NinjaPos"),
     ),
   },
   {
@@ -129,7 +129,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>Tu período de prueba termina en <b>{{dias}} días</b> ({{vence}}).</p>" +
         "<p>Activá tu plan para no perder acceso a <b>{{negocio}}</b> ni a tu información.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Activar mi plan"),
+        ctaButton("https://pos.soft.ninja/login", "Activar mi plan"),
     ),
   },
   {
@@ -141,7 +141,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>¡Gracias por sumarte! Tu plan <b>{{plan}}</b> ya está activo para <b>{{negocio}}</b>.</p>" +
         "<p>Tu próxima renovación es el {{vence}}. El cobro es automático por Mercado Pago.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Ir a mi panel"),
+        ctaButton("https://pos.soft.ninja/login", "Ir a mi panel"),
     ),
   },
   {
@@ -153,7 +153,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>Tu suscripción de <b>{{negocio}}</b> quedó cancelada.</p>" +
         "<p>Tenés acceso hasta el {{vence}}. Después, tu cuenta se pausa pero tu información queda guardada por si querés volver.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Reactivar cuando quieras"),
+        ctaButton("https://pos.soft.ninja/login", "Reactivar cuando quieras"),
     ),
   },
 
@@ -178,7 +178,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>No pudimos confirmar el pago de tu suscripción de <b>{{negocio}}</b>.</p>" +
         "<p>Revisá tu medio de pago en Mercado Pago para no perder acceso. Vamos a reintentar el cobro automáticamente.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Revisar mi pago"),
+        ctaButton("https://pos.soft.ninja/login", "Revisar mi pago"),
     ),
   },
   {
@@ -203,7 +203,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>¡Buenísimo! Activaste el <b>Asistente IA</b> en <b>{{negocio}}</b>.</p>" +
         "<p>Ya podés pedirle reportes, resúmenes y ayuda en lenguaje natural desde tu panel.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Probar el Asistente IA"),
+        ctaButton("https://pos.soft.ninja/login", "Probar el Asistente IA"),
     ),
   },
   {
@@ -228,7 +228,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>¡Listo! Tu compra del catálogo <b>{{catalogo}}</b> para <b>{{negocio}}</b> se acreditó.</p>" +
         "<p>Entrá a Tiendita para buscar productos del catálogo y agregarlos a tu tienda con un clic.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Ir a Tiendita"),
+        ctaButton("https://pos.soft.ninja/login", "Ir a Tiendita"),
     ),
   },
 
@@ -255,7 +255,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>Tu período de prueba terminó y pausamos tu cuenta.</p>" +
         "<p>Activá un plan cuando quieras para retomar <b>{{negocio}}</b> donde lo dejaste.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Activar un plan"),
+        ctaButton("https://pos.soft.ninja/login", "Activar un plan"),
     ),
   },
   {
@@ -267,7 +267,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultHtml: brandedEmail(
       "<p>Suspendimos tu cuenta por falta de pago.</p>" +
         "<p>Regularizá tu suscripción para reactivar <b>{{negocio}}</b>.</p>" +
-        ctaButton("https://ninja-soft-pos.vercel.app/login", "Regularizar ahora"),
+        ctaButton("https://pos.soft.ninja/login", "Regularizar ahora"),
     ),
   },
   {
@@ -299,7 +299,7 @@ export function sampleVars(negocio: string): Record<string, string> {
     negocio,
     logo_url: "",
     nombre: "Juan Pérez",
-    link: "https://ninja-soft-pos.vercel.app/login",
+    link: "https://pos.soft.ninja/login",
     dias: "3",
     vence: "31/05/2026",
     monto: "$ 12.500,00",

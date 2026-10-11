@@ -146,7 +146,13 @@ function NotificationItem({
   );
 }
 
-export function NotificationBell({ floating = false }: { floating?: boolean }) {
+export function NotificationBell({
+  floating = false,
+  align = "end",
+}: {
+  floating?: boolean;
+  align?: "start" | "end";
+}) {
   const [open, setOpen] = useState(false);
   const { data: items } = useNotifications();
   const { markRead, markAllRead, archive, ack } = useNotificationActions();
@@ -182,9 +188,10 @@ export function NotificationBell({ floating = false }: { floating?: boolean }) {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          align="end"
+          align={align}
           sideOffset={8}
-          className="z-50 w-[380px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
+          collisionPadding={12}
+          className="z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
             <span className="text-sm font-semibold text-foreground">

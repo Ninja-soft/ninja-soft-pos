@@ -352,14 +352,21 @@ export function AppShell({
   const nav = (
     <nav className="flex h-full flex-col p-3">
       {/* Logo fijo arriba — fuera del área scrolleable */}
-      <Link
-        href="/dashboard"
-        onClick={() => setDrawer(false)}
-        className="mb-3 flex shrink-0 items-center gap-2.5 px-2 py-2"
-      >
-        <Isotype className="h-9 w-auto" priority />
-        <WordmarkPos className="h-7 w-auto" priority />
-      </Link>
+      <div className="mb-3 flex shrink-0 items-center gap-2 px-2 py-2">
+        <Link
+          href="/dashboard"
+          onClick={() => setDrawer(false)}
+          className="flex min-w-0 flex-1 items-center gap-2.5"
+        >
+          <Isotype className="h-9 w-auto" priority />
+          <WordmarkPos className="h-7 w-auto" priority />
+        </Link>
+        {/* Campana en la barra lateral (desktop): flotando sobre el contenido
+            tapaba botones de la pantalla de cobro. En mobile vive en el header. */}
+        <div className="hidden lg:block">
+          <NotificationBell align="start" />
+        </div>
+      </div>
 
       {/* Navegación scrolleable */}
       <div className="slim-scrollbar -mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
@@ -487,12 +494,6 @@ export function AppShell({
             <NotificationBell />
           </div>
         </header>
-
-        {/* Campana flotante arriba a la derecha, sobre el contenido (solo desktop).
-            z-40 < z-50 de los modales: nunca tapa overlays. */}
-        <div className="fixed right-4 top-4 z-40 hidden lg:block">
-          <NotificationBell floating />
-        </div>
 
         <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">
           <PastDueBanner />

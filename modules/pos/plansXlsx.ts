@@ -1,5 +1,5 @@
 // Import/parse de planes de pago desde XLSX (H27).
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 import type { PaymentPlanInput } from "./api";
 import { ALL_BRANDS, BASE_LABEL, BRAND_LABEL, planLabel } from "./planConstants";
 
@@ -43,7 +43,9 @@ function cellText(v: ExcelJS.CellValue): string {
 
 // Columnas esperadas (header, insensible a may/acentos): base, marca, cuotas, recargo.
 export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResult> {
-  const wb = new ExcelJS.Workbook();
+  // exceljs se carga bajo demanda: sólo hace falta al importar un archivo.
+  const { default: Excel } = await import("exceljs");
+  const wb = new Excel.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
   if (!ws) return { rows: [], errors: ["El archivo no tiene hojas."] };

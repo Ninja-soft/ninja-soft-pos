@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildWorkbook } from "@/lib/utils/xlsx";
+import { buildWorkbook } from "@/lib/utils/xlsxWorkbook";
 
 describe("buildWorkbook (export XLSX con diseño)", () => {
   const wb = buildWorkbook(

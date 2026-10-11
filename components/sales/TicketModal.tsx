@@ -198,7 +198,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
       if (printTpl && ticketRef.current) {
         await downloadA4FromNode(ticketRef.current, data.sale.number);
       } else {
-        downloadTicketPdf({
+        await downloadTicketPdf({
           sale: data.sale,
           items: data.items,
           payments: data.payments,

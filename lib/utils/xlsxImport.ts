@@ -1,4 +1,4 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
 
 // Helper único de import XLSX (TX-3). Parser genérico dirigido por una
 // especificación de columnas: lee el workbook con exceljs, mapea encabezados a
@@ -279,7 +279,9 @@ export async function parseXlsx<R>(
 ): Promise<ParseXlsxResult<R>> {
   let grid: string[][];
   try {
-    const wb = new ExcelJS.Workbook();
+    // exceljs se carga bajo demanda: sólo hace falta al importar un archivo.
+    const { default: Excel } = await import("exceljs");
+    const wb = new Excel.Workbook();
     await wb.xlsx.load(buffer);
     const ws = wb.worksheets[0];
     if (!ws) {

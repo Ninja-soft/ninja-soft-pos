@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { IDLE_COOKIE, isIdleExpired } from "@/lib/auth/idle";
+import { homePath } from "@/lib/auth/redirect";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -100,8 +101,16 @@ export async function updateSession(request: NextRequest) {
   // tenant" por ausencia de current_tenant_id en app_metadata (lo setea
   // create_tenant). Así el wizard puede continuar el flujo de SSO.
   if (user && pathname === "/login") {
+    const meta = user.app_metadata as { is_internal?: boolean; current_tenant_id?: string } | null;
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.search = "";
+    // Sólo staff sin negocio va directo al interno; el resto al panel, cuyo
+    // layout verifica la membresía real (current_tenant_id puede faltar en
+    // usuarios invitados).
+    url.pathname =
+      meta?.is_internal === true && !meta?.current_tenant_id
+        ? homePath({ isInternal: true, hasTenant: false })
+        : "/dashboard";
     return NextResponse.redirect(url);
   }
   if (user && pathname === "/signup") {

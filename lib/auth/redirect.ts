@@ -11,3 +11,10 @@ export function safeNextPath(next: string | null | undefined, fallback = "/dashb
 export function callbackUrl(origin: string, next: string): string {
   return `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
 }
+
+// Destino al entrar según el rol: staff sin negocio propio → panel interno;
+// usuario sin negocio → onboarding (crear el negocio); el resto → panel.
+export function homePath({ isInternal, hasTenant }: { isInternal: boolean; hasTenant: boolean }): string {
+  if (hasTenant) return "/dashboard";
+  return isInternal ? "/internal/tenants" : "/onboarding";
+}

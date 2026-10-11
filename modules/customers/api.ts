@@ -203,7 +203,7 @@ export const customersApi = {
       if (!m.customer_id) continue;
       const entry =
         byCustomer.get(m.customer_id) ??
-        { name: m.customers?.name ?? "—", movements: [] };
+        { name: m.customers?.name ?? "Sin nombre", movements: [] };
       if (!byCustomer.has(m.customer_id)) byCustomer.set(m.customer_id, entry);
       entry.movements.push({ delta: m.delta, created_at: m.created_at, due_date: m.due_date });
     }

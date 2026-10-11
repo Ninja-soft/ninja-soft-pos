@@ -15,6 +15,7 @@ import {
 } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
+import { NoData } from "@/components/ui/NoData";
 
 // Sección dedicada de devoluciones (H29): buscás la venta por ticket / N° de
 // comprobante y arrancás la devolución desde acá.
@@ -140,7 +141,7 @@ export default function DevolucionesPage() {
                   >
                     <span className="shrink-0 font-mono font-semibold">Dev #{r.number}</span>
                     <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {r.reason || "—"}
+                      {r.reason || <NoData />}
                     </span>
                     <span
                       className={

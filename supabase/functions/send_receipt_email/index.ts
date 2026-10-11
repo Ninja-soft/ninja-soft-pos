@@ -311,7 +311,7 @@ Deno.serve(async (req: Request) => {
   const html = buildBody({ accent, logoHtml, safeName, safeBodyText });
 
   // Asunto con sello día+hora (AR): único por envío → Gmail no agrupa el hilo.
-  const subject = `Tu comprobante de ${name} — ${stampAr()}`;
+  const subject = `Tu comprobante de ${name} (${stampAr()})`;
   const pdfName = `factura-${sale.number}.pdf`;
 
   // Bitácora de envíos (best-effort: nunca altera la respuesta de la función).

@@ -41,7 +41,7 @@ const MEDIUM_LABELS: Record<string, string> = {
 };
 
 function mediumLabel(m: string): string {
-  return MEDIUM_LABELS[m] ?? (m ? m.charAt(0).toUpperCase() + m.slice(1) : "—");
+  return MEDIUM_LABELS[m] ?? (m ? m.charAt(0).toUpperCase() + m.slice(1) : "Sin datos");
 }
 
 function fmtMoney(n: number | null | undefined, currency?: string | null): string {
@@ -51,7 +51,7 @@ function fmtMoney(n: number | null | undefined, currency?: string | null): strin
 }
 
 function fmtDate(s: string | null | undefined): string {
-  if (!s) return "—";
+  if (!s) return "Sin datos";
   return new Date(s).toLocaleDateString("es-AR", {
     day: "2-digit",
     month: "short",

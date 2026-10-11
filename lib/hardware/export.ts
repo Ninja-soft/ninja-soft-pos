@@ -87,10 +87,10 @@ export async function exportDiagnosticXlsx(payload: DiagnosticPayload): Promise<
     ],
     rows: [
       { k: "Generado", v: new Date(payload.generatedAt).toLocaleString("es-AR") },
-      { k: "Negocio", v: context.tenantName ?? "—" },
-      { k: "Identificador (slug)", v: context.tenantSlug ?? "—" },
-      { k: "Caja", v: context.registerName ?? "—" },
-      { k: "Versión de la app", v: context.appVersion ?? "—" },
+      { k: "Negocio", v: context.tenantName ?? "Sin datos" },
+      { k: "Identificador (slug)", v: context.tenantSlug ?? "Sin datos" },
+      { k: "Caja", v: context.registerName ?? "Sin datos" },
+      { k: "Versión de la app", v: context.appVersion ?? "Sin datos" },
       {
         k: "Pruebas registradas",
         v: String(tests.length),
@@ -135,11 +135,11 @@ export async function exportDiagnosticXlsx(payload: DiagnosticPayload): Promise<
           { k: "Conexión", v: environment.online ? "En línea" : "Sin conexión" },
           {
             k: "Núcleos lógicos",
-            v: environment.hardwareConcurrency != null ? String(environment.hardwareConcurrency) : "—",
+            v: environment.hardwareConcurrency != null ? String(environment.hardwareConcurrency) : "Sin datos",
           },
           {
             k: "Memoria aprox. (GB)",
-            v: environment.deviceMemoryGb != null ? String(environment.deviceMemoryGb) : "—",
+            v: environment.deviceMemoryGb != null ? String(environment.deviceMemoryGb) : "Sin datos",
           },
           { k: "Pantalla táctil", v: environment.touch ? "Sí" : "No" },
           { k: "Origen seguro (HTTPS)", v: environment.secureContext ? "Sí" : "No" },

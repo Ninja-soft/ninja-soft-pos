@@ -188,7 +188,7 @@ export function AppointmentModal({
               <optgroup label="Servicios">
                 {productOptions.services.map((p) => (
                   <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
-                    {p.name} — {formatCurrency(p.price)}
+                    {p.name} · {formatCurrency(p.price)}
                     {p.service_duration_min ? ` · ${p.service_duration_min}min` : ""}
                   </option>
                 ))}
@@ -198,7 +198,7 @@ export function AppointmentModal({
               <optgroup label="Otros productos">
                 {productOptions.others.map((p) => (
                   <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
-                    {p.name} — {formatCurrency(p.price)}
+                    {p.name} · {formatCurrency(p.price)}
                   </option>
                 ))}
               </optgroup>
@@ -244,7 +244,7 @@ export function AppointmentModal({
             onChange={(e) => setStartsAt(e.target.value)}
           />
           <Input
-            label="Comisión (%) — opcional"
+            label="Comisión en % (opcional)"
             type="number"
             step="1"
             min="0"

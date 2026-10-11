@@ -157,14 +157,14 @@ export function detectEnv(): EnvInfo | null {
   };
   const scr = window.screen;
   return {
-    userAgent: nav.userAgent ?? "—",
+    userAgent: nav.userAgent ?? "Sin datos",
     platform:
       (nav as unknown as { platform?: string }).platform ??
       (nav as unknown as { userAgentData?: { platform?: string } }).userAgentData
         ?.platform ??
-      "—",
-    language: nav.language ?? "—",
-    screen: scr ? `${scr.width}×${scr.height}` : "—",
+      "Sin datos",
+    language: nav.language ?? "Sin datos",
+    screen: scr ? `${scr.width}×${scr.height}` : "Sin datos",
     viewport: `${window.innerWidth}×${window.innerHeight}`,
     devicePixelRatio: Math.round((window.devicePixelRatio || 1) * 100) / 100,
     online: typeof nav.onLine === "boolean" ? nav.onLine : true,

@@ -133,7 +133,7 @@ export function WalkInModal({
             <option value="">Elegí un servicio…</option>
             {services.map((p) => (
               <option key={p.id} value={p.id} className="bg-popover text-popover-foreground">
-                {p.name} — {formatCurrency(p.price)}
+                {p.name} · {formatCurrency(p.price)}
               </option>
             ))}
           </select>

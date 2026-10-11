@@ -192,7 +192,7 @@ export function CustomerFormModal({
               <p className="mb-1 text-xs text-destructive">{errors.document_type.message}</p>
             )}
             <select className={selectCls} {...register("document_type")}>
-              <option value="">—</option>
+              <option value="">Sin especificar</option>
               {DOC_TYPES.map((d) => (
                 <option key={d} value={d} className="bg-popover text-popover-foreground">
                   {DOC_TYPE_LABELS[d]}
@@ -214,7 +214,7 @@ export function CustomerFormModal({
             <p className="mb-1 text-xs text-destructive">{errors.iva_condition.message}</p>
           )}
           <select className={selectCls} {...register("iva_condition")}>
-            <option value="">—</option>
+            <option value="">Sin especificar</option>
             {IVA_CONDITIONS.map((c) => (
               <option key={c} value={c} className="bg-popover text-popover-foreground">
                 {IVA_LABELS[c]}

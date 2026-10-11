@@ -83,7 +83,7 @@ export function CatalogGrantsModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={catalog ? `Accesos — ${catalog.name}` : "Accesos"}
+      title={catalog ? `Accesos: ${catalog.name}` : "Accesos"}
       className="max-w-xl"
     >
       <div className="space-y-5">

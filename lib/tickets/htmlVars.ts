@@ -7,7 +7,7 @@
 // de venta, número fiscal, letra de comprobante, Ingresos Brutos, inicio de
 // actividades y el documento/condición IVA del receptor NO existen como dato
 // real. Esas variables se exponen igual (para que la plantilla A4 legal quede
-// armada) pero rinden el placeholder `—` hasta que exista la integración. No se
+// armada) pero rinden el placeholder `s/d` hasta que exista la integración. No se
 // inventan valores: ver FISCAL_PLACEHOLDER y los TODO de abajo.
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -17,7 +17,7 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // Placeholder neutro para datos fiscales aún no capturados (CAE, IIBB, etc.).
-const FISCAL_PLACEHOLDER = "—";
+const FISCAL_PLACEHOLDER = "s/d";
 
 // Etiquetas legibles de la condición frente al IVA (tenant_branding.iva_condition).
 const IVA_CONDITION_LABELS: Record<string, string> = {
@@ -50,19 +50,19 @@ export const HTML_TEMPLATE_VARS: { key: string; label: string }[] = [
   { key: "anulada", label: "'ANULADA' si la venta fue anulada" },
   // --- Datos fiscales (factura legal AR) ---
   { key: "condicion_iva", label: "Condición IVA del emisor" },
-  { key: "ingresos_brutos", label: "Ingresos Brutos del emisor (— si falta)" },
-  { key: "inicio_actividades", label: "Inicio de actividades (— si falta)" },
+  { key: "ingresos_brutos", label: "Ingresos Brutos del emisor (s/d si falta)" },
+  { key: "inicio_actividades", label: "Inicio de actividades (s/d si falta)" },
   { key: "comprobante_tipo", label: "Tipo de comprobante (FACTURA / COMPROBANTE…)" },
   { key: "comprobante_letra", label: "Letra del comprobante (A/B/C, X si no fiscal)" },
-  { key: "comprobante_cod", label: "Código numérico del tipo (ej. 006); — si no fiscal" },
+  { key: "comprobante_cod", label: "Código numérico del tipo (ej. 006); s/d si no fiscal" },
   { key: "punto_venta", label: "Punto de venta (0001 por defecto)" },
   { key: "comprobante_nro", label: "Número fiscal del comprobante" },
-  { key: "neto_gravado", label: "Importe neto gravado (— si IVA no discriminado)" },
-  { key: "iva_total", label: "IVA total discriminado (— si no discriminado)" },
-  { key: "cliente_doc", label: "CUIT/DNI del receptor (— si falta)" },
+  { key: "neto_gravado", label: "Importe neto gravado (s/d si IVA no discriminado)" },
+  { key: "iva_total", label: "IVA total discriminado (s/d si no discriminado)" },
+  { key: "cliente_doc", label: "CUIT/DNI del receptor (s/d si falta)" },
   { key: "cliente_iva", label: "Condición IVA del receptor" },
-  { key: "cae", label: "CAE (— hasta integrar AFIP/ARCA)" },
-  { key: "cae_vto", label: "Vencimiento del CAE (— hasta integrar AFIP/ARCA)" },
+  { key: "cae", label: "CAE (s/d hasta integrar AFIP/ARCA)" },
+  { key: "cae_vto", label: "Vencimiento del CAE (s/d hasta integrar AFIP/ARCA)" },
 ];
 
 export function buildHtmlVars(data: TicketData): Record<string, string> {
@@ -74,7 +74,7 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     )
     .join("");
   // Filas fiscales: código, descripción, cantidad, precio unit., % IVA, subtotal.
-  // TODO(AFIP): `código` usa el índice de línea y `% IVA` queda en `—` porque el
+  // TODO(AFIP): `código` usa el índice de línea y `% IVA` queda en `s/d` porque el
   // ítem de venta todavía no guarda SKU ni alícuota por línea. Cantidad, precio
   // unitario y subtotal sí son reales.
   const itemsFiscalHtml = items

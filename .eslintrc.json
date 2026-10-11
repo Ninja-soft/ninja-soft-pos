@@ -2,5 +2,33 @@
   "extends": ["next/core-web-vitals"],
   "rules": {
     "@next/next/no-html-link-for-pages": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "app/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "lib/**/*.{ts,tsx}",
+        "modules/**/*.{ts,tsx}",
+        "hooks/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value=/—/]",
+            "message": "No usar '—' en la UI: usá <NoData /> o otra puntuación."
+          },
+          {
+            "selector": "JSXText[value=/—/]",
+            "message": "No usar '—' en la UI: usá <NoData /> o otra puntuación."
+          },
+          {
+            "selector": "TemplateElement[value.raw=/—/]",
+            "message": "No usar '—' en la UI: usá <NoData /> o otra puntuación."
+          }
+        ]
+      }
+    }
+  ]
 }

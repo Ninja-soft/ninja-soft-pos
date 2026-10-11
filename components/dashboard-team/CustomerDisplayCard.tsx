@@ -136,7 +136,7 @@ export function CustomerDisplayCard() {
           </p>
           <p className="text-xs text-muted-foreground">
             Nota: por seguridad, el navegador no puede mover la ventana a otro
-            monitor ni ponerla en pantalla completa por su cuenta — ese paso lo
+            monitor ni ponerla en pantalla completa por su cuenta: ese paso lo
             hacés vos una vez. La pantalla solo muestra la venta en curso (nunca
             datos internos ni de otros clientes).
           </p>

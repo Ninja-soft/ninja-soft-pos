@@ -17,6 +17,7 @@ import {
   type CatalogStore,
 } from "@/modules/internal/catalogs";
 import { useSaveCatalog } from "@/modules/internal/catalogsHooks";
+import { NoData } from "@/components/ui/NoData";
 
 export function CatalogEditorModal({
   open,
@@ -343,7 +344,7 @@ export function CatalogEditorModal({
             <span className="font-price font-semibold text-foreground">
               {price.trim() !== "" && Number.isFinite(Number(price))
                 ? formatCurrency(Number(price))
-                : "—"}
+                : <NoData />}
             </span>
           </span>
           <div className="flex gap-2">

@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useScanner } from "@/modules/pos/useScanner";
 import { parseDni, type ParsedDni } from "@/lib/customers/dniParse";
+import { NoData } from "@/components/ui/NoData";
 
 // BarcodeDetector es nativo en Chromium; no está en los tipos de TS.
 interface BarcodeDetectorLike {
@@ -184,11 +185,11 @@ export function DniScanModal({
                 <PreviewRow label="DNI" value={parsed.dni} />
                 <PreviewRow
                   label="Sexo"
-                  value={parsed.sexo ? SEXO_LABEL[parsed.sexo] : "—"}
+                  value={parsed.sexo ? SEXO_LABEL[parsed.sexo] : ""}
                 />
                 <PreviewRow
                   label="Nacimiento"
-                  value={parsed.fechaNac ?? "—"}
+                  value={parsed.fechaNac ?? ""}
                 />
               </dl>
             </div>
@@ -223,7 +224,7 @@ function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="col-span-1">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-medium text-foreground">{value || "—"}</dd>
+      <dd className="font-medium text-foreground">{value || <NoData />}</dd>
     </div>
   );
 }

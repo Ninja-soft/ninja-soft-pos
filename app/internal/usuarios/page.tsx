@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",
@@ -163,12 +164,12 @@ export default function InternalUsersPage() {
               return (
                 <tr key={u.id} className="transition hover:bg-muted/40">
                   <td className="px-4 py-3">
-                    <div className="font-medium">{u.full_name ?? "—"}</div>
+                    <div className="font-medium">{u.full_name ?? <NoData />}</div>
                     <div className="text-xs text-muted-foreground">{u.email}</div>
                   </td>
                   <td className="px-4 py-3">
                     {u.memberships.length === 0 ? (
-                      <span className="text-muted-foreground">—</span>
+                      <NoData />
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {u.memberships.map((m, i) => (
@@ -192,7 +193,7 @@ export default function InternalUsersPage() {
                         {LEVEL_LABELS[u.internal_level] ?? u.internal_level}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <NoData />
                     )}
                   </td>
                   <td className="px-4 py-3">

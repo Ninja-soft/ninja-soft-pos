@@ -13,6 +13,7 @@ import {
   type ReturnReasonInput,
   type StockDestination,
 } from "@/modules/sales/api";
+import { NoData } from "@/components/ui/NoData";
 
 const inputCls =
   "h-9 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft";
@@ -183,7 +184,7 @@ export function ReturnReasonsModal({
                     {r.label}
                   </span>
                   <span className="truncate font-mono text-xs text-muted-foreground">
-                    {r.code ?? "—"}
+                    {r.code ?? <NoData />}
                   </span>
                   <span className="truncate">
                     <DestinationBadge destination={r.stock_destination} />

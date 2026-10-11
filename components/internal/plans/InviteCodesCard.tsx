@@ -59,7 +59,7 @@ function codeStatus(c: InviteCode): {
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "sin fecha";
   return new Date(iso).toLocaleDateString("es-AR", {
     year: "numeric",
     month: "short",

@@ -163,7 +163,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     label: "Pago confirmado",
     description: "Confirma un cobro exitoso de la suscripción.",
     variables: [...BASE_VARS, "monto", "vence"],
-    defaultSubject: "Recibimos tu pago — gracias",
+    defaultSubject: "Recibimos tu pago. ¡Gracias!",
     defaultHtml: brandedEmail(
       "<p>¡Listo! Recibimos tu pago de <b>{{monto}}</b> por la suscripción de <b>{{negocio}}</b>.</p>" +
         "<p>Tu acceso sigue activo. Tu próxima renovación es el {{vence}}.</p>",

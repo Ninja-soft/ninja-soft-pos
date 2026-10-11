@@ -983,7 +983,7 @@ function PaymentMethodRow({
     features[featureKey] !== true;
   const target = locked && featureKey ? firstPlanWithFeature(plans, featureKey) : null;
   const planName = target?.name ?? "superior";
-  const lockTip = `Desactivado — disponible desde el plan ${planName}. Tocá para mejorar tu plan.`;
+  const lockTip = `Desactivado: disponible desde el plan ${planName}. Tocá para mejorar tu plan.`;
   const openUpgrade = () => setUpgradeOpen(true);
 
   return (

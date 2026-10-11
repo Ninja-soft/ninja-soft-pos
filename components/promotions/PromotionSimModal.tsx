@@ -11,6 +11,7 @@ import { promotionsApi } from "@/modules/promotions/api";
 import type { Promotion } from "@/modules/promotions/api";
 import { simulatePromotion, type SimResult } from "@/lib/promotions/engine";
 import { formatCurrency } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 // F9 · H56 — Simulador: corre la promo contra las ventas del período y muestra
 // cuánto descuento HABRÍA dado, antes de activarla. Read-only; usa el motor puro.
@@ -86,7 +87,7 @@ export function PromotionSimModal({
             />
             <Metric
               label="Sobre lo vendido"
-              value={pct != null ? `${pct.toFixed(1)}%` : "—"}
+              value={pct != null ? `${pct.toFixed(1)}%` : <NoData />}
             />
             {result.ticketsAnalyzed === 0 && (
               <p className="col-span-2 text-xs text-muted-foreground">
@@ -112,7 +113,7 @@ function Metric({
   accent,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   accent?: boolean;
 }) {
   return (

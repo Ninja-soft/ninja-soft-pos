@@ -20,6 +20,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+import { NoData } from "@/components/ui/NoData";
 
 const SALE_STATUS: Record<string, string> = {
   completed: "Completada",
@@ -243,7 +244,7 @@ export default function VentasPage() {
                     {new Date(s.created_at).toLocaleString("es-AR")}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {s.customers?.name ?? "—"}
+                    {s.customers?.name ?? <NoData />}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold">
                     {formatCurrency(s.total)}

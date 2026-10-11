@@ -213,7 +213,7 @@ export function ExchangeFlow({
         customerId: exchangeCustomerId,
         surplusTo: surplus > 0.001 ? effectiveSurplusTo : null,
       });
-      toast({ title: `Cambio registrado — venta #${res.sale_number}`, variant: "success" });
+      toast({ title: `Cambio registrado: venta #${res.sale_number}`, variant: "success" });
       onDone(res);
     } catch (e) {
       toast({ title: exchangeError(e), variant: "error" });

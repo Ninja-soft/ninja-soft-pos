@@ -25,6 +25,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { CUSTOMER_IMPORT_COLUMNS } from "@/modules/customers/import";
+import { NoData } from "@/components/ui/NoData";
 
 export default function ClientesPage() {
   const { toast } = useToast();
@@ -207,15 +208,15 @@ export default function ClientesPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.document_type
                       ? `${DOC_TYPE_LABELS[c.document_type as keyof typeof DOC_TYPE_LABELS] ?? c.document_type} ${c.document_number ?? ""}`
-                      : "—"}
+                      : <NoData />}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.iva_condition
                       ? (IVA_LABELS[c.iva_condition as keyof typeof IVA_LABELS] ??
                         c.iva_condition)
-                      : "—"}
+                      : <NoData />}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.phone ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.phone ?? <NoData />}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <button

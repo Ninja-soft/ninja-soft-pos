@@ -508,7 +508,7 @@ export default function InternalNotificacionesPage() {
                         {n.title}
                       </td>
                       <td className="py-2.5 pr-4 text-muted-foreground">
-                        {n.requiresAck ? "Sí" : "—"}
+                        {n.requiresAck ? "Sí" : "No"}
                       </td>
                       {canDelete && (
                         <td className="py-2.5 pr-2 text-right">

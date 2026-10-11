@@ -27,6 +27,7 @@ import { downloadA4FromNode } from "@/lib/tickets/exportPng";
 import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { type TicketData } from "@/components/tickets/TicketRenderer";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
+import { NoData } from "@/components/ui/NoData";
 
 interface Props {
   open: boolean;
@@ -353,7 +354,7 @@ function Field({ label, value }: { label: string; value?: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="font-mono text-foreground">{value || "—"}</div>
+      <div className="font-mono text-foreground">{value || <NoData />}</div>
     </div>
   );
 }

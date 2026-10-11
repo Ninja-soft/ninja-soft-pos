@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, SlidersHorizontal } from "lucide-react";
 import { format, startOfDay, startOfMonth, subDays } from "date-fns";
@@ -41,6 +41,7 @@ import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { ReportSection } from "@/components/reports/ReportSection";
 import type { ReportChartDatum } from "@/components/reports/ReportChart";
+import { NoData } from "@/components/ui/NoData";
 
 const REPORTS = [
   { key: "by_day", label: "Por día" },
@@ -949,8 +950,8 @@ export default function ReportesPage() {
                             formatQty(r.qty),
                             formatCurrency(r.total),
                             // Margen sólo significativo si el producto tiene receta
-                            // cargada (cost > 0); si no, "—" (H50/H52).
-                            r.cost > 0 ? formatCurrency(r.margin) : "—",
+                            // cargada (cost > 0); si no, <NoData /> (H50/H52).
+                            r.cost > 0 ? formatCurrency(r.margin) : <NoData />,
                           ])}
                         />
                       </div>
@@ -1005,7 +1006,7 @@ function formatDuration(seconds: number | null | undefined): string {
 }
 
 // Tabla "desnuda" (sin card ni header): el chrome lo aporta ReportSection.
-function BareTable({ cols, rows }: { cols: string[]; rows: string[][] }) {
+function BareTable({ cols, rows }: { cols: string[]; rows: ReactNode[][] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[320px] text-sm">

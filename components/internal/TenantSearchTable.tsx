@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { NoData } from "@/components/ui/NoData";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -76,7 +77,7 @@ export function TenantSearchTable({ tenants }: { tenants: TenantRow[] }) {
                   <div className="text-xs text-muted-foreground">{t.slug}</div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {t.plan_name ?? "—"}
+                  {t.plan_name ?? <NoData />}
                 </td>
                 <td className={`px-4 py-3 font-medium ${STATUS_COLOR[t.status] ?? "text-foreground"}`}>
                   {STATUS_LABELS[t.status] ?? t.status}

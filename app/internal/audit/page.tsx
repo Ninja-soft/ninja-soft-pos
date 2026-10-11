@@ -13,6 +13,7 @@ import {
   useInternalAudit,
   useInternalTenants,
 } from "@/modules/internal/hooks";
+import { NoData } from "@/components/ui/NoData";
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
   if (value == null) return null;
@@ -175,7 +176,7 @@ export default function InternalAuditPage() {
                     </td>
                     <td className="px-4 py-3">{tenantName(e.tenant_id)}</td>
                     <td className="px-4 py-3">
-                      <div>{e.actorName ?? e.actorEmail ?? "—"}</div>
+                      <div>{e.actorName ?? e.actorEmail ?? <NoData />}</div>
                       {e.actorName && e.actorEmail && (
                         <div className="text-xs text-muted-foreground">{e.actorEmail}</div>
                       )}

@@ -284,7 +284,7 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
     // A4 con la estructura de una factura legal argentina (A/B/C). La app aún no
     // integra facturación electrónica (AFIP/ARCA): la letra rinde "X" (no fiscal)
     // y CAE / vto CAE / IIBB / inicio de actividades / doc. del receptor llegan
-    // como "—" desde htmlVars hasta que exista la integración. La maqueta queda
+    // como "s/d" desde htmlVars hasta que exista la integración. La maqueta queda
     // lista para poblarse sin inventar datos.
     key: "a4-factura-legal",
     name: "Factura (legal AR)",
@@ -331,7 +331,7 @@ export const HTML_STARTER_TEMPLATES: HtmlStarterTemplate[] = [
       </td>
       <td style="padding:8px 16px;vertical-align:top">
         <div><span style="color:#333">Condición frente al IVA:</span> {{cliente_iva}}</div>
-        <div style="margin-top:2px"><span style="color:#333">Domicilio:</span> —</div>
+        <div style="margin-top:2px"><span style="color:#333">Domicilio:</span> s/d</div>
       </td>
     </tr>
   </table>

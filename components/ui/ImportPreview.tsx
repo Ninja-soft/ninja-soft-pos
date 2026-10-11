@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { ParsedRow } from "@/lib/utils/xlsxImport";
+import { NoData } from "@/components/ui/NoData";
 
 // Tabla de preview reutilizable para el import XLSX (TX-3). Muestra todas las
 // filas parseadas con sus valores, resalta las inválidas y lista los errores
@@ -88,7 +89,7 @@ export function ImportPreview<R>({
                       )}
                     >
                       {c.cell(row.data) || (
-                        <span className="text-muted-foreground">—</span>
+                        <NoData />
                       )}
                       {/* Errores debajo de la primera celda de datos. */}
                       {bad && i === 0 && (

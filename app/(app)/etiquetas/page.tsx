@@ -11,6 +11,7 @@ import { useProducts } from "@/modules/products/hooks";
 import { usePrintProfiles } from "@/modules/tickets/hooks";
 import { buildLabels, clampCopies, type LabelSource } from "@/lib/labels";
 import { formatCurrency } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 type Sel = Record<string, LabelSource & { copies: number }>;
 
@@ -116,11 +117,11 @@ export default function EtiquetasPage() {
                             {p.plu}
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <NoData />
                         )}
                       </td>
                       <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-                        {p.barcode || p.sku || "—"}
+                        {p.barcode || p.sku || <NoData />}
                       </td>
                       <td className="px-4 py-2 text-right">{formatCurrency(p.price)}</td>
                       <td className="px-4 py-2 text-right">

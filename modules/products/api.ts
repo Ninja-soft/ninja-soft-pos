@@ -349,7 +349,7 @@ export const productsApi = {
       return {
         id: r.id,
         componentProductId: r.component_product_id,
-        name: p?.name ?? "—",
+        name: p?.name ?? "Sin nombre",
         quantity: r.quantity,
       };
     });

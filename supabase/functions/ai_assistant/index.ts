@@ -217,16 +217,16 @@ function providerErrText(raw: string, model: string): string {
 // Guía fija de pantallas del POS (rutas reales de la app). El asistente la usa
 // para orientar al usuario sobre dónde está cada función.
 const HELP_GUIDE = `Mapa de pantallas de NinjaPos:
-• Vender (Punto de venta) — /pos: cargás productos, cobrás (efectivo, débito, crédito, transferencia, QR Mercado Pago) e imprimís el ticket.
-• Caja — /caja: abrís y cerrás la caja, hacés arqueo y ves el cierre Z.
-• Ventas — /ventas: historial de ventas, ver detalle y anular.
-• Devoluciones — /devoluciones: notas de crédito y devoluciones de productos.
-• Productos — /productos: catálogo, precios, stock, variantes y listas de precios.
-• Etiquetas — /etiquetas: impresión de etiquetas/códigos de barras.
-• Clientes — /clientes: alta de clientes, grupos y cuenta corriente.
-• Reportes — /reportes: reportes de ventas por período, por producto y por cliente.
-• Configuración — /configuracion: diseño de ticket, medios de pago (Mercado Pago), email de comprobantes (SMTP), datos del negocio.
-• Panel del dueño — /dashboard-team: visión del negocio para dueños y encargados.
+• Vender, punto de venta (/pos): cargás productos, cobrás (efectivo, débito, crédito, transferencia, QR Mercado Pago) e imprimís el ticket.
+• Caja (/caja): abrís y cerrás la caja, hacés arqueo y ves el cierre Z.
+• Ventas (/ventas): historial de ventas, ver detalle y anular.
+• Devoluciones (/devoluciones): notas de crédito y devoluciones de productos.
+• Productos (/productos): catálogo, precios, stock, variantes y listas de precios.
+• Etiquetas (/etiquetas): impresión de etiquetas/códigos de barras.
+• Clientes (/clientes): alta de clientes, grupos y cuenta corriente.
+• Reportes (/reportes): reportes de ventas por período, por producto y por cliente.
+• Configuración (/configuracion): diseño de ticket, medios de pago (Mercado Pago), email de comprobantes (SMTP), datos del negocio.
+• Panel del dueño (/dashboard-team): visión del negocio para dueños y encargados.
 Para conectar Mercado Pago o configurar el email de comprobantes, andá a Configuración.`;
 
 type ProviderResult =
@@ -978,7 +978,7 @@ Deno.serve(async (req: Request) => {
       "Sos el asistente de NinjaPos, un sistema POS. Respondé SOLO sobre el uso " +
       "del sistema y los datos del negocio. No inventes datos. Español " +
       "rioplatense. Si te preguntan algo fuera del POS, redirigí amablemente. " +
-      "Usá '•' no '—'.\n\n" +
+      "Usá '•' para listas y nunca uses el guion largo (U+2014).\n\n" +
       (useTools
         ? "Tenés HERRAMIENTAS de solo lectura para consultar datos reales del " +
           "negocio cuando el contexto no alcanza: search_products (buscar " +
@@ -1494,7 +1494,7 @@ async function buildContext(
         is_lifetime?: boolean;
         plan_id?: string | null;
       };
-      let planName = "—";
+      let planName = "desconocido";
       if (s.plan_id) {
         const { data: plan } = await admin
           .from("plans")
@@ -1515,7 +1515,7 @@ async function buildContext(
         suspended: "suspendida",
         cancelled: "cancelada",
       };
-      const statusTxt = statusLabels[s.status ?? ""] ?? (s.status ?? "—");
+      const statusTxt = statusLabels[s.status ?? ""] ?? (s.status ?? "sin estado");
       // Para trial, la fecha canónica es tenants.trial_ends_at; si no, el período.
       let endIso: string | null = s.current_period_end ?? null;
       if (s.status === "trial") {
@@ -1545,7 +1545,7 @@ async function buildContext(
         : "";
       lines.push(
         `Suscripción: plan ${planName}, ${statusTxt} ` +
-          `(ciclo ${s.billing_cycle ?? "—"}).${tail}${cancelTxt}`,
+          `(ciclo ${s.billing_cycle ?? "s/d"}).${tail}${cancelTxt}`,
       );
     }
   } catch (e) {

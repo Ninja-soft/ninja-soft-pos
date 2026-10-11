@@ -13,6 +13,7 @@ import { useQrIntents } from "@/modules/pos/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, type SaleNumberFormat } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { NoData } from "@/components/ui/NoData";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -249,7 +250,7 @@ export function QrIntentsModal({
                         <AlertTriangle size={12} /> Sin venta
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <NoData />
                     )}
                   </td>
                 </tr>

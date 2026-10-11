@@ -20,11 +20,12 @@ import {
 import { Accent, Eyebrow } from "@/components/ui/Typography";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { useToast } from "@/components/ui/Toast";
+import { callbackUrl, safeNextPath } from "@/lib/auth/redirect";
 
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams?: { next?: string; reason?: string };
+  searchParams?: { next?: string; reason?: string; error?: string };
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -32,6 +33,8 @@ export default function LoginPage({
   // Aviso de cierre de sesión por inactividad (?reason=inactivity), seteado por
   // el InactivityGuard del shell.
   const inactivityLogout = searchParams?.reason === "inactivity";
+  // Vuelta fallida del OAuth (/auth/callback sin código válido).
+  const oauthError = searchParams?.error === "oauth";
   // Tras un fallo de credenciales no sabemos el proveedor (pre-auth no lo
   // expone por email), así que mostramos siempre el hint de Google.
   const [showGoogleHint, setShowGoogleHint] = useState(false);
@@ -67,7 +70,7 @@ export default function LoginPage({
     const origin = window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${origin}/dashboard` },
+      options: { redirectTo: callbackUrl(origin, safeNextPath(safeNext)) },
     });
     if (error) {
       setGoogleLoading(false);
@@ -78,7 +81,7 @@ export default function LoginPage({
         msg.includes("disabled")
       ) {
         toast({
-          title: "Google está casi listo — falta habilitarlo",
+          title: "Google está casi listo: falta habilitarlo",
           variant: "info",
         });
       } else {
@@ -102,6 +105,11 @@ export default function LoginPage({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {oauthError && (
+          <div role="alert" className="mb-5 rounded-lg bg-red-400/10 p-3 text-sm text-danger">
+            No pudimos completar el ingreso con Google. Probá de nuevo.
+          </div>
+        )}
         {inactivityLogout && (
           <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-warning">
             <Clock size={16} className="mt-0.5 shrink-0" />

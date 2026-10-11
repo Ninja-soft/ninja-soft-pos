@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/signup",
   "/recover",
   "/reset-password",
+  "/auth/callback",
 ];
 
 // Refresca la sesión y aplica redirecciones de auth. Ver docs/05-security.md §3.

@@ -14,11 +14,11 @@ export type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
 // Wordmark dark-mode de NinjaPos (texto "pos" en blanco → necesita fondo oscuro).
 // Usado SOLO en el footer contrastado (fondo oscuro).
 export const NINJA_LOGO_DARK_URL =
-  "https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp";
+  "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm";
 // Wordmark estándar de NinjaSoft para el fallback del header (puede caer sobre
 // fondo claro u oscuro según el diseño; usamos el asset multipropósito).
 export const NINJA_LOGO_URL =
-  "https://ninja-soft-pos.vercel.app/brand/ninjasoft-wordmark.webp";
+  "https://pos.soft.ninja/brand/ninjasoft-wordmark.webp";
 export const FOOTER_TEXT = "Enviado con NinjaPos";
 export const ATTACH_NOTE = "Tu comprobante va adjunto en PDF a este email.";
 

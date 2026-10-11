@@ -67,7 +67,7 @@ function emailHtml(title: string, body: string): string {
   return (
     '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;background:#111827;border-radius:14px;overflow:hidden">' +
     '<div style="padding:28px 24px 20px;text-align:center">' +
-    '<img src="https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp" alt="NinjaPos" style="max-height:24px;display:inline-block" />' +
+    '<img src="https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm" alt="NinjaPos" style="max-height:24px;display:inline-block" />' +
     '<div style="color:#ffffff;font-size:17px;font-weight:bold;margin-top:12px">' +
     esc(title) +
     "</div>" +
@@ -78,7 +78,7 @@ function emailHtml(title: string, body: string): string {
     esc(body) +
     "</p></div>" +
     '<div style="background:#09051C;padding:18px 12px;text-align:center">' +
-    '<img src="https://ninja-soft-pos.vercel.app/brand/ninjapos-logo-dark-mode.webp" alt="NinjaPos" style="max-height:20px;display:inline-block" />' +
+    '<img src="https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm" alt="NinjaPos" style="max-height:20px;display:inline-block" />' +
     '<div style="color:#9ca3af;font-size:11px;margin-top:8px">Enviado con NinjaPos</div>' +
     "</div></div>"
   );

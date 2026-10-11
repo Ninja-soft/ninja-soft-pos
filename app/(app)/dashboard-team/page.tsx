@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
+import { NoData } from "@/components/ui/NoData";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -135,7 +136,7 @@ export default async function DashboardTeamPage() {
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold">{tenant.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {tenant.industry ?? "—"} ·{" "}
+                  {tenant.industry ?? <NoData />} ·{" "}
                   {STATUS_LABELS[tenant.status] ?? tenant.status}
                 </p>
               </div>
@@ -155,7 +156,7 @@ export default async function DashboardTeamPage() {
                 {sub?.plans?.name ?? "Sin plan"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : "—"}
+                {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : <NoData />}
                 {sub?.current_period_end
                   ? ` · vence ${new Date(sub.current_period_end).toLocaleDateString("es-AR")}`
                   : ""}

@@ -127,7 +127,7 @@ function ProfessionalModal({
           </div>
         </div>
         <Input
-          label="Comisión por defecto (%) — opcional"
+          label="Comisión por defecto en % (opcional)"
           type="number"
           step="1"
           min="0"

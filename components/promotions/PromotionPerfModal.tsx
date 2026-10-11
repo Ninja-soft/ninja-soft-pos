@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { promotionsApi, type PromotionPerfReport } from "@/modules/promotions/api";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { formatCurrency } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 // F9 · H56 — Reporte de performance de promociones. Para el período elegido,
 // muestra cuánto descuento otorgó cada promo, en cuántas ventas se usó y la
@@ -133,7 +134,7 @@ export function PromotionPerfModal({
               />
               <Metric
                 label="Sobre lo vendido"
-                value={totalPct != null ? `${totalPct.toFixed(1)}%` : "—"}
+                value={totalPct != null ? `${totalPct.toFixed(1)}%` : <NoData />}
               />
             </div>
 
@@ -188,7 +189,7 @@ function Metric({
   accent,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   accent?: boolean;
 }) {
   return (

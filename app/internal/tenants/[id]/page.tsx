@@ -46,7 +46,7 @@ const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
 
 function fmtDate(iso: string | null | undefined) {
-  if (!iso) return "—";
+  if (!iso) return "Sin datos";
   return new Date(iso).toLocaleDateString("es-AR", {
     year: "numeric",
     month: "short",

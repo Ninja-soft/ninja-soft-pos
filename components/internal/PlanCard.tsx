@@ -31,6 +31,7 @@ import {
   type PlanLimits,
 } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
   max_stores: "Sucursales",
@@ -416,7 +417,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                       {LIMIT_LABELS[k]}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-base font-semibold text-foreground">
-                      {eff ?? "—"}
+                      {eff ?? <NoData />}
                       {hasOv && (
                         <span
                           title="Override activo"
@@ -453,7 +454,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                           {LIMIT_LABELS[k]}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          Plan: {planVal ?? "—"}
+                          Plan: {planVal ?? <NoData />}
                           {hasOv && (
                             <span className="ml-2 text-ninja-flameSoft">
                               Override: {ov}

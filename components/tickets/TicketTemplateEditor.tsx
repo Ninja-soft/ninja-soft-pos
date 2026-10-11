@@ -724,7 +724,7 @@ function HtmlControls({
                 className="flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
               >
                 <code className="font-mono text-ninja-flameSoft">{placeholder}</code>
-                <span className="truncate">— {v.label}</span>
+                <span className="truncate">{v.label}</span>
               </button>
             );
           })}

@@ -158,7 +158,7 @@ export const MODIFIER_PRESETS: ModifierPreset[] = [
   {
     key: "sabores",
     label: "Sabores",
-    hint: "Heladería (hasta 3) — editá la lista",
+    hint: "Heladería (hasta 3): editá la lista",
     group: {
       name: "Sabores",
       required: true,

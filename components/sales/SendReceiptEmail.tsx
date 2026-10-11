@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { exportNodePdfBase64 } from "@/lib/tickets/exportPng";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { NoData } from "@/components/ui/NoData";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -121,7 +122,7 @@ export function SendReceiptEmail({
           la fila de botones (ya no apretada al costado del botón). */}
       {sentAt && (
         <p className="text-xs text-muted-foreground">
-          Enviado a {sentTo ?? "—"} · {new Date(sentAt).toLocaleString("es-AR")}
+          Enviado a {sentTo ?? <NoData />} · {new Date(sentAt).toLocaleString("es-AR")}
         </p>
       )}
 

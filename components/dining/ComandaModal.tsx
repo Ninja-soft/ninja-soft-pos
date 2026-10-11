@@ -463,7 +463,7 @@ function ComandaSheet({
                   {COURSE_LABELS[it.course] ? ` ${COURSE_LABELS[it.course]}` : ""}
                 </span>
               </div>
-              {mods && <div className="pl-7 text-[13px]">— {mods}</div>}
+              {mods && <div className="pl-7 text-[13px]">· {mods}</div>}
               {/* ALERGIA (F13 · H47): recuadro negro + ⚠ + MAYÚSCULAS. En la
                   térmica (B/N) "destacar" = borde grueso + negrita, no color. */}
               {it.allergens && (
@@ -495,7 +495,7 @@ function TableHeaderBlock({
   return (
     <>
       <div className="flex items-baseline justify-between">
-        <span className="text-base font-bold">Mesa {header?.tableLabel ?? "—"}</span>
+        <span className="text-base font-bold">Mesa {header?.tableLabel ?? "s/d"}</span>
         {header?.areaName && <span className="text-neutral-600">{header.areaName}</span>}
       </div>
       <div className="flex items-baseline justify-between text-neutral-600">

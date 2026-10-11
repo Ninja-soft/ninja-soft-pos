@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useAccountsReceivable } from "@/modules/customers/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { NoData } from "@/components/ui/NoData";
 
 // Cuentas por cobrar (H31): deuda global por cliente con buckets de antigüedad.
 export function AccountsReceivableModal({
@@ -135,16 +136,16 @@ export function AccountsReceivableModal({
                         : "px-3 py-2 text-right tabular-nums text-muted-foreground"
                     }
                   >
-                    {r.overdue > 0 ? formatCurrency(r.overdue) : "—"}
+                    {r.overdue > 0 ? formatCurrency(r.overdue) : <NoData />}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    {r.b0_30 ? formatCurrency(r.b0_30) : "—"}
+                    {r.b0_30 ? formatCurrency(r.b0_30) : <NoData />}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    {r.b31_60 ? formatCurrency(r.b31_60) : "—"}
+                    {r.b31_60 ? formatCurrency(r.b31_60) : <NoData />}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                    {r.b61_90 ? formatCurrency(r.b61_90) : "—"}
+                    {r.b61_90 ? formatCurrency(r.b61_90) : <NoData />}
                   </td>
                   <td
                     className={
@@ -153,7 +154,7 @@ export function AccountsReceivableModal({
                         : "px-3 py-2 text-right tabular-nums text-muted-foreground"
                     }
                   >
-                    {r.b90plus ? formatCurrency(r.b90plus) : "—"}
+                    {r.b90plus ? formatCurrency(r.b90plus) : <NoData />}
                   </td>
                   <td className="px-3 py-2 text-right font-semibold tabular-nums">
                     {formatCurrency(r.total)}

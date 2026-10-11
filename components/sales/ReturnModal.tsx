@@ -503,7 +503,7 @@ function ExchangeResultView({
           </div>
           {surplus && result.surplus_to === "store_credit" && (
             <div className="mt-0.5 text-xs text-success">
-              Saldo a favor {formatCurrency(result.surplus)} — canjeable en el POS
+              Saldo a favor {formatCurrency(result.surplus)}, canjeable en el POS
             </div>
           )}
         </div>
@@ -1025,7 +1025,7 @@ function VoucherCustomerPicker({
                 onChange={(e) => setDocType(e.target.value)}
                 className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
               >
-                <option value="">—</option>
+                <option value="">Sin especificar</option>
                 {DOC_TYPES.map((d) => (
                   <option key={d} value={d} className="bg-popover text-popover-foreground">
                     {DOC_TYPE_LABELS[d]}

@@ -55,6 +55,7 @@ import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
@@ -372,7 +373,7 @@ export default function ProductosPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {p.categories?.name ?? "—"}
+                      {p.categories?.name ?? <NoData />}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="inline-flex items-center justify-end gap-1.5">

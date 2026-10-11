@@ -140,10 +140,10 @@ function fmtMoney(n: number | null | undefined): string {
 function fmtDate(s: string | null | undefined): string {
   return s
     ? new Date(s).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
-    : "—";
+    : "fin del período";
 }
 function fmtDateShort(s: string | null | undefined): string {
-  return s ? new Date(s).toLocaleDateString("es-AR", { day: "2-digit", month: "long" }) : "—";
+  return s ? new Date(s).toLocaleDateString("es-AR", { day: "2-digit", month: "long" }) : "fin del período";
 }
 // Días restantes (>= 0) hasta una fecha. null si no hay fecha.
 function daysUntil(s: string | null | undefined): number | null {

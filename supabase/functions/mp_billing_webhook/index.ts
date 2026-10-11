@@ -691,7 +691,7 @@ async function creditApprovedPayment(
       { negocio: tenantName, monto: montoLabel, vence: endLabel },
       isReactivation
         ? "Reactivamos tu cuenta de NinjaPos"
-        : "Recibimos tu pago — gracias",
+        : "Recibimos tu pago. ¡Gracias!",
       emailHtml(
         isReactivation ? "Reactivamos tu cuenta" : "Recibimos tu pago",
         isReactivation
@@ -763,7 +763,7 @@ async function notifyDunning(
       tenantId,
       "payment_failed",
       { negocio: tenantName },
-      "Hubo un problema con tu cobro — tenés 3 días",
+      "Hubo un problema con tu cobro: tenés 3 días",
       emailHtml(
         "Hubo un problema con tu cobro",
         "No pudimos confirmar el pago de tu suscripción de NinjaPos. Tenés 3 días para regularizarlo desde Mercado Pago; pasado ese plazo tu cuenta se bloquea hasta que pagues. Si ya pagaste, podés ignorar este aviso.",

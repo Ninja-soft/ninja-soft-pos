@@ -14,7 +14,7 @@ import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMetho
 import { format } from "date-fns";
 
 function fdate(s: string | null): string {
-  if (!s) return "—";
+  if (!s) return "Sin datos";
   return new Date(s).toLocaleString("es-AR");
 }
 

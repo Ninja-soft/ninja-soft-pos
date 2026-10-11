@@ -29,6 +29,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { FEATURE_INFO } from "@/lib/saas/featureInfo";
 import { PLAN_ICONS, DEFAULT_PLAN_ICON } from "./planIcons";
 import { PlanBadge } from "./PlanBadge";
+import { NoData } from "@/components/ui/NoData";
 
 const PLAN_ASSETS_BUCKET = "plan-assets";
 
@@ -438,7 +439,7 @@ export function PlanEditorModal({
               <span className="font-price text-lg font-bold text-foreground">
                 {price.trim() !== "" && Number.isFinite(Number(price))
                   ? formatCurrency(Number(price))
-                  : "—"}
+                  : <NoData />}
                 <span className="text-xs font-normal text-muted-foreground">
                   /mes
                 </span>

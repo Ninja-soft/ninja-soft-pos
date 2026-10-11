@@ -10,6 +10,7 @@ import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
+import { NoData } from "@/components/ui/NoData";
 
 type ScannerSettings = {
   scanner_prefix: string;
@@ -262,7 +263,7 @@ export function ScannerCard() {
                       </td>
                       <td className="py-2 pr-3 font-mono">{c.code}</td>
                       <td className="py-2 pr-3 font-mono text-muted-foreground">
-                        {c.raw !== c.code ? c.raw : "—"}
+                        {c.raw !== c.code ? c.raw : <NoData />}
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums">
                         {c.length}

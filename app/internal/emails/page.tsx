@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
 import { cn } from "@/lib/utils/cn";
+import { NoData } from "@/components/ui/NoData";
 
 type Saved = Record<string, { subject: string; html: string }>;
 
@@ -716,7 +717,7 @@ function SystemEmailsLog() {
           fecha: fmtDate(e.created_at),
           asunto: e.subject,
           destinatario: e.recipient,
-          negocio: e.tenantName ?? "—",
+          negocio: e.tenantName ?? "",
           tipo: KIND_LABELS[e.kind] ?? e.kind,
           estado: STATUS_LABELS[e.status] ?? e.status,
           error: e.error_message ?? "",
@@ -817,7 +818,7 @@ function SystemEmailsLog() {
                     </td>
                     <td className="py-2 pr-3">{e.subject}</td>
                     <td className="py-2 pr-3">{e.recipient}</td>
-                    <td className="py-2 pr-3">{e.tenantName ?? "—"}</td>
+                    <td className="py-2 pr-3">{e.tenantName ?? <NoData />}</td>
                     <td className="py-2 pr-3">
                       <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                         {KIND_LABELS[e.kind] ?? e.kind}

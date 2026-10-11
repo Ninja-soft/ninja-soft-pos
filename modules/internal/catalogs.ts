@@ -188,7 +188,7 @@ export const catalogsApi = {
       const t = (r.tenants as Record<string, unknown>) ?? {};
       return {
         tenantId: r.tenant_id as string,
-        tenantName: (t.name as string) ?? "—",
+        tenantName: (t.name as string) ?? "Sin nombre",
         tenantSlug: (t.slug as string) ?? "",
         source: (r.source as "paid" | "granted") ?? "granted",
         pricePaid: r.price_paid != null ? Number(r.price_paid) : null,

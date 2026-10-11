@@ -15,6 +15,7 @@ import {
   useTenantHealth,
 } from "@/modules/internal/hooks";
 import { formatRelative } from "@/lib/utils/format";
+import { NoData } from "@/components/ui/NoData";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Trial",
@@ -214,10 +215,10 @@ export default function InternalTenantsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div>{t.ownerName ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground">{t.ownerEmail ?? "—"}</div>
+                  <div>{t.ownerName ?? <NoData />}</div>
+                  <div className="text-xs text-muted-foreground">{t.ownerEmail ?? <NoData />}</div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{t.planName ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{t.planName ?? <NoData />}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
                     {STATUS_LABELS[t.subStatus ?? t.status] ?? t.subStatus ?? t.status}
@@ -231,7 +232,7 @@ export default function InternalTenantsPage() {
                       .map((d) => new Date(d as string).getTime());
                     return ts.length > 0
                       ? formatRelative(new Date(Math.max(...ts)))
-                      : "—";
+                      : <NoData />;
                   })()}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">

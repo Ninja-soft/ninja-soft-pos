@@ -302,7 +302,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Catálogo
           </p>
-          <h1 className="mt-0.5 truncate font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <h1 className="mt-0.5 break-words font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {catalog.name}
           </h1>
           <div className="mt-1.5 flex flex-wrap gap-1.5">

@@ -103,10 +103,10 @@ export default function ClientesPage() {
   return (
     <>
 <div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4">
+          <div className="min-w-0">
             <Eyebrow>Clientes</Eyebrow>
-            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
+            <Display className="mt-3 flex items-center gap-2 break-words text-3xl md:text-4xl">
               Clientes
               <InfoHint section="clientes" size={18} />
             </Display>

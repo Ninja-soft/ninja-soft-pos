@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 import type { Tables } from "@/types/database";
 
 export type NotificationRow = Tables<"notifications">;
@@ -34,10 +35,7 @@ type ReadState = {
 };
 
 async function currentUserId(): Promise<string> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) throw new Error("No hay sesión activa");
   return user.id;
 }

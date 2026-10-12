@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 
 export interface MyTenant {
   tenantId: string;
@@ -17,9 +18,7 @@ export function useMyTenant() {
     queryKey: ["my-tenant"],
     queryFn: async (): Promise<MyTenant | null> => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       const { data: mem } = await supabase
         .from("tenant_users")

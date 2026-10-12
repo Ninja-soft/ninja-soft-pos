@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
@@ -27,13 +28,23 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
-import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
-import { ProfileEditModal } from "@/components/account/ProfileEditModal";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+
+// Modales del menú de usuario: chunks aparte y montados recién al abrirlos.
+const ChangePasswordModal = dynamic(
+  () => import("@/components/ui/ChangePasswordModal").then((m) => m.ChangePasswordModal),
+  { ssr: false },
+);
+const ProfileEditModal = dynamic(
+  () => import("@/components/account/ProfileEditModal").then((m) => m.ProfileEditModal),
+  { ssr: false },
+);
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import {
   Dropdown,
@@ -84,9 +95,7 @@ export function InternalShell({
     queryKey: ["internal-shell-profile"],
     queryFn: async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
       const [acc, mem] = await Promise.all([
@@ -252,8 +261,12 @@ export function InternalShell({
         </main>
       </div>
 
-      <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
-      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      <MountWhenOpened open={pwOpen}>
+        <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      </MountWhenOpened>
+      <MountWhenOpened open={pfOpen}>
+        <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      </MountWhenOpened>
     </div>
   );
 }

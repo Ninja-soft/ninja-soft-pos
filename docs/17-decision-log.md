@@ -1116,31 +1116,6 @@ Sigue "Próximamente". La integración de terminales de Getnet ("Integrated POS"
 
 ---
 
-## ADR-035 — Gráficos con ECharts (reemplaza Recharts)
-
-**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** Reportes
-
-### Contexto
-
-El dueño pidió ECharts para los gráficos y marcó como mal diseñado el switch de íconos gráfico/tabla de `ReportSection`. Recharts sólo se usaba en Reportes.
-
-### Decisión
-
-- `echarts@5.5.1` (exacto, igual que ninja-soft-web); `recharts` se quita. Registro mínimo en `components/charts/echarts-core.ts` (bar, line, pie, heatmap, treemap + grid, tooltip, legend, dataZoom, visualMap, markLine, title, canvas) importado **siempre de forma dinámica** por `components/charts/EChart.tsx`, que además lo carga recién cuando el gráfico entra al viewport.
-- Colores leídos de las CSS vars del tema en el contenedor (los 4 temas) y re-dibujo al cambiar `data-theme`. Paleta categórica fija de 6 tonos (dark y light), validada con el validador de dataviz (banda OKLCH, croma, CVD adyacente, contraste 3:1); lo que excede 6 se pliega en "Otros".
-- Builders puros en `components/charts/builders.ts` (serie temporal con comparación, ranking, dona, mosaico, heatmap día × hora, apiladas, flujo de caja, bullet), testeados.
-- Switch Gráfico/Tabla: `components/ui/SegmentedControl.tsx` (radiogroup, flechas/Inicio/Fin, pulgar relleno deslizante, sin bordes de color), preferencia por sección en localStorage con try/catch.
-- Datos nuevos sin backend nuevo: comparación vs. período anterior = la misma RPC `sales_report` con el rango previo (se pide después del reporte principal); heatmap día × hora y flujo de caja = lecturas bajo RLS de `sales` y `cash_movements`, paginadas de a 1000 y diferidas hasta que la sección entra en pantalla.
-
-### Consecuencias
-
-- El chunk de ECharts (~228 kB gzip) no entra en el First Load de Reportes: se baja sólo con el primer gráfico visible. La ruta pasa de ~14 kB a ~28 kB por el código de las secciones nuevas.
-- El heatmap y el flujo de caja no tienen key de plan propia: son parte del módulo Reportes existente. Si comercialmente se quieren como "métricas avanzadas", hay que moverlos a RPCs con `tenant_has_feature_for` (la lectura directa bajo RLS no se puede gatear por plan).
-- La hora del heatmap es la local del navegador (Argentina en la práctica).
-
-### Referencias
-
-- `components/charts/*`, `components/reports/ReportSection.tsx`, `components/reports/KpiCard.tsx`, `components/ui/SegmentedControl.tsx`, `modules/reports/derive.ts`, `app/(app)/reportes/page.tsx`, `tests/unit/reportCharts.test.ts`.
 ## ADR-032 — Mercado Pago presencial sobre Orders API (QR dinámico + Point)
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de deploy y validación en sandbox) · **Hito:** F8 · H15
@@ -1236,30 +1211,31 @@ El dueño pidió sumar "Directo, medio de pago de crédito directo": **Crédito 
 
 ---
 
-## ADR-035 — Configuración de medios de pago por marca y canal (rediseño)
+## ADR-035 — Gráficos con ECharts (reemplaza Recharts)
 
-**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** Reportes
 
 ### Contexto
 
-El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
+El dueño pidió ECharts para los gráficos y marcó como mal diseñado el switch de íconos gráfico/tabla de `ReportSection`. Recharts sólo se usaba en Reportes.
 
 ### Decisión
 
-- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
-- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
-- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
-- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
-- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
-- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
+- `echarts@5.5.1` (exacto, igual que ninja-soft-web); `recharts` se quita. Registro mínimo en `components/charts/echarts-core.ts` (bar, line, pie, heatmap, treemap + grid, tooltip, legend, dataZoom, visualMap, markLine, title, canvas) importado **siempre de forma dinámica** por `components/charts/EChart.tsx`, que además lo carga recién cuando el gráfico entra al viewport.
+- Colores leídos de las CSS vars del tema en el contenedor (los 4 temas) y re-dibujo al cambiar `data-theme`. Paleta categórica fija de 6 tonos (dark y light), validada con el validador de dataviz (banda OKLCH, croma, CVD adyacente, contraste 3:1); lo que excede 6 se pliega en "Otros".
+- Builders puros en `components/charts/builders.ts` (serie temporal con comparación, ranking, dona, mosaico, heatmap día × hora, apiladas, flujo de caja, bullet), testeados.
+- Switch Gráfico/Tabla: `components/ui/SegmentedControl.tsx` (radiogroup, flechas/Inicio/Fin, pulgar relleno deslizante, sin bordes de color), preferencia por sección en localStorage con try/catch.
+- Datos nuevos sin backend nuevo: comparación vs. período anterior = la misma RPC `sales_report` con el rango previo (se pide después del reporte principal); heatmap día × hora y flujo de caja = lecturas bajo RLS de `sales` y `cash_movements`, paginadas de a 1000 y diferidas hasta que la sección entra en pantalla.
 
 ### Consecuencias
 
-- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
-- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
+- El chunk de ECharts (~228 kB gzip) no entra en el First Load de Reportes: se baja sólo con el primer gráfico visible. La ruta pasa de ~14 kB a ~28 kB por el código de las secciones nuevas.
+- El heatmap y el flujo de caja no tienen key de plan propia: son parte del módulo Reportes existente. Si comercialmente se quieren como "métricas avanzadas", hay que moverlos a RPCs con `tenant_has_feature_for` (la lectura directa bajo RLS no se puede gatear por plan).
+- La hora del heatmap es la local del navegador (Argentina en la práctica).
 
----
+### Referencias
 
+- `components/charts/*`, `components/reports/ReportSection.tsx`, `components/reports/KpiCard.tsx`, `components/ui/SegmentedControl.tsx`, `modules/reports/derive.ts`, `app/(app)/reportes/page.tsx`, `tests/unit/reportCharts.test.ts`.
 ## ADR-036 — POS por presets y hoja de cobro única
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** rediseño del POS
@@ -1283,6 +1259,30 @@ El dueño pidió poder elegir entre varios diseños del punto de venta y arregla
 - Deploy: migración `20261011190000_pos_layout` antes de guardar diseños (sin la columna, el POS cae al preset Mostrador).
 - Directo ahora puede ir en un pago dividido (cada línea pide su número de operación).
 - Se eliminó `PaymentModal` y `FavoritesGrid`.
+
+---
+
+## ADR-038 — Configuración de medios de pago por marca y canal (rediseño)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
+
+### Contexto
+
+El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
+
+### Decisión
+
+- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
+- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
+- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
+- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
+- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
+- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
+
+### Consecuencias
+
+- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
+- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
 
 ---
 

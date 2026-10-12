@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/Input";
 import { Callout } from "@/components/ui/Callout";
+import { Select } from "@/components/ui/Select";
 import {
   ADAPTER_LABEL,
   TRANSPORT_LABEL,
@@ -16,7 +17,6 @@ import type { AdapterKey, TransportKind } from "@/lib/payments/terminal/types";
 // el protocolo manda en cada venta. Lo que es de cada PC (qué dispositivo
 // quedó emparejado, token del puente) se hace aparte, en "Conectar".
 
-const SELECT = "h-11 w-full rounded-lg border border-border bg-card px-3 text-sm";
 const BAUDS = [9600, 19200, 38400, 57600, 115200];
 
 export function IntegratedTerminalFields({
@@ -37,38 +37,21 @@ export function IntegratedTerminalFields({
   return (
     <div className="space-y-3 rounded-lg border border-border p-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Protocolo</span>
-          <select
-            className={SELECT}
-            value={value.adapter}
-            onChange={(e) => {
-              const adapter = e.target.value as AdapterKey;
-              set({ adapter, transport: adapter === "simulator" ? "none" : value.transport === "none" ? "webserial" : value.transport });
-            }}
-          >
-            {adapters.map((a) => (
-              <option key={a} value={a}>
-                {ADAPTER_LABEL[a]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Protocolo"
+          value={value.adapter}
+          options={adapters.map((a) => ({ value: a, label: ADAPTER_LABEL[a] }))}
+          onChange={(adapter) =>
+            set({ adapter, transport: adapter === "simulator" ? "none" : value.transport === "none" ? "webserial" : value.transport })
+          }
+        />
         {real && (
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Conexión</span>
-            <select
-              className={SELECT}
-              value={value.transport}
-              onChange={(e) => set({ transport: e.target.value as TransportKind })}
-            >
-              {(["webserial", "webusb", "bridge"] as const).map((t) => (
-                <option key={t} value={t}>
-                  {TRANSPORT_LABEL[t]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Select<TransportKind>
+            label="Conexión"
+            value={value.transport}
+            options={(["webserial", "webusb", "bridge"] as const).map((t) => ({ value: t, label: TRANSPORT_LABEL[t] }))}
+            onChange={(transport) => set({ transport })}
+          />
         )}
       </div>
 
@@ -92,40 +75,27 @@ export function IntegratedTerminalFields({
       )}
 
       {real && (value.transport === "webserial" || (value.transport === "bridge" && target?.kind !== "tcp")) && (
-        <label className="block text-sm">
-          <span className="mb-1 block font-medium">Velocidad del puerto</span>
-          <select
-            className={SELECT}
-            value={value.serial.baudRate}
-            onChange={(e) => set({ serial: { ...value.serial, baudRate: Number(e.target.value) } })}
-          >
-            {BAUDS.map((b) => (
-              <option key={b} value={b}>
-                {b} bps
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Velocidad del puerto"
+          value={String(value.serial.baudRate)}
+          options={BAUDS.map((b) => ({ value: String(b), label: `${b} bps` }))}
+          onChange={(b) => set({ serial: { ...value.serial, baudRate: Number(b) } })}
+        />
       )}
 
       {real && value.transport === "bridge" && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium">Destino</span>
-            <select
-              className={SELECT}
-              value={target?.kind ?? "serial"}
-              onChange={(e) =>
-                set({
-                  bridgeTarget:
-                    e.target.value === "tcp" ? { kind: "tcp", host: "", port: 0 } : { kind: "serial", path: "" },
-                })
-              }
-            >
-              <option value="serial">Puerto de la PC</option>
-              <option value="tcp">Red (LAN)</option>
-            </select>
-          </label>
+          <Select
+            label="Destino"
+            value={target?.kind ?? "serial"}
+            options={[
+              { value: "serial", label: "Puerto de la PC" },
+              { value: "tcp", label: "Red (LAN)" },
+            ]}
+            onChange={(k) =>
+              set({ bridgeTarget: k === "tcp" ? { kind: "tcp", host: "", port: 0 } : { kind: "serial", path: "" } })
+            }
+          />
           {target?.kind === "tcp" ? (
             <>
               <Input

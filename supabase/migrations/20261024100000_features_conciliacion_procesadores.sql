@@ -36,7 +36,7 @@ set limits = jsonb_set(
   coalesce(p.limits, '{}'::jsonb),
   '{modules}',
   coalesce(p.limits -> 'modules', '{}'::jsonb)
-    || jsonb_build_object('conciliacion_procesadores', (p.key in ('business', 'enterprise'))),
+    || jsonb_build_object('conciliacion_procesadores', (p.key in ('pro', 'business', 'enterprise'))),
   true
 )
 where p.tenant_id is null

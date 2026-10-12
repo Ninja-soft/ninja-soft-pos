@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus, Palette } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
@@ -159,20 +158,8 @@ export function BrandingCard() {
   }
 
   return (
-    <Card className="mt-6">
-      <CardContent className="space-y-6 p-5">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
-            <Palette size={18} />
-          </span>
-          <div>
-            <Heading as="h3" className="text-base">Marca del negocio</Heading>
-            <p className="text-sm text-muted-foreground">
-              Logo, color y datos que se ven en tickets, comprobantes y catálogo.
-            </p>
-          </div>
-        </div>
-
+    <Card>
+      <CardContent className="space-y-6 p-5 sm:p-6">
         {/* Logo */}
         <div>
           <span className="mb-2 block text-sm font-medium text-muted-foreground">Logo</span>

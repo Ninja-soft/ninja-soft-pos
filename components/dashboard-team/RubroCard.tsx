@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Sparkles, Store, Trash2 } from "lucide-react";
+import { AlertTriangle, Sparkles, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -149,22 +148,8 @@ export function RubroCard() {
   }
 
   return (
-    <Card className="mt-6">
-      <CardContent className="space-y-6 p-5">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
-            <Store size={18} />
-          </span>
-          <div>
-            <Heading as="h3" className="text-base">
-              Rubro del negocio
-            </Heading>
-            <p className="text-sm text-muted-foreground">
-              Define qué funciones del POS se adaptan a tu actividad.
-            </p>
-          </div>
-        </div>
-
+    <Card>
+      <CardContent className="space-y-6 p-5 sm:p-6">
         <div className="grid gap-3 sm:grid-cols-2">
           {VERTICALS.map((v) => {
             const active = current === v;

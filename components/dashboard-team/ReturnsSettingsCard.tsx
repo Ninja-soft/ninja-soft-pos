@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, RotateCcw, Scale, Tags, Ticket } from "lucide-react";
+import { CalendarClock, Scale, Tags, Ticket } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { ReturnReasonsModal } from "@/components/sales/ReturnReasonsModal";
 import {
@@ -96,15 +95,6 @@ export function ReturnsSettingsCard() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <RotateCcw size={18} /> Devoluciones
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cómo se resuelven las devoluciones y los vales (saldo a favor) del negocio.
-        </p>
-      </div>
-
       {/* Política de devolución */}
       <Card>
         <CardContent className="p-5">
@@ -149,7 +139,7 @@ export function ReturnsSettingsCard() {
 
       {/* Validez del vale */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <CalendarClock size={16} className="text-ninja-flameSoft" /> Validez del vale (meses)
@@ -176,7 +166,7 @@ export function ReturnsSettingsCard() {
 
       {/* Motivos de devolución (catálogo con destino de stock) */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Tags size={16} className="text-ninja-flameSoft" /> Motivos de devolución

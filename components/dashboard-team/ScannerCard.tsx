@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScanLine, Sparkles, Trash2 } from "lucide-react";
+import { Sparkles, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
@@ -127,16 +126,6 @@ export function ScannerCard() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <ScanLine size={18} /> Escáner
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Perfil del lector de código de barras: limpieza de prefijo/sufijo, beep
-          de confirmación y anti-duplicado.
-        </p>
-      </div>
-
       {/* Ajustes */}
       <Card>
         <CardContent className="space-y-5 p-5">

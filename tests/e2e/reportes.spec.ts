@@ -29,19 +29,24 @@ test.describe("reportes", () => {
       has: page.getByRole("heading", { level: 2, name: "Evolución de ventas" }),
     });
     await expect(section).toBeVisible();
-    // Sin ventas en el rango el gráfico muestra su estado vacío en vez del canvas.
+    // Sin ventas en el rango (tenant QA nuevo, ventas del suite anuladas) el
+    // gráfico muestra su estado vacío en vez del canvas. Se espera a que el
+    // gráfico termine de cargar antes de decidir.
     const empty = section.getByText("Sin datos en este período");
-    const hasData = !(await empty.isVisible().catch(() => false));
-    if (hasData) {
-      await expect(section.locator('[role="img"] canvas').first()).toBeVisible();
-    }
+    const canvas = section.locator('[role="img"] canvas');
+    await expect(empty.or(canvas).first()).toBeVisible();
+    const hasData = !(await empty.isVisible());
 
-    // Switch: Tabla → tabla con sus columnas; Gráfico → vuelve el canvas.
+    // Switch: Tabla → tabla con sus columnas (una fila por día, con o sin
+    // ventas); Gráfico → vuelve el canvas o el estado vacío.
+    // (getByRole("columnheader") no encuentra estos <th> en la app real: se busca por tag.)
+    const header = section.locator("thead th", { hasText: "Ticket prom." });
     const view = page.getByRole("radiogroup", { name: "Vista de Evolución de ventas" });
     await view.getByRole("radio", { name: "Tabla" }).click();
-    await expect(section.getByRole("columnheader", { name: "Ticket prom." })).toBeVisible();
+    await expect(header).toBeVisible();
+    await expect(section.locator("tbody tr").first()).toBeVisible();
     await view.getByRole("radio", { name: "Gráfico" }).click();
-    await expect(section.getByRole("columnheader", { name: "Ticket prom." })).toHaveCount(0);
-    if (hasData) await expect(section.locator('[role="img"] canvas').first()).toBeVisible();
+    await expect(header).toHaveCount(0);
+    await expect(hasData ? canvas.first() : empty).toBeVisible();
   });
 });

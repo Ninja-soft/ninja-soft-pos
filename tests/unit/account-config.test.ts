@@ -3,6 +3,7 @@ import {
   ACCOUNT_CONFIG_DEFAULT,
   accountConfigSchema,
   accountConfigOverrideSchema,
+  describeAccountConfig,
   effectiveAccountConfig,
 } from "@/lib/account/config";
 
@@ -53,5 +54,31 @@ describe("effectiveAccountConfig", () => {
   it("los arrays del override reemplazan (no concatenan)", () => {
     const eff = effectiveAccountConfig({ reminders: { after_days: [1, 7] } }, null, { reminders: { after_days: [3] } });
     expect(eff.reminders.after_days).toEqual([3]);
+  });
+});
+
+describe("describeAccountConfig", () => {
+  it("resume la config efectiva en palabras", () => {
+    expect(describeAccountConfig(ACCOUNT_CONFIG_DEFAULT)).toEqual([
+      "Vence a 30 días",
+      "Sin cuotas",
+      "Sin punitorios",
+      "Sin bloqueo por mora",
+    ]);
+    const c = effectiveAccountConfig(
+      {
+        terms: { mode: "monthly_cutoff", cutoff_day: 25, due_day: 10 },
+        installments: { enabled: true, max: 3 },
+        interest: { enabled: true, rate_pct: 0.1, period: "daily" },
+        blocking: { overdue_days: 30 },
+      },
+      null,
+    );
+    expect(describeAccountConfig(c)).toEqual([
+      "Corte el día 25, vence el 10 del mes siguiente",
+      "Hasta 3 cuotas",
+      "Punitorio 0,1% diario simple",
+      "Bloquea con más de 30 días de mora",
+    ]);
   });
 });

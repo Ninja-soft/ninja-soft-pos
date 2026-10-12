@@ -229,7 +229,7 @@ export function AccountConfigForm({
         )}
       </Section>
 
-      <Section icon={ShieldAlert} title="Bloqueo por mora">
+      <Section icon={ShieldAlert} title="Bloqueo y autorizaciones">
         <Row title="Bloquear ventas a cuenta con deuda vencida">
           <Switch
             checked={value.blocking.overdue_days !== null}
@@ -238,20 +238,21 @@ export function AccountConfigForm({
           />
         </Row>
         {value.blocking.overdue_days !== null && (
-          <>
-            <Row title="Bloquear después de" hint="Días de atraso de la deuda más vieja.">
-              <Num label="Días de mora" value={value.blocking.overdue_days} min={0} max={365} onChange={(v) => set("blocking", { overdue_days: v ?? 0 })} />
-              <span className="text-sm text-muted-foreground">días</span>
-            </Row>
-            <Row title="Permitir que un encargado autorice igual" hint="Con motivo; queda en la auditoría.">
-              <Switch
-                checked={value.blocking.allow_manager_override}
-                onCheckedChange={(allow_manager_override) => set("blocking", { allow_manager_override })}
-                label="Override de encargado"
-              />
-            </Row>
-          </>
+          <Row title="Bloquear después de" hint="Días de atraso de la deuda más vieja.">
+            <Num label="Días de mora" value={value.blocking.overdue_days} min={0} max={365} onChange={(v) => set("blocking", { overdue_days: v ?? 0 })} />
+            <span className="text-sm text-muted-foreground">días</span>
+          </Row>
         )}
+        <Row
+          title="Permitir que un supervisor autorice igual"
+          hint="Mora, cuenta bloqueada o límite: el dueño o un encargado con motivo o con su PIN. Queda en la auditoría."
+        >
+          <Switch
+            checked={value.blocking.allow_manager_override}
+            onCheckedChange={(allow_manager_override) => set("blocking", { allow_manager_override })}
+            label="Autorización de supervisor"
+          />
+        </Row>
       </Section>
 
       {showReminders && (

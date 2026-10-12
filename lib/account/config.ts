@@ -109,3 +109,24 @@ export function parseOverride(v: unknown): AccountConfigOverride | null {
   const r = accountConfigOverrideSchema.safeParse(v);
   return r.success ? (r.data as AccountConfigOverride) : null;
 }
+
+const pct = (n: number) => `${n.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%`;
+
+// Resumen en palabras de una config efectiva (vista previa de grupo / cliente).
+export function describeAccountConfig(c: AccountConfig): string[] {
+  const t = c.terms;
+  return [
+    t.mode === "days"
+      ? `Vence a ${t.days} días`
+      : `Corte el día ${t.cutoff_day}, vence el ${t.due_day} del mes siguiente`,
+    c.installments.enabled ? `Hasta ${c.installments.max} cuotas` : "Sin cuotas",
+    c.interest.enabled
+      ? `Punitorio ${pct(c.interest.rate_pct)} ${c.interest.period === "daily" ? "diario" : "mensual"} ${
+          c.interest.method === "compound" ? "compuesto" : "simple"
+        }`
+      : "Sin punitorios",
+    c.blocking.overdue_days === null
+      ? "Sin bloqueo por mora"
+      : `Bloquea con más de ${c.blocking.overdue_days} días de mora`,
+  ];
+}

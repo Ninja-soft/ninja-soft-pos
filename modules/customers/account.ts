@@ -181,6 +181,31 @@ export interface CollectResult {
   idempotent?: boolean;
 }
 
+export interface SupervisorPinStatus {
+  can_have_pin: boolean;
+  has_pin: boolean;
+  updated_at: string | null;
+  locked_until: string | null;
+}
+
+export interface Supervisor {
+  user_id: string;
+  name: string;
+  role: "owner" | "manager";
+  locked: boolean;
+}
+
+// Resultado de pedir autorización con PIN. Los errores de PIN vuelven en el
+// cuerpo (no como excepción) para que el server pueda contar los intentos.
+export type OverrideAuthResult =
+  | { ok: true; token: string; expires_at: string; block: string }
+  | {
+      ok: false;
+      error: "pin_invalid" | "pin_locked" | "pin_not_set" | "override_not_needed" | "override_not_allowed";
+      attempts_left?: number;
+      locked_until?: string;
+    };
+
 export interface TeamMember {
   user_id: string;
   name: string;
@@ -335,6 +360,34 @@ export const accountApi = {
     if ((data as { error?: string } | null)?.error) throw new Error((data as { error: string }).error);
   },
 
+  // PIN de supervisor (dueño / encargado). Sólo se guarda el hash en el server.
+  pinStatus: () => rpc<SupervisorPinStatus>("account_supervisor_pin_status", {}),
+  setPin: (pin: string) => rpc<{ ok: boolean }>("account_set_supervisor_pin", { p_pin: pin }),
+  clearPin: (userId?: string | null) =>
+    rpc<{ ok: boolean }>("account_clear_supervisor_pin", { p_user_id: userId ?? null }),
+  supervisors: () => rpc<Supervisor[]>("account_supervisors", {}),
+  authorizeOverride: (input: {
+    customerId: string;
+    supervisorId: string;
+    pin: string;
+    amount: number;
+    reason: string;
+  }) =>
+    rpc<OverrideAuthResult>("account_authorize_override", {
+      p_customer_id: input.customerId,
+      p_supervisor_id: input.supervisorId,
+      p_pin: input.pin,
+      p_amount: input.amount,
+      p_reason: input.reason,
+    }),
+
+  // Condiciones de cuenta de un grupo de clientes (override parcial; null = hereda).
+  setGroupConfig: (groupId: string, config: AccountConfigOverride | null) =>
+    rpc<{ ok: boolean }>("account_set_group_config", {
+      p_group_id: groupId,
+      p_config: (config as unknown as Json) ?? null,
+    }),
+
   // Miembros del equipo (cobrador / responsable de tareas).
   team: async (): Promise<TeamMember[]> => {
     const supabase = createClient();
@@ -373,6 +426,13 @@ const ERRORS: [string, string][] = [
   ["tenant_smtp_not_configured", "Configurá el email de tu negocio en Configuración, sección Email"],
   ["invalid_to", "El cliente no tiene un email válido"],
   ["payment_method_not_allowed", "Ese medio de pago no está incluido en tu plan"],
+  ["override_token_invalid", "La autorización venció o ya se usó: pedila de nuevo"],
+  ["override_reason_required", "Escribí el motivo de la autorización"],
+  ["supervisor_not_found", "Elegí un dueño o encargado activo"],
+  ["weak_pin", "Ese PIN es muy fácil: evitá números repetidos o en escalera"],
+  ["invalid_pin", "El PIN tiene que tener entre 4 y 6 números"],
+  ["group_not_found", "No encontramos ese grupo"],
+  ["forbidden_account_fields", "Sólo el dueño o un encargado pueden cambiar condiciones de cuenta"],
   ["forbidden", "No tenés permiso para esta acción"],
 ];
 

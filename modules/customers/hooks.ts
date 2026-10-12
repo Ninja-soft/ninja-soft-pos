@@ -9,6 +9,7 @@ import {
 import { customersApi, customerGroupsApi } from "./api";
 import { accountApi, type CollectionItem } from "./account";
 import type { CustomerOutput } from "./schemas";
+import type { AccountConfigOverride } from "@/lib/account/config";
 
 export function useCustomers(search: string) {
   return useQuery({
@@ -128,6 +129,23 @@ export function useTeamMembers(enabled = true) {
   });
 }
 
+export function useSupervisorPinStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["account", "pin-status"],
+    enabled,
+    queryFn: () => accountApi.pinStatus(),
+  });
+}
+
+export function useAccountSupervisors(enabled = true) {
+  return useQuery({
+    queryKey: ["account", "supervisors"],
+    enabled,
+    queryFn: () => accountApi.supervisors(),
+    staleTime: 0,
+  });
+}
+
 export function useAccountMutations() {
   const qc = useQueryClient();
   const invalidate = () => {
@@ -168,6 +186,20 @@ export function useAccountMutations() {
     saveSettings: useMutation({
       mutationFn: accountApi.saveSettings,
       onSuccess: invalidate,
+    }),
+    setPin: useMutation({ mutationFn: accountApi.setPin, onSuccess: invalidate }),
+    clearPin: useMutation({
+      mutationFn: (userId?: string | null) => accountApi.clearPin(userId),
+      onSuccess: invalidate,
+    }),
+    authorizeOverride: useMutation({ mutationFn: accountApi.authorizeOverride }),
+    setGroupConfig: useMutation({
+      mutationFn: (v: { groupId: string; config: AccountConfigOverride | null }) =>
+        accountApi.setGroupConfig(v.groupId, v.config),
+      onSuccess: () => {
+        invalidate();
+        qc.invalidateQueries({ queryKey: ["customer-groups"] });
+      },
     }),
   };
 }

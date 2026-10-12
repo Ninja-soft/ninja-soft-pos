@@ -44,7 +44,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   cuenta_corriente: {
-    desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite.",
+    desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",
     minPlan: "Business",
   },

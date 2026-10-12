@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, KeyRound } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { dueDateFor, installmentSchedule, todayIso } from "@/lib/account/terms";
+import { overrideErrorMessage } from "@/lib/account/pin";
 import { accountErrorMessage } from "@/modules/customers/account";
-import { useAccountPosInfo } from "@/modules/customers/hooks";
+import { useAccountMutations, useAccountPosInfo, useAccountSupervisors } from "@/modules/customers/hooks";
 
 function fmt(iso: string) {
   const [y, m, d] = iso.split("-");
@@ -16,16 +18,27 @@ function fmt(iso: string) {
 }
 
 export interface AccountPayState {
-  // payments.reference para el trigger de cargo: {"installments": N, "override_reason": "..."}.
+  // payments.reference para el trigger de cargo:
+  // {"installments": N, "override_reason": "..."} (sesión de dueño/encargado) o
+  // {"installments": N, "override_token": "..."} (PIN de supervisor).
   reference: string | undefined;
-  // true = no se puede confirmar (bloqueado sin override, supera límite, cargando).
+  // true = no se puede confirmar (bloqueado sin autorización, cargando).
   blocked: boolean;
+}
+
+interface PinAuth {
+  token: string;
+  amount: number;
+  supervisorName: string;
+  expiresAt: string;
 }
 
 // Panel de "Cuenta corriente" dentro del cobro del POS (Cuenta corriente v2):
 // saldo, disponible, vencido, cuotas (si el negocio las habilita) y bloqueo por
-// mora con autorización inline de encargado. El server revalida todo
-// (payment_account_charge); esto es UX.
+// mora / límite con autorización inline: el dueño o encargado logueado escribe
+// el motivo; un cajero pide el PIN de un supervisor (token de un solo uso,
+// atado a este cliente, este cajero y este monto, vence a los 5 minutos). El
+// server revalida todo (payment_account_charge); esto es UX.
 export function AccountPayPanel({
   customerId,
   total,
@@ -36,19 +49,56 @@ export function AccountPayPanel({
   onChange: (s: AccountPayState) => void;
 }) {
   const { data: info, isLoading, error } = useAccountPosInfo(customerId);
+  const { authorizeOverride } = useAccountMutations();
   const [n, setN] = useState(1);
   const [overrideReason, setOverrideReason] = useState("");
+  const [supervisorId, setSupervisorId] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinReason, setPinReason] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [auth, setAuth] = useState<PinAuth | null>(null);
 
   useEffect(() => {
     setN(1);
     setOverrideReason("");
+    setSupervisorId("");
+    setPin("");
+    setPinReason("");
+    setPinError(null);
+    setAuth(null);
   }, [customerId]);
 
   const maxN = info?.installments?.enabled ? Math.max(1, info.installments.max) : 1;
   const exceedsLimit =
     info != null && Number(info.credit_limit) > 0 && Number(info.balance) + total > Number(info.credit_limit) + 0.001;
-  const canOverride = Boolean(info?.blocked && info.override_allowed && info.can_override);
-  const overrideOk = canOverride && overrideReason.trim().length > 2;
+  const needsAuth = Boolean(info && (info.blocked || exceedsLimit));
+  const overrideAllowed = Boolean(info?.override_allowed);
+  const canSession = needsAuth && overrideAllowed && Boolean(info?.can_override);
+  const canPin = needsAuth && overrideAllowed && !info?.can_override;
+  const sessionOk = canSession && overrideReason.trim().length > 2;
+
+  const { data: supervisors, isLoading: loadingSups } = useAccountSupervisors(canPin);
+
+  // La autorización vale para un monto: si el total sube, hay que pedirla de nuevo.
+  useEffect(() => {
+    if (auth && total > auth.amount + 0.001) {
+      setAuth(null);
+      setPinError("El total cambió: pedí la autorización de nuevo.");
+    }
+  }, [auth, total]);
+
+  // Vence a los 5 minutos (el server también lo controla).
+  useEffect(() => {
+    if (!auth) return;
+    const ms = new Date(auth.expiresAt).getTime() - Date.now();
+    const t = setTimeout(() => {
+      setAuth(null);
+      setPinError("La autorización venció: pedila de nuevo.");
+    }, Math.max(0, ms));
+    return () => clearTimeout(t);
+  }, [auth]);
+
+  const authorized = sessionOk || (canPin && auth != null);
 
   const schedule = useMemo(() => {
     if (!info || total <= 0) return [];
@@ -60,12 +110,37 @@ export function AccountPayPanel({
   }, [info, total, n, maxN]);
 
   useEffect(() => {
-    const blocked = isLoading || !info || exceedsLimit || (Boolean(info.blocked) && !overrideOk);
+    const blocked = isLoading || !info || (needsAuth && !authorized);
     const ref: Record<string, unknown> = {};
     if (n > 1) ref.installments = n;
-    if (info?.blocked && overrideOk) ref.override_reason = overrideReason.trim();
+    if (needsAuth && sessionOk) ref.override_reason = overrideReason.trim();
+    else if (needsAuth && canPin && auth) ref.override_token = auth.token;
     onChange({ reference: Object.keys(ref).length ? JSON.stringify(ref) : undefined, blocked });
-  }, [isLoading, info, exceedsLimit, overrideOk, overrideReason, n, onChange]);
+  }, [isLoading, info, needsAuth, authorized, sessionOk, canPin, auth, overrideReason, n, onChange]);
+
+  async function requestAuth() {
+    if (!customerId || !supervisorId) return;
+    setPinError(null);
+    try {
+      const r = await authorizeOverride.mutateAsync({
+        customerId,
+        supervisorId,
+        pin,
+        amount: total,
+        reason: pinReason.trim(),
+      });
+      if (r.ok) {
+        const name = supervisors?.find((s) => s.user_id === supervisorId)?.name ?? "un supervisor";
+        setAuth({ token: r.token, amount: total, supervisorName: name, expiresAt: r.expires_at });
+      } else {
+        setPinError(overrideErrorMessage(r.error, r));
+      }
+    } catch (e) {
+      setPinError(accountErrorMessage(e));
+    } finally {
+      setPin("");
+    }
+  }
 
   if (!customerId) return null;
   if (isLoading) {
@@ -82,6 +157,13 @@ export function AccountPayPanel({
       </p>
     );
   }
+
+  const blockText =
+    info.blocked === "account_blocked"
+      ? "La cuenta del cliente está bloqueada."
+      : info.blocked === "account_overdue_blocked"
+        ? `El cliente tiene deuda vencida hace ${info.max_days_overdue} días y la cuenta está bloqueada.`
+        : "Esta venta supera el límite de crédito del cliente.";
 
   return (
     <div className="space-y-3 rounded-lg bg-muted/40 p-3 text-sm">
@@ -104,22 +186,19 @@ export function AccountPayPanel({
         </div>
       </div>
 
-      {exceedsLimit && (
-        <p className="flex items-start gap-2 rounded-md bg-red-400/10 px-3 py-2 text-danger">
-          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          Esta venta supera el límite de crédito del cliente.
-        </p>
-      )}
-
-      {info.blocked && (
+      {needsAuth && (
         <div className="space-y-2 rounded-md bg-red-400/10 px-3 py-2">
           <p className="flex items-start gap-2 text-danger">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-            {info.blocked === "account_blocked"
-              ? "La cuenta del cliente está bloqueada."
-              : `El cliente tiene deuda vencida hace ${info.max_days_overdue} días y la cuenta está bloqueada.`}
+            <span>
+              {blockText}
+              {info.blocked && exceedsLimit ? " Además supera el límite de crédito." : ""}
+            </span>
           </p>
-          {canOverride ? (
+
+          {!overrideAllowed ? (
+            <p className="text-xs text-muted-foreground">El negocio no permite autorizar estas ventas.</p>
+          ) : canSession ? (
             <Input
               label="Autorizar igual (motivo)"
               value={overrideReason}
@@ -128,13 +207,90 @@ export function AccountPayPanel({
               maxLength={200}
               hint="Queda registrado en la auditoría."
             />
+          ) : auth ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-success/15 px-3 py-2 text-success">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0" />
+                Autorizado por {auth.supervisorName} para {formatCurrency(auth.amount)}.
+              </span>
+              <button
+                type="button"
+                className="text-xs font-medium underline-offset-2 hover:underline"
+                onClick={() => setAuth(null)}
+              >
+                Cambiar
+              </button>
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {info.override_allowed
-                ? "Sólo un encargado o el dueño puede autorizar la venta."
-                : "El negocio no permite autorizar ventas con mora."}
-            </p>
+            <div className="space-y-2 rounded-md bg-background/60 p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <KeyRound size={13} /> Pedí autorización a un supervisor
+              </div>
+              {loadingSups ? (
+                <div className="flex justify-center py-2">
+                  <Spinner size={16} />
+                </div>
+              ) : (supervisors ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Ningún dueño o encargado cargó su PIN. Se carga en Configuración, sección Cuenta corriente.
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Supervisor">
+                    {(supervisors ?? []).map((s) => (
+                      <button
+                        key={s.user_id}
+                        type="button"
+                        role="radio"
+                        aria-checked={supervisorId === s.user_id}
+                        disabled={s.locked}
+                        onClick={() => setSupervisorId(s.user_id)}
+                        className={cn(
+                          "rounded-lg px-3 py-2 text-sm transition disabled:opacity-50",
+                          supervisorId === s.user_id
+                            ? "bg-ninja-flame/15 font-medium text-ninja-flameSoft"
+                            : "bg-muted text-foreground hover:bg-muted/70",
+                        )}
+                      >
+                        {s.name}
+                        {s.locked ? " (bloqueado)" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      label="PIN del supervisor"
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={6}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    />
+                    <Input
+                      label="Motivo"
+                      value={pinReason}
+                      onChange={(e) => setPinReason(e.target.value)}
+                      placeholder="Ej: acordó pagar el viernes"
+                      maxLength={200}
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      loading={authorizeOverride.isPending}
+                      disabled={!supervisorId || pin.length < 4 || pinReason.trim().length < 3}
+                      onClick={requestAuth}
+                    >
+                      Autorizar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
+          {pinError && !auth && <p className="text-xs font-medium text-danger">{pinError}</p>}
         </div>
       )}
 

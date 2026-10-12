@@ -25,6 +25,8 @@ import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
 import { AccountSettingsCard } from "@/components/account/AccountSettingsCard";
+import { GroupAccountTermsCard } from "@/components/account/GroupAccountTermsCard";
+import { SupervisorPinCard } from "@/components/account/SupervisorPinCard";
 import { ReturnsSettingsCard } from "@/components/dashboard-team/ReturnsSettingsCard";
 import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
 import { CustomerDisplayCard } from "@/components/dashboard-team/CustomerDisplayCard";
@@ -608,7 +610,13 @@ function ConfiguracionInner() {
           {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
               automático del comprobante (solo owner; se auto-oculta) */}
           {section === "clientes" && <OperationSettingsCard view="clientes" />}
-          {section === "cuenta-corriente" && <AccountSettingsCard />}
+          {section === "cuenta-corriente" && (
+            <div className="space-y-4">
+              <AccountSettingsCard />
+              <GroupAccountTermsCard />
+              <SupervisorPinCard />
+            </div>
+          )}
 
           {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
           {section === "devoluciones" && <ReturnsSettingsCard />}

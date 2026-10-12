@@ -679,6 +679,7 @@ export type Database = {
       }
       customer_account_movements: {
         Row: {
+          accrued_through: string | null
           cash_shift_id: string | null
           created_at: string
           created_by: string | null
@@ -702,6 +703,7 @@ export type Database = {
           voided_by: string | null
         }
         Insert: {
+          accrued_through?: string | null
           cash_shift_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -725,6 +727,7 @@ export type Database = {
           voided_by?: string | null
         }
         Update: {
+          accrued_through?: string | null
           cash_shift_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -3567,12 +3570,34 @@ export type Database = {
         }
         Returns: Json
       }
+      account_authorize_override: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_pin: string
+          p_reason: string
+          p_supervisor_id: string
+        }
+        Returns: Json
+      }
+      account_clear_supervisor_pin: {
+        Args: { p_user_id?: string | null }
+        Returns: Json
+      }
       account_pos_info: {
         Args: { p_customer_id: string }
         Returns: Json
       }
       account_save_settings: {
         Args: { p_config: Json }
+        Returns: Json
+      }
+      account_set_group_config: {
+        Args: { p_config: Json | null; p_group_id: string }
+        Returns: Json
+      }
+      account_set_supervisor_pin: {
+        Args: { p_pin: string }
         Returns: Json
       }
       account_set_customer_terms: {
@@ -3587,6 +3612,14 @@ export type Database = {
       }
       account_statement: {
         Args: { p_customer_id: string; p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      account_supervisor_pin_status: {
+        Args: never
+        Returns: Json
+      }
+      account_supervisors: {
+        Args: never
         Returns: Json
       }
       account_update_collection_item: {

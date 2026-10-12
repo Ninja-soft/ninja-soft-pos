@@ -28,13 +28,13 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { downloadStatementPdf } from "@/lib/account/statementPdf";
 import { todayIso } from "@/lib/account/terms";
 import { interestConcept } from "@/lib/account/interest";
-import type { AccountConfig } from "@/lib/account/config";
+import { parseOverride, type AccountConfig } from "@/lib/account/config";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import {
   useAccountMutations,
   useAccountStatement,
-  useAccountTenantConfig,
+  useCustomerGroups,
   useTeamMembers,
 } from "@/modules/customers/hooks";
 import {
@@ -48,6 +48,7 @@ import { CollectModal } from "@/components/account/CollectModal";
 import { AccountActionModal, type AccountAction } from "@/components/account/AccountActionModal";
 import { CollectionItemModal, type CollectionItemType } from "@/components/account/CollectionItemModal";
 import { AccountConfigForm, isConfigValid } from "@/components/account/AccountConfigForm";
+import { InheritBadge } from "@/components/account/GroupAccountTermsCard";
 import {
   CreditStatusPill,
   KIND_LABEL,
@@ -609,8 +610,10 @@ function CollectionRow({ item }: { item: CollectionItem }) {
 function TermsTab({ st, canManage, cobranza }: { st: AccountStatement; canManage: boolean; cobranza: boolean }) {
   const { toast } = useToast();
   const { setTerms } = useAccountMutations();
-  const { data: tenantCfg } = useAccountTenantConfig();
+  const { data: groups } = useCustomerGroups();
   const { data: team } = useTeamMembers(cobranza);
+  const group = (groups ?? []).find((g) => g.id === st.customer.group_id);
+  const groupOwn = Boolean(group && parseOverride(group.account_config));
   const [own, setOwn] = useState(Boolean(st.customer.account_config));
   const [cfg, setCfg] = useState<AccountConfig>(st.config);
   const [limit, setLimit] = useState(String(st.customer.credit_limit ?? 0));
@@ -696,16 +699,24 @@ function TermsTab({ st, canManage, cobranza }: { st: AccountStatement; canManage
         )}
         <label className="flex items-center justify-between gap-2 pt-1">
           <span>
-            <span className="block text-sm font-medium">Condiciones propias</span>
+            <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+              Condiciones propias
+              <InheritBadge
+                own={own}
+                label={own ? undefined : groupOwn ? `Hereda del grupo ${group!.name}` : "Hereda del negocio"}
+              />
+            </span>
             <span className="block text-xs text-muted-foreground">
-              Apagado, el cliente usa las condiciones del negocio.
+              {groupOwn
+                ? "Apagado, el cliente usa las condiciones de su grupo."
+                : "Apagado, el cliente usa las condiciones del negocio."}
             </span>
           </span>
           <Switch
             checked={own}
             onCheckedChange={(v) => {
               setOwn(v);
-              if (v && !st.customer.account_config && tenantCfg) setCfg(tenantCfg.effective);
+              if (v && !st.customer.account_config) setCfg(st.config);
             }}
             label="Condiciones propias"
           />

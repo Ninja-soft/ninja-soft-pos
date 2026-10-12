@@ -28,7 +28,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
-| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049) |
+| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
@@ -440,6 +440,17 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 - [ ] **Payway Point.** Próximamente. **Bloqueo:** Payway no publica una API para mandar cobros a la terminal (sólo reversas y cierres PayStore). **Paso:** pedir al ejecutivo de Payway el kit de integradores (API de terminales, homologación PayStore, SDK Terminal Smart).
 - [ ] **Getnet Point.** Próximamente. **Bloqueo:** Cloud2Cloud de "Integrated POS" es para partners y no está confirmado en Argentina. **Paso:** contactar Partnerships de Getnet AR y pedir disponibilidad y credenciales.
 - [x] **Descartados como Point** (sin terminal propia o sin API): Mobbex, MODO, Ualá Bis, Viumi, Naranja X (cubierto por Nave), Posnet/LaPos legacy (protocolo local), Cuenta DNI, Personal Pay.
+
+#### F8 · Terminal integrada: posnet y pinpad por cable o red (ADR-053)
+
+> Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md).
+
+- [~] **H19b · Base de terminal integrada.** *En código (2026-10-12, `feat/terminal-integrada-payway`):* Web Serial, WebUSB y puente local (`tools/bridge`), simulador, máquina de estados, kinds `posnet_integrado` / `pinpad` por caja, Conectar y venta de prueba, "Tarjeta en terminal" en el cobro, bitácora `terminal_transactions` y validación del cupón en `payments`. Feature `terminal_integrada` (Pro+). **Paso:** aplicar `20261018100000_terminal_integrada`.
+- [ ] **H19c · Payway posnet integrado y pinpad.** Adaptador VPI implementado según fuentes públicas no oficiales (`unverified`). **Bloqueo:** especificación oficial, modelos y VID/PID, tabla de códigos de tarjeta, protocolo del Lane/3000 y homologación. **Paso:** pedirlo a Payway con la lista del relevamiento §7 y probar con una Classic en modo integrado.
+- [ ] **H19d · Getnet integrado.** Placeholder. **Bloqueo:** protocolo de la librería (USB / HTTP) o API de Cloud2Cloud. **Paso:** lista "Qué pedirle a Getnet".
+- [ ] **H19e · Fiserv Posnet integrado.** Placeholder. **Bloqueo:** especificación de la aplicación TRANSACT.
+- [ ] **H19f · Operaciones desde Ventas y Caja:** anulación y devolución con la terminal, cierre de lote con totales y conciliación automática (ADR-044) con la bitácora. Requiere H19c.
+- [ ] **H19g · Instalador del puente local** (servicio de Windows, emparejamiento con código corto).
 
 #### F8 · Cobros en espera y QR más rápido (ADR-048)
 
@@ -990,7 +1001,7 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [~] Datos fiscales por sucursal: punto de venta ARCA (`stores.afip_pos_number`) y domicilio hechos; razón social y CUIT opcionales pendientes (H98).
   - [x] ABM de cajas por sucursal: nombre, código, tipo (fija, móvil, autoservicio), notas de dispositivo e impresora, baja lógica (`cash_registers.deleted_at`), PV propio opcional, mover de sucursal sin turno abierto.
   - [x] Enforcement server-side de `max_stores` y de cajas por plan (`max_registers_per_store`, `multi_caja`) con triggers en `stores` y `cash_registers` (`tenant_limit_for` + `tenant_has_feature_for`), no sólo en la UI.
-  - [~] Plantilla de sucursal nueva: hereda todo por defecto y "Copiar de otra sucursal" la deja igual a otra (ADR-049); plantilla explícita pendiente.
+  - [x] Plantilla de sucursal nueva: hereda todo por defecto, "Copiar de otra sucursal" o "Usar una plantilla" guardada, eligiendo partes (operación y ticket, medios, impresoras y perfiles, planes propios y personal). Terminales y credenciales no se copian. *(2026-10-12, ADR-057)*
   - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
   - [ ] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón).
 
@@ -1016,19 +1027,19 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Función `effective_config(domain, key, store_id, register_id)` en SQL con el origen de cada campo; `create_sale`, `close_cash_shift`, el trigger de `payments` y las Edges de cobro resuelven con la caja del turno.
   - [~] Dominios del primer corte: `pos_settings` (redondeo, negativo, cierre ciego, tolerancia, descuento máximo por rol), tickets (encabezado y datos de la sucursal, logo), impresión con impresoras por sucursal y caja (cierra el pendiente de F10/H22), display de cliente (cierra el pendiente de F10/H25). *(`pos_layout` se hereda pero se pisa copiando; plantilla de ticket por sucursal y devoluciones: pendientes.)*
   - [x] Selector de alcance en cada pantalla de Configuración ("Configurando: Todo el negocio ▾"), campo marcado "Heredado / Personalizado" con "Volver a heredar" y valor heredado visible.
-  - [~] Vista "Diferencias por sucursal" y acciones "Aplicar a todas" (RPC) y "Copiar desde otra sucursal" (con diff). *("Plantilla para nuevas sucursales": pendiente.)*
+  - [x] Vista "Diferencias por sucursal" y acciones "Aplicar a todas" (RPC) y "Copiar desde otra sucursal" (con diff). Plantillas para nuevas sucursales (`store_templates`, ADR-057).
   - [x] El override nunca habilita algo fuera del plan: el gating se evalúa antes de la herencia.
   - [ ] *Criterio:* el dueño cambia el redondeo del negocio y llega a todas las sucursales menos a la que lo tenía pisado; ve en una tabla qué sucursal es distinta y la vuelve al default en un click.
 
 - [~] **H93: Medios de pago y terminales por sucursal y caja.** *(2026-10-12, ADR-049: overrides de medios, registro de terminales, Edges con terminal_id y caja QR por caja hechos)* · *Medios: OPTIONAL dentro de `multi_sucursal` (cada medio sigue gateado por su key). Registro de terminales: BASE. Requiere H89 y H92.*
   - [x] `tenant_payment_methods` sigue siendo el catálogo central; override por sucursal y caja vía `config_overrides` (`domain='payment_method'`, `domain_key=provider_key`): `enabled`, `surcharge_pct`, `plan_mode`, `sort`, `merchant_numbers`.
-  - [ ] Credenciales por sucursal: `payment_secrets.store_id` opcional (null = del negocio) para proveedores que trabajan por local (GO Cuotas "API Key de la sucursal", Mobbex `store_id`, Nave `pos_id`, Payway o Fiserv por comercio). Sigue sólo service_role.
+  - [x] Credenciales por sucursal: `payment_secrets.store_id` opcional (null = del negocio) para proveedores que trabajan por local (GO Cuotas "API Key de la sucursal", Mobbex, Nave `pos_id`, Payway o Fiserv por comercio, Mercado Pago por OAuth). Resolución sucursal → negocio en todas las Edges, el cobro guarda con qué credencial se creó y el asistente de conexión tiene alcance "Todo el negocio / Sucursal X". Sigue sólo service_role. *(2026-10-12, ADR-057)*
   - [x] Registro de terminales `payment_terminals` (sucursal, caja, proveedor, tipo `point` / `qr_caja` / `clover` / `posnet_manual`, id externo, ambiente, etiqueta, adquirente, **n° de comercio**, default por caja, activa, `last_seen_at`). Migra el lector de `localStorage` (respaldo), la caja QR de MP, `point_pos_ids` de Nave y las series de Clover.
   - [~] Las Edges (`mp_point`, `nave_point`, `clover_point`, `mp_qr`) validan que la terminal sea del negocio y de la sucursal; el POS registra el lector elegido con un tilde. *("Detectar lectores" desde la sección Terminales: pendiente.)*
   - [x] Caja QR de Mercado Pago **por caja** (`mp_qr setup` con `cash_register_id`), con la única de siempre como respaldo.
   - [~] N° de comercio por marca con override por sucursal (`merchant_numbers` efectivo) y n° por terminal. *(Autocompletar desde la terminal integrada en el cupón: pendiente.)*
-  - [ ] Planes de cuotas y recargos por sucursal (se coordina con F14/H59).
   - [x] **Cuentas de transferencia** (ADR-055): banco o billetera del catálogo con logo (o propia con logo subido), titular, CUIT, CBU / CVU validados con detección de la entidad, alias, tipo, moneda y nota; pantalla de transferencia en el POS y en la pantalla del cliente (o cierre directo), n° de operación opcional u obligatorio, cuentas y cuenta por defecto por grupo o sucursal y pantalla por caja. Snapshot de la cuenta en `payments.metadata.transfer`. BASE una cuenta; OPTIONAL `transferencia_multicuenta` (Pro).
+  - [x] Planes de cuotas y recargos por sucursal: la sucursal pisa u oculta planes del negocio y hereda el resto; el POS cobra con los de su sucursal. *(2026-10-12, ADR-057; recargo único y n° de comercio por sucursal ya estaban en ADR-049)*
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
 
 - [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
@@ -1051,14 +1062,14 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
 - [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*
   - [x] Cliente único a nivel negocio (`customers` por tenant) y cuenta corriente v2 cobrable en cualquier sucursal. *(ADR-037)*
   - [x] Vales con sucursales permitidas (`store_credit_vouchers.allowed_branch_ids`). *(F11/H29)*
-  - [ ] Sucursal de alta (`customers.home_store_id`) e historial de compras y deuda filtrable por sucursal.
+  - [x] Sucursal de alta (`customers.store_id_alta`, por trigger) e historial de compras filtrable por sucursal con estadísticas por sucursal. *(2026-10-12, ADR-057; deuda por sucursal: pendiente)*
   - [ ] Límite de crédito global con opción de tope por sucursal; cobros de cuenta corriente registrados en la sucursal de la caja.
   - [ ] Fidelización (puntos, cupones, gift cards) compartida: se cubre en F9/H55 y F16/H80.
   - [ ] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte.
 
 - [ ] **H97: Reportes consolidados y por sucursal.** · *BASE (reportes de la sucursal propia) + OPTIONAL `multi_sucursal` (consolidado y comparativo) + `metricas_avanzadas` (existe, MARKETING-FUTURO) para tableros comparativos. Requiere H90.*
   - [~] Filtro global de sucursal (el del chip de H90) en reportes, conciliación, ventas, Z, stock y export XLSX; RPC con `p_store_id` y acceso validado. *(Filtro por caja: pendiente.)*
-  - [ ] Vista consolidada con desglose por sucursal y comparativo entre sucursales (ventas, ticket promedio, medios de pago, margen, devoluciones, diferencias de caja).
+  - [x] Vista consolidada con desglose por sucursal y comparativo entre sucursales (ventas, ticket promedio, medios de pago, margen, devoluciones, diferencias de caja, clientes) con XLSX de una hoja por sucursal más el consolidado. *(2026-10-12, ADR-057)*
   - [ ] Cierres Z por sucursal y caja con correlativo propio (completa F11/H30b).
   - [ ] Reportes pesados en cola ("Reporte offline" de Napse) con aviso cuando el archivo está listo.
   - [ ] *Criterio:* el dueño compara las 3 sucursales del mes en una pantalla y descarga un XLSX con una hoja por sucursal más el consolidado.
@@ -1070,11 +1081,60 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Jurisdicción de IIBB por sucursal (para percepciones y Convenio Multilateral, F18/H105).
   - [ ] *Criterio:* Centro emite con PV 3 y Norte con PV 4; si ARCA cae, cada PV entra en contingencia por separado.
 
-- [ ] **H99: Monitor de sucursales, cajas y terminales.** · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
+- [~] **H99: Monitor de sucursales, cajas y terminales.** *(2026-10-12, ADR-057: vista de sucursales en el monitor de cajas con alertas, BASE `monitor_cajas`; heartbeat y key Enterprise pendientes)* · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
   - [ ] Heartbeat de cada caja (última venta, último ping, versión de la app, impresora y display conectados).
-  - [ ] Estado de terminales (`payment_terminals.last_seen_at`, último cobro aprobado o rechazado).
-  - [ ] Alertas por sucursal: caja abierta hace más de N horas, diferencia de caja sobre tolerancia, terminal sin respuesta, sucursal sin ventas en horario.
+  - [~] Estado de terminales (`payment_terminals.last_seen_at` en la tarjeta de la sucursal; último cobro aprobado o rechazado: pendiente).
+  - [x] Alertas por sucursal: caja abierta hace más de N horas, diferencia de caja sobre tolerancia, terminal sin señal, sucursal sin caja o sin ventas en horario, cobros pagados sin venta y faltantes (`lib/branches/monitorAlerts.ts`, umbrales por equipo). *(ADR-057)*
   - [ ] *Criterio:* el dueño ve en una pantalla que el Point de Centro no responde desde las 10:12 y que Norte no abrió caja.
+
+#### F17 · Personal, cajas y seguridad operativa (auditoría 2026-10-12, ADR-051)
+
+Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md). Cada hito indica su clasificación según la convención de features de plan.
+
+- [x] **H113: Ciclo de vida del personal.** *(2026-10-12, ADR-051)* · *BASE `personal_estados` (nueva). Requiere H91 para sucursal base y traslados.*
+  - [x] Estados `activo`, `suspendido` (motivo, desde y hasta: vuelve solo), `licencia` (tipo, desde y hasta), `baja` (despido, renuncia, fin de contrato u otro; fecha y motivo) y `reingreso`, para usuarios y perfiles sin cuenta. Historial `staff_status_events` con baja lógica, evaluación perezosa por fecha (sin cron).
+  - [x] RPC `staff_set_status`, `staff_cancel_status`, `staff_rehire`, `staff_board` (owner/manager; un encargado no toca al dueño ni a otro encargado), auditadas.
+  - [x] La suspensión y la licencia cortan la operación al instante en el servidor (turnos, ventas, alcance por sucursal vacío); la baja además revoca sesiones y el negocio activo del JWT, pasa la membresía a `inactive` y libera el cupo de usuarios.
+  - [x] Tablero visual por sucursal con avatares y chips de estado, filtros por estado, ficha con timeline (estados y traslados).
+  - [x] Invitar desde el Panel del dueño (fix del acceso rápido) con sucursal base, adicionales y rol por sucursal; reinvitar a alguien de baja es un reingreso explícito.
+  - [x] Fixes: el encargado no degrada ni suspende al dueño (`member_admin`), invitar no pisa el rol de un miembro existente, el invitado recibe el negocio activo (`app_metadata.current_tenant_id`) y se autocura al entrar.
+  - [ ] *Criterio:* el dueño da de baja a un cajero; ese cajero no puede abrir caja, vender ni leer datos del negocio después de su próximo refresh de sesión; la historia y sus ventas quedan.
+
+- [x] **H114: Propiedad de la caja.** *(2026-10-12, ADR-051)* · *BASE (control interno, sin key nueva) + FLAG-OPERATIVO `shared_shift` (caja compartida, apagado).*
+  - [x] `assert_shift_owner(shift)`: sólo quien abrió el turno vende, retira, ingresa o cierra. `resolve_sale_shift` lo exige (ventas, devoluciones y cambios) sin recrear `create_sale`.
+  - [x] Un turno abierto por usuario en todo el negocio (`open_cash_shift`).
+  - [x] Guarda en `cash_shifts` (cierre sólo del dueño del turno o por `cash_force_close`; sin inserts ni borrados directos) y en `cash_movements` (desde el cliente sólo ingreso, retiro o contramovimiento de una anulación real; sin UPDATE ni DELETE).
+  - [x] `cash_force_close(shift, monto contado, motivo)` para supervisores (sesión o PIN), con Z y auditoría.
+  - [x] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
+  - [ ] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja.
+
+- [~] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas y heartbeat en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
+  - [x] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
+  - [x] Pantalla Caja · Cajas abiertas con contador en vivo y acciones Ver detalle y Cierre forzado (PIN); widget en el Panel del dueño.
+  - [~] Pendiente (H99): heartbeat. Alertas por caja abierta hace más de N horas y terminales sin señal hechas en la vista de sucursales (ADR-057).
+
+- [x] **H116: PIN de supervisor y políticas por acción.** *(2026-10-12, ADR-051)* · *BASE `pin_supervisor` (nueva). Reemplaza el gating por `cuenta_corriente` del PIN (las RPC `account_*` siguen).*
+  - [x] `security_settings` por negocio: acciones que piden PIN con umbral (descuento sobre X %, anulación desde $Y, devolución desde $Y, retiro desde $Y, ingreso, cierre forzado), roles y usuarios supervisores, intentos y minutos de bloqueo, rotación del PIN en días, caja compartida.
+  - [x] RPC generales `supervisor_pin_status`, `supervisor_set_pin`, `supervisor_clear_pin`, `supervisor_list`, `supervisor_authorize` (token de un solo uso atado a acción, cajero y monto, 5 minutos).
+  - [x] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
+  - [x] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
+
+- [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
+  - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
+  - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
+  - [ ] Pendiente: retención por plan, alertas (muchos PIN fallidos, anulaciones fuera de horario), firma o hash encadenado para inmutabilidad.
+
+- [~] **H118: Panel del dueño operativo y por sucursal.** *(2026-10-12, ADR-051: tarjetas, gráficos y selector hechos; `current_tenant_id()` con membresía y lint pendientes)* · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
+  - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
+  - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
+  - [ ] Pendiente: `current_tenant_id()` que valide la membresía activa como initplan (raíz de S-07, medir con `EXPLAIN`), helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
+
+- [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*
+  - [ ] Cambio de precio en la línea con precio resuelto en el servidor (hoy `create_sale` confía en `unit_price`).
+  - [ ] Borrar ítem después de un cobro parcial y cancelar cobros en espera (coordinar con `feat/cobros-en-espera`).
+  - [ ] Reapertura de turno cerrado (hoy no existe) con PIN y motivo.
+  - [ ] Abrir el cajón sin venta y reimpresión de tickets con PIN opcional.
+  - [ ] Descuento por línea sobre el tope (hoy el trigger mira el descuento general de la venta).
 
 > **Orden sugerido dentro de F17:** fix de sucursal en `create_sale` (H90, ya) → H89 + H90 → H91 → H92 + H93 → H94 + H95 → H96 + H97 → H98 (con F3) → H99. Corte de control: cada hito con tests RLS por rol y sucursal y un escenario de 2 sucursales con turnos simultáneos.
 
@@ -1086,8 +1146,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 - [ ] **H100: Listas de precios simples y profesionales.** · *BASE (validación en servidor, historial, asistente simple, etiquetas) + OPTIONAL `listas_precios` (existe, Business: vigencias, listas por cliente, grupo y condición) + OPTIONAL `listas_precios_pro` (nueva, Business: costo y markup, plazos, moneda, escalas, índices, aprobación). Asignación por sucursal requiere F17/H94.*
   - [x] Listas por canal (mostrador, catálogo, mayorista, personalizada) con % sobre base y precio fijo por producto o variante, gating server-side. *(H10, `price_lists`, `lib/prices/resolve.ts`)*
-  - [ ] **P0 control interno:** `create_sale` recalcula el precio efectivo de lista; si el `unit_price` recibido difiere, lo registra como descuento o recargo con usuario y motivo, sujeto al tope por rol.
-  - [ ] Historial de precios y costos por producto, variante y lista (`price_history`: quién, cuándo, motivo, versión) y consulta "¿cuánto valía el 3 de marzo?".
+  - [x] **P0 control interno:** `create_sale` recalcula el precio efectivo de lista (`resolve_unit_price` + modificadores) y rechaza el `unit_price` distinto con `price_mismatch` y el precio esperado; el cambio intencional va marcado con motivo y PIN de `cambio_precio` (o supervisor) y queda en la venta y en auditoría; venta libre por flag y tope por rol; mesas y delivery validados al cargar. *(ADR-056, `feat/precio-servidor`, migración `20261019100000` sin aplicar. Se rechaza en vez de registrar la diferencia como descuento: ver ADR-056.)*
+  - [ ] Historial de precios y costos por producto, variante y lista (`price_history`: quién, cuándo, motivo, versión) y consulta "¿cuánto valía el 3 de marzo?". *(Precios: `product_price_history` con quién, cuándo y origen, pestaña en la ficha con gráfico, ADR-056, migración `20261019110000`; costos en `product_cost_history`, ADR-050. Falta motivo, versión y la consulta por fecha en pantalla.)*
   - [ ] Modo simple: asistente de actualización masiva en 3 pasos (qué: todos, categoría, marca, proveedor, tag; cuánto: % o monto con redondeo; cuándo: ahora o fecha) con vista previa y deshacer.
   - [ ] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes.
   - [ ] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante.

@@ -46,6 +46,8 @@ export interface TerminalInput {
   provider_key: string;
   kind: TerminalKind;
   external_id?: string | null;
+  /** Terminal integrada: { integration: {...} } (lib/payments/terminal/config.ts). */
+  external_meta?: Record<string, unknown>;
   environment?: "prod" | "test" | null;
   label: string;
   merchant_number?: string | null;
@@ -186,6 +188,33 @@ export const configApi = {
     );
   },
 
+  /**
+   * Bitácora de una operación con la terminal integrada (ADR-053). Devuelve
+   * el id que el pago lleva en card_voucher.terminal_tx.
+   */
+  recordTerminalTx: async (i: {
+    terminalId: string;
+    op: "sale" | "void" | "refund" | "close_batch" | "test";
+    status: "approved" | "declined" | "timeout" | "cancelled" | "error";
+    amount: number | null;
+    installments: number | null;
+    result: Record<string, unknown>;
+    raw: string | null;
+    clientRef: string | null;
+  }): Promise<string> => {
+    const r = await loose().rpc<string>("terminal_tx_record", {
+      p_terminal: i.terminalId,
+      p_op: i.op,
+      p_status: i.status,
+      p_amount: i.amount,
+      p_installments: i.installments,
+      p_result: i.result,
+      p_raw: i.raw,
+      p_client_ref: i.clientRef,
+    });
+    return check(r);
+  },
+
   // ── Impresoras ──
   printers: async (): Promise<Printer[]> => {
     const t = await tenantId();
@@ -261,6 +290,7 @@ export function terminalErrorMessage(err: unknown): string {
     return "Esa terminal ya está registrada en el negocio.";
   if (msg.includes("register_store_mismatch")) return "La caja elegida no es de esa sucursal.";
   if (msg.includes("terminal_kind_mismatch")) return "El tipo no corresponde a ese medio.";
+  if (msg.includes("feature_not_in_plan")) return "Tu plan no incluye la terminal integrada para esa marca.";
   if (msg.includes("row-level security") || msg.includes("42501")) return "No tenés permiso para esa sucursal.";
   return "No se pudo guardar la terminal.";
 }

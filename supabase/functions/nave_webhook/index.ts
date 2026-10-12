@@ -30,6 +30,7 @@ import {
   verifyAndApply,
   type IntentRow,
 } from "../_shared/nave_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -74,7 +75,10 @@ Deno.serve(async (req: Request) => {
   if (!data) return ok();
   const row = data as IntentRow;
 
-  const conn = await loadNaveConnection(admin, row.tenant_id);
+  // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
+  const conn = await loadNaveConnection(admin, row.tenant_id, {
+    scopeStoreId: await intentSecretScope(admin, row.id),
+  });
   if (!conn) return ok();
 
   try {

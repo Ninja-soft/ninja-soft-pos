@@ -303,6 +303,8 @@ create policy "transfer_logos_remove" on storage.objects for delete to authentic
 
 -- -----------------------------------------------------------------------------
 -- E) Herencia: whitelist, validación y base del negocio
+--    config_field_type / config_field_error: copia de 20261018300000 (incluye
+--    card_voucher_rules, ADR-054) + los campos de transferencia.
 -- -----------------------------------------------------------------------------
 create or replace function config_field_type(p_domain text, p_scope text, p_field text)
 returns text
@@ -332,7 +334,8 @@ as $$
                          'display_show_unit_prices') then 'bool'
         when p_field = 'close_tolerance' then 'num'
         when p_field in ('display_welcome_message', 'display_thanks_message') then 'text'
-        when p_field in ('print_profiles', 'pos_layout') then 'map_any'
+        -- ADR-054: reglas del cupón, también por caja (el posnet es de la caja).
+        when p_field in ('print_profiles', 'pos_layout', 'card_voucher_rules') then 'map_any'
         when p_scope = 'register' then null
         when p_field in ('allow_negative_stock', 'require_customer', 'require_card_voucher',
                          'offer_warranty', 'auto_email_receipt') then 'bool'
@@ -396,6 +399,8 @@ begin
     if p_field = 'plan_mode' and (p_value #>> '{}') not in ('global', 'plans') then return 'out_of_range'; end if;
   elsif p_type in ('map_text', 'map_num', 'map_any') then
     if jsonb_typeof(p_value) <> 'object' then return 'invalid_type'; end if;
+    -- ADR-054: la forma de las reglas del cupón se valida igual que en pos_settings.
+    if p_field = 'card_voucher_rules' then return card_voucher_rules_error(p_value); end if;
     if p_type <> 'map_any' then
       for k, v in select * from jsonb_each(p_value) loop
         if char_length(k) > 40 then return 'invalid_key'; end if;

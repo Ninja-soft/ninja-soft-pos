@@ -18,8 +18,9 @@ import {
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
 import { resolveEffective } from "@/lib/config/inheritance";
-import { useConfigOverrides, usePosResolveTarget } from "@/modules/config/hooks";
+import { useConfigOverrides, useInheritanceFlags, usePosResolveTarget } from "@/modules/config/hooks";
 import { useBranchStore } from "@/modules/branches/store";
+import { useBranchContext } from "@/modules/branches/hooks";
 
 // Turno abierto de la caja de ESTE dispositivo (F17 · H90). Antes era "el
 // último turno abierto del negocio": con varias cajas o sucursales mezclaba
@@ -119,40 +120,58 @@ export function useQrIntents(
   });
 }
 
-// Planes activos de todos los medios (POS al cobrar).
-export function usePaymentPlans() {
+// Planes efectivos de todos los medios. Sin argumento: los de la sucursal
+// del POS (F17 · ADR-057, los de la sucursal pisan a los del negocio); con
+// null: sólo los del negocio (resumen de Configuración).
+export function usePaymentPlans(storeId?: string | null) {
+  const ctx = useBranchContext();
+  const { multiStore } = useInheritanceFlags();
+  const sid = storeId === undefined ? ctx.posStoreId : storeId;
   return useQuery({
-    queryKey: ["pos", "payment-plans", "active"],
-    queryFn: () => paymentPlansApi.listActive(),
+    queryKey: ["pos", "payment-plans", "active", sid, multiStore],
+    queryFn: () => paymentPlansApi.listActive(sid, multiStore),
   });
 }
 
-// Planes de un medio concreto (editor de Configuración).
-export function useProviderPlans(providerKey: string | null) {
+// Planes efectivos de un medio en la sucursal del POS (cobro QR / link).
+export function usePosProviderPlans(providerKey: string | null) {
+  const all = usePaymentPlans();
+  const data = useMemo(
+    () => (providerKey ? (all.data ?? []).filter((p) => p.provider_key === providerKey) : []),
+    [all.data, providerKey],
+  );
+  return { data, isLoading: all.isLoading };
+}
+
+// Planes de un medio para el editor de Configuración: los del negocio y, con
+// `storeId`, los propios de esa sucursal (la herencia la resuelve la grilla).
+export function useProviderPlans(providerKey: string | null, storeId: string | null = null) {
   return useQuery({
-    queryKey: ["pos", "payment-plans", "provider", providerKey],
+    queryKey: ["pos", "payment-plans", "provider", providerKey, storeId],
     enabled: Boolean(providerKey),
-    queryFn: () => paymentPlansApi.listByProvider(providerKey!),
+    queryFn: () => paymentPlansApi.listByProvider(providerKey!, false, storeId),
   });
 }
 
 type SeedRows = Omit<PaymentPlanInput, "provider_key">[];
 
-export function usePaymentPlanMutations(providerKey: string) {
+/** Mutaciones del editor de planes en un alcance (null = negocio). */
+export function usePaymentPlanMutations(providerKey: string, storeId: string | null = null) {
   const qc = useQueryClient();
   const inv = () => qc.invalidateQueries({ queryKey: ["pos", "payment-plans"] });
   return {
     setCell: useMutation({
-      mutationFn: (v: PaymentPlanInput) => paymentPlansApi.setCell(v),
+      mutationFn: (v: PaymentPlanInput & { is_active?: boolean }) =>
+        paymentPlansApi.setCell(v, storeId, v.is_active ?? true),
       onSuccess: inv,
     }),
     removeCell: useMutation({
       mutationFn: (v: { base: string; brand: string | null; installments: number }) =>
-        paymentPlansApi.removeCell(providerKey, v.base, v.brand, v.installments),
+        paymentPlansApi.removeCell(providerKey, v.base, v.brand, v.installments, storeId),
       onSuccess: inv,
     }),
     create: useMutation({
-      mutationFn: (v: PaymentPlanInput) => paymentPlansApi.create(v),
+      mutationFn: (v: PaymentPlanInput) => paymentPlansApi.create(v, storeId),
       onSuccess: inv,
     }),
     update: useMutation({
@@ -161,15 +180,15 @@ export function usePaymentPlanMutations(providerKey: string) {
       onSuccess: inv,
     }),
     seed: useMutation({
-      mutationFn: (rows: SeedRows) => paymentPlansApi.seedTypical(providerKey, rows),
+      mutationFn: (rows: SeedRows) => paymentPlansApi.seedTypical(providerKey, rows, storeId),
       onSuccess: inv,
     }),
     bulkUpsert: useMutation({
-      mutationFn: (rows: SeedRows) => paymentPlansApi.bulkUpsert(providerKey, rows),
+      mutationFn: (rows: SeedRows) => paymentPlansApi.bulkUpsert(providerKey, rows, storeId),
       onSuccess: inv,
     }),
     replaceProvider: useMutation({
-      mutationFn: (rows: SeedRows) => paymentPlansApi.replaceProvider(providerKey, rows),
+      mutationFn: (rows: SeedRows) => paymentPlansApi.replaceProvider(providerKey, rows, storeId),
       onSuccess: inv,
     }),
     setActive: useMutation({
@@ -198,12 +217,13 @@ export function usePaymentPlanMutations(providerKey: string) {
           v.installments,
           v.validFrom,
           v.validUntil,
+          storeId,
         ),
       onSuccess: inv,
     }),
     setProviderValidity: useMutation({
       mutationFn: (v: { validFrom: string | null; validUntil: string | null }) =>
-        paymentPlansApi.setProviderValidity(providerKey, v.validFrom, v.validUntil),
+        paymentPlansApi.setProviderValidity(providerKey, v.validFrom, v.validUntil, storeId),
       onSuccess: inv,
     }),
     remove: useMutation({ mutationFn: (id: string) => paymentPlansApi.remove(id), onSuccess: inv }),

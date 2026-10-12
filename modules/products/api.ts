@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { withPriceSource } from "@/lib/prices/priceSource";
 import type { Tables } from "@/types/database";
 import type { Paged } from "@/lib/utils/pagination";
 import { normalizeAttributes } from "@/lib/products/attributes";
@@ -619,7 +620,8 @@ export const productsImportApi = {
       brand_id: r.brand ? (brandMap.get(r.brand.toLowerCase()) ?? null) : null,
     }));
 
-    const created = await insertChunked(supabase, "products", payload);
+    // ADR-056: el historial de precios registra el alta como 'import'.
+    const created = await withPriceSource("import", () => insertChunked(supabase, "products", payload));
 
     // H34: auditoría del import (cantidad creada/errores) — best effort, no bloquea.
     try {

@@ -7,6 +7,8 @@ import {
   ArrowLeft,
   ArrowUpCircle,
   Download,
+  Lock,
+  MonitorDot,
   Printer,
   Receipt,
   ShoppingCart,
@@ -33,6 +35,12 @@ import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMetho
 import { format } from "date-fns";
 import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Callout } from "@/components/ui/Callout";
+import { useBranchScope } from "@/modules/branches/hooks";
+import { useStaffPeople } from "@/modules/staff/hooks";
+import { cashErrorMessage, registerSituation } from "@/lib/cash/ownership";
+import { SupervisorCancelled } from "@/modules/security/supervisor";
+import { capitalizeName } from "@/lib/utils/format";
 
 export default function CajaPage() {
   const { toast } = useToast();
@@ -54,6 +62,19 @@ export default function CajaPage() {
     ? summarize(shift.opening_amount, movements ?? [])
     : null;
 
+  // ADR-051 (H114): la caja es de quien la abrió. Si este dispositivo mira el
+  // turno de otra persona, se ve pero no se opera.
+  const scope = useBranchScope();
+  const me = scope.data?.userId ?? null;
+  const isManager = scope.data?.role === "owner" || scope.data?.role === "manager";
+  const { data: people } = useStaffPeople(Boolean(shift));
+  const situation = registerSituation(shift, me);
+  const foreign = situation === "foreign";
+  const openerName = (() => {
+    const p = (people ?? []).find((x) => x.user_id === shift?.opened_by);
+    return p ? capitalizeName(p.name) : "otra persona";
+  })();
+
   async function submitMovement() {
     if (!shift || !modalType) return;
     const amt = Number(amount) || 0;
@@ -73,9 +94,10 @@ export default function CajaPage() {
       setAmount("");
       setReason("");
     } catch (e) {
+      if (e instanceof SupervisorCancelled) return;
       toast({
         title: "No se pudo registrar",
-        description: e instanceof Error ? e.message : undefined,
+        description: cashErrorMessage(e) ?? (e instanceof Error ? e.message : undefined),
         variant: "error",
       });
     }
@@ -128,6 +150,13 @@ export default function CajaPage() {
           description={where || undefined}
           icon={Wallet}
           help={<InfoHint section="caja" size={18} />}
+          actions={
+            isManager ? (
+              <Link href="/caja/monitor" className={buttonVariants({ size: "sm", variant: "secondary" })}>
+                <MonitorDot size={16} /> Cajas abiertas
+              </Link>
+            ) : undefined
+          }
         />
 
         {!shift ? (
@@ -145,13 +174,36 @@ export default function CajaPage() {
           </Card>
         ) : (
           <>
+            {foreign && (
+              <Callout
+                tone="warning"
+                icon={Lock}
+                className="mt-6"
+                title={`Esta caja la tiene abierta ${openerName}`}
+                actions={
+                  isManager ? (
+                    <Link href="/caja/monitor" className={buttonVariants({ size: "sm", variant: "secondary" })}>
+                      <MonitorDot size={16} /> Ver en Cajas abiertas
+                    </Link>
+                  ) : undefined
+                }
+              >
+                Desde las {new Date(shift.opened_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}.
+                Sólo quien la abrió registra ingresos, egresos y la cierra. Para vender, abrí tu propia caja en el
+                punto de venta{isManager ? "; si quedó abierta por error, cerrala con un cierre forzado." : "."}
+              </Callout>
+            )}
             <div className="mt-6 flex flex-wrap gap-3">
+              {!foreign && (
+              <>
               <Button onClick={() => setModalType("income")}>
                 <ArrowDownCircle size={16} /> Ingreso
               </Button>
               <Button variant="secondary" onClick={() => setModalType("expense")}>
                 <ArrowUpCircle size={16} /> Egreso
               </Button>
+              </>
+              )}
               <Button variant="secondary" onClick={exportZ}>
                 <Download size={16} /> Exportar Z (XLSX)
               </Button>

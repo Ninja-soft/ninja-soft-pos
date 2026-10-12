@@ -7,6 +7,8 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { posApi } from "@/modules/pos/api";
+import { withSupervisor } from "@/modules/security/supervisor";
+import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import type {
   PendingCharge,
   PendingChargeEvent,
@@ -74,6 +76,31 @@ export interface ProviderCharge {
   qr_data?: string;
 }
 
+// Porcentaje de descuento general manual del carrito (ADR-051): estacionar corre
+// create_sale en seco y puede pedir PIN de supervisor por el descuento.
+function discountPct(sale: Record<string, unknown> | null | undefined): number {
+  const items = (Array.isArray(sale?.items) ? sale!.items : []) as { unit_price?: number; quantity?: number; discount?: number }[];
+  const subtotal = items.reduce((a, it) => a + (Number(it.unit_price) || 0) * (Number(it.quantity) || 0) - (Number(it.discount) || 0), 0);
+  const disc = Number(sale?.discount_total) || 0;
+  return subtotal > 0 ? Math.round((disc / subtotal) * 10000) / 100 : 0;
+}
+
+// ADR-056: mayor desvío de un precio cambiado a mano (monto del PIN de 'cambio_precio').
+function priceOverridePct(sale: Record<string, unknown> | null | undefined): number {
+  const items = (Array.isArray(sale?.items) ? sale!.items : []) as {
+    unit_price?: number;
+    price_override?: boolean;
+    list_price?: number;
+  }[];
+  return items.reduce(
+    (m, it) =>
+      it.price_override && it.list_price != null
+        ? Math.max(m, priceDeviationPct(Number(it.list_price), Number(it.unit_price) || 0))
+        : m,
+    0,
+  );
+}
+
 const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
   const { data, error } = await createClient().rpc(fn as never, args as never);
   if (error) throw new Error(error.message);
@@ -122,7 +149,7 @@ export const pendingChargesApi = {
   },
 
   park: (a: ParkArgs) =>
-    rpc<{ id: string; expires_at: string; amount: number }>("park_pending_charge", {
+    withSupervisor(() => rpc<{ id: string; expires_at: string; amount: number }>("park_pending_charge", {
       p_intent_id: a.intentId,
       p_sale: a.sale,
       p_cart: a.cart,
@@ -136,7 +163,7 @@ export const pendingChargesApi = {
       p_customer_phone: a.customerPhone,
       p_expires_minutes: a.expiresMinutes,
       p_notes: a.notes ?? null,
-    }),
+    }), { discount_over: discountPct(a.sale), cambio_precio: priceOverridePct(a.sale) }),
 
   complete: (id: string, force = false) =>
     rpc<{ status: string; sale_id?: string; number?: number; error?: string }>("complete_pending_charge", {
@@ -158,8 +185,9 @@ export const pendingChargesApi = {
       p_version: version,
     }),
 
+  // Con carrito nuevo corre el mismo ensayo de create_sale: puede pedir PIN.
   replace: (a: ReplaceArgs) =>
-    rpc<{
+    withSupervisor(() => rpc<{
       id: string;
       intent_id: string;
       amount: number;
@@ -178,7 +206,7 @@ export const pendingChargesApi = {
       p_share_url: a.shareUrl ?? null,
       p_qr_data: a.qrData ?? null,
       p_expires_minutes: a.expiresMinutes ?? null,
-    }),
+    }), { discount_over: discountPct(a.sale), cambio_precio: priceOverridePct(a.sale) }),
 
   markShared: (id: string, via: ShareChannel, to?: string | null) =>
     rpc<void>("mark_pending_charge_shared", { p_id: id, p_via: via, p_to: to ?? null }),

@@ -22,6 +22,7 @@ import {
   fetchGetnetOrder,
   fetchGetnetToken,
 } from "../_shared/getnet.ts";
+import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const html = (body: string) =>
   new Response(
@@ -73,12 +74,7 @@ Deno.serve(async (req: Request) => {
     const orderId = String(row.preference_id);
     if (hinted && hinted !== orderId) return ok(); // notificación ajena
 
-    const { data: secretRow } = await admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", row.tenant_id)
-      .eq("provider_key", "getnet")
-      .maybeSingle();
+    const secretRow = await loadProviderSecret(admin, row.tenant_id, "getnet", { scopeStoreId: await intentSecretScope(admin, row.id) });
     const sec = (secretRow?.secrets ?? {}) as { client_id?: string; client_secret?: string };
     if (!sec.client_id || !sec.client_secret) return ok();
 

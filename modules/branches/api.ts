@@ -108,6 +108,19 @@ export const branchesAdminApi = {
     }));
   },
 
+  // Logo por sucursal (stores.logo_url, de feat/sucursales-config-terminales).
+  // Consulta aparte y tolerante: sin la columna todavía, no hay logos.
+  logos: async (): Promise<Record<string, string>> => {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) return {};
+    const r = await loose()
+      .from<{ id: string; logo_url: string | null }[]>("stores")
+      .select("id, logo_url")
+      .eq("tenant_id", tenantId);
+    if (r.error || !r.data) return {};
+    return Object.fromEntries(r.data.filter((x) => x.logo_url).map((x) => [x.id, x.logo_url as string]));
+  },
+
   allowedStoreIds: async (): Promise<string[]> => {
     const r = await loose().rpc<string[]>("user_allowed_store_ids");
     return check(r) ?? [];
@@ -174,6 +187,7 @@ export const branchesAdminApi = {
       .select(
         "id, store_id, user_id, cashier_profile_id, kind, role, valid_from, valid_until, reason, transfer_id, superseded_by, deleted_at, cancel_reason, created_at",
       )
+      .eq("tenant_id", tenantId)
       .order("valid_from", { ascending: false })
       .order("created_at", { ascending: false });
     return check(r) ?? [];

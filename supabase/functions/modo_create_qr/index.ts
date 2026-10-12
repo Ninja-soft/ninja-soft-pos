@@ -37,6 +37,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { edgeTimer } from "../_shared/timing.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -96,7 +97,7 @@ Deno.serve(async (req: Request) => {
   // Credenciales del comercio: acepta las keys nuevas (username/password, el
   // esquema real de MODO) y las históricas (client_id/client_secret) para no
   // romper conexiones guardadas antes de validar el dialecto.
-  const [{ data: mem }, { data: secretRow }, { data: methodRow }, allowedCreate] = await Promise.all([
+  const [{ data: mem }, secretRow, { data: methodRow }, allowedCreate] = await Promise.all([
     admin
       .from("tenant_users")
       .select("role")
@@ -104,12 +105,13 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle(),
-    admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", "modo")
-      .maybeSingle(),
+    // ADR-057: al crear, la credencial de la sucursal del POS (si tiene); sobre
+    // un intent, la misma con la que se creó.
+    action === "create"
+      ? loadProviderSecret(admin, tenantId, "modo", { storeId: bodyStoreId(b) })
+      : intentSecretScope(admin, String(b.intent_id ?? "")).then((scope) =>
+          loadProviderSecret(admin, tenantId, "modo", { scopeStoreId: scope })
+        ),
     admin
       .from("tenant_payment_methods")
       .select("sandbox")
@@ -189,10 +191,11 @@ Deno.serve(async (req: Request) => {
     // en MODO (externalIntentionId = intent).
     const intent = { id: crypto.randomUUID() };
     // .then() arranca la consulta ya (los builders de supabase-js son perezosos).
-    const insP = admin
-      .from("mp_payment_intents")
-      .insert({ id: intent.id, tenant_id: tenantId, amount, provider_key: "modo" })
-      .then((res: { error: unknown }) => res);
+    const insP = insertIntentWithScope(
+      admin,
+      { id: intent.id, tenant_id: tenantId, amount, provider_key: "modo" },
+      secretRow?.scopeStoreId ?? null,
+    ).then((res: { error: unknown }) => res);
 
     let r: Response;
     try {

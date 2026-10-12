@@ -17,6 +17,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractNotificationId } from "../_shared/directo.ts";
 import { INTENT_COLS, loadCreds, syncIntent, type IntentRow } from "../_shared/directo_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const html = (body: string) =>
   new Response(
@@ -65,7 +66,10 @@ Deno.serve(async (req: Request) => {
     const row = data as IntentRow | null;
     if (!row || row.status === "approved") return ok(); // idempotente
 
-    const creds = await loadCreds(admin, row.tenant_id);
+    // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
+    const creds = await loadCreds(admin, row.tenant_id, {
+      scopeStoreId: await intentSecretScope(admin, row.id),
+    });
     if (!creds) return ok();
 
     const res = await syncIntent(admin, row, creds, "webhook", notificationId, null);

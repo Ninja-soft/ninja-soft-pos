@@ -22,13 +22,11 @@ export function useMyTenant() {
       const supabase = createClient();
       const user = await getCurrentUser();
       if (!user) return null;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      // Membresía del negocio ACTIVO del JWT (con dos membresías no vale cualquiera).
+      const activeTenant = (user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
+      let memQ = supabase.from("tenant_users").select("tenant_id, role").eq("user_id", user.id).eq("status", "active");
+      if (activeTenant) memQ = memQ.eq("tenant_id", activeTenant);
+      const { data: mem } = await memQ.limit(1).maybeSingle();
       if (!mem) return null;
       const { data: t } = await supabase
         .from("tenants")

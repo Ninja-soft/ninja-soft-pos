@@ -93,6 +93,10 @@ Deno.serve(async (req: Request) => {
   if (!caller || !["owner", "manager"].includes(caller.role)) {
     return json({ error: "forbidden" }, 403);
   }
+  // ADR-051: sólo el dueño suma encargados.
+  if (role === "manager" && caller.role !== "owner") {
+    return json({ error: "forbidden_role" }, 403);
+  }
 
   // Sucursales: se validan ANTES de invitar (que no quede un usuario creado
   // con sucursales inválidas). La función SQL vuelve a validar todo.
@@ -132,6 +136,8 @@ Deno.serve(async (req: Request) => {
 
   // ¿el target ya es miembro activo? entonces no suma asiento.
   let targetAlreadyActive = false;
+  let existingRole: string | null = null;
+  let existingStatus: string | null = null;
   const { data: targetUser } = await admin
     .from("users")
     .select("id")
@@ -140,11 +146,23 @@ Deno.serve(async (req: Request) => {
   if (targetUser) {
     const { data: existingMembership } = await admin
       .from("tenant_users")
-      .select("status")
+      .select("status, role")
       .eq("tenant_id", tenantId)
       .eq("user_id", targetUser.id)
       .maybeSingle();
     targetAlreadyActive = existingMembership?.status === "active";
+    existingRole = existingMembership?.role ?? null;
+    existingStatus = existingMembership?.status ?? null;
+  }
+
+  // ADR-051: invitar NO pisa a un miembro existente (antes un upsert podía
+  // degradar al dueño). Un miembro activo se informa tal cual; uno dado de baja
+  // vuelve por "Reingreso" (queda en su historial), no por invitación.
+  if (existingRole === "owner" || targetAlreadyActive) {
+    return json({ error: "already_member", role: existingRole }, 409);
+  }
+  if (existingStatus === "inactive") {
+    return json({ error: "member_terminated" }, 409);
   }
 
   if (
@@ -189,6 +207,18 @@ Deno.serve(async (req: Request) => {
     { onConflict: "tenant_id,user_id" },
   );
   if (muErr) return json({ error: "membership_failed", detail: muErr.message }, 500);
+
+  // ADR-051 (B-01): sin app_metadata.current_tenant_id la RLS le niega todo al
+  // invitado. Se setea sólo si no tiene otro negocio activo.
+  if (targetId) {
+    const { data: target } = await admin.auth.admin.getUserById(targetId);
+    const meta = (target?.user?.app_metadata ?? {}) as Record<string, unknown>;
+    if (!meta.current_tenant_id) {
+      await admin.auth.admin.updateUserById(targetId, {
+        app_metadata: { ...meta, current_tenant_id: tenantId },
+      });
+    }
+  }
 
   await admin.from("audit_logs").insert({
     tenant_id: tenantId,

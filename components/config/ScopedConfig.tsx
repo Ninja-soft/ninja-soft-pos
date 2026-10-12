@@ -97,7 +97,7 @@ export function useScopeNamer() {
 }
 
 /** Destino de resolución para un alcance elegido. */
-function targetFor(sel: ScopeSel, groupMap: Record<string, string | null> | undefined): ResolveTarget {
+export function targetFor(sel: ScopeSel, groupMap: Record<string, string | null> | undefined): ResolveTarget {
   const flags = { multiStore: true, multiRegister: true };
   if (sel.scope === "tenant") return { ...flags };
   if (sel.scope === "store_group") return { ...flags, groupId: sel.id };

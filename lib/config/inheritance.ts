@@ -95,6 +95,7 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     { key: "offer_warranty", type: "bool", label: "Ofrecer garantía extendida", scopes: GS },
     { key: "auto_email_receipt", type: "bool", label: "Enviar comprobante por mail", scopes: GS },
     { key: "allow_free_sale", type: "bool", label: "Venta libre (monto manual)", scopes: ALL },
+    { key: "max_free_sale", type: "map_num", label: "Tope de venta libre por rol", unit: "$", scopes: GS },
     { key: "blind_close", type: "bool", label: "Cierre de caja ciego", scopes: ALL },
     { key: "close_tolerance", type: "num", label: "Tolerancia de cierre", unit: "$", scopes: ALL },
     { key: "require_close_reason", type: "bool", label: "Motivo obligatorio en diferencias", scopes: ALL },
@@ -103,6 +104,9 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     { key: "display_thanks_message", type: "text", label: "Pantalla del cliente: agradecimiento", scopes: ALL },
     { key: "print_profiles", type: "map_any", label: "Perfiles de impresión", scopes: ALL },
     { key: "pos_layout", type: "map_any", label: "Diseño del POS", scopes: ALL },
+    // ADR-054: reglas del cupón del posnet (se pisan por clave: acquirers,
+    // fields, by_acquirer). También por caja: el posnet es de la caja.
+    { key: "card_voucher_rules", type: "map_any", label: "Datos del cupón del posnet", scopes: ALL },
   ],
   ticket: [
     {

@@ -100,6 +100,42 @@ export interface TenderDef {
    * conexión (provider) NO esté conectada (Directo, ADR-041).
    */
   manualFallback?: boolean;
+  /**
+   * Tarjeta con terminal integrada de la caja (ADR-053): el monto va a la
+   * terminal y el cupón vuelve solo. Sólo en el tender sintético "card:terminal".
+   */
+  integrated?: IntegratedTenderInfo;
+}
+
+export interface IntegratedTenderInfo {
+  terminalId: string;
+  /** Nombre de la terminal en el registro ("Pinpad caja 1"). */
+  label: string;
+  /** Marca adquirente (payway, fiserv, getnet). */
+  providerKey: string;
+  /** El protocolo pide elegir la marca de la tarjeta antes de mandar. */
+  requiresBrand: boolean;
+  /** Simulador: cobros de prueba. */
+  simulated: boolean;
+}
+
+export const INTEGRATED_CARD_TENDER_ID = "card:terminal";
+
+/**
+ * Tender "Tarjeta en terminal" a partir de "Tarjeta en posnet": mismo grupo y
+ * planes, con la terminal integrada de la caja. Se ofrece primero; el
+ * posnet manual queda como respaldo.
+ */
+export function integratedCardTender<T extends TenderDef>(card: T, info: IntegratedTenderInfo): T {
+  return {
+    ...card,
+    id: INTEGRATED_CARD_TENDER_ID,
+    brandLabel: "Tarjeta en terminal",
+    label: "Tarjeta en terminal",
+    logo: paymentIcon(info.providerKey) ?? card.logo,
+    hint: info.simulated ? `${info.label} (simulador)` : `Cobra ${info.label} y completa el cupón`,
+    integrated: info,
+  };
 }
 
 // Isotipos oficiales: misma fuente que la configuración de medios de pago

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useFeature } from "@/modules/saas/gating";
 import { CalendarClock, Heart, Mail, MessageCircle, Package, RotateCcw, Wallet } from "lucide-react";
 import {
+  useCustomerBranchStats,
   useCustomerHistory,
   useCustomerLastSaleItems,
   useCustomerUpcomingAppointments,
@@ -16,6 +18,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import type { Customer } from "@/modules/customers/api";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { BranchDot } from "@/components/branches/BranchSwitcher";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { branchLabel } from "@/modules/branches/logic";
 
 // Recordatorio manual del próximo turno por WhatsApp (como los links de
 // cumpleaños · BirthdaysModal). El ENVÍO automático queda como follow-up (cron
@@ -67,7 +72,24 @@ export function CustomerHistoryModal({
   customer: Customer | null;
 }) {
   const router = useRouter();
-  const { data, isLoading } = useCustomerHistory(open ? customer?.id : null);
+  const branchCtx = useBranchContext();
+  // Filtro de compras por sucursal (F17 · H96). "" = todas las que veo.
+  const [storeFilter, setStoreFilter] = useState("");
+  useEffect(() => {
+    if (!open) setStoreFilter("");
+  }, [open, customer?.id]);
+  const multi = branchCtx.isMulti;
+  const { data, isLoading } = useCustomerHistory(
+    open ? customer?.id : null,
+    multi && storeFilter ? storeFilter : null,
+  );
+  const { data: branchStats } = useCustomerBranchStats(open ? customer?.id : null, multi);
+  // store_id_alta (ADR-057) todavía no está en los tipos generados.
+  const altaId =
+    (customer as unknown as { store_id_alta?: string | null } | null)?.store_id_alta ??
+    branchStats?.storeIdAlta ??
+    null;
+  const altaBranch = altaId ? (branchCtx.all.find((b) => b.id === altaId) ?? null) : null;
   // Packs de sesiones del cliente (H41): todos (no sólo disponibles) para mostrar
   // también los agotados/vencidos en el historial.
   const { data: packCredits } = useCustomerPackCredits(
@@ -314,10 +336,88 @@ export function CustomerHistoryModal({
             </div>
           )}
 
+          {/* Sucursales (F17 · H96): alta y compras por sucursal. El cliente es
+              del negocio: compra y paga en cualquiera. */}
+          {multi && (altaBranch || (branchStats?.byStore.length ?? 0) > 0) && (
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Sucursales
+                </span>
+                {altaBranch && (
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Alta en
+                    <BranchDot branch={altaBranch} />
+                    <span className="font-medium text-foreground">{branchLabel(altaBranch)}</span>
+                  </span>
+                )}
+              </div>
+              {branchStats && branchStats.byStore.length > 0 && (
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-1.5 text-left font-medium">Sucursal</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Compras</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Total</th>
+                        <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">Ticket prom.</th>
+                        <th className="px-3 py-1.5 text-right font-medium">Última</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {branchStats.byStore.map((r) => (
+                        <tr key={r.storeId} className="border-t border-border">
+                          <td className="px-3 py-1.5">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <BranchDot branch={{ color: r.color }} />
+                              <span className="truncate">{r.shortName || r.name}</span>
+                            </span>
+                            {r.returnsTotal > 0 && (
+                              <span className="block text-[11px] text-muted-foreground">
+                                Devoluciones {formatCurrency(r.returnsTotal)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{r.count}</td>
+                          <td className="px-2 py-1.5 text-right font-semibold tabular-nums">
+                            {formatCurrency(r.total)}
+                          </td>
+                          <td className="hidden px-2 py-1.5 text-right tabular-nums sm:table-cell">
+                            {formatCurrency(r.avgTicket)}
+                          </td>
+                          <td className="px-3 py-1.5 text-right text-xs text-muted-foreground">
+                            {r.lastAt ? new Date(r.lastAt).toLocaleDateString("es-AR") : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Compras */}
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Compras ({data.sales.length})
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Compras ({data.sales.length})
+              </span>
+              {multi && branchCtx.allowed.length > 1 && (
+                <select
+                  value={storeFilter}
+                  onChange={(e) => setStoreFilter(e.target.value)}
+                  aria-label="Filtrar compras por sucursal"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-ninja-flameSoft"
+                >
+                  <option value="">Todas las sucursales</option>
+                  {branchCtx.allowed.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {branchLabel(b)}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="max-h-44 space-y-1 overflow-y-auto">
               {data.sales.length === 0 && (
@@ -333,6 +433,9 @@ export function CustomerHistoryModal({
                   <span className="font-mono">{formatSaleNumber(s.number, numFmt)}</span>
                   <span className="text-xs text-muted-foreground">
                     {new Date(s.created_at).toLocaleDateString("es-AR")}
+                    {multi && s.store_id && !storeFilter && (
+                      <span className="ml-1.5">· {branchCtx.branchName(s.store_id)}</span>
+                    )}
                   </span>
                   <span
                     className={

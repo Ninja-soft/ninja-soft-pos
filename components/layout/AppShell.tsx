@@ -19,6 +19,7 @@ import {
   Lock,
   LogOut,
   Menu,
+  MonitorDot,
   Moon,
   Package,
   Receipt,
@@ -72,6 +73,8 @@ import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
+import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
+import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -163,6 +166,8 @@ type Item = {
   // Sólo con 2+ sucursales (traslados · F17/H95): con una sola no tiene sentido
   // y se oculta sin candado.
   requiresMultiStore?: boolean;
+  // Sólo dueño o encargado (monitor de cajas, ADR-051).
+  managersOnly?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -200,6 +205,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // pago. Con candado si el plan no la incluye.
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         { href: "/caja", label: "Caja", icon: Wallet },
+        // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
+        { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
         { href: "/ventas", label: "Ventas", icon: Receipt },
         {
           href: "/devoluciones",
@@ -417,13 +424,11 @@ export function AppShell({
       if (!user) return { isInternal: false, role: null as string | null };
       const isInternal = !!(user.app_metadata as { is_internal?: boolean } | null)
         ?.is_internal;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      // Rol en el negocio ACTIVO (con dos membresías no vale cualquiera).
+      const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
+      let q = supabase.from("tenant_users").select("role").eq("user_id", user.id).eq("status", "active");
+      if (tenantId) q = q.eq("tenant_id", tenantId);
+      const { data: mem } = await q.limit(1).maybeSingle();
       return { isInternal, role: mem?.role ?? null };
     },
   });
@@ -453,7 +458,8 @@ export function AppShell({
   const showItem = (it: Item) =>
     (!it.requiresDining || Boolean(diningEnabled)) &&
     (!it.requiresDelivery || Boolean(deliveryEnabled)) &&
-    (!it.requiresMultiStore || (stores?.length ?? 0) > 1);
+    (!it.requiresMultiStore || (stores?.length ?? 0) > 1) &&
+    (!it.managersOnly || canOwnerPanel);
 
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni
@@ -592,6 +598,9 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       <InactivityGuard />
+      <TenantClaimHealer />
+      <StaffAccessGate email={email} />
+      <SupervisorPinHost />
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>

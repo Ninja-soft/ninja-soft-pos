@@ -38,6 +38,21 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, cada sucursal opera con una sola caja (la primera caja siempre está incluida).",
     minPlan: "Pro",
   },
+  personal_estados: {
+    desc: "Estados del personal: licencias, suspensiones con fecha de vuelta, bajas y reingresos, con motivo e historial. Quien no está activo no abre caja ni vende y la baja corta el acceso al negocio.",
+    impact: "Desactivado, no se puede suspender, dar licencia ni dar de baja con historial; sólo queda borrar el acceso a mano.",
+    minPlan: "Start",
+  },
+  pin_supervisor: {
+    desc: "PIN de supervisor por acción: anulaciones, devoluciones, retiros, ingresos y descuentos por encima de un monto piden el PIN de un dueño o encargado; cierre forzado de cajas ajenas. Exigido por el servidor y auditado.",
+    impact: "Desactivado, nadie puede autorizar con PIN desde la caja de otro.",
+    minPlan: "Start",
+  },
+  monitor_cajas: {
+    desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
+    impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",
+    minPlan: "Start",
+  },
   devoluciones: {
     desc: "Devoluciones y notas de crédito sobre ventas: permite reintegrar productos y emitir el comprobante de devolución.",
     impact: "Sin esto el cajero no puede procesar devoluciones desde el sistema; habría que hacerlas por fuera.",
@@ -200,6 +215,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["fiserv"],
     needs: "Marca Fiserv conectada (el Merchant ID y el token de Clover del comercio) y la app Cloud Pay Display abierta en cada terminal.",
   },
+  terminal_integrada: {
+    desc: "Terminal integrada: el posnet (por cable o red) o el pinpad conectado a la PC cobra el monto que manda el POS y devuelve lote, cupón, autorización, tarjeta, últimos 4 y cuotas, que quedan en el cobro sin cargarlos a mano. Configuración, Terminales, por caja; incluye un simulador para probar sin hardware.",
+    impact: "Desactivado, se cobra con Tarjeta en posnet y el cajero carga el cupón a mano.",
+    minPlan: "Pro",
+    needs: "Chrome o Edge de escritorio (Web Serial / WebUSB) o el puente local NinjaPOS en la PC de la caja, y la terminal en modo integrado. Payway: protocolo sin homologar todavía; Fiserv y Getnet: pendientes de la especificación del adquirente.",
+  },
   pagos360: {
     desc: "Cobros con Pagos360: links de pago y DEBIN para cobrar a distancia o por débito inmediato.",
     impact: "Sin esto no se pueden generar links de pago ni cobros DEBIN con Pagos360.",
@@ -257,6 +278,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",
     minPlan: "Pro",
+  },
+  historial_precios: {
+    desc: "Historial de precios: cada cambio del precio del producto, sus variantes y las listas con quién, cuándo y de dónde vino (manual, importación, masivo o lista), con gráfico en la ficha.",
+    impact: "Desactivado, los cambios se siguen registrando pero no se pueden consultar.",
+    minPlan: "Start",
   },
   listas_precios: {
     desc: "Múltiples listas de precios: precios distintos por lista (mayorista, minorista, etc.) aplicables según el cliente.",
@@ -328,7 +354,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Integraciones ──────────────────────────────────────────────────────────
   multi_sucursal: {
-    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales.",
+    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales. Credenciales de cobro y planes de cuotas propios por sucursal, sucursales nuevas desde otra o desde una plantilla, y reportes comparativos entre sucursales.",
     impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },
@@ -355,8 +381,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   auditoria: {
-    desc: "Registro de auditoría: deja traza de las acciones críticas (quién hizo qué y cuándo) dentro del negocio.",
-    impact: "Sin auditoría no queda registro de las acciones sensibles del equipo.",
+    desc: "Visor de auditoría: filtrá todo lo que pasa en el negocio por usuario, sucursal, acción y fecha, mirá el detalle de cada cambio y exportalo a Excel. El registro se guarda siempre, en todos los planes.",
+    impact: "Sin el visor el registro se guarda igual, pero no se puede consultar ni exportar desde la app.",
     minPlan: "Business",
   },
   backup: {

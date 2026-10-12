@@ -31,6 +31,7 @@ import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, othe
 import { formatQty } from "@/lib/utils/format";
 import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
+import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
 import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
@@ -70,8 +71,10 @@ import { accentVars } from "@/components/pos/ui/posStyles";
 import {
   CustomerPickerDialog,
   FreeSaleDialog,
+  PriceOverrideDialog,
   SerialDialog,
   WeighDialog,
+  type PriceOverrideTarget,
 } from "@/components/pos/screen/PosDialogs";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
@@ -370,6 +373,20 @@ function PosPageInner() {
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
+  // F18 · H100 (ADR-056): cambio manual de precio con motivo.
+  const setLinePrice = useCartStore((s) => s.setLinePrice);
+  const [priceTarget, setPriceTarget] = useState<PriceOverrideTarget | null>(null);
+  function openPriceEdit(lineId: string) {
+    const l = useCartStore.getState().lines.find((x) => x.lineId === lineId);
+    if (!l) return;
+    setPriceTarget({
+      lineId,
+      name: l.name,
+      unitPrice: l.unitPrice,
+      listPrice: l.listPrice ?? l.unitPrice,
+      reason: l.overrideReason ?? "",
+    });
+  }
   const clear = useCartStore((s) => s.clear);
 
   // Lista de precios 'mostrador' activa: el precio al agregar se resuelve acá.
@@ -560,7 +577,9 @@ function PosPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
-  const hasShift = Boolean(shift);
+  // ADR-051 (H114): el turno de otra persona no cuenta como caja abierta propia.
+  const shiftOwnership = useShiftOwnership(shift);
+  const hasShift = Boolean(shift) && shiftOwnership.usable;
 
   // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
@@ -885,6 +904,10 @@ function PosPageInner() {
   const pinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
   const canCheckout = hasShift && lines.length > 0;
   function startCheckout(tenderId?: string) {
+    if (shiftOwnership.foreign) {
+      toast({ title: "Esta caja la tiene abierta otra persona", description: "Elegí otra caja arriba y abrila a tu nombre.", variant: "error" });
+      return;
+    }
     if (!hasShift) {
       setOpenShiftModal(true);
       return;
@@ -966,6 +989,7 @@ function PosPageInner() {
       creditForLine={creditForLine}
       onCover={coverLineWithPack}
       onUncover={uncoverLine}
+      onEditPrice={openPriceEdit}
       emptyHint={preset === "caja_rapida" ? "Escaneá un código o tipeá un PLU." : undefined}
     />
   );
@@ -1029,6 +1053,7 @@ function PosPageInner() {
 
   const banners = (
     <>
+      <ForeignShiftBanner shift={shift} />
       {editingCharge && (
         <ModeBanner
           tone="info"
@@ -1363,6 +1388,14 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
+      <PriceOverrideDialog
+        line={priceTarget}
+        onClose={() => setPriceTarget(null)}
+        onConfirm={(price, reason) => {
+          if (priceTarget) setLinePrice(priceTarget.lineId, price, reason);
+          setPriceTarget(null);
+        }}
+      />
       <FreeSaleDialog
         open={freeOpen}
         onOpenChange={setFreeOpen}

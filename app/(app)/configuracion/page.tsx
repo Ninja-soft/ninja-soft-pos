@@ -131,12 +131,20 @@ const GroupAccountTermsCard = dynamic(
   () => import("@/components/account/GroupAccountTermsCard").then((m) => m.GroupAccountTermsCard),
   { loading },
 );
+const SecuritySettings = dynamic(
+  () => import("@/components/security/SecuritySettings").then((m) => m.SecuritySettings),
+  { loading },
+);
 const SupervisorPinCard = dynamic(
   () => import("@/components/account/SupervisorPinCard").then((m) => m.SupervisorPinCard),
   { loading },
 );
 
 // Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
+const PosnetVoucherCard = dynamic(
+  () => import("@/components/config/PosnetVoucherCard").then((m) => m.PosnetVoucherCard),
+  { loading },
+);
 const TerminalsManager = dynamic(
   () => import("@/components/config/TerminalsManager").then((m) => m.TerminalsManager),
   { loading },
@@ -166,6 +174,7 @@ const OPERACION_FIELDS = [
   "require_card_voucher",
   "offer_warranty",
   "allow_free_sale",
+  "max_free_sale",
   "blind_close",
   "close_tolerance",
   "require_close_reason",
@@ -200,6 +209,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <StoreGroupsCard />
         </>
       );
+    case "seguridad":
+      return <SecuritySettings />;
     // Modelos de ticket (escritura protegida por RLS).
     case "tickets":
       return <TicketTemplatesCard />;
@@ -222,6 +233,13 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
             <PaymentMethodsCard />
           </ScopedSection>
         </Suspense>
+      );
+    // ADR-054: terminales y datos del cupón del posnet offline (heredables).
+    case "posnet":
+      return (
+        <ScopedSection domain="pos_settings" fields={[]} scopedExtra={(s) => <PosnetVoucherCard scope={s} />}>
+          <PosnetVoucherCard />
+        </ScopedSection>
       );
     case "terminales":
       return <TerminalsManager />;

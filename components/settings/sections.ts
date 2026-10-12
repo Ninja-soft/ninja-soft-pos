@@ -36,11 +36,13 @@ export type SettingsSectionKey =
   | "diseno-pos"
   | "rubro"
   | "sucursales"
+  | "seguridad"
   | "marca"
   | "tickets"
   | "impresion"
   | "email"
   | "pagos"
+  | "posnet"
   | "terminales"
   | "operacion"
   | "salones"
@@ -122,6 +124,15 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Tus locales, sus cajas y qué personal trabaja en cada uno, con traslados programados.",
         icon: Building2,
         keywords: "sucursal local caja punto de venta personal empleados traslado cobertura multi",
+      },
+      {
+        key: "seguridad",
+        label: "Seguridad y auditoría",
+        title: "Seguridad y auditoría",
+        description:
+          "Qué acciones piden PIN de supervisor y desde qué monto, quién autoriza, tu PIN y el registro de todo lo que pasa en el negocio.",
+        icon: ShieldCheck,
+        keywords: "pin supervisor autorizacion anulacion devolucion retiro descuento auditoria registro log caja compartida",
       },
     ],
   },
@@ -207,6 +218,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Conectá tus cuentas y elegí con qué canales cobrás en el POS.",
         icon: CreditCard,
         keywords: "mercado pago tarjetas cuotas qr posnet transferencia efectivo recargo",
+      },
+      // ADR-054: posnet offline (Tarjeta en posnet): terminales y datos del cupón.
+      {
+        key: "posnet",
+        label: "Tarjeta en posnet",
+        title: "Tarjeta en posnet",
+        description:
+          "Cobrás en tu terminal sin integrar (Payway, Getnet, Clover...) y cargás el cupón. Elegí las terminales y qué datos se piden.",
+        icon: CreditCard,
+        keywords: "posnet cupon voucher lote autorizacion ultimos 4 payway getnet fiserv clover nave adquirente terminal offline",
       },
       // F17 · H93 (ADR-049): registro de terminales por sucursal y caja (BASE).
       {
@@ -368,7 +389,12 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cuenta: "cuenta-corriente",
   "listas-precios": "precios",
   "medios-pago": "pagos",
+  cupon: "posnet",
+  voucher: "posnet",
   tema: "apariencia",
+  auditoria: "seguridad",
+  pin: "seguridad",
+  supervisor: "seguridad",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

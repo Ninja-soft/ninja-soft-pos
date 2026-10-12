@@ -11,6 +11,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, tenantMpCredential } from "../_shared/mpAuth.ts";
+import { bodyStoreId, insertIntentWithScope } from "../_shared/paymentSecrets.ts";
 import { edgeTimer } from "../_shared/timing.ts";
 
 const cors = {
@@ -71,8 +72,8 @@ Deno.serve(async (req: Request) => {
       .maybeSingle(),
     admin.rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "mercado_pago" }),
     // Access Token del tenant (producción o prueba según el switch Sandbox;
-    // refresh OAuth incluido).
-    tenantMpCredential(admin, tenantId),
+    // refresh OAuth incluido). ADR-057: la de la sucursal si tiene una propia.
+    tenantMpCredential(admin, tenantId, null, { storeId: bodyStoreId(b) }),
   ]);
   timer.mark("prechecks");
   if (!mem) return json({ error: "forbidden" }, 403);
@@ -86,9 +87,11 @@ Deno.serve(async (req: Request) => {
   const notificationUrl = `${url}/functions/v1/mp_webhook?intent=${intentId}`;
 
   const [ins, prefRes] = await Promise.all([
-    admin
-      .from("mp_payment_intents")
-      .insert({ id: intentId, tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env }),
+    insertIntentWithScope(
+      admin,
+      { id: intentId, tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env },
+      cred.scopeStoreId,
+    ),
     fetch(`${MP_API}/checkout/preferences`, {
       method: "POST",
       headers: {

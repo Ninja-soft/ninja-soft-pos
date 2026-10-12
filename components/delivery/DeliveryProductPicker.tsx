@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useProducts } from "@/modules/products/hooks";
 import { useMostradorPricing } from "@/modules/prices/hooks";
+import { useQueryClient } from "@tanstack/react-query";
 import { resolvePrice } from "@/lib/prices/resolve";
+import { orderItemError } from "@/lib/pos/priceMismatch";
 import { useDeliveryMutations } from "@/modules/delivery/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -27,6 +29,7 @@ export function DeliveryProductPicker({
   orderId: string | null;
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const { data: products } = useProducts(search);
   const { data: pricing } = useMostradorPricing();
@@ -67,11 +70,13 @@ export function DeliveryProductPicker({
       setAllergen("");
       toast({ title: `${name} agregado`, variant: "success" });
     } catch (e) {
-      toast({
-        title: "No se pudo agregar",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
+      // ADR-056: el servidor valida el precio al cargar el ítem.
+      const err = orderItemError(e, name, formatCurrency);
+      if (err.refresh) {
+        void qc.invalidateQueries({ queryKey: ["price-lists"] });
+        void qc.invalidateQueries({ queryKey: ["products"] });
+      }
+      toast({ title: err.title, description: err.description, variant: "error" });
     }
   }
 
@@ -98,11 +103,8 @@ export function DeliveryProductPicker({
       setAllergen("");
       toast({ title: "Ítem agregado", variant: "success" });
     } catch (e) {
-      toast({
-        title: "No se pudo agregar",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
+      const err = orderItemError(e, freeName.trim() || "Ítem", formatCurrency);
+      toast({ title: err.title, description: err.description, variant: "error" });
     }
   }
 

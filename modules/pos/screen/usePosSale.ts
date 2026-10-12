@@ -5,18 +5,35 @@ import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/chec
 import { appointmentsApi } from "@/modules/agenda/api";
 import { buildSaleItemsAndExtras, type SaleArgsLine } from "@/modules/pending-charges/logic";
 import { usePosMutations } from "@/modules/pos/hooks";
+import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
+import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
 
 // Registro de la venta (create_sale) del POS. Movido tal cual desde la página:
 // mismos ítems, extras, packs, promo, cupón, mesa/delivery atómicos y el mismo
 // mapeo de errores del server a mensajes.
 
 export function saleErrorTitle(msg: string): string {
+  // F18 · H100 (ADR-056): precio autoritativo y venta libre.
+  if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  if (msg.includes("price_override_reason_required")) return "Escribí el motivo del cambio de precio";
+  if (msg.includes("free_sale_not_allowed")) return "La venta libre (monto manual) está apagada en esta caja";
+  if (msg.includes("free_sale_exceeds_limit")) return "La venta libre supera el tope de tu rol";
+  if (msg.includes("modifier_not_found")) return "Una opción elegida ya no existe: volvé a cargar el producto";
+  if (msg.includes("invalid_quantity")) return "Hay una línea con cantidad inválida";
   // F17 · H90: turno y sucursal de la caja en uso.
   if (msg.includes("shift_ambiguous")) return "Hay cajas abiertas en varias sucursales: elegí tu caja arriba";
   if (msg.includes("shift_not_open")) return "El turno de esta caja ya se cerró: abrí la caja de nuevo";
   if (msg.includes("store_not_allowed")) return "No tenés acceso a la sucursal de esta caja";
+  // ADR-051: caja propia, PIN de supervisor y estado del personal.
+  if (msg.includes("shift_not_owned")) return "Esta caja la tiene abierta otra persona: abrí la tuya para cobrar";
+  if (msg.includes("no_open_shift")) return "No tenés una caja abierta: abrí la tuya para cobrar";
+  if (msg.includes("supervisor_cancelled")) return "Cancelaste la autorización del supervisor";
+  if (msg.includes("supervisor_token_invalid")) return "La autorización venció o ya se usó: pedila de nuevo";
+  if (msg.includes("supervisor_required")) return "Hace falta la autorización de un supervisor";
+  if (msg.includes("staff_suspended") || msg.includes("staff_on_leave") || msg.includes("staff_terminated"))
+    return "Tu usuario no está habilitado para vender ahora";
   // F17 · H92/H94 (ADR-049): configuración y stock de la sucursal.
   if (msg.includes("insufficient_stock_branch")) return "No hay stock suficiente en esta sucursal";
   if (msg.includes("payment_method_disabled_in_store"))
@@ -24,6 +41,9 @@ export function saleErrorTitle(msg: string): string {
   // ADR-055: transferencias.
   if (msg.includes("transfer_reference_required")) return "Cargá el número de operación de la transferencia";
   if (msg.includes("transfer_account_not_available")) return "Esa cuenta de transferencia no está disponible en esta caja";
+  // ADR-054: reglas del cupón del posnet (validadas en el servidor).
+  if (msg.includes("card_voucher_required") || msg.includes("card_voucher_invalid"))
+    return cardVoucherErrorTitle(msg);
   return msg.includes("account_inactive")
     ? "Tu suscripción venció. Renovala para volver a cobrar."
     : msg.includes("coupon_usage_exceeded")
@@ -96,6 +116,10 @@ export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
     discount: l.discount,
     packId: l.packId ?? null,
     packCreditId: l.packCreditId ?? null,
+    giftPromoId: l.giftPromoId ?? null,
+    priceOverride: l.priceOverride ?? false,
+    overrideReason: l.overrideReason ?? null,
+    listPrice: l.listPrice ?? null,
   }));
 }
 
@@ -112,6 +136,7 @@ export function usePosSale(ctx: {
 }) {
   const { toast } = useToast();
   const { sale } = usePosMutations();
+  const handlePriceMismatch = usePriceRefresh();
 
   async function handleSale(
     payments: CheckoutPayment[],
@@ -154,6 +179,8 @@ export function usePosSale(ctx: {
       });
       ctx.onSuccess({ saleId: res.sale_id, change: change ?? 0 });
     } catch (e) {
+      // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
+      if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : "";
       const title = saleErrorTitle(msg);
       toast({

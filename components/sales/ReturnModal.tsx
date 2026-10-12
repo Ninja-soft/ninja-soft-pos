@@ -1266,6 +1266,10 @@ function returnError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   const map: Record<string, string> = {
     no_open_shift: "Abrí la caja para reintegrar en efectivo",
+    shift_not_owned: "Esta caja la tiene abierta otra persona: abrí la tuya",
+    supervisor_cancelled: "Cancelaste la autorización del supervisor",
+    supervisor_token_invalid: "La autorización venció o ya se usó: pedila de nuevo",
+    supervisor_required: "Hace falta la autorización de un supervisor",
     store_credit_needs_customer: "El vale necesita un cliente",
     sale_not_returnable: "La venta ya no es devolvible (fue anulada)",
     qty_exceeds: "La cantidad supera lo disponible; refrescá e intentá de nuevo",

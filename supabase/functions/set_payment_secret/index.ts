@@ -3,8 +3,21 @@
 // (ej. Access Token de Mercado Pago) por tenant. SOLO owner/manager del tenant.
 // service_role solo acá: payment_secrets tiene RLS deny a todos.
 // Marca tenant_payment_methods.config.connected = true (no secreto) para la UI.
+//
+// ADR-057: body.store_id opcional = credencial propia de esa sucursal (pisa a
+// la del negocio). Validado en el servidor con payment_secret_scope_check
+// (dueño o encargado con acceso a la sucursal, plan con multi_sucursal). Una
+// credencial de sucursal NO toca tenant_payment_methods.config.connected (eso
+// refleja la del negocio); la UI lee payment_secret_scopes().
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import {
+  deleteProviderSecret,
+  isScopeUuid,
+  loadProviderSecret,
+  saveProviderSecret,
+  scopeErrorStatus,
+} from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -73,40 +86,52 @@ Deno.serve(async (req: Request) => {
 
   const action = b.action === "clear" ? "clear" : "set";
   const secrets = (b.secrets ?? {}) as Record<string, unknown>;
+  if (b.store_id != null && !isScopeUuid(b.store_id)) return json({ error: "invalid_store" }, 400);
+  const storeId = isScopeUuid(b.store_id) ? b.store_id : null;
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  // Guard: owner/manager activo del tenant.
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem || !["owner", "manager"].includes(mem.role as string)) {
-    return json({ error: "forbidden" }, 403);
+  // Guard: owner/manager activo del tenant (y, por sucursal, acceso a ella y
+  // multi_sucursal en el plan).
+  const { data: scopeErr, error: scopeRpcErr } = await admin.rpc("payment_secret_scope_check", {
+    p_tenant: tenantId,
+    p_user: user.id,
+    p_store: storeId,
+  });
+  if (scopeRpcErr) {
+    // Base sin la migración: sólo existe la credencial del negocio.
+    if (storeId) return json({ error: "store_scope_unavailable" }, 409);
+    const { data: mem } = await admin
+      .from("tenant_users")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!mem || !["owner", "manager"].includes(mem.role as string)) {
+      return json({ error: "forbidden" }, 403);
+    }
+  } else if (scopeErr) {
+    return json({ error: scopeErr }, scopeErrorStatus(String(scopeErr)));
   }
 
   if (action === "clear") {
-    await admin
-      .from("payment_secrets")
-      .delete()
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", providerKey);
-    await admin.from("tenant_payment_methods").upsert(
-      { tenant_id: tenantId, provider_key: providerKey, config: { connected: false } },
-      { onConflict: "tenant_id,provider_key" },
-    );
+    await deleteProviderSecret(admin, { tenantId, providerKey, storeId });
+    if (!storeId) {
+      await admin.from("tenant_payment_methods").upsert(
+        { tenant_id: tenantId, provider_key: providerKey, config: { connected: false } },
+        { onConflict: "tenant_id,provider_key" },
+      );
+    }
     await admin.from("audit_logs").insert({
       tenant_id: tenantId,
       actor_user_id: user.id,
       entity_type: "payment_secrets",
       entity_id: null,
       action: "payment_secret_cleared",
-      after_data: { provider_key: providerKey },
+      after_data: { provider_key: providerKey, store_id: storeId },
     });
-    return json({ ok: true, connected: false });
+    return json({ ok: true, connected: false, store_id: storeId });
   }
 
   // Limpia/recorta strings de los secretos.
@@ -125,35 +150,41 @@ Deno.serve(async (req: Request) => {
     return json({ error: "empty_secrets" }, 400);
   }
 
+  // Fila previa de ESTE alcance (nunca la del negocio para una sucursal).
+  const prevOfScope = async (): Promise<Record<string, unknown>> => {
+    const prev = await loadProviderSecret(admin, tenantId, providerKey, { scopeStoreId: storeId });
+    return prev && prev.scopeStoreId === storeId ? prev.secrets : {};
+  };
+
   let next: Record<string, unknown> = clean;
   if (merge) {
-    const { data: prev } = await admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", providerKey)
-      .maybeSingle();
-    next = { ...((prev?.secrets as Record<string, unknown>) ?? {}), ...clean };
+    next = { ...(await prevOfScope()), ...clean };
     for (const k of remove) delete next[k];
   } else if (providerKey === "mercadopago") {
     // Reemplazo del token de producción: conserva el de prueba si había.
-    const { data: prev } = await admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", providerKey)
-      .maybeSingle();
-    const testToken = (prev?.secrets as { test_access_token?: string } | null)?.test_access_token;
+    const testToken = ((await prevOfScope()) as { test_access_token?: string }).test_access_token;
     if (testToken && !clean.test_access_token) next = { ...clean, test_access_token: testToken };
   }
 
-  const up = await admin
-    .from("payment_secrets")
-    .upsert(
-      { tenant_id: tenantId, provider_key: providerKey, secrets: next },
-      { onConflict: "tenant_id,provider_key" },
-    );
+  const up = await saveProviderSecret(admin, { tenantId, providerKey, storeId, secrets: next });
   if (up.error) return json({ error: "save_failed", detail: up.error.message }, 500);
+
+  if (storeId) {
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "payment_secrets",
+      entity_id: null,
+      action: "payment_secret_set",
+      after_data: {
+        provider_key: providerKey,
+        store_id: storeId,
+        keys: Object.keys(clean),
+        ...(merge ? { merge: true, removed: remove } : {}),
+      },
+    });
+    return json({ ok: true, connected: true, store_id: storeId });
+  }
 
   // Marca conectado (sin exponer el secreto) para la UI, sin pisar otros flags.
   // test_connected: hay token de prueba (switch Sandbox de Mercado Pago).
@@ -182,6 +213,7 @@ Deno.serve(async (req: Request) => {
     action: "payment_secret_set",
     after_data: {
       provider_key: providerKey,
+      store_id: null,
       keys: Object.keys(clean),
       ...(merge ? { merge: true, removed: remove } : {}),
     },

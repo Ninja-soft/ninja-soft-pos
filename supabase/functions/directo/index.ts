@@ -27,11 +27,12 @@ import {
   INTENT_COLS,
   clientFor,
   intentEnvValue,
-  loadCreds,
+  loadCredsScoped,
   loadEnv,
   syncIntent,
   type IntentRow,
 } from "../_shared/directo_server.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -84,8 +85,17 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
-  const creds = await loadCreds(admin, tenantId);
-  if (!creds) return json({ error: "not_connected" }, 400);
+  // ADR-057: al crear, la conexión de la sucursal del POS (si tiene); sobre
+  // un intent, la misma con la que se creó.
+  const conn = await loadCredsScoped(
+    admin,
+    tenantId,
+    action === "create"
+      ? { storeId: bodyStoreId(b) }
+      : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) },
+  );
+  if (!conn) return json({ error: "not_connected" }, 400);
+  const creds = conn.creds;
 
   // ── create ─────────────────────────────────────────────────────────────────
   if (action === "create") {
@@ -118,16 +128,16 @@ Deno.serve(async (req: Request) => {
       return json({ error: e instanceof Error ? e.message : "invalid_amount" }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({
+    const { data: intent, error: intErr } = await insertIntentWithScope(
+      admin,
+      {
         tenant_id: tenantId,
         amount,
         provider_key: "directo",
         mp_env: intentEnvValue(env),
-      })
-      .select("id")
-      .single();
+      },
+      conn.scopeStoreId,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const intentId = (intent as { id: string }).id;
 

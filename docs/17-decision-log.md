@@ -1458,6 +1458,46 @@ El dueño marcó la hoja de cobro como fea: muchos degradados (monto en degradad
 
 ---
 
+## ADR-043: Multi-sucursal como contexto de primera clase, configuración heredable y bloque fiscal-contable (F17 y F18)
+
+**Fecha:** 2026-10-12 · **Estado:** propuesta (sólo documentación; sin código ni migraciones) · **Hitos:** F17 (H89 a H99) y F18 (H100 a H112)
+
+### Contexto
+
+El dueño pidió auditar Napse (relevamiento de Bridge Manager 7.9, 253 pantallas) con foco en gestión de sucursales, "en qué sucursal estoy", medios de pago y terminales en todas las sucursales, compartir configuración, clientes, productos y contabilidad; y después una auditoría con mirada de contador sobre listas de precios, compras e importaciones, impuestos internos, padrones, percepciones, retenciones, facturación y contabilidad. Resultado en [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md) y [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md). Hallazgos clave en el código:
+
+- `stores` y `cash_registers` existen sin ABM. `create_sale`, `exchange_sale`, `return_sale` y los RPC de stock eligen **la sucursal default** (`order by is_default desc, created_at limit 1`) en vez de la de la caja del turno: con dos sucursales, las ventas quedarían en la equivocada.
+- Stock único (`products.stock`); toda la configuración (medios, credenciales, cuotas, POS, tickets, impresión) es por negocio; roles por negocio; terminales Point recordadas en `localStorage`.
+- `create_sale` acepta el `unit_price` que manda el navegador: debilidad de control interno.
+- `products.tax_rate` numérico sin distinguir exento, no gravado y 0 %; sin impuestos internos, percepciones, retenciones, padrones, compras, libros ni asientos.
+- `multi_sucursal` y `facturacion_afip` están en planes sin función (MARKETING-FUTURO).
+
+### Decisión
+
+1. **Sucursal y caja como contexto de primera clase (F17).** La sucursal de toda operación se deriva de `cash_shift → cash_register → store`. Indicador visible siempre (chip en el topbar del panel, "Centro · Caja 1" en el POS, ticket, Z y display); selector "Todas / sucursal" para quien tiene alcance central.
+2. **Configuración heredable negocio → grupo → sucursal → caja** con una tabla genérica de overrides **por campo** (`config_overrides`) y una función de valor efectivo que informa el origen de cada campo. "Compartir configuración" = no copiar: la sucursal sólo guarda lo que pisa; acciones explícitas "Aplicar a todas", "Copiar desde" (con diff) y "Plantilla de sucursal". Es el primer corte concreto de F14/H57. El override nunca habilita algo fuera del plan.
+3. **Terminales como entidad** (`payment_terminals`, con sucursal, caja, proveedor, id externo, adquirente y n° de comercio) y credenciales de proveedor opcionalmente por sucursal (`payment_secrets.store_id`).
+4. **Permisos por sucursal** con `tenant_user_stores` (rol que pisa el del negocio) y helper RLS `user_can_access_store`; sin filas = acceso total (compatibilidad). Maestros (productos, clientes, medios, listas) siguen por negocio.
+5. **Bloque fiscal y contable (F18)** con toda alícuota, tope, mínimo y código de tributo como **parámetro con vigencia**. Antes de F3 deben estar el catálogo de alícuotas IVA e internos (H103) y la condición fiscal del receptor con padrones (H104). El POS genera asientos inmutables y exporta a los sistemas de los estudios; no pretende reemplazar al sistema contable.
+6. **Dos P0 inmediatos e independientes:** fix de sucursal en los RPC de venta (F17/H90) y validación del precio en el servidor (F18/H100).
+7. **Clasificación de features** según `CLAUDE.md`: `multi_sucursal` (existe) cubre sucursales, herencia, stock y reportes; nuevas keys OPTIONAL `multi_caja`, `transferencias_stock`, `multi_razon_social`, `monitoreo_sucursales`, `listas_precios_pro`, `compras`, `importaciones`, `impuestos_internos`, `padrones`, `percepciones`, `retenciones`, `factura_exportacion`, `export_contable`, `contabilidad`, `conciliacion_tarjetas`, `conciliacion_bancaria`, `tesoreria`, `sepa`; ADDON `integracion_erp`. BASE: primera sucursal y caja, indicador, registro de terminales, validación de precio, historial de precios, alícuotas IVA, condición fiscal manual y campos de registro de producto.
+
+### Alternativas descartadas
+
+- **Copiar la configuración a cada sucursal** (una fila de `tenant_payment_methods` por sucursal): duplica datos, un cambio central no llega a todas y el dueño no sabe qué local es distinto.
+- **Una tabla de override por dominio** (`store_payment_methods`, `store_pos_settings`...): más tablas, más policies y la misma lógica repetida; se usa la tabla genérica y, si un dominio caliente lo necesita, una vista materializada.
+- **Parámetros sueltos por categoría como Napse** (52 categorías de `systemProperty`): potente pero opaco; se elige mostrar valor efectivo y origen en la misma pantalla de cada configuración.
+- **Resolver impuestos y precios sólo en el front:** no es auditable ni seguro; el servidor recalcula.
+
+### Consecuencias
+
+- Roadmap: F4 apunta a F17; nuevas fases F17 (H89 a H99) y F18 (H100 a H112); F3 lista sus prerrequisitos fiscales; F11/H33 y F14/H64 apuntan a F17 y F18.
+- RLS de `sales` y `payments` cambia en H91: requiere `EXPLAIN` y tests por rol y sucursal antes de activar.
+- La comparación de planes debe mostrar como "Próximamente" las keys sin función (hoy `multi_sucursal`, `facturacion_afip` y las nuevas) hasta que existan.
+- **Pendiente con el dueño:** confirmar qué quiso decir con "tag registration" (interpretaciones en §5 de la auditoría fiscal) y validar el alcance fiscal con un estudio contable antes de implementar F18.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

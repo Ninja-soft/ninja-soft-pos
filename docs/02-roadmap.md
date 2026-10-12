@@ -28,9 +28,13 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
+| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🔴 No iniciado (auditoría Napse 2026-10-12, ADR-043) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🔴 No iniciado (auditoría fiscal 2026-10-12, ADR-043) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
+
+> **F17 y F18 (2026-10-12, ADR-043):** dos P0 se hacen ya, independientes del orden: el fix de sucursal en `create_sale` (F17/H90) y la validación del precio en el servidor (F18/H100). Antes de F3 tienen que estar F18/H103 (alícuotas e internos) y H104 (condición fiscal y padrones); F17/H98 y F18/H107 se ejecutan junto con F3. El resto de F17 entra antes de F16.
 
 ---
 
@@ -137,6 +141,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [ ] Cola fiscal robusta: pendientes, reintentos, bloqueados, rechazados, dead-letter y reproceso manual.
   - [ ] Idempotencia fiscal por venta/tipo de comprobante/punto de venta.
   - [ ] Conciliación contra AFIP (`FECompUltimoAutorizado`) para detectar drift de numeración.
+- [ ] **Prerrequisitos fiscales (2026-10-12, ADR-043):** alícuotas IVA con exento y no gravado e impuestos internos (F18/H103), condición fiscal del receptor y padrones (F18/H104), punto de venta por sucursal (F17/H98). Comprobantes completos (tributos, M, FCE MiPyME, E, Transparencia Fiscal) en F18/H107.
 - [ ] Gestión de certificados AFIP por tenant (almacenados encriptados).
 - [ ] Panel de monitoreo de facturación electrónica:
   - [ ] Comprobantes pendientes.
@@ -163,14 +168,16 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 **Duración:** 8–10 semanas. **Objetivo:** soportar clientes con múltiples sucursales y cajas, integraciones con hardware y pasarelas de pago.
 
+> **Actualización 2026-10-12 (ADR-043):** el bloque multi-sucursal y multi-caja de F4 se detalla y se ejecuta en **[F17](#f17--multi-sucursal-real)** (H89 a H99), a partir de la auditoría [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md). Los ítems de abajo quedan como resumen y apuntan al hito que los cubre.
+
 ### Entregables
-- [ ] **Multi-sucursal:**
-  - [ ] Stock por sucursal con transferencias.
-  - [ ] Reportes consolidados.
-  - [ ] Permisos por sucursal.
-- [ ] **Multi-caja por sucursal:**
-  - [ ] Asignación de cajero a caja específica.
-  - [ ] Reportes por caja.
+- [ ] **Multi-sucursal:** *(ver F17)*
+  - [ ] Stock por sucursal con transferencias. *(F17/H94 y H95)*
+  - [ ] Reportes consolidados. *(F17/H97)*
+  - [ ] Permisos por sucursal. *(F17/H91)*
+- [ ] **Multi-caja por sucursal:** *(ver F17)*
+  - [ ] Asignación de cajero a caja específica. *(F17/H90 y H91)*
+  - [ ] Reportes por caja. *(F17/H97)*
 - [ ] **Integraciones de hardware:**
   - [ ] Impresoras térmicas (ESC/POS via plugin de impresión web).
   - [ ] Cajón de dinero.
@@ -558,6 +565,7 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] *Criterio:* vendedor crea pedido reservado, cajera lo levanta, cobra y expedición lo marca entregado.
 
 - [ ] **H33 — Depósitos, stock multi-depósito y transferencias.**
+  > Nota 2026-10-12: *(Stock y transferencias entre sucursales: F17/H94 y H95; acá quedan los depósitos dentro de cada sucursal.)*
   - [ ] Depósitos por sucursal: principal, reserva, devolución, merma, tránsito.
   - [ ] Stock por depósito.
   - [ ] Transferencias entre depósitos con origen/destino, motivo, estado y auditoría.
@@ -803,6 +811,7 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito.
 
 - [ ] **H64 — Inventario PRO, compras y proveedores.**
+  > Nota 2026-10-12: *(Compras, proveedores, costos e importaciones se detallan con su tratamiento fiscal en F18/H101 y H102.)*
   - [ ] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría.
   - [ ] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores.
   - [ ] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales.
@@ -954,6 +963,230 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
 
 ---
 
+### F17 · Multi-sucursal real
+
+Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja como contexto de primera clase** (siempre se ve dónde estoy), configure medios de pago, terminales, precios, tickets e impresión **una vez en el negocio y pise sólo lo que cambia por sucursal o caja**, y tenga stock, clientes y reportes por sucursal. Sale de la auditoría [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md) (Napse Bridge Manager 7.9, 253 pantallas) y de [ADR-043](./17-decision-log.md). Reemplaza en detalle el bloque multi-sucursal de F4. Lo contable y fiscal va en [F18](#f18--fiscal-contable-precios-y-compras-argentina).
+
+> **Estado de partida (auditoría 2026-10-12):** `stores` y `cash_registers` existen pero sin ABM; `create_sale`, `exchange_sale`, `return_sale` y los RPC de stock toman **la sucursal default** en vez de la de la caja del turno; stock único en `products.stock`; toda la configuración (`tenant_payment_methods`, `payment_secrets`, `payment_plans`, `pos_settings`, `ticket_templates`, impresión) es por negocio; roles por negocio (`tenant_users.role`); la feature `multi_sucursal` está en planes pero no tiene función (hoy es MARKETING-FUTURO).
+>
+> **Clasificación (convención de features de plan):** cada hito indica BASE / OPTIONAL / ADDON / FLAG-OPERATIVO y su key. Las keys nuevas siguen el checklist completo de `CLAUDE.md` (features, `plans.limits.modules`, gating server-side, `featureInfo.ts`, `planComparison.ts`).
+
+- [ ] **H89: Sucursales y cajas como entidades administrables.** · *BASE (la primera sucursal y caja) + OPTIONAL `multi_sucursal` (Business, existe) desde la segunda sucursal + OPTIONAL `multi_caja` (nueva, Pro) desde la segunda caja de una sucursal.*
+  - [ ] ABM de sucursales en Configuración: nombre, nombre corto, código, dirección estructurada, teléfono, horario, color, grupo o zona (`store_groups`), estado, baja lógica.
+  - [ ] Datos fiscales por sucursal: domicilio comercial, punto de venta ARCA (`stores.afip_pos_number`), razón social y CUIT opcionales (null = los del negocio).
+  - [ ] ABM de cajas por sucursal: nombre, código, tipo (fija, móvil, autoservicio), baja lógica (`cash_registers.deleted_at`), PV propio opcional.
+  - [ ] Enforcement server-side de `max_stores` y de cajas por plan (trigger en `stores` y `cash_registers` con `tenant_limit` + `tenant_has_feature_for`), no sólo en la UI.
+  - [ ] Plantilla de sucursal nueva: qué configuración hereda y qué se copia al crearla (ver H92).
+  - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
+  - [ ] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón).
+
+- [ ] **H90: Contexto de sucursal y caja activa ("dónde estoy").** · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
+  - [ ] **Fix P0 independiente:** `create_sale`, `exchange_sale`, `return_sale_*`, cobros de cuenta corriente y RPC de stock derivan `store_id` de `cash_shift → cash_register → store`, no de `stores.is_default`. Test con 2 sucursales y turnos abiertos en ambas. Se puede hacer ya.
+  - [ ] Chip de sucursal en el topbar del panel (nombre corto + color) con selector "Todas las sucursales" o una sucursal; filtra ventas, reportes, stock y caja; recordado en `users.settings.active_store_id`; título de pestaña "Ventas · Centro".
+  - [ ] Cabecera del POS: "Centro · Caja 1 · abierta" (mobile: "Centro · C1"). Sin cambio de sucursal con carrito o turno abierto.
+  - [ ] Entrada al POS: "¿Dónde vendés hoy?" con sucursales y cajas (libre, ocupada por X, cerrada) cuando el usuario puede elegir; el dispositivo recuerda su caja. Reemplaza `posApi.defaultRegister()` (primera caja activa del tenant).
+  - [ ] Apertura y cierre de caja, Cierre Z, ticket y display de cliente muestran sucursal y caja.
+  - [ ] Aviso de contexto cruzado: si el panel mira "Norte" y el turno abierto es en "Centro", el acceso "Vender" lo dice.
+  - [ ] *Criterio:* un cajero con turno en la Caja 2 de Norte vende y la venta, el stock y el Z quedan en Norte; en ninguna pantalla hay duda de en qué sucursal está.
+
+- [ ] **H91: Usuarios, roles y datos por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89.*
+  - [ ] `tenant_user_stores(user_id, store_id, role)`: sucursales permitidas por usuario y rol que pisa el del negocio en esa sucursal (como Napse: el mismo usuario es encargado en Centro y cajero en Norte). Sin filas = acceso a todas (compatibilidad).
+  - [ ] Alcance central vs sucursal: los maestros (productos, clientes, medios, listas) sólo los edita quien tiene alcance central.
+  - [ ] RLS con helper `user_can_access_store(store_id)` en tablas con `store_id` (`sales`, `cash_z_closures`, `cash_registers`, `stock_levels`, `stock_transfers`, `payment_terminals`); desnormalizar `store_id` en `payments`, `cash_shifts`, `cash_movements`. Medición con `EXPLAIN` y tests RLS por rol y sucursal antes de activar.
+  - [ ] `store_id` en `audit_logs` para filtrar la auditoría por sucursal.
+  - [ ] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas").
+  - [ ] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo.
+
+- [ ] **H92: Configuración heredable negocio → grupo → sucursal → caja ("compartir configuración").** · *OPTIONAL dentro de `multi_sucursal` (nivel caja: `multi_caja`). Primer corte concreto de F14/H57; la clonación con diff es parte de F14/H62.*
+  - [ ] Tabla `config_overrides(scope, scope_id, domain, domain_key, patch)` con override **por campo**, whitelist de campos por dominio, auditoría y RLS owner/manager (o manager de esa sucursal, H91).
+  - [ ] Función `effective_config(domain, key, register_id)` en SQL con el origen de cada campo; los RPC y Edges resuelven con la caja del turno.
+  - [ ] Dominios del primer corte: `pos_settings` (redondeo, negativo, cierre ciego, tolerancia, descuento máximo por rol), `pos_layout` (preset y cobro; orden negocio → sucursal → caja → usuario), tickets (plantilla por tipo, encabezado con datos de la sucursal), impresión (cierra el pendiente "por sucursal/caja" de F10/H22), display de cliente (cierra el pendiente de F10/H25), devoluciones (plazo, medios permitidos).
+  - [ ] Selector de alcance en cada pantalla de Configuración ("Configurando: Todo el negocio ▾"), campo pisado marcado con "Volver al del negocio" y valor heredado visible.
+  - [ ] Vista "Diferencias por sucursal" (campo × sucursal) y acciones "Aplicar a todas", "Copiar desde otra sucursal" (con diff) y "Plantilla para nuevas sucursales".
+  - [ ] El override nunca habilita algo fuera del plan: el gating se evalúa antes de la herencia.
+  - [ ] *Criterio:* el dueño cambia el redondeo del negocio y llega a todas las sucursales menos a la que lo tenía pisado; ve en una tabla qué sucursal es distinta y la vuelve al default en un click.
+
+- [ ] **H93: Medios de pago y terminales por sucursal y caja.** · *Medios: OPTIONAL dentro de `multi_sucursal` (cada medio sigue gateado por su key). Registro de terminales: BASE. Requiere H89 y H92.*
+  - [ ] `tenant_payment_methods` sigue siendo el catálogo central; override por sucursal y caja vía `config_overrides` (`domain='payment_method'`, `domain_key=provider_key`): `enabled`, `surcharge_pct`, `sort`, favoritos, canales visibles, `config.merchant_numbers`.
+  - [ ] Credenciales por sucursal: `payment_secrets.store_id` opcional (null = del negocio) para proveedores que trabajan por local (GO Cuotas "API Key de la sucursal", Mobbex `store_id`, Nave `pos_id`, Payway o Fiserv por comercio). Sigue sólo service_role.
+  - [ ] Registro de terminales `payment_terminals` (sucursal, caja, proveedor, tipo `point` / `qr_pos` / `posnet_manual` / `pinpad`, id externo, etiqueta, adquirente, **n° de comercio**, default por caja, estado, `last_seen_at`). Reemplaza el lector recordado en `localStorage` (`PointCheckoutModal`) y el texto `point_pos_ids` de Nave.
+  - [ ] "Detectar lectores" (Point `devices`) y asignarlos a sucursal y caja; las Edges (`mp_point`, `nave`, `mp_qr`) validan que la terminal sea de la sucursal del turno.
+  - [ ] Caja QR de Mercado Pago **por caja** (hoy una sola por ambiente en `config.mp_qr`), con `external_pos_id` por `cash_register`.
+  - [ ] N° de comercio: el que se está agregando (`payments.card_voucher.comercio` + `tenant_payment_methods.config.merchant_numbers`) gana override por sucursal y se autocompleta desde la terminal o la sucursal. Alimenta la conciliación (F18/H110).
+  - [ ] Planes de cuotas y recargos por sucursal (se coordina con F14/H59).
+  - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
+
+- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.*
+  - [ ] `stock_levels(store_id, product_id, variant_id, qty, reserved, in_transit)` mantenido por trigger sobre `stock_movements`; `products.stock` pasa a ser la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal default.
+  - [ ] Venta en negativo y stock mínimo por sucursal.
+  - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
+  - [ ] Listas de precios asignables a sucursal o grupo (`price_list_assignments`, ver F18/H100).
+  - [ ] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
+  - [ ] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34).
+  - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
+
+- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `transferencias_stock` (nueva, Business). Requiere H94.*
+  - [ ] Documento con estados `borrador → confirmada → en tránsito → recibida parcial → recibida / cancelada` (la misma máquina de estados para todo documento de inventario, como Napse).
+  - [ ] Movimientos `transfer_out` / `transfer_in`, stock en tránsito visible, diferencias en la recepción con motivo.
+  - [ ] Remito interno imprimible (con el tratamiento fiscal del traslado entre locales propios), solicitud de transferencia desde la sucursal que necesita, transferencia sugerida por stock mínimo (enlaza con F14/H64).
+  - [ ] Auditoría y reporte de artículos en tránsito.
+  - [ ] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran.
+
+- [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*
+  - [x] Cliente único a nivel negocio (`customers` por tenant) y cuenta corriente v2 cobrable en cualquier sucursal. *(ADR-037)*
+  - [x] Vales con sucursales permitidas (`store_credit_vouchers.allowed_branch_ids`). *(F11/H29)*
+  - [ ] Sucursal de alta (`customers.home_store_id`) e historial de compras y deuda filtrable por sucursal.
+  - [ ] Límite de crédito global con opción de tope por sucursal; cobros de cuenta corriente registrados en la sucursal de la caja.
+  - [ ] Fidelización (puntos, cupones, gift cards) compartida: se cubre en F9/H55 y F16/H80.
+  - [ ] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte.
+
+- [ ] **H97: Reportes consolidados y por sucursal.** · *BASE (reportes de la sucursal propia) + OPTIONAL `multi_sucursal` (consolidado y comparativo) + `metricas_avanzadas` (existe, MARKETING-FUTURO) para tableros comparativos. Requiere H90.*
+  - [ ] Filtro global de sucursal (el del chip de H90) y de caja en todos los reportes, ventas, Z y export XLSX.
+  - [ ] Vista consolidada con desglose por sucursal y comparativo entre sucursales (ventas, ticket promedio, medios de pago, margen, devoluciones, diferencias de caja).
+  - [ ] Cierres Z por sucursal y caja con correlativo propio (completa F11/H30b).
+  - [ ] Reportes pesados en cola ("Reporte offline" de Napse) con aviso cuando el archivo está listo.
+  - [ ] *Criterio:* el dueño compara las 3 sucursales del mes en una pantalla y descarga un XLSX con una hoja por sucursal más el consolidado.
+
+- [ ] **H98: Fiscal por sucursal y punto de venta.** · *OPTIONAL `facturacion_afip` (existe, MARKETING-FUTURO hasta F3) + OPTIONAL `multi_razon_social` (nueva, Enterprise). Requiere F3 y H89. Motor de impuestos en F18.*
+  - [ ] Punto de venta ARCA por sucursal (y por caja si el negocio lo elige), con domicilio comercial del PV; reemplaza el `tenants.afip_pos_number` único previsto en `15-afip-integration.md`.
+  - [ ] Numeración, cola fiscal y CAEA de contingencia por PV (se coordina con F16/H79).
+  - [ ] Varias razones sociales que facturan dentro del negocio (franquicias, consignación): cada sucursal o condición de facturación decide quién emite (como las "condiciones de facturación" de Napse).
+  - [ ] Jurisdicción de IIBB por sucursal (para percepciones y Convenio Multilateral, F18/H105).
+  - [ ] *Criterio:* Centro emite con PV 3 y Norte con PV 4; si ARCA cae, cada PV entra en contingencia por separado.
+
+- [ ] **H99: Monitor de sucursales, cajas y terminales.** · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
+  - [ ] Heartbeat de cada caja (última venta, último ping, versión de la app, impresora y display conectados).
+  - [ ] Estado de terminales (`payment_terminals.last_seen_at`, último cobro aprobado o rechazado).
+  - [ ] Alertas por sucursal: caja abierta hace más de N horas, diferencia de caja sobre tolerancia, terminal sin respuesta, sucursal sin ventas en horario.
+  - [ ] *Criterio:* el dueño ve en una pantalla que el Point de Centro no responde desde las 10:12 y que Norte no abrió caja.
+
+> **Orden sugerido dentro de F17:** fix de sucursal en `create_sale` (H90, ya) → H89 + H90 → H91 → H92 + H93 → H94 + H95 → H96 + H97 → H98 (con F3) → H99. Corte de control: cada hito con tests RLS por rol y sucursal y un escenario de 2 sucursales con turnos simultáneos.
+
+### F18 · Fiscal, contable, precios y compras (Argentina)
+
+Objetivo: que el sistema **registre lo que exige la normativa argentina y le entregue al contador lo que necesita sin retipear**: listas de precios simples o profesionales, compras e importaciones con costeo, motor de impuestos (IVA por alícuota, internos, percepciones, retenciones, padrones), facturación electrónica completa, libros y regímenes de información, contabilidad con asientos automáticos y conciliaciones. Sale de [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) (auditoría con mirada de contador) y de [ADR-043](./17-decision-log.md). Toda alícuota, tope, mínimo y código de tributo es **parámetro con vigencia**, nunca constante en el código, y cada hito se valida contra la norma vigente al implementarlo.
+
+> **Estado de partida (2026-10-12):** `price_lists` por canal con `adjustment_pct` y `price_list_items` (gateado por `listas_precios`); el precio se resuelve en el navegador y `create_sale` acepta el `unit_price` recibido; `products.tax_rate` numérico (sin distinguir exento, no gravado y 0 %); `products.cost` único; `customers.iva_condition` y `tenant_branding.iva_condition`; sin proveedores, compras, impuestos internos, percepciones, retenciones, padrones, libros ni asientos. `facturacion_afip` es MARKETING-FUTURO (F3 no iniciada). Conciliación de tarjetas en curso (`feat/conciliacion-tarjetas`).
+
+- [ ] **H100: Listas de precios simples y profesionales.** · *BASE (validación en servidor, historial, asistente simple, etiquetas) + OPTIONAL `listas_precios` (existe, Business: vigencias, listas por cliente, grupo y condición) + OPTIONAL `listas_precios_pro` (nueva, Business: costo y markup, plazos, moneda, escalas, índices, aprobación). Asignación por sucursal requiere F17/H94.*
+  - [x] Listas por canal (mostrador, catálogo, mayorista, personalizada) con % sobre base y precio fijo por producto o variante, gating server-side. *(H10, `price_lists`, `lib/prices/resolve.ts`)*
+  - [ ] **P0 control interno:** `create_sale` recalcula el precio efectivo de lista; si el `unit_price` recibido difiere, lo registra como descuento o recargo con usuario y motivo, sujeto al tope por rol.
+  - [ ] Historial de precios y costos por producto, variante y lista (`price_history`: quién, cuándo, motivo, versión) y consulta "¿cuánto valía el 3 de marzo?".
+  - [ ] Modo simple: asistente de actualización masiva en 3 pasos (qué: todos, categoría, marca, proveedor, tag; cuánto: % o monto con redondeo; cuándo: ahora o fecha) con vista previa y deshacer.
+  - [ ] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes.
+  - [ ] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante.
+  - [ ] Asignación y precedencia explicable: cliente → grupo de clientes → condición de pago → sucursal → canal → base (`price_list_assignments`; `customers.group_id` ya existe).
+  - [ ] Listas derivadas: de otra lista o de **costo** (reposición, promedio ponderado o último) con **markup** o **margen objetivo** (mostrando ambos), piso, techo y margen mínimo con alerta; reglas por categoría, marca, proveedor y tag (`products.tags` ya existe).
+  - [ ] Redondeo por múltiplo, terminación psicológica (,99 / 9 / 90) y por tramo de precio.
+  - [ ] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente.
+  - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización.
+  - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock.
+  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador).
+  - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente).
+  - [ ] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió.
+
+- [ ] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.*
+  - [ ] Proveedores: CUIT validado contra padrón (H104), condición IVA, alícuotas de padrones, condición de pago, moneda, contactos, baja lógica.
+  - [ ] Producto por proveedor: código del proveedor, último costo, mínimo de pedido, unidad de compra y conversión.
+  - [ ] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo.
+  - [ ] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
+  - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías).
+  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos.
+  - [ ] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
+  - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109).
+  - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente.
+
+- [ ] **H102: Importaciones y costeo de importación.** · *OPTIONAL `importaciones` (nueva, Enterprise). Requiere H101.*
+  - [ ] Carpeta de importación: proveedor del exterior, factura comercial, incoterm, FOB, flete internacional, seguro, **CIF**.
+  - [ ] Tributos aduaneros sobre CIF con vigencia: derechos de importación por posición NCM, tasa de estadística, IVA, percepción de IVA adicional, percepción de Ganancias, percepción de IIBB aduanera y "otros tributos" parametrizables.
+  - [ ] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios.
+  - [ ] Prorrateo configurable por concepto (valor, peso, volumen o cantidad) y costo unitario puesto en depósito por producto y lote; crédito fiscal separado del costo.
+  - [ ] Tipo de cambio por operación (oficializado del despacho y del pago) y diferencia de cambio.
+  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias.
+  - [ ] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote.
+
+- [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.*
+  - [ ] Catálogo cerrado de condición IVA por producto: **21 %, 10,5 %, 27 %, 5 %, 2,5 %, 0 %, exento, no gravado** (exento y no gravado separados para el Libro IVA); migración de `products.tax_rate`.
+  - [ ] Alícuota por operación cuando depende del receptor o del destino (por ejemplo 27 % a responsables inscriptos en ciertos servicios).
+  - [ ] Cálculo por ítem de neto, IVA y precio final, con precios cargados con o sin IVA.
+  - [ ] Impuestos internos por rubro con alícuota y vigencia, **tasa nominal vs. efectiva**, "incluido en precio" sí/no, discriminación en factura A y tratamiento en la base de IVA; por producto y por sucursal.
+  - [ ] Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido y otros impuestos nacionales indirectos por ítem para la factura B y, si corresponde, para la exhibición.
+  - [ ] *Criterio:* una venta mixta (21 %, 10,5 %, exento y una bebida con internos) calcula por ítem y totaliza igual que el Libro IVA.
+
+- [ ] **H104: Padrones y condición fiscal de clientes y proveedores.** · *BASE (carga manual) + OPTIONAL `padrones` (nueva, Pro: consultas e imports automáticos).*
+  - [ ] Condición fiscal ampliada: RI, monotributo (categoría), monotributo social, exento, CF, no alcanzado, sujeto no categorizado.
+  - [ ] Consulta de constancia de inscripción de ARCA por CUIT (web service de padrón vigente) al alta: razón social, domicilio fiscal, condición IVA, actividades; cache con fecha y re-validación periódica.
+  - [ ] Padrones provinciales periódicos (ARBA, AGIP y otras jurisdicciones) importados por job con alícuotas de percepción y retención por CUIT y vigencia; historial (se usa la alícuota vigente a la fecha del comprobante).
+  - [ ] Certificados de exclusión (IVA, Ganancias, IIBB) con vigencia y porcentaje, cargados o consultados.
+  - [ ] Alertas: CUIT dado de baja, padrón vencido sin actualizar, monotributista cerca de tope.
+  - [ ] *Criterio:* al cargar un CUIT se completan razón social y condición IVA, y la percepción de ARBA usa la alícuota del padrón del mes.
+
+- [ ] **H105: Percepciones (el comercio como agente).** · *OPTIONAL `percepciones` (nueva, Business). Requiere H103 y H104; jurisdicción por sucursal en F17/H98.*
+  - [ ] Motor de reglas: jurisdicción × impuesto × condición del cliente → alícuota (padrón o general) + mínimo de base + mínimo de percepción + exclusiones vigentes.
+  - [ ] Percepción de IVA para agentes designados (RG 2408 y regímenes específicos).
+  - [ ] Percepción de IIBB: ARBA, AGIP/ARCIBA (incluido alto riesgo fiscal), Convenio Multilateral y jurisdicción genérica con padrón importable; percepciones municipales como "otros tributos".
+  - [ ] Percepciones en el comprobante, en el array `Tributos` de WSFE, en el ticket y en NC (reversa proporcional).
+  - [ ] *Criterio:* una factura A a un RI de Provincia de Buenos Aires suma la percepción de IIBB del padrón y de IVA si corresponde, y ambas salen en la DDJJ del mes.
+
+- [ ] **H106: Retenciones (como agente y como sujeto).** · *OPTIONAL `retenciones` (nueva, Business). Requiere H101 y H104.*
+  - [ ] Como agente al pagar a proveedores: Ganancias (RG 830: concepto, escala, mínimo no sujeto, acumulado mensual), IVA (agentes designados), IIBB por jurisdicción, SUSS (contratistas de construcción, limpieza, seguridad); certificado de retención en PDF.
+  - [ ] Como sujeto: registro de retenciones y percepciones sufridas (proveedores, tarjetas vía **SIRTAC**, bancos vía **SIRCREB**, impuesto a los débitos y créditos) para imputarlas en DDJJ; import desde la liquidación (H110) y desde "Mis Retenciones" de ARCA.
+  - [ ] *Criterio:* una orden de pago calcula la retención de Ganancias con el acumulado del mes, emite el certificado y queda para SICORE/SIRE.
+
+- [ ] **H107: Facturación electrónica completa.** · *OPTIONAL `facturacion_afip` (existe, MARKETING-FUTURO) + OPTIONAL `factura_exportacion` (nueva, Enterprise). Extiende F3; requiere H103, H104 y F17/H98.*
+  - [ ] Decisión automática del tipo de comprobante: A, B, C, M según emisor y receptor; tope de identificación del consumidor final como parámetro con vigencia.
+  - [ ] Condición frente al IVA del receptor informada en WSFE; arrays `AlicIva` y `Tributos` (internos, percepciones) desde H103 y H105; ids desde `FEParamGetTiposIva` y `FEParamGetTiposTributos`.
+  - [ ] Moneda extranjera (`MonId`, `MonCotiz`); conceptos de servicios con fechas; comprobantes asociados en NC y ND.
+  - [ ] **Factura de Crédito Electrónica MiPyME** (Ley 27.440, tipos 201 a 213): monto mínimo, CBU, aceptación o rechazo, vínculo con cuenta corriente.
+  - [ ] **Factura E** de exportación (WSFEX) con incoterm y permiso de embarque.
+  - [ ] QR fiscal en el impreso, CAEA de contingencia por PV, almacenamiento del request y response.
+  - [ ] *Criterio:* el sistema emite A, B, C, NC, FCE y E en homologación con percepciones e internos y todas cierran contra el Libro IVA.
+
+- [ ] **H108: Libros y regímenes de información.** · *OPTIONAL `export_contable` (nueva, Pro). Requiere F3 (ventas) y H101 (compras).*
+  - [ ] Libro IVA Digital ventas y compras (RG 4597) con archivos de importación; prorrateo de crédito fiscal si hay operaciones exentas.
+  - [ ] SICORE y SIRE (retenciones y percepciones practicadas).
+  - [ ] DDJJ de IIBB: ARBA, e-ARCIBA, SIFERE (Convenio Multilateral, coeficientes CM05), SIRCAR; base y tributo de impuestos internos.
+  - [ ] Exportador genérico por plantilla para otros regímenes de información provinciales o nacionales.
+  - [ ] *Criterio:* a fin de mes el contador baja Libro IVA ventas y compras, SICORE y la DDJJ de ARBA y los importa sin retipear.
+
+- [ ] **H109: Contabilidad: plan de cuentas, asientos, cierres y export a estudios.** · *OPTIONAL `contabilidad` (nueva, Business) + OPTIONAL `export_contable` (Pro) + ADDON `integracion_erp` (nueva, por conector). Centros de costo requieren F17/H89.*
+  - [ ] Plan de cuentas con plantilla argentina comercial precargada, niveles y edición.
+  - [ ] Mapeos: medio de pago (+ cuotas) → cuenta y **código ERP**, caja de cada sucursal → cuenta, IVA y tributos → cuentas, CMV y stock → cuentas.
+  - [ ] Asientos automáticos por **venta**, **cobro**, **compra**, **pago**, Z, liquidación de tarjeta y movimiento bancario; resumidos (día, sucursal, medio) o detallados; inmutables, corrección por contra-asiento.
+  - [ ] Centros de costo por sucursal (y opcional por unidad de negocio).
+  - [ ] Cierre mensual (bloqueo de período, re-apertura auditada); diferencias de cambio.
+  - [ ] Libros Diario, Mayor y Balance de sumas y saldos.
+  - [ ] Export a estudios contables: Tango, Bejerman, Holistor, Xubio, Colppy y Excel con layout configurable (conectores con API: ADDON; API y webhooks en F14/H68).
+  - [ ] Ajuste por inflación: el POS exporta datos con fecha y moneda homogénea; el ajuste (RT 6 contable, Título VI de Ganancias impositivo) se resuelve en el sistema contable del estudio. Evaluar cálculo propio en una etapa posterior.
+  - [ ] *Criterio:* a fin de mes el estudio recibe los asientos por sucursal en el formato de su sistema y cuadran con el Libro IVA y los Z.
+
+- [ ] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
+  - [~] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(en curso: `feat/conciliacion-tarjetas`)*
+  - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
+  - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
+  - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.
+  - [ ] Conciliación del turno: marcar un Z como conciliado con motivo.
+  - [ ] Conciliación bancaria: extracto importado contra cobros, depósitos, pagos y liquidaciones; SIRCREB e impuesto a los débitos y créditos.
+  - [ ] BIN de tarjeta → banco y medio (opcional).
+  - [ ] *Criterio:* el dueño sube la liquidación de Prisma de Norte y ve qué cupones se acreditaron, cuáles faltan y cuánto se llevó de comisión y retenciones.
+
+- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.*
+  - [ ] Caja fuerte por sucursal, retiros del cajón (por límite con motivo), depósitos al banco y transferencias entre sucursales, con comprobante adjunto.
+  - [ ] Rendiciones por medio de pago con estados (pendiente de aprobación → entregado) y fondo fijo de cambio.
+  - [ ] Saldo teórico vs. contado por cuenta (cajero, caja fuerte, banco) y asiento (H109).
+  - [ ] *Criterio:* el encargado de Norte retira efectivo al llegar al límite, lo deposita y el dueño ve el dinero en tránsito hasta el banco.
+
+- [ ] **H112: Registros de producto, códigos y régimen de precios ("tag registration").** · *BASE (campos y validaciones) + OPTIONAL `sepa` (nueva, Enterprise). SEPA por sucursal requiere F17/H94. **Interpretación a confirmar con el dueño** (ver §5 de la auditoría).*
+  - [ ] Tags de producto como alcance de reglas de precio, promociones, impuestos y reportes (`products.tags` existe).
+  - [ ] GTIN/EAN con validación de dígito verificador, prefijo de empresa GS1 y códigos de balanza.
+  - [ ] Registros sanitarios y técnicos por producto con n° y vencimiento: RNPA/RNE (alimentos), ANMAT (productos médicos y cosméticos), SENASA, INV, certificación de seguridad eléctrica y etiqueta de eficiencia energética; alerta y bloqueo opcional de venta si venció.
+  - [ ] Régimen de información de precios SEPA (cadenas alcanzadas): archivo diario por sucursal desde las listas vigentes; marca de productos adheridos a programas oficiales de precios con su tope.
+  - [ ] *Criterio:* un producto con RNPA vencido avisa al venderlo y la cadena genera el archivo SEPA del día por sucursal.
+
+> **Orden sugerido dentro de F18:** H100 (validación de precio, P0) → H103 + H104 (base fiscal, antes de F3) → F3 + H107 + F17/H98 → H100 completo → H101 + H102 → H105 + H106 → H108 + H109 + H110 + H111 → H112. Corte de control: casos de prueba fiscales validados con un contador (venta mixta de alícuotas, percepción con padrón, NC con percepción, FCE) y conciliación de un mes real de tarjetas.
+
+---
+
 ## TX — Mejoras transversales (UX y datos)
 
 Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de forma continua en todo el producto. No son una fase con fin: son estándar del proyecto.
@@ -1010,7 +1243,18 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Facturación electrónica / fiscal (AFIP, CAE) | F3 |
 | Fiscal hub multi-canal, contingencia, XML/PDF, almacenamiento y multi-país | **F16/H79** + F3 |
 | Fotos de producto, branding, tickets a medida, catálogo público | F6 |
-| Multi-sucursal, multi-caja, transferencias de stock | F4 |
+| Multi-sucursal, multi-caja, transferencias de stock | F4 → **F17/H89–H95** |
+| Indicador y selector de sucursal y caja ("dónde estoy") | **F17/H90** |
+| Configuración central con override por sucursal y caja (medios, tickets, impresión, POS) | **F17/H92** (primer corte de F14/H57) |
+| Registro de terminales de cobro por sucursal y caja, n° de comercio | **F17/H93** |
+| Listas de precios PRO: vigencias, programación, costo y markup, plazos, moneda, escalas, índices, etiquetas | F6/H10 + **F18/H100** |
+| Compras, proveedores, costos e importaciones con costeo | F14/H64 → **F18/H101–H102** |
+| Motor de impuestos: IVA por alícuota, internos, percepciones, retenciones, padrones | **F18/H103–H106** |
+| Facturación electrónica completa (A/B/C/M/E, FCE MiPyME, tributos) y libros (Libro IVA Digital, SICORE/SIRE, DDJJ IIBB) | F3 + **F18/H107–H108** |
+| Contabilidad: plan de cuentas, asientos, export a contador/ERP | **F18/H109** |
+| Conciliación de tarjetas, liquidaciones y bancos por n° de comercio | **F18/H110** (+ F8/H21b) |
+| Tesorería: caja fuerte, retiros a banco, rendiciones | **F18/H111** |
+| Registros de producto (GTIN, sanitarios), SEPA y tags | **F18/H112** |
 | Inventario avanzado: lotes, vencimientos, series, conteos, alertas | **F14/H64** |
 | Compras y proveedores (órdenes de compra, recepción, costos) | **F14/H64** |
 | Cuenta corriente de clientes (fiado) | **F11/H31** + gancha con F9/H55 |
@@ -1022,7 +1266,7 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 | Garantías extendidas con prima y comisión | **F11/H28** |
 | Devoluciones/cambios con vales y motivos | **F11/H29** |
 | Pedidos de salón, reservas y despacho separado | **F11/H32** |
-| Depósitos, stock multi-depósito y transferencias | F4 + **F11/H33** |
+| Depósitos, stock multi-depósito y transferencias | F4 + **F11/H33** + **F17/H94–H95** |
 | Importación masiva por Excel de datos maestros | **F11/H34** + **TX-4** |
 | Restaurante: mesas, comandas, KDS, división de cuenta, modificadores | **F13/H43–H52** |
 | Variantes (talle/color), SKU compuesto (textil) | F6/H10 + F5 (perfil textil) |

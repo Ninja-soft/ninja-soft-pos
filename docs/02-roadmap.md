@@ -441,6 +441,17 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 - [ ] **Getnet Point.** Próximamente. **Bloqueo:** Cloud2Cloud de "Integrated POS" es para partners y no está confirmado en Argentina. **Paso:** contactar Partnerships de Getnet AR y pedir disponibilidad y credenciales.
 - [x] **Descartados como Point** (sin terminal propia o sin API): Mobbex, MODO, Ualá Bis, Viumi, Naranja X (cubierto por Nave), Posnet/LaPos legacy (protocolo local), Cuenta DNI, Personal Pay.
 
+#### F8 · Terminal integrada: posnet y pinpad por cable o red (ADR-053)
+
+> Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md).
+
+- [~] **H19b · Base de terminal integrada.** *En código (2026-10-12, `feat/terminal-integrada-payway`):* Web Serial, WebUSB y puente local (`tools/bridge`), simulador, máquina de estados, kinds `posnet_integrado` / `pinpad` por caja, Conectar y venta de prueba, "Tarjeta en terminal" en el cobro, bitácora `terminal_transactions` y validación del cupón en `payments`. Feature `terminal_integrada` (Pro+). **Paso:** aplicar `20261018100000_terminal_integrada`.
+- [ ] **H19c · Payway posnet integrado y pinpad.** Adaptador VPI implementado según fuentes públicas no oficiales (`unverified`). **Bloqueo:** especificación oficial, modelos y VID/PID, tabla de códigos de tarjeta, protocolo del Lane/3000 y homologación. **Paso:** pedirlo a Payway con la lista del relevamiento §7 y probar con una Classic en modo integrado.
+- [ ] **H19d · Getnet integrado.** Placeholder. **Bloqueo:** protocolo de la librería (USB / HTTP) o API de Cloud2Cloud. **Paso:** lista "Qué pedirle a Getnet".
+- [ ] **H19e · Fiserv Posnet integrado.** Placeholder. **Bloqueo:** especificación de la aplicación TRANSACT.
+- [ ] **H19f · Operaciones desde Ventas y Caja:** anulación y devolución con la terminal, cierre de lote con totales y conciliación automática (ADR-044) con la bitácora. Requiere H19c.
+- [ ] **H19g · Instalador del puente local** (servicio de Windows, emparejamiento con código corto).
+
 #### F8 · Cobros en espera y QR más rápido (ADR-048)
 
 - [~] **H21f · Cobros en espera.** *Integrado en código (2026-10-12, rama `feat/cobros-en-espera`):* compartir el QR o link (sistema, WhatsApp, email del servidor con el diseño del negocio, copiar, SMS) y "Dejar en espera": la venta queda en `pending_charges` y se registra sola del lado del servidor al acreditarse (trigger sobre `mp_payment_intents`, idempotente), con aviso en el POS (imprimir ticket o factura) y en la campana. Pestaña propia en el POS y en Operación (filtros, sucursal, detalle con línea de tiempo, cancelar, editar en el POS, reenviar, extender, regenerar, reintentar). Cierre de caja con decisión obligatoria (cancelar o pasar a la próxima apertura). Feature `cobros_en_espera` (Pro+). **Pasos:** aplicar `20261014100000_cobros_en_espera`, deploy de `pending_charge_share` y `pending_charges_sync` (y de las Edges de cobro tocadas), probar en sandbox con Mercado Pago (link) y Pagos360 (sin webhook). **Pendiente:** Realtime en vez de sondeo, factura electrónica desde el aviso (F3), "visto por el cliente" (los proveedores no lo informan).

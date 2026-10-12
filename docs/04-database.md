@@ -277,6 +277,18 @@ create table cash_registers (
 );
 ```
 
+#### Extensión F17 · H89-H91 (ADR-045): sucursales, cajas y personal por sucursal
+
+Migraciones `20261013100000_sucursales_cajas`, `20261013110000_personal_por_sucursal` y `20261013120000_venta_sucursal_del_turno`.
+
+- `stores` suma `code` (único vivo por negocio, en mayúsculas), `short_name`, `color` (`#rrggbb`), `email`, `city`, `province`, `postal_code`, `timezone`, `afip_pos_number` (PV ARCA, 1 a 99998), `opening_hours` (jsonb `{ mon: [{from, to}], ... }`), `notes`, `sort`, `archived_reason`. Estados: activa, pausada (`is_active = false`) y archivada (`deleted_at`). Una sola principal viva por negocio (índice parcial; cambiar con `set_default_store`).
+- `cash_registers` suma `code` (único vivo por sucursal), `kind` (`fixed`, `mobile`, `self_service`), `device_notes`, `printer_notes`, `afip_pos_number`, `sort`, `deleted_at`, `archived_reason`.
+- `cash_shifts.store_id` (not null): desnormalizado de la caja por trigger; es histórico (mover la caja no lo cambia).
+- Triggers `stores_enforce_rules` y `cash_registers_enforce_rules`: feature y límite del plan al crear o restaurar (`multi_sucursal` + `max_stores`; `multi_caja` + `max_registers_per_store`), y reglas de archivo y pausa (principal, turno abierto, última sucursal activa, última caja).
+- `staff_branch_assignments(store_id, user_id | cashier_profile_id, kind home|cover|extra, role, valid_from, valid_until, reason, transfer_id, superseded_by, prev_valid_until, deleted_at, cancel_reason)`: personal por sucursal con vigencias. Escritura sólo por `staff_branch_schedule` y `staff_branch_cancel`.
+- Helpers: `branch_today()`, `staff_allowed_store_ids(...)`, `user_allowed_store_ids()`, `user_can_access_store(store)`, `user_store_role(store)`, `tenant_limit_for(tenant, key)`, `resolve_sale_shift(shift, strict)`.
+- RLS: lectura de `stores` y `cash_registers` para miembros, escritura owner/manager, sin DELETE. Policies RESTRICTIVE de lectura por sucursal en `sales`, `cash_shifts`, `cash_movements` y `cash_z_closures`.
+
 #### `categories`
 
 ```sql

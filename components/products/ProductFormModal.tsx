@@ -49,6 +49,7 @@ import { AttributesEditor } from "@/components/products/AttributesEditor";
 import { CategoryPathEditor } from "@/components/products/CategoryPathEditor";
 import { PackagesEditor } from "@/components/products/PackagesEditor";
 import { Barcode } from "@/components/products/Barcode";
+import { ProductCostsPanel } from "@/components/purchases/ProductCostsPanel";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
 import { diffPackages, type ProductPackage } from "@/lib/products/packages";
@@ -92,6 +93,7 @@ const FIELD_TAB: Partial<Record<keyof ProductInput, TabKey>> = {
   model: "general",
   price: "precios",
   cost: "precios",
+  replacement_cost: "precios",
   tax_rate: "precios",
   stock: "stock",
   stock_min: "stock",
@@ -243,6 +245,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       brand_id: product?.brand_id ?? null,
       price: product?.price ?? 0,
       cost: product?.cost ?? undefined,
+      replacement_cost:
+        (product as { replacement_cost?: number | null } | null | undefined)?.replacement_cost ?? undefined,
       stock: product?.stock ?? 0,
       stock_min: product?.stock_min ?? 0,
       unit: product?.unit ?? "un",
@@ -586,6 +590,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               className="max-w-[140px]"
               {...register("tax_rate")}
             />
+          </Group>
+
+          <Group
+            title="Costos de compra"
+            description="Último costo, promedio ponderado y reposición, sin IVA. El que elegiste en Configuración de compras alimenta el margen."
+          >
+            <ProductCostsPanel
+              product={active}
+              price={price}
+              replacementField={register("replacement_cost")}
+            />
+            {errors.replacement_cost?.message && (
+              <p className="text-xs text-destructive">{errors.replacement_cost.message}</p>
+            )}
           </Group>
 
           <Group title="Listas de precios" description="Cómo queda este precio en cada lista activa.">

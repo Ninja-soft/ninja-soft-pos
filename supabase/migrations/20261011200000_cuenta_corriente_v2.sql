@@ -459,6 +459,8 @@ as $$
     when 'pagos360'          then 'pagos360'
     when 'nave'              then 'nave'
     when 'nave_point'        then 'nave_point'
+    when 'gocuotas'          then 'gocuotas'
+    when 'directo'           then 'directo'
     when 'account'           then 'cuenta_corriente'
     when 'cuenta_corriente'  then 'cuenta_corriente'
     else null
@@ -480,7 +482,7 @@ alter table cash_movements add constraint cash_movements_type_check
 
 alter table system_emails drop constraint if exists system_emails_kind_check;
 alter table system_emails add constraint system_emails_kind_check
-  check (kind in ('system', 'receipt', 'smtp_test', 'account_reminder', 'account_statement'));
+  check (kind in ('system', 'receipt', 'smtp_test', 'password_recovery', 'account_reminder', 'account_statement'));
 
 -- Devoluciones de ventas a cuenta: el reintegro puede ir a la cuenta corriente.
 alter table sale_returns drop constraint if exists sale_returns_refund_method_check;

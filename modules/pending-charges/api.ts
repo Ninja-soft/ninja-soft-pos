@@ -5,6 +5,7 @@
 // tablas y RPC nuevas viajan con cast.
 // =============================================================================
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { posApi } from "@/modules/pos/api";
 import type {
   PendingCharge,
@@ -81,9 +82,13 @@ const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => 
 
 export const pendingChargesApi = {
   list: async (f: ListFilters): Promise<PendingCharge[]> => {
+    // Siempre por el negocio activo (ADR-052): la RLS no es el único filtro.
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) return [];
     let q = createClient()
       .from("pending_charges" as never)
       .select(COLS)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(f.limit ?? 200);
     if (f.storeId) q = q.eq("store_id", f.storeId);
@@ -99,6 +104,7 @@ export const pendingChargesApi = {
       .from("pending_charges" as never)
       .select(COLS)
       .eq("id", id)
+      .eq("tenant_id", (await getCurrentTenantId()) ?? "")
       .maybeSingle();
     if (error) throw new Error(error.message);
     return data ? normalize(data as unknown as Record<string, unknown>) : null;
@@ -109,6 +115,7 @@ export const pendingChargesApi = {
       .from("pending_charge_events" as never)
       .select("id, pending_charge_id, kind, data, actor_user_id, created_at")
       .eq("pending_charge_id", id)
+      .eq("tenant_id", (await getCurrentTenantId()) ?? "")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     return (data ?? []) as unknown as PendingChargeEvent[];

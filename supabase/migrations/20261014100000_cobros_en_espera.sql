@@ -171,11 +171,13 @@ alter table pending_charges enable row level security;
 alter table pending_charge_events enable row level security;
 
 -- Lectura: miembros del negocio, sólo de las sucursales que pueden operar.
--- Escritura: sólo RPC (sin policies de insert/update/delete).
+-- Staff interno sólo con internal_scope() (ADR-052: nunca is_internal() en
+-- policies de tablas con tenant_id). Escritura: sólo RPC (sin policies de
+-- insert/update/delete).
 drop policy if exists pending_charges_select on pending_charges;
 create policy pending_charges_select on pending_charges
   for select using (
-    is_internal()
+    internal_scope()
     or (
       tenant_id = current_tenant_id()
       and deleted_at is null
@@ -186,7 +188,7 @@ create policy pending_charges_select on pending_charges
 drop policy if exists pending_charge_events_select on pending_charge_events;
 create policy pending_charge_events_select on pending_charge_events
   for select using (
-    is_internal()
+    internal_scope()
     or (
       tenant_id = current_tenant_id()
       and exists (select 1 from pending_charges pc where pc.id = pending_charge_events.pending_charge_id)

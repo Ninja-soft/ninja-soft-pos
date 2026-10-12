@@ -128,7 +128,7 @@ export function PaymentMethodsCard() {
 
   const { data: gating } = useGating();
   // Planes de cuotas activos por medio: cantidad + tarjetas en cada canal.
-  const { data: activePlans } = usePaymentPlans();
+  const { data: activePlans } = usePaymentPlans(null);
   const planSummary = useMemo(() => summarizePlans(activePlans ?? []), [activePlans]);
   const { data: plans = [] } = useGlobalPlansForUpgrade();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });

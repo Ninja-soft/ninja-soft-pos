@@ -38,6 +38,17 @@ export function useCashMonitor(storeId: string | null, enabled = true) {
   });
 }
 
+// Vista general de sucursales del monitor (ADR-057). Mismo refresco que el monitor.
+export function useBranchOverview(enabled = true) {
+  return useQuery({
+    queryKey: ["cash", "branch-overview"],
+    queryFn: () => cashApi.branchOverview(),
+    enabled,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+}
+
 export function useForceClose() {
   const qc = useQueryClient();
   return useMutation({

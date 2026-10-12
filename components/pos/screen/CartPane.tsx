@@ -290,9 +290,12 @@ export function CartSummary(p: CartSummaryProps) {
               Vale {money(p.storeCredit)}
             </span>
           )}
-          <span className={cn("shrink-0 text-xs font-medium", missingCustomer ? "text-warning" : "text-muted-foreground")}>
-            {p.customer ? "Cambiar" : p.requireCustomer ? "Obligatorio" : "Elegir"}
-          </span>
+          {/* Con vale a la vista, el nombre necesita el lugar de "Cambiar". */}
+          {!(p.customer && p.storeCredit > 0) && (
+            <span className={cn("shrink-0 text-xs font-medium", missingCustomer ? "text-warning" : "text-muted-foreground")}>
+              {p.customer ? "Cambiar" : p.requireCustomer ? "Obligatorio" : "Elegir"}
+            </span>
+          )}
         </button>
         <button
           type="button"

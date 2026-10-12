@@ -187,7 +187,7 @@ export function ProductPane({
       {browsing && layout.categoryBar !== "hidden" && categories.length > 0 && (
         // Con el riel lateral (Boutique) las pestañas sólo aparecen donde el
         // riel no entra.
-        <div className={cn(layout.categoryBar === "left" && "lg:hidden")}>
+        <div className={cn(layout.categoryBar === "left" && "xl:hidden")}>
           <CategoryChips categories={categories} selected={categoryFilter} onSelect={onCategory} />
         </div>
       )}

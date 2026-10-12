@@ -160,7 +160,7 @@ export function PosShell(p: PosShellProps) {
       )}
 
       <div className={cn("flex min-h-0 flex-1 gap-3 px-3 pb-3 md:px-4 md:pb-4", left && "md:flex-row-reverse")}>
-        {p.rail && <aside className={cn("hidden w-44 shrink-0 p-2 lg:block xl:w-52", POS_PANEL)}>{p.rail}</aside>}
+        {p.rail && <aside className={cn("hidden w-48 shrink-0 p-2 xl:block 2xl:w-52", POS_PANEL)}>{p.rail}</aside>}
         {salon && <aside className={cn("hidden w-[300px] shrink-0 p-3 xl:block", POS_PANEL)}>{p.tables}</aside>}
 
         <main

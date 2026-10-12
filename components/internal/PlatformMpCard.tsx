@@ -134,8 +134,8 @@ export function PlatformMpCard() {
             Redirect URIs.
           </p>
           <div className="flex items-center gap-3">
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Guardando…" : "Guardar"}
+            <Button loading={save.isPending} onClick={() => save.mutate()}>
+              Guardar
             </Button>
             {status?.updated_at && (
               <span className="inline-flex items-center gap-1 text-xs text-success">

@@ -394,8 +394,8 @@ export function TeamSection({
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={m.isPending}>
-                {m.isPending ? "Enviando…" : "Enviar invitación"}
+              <Button type="submit" loading={m.isPending}>
+                Enviar invitación
               </Button>
             </div>
           </form>
@@ -510,8 +510,8 @@ export function TeamSection({
                   {member.status === "suspended" ? "Reactivar" : "Suspender"}
                 </Button>
               )}
-              <Button type="submit" disabled={save.isPending}>
-                {save.isPending ? "Guardando…" : "Guardar"}
+              <Button type="submit" loading={save.isPending}>
+                Guardar
               </Button>
             </div>
           </form>
@@ -637,8 +637,8 @@ export function TeamSection({
               ) : (
                 <span />
               )}
-              <Button type="submit" disabled={save.isPending}>
-                {save.isPending ? "Guardando…" : editing ? "Guardar" : "Crear perfil"}
+              <Button type="submit" loading={save.isPending}>
+                {editing ? "Guardar" : "Crear perfil"}
               </Button>
             </div>
           </form>

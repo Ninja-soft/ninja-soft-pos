@@ -477,10 +477,11 @@ export default function InternalTenantDetail({
             />
             <Button
               type="submit"
-              disabled={noteMut.add.isPending || !noteBody.trim()}
+              loading={noteMut.add.isPending}
+              disabled={!noteBody.trim()}
               className="sm:self-end"
             >
-              {noteMut.add.isPending ? "Guardando…" : "Agregar"}
+              Agregar
             </Button>
           </form>
 

@@ -407,7 +407,11 @@ export default function PagarPage() {
               className="mt-4 h-14 w-full rounded-2xl text-base font-bold text-white shadow-md transition active:scale-[0.99] disabled:opacity-50"
               style={{ background: accent }}
             >
-              {phase === "paying" ? "Procesando…" : `Pagar ${fmt(total)}`}
+              {phase === "paying" ? (
+                <Spinner size={22} label="Procesando el pago" className="border-white/30 border-t-white align-middle" />
+              ) : (
+                `Pagar ${fmt(total)}`
+              )}
             </button>
 
             <p className="mt-3 pb-2 text-center text-[11px] leading-relaxed text-neutral-400">

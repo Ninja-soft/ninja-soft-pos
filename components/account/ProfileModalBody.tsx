@@ -62,8 +62,8 @@ export function ProfileModalBody({
           onChange={(e) => onNameChange(e.target.value)}
         />
         <div className="flex justify-end">
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
+          <Button onClick={onSave} loading={saving}>
+            Guardar
           </Button>
         </div>
       </div>

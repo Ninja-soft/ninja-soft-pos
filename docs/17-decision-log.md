@@ -1055,7 +1055,7 @@ Sigue "Próximamente". La integración de terminales de Getnet ("Integrated POS"
 
 ---
 
-## ADR-032 — Gráficos con ECharts (reemplaza Recharts)
+## ADR-035 — Gráficos con ECharts (reemplaza Recharts)
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** Reportes
 

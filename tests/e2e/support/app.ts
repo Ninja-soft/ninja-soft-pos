@@ -134,6 +134,68 @@ export async function addToCart(page: Page, name: string) {
   await expect(page.getByText("El carrito está vacío")).toHaveCount(0);
 }
 
+/** Abre el popover "Diseño del POS" de la barra superior (en /pos). */
+async function openPresetPopover(page: Page) {
+  await page.getByRole("button", { name: "Cambiar el diseño del POS" }).click();
+  await expect(page.getByText("Diseño de esta pantalla")).toBeVisible();
+}
+
+async function closePresetPopover(page: Page) {
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("Diseño de esta pantalla")).toHaveCount(0);
+}
+
+/**
+ * Elige un preset del POS para el usuario (users.settings.pos_layout) y espera
+ * a que quede guardado (el botón aparece marcado al reabrir el popover).
+ */
+export async function setPosPreset(page: Page, preset: string) {
+  if (!page.url().includes("/pos")) await gotoClean(page, "/pos");
+  // El trigger del popover aparece cuando el POS terminó de cargar el turno.
+  await expect(page.getByTitle(/^(Cerrar caja \(arqueo\)|Abrir caja)$/).first()).toBeVisible();
+  const btn = () =>
+    page
+      .getByRole("group", { name: "Diseño del POS" })
+      .getByRole("button", { name: new RegExp(`^${escapeRe(preset)}`) });
+  // Si la elección se pisa (p. ej. llega tarde la carga del usuario), reintenta.
+  await expect(async () => {
+    await openPresetPopover(page);
+    if ((await btn().getAttribute("aria-pressed")) === "true") {
+      await closePresetPopover(page);
+      return;
+    }
+    await btn().click();
+    await expect(page.getByText("Diseño de esta pantalla")).toHaveCount(0);
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+    await openPresetPopover(page);
+    const pressed = await btn().getAttribute("aria-pressed");
+    await closePresetPopover(page);
+    expect(pressed).toBe("true");
+  }).toPass({ timeout: 30_000 });
+}
+
+/**
+ * Vuelve al diseño del negocio (borra el override del usuario). En el tenant
+ * QA el del negocio es Mostrador con cobro en dos columnas.
+ */
+export async function resetPosPreset(page: Page) {
+  await gotoClean(page, "/pos");
+  await expect(page.getByTitle(/^(Cerrar caja \(arqueo\)|Abrir caja)$/).first()).toBeVisible();
+  await expect(async () => {
+    await openPresetPopover(page);
+    const reset = page.getByRole("button", { name: "Volver al del negocio" });
+    if (await appears(reset, 1_000)) {
+      await reset.click();
+      await expect(page.getByText("Diseño de esta pantalla")).toHaveCount(0);
+      await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
+      await openPresetPopover(page);
+    }
+    const business = await page.getByText("Usás el diseño del negocio.").isVisible();
+    await closePresetPopover(page);
+    expect(business).toBe(true);
+  }).toPass({ timeout: 30_000 });
+}
+
 /** Abre el CheckoutSheet desde el carrito. */
 export async function openCheckout(page: Page): Promise<Locator> {
   await page.getByRole("button", { name: /^Cobrar/ }).last().click();

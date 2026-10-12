@@ -13,6 +13,8 @@ import {
   escapeRe,
   gotoClean,
   openCheckout,
+  resetPosPreset,
+  setPosPreset,
   voidSale,
 } from "./support/app";
 
@@ -62,6 +64,16 @@ test.describe("pos", () => {
   });
 
   test("cada preset de diseño renderiza", async ({ page }) => {
+    try {
+      await renderEachPreset(page);
+    } finally {
+      // Restaurar el diseño del negocio (Mostrador / dos columnas) aunque falle:
+      // el preset se guarda por usuario y lo heredarían los tests siguientes.
+      await resetPosPreset(page);
+    }
+  });
+
+  async function renderEachPreset(page: Page) {
     await gotoClean(page, "/pos");
     const presets = ["Mostrador", "Boutique", "Caja rápida", "Salón"];
     for (const preset of presets) {
@@ -84,12 +96,7 @@ test.describe("pos", () => {
       await expect(search.first()).toBeVisible();
       await expect(page.getByText("Total").first()).toBeVisible();
     }
-    // Restaurar el diseño del negocio (el preset se guarda por usuario).
-    await page.getByRole("button", { name: "Cambiar el diseño del POS" }).click();
-    const reset = page.getByRole("button", { name: "Volver al del negocio" });
-    if (await appears(reset, 1_500)) await reset.click();
-    await page.keyboard.press("Escape");
-  });
+  }
 
   test("efectivo con monto rápido y vuelto", async ({ page }) => {
     await cartWithProduct(page);
@@ -103,20 +110,38 @@ test.describe("pos", () => {
     await finishAndVoid(page);
   });
 
-  test("pago mixto: efectivo + transferencia", async ({ page }) => {
-    await cartWithProduct(page);
-    const sheet = await openCheckout(page);
-    await tender(sheet, "Efectivo");
-    await sheet.getByRole("radio", { name: "½", exact: true }).click();
-    await sheet.getByRole("button", { name: "Exacto" }).click();
-    await sheet.getByRole("button", { name: /^Agregar pago/ }).click();
-    await expect(sheet.getByText(/Resta \$/).first()).toBeVisible();
-    await tender(sheet, "Transferencia");
-    await sheet.getByRole("button", { name: /^(Cobrar|Confirmar venta) \$/ }).click();
-    const confirm = sheet.getByRole("button", { name: /^Confirmar venta/ });
-    if (await appears(confirm, 1_500)) await confirm.click();
-    await finishAndVoid(page);
-  });
+  // Toda variante de la hoja de cobro permite dividir el pago. El preset se fija
+  // explícitamente (no depende de lo que dejó otro test) y se restaura al final.
+  for (const { preset, layout } of [
+    { preset: "Mostrador", layout: "dos columnas" },
+    { preset: "Caja rápida", layout: "teclado primero" },
+  ]) {
+    test(`pago mixto: efectivo + transferencia (${layout})`, async ({ page }) => {
+      try {
+        await gotoClean(page, "/pos");
+        await setPosPreset(page, preset);
+        await cartWithProduct(page);
+        const sheet = await openCheckout(page);
+        await tender(sheet, "Efectivo");
+        if (layout === "teclado primero") {
+          await expect(sheet.getByRole("group", { name: "Teclado numérico" })).toBeVisible();
+        }
+        await sheet.getByRole("radio", { name: "½", exact: true }).click();
+        await expect(sheet.getByText(/^Quedan \$.+ para cobrar con otro medio/)).toBeVisible();
+        await sheet.getByRole("button", { name: "Exacto", exact: true }).click();
+        await sheet.getByRole("button", { name: /^Agregar pago/ }).click();
+        await expect(sheet.getByText("Resta cobrar").locator("visible=true")).toBeVisible();
+        await expect(sheet.getByRole("list", { name: "Pagos" })).toContainText("Efectivo");
+        await tender(sheet, "Transferencia");
+        await sheet.getByRole("button", { name: /^(Cobrar|Confirmar venta) \$/ }).click();
+        const confirm = sheet.getByRole("button", { name: /^Confirmar venta/ });
+        if (await appears(confirm, 1_500)) await confirm.click();
+        await finishAndVoid(page);
+      } finally {
+        await resetPosPreset(page);
+      }
+    });
+  }
 
   test("Directo: registro manual con número de operación", async ({ page }) => {
     await cartWithProduct(page);

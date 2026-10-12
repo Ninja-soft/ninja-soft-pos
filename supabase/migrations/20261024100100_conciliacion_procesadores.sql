@@ -330,7 +330,7 @@ begin
       round(coalesce((v_line ->> 'refunded')::numeric, 0), 2),
       _settlement_txt(v_line, 'currency', 5), _settlement_txt(v_line, 'payment_method'),
       _settlement_txt(v_line, 'payment_type'), _settlement_txt(v_line, 'card_brand'),
-      right(regexp_replace(coalesce(v_line ->> 'last4', ''), '\D', '', 'g'), 4),
+      nullif(right(regexp_replace(coalesce(v_line ->> 'last4', ''), '\D', '', 'g'), 4), ''),
       nullif(least(greatest(coalesce((v_line ->> 'installments')::numeric, 0), 0), 99)::int, 0),
       _settlement_txt(v_line, 'lote', 12), _settlement_txt(v_line, 'cupon', 16),
       upper(_settlement_txt(v_line, 'autorizacion', 20)), _settlement_txt(v_line, 'comercio', 20),
@@ -435,6 +435,7 @@ declare
   v_diff   numeric;
   v_status text;
   v_marked boolean := false;
+  v_prev   boolean := false;
 begin
   select * into v_line from settlement_lines
    where id = p_line_id and tenant_id = v_tenant
@@ -475,10 +476,11 @@ begin
                     - case when v_pay.sale_status = 'voided' then 0 else v_pay.amount end, 2);
     v_status := case when abs(v_diff) > 0.01 then 'amount_diff' else 'matched' end;
     -- Lo que esta línea había marcado en otro cobro (o en este, si ya no cierra) se desmarca.
-    if v_line.reconciled_payment and v_line.payment_id is not null
+    v_prev := v_line.reconciled_payment;
+    if v_prev and v_line.payment_id is not null
        and (v_line.payment_id <> p_payment_id or v_status <> 'matched') then
       perform _settlement_mark_payment(v_tenant, v_line.payment_id, false, v_uid, v_line.id, 'settlement_manual');
-      v_line.reconciled_payment := false;
+      v_prev := false;
     end if;
     if v_status = 'matched' then
       v_marked := _settlement_mark_payment(v_tenant, p_payment_id, true, v_uid, v_line.id, 'settlement_manual');
@@ -486,7 +488,7 @@ begin
     update settlement_lines
        set payment_id = p_payment_id, sale_id = v_pay.sale_id, match_status = v_status,
            match_method = 'manual', diff_amount = v_diff, matched_at = now(),
-           reconciled_payment = v_marked or (v_line.reconciled_payment and v_status = 'matched'),
+           reconciled_payment = v_marked or (v_prev and v_status = 'matched'),
            reviewed_at = now(), reviewed_by = v_uid,
            review_note = coalesce(nullif(left(btrim(coalesce(p_note, '')), 300), ''), review_note)
      where id = v_line.id;

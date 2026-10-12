@@ -48,6 +48,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, nadie puede autorizar con PIN desde la caja de otro.",
     minPlan: "Start",
   },
+  pin_autenticador: {
+    desc: "PIN autenticador: además del PIN fijo, cada supervisor autoriza con un PIN rotativo que cambia solo (12 h, 24 h o a medida), con PIN de un uso generados en el momento (vencen en minutos, opcionalmente atados a una acción y un monto) o con Google o Microsoft Authenticator. El dueño elige qué modos acepta cada acción. Secretos sólo en el servidor, todo auditado.",
+    impact: "Desactivado, sólo vale el PIN fijo de cada supervisor.",
+    minPlan: "Pro",
+    requires: ["pin_supervisor"],
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",

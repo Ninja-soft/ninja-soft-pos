@@ -1119,6 +1119,13 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
   - [x] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
 
+- [x] **H116b: PIN autenticador (rotativo, de un uso y app).** *(2026-10-12, ADR-060, `feat/pin-autenticador`, migración `20261023100000` sin aplicar)* · *OPTIONAL `pin_autenticador` (nueva, Pro). Requiere H116.*
+  - [x] Modos por supervisor: fijo, rotativo (HMAC-SHA256 con pasos de N horas alineados a la hora argentina, anterior válido 5 minutos), de un uso (aleatorio, 1 a 30 minutos, hasheado, opcionalmente por acción y monto) y app TOTP estándar (QR `otpauth://`, ±1 paso, sin repetir).
+  - [x] Mis PINes: código con cuenta regresiva, Copiar y WhatsApp, generar y revocar PIN de un uso, vincular la app, historial de usos.
+  - [x] `supervisor_authorize` acepta todos los modos según la política de la acción; bloqueo por supervisor y por quien pide, tope por minuto, auditoría con el modo.
+  - [x] Política del dueño: modos del negocio, modo por defecto, período del rotativo, duración máxima y modos por acción.
+  - [ ] Pendiente: notificar al supervisor cuando se usa su PIN (push o WhatsApp) y cifrado en reposo de los secretos con Vault.
+
 - [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
   - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
   - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.

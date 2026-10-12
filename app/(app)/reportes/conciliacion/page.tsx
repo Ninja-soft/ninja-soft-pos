@@ -23,6 +23,8 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { branchFileTag, reportScopeLabel } from "@/lib/reports/branchScope";
 import {
   reconcileErrorMessage,
   useCardPayments,
@@ -145,7 +147,15 @@ export default function ConciliacionTarjetasPage() {
   const setFilter = <K extends keyof CardRecFilters>(k: K, v: CardRecFilters[K]) =>
     setFilters((f) => ({ ...f, [k]: v }));
 
-  const { data, isLoading, isError, refetch } = useCardPayments(fromISO, toISO, enabled !== false);
+  // Sucursal del chip del panel (F17 · H97).
+  const branch = useBranchContext();
+  const scopeLabel = reportScopeLabel(branch.isMulti, branch.filterStore);
+  const { data, isLoading, isError, refetch } = useCardPayments(
+    fromISO,
+    toISO,
+    enabled !== false,
+    branch.filterStoreId,
+  );
   const mutation = useSetReconciled();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -173,10 +183,11 @@ export default function ConciliacionTarjetasPage() {
   async function exportList() {
     const from = range?.from ? dayLabel(localISODate(range.from)) : "";
     const to = range?.to ? dayLabel(localISODate(range.to)) : from;
-    await exportXlsx(`conciliacion-tarjetas_${localISODate(range?.from ?? new Date())}`, [
+    const fileTag = branchFileTag(branch.isMulti, branch.filterStore);
+    await exportXlsx(`conciliacion-tarjetas_${fileTag ? `${fileTag}_` : ""}${localISODate(range?.from ?? new Date())}`, [
       {
         name: "Detalle",
-        title: `Conciliación de tarjetas ${from}${to && to !== from ? ` al ${to}` : ""} • NinjaPos`,
+        title: `Conciliación de tarjetas ${from}${to && to !== from ? ` al ${to}` : ""}${scopeLabel ? ` · ${scopeLabel}` : ""} • NinjaPos`,
         columns: XLSX_COLUMNS,
         rows: xlsxDetailRows(groups),
         totals: { cantidad: summary.total.count, monto: summary.total.amount },
@@ -216,7 +227,16 @@ export default function ConciliacionTarjetasPage() {
         className="mt-2"
         eyebrow="Reportes"
         title="Conciliación de tarjetas"
-        description="Compará los cobros con tarjeta contra la liquidación de cada adquirente, por día, número de comercio y lote, y marcá lo que ya te acreditaron."
+        description={
+          <>
+            Compará los cobros con tarjeta contra la liquidación de cada adquirente, por día, número de comercio y lote, y marcá lo que ya te acreditaron.
+            {scopeLabel && (
+              <span className="mt-1 block">
+                Mirando <span className="font-medium text-foreground">{scopeLabel}</span>.
+              </span>
+            )}
+          </>
+        }
         actions={
           enabled !== false ? (
             <GatedButton

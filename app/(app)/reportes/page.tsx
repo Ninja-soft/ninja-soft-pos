@@ -53,6 +53,9 @@ import {
   type DayPoint,
 } from "@/modules/reports/derive";
 import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { useLowStockByStore, useMultiStoreStock } from "@/modules/stock/hooks";
+import { branchFileTag, filterByStore, reportScopeLabel } from "@/lib/reports/branchScope";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import {
   DELIVERY_CHANNEL_LABELS,
@@ -136,21 +139,27 @@ export default function ReportesPage() {
     return { fromISO: f.toISOString(), toISO: t.toISOString() };
   }, [range]);
 
-  const { data, isLoading } = useSalesReport(fromISO, toISO);
-  const { data: warranty } = useWarrantyReport(fromISO, toISO);
+  // Sucursal del chip del panel (F17 · H97): null = todas las que el usuario
+  // puede ver. El servidor recorta igual a las sucursales permitidas.
+  const branch = useBranchContext();
+  const storeId = branch.filterStoreId;
+  const scopeLabel = reportScopeLabel(branch.isMulti, branch.filterStore);
+
+  const { data, isLoading } = useSalesReport(fromISO, toISO, { storeId });
+  const { data: warranty } = useWarrantyReport(fromISO, toISO, storeId);
   // Productividad por profesional (H39): el owner liquida comisiones de la semana
   // mirando esta tabla (+ export XLSX).
-  const { data: staff } = useStaffProductivity(fromISO, toISO);
+  const { data: staff } = useStaffProductivity(fromISO, toISO, storeId);
 
   // ── Gastronomía (F13 · H52): la sección sólo aparece si el tenant usa mesas
   // o delivery. Cada RPC se consulta gateada por su modo (top ítems = cualquiera).
   const { data: diningEnabled = false } = useDiningEnabled();
   const { data: deliveryEnabled = false } = useDeliveryEnabled();
   const showGastro = diningEnabled || deliveryEnabled;
-  const { data: gTables } = useGastroTablesReport(fromISO, toISO, diningEnabled);
-  const { data: gKitchen } = useGastroKitchenReport(fromISO, toISO, showGastro);
-  const { data: gDelivery } = useGastroDeliveryReport(fromISO, toISO, deliveryEnabled);
-  const { data: gTop } = useGastroTopItemsReport(fromISO, toISO, showGastro);
+  const { data: gTables } = useGastroTablesReport(fromISO, toISO, diningEnabled, storeId);
+  const { data: gKitchen } = useGastroKitchenReport(fromISO, toISO, showGastro, storeId);
+  const { data: gDelivery } = useGastroDeliveryReport(fromISO, toISO, deliveryEnabled, storeId);
+  const { data: gTop } = useGastroTopItemsReport(fromISO, toISO, showGastro, storeId);
 
   async function exportReporte() {
     if (!data) return;
@@ -161,7 +170,7 @@ export default function ReportesPage() {
     const sheets: Parameters<typeof exportXlsx>[1] = [
       {
         name: "Resumen",
-        title: `Reporte de ventas · ${tag}`,
+        title: scopeLabel ? `Reporte de ventas · ${scopeLabel} · ${tag}` : `Reporte de ventas · ${tag}`,
         columns: [
           { header: "Métrica", key: "k", width: 22 },
           { header: "Valor", key: "v", type: "money", width: 18 },
@@ -402,7 +411,8 @@ export default function ReportesPage() {
       });
     }
 
-    await exportXlsx(`reporte-ventas-${tag}`, sheets);
+    const fileTag = branchFileTag(branch.isMulti, branch.filterStore);
+    await exportXlsx(`reporte-ventas-${fileTag ? `${fileTag}-` : ""}${tag}`, sheets);
   }
 
   const [vis, setVis] = useState<Record<ReportKey, boolean>>(DEFAULT_VIS);
@@ -419,9 +429,15 @@ export default function ReportesPage() {
     });
   }
 
-  // Stock bajo (no depende del rango: es stock actual).
-  const { data: lowStock = [] } = useQuery({
+  // Stock bajo (no depende del rango: es stock actual). Con una sucursal
+  // elegida y stock por sucursal en el plan, es el faltante de esa sucursal
+  // (contra su mínimo); si no, el del total del producto como siempre.
+  const multiStore = useMultiStoreStock();
+  const lowByBranch = multiStore.enabled && Boolean(storeId);
+  const { data: lowRows } = useLowStockByStore(lowByBranch);
+  const { data: lowTotal = [] } = useQuery({
     queryKey: ["report-low-stock"],
+    enabled: !lowByBranch,
     queryFn: async () => {
       const supabase = createClient();
       const { data } = await supabase
@@ -434,6 +450,18 @@ export default function ReportesPage() {
       return (data ?? []).filter((p) => p.stock <= (p.stock_min ?? 0));
     },
   });
+  const lowStock = useMemo(
+    () =>
+      lowByBranch
+        ? filterByStore(lowRows ?? [], storeId).map((r) => ({
+            name: r.variant_label ? `${r.product_name} · ${r.variant_label}` : r.product_name,
+            stock: r.qty,
+            stock_min: r.min_qty,
+            unit: r.unit,
+          }))
+        : lowTotal,
+    [lowByBranch, lowRows, lowTotal, storeId],
+  );
 
   // ── Comparación con el período anterior (misma cantidad de días). Se pide
   // recién cuando el reporte principal ya está: no compite con el primer paint.
@@ -463,6 +491,7 @@ export default function ReportesPage() {
   const prevToISO = addDays(prev.to, 1).toISOString();
   const { data: prevData, isLoading: prevLoading } = useSalesReport(prevFromISO, prevToISO, {
     enabled: compare && !!data,
+    storeId,
   });
   const prevHint = nDays === 1 ? "vs. día anterior" : `vs. ${nDays} días anteriores`;
 
@@ -473,11 +502,13 @@ export default function ReportesPage() {
     fromISO,
     toISO,
     wantHours && vis.by_hour,
+    storeId,
   );
   const { data: cashMoves, isLoading: cashLoading } = useCashFlow(
     fromISO,
     toISO,
     wantCash && vis.cash_flow,
+    storeId,
   );
 
   // ── Series derivadas (client-side, sin consultas extra).
@@ -595,6 +626,12 @@ export default function ReportesPage() {
           Reportes
           <InfoHint section="reportes" size={18} />
         </Display>
+        {scopeLabel && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Mirando <span className="font-medium text-foreground">{scopeLabel}</span>
+            {storeId ? "" : " (consolidado)"}. Cambiala desde el selector de sucursal.
+          </p>
+        )}
 
         <div className="-mx-4 mt-6 flex items-end gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex shrink-0 flex-col gap-1">

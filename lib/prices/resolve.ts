@@ -282,6 +282,35 @@ function adjust(l: ProPriceList, s: Step): Step {
   return { cents: Math.max(0, c), computed: true };
 }
 
+/**
+ * Lista que aplica: la explícita (si es válida) o la elegida en el POS (si es
+ * elegible), las asignadas y el canal mostrador, la primera vigente.
+ */
+export function selectList(
+  w: PricingWorld,
+  at: number,
+  explicitId: string | null,
+  selectedId: string | null,
+): ProPriceList | null {
+  const byId = new Map(w.lists.map((l) => [l.id, l]));
+  if (explicitId) {
+    const l = byId.get(explicitId);
+    return listIsValid(l, at) ? l : null;
+  }
+  const cands: (string | null | undefined)[] = [];
+  const sel = selectedId ? byId.get(selectedId) : undefined;
+  if (sel?.pos_selectable) cands.push(sel.id);
+  cands.push(...w.assigned);
+  for (const id of cands) {
+    const l = id ? byId.get(id) : undefined;
+    if (listIsValid(l, at)) return l;
+  }
+  const m = w.lists
+    .filter((l) => l.channel === "mostrador" && l.is_active !== false && !l.deleted_at)
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
+  return listIsValid(m, at) ? m : null;
+}
+
 export function resolveUnitPrice(w: PricingWorld, q: PriceQuery): PriceResolution {
   const at = ts(q.at);
   const pid = q.productId;
@@ -298,30 +327,7 @@ export function resolveUnitPrice(w: PricingWorld, q: PriceQuery): PriceResolutio
   }
   const baseCents = toCents(base);
 
-  // Lista.
-  let list: ProPriceList | null = null;
-  if (q.listId) {
-    const l = byId.get(q.listId);
-    list = listIsValid(l, at) ? l : null;
-  } else {
-    const cands: (string | null | undefined)[] = [];
-    const sel = q.selectedListId ? byId.get(q.selectedListId) : undefined;
-    if (sel?.pos_selectable) cands.push(sel.id);
-    cands.push(...w.assigned);
-    for (const id of cands) {
-      const l = id ? byId.get(id) : undefined;
-      if (listIsValid(l, at)) {
-        list = l;
-        break;
-      }
-    }
-    if (!list) {
-      const m = w.lists
-        .filter((l) => l.channel === "mostrador" && l.is_active !== false && !l.deleted_at)
-        .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
-      if (listIsValid(m, at)) list = m;
-    }
-  }
+  const list = selectList(w, at, q.listId ?? null, q.selectedListId ?? null);
 
   const costs = w.costs[pid];
 

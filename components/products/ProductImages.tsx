@@ -148,7 +148,7 @@ export function ProductImages({
           </div>
         ) : (
           tiles.map((img) => (
-            <div key={img.id} className="relative aspect-square overflow-hidden rounded-2xl bg-white">
+            <div key={img.id} className="relative aspect-square overflow-hidden rounded-lg bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img.url} alt="" className="h-full w-full object-contain p-1.5" />
               {img.is_primary && (
@@ -210,7 +210,7 @@ export function ProductImages({
           onClick={() => inputRef.current?.click()}
           disabled={busy}
           className={cn(
-            "flex aspect-square flex-col items-center justify-center gap-1.5 rounded-2xl bg-muted text-muted-foreground transition hover:bg-secondary hover:text-foreground",
+            "flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg bg-muted text-muted-foreground transition hover:bg-secondary hover:text-foreground",
             busy && "opacity-60",
           )}
         >

@@ -122,7 +122,7 @@ function SellQuickAction({
       aria-label={hint}
       aria-keyshortcuts={SELL_SHORTCUT}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white shadow-sm transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         compact ? "h-9 px-3 text-sm" : "h-10 w-full px-3 text-sm",
       )}
     >
@@ -535,7 +535,7 @@ export function AppShell({
             onClick={() => setDrawer(false)}
             className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--pos-solid)] text-white">
               <ShieldCheck size={16} />
             </span>
             <span className="min-w-0 flex-1 leading-tight">

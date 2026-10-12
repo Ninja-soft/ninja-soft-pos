@@ -159,7 +159,7 @@ export function CanvasTicketRenderer({ content, data, paper, showNinjaLogo, clas
 
   return (
     <div
-      className={`mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black shadow-sm ${className ?? ""}`}
+      className={`mx-auto overflow-hidden rounded-lg border border-neutral-300 bg-white p-4 font-mono text-sm text-black ${className ?? ""}`}
       style={{ width: `${width}px`, maxWidth: "100%" }}
     >
       {/* Zona superior: anclada (alto fijo = items.y, o todo el lienzo si no hay items). */}

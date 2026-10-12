@@ -86,7 +86,7 @@ export function CatalogPriceArrow({
           collisionPadding={12}
           onMouseLeave={() => setOpen(false)}
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
+          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-popover-foreground backdrop-blur-xl data-[state=open]:animate-fade-in"
         >
           <div className="space-y-1.5 text-xs leading-relaxed">
             <p className="font-medium text-foreground">{headline}</p>

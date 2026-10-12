@@ -218,7 +218,7 @@ export default function DeliveryPage() {
             return (
               <section
                 key={col}
-                className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/20 p-2.5"
+                className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2.5"
               >
                 <div className="flex items-center justify-between px-1">
                   <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
@@ -356,7 +356,7 @@ function OrderCard({
           type="button"
           onClick={onAdvance}
           disabled={advancing}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-ninja-flame px-3 py-1.5 text-xs font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-110 disabled:opacity-50"
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-ninja-flame px-3 py-1.5 text-xs font-semibold text-ninja-voidViolet transition hover:brightness-110 disabled:opacity-50"
         >
           {DELIVERY_STATUS_LABELS[next]} <ChevronRight size={14} />
         </button>

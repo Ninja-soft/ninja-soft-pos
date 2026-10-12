@@ -1400,7 +1400,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       {/* Confirmación inline: salir con cobros electrónicos aprobados */}
       {confirmLeave && (
         <div className="absolute inset-0 z-10 flex items-end bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] backdrop-blur-sm md:items-center md:justify-center">
-          <div className="w-full rounded-t-xl border border-border bg-popover p-5 shadow-2xl md:max-w-md md:rounded-xl">
+          <div className="w-full rounded-t-xl border border-border bg-popover p-5 md:max-w-md md:rounded-xl">
             <p className="font-display text-lg font-bold">Hay cobros aprobados</p>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Ya se cobraron {money(lockedTotal)} con QR o Point. Si salís sin confirmar la venta, el cobro queda

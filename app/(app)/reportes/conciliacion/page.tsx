@@ -60,7 +60,7 @@ const SELECT =
 
 function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "success" | "warning" }) {
   return (
-    <div className="min-w-0 rounded-xl bg-card p-4 shadow-sm ring-1 ring-border">
+    <div className="min-w-0 rounded-lg bg-card p-4 ring-1 ring-border">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
         className={cn(

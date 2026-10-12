@@ -121,7 +121,7 @@ export function ChatMarkdown({ text }: { text: string }) {
                 <li key={ii} className="flex gap-2.5">
                   <span
                     aria-hidden
-                    className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-ninja-gradient"
+                    className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-ninja-flame"
                   />
                   <span className="min-w-0">{renderInline(it)}</span>
                 </li>

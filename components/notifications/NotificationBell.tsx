@@ -174,7 +174,7 @@ export function NotificationBell({
           className={cn(
             "relative grid place-items-center border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground",
             floating
-              ? "h-10 w-10 rounded-full shadow-ninjaSoft"
+              ? "h-10 w-10 rounded-full"
               : "h-9 w-9 rounded-lg",
           )}
         >
@@ -191,7 +191,7 @@ export function NotificationBell({
           align={align}
           sideOffset={8}
           collisionPadding={12}
-          className="z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
+          className="z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground backdrop-blur-xl data-[state=open]:animate-fade-in"
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
             <span className="text-sm font-semibold text-foreground">

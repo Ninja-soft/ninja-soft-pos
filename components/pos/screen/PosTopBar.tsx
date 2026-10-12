@@ -110,7 +110,7 @@ export function PosTopBar({
             <Popover.Content
               align="end"
               sideOffset={8}
-              className="z-50 w-[min(92vw,360px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl animate-fade-in"
+              className="z-50 w-[min(92vw,360px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground animate-fade-in"
             >
               <p className="px-1 text-sm font-semibold">Diseño de esta pantalla</p>
               <p className="px-1 pb-3 text-xs text-muted-foreground">

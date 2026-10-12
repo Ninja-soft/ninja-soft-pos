@@ -264,7 +264,7 @@ export function ImportProductModal({
         <div className="space-y-7">
           {/* Foto + identidad */}
           <div className="flex gap-4">
-            <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-white sm:h-32 sm:w-32">
+            <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-white sm:h-32 sm:w-32">
               {shownPhoto ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={shownPhoto} alt="" className="h-full w-full object-contain p-2" />

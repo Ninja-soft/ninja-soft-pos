@@ -79,7 +79,7 @@ export function StoreStockPanel({ product }: { product: PanelProduct }) {
 
   if (locked) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl bg-muted p-3.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 rounded-lg bg-muted p-3.5 text-xs text-muted-foreground">
         <Lock size={16} className="shrink-0 text-ninja-flameSoft" />
         <span className="flex-1">
           Tenés {stores.length} sucursales. Con <b>Stock por sucursal</b> ves y
@@ -135,7 +135,7 @@ export function StoreStockPanel({ product }: { product: PanelProduct }) {
       {isLoading ? (
         <SpinnerBlock className="py-4" />
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl bg-muted">
+        <ul className="divide-y divide-border overflow-hidden rounded-lg bg-muted">
           {lines.map((l) => (
             <StoreLine
               key={l.store.id}

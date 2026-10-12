@@ -107,21 +107,8 @@ export const AssistantLauncher = forwardRef<
       // Pantallas con acciones abajo (el POS) corren la burbuja con
       // --fab-lift / --fab-shift para no tapar el botón de cobro.
       style={{ marginBottom: "var(--fab-lift, 0px)", marginRight: "var(--fab-shift, 0px)" }}
-      className="group fixed bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 z-40 grid h-14 w-14 place-items-center rounded-[30%] outline-none transition-transform duration-200 ease-out hover:scale-[1.06] focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-default disabled:hover:scale-100 sm:bottom-6 sm:right-6"
+      className="group fixed bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 z-40 grid h-14 w-14 place-items-center rounded-lg outline-none transition-transform duration-200 ease-out hover:scale-[1.06] focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-default disabled:hover:scale-100 sm:bottom-6 sm:right-6"
     >
-      {/* Halo de fuego que "respira" detrás del ícono. */}
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -inset-1.5 rounded-[38%] bg-ninja-gradient blur-xl",
-          ready ? "ai-halo" : "opacity-20",
-        )}
-      />
-      {/* Sombra de apoyo: separa el ícono de cualquier fondo (claro u oscuro). */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[30%] shadow-[0_10px_24px_-6px_rgba(11,7,32,0.55)]"
-      />
       <AssistantMark
         size={56}
         animated={ready}
@@ -158,7 +145,7 @@ export const AssistantLauncher = forwardRef<
       {ready && (
         <span
           aria-hidden
-          className="pointer-events-none absolute right-[calc(100%+12px)] top-1/2 hidden -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full bg-popover px-3.5 py-2 text-[13px] font-medium text-popover-foreground opacity-0 shadow-[0_8px_24px_-8px_rgba(11,7,32,0.45)] transition duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 sm:block"
+          className="pointer-events-none absolute right-[calc(100%+12px)] top-1/2 hidden -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-md border border-border bg-popover px-3 py-1.5 text-[13px] font-medium text-popover-foreground opacity-0 transition duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 sm:block"
         >
           {locked
             ? "Conocé el Asistente IA"
@@ -171,7 +158,7 @@ export const AssistantLauncher = forwardRef<
 
 function CornerBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-popover shadow-[0_0_0_2px_var(--background),0_2px_6px_rgba(11,7,32,0.35)]">
+    <span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full bg-popover shadow-[0_0_0_2px_var(--background)]">
       {children}
     </span>
   );
@@ -245,21 +232,10 @@ export function AssistantPanel(props: PanelProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "ai-panel-in fixed inset-x-0 bottom-0 z-40 flex h-[88dvh] flex-col overflow-hidden rounded-t-[28px] bg-popover text-popover-foreground outline-none",
-          "shadow-[0_-12px_48px_-12px_rgba(11,7,32,0.55)]",
-          "sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-[28px] sm:shadow-[0_28px_80px_-16px_rgba(11,7,32,0.6),0_0_0_1px_rgba(127,117,166,0.14)]",
+          "ai-panel-in fixed inset-x-0 bottom-0 z-40 flex h-[88dvh] flex-col overflow-hidden rounded-t-xl border border-b-0 border-border bg-popover text-popover-foreground outline-none",
+          "sm:inset-x-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-xl sm:border-b",
         )}
       >
-        {/* Resplandor de marca arriba: identidad sin bordes de color. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-40 opacity-70"
-          style={{
-            background:
-              "radial-gradient(80% 100% at 15% 0%, rgba(255,75,34,0.16) 0%, rgba(255,138,31,0.06) 45%, rgba(255,138,31,0) 75%)",
-          }}
-        />
-
         {/* Grabber del sheet (mobile). */}
         <div className="relative flex justify-center pt-2.5 sm:hidden">
           <span className="h-1.5 w-10 rounded-full bg-ninja-slate/35" />
@@ -352,7 +328,7 @@ function HeaderButton({
       disabled={disabled}
       aria-pressed={active}
       className={cn(
-        "grid h-9 w-9 shrink-0 place-items-center rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-95 disabled:opacity-50 disabled:active:scale-100",
+        "grid h-9 w-9 shrink-0 place-items-center rounded-md outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-95 disabled:opacity-50 disabled:active:scale-100",
         active
           ? "bg-ninja-flame/15 text-primary"
           : "bg-secondary text-muted-foreground hover:text-foreground",
@@ -408,7 +384,7 @@ function HistoryBody({
         </div>
       ) : conversations.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+          <span className="grid h-12 w-12 place-items-center rounded-lg bg-secondary text-muted-foreground">
             <MessageSquare size={20} />
           </span>
           <p className="mt-3 text-sm font-medium text-foreground">
@@ -427,7 +403,7 @@ function HistoryBody({
               return (
                 <li
                   key={c.id}
-                  className="flex min-h-[56px] items-center gap-2 rounded-2xl bg-danger/10 px-3.5 py-2"
+                  className="flex min-h-[56px] items-center gap-2 rounded-lg bg-danger/10 px-3.5 py-2"
                 >
                   <span className="min-w-0 flex-1 text-sm text-foreground">
                     ¿Borrar esta conversación?
@@ -460,7 +436,7 @@ function HistoryBody({
                   disabled={isDeleting}
                   aria-current={isActive ? "true" : undefined}
                   className={cn(
-                    "flex min-h-[56px] min-w-0 flex-1 flex-col justify-center rounded-2xl px-3.5 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-[0.99] disabled:opacity-60",
+                    "flex min-h-[56px] min-w-0 flex-1 flex-col justify-center rounded-lg px-3.5 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-[0.99] disabled:opacity-60",
                     isActive
                       ? "bg-ninja-flame/10"
                       : "bg-secondary hover:bg-ninja-flame/[0.07]",
@@ -594,7 +570,7 @@ function ChatBody({
                   type="button"
                   onClick={() => submit(text)}
                   disabled={pending}
-                  className="group flex min-h-[48px] items-center gap-3 rounded-2xl bg-secondary px-3.5 py-2.5 text-left text-sm text-foreground outline-none transition hover:bg-ninja-flame/10 focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-[0.99]"
+                  className="group flex min-h-[48px] items-center gap-3 rounded-lg bg-secondary px-3.5 py-2.5 text-left text-sm text-foreground outline-none transition hover:bg-ninja-flame/10 focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-[0.99]"
                 >
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-ninja-flame/15 text-primary">
                     <Icon size={16} />
@@ -613,7 +589,7 @@ function ChatBody({
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <div key={i} className="ai-msg-in flex justify-end pl-10">
-                  <div className="whitespace-pre-wrap break-words rounded-[20px] rounded-br-md bg-ninja-gradient px-4 py-2.5 text-[15px] leading-relaxed text-ninja-voidViolet shadow-[0_6px_16px_-8px_rgba(255,75,34,0.6)] sm:text-[14.5px]">
+                  <div className="whitespace-pre-wrap break-words rounded-lg rounded-br-sm bg-[var(--pos-solid)] px-4 py-2.5 text-[15px] leading-relaxed text-white sm:text-[14.5px]">
                     {m.content}
                   </div>
                 </div>
@@ -624,7 +600,7 @@ function ChatBody({
                 >
                   <AssistantMark size={28} sparkle={false} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <div className="inline-block max-w-full break-words rounded-[20px] rounded-tl-md bg-secondary px-4 py-3 text-[15px] leading-relaxed text-secondary-foreground sm:text-[14.5px]">
+                    <div className="inline-block max-w-full break-words rounded-lg rounded-tl-sm bg-secondary px-4 py-3 text-[15px] leading-relaxed text-secondary-foreground sm:text-[14.5px]">
                       <ChatMarkdown text={m.content} />
                     </div>
                     {/* La respuesta usó datos reales del negocio (function-
@@ -645,12 +621,12 @@ function ChatBody({
                 <div
                   role="status"
                   aria-label="El asistente está escribiendo"
-                  className="flex h-[42px] items-center gap-1.5 rounded-[20px] rounded-tl-md bg-secondary px-4"
+                  className="flex h-[42px] items-center gap-1.5 rounded-lg rounded-tl-sm bg-secondary px-4"
                 >
                   {[0, 160, 320].map((d) => (
                     <span
                       key={d}
-                      className="ai-dot h-2 w-2 rounded-full bg-ninja-gradient"
+                      className="ai-dot h-2 w-2 rounded-full bg-ninja-flame"
                       style={{ animationDelay: `${d}ms` }}
                     />
                   ))}
@@ -668,7 +644,7 @@ function ChatBody({
             e.preventDefault();
             submit();
           }}
-          className="flex items-end gap-2 rounded-[24px] bg-secondary py-1.5 pl-4 pr-1.5 transition-colors focus-within:bg-ninja-flame/[0.07]"
+          className="flex items-end gap-2 rounded-lg bg-secondary py-1.5 pl-4 pr-1.5 transition-colors focus-within:bg-ninja-flame/[0.07]"
         >
           <textarea
             ref={inputRef}
@@ -695,9 +671,9 @@ function ChatBody({
             disabled={!canSend}
             aria-label="Enviar mensaje"
             className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-popover active:scale-90",
+              "grid h-9 w-9 shrink-0 place-items-center rounded-md outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-popover active:scale-90",
               canSend
-                ? "bg-ninja-gradient text-ninja-voidViolet shadow-[0_4px_12px_-4px_rgba(255,75,34,0.7)]"
+                ? "bg-[var(--pos-solid)] text-white"
                 : "bg-ninja-slate/20 text-muted-foreground",
             )}
           >
@@ -751,13 +727,9 @@ function LockedBody({
   return (
     <>
       <div className="slim-scrollbar relative flex flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-2 sm:px-5">
-        {/* Hero: siempre "noche violeta" (como el ícono), en cualquier tema. */}
+        {/* Hero: siempre "noche violeta" plano (como el ícono), en cualquier tema. */}
         <div
-          className="relative shrink-0 overflow-hidden rounded-3xl px-5 pb-5 pt-5 text-ninja-softWhite"
-          style={{
-            background:
-              "radial-gradient(90% 70% at 50% 120%, rgba(255,75,34,0.45) 0%, rgba(255,138,31,0.12) 45%, rgba(255,138,31,0) 70%), linear-gradient(160deg, #24145E 0%, #140B3A 50%, #0B0720 100%)",
-          }}
+          className="relative shrink-0 overflow-hidden rounded-lg border border-white/10 bg-[#140B3A] px-5 pb-5 pt-5 text-ninja-softWhite"
         >
           <div className="flex flex-col items-center text-center">
             <AssistantMark size={56} animated />
@@ -790,7 +762,7 @@ function LockedBody({
           {SUGGESTIONS.slice(0, 3).map(({ icon: Icon, text }) => (
             <li
               key={text}
-              className="flex items-center gap-3 rounded-2xl bg-secondary px-3.5 py-2.5 text-sm text-foreground"
+              className="flex items-center gap-3 rounded-lg bg-secondary px-3.5 py-2.5 text-sm text-foreground"
             >
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-primary">
                 <Icon size={14} />
@@ -805,7 +777,7 @@ function LockedBody({
       <div className="relative shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-5">
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-popover to-transparent"
+          className="pointer-events-none absolute inset-x-0 -top-px h-px bg-border"
         />
         {price && (
           <p className="mb-2.5 flex items-baseline justify-center gap-1.5 text-foreground">
@@ -831,7 +803,7 @@ const CtaLink = forwardRef<HTMLAnchorElement, { onClick: () => void }>(
         ref={ref}
         href={"/dashboard-team" as never}
         onClick={onClick}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-ninja-gradient text-[15px] font-semibold text-ninja-voidViolet shadow-[0_10px_24px_-10px_rgba(255,75,34,0.8)] outline-none transition hover:brightness-105 focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-popover active:scale-[0.98]"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--pos-solid)] text-[15px] font-semibold text-white outline-none transition-colors hover:bg-[var(--pos-solid-hover)] focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-popover active:scale-[0.98]"
       >
         <Sparkles size={17} /> Contratar Asistente IA
       </Link>

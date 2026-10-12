@@ -21,16 +21,11 @@ const BULLETS = [
   },
 ];
 
-// Columna izquierda del wizard (desktop): propuesta de valor sobre el panel
-// glass con glow flame. En mobile se colapsa a un header compacto.
+// Columna izquierda del wizard (desktop): propuesta de valor sobre un panel
+// plano noche violeta (sin degradados ni glow). En mobile se colapsa a un header compacto.
 export function ValuePanel() {
   return (
-    <div className="relative hidden overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-ninja-deepViolet/80 via-ninja-voidViolet/70 to-ninja-void/90 p-8 lg:flex lg:flex-col">
-      {/* Glow flame sutil */}
-      <div
-        className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-ninja-flame/25 blur-3xl"
-        aria-hidden
-      />
+    <div className="relative hidden overflow-hidden rounded-lg border border-white/10 bg-ninja-deepViolet p-8 lg:flex lg:flex-col">
       <div className="relative z-10 flex items-center gap-3">
         <Isotype className="h-9 w-auto" priority />
         <WordmarkPos variant="dark" className="h-7 w-auto" priority />
@@ -39,7 +34,7 @@ export function ValuePanel() {
       <div className="relative z-10 mt-10">
         <h2 className="font-sans text-3xl font-extrabold leading-[1.1] tracking-[-0.02em] text-ninja-softWhite">
           Tu negocio,{" "}
-          <span className="bg-ninja-gradient bg-clip-text text-transparent">
+          <span className="text-ninja-flame">
             bajo control
           </span>
         </h2>

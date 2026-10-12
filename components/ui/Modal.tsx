@@ -38,9 +38,9 @@ export function Modal({
         <Dialog.Content
           className={cn(
             // Mobile: hoja inferior.
-            "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[22px] border border-b-0 border-border bg-popover text-popover-foreground shadow-ninjaSoft outline-none data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out",
+            "fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-xl border border-b-0 border-border bg-popover text-popover-foreground outline-none data-[state=open]:animate-sheet-in data-[state=closed]:animate-sheet-out",
             // Desde sm: diálogo centrado.
-            "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:mx-0 sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[20px] sm:border-b sm:data-[state=open]:animate-modal-in sm:data-[state=closed]:animate-modal-out",
+            "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:mx-0 sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border-b sm:data-[state=open]:animate-modal-in sm:data-[state=closed]:animate-modal-out",
             className,
           )}
         >

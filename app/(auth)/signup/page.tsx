@@ -57,7 +57,7 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
                 className={cn(
                   "grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition",
                   active
-                    ? "bg-ninja-gradient text-white shadow-ninjaGlow"
+                    ? "bg-[var(--pos-solid)] text-white"
                     : done
                       ? "bg-ninja-flame/20 text-ninja-flameSoft"
                       : "bg-white/10 text-ninja-lavender",
@@ -502,7 +502,7 @@ function SignupWizard() {
   const businessErrors = businessForm.formState.errors;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-card/70 shadow-ninjaSoft backdrop-blur-xl">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-card/70 backdrop-blur-xl">
       <div className="grid lg:grid-cols-2">
         <ValuePanel />
 

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { brandLogo } from "@/modules/pos/planConstants";
+import { Spinner } from "@/components/ui/Spinner";
 
 type Plan = {
   brand: string | null;
@@ -234,7 +235,7 @@ export default function PagarPage() {
           </div>
         ) : !info ? (
           <div className="mt-10 rounded-2xl bg-white p-8 text-center text-sm text-neutral-500 shadow-sm">
-            Cargando…
+            <Spinner />
           </div>
         ) : (
           <>

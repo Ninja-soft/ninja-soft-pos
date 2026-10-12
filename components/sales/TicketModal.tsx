@@ -28,6 +28,7 @@ import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { type TicketData } from "@/components/tickets/TicketRenderer";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 interface Props {
   open: boolean;
@@ -217,7 +218,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Ticket" className="max-w-sm">
       {isLoading || !data || !ticketData ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (
         <>
           <div ref={ticketRef}>

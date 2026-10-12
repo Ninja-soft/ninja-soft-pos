@@ -31,6 +31,7 @@ import {
   type TenantDiscount,
 } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 function discountLabel(d: TenantDiscount): string {
   return d.kind === "percent"
@@ -413,7 +414,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
 
           {/* Billing records */}
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           ) : (records ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Sin pagos registrados.

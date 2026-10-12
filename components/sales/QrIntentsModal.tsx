@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, type SaleNumberFormat } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -195,7 +196,7 @@ export function QrIntentsModal({
             {isLoading && (
               <tr>
                 <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}

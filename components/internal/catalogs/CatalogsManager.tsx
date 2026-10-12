@@ -30,6 +30,7 @@ import {
 import { CATALOG_ASSETS_BUCKET, type Catalog } from "@/modules/internal/catalogs";
 import { CatalogEditorModal } from "./CatalogEditorModal";
 import { CatalogGrantsModal } from "./CatalogGrantsModal";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const CATALOG_IMPORTS_BUCKET = "catalog-imports";
 
@@ -219,7 +220,7 @@ export function CatalogsManager() {
 
         <div className="mt-3 space-y-3">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando catálogos…</p>
+            <SpinnerBlock className="py-6" />
           ) : (catalogs?.length ?? 0) === 0 ? (
             <Card>
               <CardContent className="p-6 text-center text-sm text-muted-foreground">

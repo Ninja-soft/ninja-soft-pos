@@ -26,6 +26,7 @@ import type {
   NotificationSeverity,
   NotificationType,
 } from "@/modules/notifications/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 type Audience = "all" | "tenant";
 
@@ -462,7 +463,7 @@ export default function InternalNotificacionesPage() {
             <Bell size={16} /> Enviadas
           </div>
           {sentLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           ) : sent.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin notificaciones aún.</p>
           ) : (

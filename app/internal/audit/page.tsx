@@ -14,6 +14,7 @@ import {
   useInternalTenants,
 } from "@/modules/internal/hooks";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
   if (value == null) return null;
@@ -130,7 +131,7 @@ export default function InternalAuditPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}

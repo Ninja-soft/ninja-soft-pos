@@ -37,8 +37,12 @@ export function TableStateRow({
 }) {
   return (
     <tr>
-      <td colSpan={colSpan} className={cn("px-4 py-10 text-center", className)}>
-        {loading ? <Spinner size={22} /> : children}
+      <td colSpan={colSpan} className={cn("py-10 text-center sm:px-4", className)}>
+        {/* Sticky + ancho de viewport: en mobile la tabla scrollea en
+            horizontal y el contenido queda centrado en lo visible. */}
+        <div className="sticky left-0 w-[calc(100vw-2.5rem)] px-3 sm:static sm:w-auto">
+          {loading ? <Spinner size={22} /> : children}
+        </div>
       </td>
     </tr>
   );

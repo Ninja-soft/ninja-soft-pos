@@ -4,10 +4,10 @@ import { cn } from "@/lib/utils/cn";
 const TONES = {
   brand: "bg-ninja-flame/15 text-ninja-flameSoft",
   gold: "bg-ninja-gold/15 text-warning",
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/12 text-warning",
-  danger: "bg-danger/12 text-danger",
-  info: "bg-info/12 text-info",
+  success: "bg-success/15 text-success",
+  warning: "bg-warning/15 text-warning",
+  danger: "bg-danger/15 text-danger",
+  info: "bg-info/15 text-info",
   neutral: "bg-muted text-muted-foreground",
 } as const;
 

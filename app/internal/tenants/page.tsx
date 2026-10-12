@@ -16,6 +16,7 @@ import {
 } from "@/modules/internal/hooks";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Trial",
@@ -178,7 +179,7 @@ export default function InternalTenantsPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}

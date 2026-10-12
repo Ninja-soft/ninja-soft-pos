@@ -51,7 +51,7 @@ export function Segmented<T extends string>({
               "inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               size === "sm" ? "min-h-[32px] px-2.5 py-1 text-xs" : "min-h-[36px] px-3 py-1.5 text-sm",
               active
-                ? "bg-card text-foreground shadow-ninjaSoft"
+                ? "bg-[var(--seg-thumb)] text-foreground shadow-ninjaSoft"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

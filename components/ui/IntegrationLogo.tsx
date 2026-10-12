@@ -45,7 +45,7 @@ export function IntegrationLogo({
         className,
       )}
       style={{
-        width: size,
+        width: logo.wide ? Math.round(size * 1.7) : size,
         height: size,
         borderRadius: Math.round(size * 0.26),
         padding: pad,

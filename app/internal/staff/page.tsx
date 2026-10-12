@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
+import { Spinner } from "@/components/ui/Spinner";
 
 type Level = "support" | "admin" | "super_admin";
 const LEVEL_LABELS: Record<string, string> = {
@@ -164,7 +165,7 @@ export default function InternalStaffPage() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-muted-foreground">Cargando…</td>
+                  <td colSpan={3} className="text-center px-4 py-6 text-muted-foreground"><Spinner /></td>
                 </tr>
               ) : staff.length === 0 ? (
                 <tr>

@@ -39,6 +39,7 @@ import { PlanBadge } from "@/components/internal/plans/PlanBadge";
 import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { PaymentHistory, type PaymentRecord } from "@/components/saas/PaymentHistory";
 import { useMyPaymentHistory } from "@/modules/saas/paymentHistory";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // Tipos de los RPC (no están en los tipos generados → cast laxo).
 type Addon = {
@@ -474,7 +475,7 @@ export function SubscriptionCard() {
           <CreditCard size={18} /> Suscripción
         </Heading>
         <Card className="mt-3">
-          <CardContent className="p-6 text-muted-foreground">Cargando…</CardContent>
+          <CardContent className="p-6"><SpinnerBlock className="py-4" /></CardContent>
         </Card>
       </section>
     );

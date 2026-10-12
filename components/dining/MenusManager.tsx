@@ -22,6 +22,7 @@ import {
   timeToMin,
   isValidWindow,
 } from "@/lib/gastro/menuTime";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // F13 · H47 — Administrador de menús por horario (daypart). El dueño define
 // menús (Desayuno, Almuerzo, Cena, Happy hour…), sus ventanas horarias (día +
@@ -80,7 +81,7 @@ export function MenusManager() {
       </div>
 
       {isLoading ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (menus ?? []).length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
           Sin menús. Creá uno (ej. “Desayuno”, “Almuerzo”, “Happy hour”) y definí

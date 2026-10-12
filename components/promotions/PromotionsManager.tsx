@@ -17,6 +17,7 @@ import {
 import type { Promotion, PromotionInput } from "@/modules/promotions/api";
 import { WEEKDAYS_SHORT, minToTime, timeToMin } from "@/lib/gastro/menuTime";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // F9 · H53 — Administrador de promociones. El dueño define promos (condiciones →
 // acción). El POS las aplicará al carrito cuando se integre el motor (follow-up).
@@ -54,7 +55,7 @@ export function PromotionsManager() {
       </p>
 
       {isLoading ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (promos ?? []).length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
           Sin promociones. Creá una (ej. “10% los martes”, “$500 off en Bebidas”).

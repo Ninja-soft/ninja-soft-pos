@@ -13,6 +13,7 @@ import {
 } from "@/modules/delivery/hooks";
 import type { DeliveryZone } from "@/modules/delivery/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // ── Modal de zona (alta/edición) ──────────────────────────────────────────────
 function ZoneModal({
@@ -180,7 +181,7 @@ export function ZonasManager() {
       </div>
 
       {isLoading ? (
-        <p className="py-4 text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : list.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-5 text-center">
           <Bike size={26} className="mx-auto mb-2 text-ninja-flameSoft" />

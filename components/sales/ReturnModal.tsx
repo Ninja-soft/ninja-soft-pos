@@ -52,6 +52,7 @@ import { ExchangeFlow } from "@/components/sales/ExchangeFlow";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { cn } from "@/lib/utils/cn";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 type Refund = "cash" | "store_credit";
 
@@ -235,7 +236,7 @@ export function ReturnModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Devolución / cambio" className="max-w-lg">
       {!data ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">Cargando venta…</p>
+        <SpinnerBlock className="py-6" />
       ) : result ? (
         <ReturnResult result={result} onClose={() => onOpenChange(false)} />
       ) : exchangeResult ? (

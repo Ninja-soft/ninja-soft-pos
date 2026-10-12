@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useCoupons, useCouponMutations } from "@/modules/coupons/hooks";
 import type { Coupon, CouponInput } from "@/modules/coupons/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // F9 · H54 — Administrador de cupones. El dueño define códigos con % o monto fijo,
 // monto mínimo, vigencia y topes de uso. El límite de uso lo enforce create_sale
@@ -46,7 +47,7 @@ export function CouponsManager() {
       </p>
 
       {isLoading ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (coupons ?? []).length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
           Sin cupones. Creá uno (ej. “BIENVENIDO10”, 10% con monto mínimo).

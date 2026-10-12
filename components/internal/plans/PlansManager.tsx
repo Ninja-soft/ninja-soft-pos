@@ -10,6 +10,7 @@ import type { PlanWithCount } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { PlanEditorModal } from "./PlanEditorModal";
 import { PlanBadge } from "./PlanBadge";
+import { Spinner } from "@/components/ui/Spinner";
 
 function StatusChip({ active }: { active: boolean }) {
   return (
@@ -63,7 +64,7 @@ export function PlansManager() {
                       colSpan={6}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
-                      Cargando planes…
+                      <Spinner />
                     </td>
                   </tr>
                 )}

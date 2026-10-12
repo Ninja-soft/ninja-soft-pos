@@ -56,6 +56,7 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
@@ -329,7 +330,7 @@ export default function ProductosPage() {
               {isLoading && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Cargando productos…
+                    <Spinner />
                   </td>
                 </tr>
               )}

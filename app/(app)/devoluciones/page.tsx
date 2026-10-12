@@ -16,6 +16,7 @@ import {
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // Sección dedicada de devoluciones (H29): buscás la venta por ticket / N° de
 // comprobante y arrancás la devolución desde acá.
@@ -89,7 +90,7 @@ export default function DevolucionesPage() {
 
         <div className="mt-2 space-y-2">
           {isLoading && (
-            <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           )}
           {!isLoading && results.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">

@@ -23,6 +23,7 @@ import {
 import { modifiersSummaryNoPrice, type SaleLineModifierGroup } from "@/modules/products/modifiers";
 import { webPrintCopies } from "@/lib/print/webPrint";
 import { formatQty } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // F13 · H45 (mesa) + H49 (delivery/takeaway) — Comanda impresa por estación.
 //
@@ -366,7 +367,7 @@ export function ComandaModal(props: ComandaModalProps) {
               : "No hay ítems nuevos para enviar. Usá “Reimprimir todo” para reimprimir la comanda completa."}
           </p>
         ) : isLoading ? (
-          <p className="no-print py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          <SpinnerBlock className="py-6 no-print" />
         ) : (
           // Vista previa = lo que se imprime. .comanda-print aísla al imprimir.
           <div className="comanda-print mx-auto flex max-w-full flex-col items-center gap-4">

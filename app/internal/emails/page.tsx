@@ -28,6 +28,7 @@ import {
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 type Saved = Record<string, { subject: string; html: string }>;
 
@@ -790,7 +791,7 @@ function SystemEmailsLog() {
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <SpinnerBlock className="py-6" />
         ) : filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {emails.length === 0

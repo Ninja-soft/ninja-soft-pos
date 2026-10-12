@@ -15,6 +15,7 @@ import { Avatar, AVATAR_ICONS, AVATAR_PRESETS } from "@/components/ui/Avatar";
 import { AvatarUploader } from "@/components/account/AvatarUploader";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { Spinner } from "@/components/ui/Spinner";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -192,8 +193,8 @@ export function TeamSection({
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-muted-foreground">
-                    Cargando…
+                  <td colSpan={4} className="text-center px-4 py-6 text-muted-foreground">
+                    <Spinner />
                   </td>
                 </tr>
               ) : members.length === 0 ? (

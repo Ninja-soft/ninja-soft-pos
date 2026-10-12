@@ -14,6 +14,7 @@ import {
   useServicePackMutations,
 } from "@/modules/packs/hooks";
 import type { ServicePack } from "@/modules/packs/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 function PackModal({
   open,
@@ -225,7 +226,7 @@ export function ServicePacksManager() {
       </div>
 
       {isLoading ? (
-        <p className="py-4 text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (packs ?? []).length === 0 ? (
         <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
           Sin paquetes. Creá bonos de sesiones (ej. &quot;4 cortes&quot;, &quot;10

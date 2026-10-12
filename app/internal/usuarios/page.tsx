@@ -10,6 +10,7 @@ import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",
@@ -147,7 +148,7 @@ export default function InternalUsersPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}

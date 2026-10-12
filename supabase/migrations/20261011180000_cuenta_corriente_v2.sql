@@ -387,8 +387,10 @@ begin
   return account_jsonb_merge(account_jsonb_merge(account_jsonb_merge(v_cfg, v_ten), v_grp), v_cust);
 end;
 $$;
-revoke all on function account_effective_config(uuid) from public, anon;
-grant execute on function account_effective_config(uuid) to authenticated, service_role;
+-- Sin grant a authenticated: no chequea tenant (la usan las RPC/trigger, que sí
+-- lo hacen). El front arma la efectiva con lib/account/config.ts.
+revoke all on function account_effective_config(uuid) from public, anon, authenticated;
+grant execute on function account_effective_config(uuid) to service_role;
 
 -- -----------------------------------------------------------------------------
 -- E) RLS del ledger: escrituras SÓLO por RPC (security definer).

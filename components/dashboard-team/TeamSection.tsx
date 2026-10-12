@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { StaffBranchesModal } from "@/components/branches/StaffBranchesModal";
-import { useBranches, useStaffAssignments, type StaffPerson } from "@/modules/branches/hooks";
+import { useBranchContext, useBranches, useStaffAssignments, type StaffPerson } from "@/modules/branches/hooks";
 import { allowedStoreIds, assignmentsOf, todayAR, type StaffRole } from "@/modules/branches/logic";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -101,6 +101,55 @@ const tileClass = (on: boolean) =>
       ? cn(CHOICE_ON, "text-foreground")
       : "bg-muted text-muted-foreground hover:bg-secondary hover:text-foreground",
   );
+
+// Sucursales al invitar (F17 · H91): chips multi-selección. La primera elegida
+// queda como base y el resto como acceso adicional. Sin elegir ninguna rigen
+// las reglas de siempre (encargado = todas; cajero = la principal).
+function InviteBranchesPicker({
+  branches,
+  value,
+  onChange,
+}: {
+  branches: { id: string; name: string; short_name: string | null }[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div>
+      <span className="mb-2 block text-sm font-medium text-muted-foreground">Sucursales</span>
+      <div className="flex flex-wrap gap-2">
+        {branches.map((b) => {
+          const on = value.includes(b.id);
+          const idx = value.indexOf(b.id);
+          return (
+            <button
+              key={b.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(b.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                on
+                  ? cn(CHOICE_ON, "text-foreground")
+                  : "bg-muted text-muted-foreground hover:bg-secondary hover:text-foreground",
+              )}
+            >
+              <MapPin size={14} aria-hidden />
+              {b.short_name || b.name}
+              {idx === 0 && <span className="text-[11px] text-muted-foreground">(base)</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        La primera que elijas queda como su sucursal base; las demás, como acceso adicional. Si no
+        elegís ninguna, un encargado ve todas y un cajero, la principal.
+      </p>
+    </div>
+  );
+}
 
 // Grilla de avatares: iniciales + iconos + foto propia (subir / la ya subida),
 // todos como tiles iguales. La vista previa vive fuera (encabezado del modal).
@@ -563,6 +612,8 @@ export function TeamSection({
     const [name, setName] = useState("");
     const [role, setRole] = useState<AssignableRole>("cashier");
     const [avatar, setAvatar] = useState<string | null>(null);
+    const branchCtx = useBranchContext();
+    const [storeIds, setStoreIds] = useState<string[]>([]);
 
     const m = useMutation({
       mutationFn: async () => {
@@ -572,10 +623,11 @@ export function TeamSection({
             role,
             display_name: name.trim(),
             avatar,
+            ...(branchCtx.isMulti && storeIds.length > 0 ? { store_ids: storeIds } : {}),
           },
         });
         if (error) throw error;
-        return data as { existed: boolean };
+        return data as { existed: boolean; branches_error?: string | null };
       },
       onSuccess: (d) => {
         toast({
@@ -585,11 +637,20 @@ export function TeamSection({
             ? "Ya tenía cuenta; ahora es parte del equipo."
             : "Le mandamos un email para definir su contraseña.",
         });
+        if (d?.branches_error) {
+          toast({
+            variant: "error",
+            title: "No se pudieron asignar las sucursales",
+            description: "Asignalas desde Personal por sucursal.",
+          });
+        }
         setOpen(false);
         setEmail("");
         setName("");
         setAvatar(null);
         setRole("cashier");
+        setStoreIds([]);
+        qc.invalidateQueries({ queryKey: ["branches"] });
         onDone();
       },
       onError: () =>
@@ -647,6 +708,9 @@ export function TeamSection({
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Rol</span>
               <RolePicker value={role} onChange={setRole} />
             </div>
+            {branchCtx.isMulti && branchCtx.allowed.length > 1 && (
+              <InviteBranchesPicker branches={branchCtx.allowed} value={storeIds} onChange={setStoreIds} />
+            )}
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
               <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />

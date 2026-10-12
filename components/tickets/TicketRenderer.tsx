@@ -9,6 +9,7 @@ import type { Align, TextSize, TicketBlock } from "@/lib/tickets/blocks";
 import { styleProps } from "@/lib/tickets/blocks";
 import type { SampleTicketData } from "@/lib/tickets/sample";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
+import { ticketLocationText } from "@/lib/tickets/location";
 
 export type TicketData = SampleTicketData;
 
@@ -52,6 +53,7 @@ interface Props {
 
 export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }: Props) {
   const { sale, items, payments, customer, brand } = data;
+  const location = ticketLocationText(data.location);
   const width = paper === "58" ? "58mm" : paper === "80" ? "80mm" : "210mm";
 
   const renderBlock = (b: TicketBlock) => {
@@ -87,9 +89,12 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
         );
       case "saleInfo":
         return (
-          <div key={b.id} className="flex justify-between text-xs text-neutral-500">
-            {b.showNumber !== false && <span>Comprobante {sale.numberLabel}</span>}
-            {b.showDate !== false && <span>{new Date(sale.created_at).toLocaleString("es-AR")}</span>}
+          <div key={b.id} className="text-xs text-neutral-500">
+            <div className="flex justify-between">
+              {b.showNumber !== false && <span>Comprobante {sale.numberLabel}</span>}
+              {b.showDate !== false && <span>{new Date(sale.created_at).toLocaleString("es-AR")}</span>}
+            </div>
+            {location && <div>{location}</div>}
           </div>
         );
       case "customer":

@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
+import { useProfessionalsForPosStore } from "@/modules/branches/staffHooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
 import { resolveMerchantNumber } from "@/lib/payments/merchantNumbers";
 import { useWarrantyPlans } from "@/modules/products/hooks";
@@ -50,7 +51,9 @@ type Connected = Omit<
 export function CheckoutSheetConnected({ onQrState, customerId = null, ...props }: Connected) {
   const { data: allPlans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
-  const { data: professionals } = useProfessionals();
+  const { data: allProfessionals } = useProfessionals();
+  // Sólo los vendedores habilitados en la sucursal del POS (F17 · H91).
+  const professionals = useProfessionalsForPosStore(allProfessionals);
   const { data: posSettings } = usePosSettings();
   const { data: methods } = usePaymentMethodsStatus();
   const merchantNumberFor = useCallback(

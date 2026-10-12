@@ -25,7 +25,10 @@ import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import { useCartStore } from "@/modules/pos/store";
 import { useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
-import { useBranchScope } from "@/modules/branches/hooks";
+import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
+import { usePosBranchStock } from "@/modules/pos/branchStock";
+import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, otherBranchesText } from "@/lib/stock/posBranchStock";
+import { formatQty } from "@/lib/utils/format";
 import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
 import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
@@ -236,6 +239,7 @@ function PosPageInner() {
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
   const { data: register, store: registerStore } = useDefaultRegister();
+  const branchCtx = useBranchContext();
   const currentUserId = useBranchScope().data?.userId ?? null;
   const { open, close } = usePosMutations();
   const { data: myTenant } = useMyTenant();
@@ -317,12 +321,14 @@ function PosPageInner() {
       businessName: dispBranding?.legal_name ?? null,
       logoUrl: dispBranding?.logo_url ?? null,
       accent: dispBranding?.accent ?? null,
-      registerLabel: register?.name ?? null,
+      // Con varias sucursales, "Centro · Caja 1"; con una, sólo la caja.
+      registerLabel:
+        branchCtx.isMulti && registerStore ? locationLabel(registerStore, register ?? null) : (register?.name ?? null),
       welcomeMessage: posSettings?.displayWelcomeMessage ?? null,
       thanksMessage: posSettings?.displayThanksMessage ?? null,
       showUnitPrices: posSettings?.displayShowUnitPrices ?? true,
     }),
-    [dispBranding, register?.name, posSettings],
+    [dispBranding, register, registerStore, branchCtx.isMulti, posSettings],
   );
 
   // ── Carrito ────────────────────────────────────────────────────────────────
@@ -363,6 +369,7 @@ function PosPageInner() {
       setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), categoryId: p.categoryId ?? null });
       setWeighGrams("");
     } else {
+      if (!branchStockGate(p.id, null, qty)) return;
       addProduct({ ...p, price: priceFor(p.id, null, p.price), warrantyMonths: p.warranty_months ?? 0 }, qty);
     }
   }
@@ -377,9 +384,11 @@ function PosPageInner() {
   }, []);
 
   function favQuickUnits(p: Product, qty: number) {
+    if (!branchStockGate(p.id, null, qty)) return;
     addProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.category_id }, qty);
   }
   function favQuickWeight(p: Product, kg: number) {
+    if (!branchStockGate(p.id, null, kg)) return;
     addWeighed({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), categoryId: p.category_id }, kg);
   }
 
@@ -403,6 +412,7 @@ function PosPageInner() {
       toast({ title: "Ingresá un peso válido", variant: "error" });
       return;
     }
+    if (!branchStockGate(weighProduct.id, null, grams / 1000)) return;
     addWeighed(weighProduct, grams / 1000);
     setWeighProduct(null);
     setWeighGrams("");
@@ -424,6 +434,90 @@ function PosPageInner() {
   const origins = usePosOrigins({ setCustomer, priceFor });
   const pricing = usePosPricing({ rounding, customerId: customer?.id ?? null });
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+
+  // ── Stock de la sucursal del POS (F17 · H94) ───────────────────────────────
+  // Con 2+ sucursales y stock_sucursales, la grilla muestra el saldo de ESTA
+  // sucursal (con lo que hay en las otras) y al agregar se avisa o se bloquea
+  // (según "vender sin stock", que puede ser distinto por sucursal) cuando no
+  // alcanza acá, aunque el total del negocio sí alcance.
+  const trackedIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allProducts ?? []) if (p.track_stock) set.add(p.id);
+    for (const p of topProducts ?? []) if (p.track_stock) set.add(p.id);
+    return set;
+  }, [allProducts, topProducts]);
+  const trackedSeen = useRef<Set<string>>(new Set());
+  for (const id of trackedIds) trackedSeen.current.add(id);
+  const cartProductKey = lines
+    .map((l) => l.productId)
+    .filter((id): id is string => Boolean(id))
+    .sort()
+    .join(",");
+  const stockIds = useMemo(
+    () => [...new Set([...(products ?? []).map((p) => p.id), ...(cartProductKey ? cartProductKey.split(",") : [])])],
+    [products, cartProductKey],
+  );
+  const branchStock = usePosBranchStock(stockIds);
+  const allowNegativeStock = posSettings?.allowNegativeStock ?? true;
+  const shownProducts = useMemo(() => {
+    if (!branchStock.loaded || !branchStock.storeId || !products) return products;
+    const storeId = branchStock.storeId;
+    return products.map((p) => {
+      if (!p.track_stock) return p;
+      const others = otherBranchesText(
+        otherBranchesStock(branchStock.rows, p.id, storeId, branchStock.names),
+        (n) => formatQty(n),
+      );
+      return {
+        ...p,
+        stock: branchStock.qtyByProduct.get(p.id) ?? 0,
+        stockHint: others ? `En otras sucursales: ${others}` : "Sin stock en otras sucursales",
+      };
+    });
+  }, [products, branchStock.loaded, branchStock.storeId, branchStock.rows, branchStock.qtyByProduct, branchStock.names]);
+
+  function branchStockGate(productId: string, variantId: string | null, adding: number): boolean {
+    const storeId = branchStock.storeId;
+    if (!branchStock.loaded || !storeId || !trackedSeen.current.has(productId)) return true;
+    const have = branchQty(branchStock.rows, storeId, productId, variantId);
+    const inCart = useCartStore
+      .getState()
+      .lines.filter((l) => l.productId === productId && (variantId === null || (l.variantId ?? null) === variantId))
+      .reduce((acc, l) => acc + (Number(l.quantity) || 0), 0);
+    const check = branchStockCheck({ have, inCart, adding, allowNegative: allowNegativeStock });
+    if (check === "ok") return true;
+    const others = otherBranchesText(
+      otherBranchesStock(branchStock.rows, productId, storeId, branchStock.names),
+      (n) => formatQty(n),
+    );
+    const where = branchStock.storeName ?? "esta sucursal";
+    const detail = `En ${where} quedan ${formatQty(Math.max(have, 0))}.${others ? ` En otras sucursales: ${others}.` : ""}`;
+    if (check === "block") {
+      toast({ title: `Sin stock suficiente en ${where}`, description: detail, variant: "error" });
+      return false;
+    }
+    toast({ title: `Queda en negativo en ${where}`, description: detail, variant: "info" });
+    return true;
+  }
+
+  // Al cobrar: si la sucursal no permite vender sin stock, se corta antes de
+  // mandar la venta (el carrito pudo cambiar de cantidad después de agregar).
+  function branchStockBlocksSale(): boolean {
+    const storeId = branchStock.storeId;
+    if (allowNegativeStock || !branchStock.loaded || !storeId) return false;
+    const short = branchShortfalls(lines, branchStock.rows, storeId, trackedSeen.current);
+    if (short.length === 0) return false;
+    const names = short
+      .map((s) => lines.find((l) => l.productId === s.productId)?.name ?? "Producto")
+      .slice(0, 3)
+      .join(", ");
+    toast({
+      title: `Sin stock suficiente en ${branchStock.storeName ?? "esta sucursal"}`,
+      description: `${names}${short.length > 3 ? " y otros" : ""}. Ajustá las cantidades o pedí un traslado.`,
+      variant: "error",
+    });
+    return true;
+  }
 
   // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
   const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
@@ -860,7 +954,7 @@ function PosPageInner() {
         quickKeysTitle={layout.quickKeys.length > 0 ? "Teclas rápidas" : "Favoritos"}
         frequent={showFrequent && !categoryFilter && !menuFilter ? topProducts : undefined}
         categoryPath={categoryPath}
-        products={products}
+        products={shownProducts}
         loading={productsLoading}
         onPickProduct={onPickProduct}
         onQuickUnits={favQuickUnits}
@@ -990,7 +1084,10 @@ function PosPageInner() {
           checkout={layout.checkout}
           style={accentVars(effectiveLayout.accent)}
           loading={saving}
-          onConfirm={handleSale}
+          onConfirm={(...args: Parameters<typeof handleSale>) => {
+            if (branchStockBlocksSale()) return;
+            return handleSale(...args);
+          }}
           onQrState={handleQrState}
         />
       </MountWhenOpened>
@@ -1020,6 +1117,7 @@ function PosPageInner() {
           onClose={() => setVariantProduct(null)}
           onPick={({ variantId, variantLabel: label, price }) => {
             if (!variantProduct) return;
+            if (!branchStockGate(variantProduct.id, variantId, 1)) return;
             addVariant({
               id: variantProduct.id,
               name: variantProduct.name,

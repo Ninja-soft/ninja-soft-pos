@@ -13,6 +13,7 @@ import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
+import { ticketLocationText } from "@/lib/tickets/location";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -49,6 +50,9 @@ export const HTML_TEMPLATE_VARS: { key: string; label: string }[] = [
   { key: "leyenda", label: "Leyenda extra" },
   { key: "qr_url", label: "URL del QR" },
   { key: "anulada", label: "'ANULADA' si la venta fue anulada" },
+  { key: "sucursal", label: "Sucursal de la venta (vacío con una sola sucursal)" },
+  { key: "caja", label: "Caja de la venta (vacío con una sola sucursal)" },
+  { key: "sucursal_caja", label: "Sucursal y caja, ej. 'Sucursal Centro · Caja 1'" },
   // --- Datos fiscales (factura legal AR) ---
   { key: "condicion_iva", label: "Condición IVA del emisor" },
   { key: "ingresos_brutos", label: "Ingresos Brutos del emisor (s/d si falta)" },
@@ -126,6 +130,9 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     leyenda: esc(brand?.ticket_legend || ""),
     qr_url: esc(qrUrl),
     anulada: sale.status === "voided" ? "ANULADA" : "",
+    sucursal: esc(data.location?.branch ?? ""),
+    caja: esc(data.location?.register ?? ""),
+    sucursal_caja: esc(ticketLocationText(data.location) ?? ""),
 
     // --- Datos fiscales ---
     condicion_iva: esc(emisorIva),

@@ -19,6 +19,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **UI: un solo control segmentado.** `SegmentedControl` se fusiona en `components/ui/Segmented` (pulgar que se desliza, flechas / Inicio / Fin, `fill`, `preview`, `iconOnlyOnMobile`); el riel pasa a `--seg-track` en toda la app y las variables `--seg-*` quedan definidas una sola vez por tema.
+
 - **Reportes: gráficos con ECharts y sección rediseñada.** Recharts se reemplaza por ECharts (carga diferida, colores de cada tema, accesible con tabla oculta para lectores, exportar cada gráfico a PNG). Nuevo switch Gráfico / Tabla estilo iOS que recuerda la elección por sección. KPIs con variación vs. el período anterior y mini tendencia (total, ventas, ticket promedio, mejor día). Evolución de ventas en área/línea/barras con métrica Vendido/Ventas/Ticket, línea del período anterior, promedio y zoom en rangos largos. Nuevas secciones **Ventas por día y hora** (mapa de calor u horas) y **Flujo de caja** (ingresos, egresos y neto por día), que consultan recién al entrar en pantalla. Medios de pago y categorías en dona/mosaico/barras, top productos y clientes en ranking, staff apilado comisión + propinas, stock bajo como bullet (stock vs. mínimo). ADR-035.
 
 ### Changed

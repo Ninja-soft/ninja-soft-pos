@@ -45,7 +45,6 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.1);
-  --seg-thumb: rgba(255, 255, 255, 0.13);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.05);
@@ -84,7 +83,6 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.09);
-  --seg-thumb: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.07);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.045);
@@ -118,7 +116,6 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e6e1f3;
-  --seg-thumb: #ffffff;
   --input: #e2dcf1;
   --ring: #ff6a1a;
   --pattern: rgba(30, 22, 60, 0.06);
@@ -154,7 +151,6 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #eadfcf;
-  --seg-thumb: #ffffff;
   --input: #e7dcc9;
   --ring: #ff6a1a;
   --pattern: rgba(60, 40, 20, 0.06);
@@ -243,9 +239,10 @@
   --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.05);
 }
 
-/* Control segmentado estilo iOS (components/ui/SegmentedControl): riel neutro
-   y "pulgar" relleno que se desliza. En oscuro el pulgar es más claro que el
-   riel; en claro es blanco con sombra mínima. Sin bordes de color. */
+/* Control segmentado estilo iOS (components/ui/Segmented): riel neutro y
+   "pulgar" relleno que se desliza. Única definición de --seg-* por tema. En
+   oscuro el pulgar es más claro que el riel; en claro es blanco con sombra
+   mínima. Sin bordes de color. */
 :root,
 [data-theme="ninja-dark"] {
   --seg-track: rgba(255, 255, 255, 0.06);

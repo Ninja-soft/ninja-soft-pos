@@ -27,9 +27,9 @@ const ALLOWED = new Set([
   "fiserv",
   "mobbex",
   "pagos360",
-  // H21c — Nave: el backend ya acepta credenciales (paridad con el resto de
-  // proveedores del catálogo); la integración de cobro sigue pendiente y la UI
-  // lo muestra como "Próximamente".
+  // H21c — Nave (ADR-030): client_id, client_secret, pos_id (QR + link),
+  // point_pos_ids y audience opcionales. Nave Point reutiliza ESTA conexión
+  // (no hay provider 'nave_point' de secretos).
   "nave",
 ]);
 

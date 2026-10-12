@@ -44,17 +44,23 @@ const IMPLEMENTED = new Set([
   "pagos360",
   "payway",
   "getnet",
+  "nave",
+  "nave_point",
 ]);
 
-// Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
-// del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
-// cuotas/recargos los resuelve el lector (sin grid de planes ni recargo acá).
-const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
+// Canales Point que NO piden credenciales propias: usan la conexión de su
+// marca (Mercado Point → Mercado Pago, Nave Point → Nave). Su "Conectado" se
+// deriva de la fila de la marca, y las cuotas/recargos los resuelve la
+// terminal (sin grid de planes ni recargo acá).
+const USES_CONNECTION_OF: Record<string, { key: string; name: string }> = {
+  mercadopago_point: { key: "mercadopago", name: "Mercado Pago" },
+  nave_point: { key: "nave", name: "Nave" },
+};
 
 // Proveedores cuyo switch Sandbox cambia de verdad el ambiente de la Edge
 // (MODO → merchants.preprod.playdigital.com.ar · Pagos360 → api.sandbox.pagos360.com).
 // Sólo para estos se muestra el toggle; en el resto no haría nada.
-const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway"]);
+const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave"]);
 
 // Proveedores donde el grid de "Planes" (cuotas por tarjeta + recargo) SÍ se
 // aplica en el POS antes de generar el cobro. MODO/Pagos360/Payway resuelven
@@ -75,7 +81,12 @@ const PROVIDER_LOGO: Record<string, string> = {
   mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
   pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
   nave: "/img/medios_de_pago/nave_cube.webp",
+  nave_point: "/img/medios_de_pago/nave_cube.webp",
 };
+
+// URL de notificaciones que el dueño informa a Nave en el onboarding (Nave la
+// registra de su lado; no viaja por request).
+const NAVE_WEBHOOK_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/nave_webhook`;
 
 // Resumen corto bajo el nombre (qué tipo de medio es).
 const PROVIDER_CHIP: Record<string, string> = {
@@ -189,6 +200,31 @@ const PROVIDER_INFO: Record<string, Explain> = {
     ],
     recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
   },
+  nave: {
+    activa:
+      "Habilita el cobro con Nave en el POS: se genera un QR interoperable (lo paga cualquier billetera o app bancaria) y un link de pago de Nave. La plata entra a tu cuenta de Nave.",
+    conexion:
+      "Pegá el Client ID, el Client Secret y el ID de punto de venta que te da Nave (Integraciones). Informale a Nave la URL de notificaciones que te mostramos al conectar. Con el switch Sandbox se usa el ambiente de prueba de Nave (sin plata real).",
+    pasos: [
+      "En el POS elegís cobrar con Nave.",
+      "El cliente escanea el QR o abre el link y paga en Nave.",
+      "Nave nos avisa, verificamos el pago contra Nave y la venta se cierra sola.",
+    ],
+    recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
+  },
+  nave_point: {
+    activa:
+      "Habilita el cobro con la terminal Nave Point: el POS manda el monto a la terminal y el cliente paga con tarjeta, contactless o QR.",
+    conexion:
+      "Usa tu conexión de Nave (no pide credenciales nuevas). Cargá el ID de punto de venta de cada terminal al conectar Nave (Nave › Integraciones › Sistema de gestión).",
+    pasos: [
+      "En el POS elegís cobrar con Nave Point y la terminal.",
+      "El cliente paga en la terminal (las cuotas se eligen ahí).",
+      "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
+    ],
+    recargo:
+      "Los recargos y cuotas los maneja Nave en la terminal; acá no se configura un % aparte.",
+  },
   modo: {
     activa:
       "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
@@ -236,6 +272,12 @@ export function PaymentMethodsCard() {
   const [modoClientSecret, setModoClientSecret] = useState("");
   const [modoStoreId, setModoStoreId] = useState("");
   const [modoProcessor, setModoProcessor] = useState("");
+  // Nave: client credentials + punto de venta (QR + link) + terminales Point.
+  const [naveClientId, setNaveClientId] = useState("");
+  const [naveClientSecret, setNaveClientSecret] = useState("");
+  const [navePosId, setNavePosId] = useState("");
+  const [navePointIds, setNavePointIds] = useState("");
+  const [naveAudience, setNaveAudience] = useState("");
   const [showManual, setShowManual] = useState(false);
   const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -440,7 +482,9 @@ export function PaymentMethodsCard() {
             method={byKey.get(p.key)}
             plans={plans}
             features={features}
-            mpConnected={Boolean(byKey.get("mercadopago")?.config?.connected)}
+            parentConnected={Boolean(
+              byKey.get(USES_CONNECTION_OF[p.key]?.key ?? "")?.config?.connected,
+            )}
             isOpen={expanded.has(p.key)}
             onToggleExpand={() => toggleExpand(p.key)}
             onConnect={() => {
@@ -459,6 +503,11 @@ export function PaymentMethodsCard() {
               setModoClientSecret("");
               setModoStoreId("");
               setModoProcessor("");
+              setNaveClientId("");
+              setNaveClientSecret("");
+              setNavePosId("");
+              setNavePointIds("");
+              setNaveAudience("");
               setShowManual(false);
             }}
             onOpenPlans={() => setPlansProvider({ key: p.key, name: p.name })}
@@ -603,6 +652,152 @@ export function PaymentMethodsCard() {
                   : connectingConnected
                     ? "Actualizar credenciales"
                     : "Conectar MODO"}
+              </Button>
+            </>
+          ) : connectKey === "nave" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-success">
+                  <Check size={16} /> Nave está conectado. Para cambiar algo, cargá
+                  todos los datos de nuevo.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá las credenciales que te dio Nave (Integraciones) y el ID de
+                  punto de venta. Sandbox y producción usan credenciales distintas.
+                  Se guardan cifradas del lado del servidor.
+                </p>
+              )}
+              <Input
+                label="Client ID"
+                name="nave_client_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveClientId}
+                onChange={(e) => setNaveClientId(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID de Nave"}
+              />
+              <Input
+                label="Client Secret"
+                type="password"
+                name="nave_client_secret"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveClientSecret}
+                onChange={(e) => setNaveClientSecret(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret de Nave"}
+              />
+              <Input
+                label="ID de punto de venta (QR y link)"
+                name="nave_pos_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={navePosId}
+                onChange={(e) => setNavePosId(e.target.value)}
+                placeholder="pos_id que te dio Nave"
+              />
+              <Input
+                label="Terminales Nave Point (opcional)"
+                name="nave_point_pos_ids"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={navePointIds}
+                onChange={(e) => setNavePointIds(e.target.value)}
+                placeholder="Caja 1: id-de-la-terminal, Caja 2: otro-id"
+                hint="ID de punto de venta de cada terminal (Nave › Integraciones › Sistema de gestión), separados por coma."
+              />
+              <Input
+                label="Audience (opcional)"
+                name="nave_audience"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveAudience}
+                onChange={(e) => setNaveAudience(e.target.value)}
+                placeholder="Sólo si Nave te dio uno distinto al estándar"
+              />
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">URL de notificaciones para Nave</p>
+                <p className="mt-1">
+                  Pasásela a Nave al pedir las credenciales (una para sandbox y otra
+                  para producción): así nos avisan cada pago al instante.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1 text-[11px]">
+                    {NAVE_WEBHOOK_URL}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      navigator.clipboard
+                        .writeText(NAVE_WEBHOOK_URL)
+                        .then(() => toast({ title: "URL copiada", variant: "success" }))
+                        .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
+                    }
+                  >
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConnEnv("prod")}
+                    className={
+                      connEnv === "prod"
+                        ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                    }
+                  >
+                    Producción (cobros reales)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConnEnv("test")}
+                    className={
+                      connEnv === "test"
+                        ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                    }
+                  >
+                    Prueba (sandbox)
+                  </button>
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                disabled={
+                  connect.isPending ||
+                  naveClientId.trim().length < 6 ||
+                  naveClientSecret.trim().length < 6 ||
+                  navePosId.trim().length < 4
+                }
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "nave",
+                    secrets: {
+                      client_id: naveClientId.trim(),
+                      client_secret: naveClientSecret.trim(),
+                      pos_id: navePosId.trim(),
+                      ...(navePointIds.trim() ? { point_pos_ids: navePointIds.trim() } : {}),
+                      ...(naveAudience.trim() ? { audience: naveAudience.trim() } : {}),
+                    },
+                  })
+                }
+              >
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar credenciales"
+                    : "Conectar Nave"}
               </Button>
             </>
           ) : connectKey === "payway" ? (
@@ -1015,13 +1210,13 @@ function PaymentMethodRow({
   onOpenPlans,
   onSaveEnabled,
   onSaveSurcharge,
-  mpConnected = false,
+  parentConnected = false,
 }: {
   provider: Provider;
   method: Method | undefined;
   plans: PlanForUpgrade[];
-  // Conexión de la fila de Mercado Pago (para medios que la reutilizan: Point).
-  mpConnected?: boolean;
+  // Conexión de la fila de la marca (para canales Point que la reutilizan).
+  parentConnected?: boolean;
   // Features activas del tenant. undefined mientras carga (optimista: no bloquea).
   features: Record<string, boolean> | undefined;
   isOpen: boolean;
@@ -1033,9 +1228,8 @@ function PaymentMethodRow({
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  const connected = USES_MP_CONNECTION.has(p.key)
-    ? mpConnected
-    : Boolean(m?.config?.connected);
+  const parent = USES_CONNECTION_OF[p.key];
+  const connected = parent ? parentConnected : Boolean(m?.config?.connected);
   const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
   const info = PROVIDER_INFO[p.key];
   // Medios con grid de planes: el recargo se configura ahí, no en la fila.
@@ -1043,7 +1237,7 @@ function PaymentMethodRow({
   // Point: cuotas/recargo se resuelven en el lector → sin input de recargo.
   // Con grid de planes, el recargo vive en el grid. El resto (modo/pagos360/
   // payway y manuales) usa el % plano del medio, que el POS aplica al cobrar.
-  const hideSurcharge = hasPlans || USES_MP_CONNECTION.has(p.key);
+  const hideSurcharge = hasPlans || Boolean(parent);
 
   // Gating por plan. Optimista mientras `features` es undefined (no parpadea).
   // Sólo gateamos medios IMPLEMENTADOS (no `soon`): ahí el switch se podía
@@ -1135,17 +1329,17 @@ function PaymentMethodRow({
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock size={13} /> Próximamente
             </span>
-          ) : USES_MP_CONNECTION.has(p.key) ? (
+          ) : parent ? (
             connected ? (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
-                <Check size={13} /> Vía Mercado Pago
+                <Check size={13} /> Vía {parent.name}
               </span>
             ) : (
               <span
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                title="Conectá Mercado Pago para usar Point"
+                title={`Conectá ${parent.name} para usar ${p.name}`}
               >
-                <Link2 size={13} /> Requiere conectar MP
+                <Link2 size={13} /> Requiere conectar {parent.name}
               </span>
             )
           ) : (
@@ -1289,7 +1483,7 @@ function PaymentMethodRow({
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock size={13} /> Próximamente
               </span>
-            ) : USES_MP_CONNECTION.has(p.key) ? (
+            ) : parent ? (
               <span
                 className={
                   connected
@@ -1299,11 +1493,11 @@ function PaymentMethodRow({
               >
                 {connected ? (
                   <>
-                    <Check size={13} /> Vía Mercado Pago
+                    <Check size={13} /> Vía {parent.name}
                   </>
                 ) : (
                   <>
-                    <Link2 size={13} /> Requiere conectar MP
+                    <Link2 size={13} /> Requiere conectar {parent.name}
                   </>
                 )}
               </span>

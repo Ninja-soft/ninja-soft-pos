@@ -16,7 +16,7 @@ describe("mail de registro para Nave", () => {
     expect(m.body).toMatch(/pos_id/);
     expect(m.body).toMatch(/Nave Point/);
     expect(m.mailto.startsWith("mailto:integraciones@navenegocios.com?subject=")).toBe(true);
-    expect(m.text).not.toContain("—");
+    expect(m.text).not.toContain(String.fromCharCode(0x2014));
   });
 
   it("sin nombre cae en un genérico", () => {

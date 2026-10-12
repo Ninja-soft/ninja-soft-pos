@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   TENDERS,
   TENDER_BY_ID,
+  checkoutSections,
   groupTenders,
+  normalizeTenderId,
   pinnedTenders,
   resolveTenders,
   type ProviderStatus,
   type TenderContext,
 } from "@/lib/pos/tenders";
 import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
+import { availableCardBrands, cardBrandByKey, plansForCard } from "@/lib/pos/cardBrands";
 
 const row = (provider_key: string, connected = true, enabled = true): ProviderStatus => ({
   provider_key,
@@ -65,7 +68,7 @@ describe("registro de tenders", () => {
 
 describe("disponibilidad", () => {
   it("sin configuración ofrece sólo los medios manuales", () => {
-    expect(ids(ctx())).toEqual(["cash", "transfer", "card:debit", "card:credit"]);
+    expect(ids(ctx())).toEqual(["cash", "transfer", "card"]);
   });
 
   it("un proveedor QR necesita estar habilitado, conectado y en el plan", () => {
@@ -93,9 +96,9 @@ describe("disponibilidad", () => {
 
   it("la tarjeta manual aparece si algún proveedor de tarjeta está habilitado y permitido", () => {
     const providers = [row("cash"), row("fiserv", false)];
-    expect(ids(ctx({ providers }))).toContain("card:credit");
-    expect(ids(ctx({ providers, features: { fiserv: false } }))).not.toContain("card:credit");
-    expect(ids(ctx({ providers: [row("cash")] }))).not.toContain("card:debit");
+    expect(ids(ctx({ providers }))).toContain("card");
+    expect(ids(ctx({ providers, features: { fiserv: false } }))).not.toContain("card");
+    expect(ids(ctx({ providers: [row("cash")] }))).not.toContain("card");
   });
 
   it("vale y cuenta corriente dependen del cliente, el saldo y el plan", () => {
@@ -175,9 +178,76 @@ describe("preferencias del negocio", () => {
   });
 
   it("fija efectivo y el primer cobro electrónico por defecto", () => {
-    expect(pinnedTenders(all).map((t) => t.id)).toEqual(["cash", "mercadopago:qr", "card:debit"]);
+    expect(pinnedTenders(all).map((t) => t.id)).toEqual(["cash", "mercadopago:qr", "card"]);
     expect(pinnedTenders(all, { pinned: ["nave:qr", "payway:qr", "cash"] }).map((t) => t.id)).toEqual(
       ["nave:qr", "cash"],
     );
+  });
+
+  it("traduce los ids viejos de la tarjeta manual (débito/crédito) a Tarjeta en posnet", () => {
+    expect(normalizeTenderId("card:debit")).toBe("card");
+    expect(normalizeTenderId("card:credit")).toBe("card");
+    expect(normalizeTenderId("cash")).toBe("cash");
+    expect(pinnedTenders(all, { pinned: ["card:debit", "card:credit"] }).map((t) => t.id)).toEqual(["card"]);
+    expect(groupTenders(all, { hidden: ["card:credit"] }).map((g) => g.key)).not.toContain("card");
+  });
+});
+
+describe("selector de la hoja de cobro", () => {
+  const all = resolveTenders(
+    ctx({ providers: [row("cash"), row("transfer"), row("mercadopago"), row("fiserv"), row("nave")] }),
+  );
+
+  it("sin preferencias es igual al agrupado por medio", () => {
+    expect(checkoutSections(all).map((s) => s.key)).toEqual(groupTenders(all).map((s) => s.key));
+  });
+
+  it("los favoritos van primero, en su orden, y no se repiten en su grupo", () => {
+    const s = checkoutSections(all, {}, { favorites: ["mercadopago:qr", "cash", "inexistente"] });
+    expect(s[0]?.key).toBe("favorites");
+    expect(s[0]?.tenders.map((t) => t.id)).toEqual(["mercadopago:qr", "cash"]);
+    expect(s.map((x) => x.key)).not.toContain("cash");
+    expect(s.find((x) => x.key === "mercadopago")?.tenders.map((t) => t.id)).not.toContain("mercadopago:qr");
+  });
+
+  it("un favorito oculto en el negocio no aparece", () => {
+    const s = checkoutSections(all, { hidden: ["cash"] }, { favorites: ["cash"] });
+    expect(s.map((x) => x.key)).not.toContain("favorites");
+  });
+
+  it("oculta grupos pero nunca deja la hoja vacía", () => {
+    const keys = checkoutSections(all, {}, { hiddenGroups: ["transfer", "nave"] }).map((s) => s.key);
+    expect(keys).toEqual(["cash", "card", "mercadopago"]);
+    const everything = ["cash", "transfer", "card", "mercadopago", "nave"];
+    expect(checkoutSections(all, {}, { hiddenGroups: everything }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("tarjeta en posnet", () => {
+  const plans = [
+    { id: "v1", base: "credito", brand: "visa", installments: 1 },
+    { id: "v6", base: "credito", brand: "visa", installments: 6 },
+    { id: "v3", base: "credito", brand: "visa", installments: 3 },
+    { id: "m3", base: "credito", brand: "master", installments: 3 },
+    { id: "any", base: "credito", brand: null, installments: 12 },
+    { id: "vd", base: "debito", brand: "visa", installments: 1 },
+  ];
+
+  it("ofrece las entidades con planes cargados y siempre Otra", () => {
+    expect(availableCardBrands(plans).map((b) => b.key)).toEqual(["visa", "master", "other"]);
+    expect(availableCardBrands([]).map((b) => b.key)).toContain("amex");
+  });
+
+  it("filtra los planes por entidad y tipo, ordenados por cuotas", () => {
+    expect(plansForCard(plans, "visa", "credit").map((p) => p.id)).toEqual(["v1", "v3", "v6", "any"]);
+    expect(plansForCard(plans, "master", "credit").map((p) => p.id)).toEqual(["m3", "any"]);
+    expect(plansForCard(plans, "visa", "debit").map((p) => p.id)).toEqual(["vd"]);
+    expect(plansForCard(plans, null, "credit").map((p) => p.id)).toEqual(["any"]);
+  });
+
+  it("Maestro es sólo débito y Amex sólo crédito", () => {
+    expect(cardBrandByKey("maestro")?.kinds).toEqual(["debit"]);
+    expect(cardBrandByKey("amex")?.kinds).toEqual(["credit"]);
+    expect(cardBrandByKey("nada")).toBeNull();
   });
 });

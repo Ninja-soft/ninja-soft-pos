@@ -109,7 +109,7 @@ test.describe("pos", () => {
     await cartWithProduct(page);
     const sheet = await openCheckout(page);
     await tender(sheet, "Efectivo");
-    await sheet.getByRole("button", { name: "½", exact: true }).click();
+    await sheet.getByRole("radio", { name: "½", exact: true }).click();
     await sheet.getByRole("button", { name: "Exacto" }).click();
     await sheet.getByRole("button", { name: /^Agregar pago/ }).click();
     await expect(sheet.getByText(/Resta \$/).first()).toBeVisible();

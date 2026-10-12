@@ -33,7 +33,11 @@ export interface CheckoutPayment {
   method: SaleMethod;
   amount: number;
   reference?: string;
-  card_voucher?: { lote: string; cupon: string; autorizacion: string };
+  /**
+   * payments.card_voucher (jsonb). `marca` y `ultimos4` los suma la tarjeta en
+   * posnet (opcionales; el ticket sigue leyendo lote/cupón/autorización).
+   */
+  card_voucher?: { lote: string; cupon: string; autorizacion: string; marca?: string; ultimos4?: string };
 }
 
 /** Resultado aprobado de un cobro electrónico (QR / link / Point). */

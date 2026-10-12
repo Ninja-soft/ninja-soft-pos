@@ -261,3 +261,5 @@ Si el cambio afecta POS, internal, reportes o configuración, el control es bloq
 | Modal | `Modal` con `footer` para las acciones (hoja inferior en mobile). |
 
 Reglas: lo seleccionado se marca con **relleno neutro elevado** (`choiceClass` o las clases `choice-on` + `choice-check`: relleno tonal del tema, texto de primer plano e insignia de check con el fuego Ninja en la esquina; `choice-on` solo para pastillas compactas o cuando ya hay `ChoiceDot`), nunca con borde o ring de color ni tinte marrón de flame; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).
+
+Hoja de cobro (ADR-042): tiles y botones `rounded-lg`, la hoja `rounded-xl`; un único color sólido en el CTA, montos en `text-foreground` (nada de `price-hl` ni texto en degradado); logos de medios con su fondo transparente vía `TenderLogo` (sin placa blanca). Miniaturas de diseño: wireframes en tonos del tema (`bg-foreground/[x]`) con un solo acento mínimo para el botón de cobro.

@@ -15,6 +15,7 @@ export function PosSheet({
   size = "md",
   hideClose,
   onRequestClose,
+  focusContainer,
   className,
   style,
   children,
@@ -27,6 +28,12 @@ export function PosSheet({
   hideClose?: boolean;
   /** Si se pasa, cerrar (Esc, afuera, X) llama a esto en vez de cerrar. */
   onRequestClose?: () => void;
+  /**
+   * Al abrir, el foco va al contenedor y no al primer botón (evita que el
+   * primer medio de cobro aparezca con el anillo de foco como si estuviera
+   * elegido). Tab sigue recorriendo la hoja desde el principio.
+   */
+  focusContainer?: boolean;
   className?: string;
   style?: React.CSSProperties;
   children: React.ReactNode;
@@ -44,6 +51,14 @@ export function PosSheet({
         <Dialog.Content
           onEscapeKeyDown={intercept}
           onPointerDownOutside={intercept}
+          onOpenAutoFocus={
+            focusContainer
+              ? (e) => {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLElement | null)?.focus();
+                }
+              : undefined
+          }
           style={style}
           className={cn(
             "pos-sheet fixed z-50 flex flex-col overflow-hidden bg-popover text-popover-foreground shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.6)] outline-none",

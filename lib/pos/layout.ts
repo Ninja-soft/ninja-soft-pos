@@ -36,6 +36,48 @@ const paymentsSchema = z.object({
   quickCash: z.array(z.number().positive().max(10_000_000)).max(6),
 });
 
+// Pantalla de cobro (CheckoutSheet). FLAG-OPERATIVO como el resto del diseño:
+// sin gating de plan. Sólo ordena y muestra: nunca habilita un medio.
+export const CHECKOUT_LAYOUTS = ["two_columns", "compact_list", "keypad_first", "big_buttons"] as const;
+export type CheckoutLayout = (typeof CHECKOUT_LAYOUTS)[number];
+export const CHECKOUT_FAVORITES_MAX = 6;
+
+const checkoutSchema = z.object({
+  /** Distribución de la hoja de cobro. */
+  layout: z.enum(CHECKOUT_LAYOUTS),
+  /** Ids de tenders fijados arriba de todo ("Favoritos"). */
+  favorites: z.array(z.string().max(40)).max(CHECKOUT_FAVORITES_MAX),
+  /** Grupos (TenderGroupKey) que no se muestran en el selector. */
+  hiddenGroups: z.array(z.string().max(40)).max(12),
+  /** Marcas con varios canales: fila con los canales como segmentos. */
+  channelChips: z.boolean(),
+  density: z.enum(["compact", "comfortable"]),
+});
+export type CheckoutPrefs = z.infer<typeof checkoutSchema>;
+
+export const CHECKOUT_LAYOUT_INFO: Record<CheckoutLayout, { name: string; tagline: string; bestFor: string }> = {
+  two_columns: {
+    name: "Dos columnas",
+    tagline: "Medios a la izquierda y el cobro a la derecha",
+    bestFor: "Computadora o notebook en el mostrador",
+  },
+  compact_list: {
+    name: "Lista compacta",
+    tagline: "Una sola columna, cada medio en una fila",
+    bestFor: "Tablets y celulares",
+  },
+  keypad_first: {
+    name: "Teclado primero",
+    tagline: "Teclado numérico grande y montos rápidos",
+    bestFor: "Kioscos y cajas con mucho efectivo",
+  },
+  big_buttons: {
+    name: "Botones grandes",
+    tagline: "Medios en botones grandes, fáciles de tocar",
+    bestFor: "Pantallas táctiles",
+  },
+};
+
 // Forma COMPLETA (resuelta). Lo guardado es un subconjunto (override).
 export const posLayoutSchema = z.object({
   preset: z.enum(POS_PRESETS),
@@ -53,6 +95,7 @@ export const posLayoutSchema = z.object({
   payments: paymentsSchema,
   keypad: z.boolean(),
   tipPresets: z.array(z.number().min(0).max(100)).max(5),
+  checkout: checkoutSchema,
 });
 export type PosLayout = z.infer<typeof posLayoutSchema>;
 export type PosLayoutOverride = Partial<PosLayout>;
@@ -73,6 +116,7 @@ const BASE: PosLayout = {
   payments: { order: [], hidden: [], pinned: [], quickCash: [] },
   keypad: false,
   tipPresets: [10, 15, 20],
+  checkout: { layout: "two_columns", favorites: [], hiddenGroups: [], channelChips: true, density: "comfortable" },
 };
 
 // Defaults de cada preset: el dueño elige un preset y después ajusta encima.
@@ -95,6 +139,7 @@ export const PRESET_DEFAULTS: Record<PosPreset, PosLayout> = {
     categoryBar: "hidden",
     keypad: true,
     tipPresets: [],
+    checkout: { ...BASE.checkout, layout: "keypad_first", density: "compact" },
   },
 };
 
@@ -153,16 +198,18 @@ export function sanitizeLayout(raw: unknown, opts: { allowQuickKeys?: boolean } 
     if (!(key in src)) continue;
     if (key === "quickKeys" && opts.allowQuickKeys === false) continue;
     const field = posLayoutSchema.shape[key];
-    if (key === "payments") {
-      // payments se valida por sub-campo para no perder todo por uno malo.
-      const p = src.payments;
-      if (!p || typeof p !== "object") continue;
+    if (key === "payments" || key === "checkout") {
+      // Sub-objetos: se validan por sub-campo para no perder todo por uno malo.
+      const p = src[key];
+      if (!p || typeof p !== "object" || Array.isArray(p)) continue;
+      const shape: Record<string, z.ZodTypeAny> = key === "payments" ? paymentsSchema.shape : checkoutSchema.shape;
       const pv: Record<string, unknown> = {};
-      for (const sub of Object.keys(paymentsSchema.shape) as (keyof typeof paymentsSchema.shape)[]) {
-        const r = paymentsSchema.shape[sub].safeParse((p as Record<string, unknown>)[sub]);
+      for (const sub of Object.keys(shape)) {
+        if (!(sub in p)) continue;
+        const r = shape[sub]!.safeParse((p as Record<string, unknown>)[sub]);
         if (r.success) pv[sub] = r.data;
       }
-      out.payments = pv;
+      out[key] = pv;
       continue;
     }
     const r = field.safeParse(src[key]);
@@ -190,7 +237,12 @@ export function resolveLayout(business: unknown, user?: unknown): PosLayout {
     ...(b.payments ?? {}),
     ...(u.payments ?? {}),
   };
-  return { ...base, ...b, ...u, preset, payments, quickKeys: b.quickKeys ?? base.quickKeys };
+  const checkout = {
+    ...base.checkout,
+    ...(b.checkout ?? {}),
+    ...(u.checkout ?? {}),
+  };
+  return { ...base, ...b, ...u, preset, payments, checkout, quickKeys: b.quickKeys ?? base.quickKeys };
 }
 
 /** ¿El layout necesita la feature pos_quick_keys_pro? (espejo del trigger). */

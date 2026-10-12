@@ -4,14 +4,17 @@ import { cn } from "@/lib/utils/cn";
 export function Spinner({
   size = 20,
   className,
+  label = "Cargando",
 }: {
   size?: number;
   className?: string;
+  /** Nombre accesible (lo anuncia el lector de pantalla). */
+  label?: string;
 }) {
   return (
     <span
       role="status"
-      aria-label="Cargando"
+      aria-label={label}
       className={cn(
         "inline-block animate-spin rounded-full border-2 border-muted-foreground/30 border-t-ninja-flameSoft",
         className,
@@ -22,10 +25,10 @@ export function Spinner({
 }
 
 // Spinner centrado para bloques/áreas que están cargando.
-export function SpinnerBlock({ className }: { className?: string }) {
+export function SpinnerBlock({ className, label }: { className?: string; label?: string }) {
   return (
     <div className={cn("flex items-center justify-center py-10", className)}>
-      <Spinner size={24} />
+      <Spinner size={24} label={label} />
     </div>
   );
 }

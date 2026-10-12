@@ -4,8 +4,9 @@
 // Vitest (tests/unit/productImage.test.ts). Sin imports: corre en Deno y Node.
 //
 // Convención de la galería (product_images):
-//   - path = "<tenant>/<product>/<uuid>.webp" → archivo propio en el bucket
-//     público product-images (lo que sube el dueño o copia esta Edge).
+//   - path = "<tenant>/<product>/<uuid>.<ext>" → archivo propio en el bucket
+//     público product-images (lo que sube el dueño, en WebP, o copia la
+//     Edge, en el formato de origen).
 //   - path = ""                                → foto EXTERNA (URL del maestro
 //     del catálogo) pendiente de copiar. Se muestra igual; nunca se intenta
 //     borrar del bucket.
@@ -15,9 +16,37 @@ export const PRODUCT_IMAGES_BUCKET = "product-images";
 export const MAX_SOURCE_BYTES = 8 * 1024 * 1024; // 8 MB
 export const MAX_IMAGE_WIDTH = 900;
 
-/** Path canónico de una foto propia: tenant/product/uuid.webp. */
-export function productImagePath(tenantId: string, productId: string, uuid: string): string {
-  return `${tenantId}/${productId}/${uuid}.webp`;
+/**
+ * Path canónico de una foto propia: tenant/product/uuid.<ext>. Lo que sube
+ * el dueño se convierte a WebP en el navegador; la copia de Tiendita
+ * conserva el formato de origen (ver tiendita_copy_image), de ahí `ext`.
+ */
+export function productImagePath(
+  tenantId: string,
+  productId: string,
+  uuid: string,
+  ext = "webp",
+): string {
+  return `${tenantId}/${productId}/${uuid}.${ext}`;
+}
+
+const IMAGE_EXT: Record<string, string> = {
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/avif": "avif",
+};
+
+/** content-type canónico (image/jpg → image/jpeg, sin parámetros). */
+export function normalizeImageType(ct: string): string {
+  const t = ct.split(";")[0]!.trim().toLowerCase();
+  return t === "image/jpg" ? "image/jpeg" : t;
+}
+
+/** Extensión de archivo para un content-type de imagen aceptado. */
+export function imageExtension(ct: string): string {
+  return IMAGE_EXT[normalizeImageType(ct)] ?? "bin";
 }
 
 /** true si la fila de la galería apunta a un archivo propio del bucket. */

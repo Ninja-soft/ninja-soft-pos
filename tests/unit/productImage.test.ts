@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   fitWidth,
+  imageExtension,
   isAllowedSourceUrl,
   isExternalImage,
   isImageContentType,
   isStoredImagePath,
+  normalizeImageType,
   productImagePath,
 } from "@/supabase/functions/_shared/productImage";
 
@@ -14,6 +16,15 @@ const P = "22222222-2222-2222-2222-222222222222";
 describe("productImage (copia de foto de Tiendita)", () => {
   it("arma el path canónico tenant/product/uuid.webp", () => {
     expect(productImagePath(T, P, "abc")).toBe(`${T}/${P}/abc.webp`);
+  });
+
+  it("la copia conserva la extensión del formato de origen", () => {
+    expect(productImagePath(T, P, "abc", "jpg")).toBe(`${T}/${P}/abc.jpg`);
+    expect(imageExtension("image/jpeg")).toBe("jpg");
+    expect(imageExtension("image/jpg")).toBe("jpg");
+    expect(imageExtension("image/PNG; charset=binary")).toBe("png");
+    expect(imageExtension("image/webp")).toBe("webp");
+    expect(normalizeImageType("image/jpg")).toBe("image/jpeg");
   });
 
   it("distingue foto propia del bucket vs externa pendiente", () => {

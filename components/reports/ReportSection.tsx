@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChartColumn, ImageDown, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { EChart, type EChartHandle, type OptionBuilder, type ChartSummary } from "@/components/charts/EChart";
-import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
+import { Segmented, type SegmentedOption } from "@/components/ui/Segmented";
 import { Spinner } from "@/components/ui/Spinner";
 
 type View = "chart" | "table";
@@ -121,8 +121,8 @@ export function ReportSection<T extends string = string>({
   const canExport = view === "chart" && !loading && !spec.empty;
   const showToolbar = view === "chart" && ((chartTypes?.length ?? 0) > 1 || !!controls);
   const viewToggle = (
-    <SegmentedControl
-      ariaLabel={`Vista de ${title}`}
+    <Segmented
+      aria-label={`Vista de ${title}`}
       value={view}
       onChange={setView}
       options={VIEW_OPTIONS}
@@ -170,8 +170,8 @@ export function ReportSection<T extends string = string>({
         )}
       >
         {view === "chart" && chartTypes && chartTypes.length > 1 && (
-          <SegmentedControl
-            ariaLabel={`Tipo de gráfico de ${title}`}
+          <Segmented
+            aria-label={`Tipo de gráfico de ${title}`}
             value={chartType}
             onChange={setChartType}
             options={chartTypes}

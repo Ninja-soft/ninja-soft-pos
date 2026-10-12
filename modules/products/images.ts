@@ -1,6 +1,7 @@
 // Fotos de producto (galería product_images + bucket público product-images).
 // Conversión a WebP client-side (sharp no corre en Edge). Path canónico
-// tenant/product/uuid.webp, el mismo que usa la Edge tiendita_copy_image.
+// tenant/product/uuid.webp (la Edge tiendita_copy_image usa el mismo path con
+// la extensión del formato de origen).
 import { createClient } from "@/lib/supabase/client";
 import { resizeToWebp } from "@/lib/utils/image";
 import {

@@ -4,6 +4,7 @@ import { Package } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { formatCurrency } from "@/lib/utils/format";
 import { useServicePacks } from "@/modules/packs/hooks";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // Vender un pack desde el POS (H41): lista los packs activos del tenant; al
 // elegir uno se agrega como ítem de venta por su precio (onPick). El cliente es
@@ -30,7 +31,7 @@ export function SellPackModal({
     >
       <div className="space-y-2">
         {isLoading ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+          <SpinnerBlock className="py-6" label="Cargando pack" />
         ) : (packs ?? []).length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
             No hay paquetes activos. Creálos en Configuración → Paquetes.

@@ -6,7 +6,7 @@ import {
   QRCodeReader,
   RGBLuminanceSource,
 } from "@zxing/library";
-import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
+import { encodeQr, qrSvgDataUrl, qrSvgPath } from "@/lib/qr/qrcode";
 
 // Renderiza la matriz a luminancia (escala 4, borde 4) y la decodifica con
 // zxing: si un lector real la lee, el encoder es correcto.
@@ -84,5 +84,18 @@ describe("qrSvgPath", () => {
     expect(d.match(/M/g)?.length).toBe(dark);
     // El módulo (0,0) es parte de un patrón de búsqueda (oscuro).
     expect(d.startsWith("M4 4h1v1h-1z")).toBe(true);
+  });
+});
+
+describe("qrSvgDataUrl", () => {
+  it("devuelve un SVG local (sin servicios externos) con el path del QR", () => {
+    const url = qrSvgDataUrl("Mi negocio | 0001-00000042 | $ 1.234,00");
+    expect(url.startsWith("data:image/svg+xml;charset=utf-8,")).toBe(true);
+    const svg = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+    expect(svg).toContain('<path d="M2 2h1v1h-1z');
+  });
+
+  it("texto demasiado largo devuelve cadena vacía", () => {
+    expect(qrSvgDataUrl("x".repeat(5000))).toBe("");
   });
 });

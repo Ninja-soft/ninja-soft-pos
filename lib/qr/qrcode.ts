@@ -399,3 +399,24 @@ export function qrSvgPath(qr: QrMatrix, border = 4): string {
   }
   return parts.join("");
 }
+
+/**
+ * QR como data URL de un SVG (fondo blanco, módulos negros, bordes nítidos).
+ * Sirve donde hace falta un `src` de <img> (tickets, plantillas HTML,
+ * exportar a PNG) sin pedir la imagen a un servicio externo. Si el texto no
+ * entra en un QR devuelve "" (el llamador decide no mostrar nada).
+ */
+export function qrSvgDataUrl(text: string, ecc: QrEcc = "M", border = 2): string {
+  let qr: QrMatrix;
+  try {
+    qr = encodeQr(text, ecc);
+  } catch {
+    return "";
+  }
+  const dim = qr.size + border * 2;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges">` +
+    `<rect width="${dim}" height="${dim}" fill="#fff"/>` +
+    `<path d="${qrSvgPath(qr, border)}" fill="#000"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}

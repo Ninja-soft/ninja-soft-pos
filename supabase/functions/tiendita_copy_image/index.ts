@@ -1,12 +1,18 @@
 // =============================================================================
 // Edge Function: tiendita_copy_image — copia la foto de un producto importado
-// desde Tiendita al bucket product-images del TENANT, como WebP.
+// desde Tiendita al bucket product-images del TENANT.
 //
 // Contexto (bug "al importar no lleva la foto / la borra"): el import dejaba la
 // URL del maestro del catálogo como products.image_url (hotlink) y sin fila en
 // product_images. Ahora el RPC import_catalog_product crea la fila con
 // path '' (externa) y esta función la reemplaza por una copia propia:
-//   <tenant>/<product>/<uuid>.webp  → product_images.path/url + products.image_url
+//   <tenant>/<product>/<uuid>.<ext>  → product_images.path/url + products.image_url
+//
+// Formato: se CONSERVA el de origen con su content-type y extensión. imagescript
+// (deno.land/x 1.3.0 y 1.4.0) no trae encoder WebP en Deno (sólo PNG/JPEG; el
+// encodeWEBP del paquete npm usa un binario nativo de Node que no corre en
+// Edge), así que no se convierte. JPEG/PNG más anchos que 900px se achican y
+// se re-codifican en su mismo formato; WebP/GIF/AVIF se copian tal cual.
 //
 // Seguridad:
 //   • verify_jwt = true. El tenant sale SIEMPRE del JWT (current_tenant_id).
@@ -16,9 +22,9 @@
 //     y se valida (https, sin hosts privados) antes de descargar (anti SSRF).
 //   • Descarga con timeout y tope de tamaño; sólo content-type de imagen.
 //
-// Degradación: si algo falla (origen caído, formato no soportado, sin encoder
-// WebP), responde { ok: false, reason } con 200 y la foto externa QUEDA: el
-// producto nunca se queda sin foto por culpa de la copia.
+// Degradación: si algo falla (origen caído, subida rechazada), responde
+// { ok: false, reason } con 200 y la foto externa QUEDA: el producto nunca se
+// queda sin foto por culpa de la copia.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
@@ -26,9 +32,11 @@ import {
   PRODUCT_IMAGES_BUCKET,
   MAX_SOURCE_BYTES,
   fitWidth,
+  imageExtension,
   isAllowedSourceUrl,
   isExternalImage,
   isImageContentType,
+  normalizeImageType,
   productImagePath,
 } from "../_shared/productImage.ts";
 
@@ -61,7 +69,7 @@ async function download(url: string): Promise<{ bytes: Uint8Array; type: string 
     if (len > MAX_SOURCE_BYTES) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_SOURCE_BYTES) return null;
-    return { bytes: buf, type: type.split(";")[0]!.trim().toLowerCase() };
+    return { bytes: buf, type: normalizeImageType(type) };
   } catch {
     return null;
   } finally {
@@ -69,22 +77,20 @@ async function download(url: string): Promise<{ bytes: Uint8Array; type: string 
   }
 }
 
-// Convierte a WebP (máx 900px de ancho). Si el origen ya es WebP chico, se
-// usa tal cual. Devuelve null si no se puede producir WebP.
-async function toWebp(src: { bytes: Uint8Array; type: string }): Promise<Uint8Array | null> {
+// Achica JPEG/PNG a 900px de ancho como máximo, en su mismo formato. El resto
+// (o si el decode falla) se copia tal cual: mejor la foto original que ninguna.
+async function prepare(src: { bytes: Uint8Array; type: string }): Promise<Uint8Array> {
+  if (src.type !== "image/jpeg" && src.type !== "image/png") return src.bytes;
   try {
     const img = await Image.decode(src.bytes);
     const { width, height } = fitWidth(img.width, img.height);
-    if (src.type === "image/webp" && width === img.width) return src.bytes;
-    if (width !== img.width) img.resize(width, height);
-    // deno-lint-ignore no-explicit-any
-    const enc = (img as any).encodeWEBP;
-    if (typeof enc !== "function") return src.type === "image/webp" ? src.bytes : null;
-    const out = await enc.call(img, 82);
-    return out instanceof Uint8Array && out.byteLength > 0 ? out : null;
+    if (width === img.width) return src.bytes;
+    img.resize(width, height);
+    const out = src.type === "image/png" ? await img.encode(1) : await img.encodeJPEG(82);
+    return out.byteLength > 0 ? out : src.bytes;
   } catch (e) {
-    console.warn("[tiendita_copy_image] decode/encode", String(e));
-    return src.type === "image/webp" ? src.bytes : null;
+    console.warn("[tiendita_copy_image] resize", String(e));
+    return src.bytes;
   }
 }
 
@@ -154,13 +160,17 @@ Deno.serve(async (req: Request) => {
 
   const downloaded = await download(source);
   if (!downloaded) return soft("download_failed", source);
-  const webp = await toWebp(downloaded);
-  if (!webp) return soft("webp_unavailable", downloaded.type);
+  const bytes = await prepare(downloaded);
 
-  const path = productImagePath(tenantId, productId, crypto.randomUUID());
+  const path = productImagePath(
+    tenantId,
+    productId,
+    crypto.randomUUID(),
+    imageExtension(downloaded.type),
+  );
   const up = await admin.storage
     .from(PRODUCT_IMAGES_BUCKET)
-    .upload(path, webp, { contentType: "image/webp", upsert: false });
+    .upload(path, bytes, { contentType: downloaded.type, upsert: false });
   if (up.error) return soft("upload_failed", up.error.message);
   const publicUrl = admin.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path).data.publicUrl;
 

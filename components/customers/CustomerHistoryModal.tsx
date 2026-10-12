@@ -15,6 +15,7 @@ import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import type { Customer } from "@/modules/customers/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // Recordatorio manual del próximo turno por WhatsApp (como los links de
 // cumpleaños · BirthdaysModal). El ENVÍO automático queda como follow-up (cron
@@ -103,7 +104,7 @@ export function CustomerHistoryModal({
       className="max-w-lg"
     >
       {isLoading || !data ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" label="Cargando historial" />
       ) : (
         <div className="space-y-5">
           {/* Recompra rápida (H40): repetir la última venta del cliente. Carga

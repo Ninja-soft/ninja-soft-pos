@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Cake, Mail, Phone } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { useBirthdays } from "@/modules/customers/hooks";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const MONTHS = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -50,7 +51,7 @@ export function BirthdaysModal({
 
         <div className="max-h-80 space-y-1 overflow-y-auto">
           {isLoading && (
-            <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" label="Cargando cumpleaños" />
           )}
           {!isLoading && data && data.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">

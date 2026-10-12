@@ -30,7 +30,7 @@ import {
 } from "@/modules/saas/subscriptionBilling";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
+import { SectionHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -471,10 +471,8 @@ export function SubscriptionCard() {
 
   if (isLoading) {
     return (
-      <section className="mt-10">
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <CreditCard size={18} /> Suscripción
-        </Heading>
+      <section>
+        <SectionHeader title="Suscripción" icon={CreditCard} />
         <Card className="mt-3">
           <CardContent className="p-6"><SpinnerBlock className="py-4" /></CardContent>
         </Card>
@@ -484,10 +482,8 @@ export function SubscriptionCard() {
 
   if (!sub) {
     return (
-      <section className="mt-10">
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <CreditCard size={18} /> Suscripción
-        </Heading>
+      <section>
+        <SectionHeader title="Suscripción" icon={CreditCard} />
         <Card className="mt-3">
           <CardContent className="p-6 text-muted-foreground">
             No encontramos tu suscripción. Si creés que es un error, escribinos.
@@ -550,17 +546,16 @@ export function SubscriptionCard() {
   }
 
   return (
-    <section className="mt-10">
-      <Heading as="h2" className="flex items-center gap-2 text-base">
-        <CreditCard size={18} /> Suscripción
-      </Heading>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Gestioná tu plan, tus complementos y tu método de pago.
-      </p>
+    <section>
+      <SectionHeader
+        title="Suscripción"
+        icon={CreditCard}
+        description="Gestioná tu plan, tus complementos y tu método de pago."
+      />
 
       {/* ── Plan actual (hero premium) ── */}
       <Card className="mt-3 overflow-hidden">
-        <div className="bg-[radial-gradient(120%_140%_at_0%_0%,rgba(236,63,23,0.10),transparent_55%)]">
+        <div>
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
@@ -743,7 +738,7 @@ export function SubscriptionCard() {
 
           {aiActive ? (
             // Contratado: estado + acción discreta.
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3.5">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
               <div className="flex min-w-0 items-center gap-3">
                 <AiAvatar src={aiCfg?.image_url} />
                 <div className="min-w-0">
@@ -799,7 +794,7 @@ export function SubscriptionCard() {
             </div>
           ) : (
             // No contratado: venta corta + CTA.
-            <div className="mt-3 rounded-xl bg-ninja-flame/[0.08] p-4">
+            <div className="mt-3 rounded-lg bg-muted/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
                   <AiAvatar src={aiCfg?.image_url} />
@@ -811,7 +806,7 @@ export function SubscriptionCard() {
                       {aiCfg?.commercial_text?.trim() ||
                         "Un asistente que responde sobre tus ventas, tu stock y cómo usar cada función del sistema, desde cualquier pantalla."}
                     </p>
-                    <ul className="mt-2 grid gap-1 text-xs text-ninja-lavender sm:grid-cols-2">
+                    <ul className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                       {[
                         "Consultá tus ventas en lenguaje natural",
                         "Resolvé dudas del sistema al instante",
@@ -873,7 +868,7 @@ export function SubscriptionCard() {
           />
           Opciones de la cuenta
         </summary>
-        <div className="mt-2 space-y-2 rounded-xl border border-border/60 bg-muted/10 p-4">
+        <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-muted/10 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-sm font-medium">Cancelar suscripción</div>
@@ -1094,7 +1089,7 @@ function AiAvatar({ src }: { src?: string }) {
     );
   }
   return (
-    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-gradient text-ninja-voidViolet">
+    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-flame/15 text-ninja-flameSoft">
       <Sparkles size={18} />
     </span>
   );

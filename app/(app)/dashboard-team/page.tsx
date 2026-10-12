@@ -1,13 +1,35 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CreditCard, Palette } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  CalendarClock,
+  CreditCard,
+  Gauge,
+  LayoutTemplate,
+  Palette,
+  Settings,
+  ShoppingCart,
+  Store,
+  UserPlus,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
+import {
+  QuickActions,
+  STATUS_TONE,
+  SummaryTile,
+  UsageMeter,
+  type QuickAction,
+} from "@/components/dashboard-team/OwnerOverview";
 import { NoData } from "@/components/ui/NoData";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -17,6 +39,30 @@ const STATUS_LABELS: Record<string, string> = {
   suspended: "Suspendida",
   cancelled: "Cancelada",
 };
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  manager: "Encargado",
+  cashier: "Cajero",
+  viewer: "Solo lectura",
+};
+
+function fmtDate(s: string): string {
+  return new Date(s).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+// Días restantes (>= 0) hasta una fecha.
+function daysUntil(s: string): number {
+  const ms = new Date(s).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+function inDays(n: number): string {
+  if (n === 0) return "Hoy";
+  return n === 1 ? "En 1 día" : `En ${n} días`;
+}
 
 // Acento de marca del tenant (hex #rrggbb válido) o el flame de NinjaSoft.
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -53,7 +99,7 @@ export default async function DashboardTeamPage() {
 
   if (!membership?.tenants) {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageContainer size="lg">
         <PageHeader eyebrow="Administración" title="Panel del dueño" icon={Building2} />
         <Card className="mt-6">
           <EmptyState
@@ -67,131 +113,261 @@ export default async function DashboardTeamPage() {
             }
           />
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   type Sub = {
     status: string;
     current_period_end: string | null;
+    cancel_at_period_end: boolean | null;
+    is_lifetime: boolean;
     plans: { name: string; key: string } | null;
   };
   const tenant = membership.tenants;
-
-  const { data: subData } = await supabase
-    .from("subscriptions")
-    .select("status, current_period_end, plans(name, key)")
-    .eq("tenant_id", tenant.id)
-    .limit(1);
-  const sub = (subData?.[0] as unknown as Sub) ?? null;
   const isOwner = membership.role === "owner";
+  const canManage = ["owner", "manager"].includes(membership.role);
 
-  // Marca del negocio (logo + acento) para personalizar la card "Negocio".
-  const { data: brandingData } = await supabase
-    .from("tenant_branding")
-    .select("logo_url, accent")
-    .eq("tenant_id", tenant.id)
-    .maybeSingle();
-  const branding = (brandingData as { logo_url: string | null; accent: string | null } | null) ?? null;
+  // Todo lo del resumen va en paralelo: suscripción, marca, gating (features +
+  // límites efectivos del plan) y los conteos de uso.
+  const countActive = (table: "stores" | "products") =>
+    supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenant.id)
+      .is("deleted_at", null);
+  const [subRes, brandingRes, gatingRes, usersRes, storesRes, productsRes] =
+    await Promise.all([
+      supabase
+        .from("subscriptions")
+        .select("status, current_period_end, cancel_at_period_end, is_lifetime, plans(name, key)")
+        .eq("tenant_id", tenant.id)
+        .limit(1),
+      // Marca del negocio (logo + acento) para personalizar el tile "Negocio".
+      supabase
+        .from("tenant_branding")
+        .select("logo_url, accent")
+        .eq("tenant_id", tenant.id)
+        .maybeSingle(),
+      supabase.rpc("gating_summary"),
+      supabase
+        .from("tenant_users")
+        .select("user_id", { count: "exact", head: true })
+        .eq("tenant_id", tenant.id)
+        .eq("status", "active"),
+      countActive("stores"),
+      countActive("products"),
+    ]);
+
+  const sub = (subRes.data?.[0] as unknown as Sub) ?? null;
+  const branding =
+    (brandingRes.data as { logo_url: string | null; accent: string | null } | null) ?? null;
   const accent = brandAccent(branding?.accent);
   const tenantLogo = branding?.logo_url ?? null;
 
+  const gating = (gatingRes.data ?? null) as {
+    features?: Record<string, boolean>;
+    limits?: Record<string, number | null>;
+  } | null;
+  const limit = (k: string): number | null => {
+    const v = gating?.limits?.[k];
+    return v == null ? null : Number(v);
+  };
+  // Sin datos de gating no marcamos nada como bloqueado: el gating real lo
+  // aplica el servidor dentro de cada sección.
+  const hasFeature = (k: string) => (gating?.features ? gating.features[k] === true : true);
+  const used = (r: { count: number | null; error: unknown }) => (r.error ? null : (r.count ?? 0));
+
+  // Próximo hito de la suscripción (cobro, fin de prueba o fin de acceso).
+  const periodEnd =
+    sub?.current_period_end ?? (sub?.status === "trial" ? tenant.trial_ends_at : null);
+  let period: { label: string; value: string; hint: string } | null = null;
+  if (sub?.is_lifetime) {
+    period = { label: "Vencimiento", value: "Sin vencimiento", hint: "Acceso vitalicio, sin cobros" };
+  } else if (periodEnd) {
+    const d = daysUntil(periodEnd);
+    if (sub?.cancel_at_period_end) {
+      period = { label: "Acceso hasta", value: fmtDate(periodEnd), hint: "No se renueva" };
+    } else if (sub?.status === "trial") {
+      period = { label: "Fin de la prueba", value: fmtDate(periodEnd), hint: inDays(d) };
+    } else {
+      period = { label: "Próximo cobro", value: fmtDate(periodEnd), hint: inDays(d) };
+    }
+  }
+
+  const actions: QuickAction[] = [
+    {
+      href: "/pos",
+      title: "Punto de venta",
+      description: "Abrí la caja y empezá a vender.",
+      icon: ShoppingCart,
+    },
+    ...(canManage
+      ? [
+          {
+            href: "#invitar",
+            title: "Invitar usuario",
+            description: "Sumá a alguien a tu equipo con su email.",
+            icon: UserPlus,
+          },
+        ]
+      : []),
+    {
+      href: "/configuracion?seccion=pagos",
+      title: "Medios de pago",
+      description: "Efectivo, tarjetas, billeteras y transferencias.",
+      icon: Wallet,
+    },
+    {
+      href: "/configuracion?seccion=diseno-pos",
+      title: "Diseño del POS",
+      description: "Cómo se ve y se ordena la pantalla de venta.",
+      icon: LayoutTemplate,
+    },
+    {
+      href: "/configuracion?seccion=marca",
+      title: "Marca del negocio",
+      description: "Logo y color para tickets y pantallas.",
+      icon: Store,
+      locked: !hasFeature("personalizacion_marca"),
+    },
+    {
+      href: "/reportes",
+      title: "Reportes",
+      description: "Ventas, productos y caja de un vistazo.",
+      icon: BarChart3,
+    },
+    ...(isOwner
+      ? [
+          {
+            href: "#suscripcion",
+            title: "Suscripción y facturación",
+            description: "Tu plan, complementos y registro de pagos.",
+            icon: CreditCard,
+          },
+        ]
+      : []),
+    {
+      href: "/configuracion?seccion=apariencia",
+      title: "Apariencia",
+      description: "Tema, tipografías y colores de la app.",
+      icon: Palette,
+    },
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+    <PageContainer size="lg">
       <PageHeader
-        eyebrow="Administración"
+        eyebrow="Panel del dueño"
         title={tenant.name}
-        description="Acá administrás tu NinjaPos: equipo, suscripción y configuración."
+        icon={Building2}
+        description="Tu centro de control: negocio, plan, equipo y configuración en un solo lugar."
+        actions={
+          <>
+            <Link href="/pos" className={buttonVariants({ size: "sm" })}>
+              <ShoppingCart size={16} /> Ir al POS
+            </Link>
+            <Link
+              href="/configuracion"
+              className={buttonVariants({ size: "sm", variant: "secondary" })}
+            >
+              <Settings size={16} /> Configuración
+            </Link>
+          </>
+        }
       />
 
-      {/* Negocio — usa el logo y el color de marca del tenant si los cargó. */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <Card
-          className="overflow-hidden border-l-4"
-          style={{ borderLeftColor: accent }}
-        >
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Building2 size={16} style={{ color: accent }} />{" "}
-              <span className="text-sm">Negocio</span>
-            </div>
-            <div className="mt-2 flex items-center gap-3">
-              {tenantLogo ? (
-                <span
-                  className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted"
-                  style={{ borderColor: accent }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={tenantLogo}
-                    alt={tenant.name}
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-              ) : (
-                <span
-                  className="grid h-12 w-12 shrink-0 place-items-center rounded-lg"
-                  style={{ backgroundColor: `${accent}1f`, color: accent }}
-                >
-                  <Building2 size={22} />
-                </span>
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-lg font-semibold">{tenant.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {tenant.industry ?? <NoData />} ·{" "}
-                  {STATUS_LABELS[tenant.status] ?? tenant.status}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Resumen de suscripción para no-dueños (los dueños ven el panel completo
-            abajo, que es interactivo). */}
-        {!isOwner && (
-          <Card>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <CreditCard size={16} /> <span className="text-sm">Suscripción</span>
-              </div>
-              <p className="mt-2 text-lg font-semibold">
-                {sub?.plans?.name ?? "Sin plan"}
+      {/* ── Resumen: negocio, plan y uso del plan ── */}
+      <section aria-label="Resumen" className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <SummaryTile icon={Building2} label="Negocio">
+          <div className="flex items-center gap-3">
+            {tenantLogo ? (
+              <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={tenantLogo} alt={tenant.name} className="h-full w-full object-contain" />
+              </span>
+            ) : (
+              <span
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-lg"
+                style={{ backgroundColor: `${accent}1f`, color: accent }}
+              >
+                <Building2 size={22} aria-hidden />
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="break-words text-lg font-semibold leading-tight">{tenant.name}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {tenant.industry ?? <NoData />}
               </p>
-              <p className="text-sm text-muted-foreground">
-                {sub ? (STATUS_LABELS[sub.status] ?? sub.status) : <NoData />}
-                {sub?.current_period_end
-                  ? ` · vence ${new Date(sub.current_period_end).toLocaleDateString("es-AR")}`
-                  : ""}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </div>
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+            <Badge tone={STATUS_TONE[tenant.status] ?? "neutral"}>
+              {STATUS_LABELS[tenant.status] ?? tenant.status}
+            </Badge>
+            <Badge tone="neutral">Tu rol: {ROLE_LABELS[membership.role] ?? membership.role}</Badge>
+          </div>
+        </SummaryTile>
+
+        <SummaryTile icon={CreditCard} label="Plan">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold leading-tight">{sub?.plans?.name ?? "Sin plan"}</p>
+            {sub && (
+              <Badge tone={STATUS_TONE[sub.status] ?? "neutral"}>
+                {STATUS_LABELS[sub.status] ?? sub.status}
+              </Badge>
+            )}
+          </div>
+          <div className="mt-auto flex items-start gap-2.5 pt-4">
+            <CalendarClock size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+            <div className="min-w-0 text-sm">
+              <p className="text-muted-foreground">{period?.label ?? "Vencimiento"}</p>
+              <p className="font-semibold text-foreground">{period ? period.value : <NoData />}</p>
+              {period && <p className="text-muted-foreground">{period.hint}</p>}
+            </div>
+          </div>
+          {isOwner && (
+            <Link
+              href="#suscripcion"
+              className="mt-4 inline-flex items-center gap-1.5 self-start text-sm font-semibold text-ninja-flameSoft hover:underline"
+            >
+              <Zap size={14} aria-hidden /> Ver o cambiar plan
+            </Link>
+          )}
+        </SummaryTile>
+
+        <SummaryTile icon={Gauge} label="Uso del plan" className="md:col-span-2 lg:col-span-1">
+          <div className="space-y-4">
+            <UsageMeter label="Usuarios" used={used(usersRes)} limit={limit("max_users")} />
+            <UsageMeter label="Sucursales" used={used(storesRes)} limit={limit("max_stores")} />
+            <UsageMeter label="Productos" used={used(productsRes)} limit={limit("max_products")} />
+          </div>
+        </SummaryTile>
+      </section>
+
+      {/* ── Accesos rápidos ── */}
+      <section className="mt-10">
+        <SectionHeader
+          title="Accesos rápidos"
+          icon={Zap}
+          description="Lo que más se usa para manejar el negocio."
+        />
+        <div className="mt-4">
+          <QuickActions actions={actions} />
+        </div>
+      </section>
+
+      {/* ── Equipo (lista + invitar) ── */}
+      <div id="equipo" className="mt-10 scroll-mt-24">
+        <TeamSection currentUserId={user.id} tenantId={tenant.id} canManage={canManage} />
       </div>
 
-      {/* Acceso rápido al POS — por encima de la suscripción. */}
-      <div className="mt-4 flex justify-end">
-        <Link href="/dashboard" className={buttonVariants()}>
-          Ir al POS
-        </Link>
-      </div>
-
-      {/* Equipo (cliente: lista + invitar) — arriba de la suscripción. */}
-      <TeamSection
-        currentUserId={user.id}
-        tenantId={tenant.id}
-        canManage={["owner", "manager"].includes(membership.role)}
-      />
-
-      {/* Apariencia — antes que la suscripción. */}
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Link href="/configuracion" className={buttonVariants({ variant: "secondary" })}>
-          <Palette size={16} /> Apariencia
-        </Link>
-      </div>
-
-      {/* Panel de suscripción interactivo (solo dueños: las RPC son owner-gated). */}
-      {isOwner && <SubscriptionCard />}
-    </div>
+      {/* ── Suscripción interactiva (solo dueños: las RPC son owner-gated) ── */}
+      {isOwner && (
+        <div id="suscripcion" className="mt-10 scroll-mt-24">
+          <SubscriptionCard />
+        </div>
+      )}
+    </PageContainer>
   );
 }

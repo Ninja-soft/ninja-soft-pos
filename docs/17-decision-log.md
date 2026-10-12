@@ -1623,6 +1623,43 @@ El dueño pidió traslados "muy flexibles y configurables, programados, muy robu
 
 ---
 
+## ADR-050: Compras, proveedores, costos e importaciones v1 (F18 · H101 y H102)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/compras-proveedores`, migraciones no aplicadas) · **Hitos:** F18/H101 (compras, proveedores y costos) y F18/H102 (costeo de importación) · **Numeración:** ADR-048 y ADR-049 reservadas por otras ramas; ADR-052 tomada por el aislamiento del staff interno.
+
+### Contexto
+
+No había proveedores, compras ni costos más allá de `products.cost` (único y manual). El dueño pidió un módulo "muy configurable, con un modo simple y uno muy profesional para quien compra e importa", con contexto argentino. Debe convivir con el stock por sucursal derivado de movimientos (ADR-046) y con el contexto de sucursal (ADR-045).
+
+### Decisión
+
+1. **Modelo.** `suppliers` (razón social, CUIT validado por dígito verificador en TS y en un check SQL, condición IVA, contacto, plazo de pago, moneda, CBU/alias, baja lógica), `supplier_products` (código del proveedor, último costo, costo de lista, plazo de entrega, mínimo y unidad de compra), `purchase_orders` + `purchase_order_items`, `goods_receipts` + `goods_receipt_items`, `product_lots` (lote, vencimiento, n° de despacho), `supplier_invoices`, `supplier_payments`, `purchase_events` (timeline común), `purchase_settings` y `product_cost_history`. Vistas `supplier_account_entries` y `supplier_balances` con `security_invoker`.
+2. **Escrituras.** Proveedores y productos por proveedor por tabla con RLS (rol dueño o encargado y feature `compras` en la policy). Órdenes, recepciones, costeo, comprobantes y pagos sólo por RPC `SECURITY DEFINER` con `search_path` fijo que validan plan, rol, estado y sucursal, y escriben `purchase_events` y `audit_logs`. Las tablas sólo tienen policies de lectura, siempre `tenant_id = current_tenant_id() or internal_scope()` (ADR-052); el front filtra además por el negocio activo.
+3. **Máquina de estados de la OC** `draft → sent → partially_received → received`, `sent → draft` (reabrir sin recepciones), `partially_received → received` (cerrar con faltante y motivo) y `draft | sent → cancelled` sin nada recibido. Espejo puro en `lib/purchases/orders.ts`. Descuentos en cascada por línea (10 + 5) y descuento global; numeración `OC-`, `REC-` y `OP-` por negocio con lock por advisory.
+4. **Recepción** contra OC o libre (configurable), parcial, con diferencias y motivo, por sucursal destino (la de la OC o la elegida; el cajero sólo en las sucursales que tiene asignadas). Cada línea suma `products.stock` / `product_variants.stock` e inserta `stock_movements` con motivo `purchase` (ya estaba en el check) y `store_id`: `product_stock` lo mantiene el trigger de ADR-046. Actualiza el último costo del producto en ese proveedor (lo crea si no existía).
+5. **Costos (BASE, sin key).** `products.last_cost`, `avg_cost` (promedio ponderado móvil: el stock negativo cuenta como cero) y `replacement_cost`, netos de IVA y en pesos, con historia (`product_cost_history`, por trigger, con la fuente: recepción, costeo, lista del proveedor, manual). El negocio elige la base del margen (`purchase_settings.cost_basis`, último por defecto) y, con `sync_product_cost` (activo por defecto), `products.cost` sigue a esa base: márgenes, valor del inventario, traslados y el asistente usan el costo correcto sin cambios. Backfill: último y promedio parten del costo cargado hoy. Costos a nivel producto (las variantes comparten costo en v1).
+6. **Modo simple / profesional** (`purchase_settings.mode`, preferencia de UI). Profesional muestra moneda y tipo de cambio por operación (OC, recepción, comprobante y pago), peso y volumen por línea y la hoja de costeo. El saldo de la cuenta corriente va en pesos al tipo de cambio de cada documento; la diferencia de cambio queda para H109.
+7. **Costeo de importación** (`compras_importacion`): lógica pura en `lib/purchases/landed.ts` (FOB + flete + seguro = CIF; derechos por línea, tasa de estadística con tope, otros tributos que son costo y gastos de nacionalización, cada concepto prorrateado por valor, peso, volumen o cantidad en centavos exactos). El IVA de importación y las percepciones se calculan aparte y **nunca** se suman al costo. Se aplica sobre una recepción ya registrada y es re-aplicable: el servidor guarda la hoja, el costo puesto en depósito por línea y el n° de despacho en el lote, y ajusta el promedio repartiendo la diferencia sobre el stock actual (último costo sólo si es la recepción más reciente).
+8. **Comprobantes y pagos.** Letra A/B/C/M/E, punto de venta y número (único por proveedor y tipo entre los vigentes), neto por alícuota del catálogo (21, 10,5, 27, 5, 2,5, 0), exento, no gravado, percepciones y otros tributos como líneas libres; B y C no discriminan IVA; el total tiene que cerrar (servidor y TS). Vínculo con recepciones (control de dos vías). Pagos con medio, referencia y retenciones practicadas como placeholder hasta H106; anulación con motivo en ambos. Aging FIFO por vencimiento en `lib/purchases/aging.ts`.
+9. **Sugerencia de compra** por sucursal (`purchase_suggestions`): bajo el mínimo contando traslados en camino y OC abiertas; cantidad a máximo o mínimo, redondeada a la unidad de compra y al mínimo del proveedor (`lib/purchases/suggest.ts`).
+10. **Features (CLAUDE.md §6):** `compras` OPTIONAL desde Pro; `compras_importacion` OPTIONAL desde Business, requiere `compras`. El roadmap y la auditoría proponían `importaciones` (Enterprise); se usa `compras_importacion` en Business por pedido explícito del PM. Gating server-side en `purchase_assert` (todas las RPC), en las policies de proveedores y en `purchase_apply_costing`; el modo profesional exige `compras` al guardarse. Copy en `featureInfo.ts`; la comparación de planes deriva de la matriz.
+
+### Alternativas descartadas
+
+- **Escribir `product_stock` desde la recepción:** rompe el invariante de ADR-046 (el saldo sale del libro de movimientos).
+- **FIFO / capas de costo:** más preciso pero caro; el promedio móvil con ajuste por costeo alcanza para v1.
+- **Calcular el costeo de importación en SQL:** duplicaría una lógica larga y parametrizable; el servidor guarda la hoja completa y el resultado por línea (auditable) y valida montos no negativos.
+- **Comprobantes con tablas hijas de alícuotas y tributos:** jsonb validado alcanza para v1 y para exportar el libro de compras; se normaliza con H108.
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261016100000` a `20261016100300` en orden, después de las de ADR-046 y de `20261013900000` (ADR-052; si no está, la migración crea `internal_scope()` con la misma definición sin pisarla). Backfill liviano de `last_cost` y `avg_cost`.
+- **Riesgos:** recepciones inmutables en v1 (una corrección es un ajuste de stock o una recepción nueva); el costeo confía en el costo unitario calculado por el cliente (queda la hoja guardada); sin integración con caja ni tesorería para pagos en efectivo (H111); sin padrones ni retenciones como agente (H104 y H106); sin devoluciones al proveedor con salida de stock.
+- **Pendiente:** devoluciones a proveedor, órdenes de pago con aplicación manual a comprobantes, anticipos, importación de listas de precios del proveedor (H100), libro IVA compras (H108), n° de despacho en la factura de venta y consumo por lote, unidad de compra con conversión en la OC.
+
+---
+
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

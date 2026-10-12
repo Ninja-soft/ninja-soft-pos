@@ -70,8 +70,10 @@ import { accentVars } from "@/components/pos/ui/posStyles";
 import {
   CustomerPickerDialog,
   FreeSaleDialog,
+  PriceOverrideDialog,
   SerialDialog,
   WeighDialog,
+  type PriceOverrideTarget,
 } from "@/components/pos/screen/PosDialogs";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
@@ -367,6 +369,20 @@ function PosPageInner() {
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
+  // F18 · H100 (ADR-056): cambio manual de precio con motivo.
+  const setLinePrice = useCartStore((s) => s.setLinePrice);
+  const [priceTarget, setPriceTarget] = useState<PriceOverrideTarget | null>(null);
+  function openPriceEdit(lineId: string) {
+    const l = useCartStore.getState().lines.find((x) => x.lineId === lineId);
+    if (!l) return;
+    setPriceTarget({
+      lineId,
+      name: l.name,
+      unitPrice: l.unitPrice,
+      listPrice: l.listPrice ?? l.unitPrice,
+      reason: l.overrideReason ?? "",
+    });
+  }
   const clear = useCartStore((s) => s.clear);
 
   // Lista de precios 'mostrador' activa: el precio al agregar se resuelve acá.
@@ -962,6 +978,7 @@ function PosPageInner() {
       creditForLine={creditForLine}
       onCover={coverLineWithPack}
       onUncover={uncoverLine}
+      onEditPrice={openPriceEdit}
       emptyHint={preset === "caja_rapida" ? "Escaneá un código o tipeá un PLU." : undefined}
     />
   );
@@ -1359,6 +1376,14 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
+      <PriceOverrideDialog
+        line={priceTarget}
+        onClose={() => setPriceTarget(null)}
+        onConfirm={(price, reason) => {
+          if (priceTarget) setLinePrice(priceTarget.lineId, price, reason);
+          setPriceTarget(null);
+        }}
+      />
       <FreeSaleDialog
         open={freeOpen}
         onOpenChange={setFreeOpen}

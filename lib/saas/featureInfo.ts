@@ -273,6 +273,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",
     minPlan: "Pro",
   },
+  historial_precios: {
+    desc: "Historial de precios: cada cambio del precio del producto, sus variantes y las listas con quién, cuándo y de dónde vino (manual, importación, masivo o lista), con gráfico en la ficha.",
+    impact: "Desactivado, los cambios se siguen registrando pero no se pueden consultar.",
+    minPlan: "Start",
+  },
   listas_precios: {
     desc: "Múltiples listas de precios: precios distintos por lista (mayorista, minorista, etc.) aplicables según el cliente.",
     impact: "Sin esto sólo existe un precio por producto; no se pueden manejar listas diferenciadas.",

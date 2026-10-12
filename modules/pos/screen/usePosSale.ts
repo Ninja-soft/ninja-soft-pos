@@ -5,6 +5,7 @@ import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/chec
 import { appointmentsApi } from "@/modules/agenda/api";
 import { buildSaleItemsAndExtras, type SaleArgsLine } from "@/modules/pending-charges/logic";
 import { usePosMutations } from "@/modules/pos/hooks";
+import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
 import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
@@ -14,6 +15,13 @@ import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
 // mapeo de errores del server a mensajes.
 
 export function saleErrorTitle(msg: string): string {
+  // F18 · H100 (ADR-056): precio autoritativo y venta libre.
+  if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  if (msg.includes("price_override_reason_required")) return "Escribí el motivo del cambio de precio";
+  if (msg.includes("free_sale_not_allowed")) return "La venta libre (monto manual) está apagada en esta caja";
+  if (msg.includes("free_sale_exceeds_limit")) return "La venta libre supera el tope de tu rol";
+  if (msg.includes("modifier_not_found")) return "Una opción elegida ya no existe: volvé a cargar el producto";
+  if (msg.includes("invalid_quantity")) return "Hay una línea con cantidad inválida";
   // F17 · H90: turno y sucursal de la caja en uso.
   if (msg.includes("shift_ambiguous")) return "Hay cajas abiertas en varias sucursales: elegí tu caja arriba";
   if (msg.includes("shift_not_open")) return "El turno de esta caja ya se cerró: abrí la caja de nuevo";
@@ -105,6 +113,10 @@ export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
     discount: l.discount,
     packId: l.packId ?? null,
     packCreditId: l.packCreditId ?? null,
+    giftPromoId: l.giftPromoId ?? null,
+    priceOverride: l.priceOverride ?? false,
+    overrideReason: l.overrideReason ?? null,
+    listPrice: l.listPrice ?? null,
   }));
 }
 
@@ -121,6 +133,7 @@ export function usePosSale(ctx: {
 }) {
   const { toast } = useToast();
   const { sale } = usePosMutations();
+  const handlePriceMismatch = usePriceRefresh();
 
   async function handleSale(
     payments: CheckoutPayment[],
@@ -163,6 +176,8 @@ export function usePosSale(ctx: {
       });
       ctx.onSuccess({ saleId: res.sale_id, change: change ?? 0 });
     } catch (e) {
+      // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
+      if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : "";
       const title = saleErrorTitle(msg);
       toast({

@@ -10,6 +10,7 @@ import {
   Camera,
   ChevronDown,
   CircleDollarSign,
+  History,
   Info,
   LayoutGrid,
   Plus,
@@ -37,6 +38,7 @@ import { categoriesApi, packagesApi, type Product } from "@/modules/products/api
 import { KDS_STATIONS, KDS_STATION_LABELS } from "@/modules/dining/api";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { usePriceLists } from "@/modules/prices/hooks";
+import { PriceHistoryPanel } from "@/components/products/PriceHistoryPanel";
 import { useFeature } from "@/modules/saas/gating";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
@@ -65,6 +67,7 @@ import {
   useProductMutations,
   usePluSettings,
   useProductPackages,
+  useVariants,
 } from "@/modules/products/hooks";
 
 interface Props {
@@ -73,7 +76,16 @@ interface Props {
   product?: Product | null;
 }
 
-type TabKey = "general" | "precios" | "stock" | "codigos" | "atributos" | "fotos" | "medidas" | "mas";
+type TabKey =
+  | "general"
+  | "precios"
+  | "stock"
+  | "codigos"
+  | "atributos"
+  | "fotos"
+  | "medidas"
+  | "mas"
+  | "historial";
 
 const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "general", label: "General", icon: LayoutGrid },
@@ -84,6 +96,8 @@ const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "fotos", label: "Fotos", icon: Camera },
   { key: "medidas", label: "Medidas", icon: Boxes },
   { key: "mas", label: "Más", icon: Settings2 },
+  // F18 · H100 (ADR-056): sólo con el producto guardado.
+  { key: "historial", label: "Historial de precios", icon: History },
 ];
 
 // Campo → pestaña (para llevar al usuario al error si está en otra pestaña).
@@ -189,11 +203,20 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { data: diningEnabled } = useDiningEnabled();
   const { data: priceLists = [] } = usePriceLists();
   const packagesAllowed = useFeature("medidas_bultos") !== false;
+  const historyAllowed = useFeature("historial_precios") !== false;
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
 
   const [tab, setTab] = useState<TabKey>("general");
+  const { data: historyVariants } = useVariants(active?.id ?? null, tab === "historial");
+  const variantNames = useMemo(
+    () =>
+      new Map(
+        (historyVariants ?? []).map((v) => [v.id, [v.option1, v.option2].filter(Boolean).join(" / ")] as [string, string]),
+      ),
+    [historyVariants],
+  );
   const [newBrand, setNewBrand] = useState("");
   const [addingBrand, setAddingBrand] = useState(false);
   const [nodes, setNodes] = useState<CategoryNode[]>([]);
@@ -418,7 +441,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       {/* Pestañas de secciones (relleno en la activa, sin bordes de color). */}
       <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-5 bg-popover px-5 pb-3 pt-4 backdrop-blur sm:-top-6 sm:-mx-6 sm:-mt-6 sm:px-6">
         <div className="-mx-1 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-1 overflow-x-auto px-1">
-          {TABS.map((t) => {
+          {TABS.filter((t) => t.key !== "historial" || (isEdit && historyAllowed)).map((t) => {
             const on = tab === t.key;
             const Icon = t.icon;
             return (
@@ -929,6 +952,17 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </Disclosure>
         </div>
       </form>
+      {/* ── Historial de precios (fuera del form: sólo lectura) ─────── */}
+      {active && historyAllowed && (
+        <div className={show("historial")}>
+          <PriceHistoryPanel
+            productId={active.id}
+            active={tab === "historial"}
+            lists={new Map(priceLists.map((l) => [l.id, l.name]))}
+            variants={variantNames}
+          />
+        </div>
+      )}
     </Modal>
   );
 }

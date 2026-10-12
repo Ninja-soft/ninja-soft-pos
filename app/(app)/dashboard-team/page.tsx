@@ -7,6 +7,8 @@ import {
   CreditCard,
   Gauge,
   LayoutTemplate,
+  MonitorDot,
+  ShieldCheck,
   Palette,
   Settings,
   ShoppingCart,
@@ -22,12 +24,14 @@ import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
 import {
+  MiniStat,
   QuickActions,
   STATUS_TONE,
   SummaryTile,
   UsageMeter,
   type QuickAction,
 } from "@/components/dashboard-team/OwnerOverview";
+import { OwnerLive } from "@/components/dashboard-team/OwnerLive";
 import { NoData } from "@/components/ui/NoData";
 import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -89,12 +93,15 @@ export default async function DashboardTeamPage() {
     } | null;
   };
   // Filtramos por user_id: un usuario interno vería todos los tenants por RLS.
-  const { data: memData } = await supabase
+  // Y por el negocio activo del JWT: con dos membresías no vale cualquiera.
+  const activeTenant = (user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
+  let memQuery = supabase
     .from("tenant_users")
     .select("role, tenants(id, name, industry, status, trial_ends_at)")
     .eq("user_id", user.id)
-    .eq("status", "active")
-    .limit(1);
+    .eq("status", "active");
+  if (activeTenant) memQuery = memQuery.eq("tenant_id", activeTenant);
+  const { data: memData } = await memQuery.limit(1);
   const membership = (memData?.[0] as unknown as Membership) ?? null;
 
   if (!membership?.tenants) {
@@ -136,7 +143,7 @@ export default async function DashboardTeamPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenant.id)
       .is("deleted_at", null);
-  const [subRes, brandingRes, gatingRes, usersRes, storesRes, productsRes] =
+  const [subRes, brandingRes, gatingRes, usersRes, storesRes, productsRes, registersRes] =
     await Promise.all([
       supabase
         .from("subscriptions")
@@ -157,7 +164,18 @@ export default async function DashboardTeamPage() {
         .eq("status", "active"),
       countActive("stores"),
       countActive("products"),
+      // Cajas vivas (para "cajas por sucursal" del plan y el resumen).
+      supabase
+        .from("cash_registers")
+        .select("store_id")
+        .eq("tenant_id", tenant.id)
+        .is("deleted_at", null),
     ]);
+  const registerRows = (registersRes.data ?? []) as { store_id: string }[];
+  const registersCount = registersRes.error ? null : registerRows.length;
+  const perStore = new Map<string, number>();
+  for (const r of registerRows) perStore.set(r.store_id, (perStore.get(r.store_id) ?? 0) + 1);
+  const maxRegistersInStore = registersRes.error ? null : Math.max(0, ...perStore.values());
 
   const sub = (subRes.data?.[0] as unknown as Sub) ?? null;
   const branding =
@@ -205,7 +223,7 @@ export default async function DashboardTeamPage() {
     ...(canManage
       ? [
           {
-            href: "#invitar",
+            href: "/dashboard-team?invitar=1#equipo",
             title: "Invitar usuario",
             description: "Sumá a alguien a tu equipo con su email.",
             icon: UserPlus,
@@ -231,6 +249,22 @@ export default async function DashboardTeamPage() {
       icon: Store,
       locked: !hasFeature("personalizacion_marca"),
     },
+    ...(canManage
+      ? [
+          {
+            href: "/caja/monitor",
+            title: "Cajas abiertas",
+            description: "Quién tiene cada caja y desde cuándo.",
+            icon: MonitorDot,
+          },
+          {
+            href: "/configuracion?seccion=seguridad",
+            title: "Seguridad y auditoría",
+            description: "PIN de supervisor y registro de acciones.",
+            icon: ShieldCheck,
+          },
+        ]
+      : []),
     {
       href: "/reportes",
       title: "Reportes",
@@ -301,6 +335,15 @@ export default async function DashboardTeamPage() {
               </p>
             </div>
           </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <MiniStat
+              label={used(storesRes) === 1 ? "Sucursal" : "Sucursales"}
+              value={used(storesRes) ?? <NoData />}
+              href={canManage ? "/configuracion?seccion=sucursales" : undefined}
+            />
+            <MiniStat label={registersCount === 1 ? "Caja" : "Cajas"} value={registersCount ?? <NoData />} />
+            <MiniStat label="Equipo" value={used(usersRes) ?? <NoData />} href="#equipo" />
+          </div>
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
             <Badge tone={STATUS_TONE[tenant.status] ?? "neutral"}>
               {STATUS_LABELS[tenant.status] ?? tenant.status}
@@ -340,10 +383,19 @@ export default async function DashboardTeamPage() {
           <div className="space-y-4">
             <UsageMeter label="Usuarios" used={used(usersRes)} limit={limit("max_users")} />
             <UsageMeter label="Sucursales" used={used(storesRes)} limit={limit("max_stores")} />
+            <UsageMeter
+              label="Cajas por sucursal"
+              used={maxRegistersInStore}
+              limit={limit("max_registers_per_store")}
+              hint="En la sucursal con más cajas."
+            />
             <UsageMeter label="Productos" used={used(productsRes)} limit={limit("max_products")} />
           </div>
         </SummaryTile>
       </section>
+
+      {/* ── Hoy: ventas, cajas abiertas y personal (dueño y encargado) ── */}
+      {canManage && <OwnerLive />}
 
       {/* ── Accesos rápidos ── */}
       <section className="mt-10">
@@ -359,7 +411,12 @@ export default async function DashboardTeamPage() {
 
       {/* ── Equipo (lista + invitar) ── */}
       <div id="equipo" className="mt-10 scroll-mt-24">
-        <TeamSection currentUserId={user.id} tenantId={tenant.id} canManage={canManage} />
+        <TeamSection
+          currentUserId={user.id}
+          tenantId={tenant.id}
+          canManage={canManage}
+          role={membership.role as "owner" | "manager" | "cashier" | "viewer"}
+        />
       </div>
 
       {/* ── Suscripción interactiva (solo dueños: las RPC son owner-gated) ── */}

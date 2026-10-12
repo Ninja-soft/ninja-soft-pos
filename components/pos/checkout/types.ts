@@ -37,7 +37,43 @@ export interface CheckoutPayment {
    * payments.card_voucher (jsonb). `marca` y `ultimos4` los suma la tarjeta en
    * posnet (opcionales; el ticket sigue leyendo lote/cupón/autorización).
    */
-  card_voucher?: { lote: string; cupon: string; autorizacion: string; marca?: string; ultimos4?: string; comercio?: string; cuotas?: number };
+  card_voucher?: {
+    lote: string;
+    cupon: string;
+    autorizacion: string;
+    marca?: string;
+    ultimos4?: string;
+    comercio?: string;
+    cuotas?: number;
+    /** Adquirente (payway, fiserv, getnet...). */
+    adquirente?: string;
+    /** Terminal integrada (ADR-053): el cupón lo informó la terminal. */
+    origen?: "terminal";
+    /** terminal_transactions.id; lo valida el trigger de payments. */
+    terminal_tx?: string;
+  };
+}
+
+/** Cobro aprobado por la terminal integrada (ADR-053). */
+export interface TerminalChargeResult {
+  method: "debit" | "credit";
+  card_voucher: NonNullable<CheckoutPayment["card_voucher"]>;
+  /** Marca (clave de lib/pos/cardBrands) para el logo, si se reconoce. */
+  brandKey: string | null;
+}
+
+/** Pedido de cobro que la hoja delega a la terminal integrada de la caja. */
+export interface TerminalChargeRequest {
+  amount: number;
+  /** Cuotas pedidas (null = las elige el cliente en la terminal, si se puede). */
+  installments: number | null;
+  cardKind: "debit" | "credit";
+  /** Marca elegida (clave de lib/pos/cardBrands) si el protocolo la pide. */
+  cardBrand: string | null;
+  onApproved: (r: TerminalChargeResult) => void;
+  /** Pasar a "Tarjeta en posnet" con carga manual del cupón. */
+  onManual: () => void;
+  onClose: () => void;
 }
 
 /** Resultado aprobado de un cobro electrónico (QR / link / Point). */

@@ -58,6 +58,7 @@ import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, type CardStep } from "./CardWizard";
+import { IntegratedCardPanel } from "./IntegratedCardPanel";
 import type {
   AccountPayRequest,
   AccountPayState,
@@ -69,6 +70,8 @@ import type {
   PaymentExtra,
   Promo,
   SplitItem,
+  TerminalChargeRequest,
+  TerminalChargeResult,
 } from "./types";
 
 // Plan de cuotas mínimo que necesita la hoja (subset de PaymentPlan).
@@ -155,6 +158,11 @@ export interface CheckoutSheetProps {
   renderAccount?: (req: AccountPayRequest) => React.ReactNode;
   /** Cobros en espera (ADR-048): dejar el QR / link esperando el pago. */
   park?: SheetParkOptions | null;
+  /**
+   * Terminal integrada (ADR-053): cobro con la terminal de la caja del tender
+   * "card:terminal". Lo provee CheckoutSheetConnected.
+   */
+  renderTerminal?: (req: TerminalChargeRequest) => React.ReactNode;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -202,6 +210,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     renderElectronic,
     renderAccount,
     park,
+    renderTerminal,
   } = props;
 
   const [lines, setLines] = useState<PaidLine[]>([]);
@@ -244,6 +253,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [professionalId, setProfessionalId] = useState("");
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [electronic, setElectronic] = useState<{ tender: ResolvedTender; amount: number } | null>(null);
+  // Cobro en curso con la terminal integrada (ADR-053): monto y recargo
+  // congelados al mandar.
+  const [terminalCharge, setTerminalCharge] = useState<{
+    tender: ResolvedTender;
+    amount: number;
+    installments: number | null;
+    kind: CardKind;
+    brand: string | null;
+    surcharge: number;
+    surchargeName: string;
+    planLabel: string | null;
+  } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // Estado del panel de cuenta corriente (reference JSON con cuotas / override y
   // si el cargo está bloqueado). Arranca bloqueado hasta que el panel lea la cuenta.
@@ -279,6 +300,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setProfessionalId("");
     setExtrasOpen(Boolean(initialWarrantyId));
     setElectronic(null);
+    setTerminalCharge(null);
     setConfirmLeave(false);
     // Sólo al abrir: no re-resetear si cambian los tenders mientras se cobra.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,7 +310,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   // Método efectivo del tender activo (tarjeta/terminal: según el switch).
   const isCard = active?.flow === "card" || active?.flow === "terminal";
-  const isPosnet = active?.flow === "card";
+  // Tarjeta en terminal integrada (ADR-053): mismo flujo "card" con terminal.
+  const integrated = active?.flow === "card" && active.integrated ? active.integrated : null;
+  const isPosnet = active?.flow === "card" && !integrated;
   const activeMethod: SaleMethod | null = active ? (isCard ? cardKind : active.method) : null;
 
   // ── Promo por medio de pago (sólo si se paga TODO con un único medio) ─────────
@@ -358,6 +382,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // ── Editor del tender activo ───────────────────────────────────────────────
   const plansForActive = useMemo(() => {
     if (!isCard) return [];
+    // Terminal integrada: planes de la marca si se eligió (y los sin entidad).
+    if (integrated) return plansForCard(cardPlans, cardBrand, cardKind);
     // Tarjeta en posnet: planes de la entidad elegida (y los sin entidad).
     if (isPosnet) return plansForCard(cardPlans, cardBrand === "other" ? null : cardBrand, cardKind);
     const b = activeMethod ? PLAN_BASE[activeMethod] : undefined;
@@ -365,7 +391,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     return cardPlans
       .filter((p) => p.base === b)
       .sort((a, z) => (a.installments ?? 1) - (z.installments ?? 1));
-  }, [cardPlans, activeMethod, isCard, isPosnet, cardBrand, cardKind]);
+  }, [cardPlans, activeMethod, isCard, isPosnet, integrated, cardBrand, cardKind]);
   const cardBrands = useMemo(() => availableCardBrands(cardPlans), [cardPlans]);
   const plan = plansForActive.find((p) => p.id === planId) ?? null;
   const surchargePct = !active
@@ -399,11 +425,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const last4Ok = voucher.ultimos4.trim() === "" || /^\d{4}$/.test(voucher.ultimos4.trim());
   const voucherOk =
     !isCard ||
+    Boolean(integrated) ||
     ((!voucherRequired ||
       (voucher.lote.trim() !== "" && voucher.cupon.trim() !== "" && voucher.autorizacion.trim() !== "")) &&
       last4Ok);
   // Tarjeta en posnet: se registra recién en el paso del cupón.
   const posnetReady = !isPosnet || (cardBrand !== null && cardStep === 3);
+  const terminalReady = !integrated || !integrated.requiresBrand || cardBrand !== null;
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
   const refOk = !active?.requiresReference || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
@@ -416,10 +444,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     settle.amount > 0 &&
     voucherOk &&
     posnetReady &&
+    terminalReady &&
     refOk &&
     !belowMin &&
     !receivedShort &&
-    !electronic;
+    !electronic &&
+    !terminalCharge;
 
   // Reset de los campos al cambiar de medio.
   useEffect(() => {
@@ -500,6 +530,19 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       setElectronic({ tender: active, amount: settle.amount });
       return;
     }
+    if (integrated) {
+      setTerminalCharge({
+        tender: active,
+        amount: settle.amount,
+        installments: plan?.installments ?? (cardKind === "credit" ? 1 : null),
+        kind: cardKind,
+        brand: integrated.requiresBrand ? cardBrand : null,
+        surcharge: settle.surcharge,
+        surchargeName: plan ? `Recargo ${plan.label}` : `Recargo ${active.label}`,
+        planLabel: plan?.label ?? null,
+      });
+      return;
+    }
     if (!activeMethod) return;
     const surchargeName = plan
       ? `Recargo ${plan.label}`
@@ -564,6 +607,40 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     });
   }
 
+  // Cobro aprobado por la terminal integrada: el cupón vino de la terminal.
+  function onTerminalApproved(r: TerminalChargeResult) {
+    const tc = terminalCharge;
+    setTerminalCharge(null);
+    if (!tc) return;
+    const v = r.card_voucher;
+    const kindLabel = r.method === "debit" ? "débito" : "crédito";
+    addLine({
+      key: `l${++keySeq}`,
+      tenderId: tc.tender.id,
+      title: `${v.marca ?? "Tarjeta"} ${kindLabel}`,
+      detail:
+        [tc.planLabel, v.cupon ? `Cupón ${v.cupon}` : null, v.ultimos4 ? `**** ${v.ultimos4}` : null]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+      logo: r.brandKey ? cardBrandLogo(r.brandKey, r.method) : tc.tender.logo,
+      method: r.method,
+      amount: tc.amount,
+      surcharge: tc.surcharge,
+      surchargeItems: tc.surcharge > 0 ? [{ name: tc.surchargeName, amount: tc.surcharge }] : [],
+      card_voucher: v,
+      // Ya se cobró en la terminal: no se puede quitar (se anula desde ventas).
+      locked: true,
+      promoEligible: true,
+    });
+  }
+
+  // Pasar de la terminal integrada a la Tarjeta en posnet (carga manual).
+  function toManualCard() {
+    setTerminalCharge(null);
+    const manual = visible.find((t) => t.flow === "card" && !t.integrated);
+    if (manual) pickTender(manual);
+  }
+
   function onElectronicApproved(r: ElectronicResult) {
     const t = electronic?.tender;
     setElectronic(null);
@@ -619,7 +696,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const lockedTotal = round2(lines.filter((l) => l.locked).reduce((a, l) => a + l.amount, 0));
   function requestClose() {
-    if (electronic) return;
+    if (electronic || terminalCharge) return;
     if (lockedTotal > 0) setConfirmLeave(true);
     else onOpenChange(false);
   }
@@ -635,6 +712,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const qrAmt = money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)));
     if (active.flow === "qr") ctaLabel = active.channel === "link" ? `Generar link ${qrAmt}` : `Generar QR ${qrAmt}`;
     else if (active.flow === "point") ctaLabel = `Enviar al Point ${amt}`;
+    else if (integrated)
+      ctaLabel = integrated.requiresBrand && !cardBrand ? "Elegí la tarjeta" : `Cobrar en la terminal ${amt}`;
     else if (isPosnet && cardStep < 3) ctaLabel = cardBrand ? "Continuar" : "Elegí la entidad de la tarjeta";
     else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
     else ctaLabel = settle.closes ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
@@ -925,7 +1004,23 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     ) : null;
 
   // Tarjeta en posnet: asistente entidad, tipo y cuotas, cupón.
-  const cardBlock = isPosnet ? (
+  const cardBlock = integrated ? (
+    <IntegratedCardPanel
+      info={integrated}
+      brands={cardBrands}
+      brand={cardBrand}
+      onBrand={setCardBrand}
+      kind={cardKind}
+      onKind={setCardKind}
+      plans={plansForActive}
+      planId={planId}
+      onPlan={setPlanId}
+      portion={portion}
+      amount={settle.amount}
+      surcharge={settle.surcharge}
+      onManual={toManualCard}
+    />
+  ) : isPosnet ? (
     <CardWizard
       brands={cardBrands}
       brand={cardBrand}
@@ -1425,6 +1520,16 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         </div>
       )}
 
+      {terminalCharge &&
+        renderTerminal?.({
+          amount: terminalCharge.amount,
+          installments: terminalCharge.installments,
+          cardKind: terminalCharge.kind,
+          cardBrand: terminalCharge.brand,
+          onApproved: onTerminalApproved,
+          onManual: toManualCard,
+          onClose: () => setTerminalCharge(null),
+        })}
       {electronic &&
         renderElectronic({
           tender: electronic.tender,

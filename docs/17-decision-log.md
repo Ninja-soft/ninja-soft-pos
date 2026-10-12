@@ -1820,3 +1820,35 @@ El dueño pidió que cada usuario trabaje sólo en su sucursal, que el dueño co
 
 **Consecuencias.** Toda política nueva de negocio debe usar `internal_scope()`. Las Edge Functions internas no cambian (validan el JWT y usan service_role). Orden de deploy: front primero (el header es inocuo sin la migración), después la migración.
 
+---
+
+## ADR-053: Terminal integrada (posnet y pinpad conectados a la caja), base vendor-agnóstica y simulador
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/terminal-integrada-payway`; migración sin aplicar; Payway sin homologar; Fiserv y Getnet pendientes del kit) · **Hito:** F8 · H19b · **Base:** ADR-042, ADR-044, ADR-047, ADR-049, ADR-052 · **Numeración:** ADR-054 queda para la tarjeta en posnet offline.
+
+### Contexto
+
+El dueño: "lo que quiero es que la terminal cobre y envíe los datos al POS, ya sea posnet o pinpad", con terminales Payway clásicas (countertop o móvil) y pinpad conectado a la PC; después sumó Getnet. La Payway Smart (Android) queda fuera. Hoy la tarjeta con posnet propio se cobra en la terminal y el cajero carga el cupón a mano (Tarjeta en posnet, ADR-042). Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md). Hallazgos: el "POS Integrado" de LaPos / Payway por cable existe y lo usan otros sistemas; su protocolo (VPI PC, 19200 8N1, STX/ETX/LRC, comandos de 3 letras) sólo está descripto por fuentes públicas no oficiales; el pinpad Lane/3000 no tiene nada público; Payway tiene además una API cloud PayStore Terminals con homologación; Getnet tiene una librería con modos USB, HTTP local y Cloud2Cloud sin protocolo público; Fiserv Posnet no publica nada.
+
+### Decisión
+
+1. **Base vendor-agnóstica en el navegador** (`lib/payments/terminal`): `TerminalAdapter` (connect, sale, void, refund, closeBatch, status, lastTransaction opcional) que devuelve un `TerminalResult` normalizado (aprobado, autorización, lote, cupón, marca, tipo, últimos 4, cuotas, n° de comercio, código y mensaje, crudo). Transportes `ByteTransport`: **Web Serial** y **WebUSB** (Chrome / Edge de escritorio, permiso con gesto del usuario, emparejamiento guardado por PC en `localStorage`) y **Puente local NinjaPOS** (WebSocket en 127.0.0.1 con token y origen permitido; protocolo y referencia en Node en `tools/bridge`, sin binario). Framing ISO 1745 parametrizable (STX/ETX/LRC, ACK/NAK, reintentos).
+2. **Adaptadores:** `SimulatorAdapter` (demos y tests, escenarios por centavos, lote y cupones, anulación, devolución, cierre y última operación); `PaywayAdapter` con el formato VPI implementado según las fuentes públicas, estado **`unverified`** (no se copió código ni se usan DLLs del fabricante; el protocolo pide el código de tarjeta, que el dueño carga desde la tabla que da Payway); `FiservPosnetAdapter` y `GetnetAdapter` **placeholders** (`pending_kit`: conexión física sí, operaciones `spec_pending`).
+3. **Máquina de estados del cobro** (`charge.ts`): conectando, esperando, aprobado, rechazado, timeout, cancelado, error; reintentar nunca sobre un aprobado; el **timeout es incierto** (pudo cobrar) y una aprobación tardía se respeta; "Consultar la terminal" (última operación) para recuperar el cupón antes de reintentar.
+4. **Registro por caja (extiende ADR-049):** `payment_terminals.kind` suma `posnet_integrado` y `pinpad` para las marcas `payway`, `fiserv` y `getnet`; la configuración compartida (protocolo, conexión, puerto, destino del puente, timeout, códigos de tarjeta, razón social, CUIT) va en `external_meta.integration`; lo de cada PC (dispositivo emparejado, token del puente) en el navegador. Configuración, Terminales: tipo, campos de integración y **Conectar** (emparejar, probar conexión, venta de prueba con el simulador).
+5. **POS:** con una terminal integrada en la caja (o flotante de la sucursal), la hoja de cobro ofrece **"Tarjeta en terminal"** antes de "Tarjeta en posnet" (se engancha a nivel tender, `card:terminal`, sin tocar el asistente manual). Débito / crédito, cuotas con su recargo (y la marca si el protocolo la pide) y "Cobrar en la terminal": espera con cancelar, timeout y reintentar; aprobado completa `card_voucher` (lote, cupón, autorización, marca, últimos 4, cuotas, comercio, **adquirente**, `origen: "terminal"`, `terminal_tx`) y registra el pago (bloqueado en la hoja); rechazo muestra el motivo; siempre se puede pasar a la carga manual.
+6. **Servidor (lo que se escribe):** bitácora `terminal_transactions` (sólo lectura por RLS con `internal_scope()` y sucursales del usuario; escritura sólo por la RPC `terminal_tx_record`: rol, terminal del usuario vía `terminal_for_user`, feature y `audit_logs`). Trigger en `payments`: un cupón con `origen: "terminal"` exige `terminal_tx` de una **venta aprobada** del mismo negocio, mismo monto, de las últimas 24 h y no usada (bloqueo `FOR UPDATE` y vínculo por un trigger `AFTER INSERT`), y pisa lote, cupón, autorización y últimos 4 con los de la bitácora; si vino del simulador, marca `simulado`. Si la bitácora no se pudo guardar, el POS registra el cobro como carga manual (la plata ya se cobró).
+7. **Feature `terminal_integrada`:** OPTIONAL, grupo pagos, desde **Pro** (Pro, Business, Enterprise). Gating real en el trigger de `payment_terminals` (alta, cambio a integrada o reactivación; además la marca tiene que estar en el plan), en la RPC de bitácora y en el trigger de `payments`. Copy en `featureInfo`; la comparación de planes la deriva de la matriz.
+
+### Alternativas descartadas
+
+- **Usar la DLL del fabricante (`vpipc.dll`) con un agente local:** no se puede redistribuir sin permiso de Payway y ata la solución a Windows; el formato público alcanza para el navegador o el puente.
+- **Cloud API (PayStore) como única vía:** no sirve para el pinpad por cable y no está confirmado para la Classic; queda como alternativa a evaluar con Payway.
+- **Confiar en el cupón que manda el navegador:** el trigger lo valida contra la bitácora; un cupón "de terminal" no se puede inventar.
+- **Rediseñar el asistente de Tarjeta en posnet:** otra rama lo está cambiando; la integración se suma como tender propio.
+
+### Consecuencias
+
+- Deploy: migración `20261018100000_terminal_integrada` (después de `20261015110000` de ADR-049 y de `20261013900000` de ADR-052). Sin Edges nuevas.
+- Lo que el comercio necesita: Chrome o Edge de escritorio en https (o el puente), la terminal en modo integrado y, para Payway, los códigos de tarjeta.
+- **Pendiente con los adquirentes:** especificación oficial y homologación de Payway (lista en el relevamiento), protocolo de Fiserv Posnet, librería o Cloud2Cloud de Getnet. Anulación, devolución y cierre de lote desde Ventas y la Caja quedan para cuando haya protocolo validado (el adaptador ya los tiene). Instalador del puente. Cobro de una venta aprobada cuya venta falla después queda en la bitácora sin pago (conciliable), igual que un Point.

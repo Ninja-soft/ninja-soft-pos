@@ -170,6 +170,7 @@ export const branchesAdminApi = {
     if (!tenantId) return [];
     const r = await loose()
       .from<StaffAssignment[]>("staff_branch_assignments")
+      .eq("tenant_id", tenantId)
       .select(
         "id, store_id, user_id, cashier_profile_id, kind, role, valid_from, valid_until, reason, transfer_id, superseded_by, deleted_at, cancel_reason, created_at",
       )

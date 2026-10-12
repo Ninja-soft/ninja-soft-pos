@@ -6,13 +6,16 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 // Cliente Supabase para Server Components / Route Handlers.
 // Usa cookies de la request (anon key + sesión del usuario). RLS aplicada.
-export function createClient() {
+// `scope: "internal"` sólo desde app/internal: habilita el acceso cruzado del
+// staff interno en RLS (internal_scope(), ADR-052).
+export function createClient(opts: { scope?: "internal" } = {}) {
   const cookieStore = cookies();
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(opts.scope === "internal" ? { global: { headers: { "x-ninja-scope": "internal" } } } : {}),
       cookies: {
         getAll() {
           return cookieStore.getAll();

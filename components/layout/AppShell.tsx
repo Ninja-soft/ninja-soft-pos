@@ -11,6 +11,7 @@ import {
   CalendarClock,
   CalendarDays,
   ChevronDown,
+  HandCoins,
   KeyRound,
   LayoutDashboard,
   Lock,
@@ -131,6 +132,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Gestión",
       items: [
         { href: "/clientes", label: "Clientes", icon: Users },
+        // Cuenta corriente v2: tablero de cobranza. Con candado si el plan no la incluye.
+        { href: "/clientes/cuentas", label: "Cuentas corrientes", icon: HandCoins, feature: "cuenta_corriente" },
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
         { href: "/configuracion", label: "Configuración", icon: Settings },
       ],

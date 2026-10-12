@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -24,6 +24,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
 import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
 import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
+import { AccountSettingsCard } from "@/components/account/AccountSettingsCard";
 import { ReturnsSettingsCard } from "@/components/dashboard-team/ReturnsSettingsCard";
 import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
 import { CustomerDisplayCard } from "@/components/dashboard-team/CustomerDisplayCard";
@@ -61,6 +62,7 @@ type Section =
   | "profesionales"
   | "paquetes"
   | "clientes"
+  | "cuenta-corriente"
   | "devoluciones"
   | "escaner"
   | "pantalla-cliente"
@@ -126,7 +128,11 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   },
   {
     title: "Clientes",
-    sections: [{ key: "clientes", label: "Datos del cliente", icon: Users }],
+    sections: [
+      { key: "clientes", label: "Datos del cliente", icon: Users },
+      // Cuenta corriente v2: plazos, cuotas, punitorios, bloqueo y recordatorios.
+      { key: "cuenta-corriente", label: "Cuenta corriente", icon: Wallet, feature: "cuenta_corriente" },
+    ],
   },
   {
     title: "Comprobantes",
@@ -602,6 +608,7 @@ function ConfiguracionInner() {
           {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
               automático del comprobante (solo owner; se auto-oculta) */}
           {section === "clientes" && <OperationSettingsCard view="clientes" />}
+          {section === "cuenta-corriente" && <AccountSettingsCard />}
 
           {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
           {section === "devoluciones" && <ReturnsSettingsCard />}

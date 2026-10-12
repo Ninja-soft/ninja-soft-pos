@@ -37,6 +37,32 @@ export interface CatalogSearchResult {
   categoriaPath: string | null;
   fotoUrl: string | null;
   disponible: boolean;
+  // Datos opcionales del maestro (si el catálogo los trae).
+  descripcion: string | null;
+  atributos: unknown;
+}
+
+// Edición previa al import (todo opcional; ausente = valor del catálogo).
+export interface CatalogImportOverrides {
+  name?: string;
+  description?: string | null;
+  model?: string | null;
+  brand?: string | null;
+  barcode?: string | null;
+  sku?: string | null;
+  price?: number;
+  cost?: number | null;
+  stock?: number;
+  track_stock?: boolean;
+  attributes?: { key: string; value: string }[];
+  keep_image?: boolean;
+  category_path?: { id: string | null; name: string }[];
+}
+
+export interface CatalogImportResult {
+  productId: string;
+  existing: boolean;
+  imagePending: boolean;
 }
 
 // Cliente "destipado" para tablas/RPC de Tiendita ausentes en database.ts.
@@ -126,6 +152,8 @@ export const storefrontApi = {
       categoriaPath: (r.categoria_path as string) ?? null,
       fotoUrl: (r.foto_url as string) ?? null,
       disponible: Boolean(r.disponible),
+      descripcion: (r.descripcion as string) ?? null,
+      atributos: r.atributos ?? null,
     }));
   },
 
@@ -141,6 +169,42 @@ export const storefrontApi = {
     });
     if (error) throw error;
     return data as string;
+  },
+
+  // Import con edición previa (import_catalog_product). Idempotente por código
+  // de barras: si ya existe devuelve ese producto con existing=true.
+  importProduct: async (
+    catalogId: string,
+    catalogProductId: number,
+    overrides: CatalogImportOverrides,
+  ): Promise<CatalogImportResult> => {
+    const { data, error } = await db().rpc("import_catalog_product", {
+      p_catalog_id: catalogId,
+      p_catalog_product_id: catalogProductId,
+      p_overrides: overrides,
+    });
+    if (error) throw error;
+    const r = (data ?? {}) as Record<string, unknown>;
+    return {
+      productId: String(r.product_id ?? ""),
+      existing: Boolean(r.existing),
+      imagePending: Boolean(r.image_pending),
+    };
+  },
+
+  // Copia la foto del maestro al bucket del negocio (Edge tiendita_copy_image).
+  // Nunca rompe el import: si falla, la foto externa queda en la galería.
+  copyImage: async (productId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await createClient().functions.invoke(
+        "tiendita_copy_image",
+        { body: { product_id: productId } },
+      );
+      if (error) return false;
+      return Boolean((data as { ok?: boolean } | null)?.ok);
+    } catch {
+      return false;
+    }
   },
 };
 

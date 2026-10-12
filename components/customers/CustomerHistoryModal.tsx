@@ -1,13 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { useToast } from "@/components/ui/Toast";
-import { CalendarClock, Heart, Mail, MessageCircle, Package, RotateCcw } from "lucide-react";
+import { useFeature } from "@/modules/saas/gating";
+import { CalendarClock, Heart, Mail, MessageCircle, Package, RotateCcw, Wallet } from "lucide-react";
 import {
   useCustomerHistory,
   useCustomerLastSaleItems,
@@ -17,7 +14,8 @@ import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
-import { customersApi, type Customer } from "@/modules/customers/api";
+import type { Customer } from "@/modules/customers/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 // Recordatorio manual del próximo turno por WhatsApp (como los links de
 // cumpleaños · BirthdaysModal). El ENVÍO automático queda como follow-up (cron
@@ -83,9 +81,7 @@ export function CustomerHistoryModal({
     open ? customer?.id : null,
   );
   const { data: numFmt } = useSaleNumberFormat();
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [payAmount, setPayAmount] = useState("");
+  const accountEnabled = useFeature("cuenta_corriente");
 
   // preferences (H40) aún no está en el tipo Customer (no se regeneran tipos).
   const preferences =
@@ -100,16 +96,6 @@ export function CustomerHistoryModal({
     router.push(`/pos?repeat=${customer.id}`);
   }
 
-  const payDebt = useMutation({
-    mutationFn: () => customersApi.payDebt(customer!.id, Number(payAmount) || 0),
-    onSuccess: () => {
-      setPayAmount("");
-      qc.invalidateQueries({ queryKey: ["customers", "history", customer?.id] });
-      toast({ title: "Pago registrado", variant: "success" });
-    },
-    onError: () => toast({ title: "No se pudo registrar el pago", variant: "error" }),
-  });
-
   return (
     <Modal
       open={open}
@@ -118,7 +104,7 @@ export function CustomerHistoryModal({
       className="max-w-lg"
     >
       {isLoading || !data ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" label="Cargando historial" />
       ) : (
         <div className="space-y-5">
           {/* Recompra rápida (H40): repetir la última venta del cliente. Carga
@@ -192,30 +178,21 @@ export function CustomerHistoryModal({
             </div>
           </div>
 
-          {data.accountDebt > 0 && (
-            <div className="flex items-end gap-2 rounded-lg border border-border p-3">
-              <label className="flex-1 text-xs text-muted-foreground">
-                Registrar pago de deuda
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  placeholder={formatCurrency(data.accountDebt)}
-                  className="mt-1"
-                />
-              </label>
-              <Button
-                disabled={
-                  payDebt.isPending ||
-                  !(Number(payAmount) > 0)
-                }
-                onClick={() => payDebt.mutate()}
-              >
-                {payDebt.isPending ? "Registrando…" : "Cobrar deuda"}
-              </Button>
-            </div>
+          {/* Cuenta corriente v2: el cobro (con medio, caja, recibo e imputación),
+              el estado de cuenta y la cobranza viven en la ficha de cuenta. */}
+          {accountEnabled !== false && customer && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                onOpenChange(false);
+                router.push(`/clientes/cuentas/${customer.id}`);
+              }}
+            >
+              <Wallet size={16} />
+              {data.accountDebt > 0 ? "Cobrar y ver cuenta corriente" : "Ver cuenta corriente"}
+            </Button>
           )}
 
           {/* Paquetes / sesiones (H41): packs activos del cliente con sesiones

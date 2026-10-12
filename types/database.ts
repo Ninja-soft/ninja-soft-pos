@@ -14,6 +14,96 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_conversations: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          tenant_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          tenant_id: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+          tenant_id: string
+          tool_summary: Json | null
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+          tenant_id: string
+          tool_summary?: Json | null
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+          tenant_id?: string
+          tool_summary?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage: {
         Row: {
           created_at: string
@@ -381,6 +471,7 @@ export type Database = {
       }
       cash_z_closures: {
         Row: {
+          account_collected: Json
           cash_in: number
           cash_out: number
           cash_shift_id: string
@@ -405,6 +496,7 @@ export type Database = {
           z_number: number
         }
         Insert: {
+          account_collected?: Json
           cash_in?: number
           cash_out?: number
           cash_shift_id: string
@@ -429,6 +521,7 @@ export type Database = {
           z_number: number
         }
         Update: {
+          account_collected?: Json
           cash_in?: number
           cash_out?: number
           cash_shift_id?: string
@@ -578,39 +671,174 @@ export type Database = {
           },
         ]
       }
+      customer_account_allocations: {
+        Row: {
+          amount: number
+          charge_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          payment_id: string
+          released_at: string | null
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          charge_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id: string
+          released_at?: string | null
+          tenant_id?: string
+        }
+        Update: {
+          amount?: number
+          charge_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          payment_id?: string
+          released_at?: string | null
+          tenant_id?: string
+        }
+        Relationships: []
+      }
+      account_collection_items: {
+        Row: {
+          assignee: string | null
+          body: string | null
+          channel: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          dedupe_key: string | null
+          deleted_at: string | null
+          done_at: string | null
+          due_at: string | null
+          id: string
+          meta: Json
+          promise_amount: number | null
+          promise_date: string | null
+          status: string
+          tenant_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          assignee?: string | null
+          body?: string | null
+          channel?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          dedupe_key?: string | null
+          deleted_at?: string | null
+          done_at?: string | null
+          due_at?: string | null
+          id?: string
+          meta?: Json
+          promise_amount?: number | null
+          promise_date?: string | null
+          status?: string
+          tenant_id?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          assignee?: string | null
+          body?: string | null
+          channel?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          dedupe_key?: string | null
+          deleted_at?: string | null
+          done_at?: string | null
+          due_at?: string | null
+          id?: string
+          meta?: Json
+          promise_amount?: number | null
+          promise_date?: string | null
+          status?: string
+          tenant_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customer_account_movements: {
         Row: {
+          accrued_through: string | null
+          cash_shift_id: string | null
           created_at: string
           created_by: string | null
           customer_id: string
           delta: number
           due_date: string | null
           id: string
+          idempotency_key: string | null
+          installment_no: number | null
+          installments: number | null
+          kind: string
+          method: string | null
+          note: string | null
+          parent_id: string | null
+          period: string | null
           reason: string | null
+          receipt_no: number | null
           sale_id: string | null
           tenant_id: string
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
+          accrued_through?: string | null
+          cash_shift_id?: string | null
           created_at?: string
           created_by?: string | null
           customer_id: string
           delta: number
           due_date?: string | null
           id?: string
+          idempotency_key?: string | null
+          installment_no?: number | null
+          installments?: number | null
+          kind: string
+          method?: string | null
+          note?: string | null
+          parent_id?: string | null
+          period?: string | null
           reason?: string | null
+          receipt_no?: number | null
           sale_id?: string | null
           tenant_id?: string
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
+          accrued_through?: string | null
+          cash_shift_id?: string | null
           created_at?: string
           created_by?: string | null
           customer_id?: string
           delta?: number
           due_date?: string | null
           id?: string
+          idempotency_key?: string | null
+          installment_no?: number | null
+          installments?: number | null
+          kind?: string
+          method?: string | null
+          note?: string | null
+          parent_id?: string | null
+          period?: string | null
           reason?: string | null
+          receipt_no?: number | null
           sale_id?: string | null
           tenant_id?: string
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -638,6 +866,7 @@ export type Database = {
       }
       customer_groups: {
         Row: {
+          account_config: Json | null
           created_at: string
           id: string
           is_active: boolean
@@ -646,6 +875,7 @@ export type Database = {
           tenant_id: string
         }
         Insert: {
+          account_config?: Json | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -654,6 +884,7 @@ export type Database = {
           tenant_id?: string
         }
         Update: {
+          account_config?: Json | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -673,10 +904,13 @@ export type Database = {
       }
       customers: {
         Row: {
+          account_config: Json | null
           address: string | null
           birth_date: string | null
+          collector_user_id: string | null
           created_at: string
           credit_limit: number
+          credit_status: string
           deleted_at: string | null
           document_number: string | null
           document_type: string | null
@@ -693,10 +927,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_config?: Json | null
           address?: string | null
           birth_date?: string | null
+          collector_user_id?: string | null
           created_at?: string
           credit_limit?: number
+          credit_status?: string
           deleted_at?: string | null
           document_number?: string | null
           document_type?: string | null
@@ -713,10 +950,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_config?: Json | null
           address?: string | null
           birth_date?: string | null
+          collector_user_id?: string | null
           created_at?: string
           credit_limit?: number
+          credit_status?: string
           deleted_at?: string | null
           document_number?: string | null
           document_type?: string | null
@@ -1485,6 +1725,7 @@ export type Database = {
       }
       pos_settings: {
         Row: {
+          account_config: Json | null
           account_due_days: number
           allow_negative_stock: boolean
           auto_email_receipt: boolean
@@ -1508,6 +1749,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_config?: Json | null
           account_due_days?: number
           allow_negative_stock?: boolean
           auto_email_receipt?: boolean
@@ -1531,6 +1773,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_config?: Json | null
           account_due_days?: number
           allow_negative_stock?: boolean
           auto_email_receipt?: boolean
@@ -1821,6 +2064,72 @@ export type Database = {
           },
         ]
       }
+      product_packages: {
+        Row: {
+          code: string | null
+          created_at: string
+          deleted_at: string | null
+          depth_cm: number | null
+          height_cm: number | null
+          id: string
+          idx: number
+          pack_count: number
+          product_id: string
+          tenant_id: string
+          units_per_pack: number
+          updated_at: string
+          weight_kg: number | null
+          width_cm: number | null
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          depth_cm?: number | null
+          height_cm?: number | null
+          id?: string
+          idx?: number
+          pack_count?: number
+          product_id: string
+          tenant_id?: string
+          units_per_pack?: number
+          updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          depth_cm?: number | null
+          height_cm?: number | null
+          id?: string
+          idx?: number
+          pack_count?: number
+          product_id?: string
+          tenant_id?: string
+          units_per_pack?: number
+          updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_packages_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_packages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           barcode: string | null
@@ -1884,6 +2193,7 @@ export type Database = {
       products: {
         Row: {
           allow_negative: boolean | null
+          attributes: Json
           barcode: string | null
           brand_id: string | null
           category_id: string | null
@@ -1899,6 +2209,7 @@ export type Database = {
           is_kit: boolean
           is_serialized: boolean
           metadata: Json
+          model: string | null
           name: string
           price: number
           season: string | null
@@ -1917,6 +2228,7 @@ export type Database = {
         }
         Insert: {
           allow_negative?: boolean | null
+          attributes?: Json
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -1932,6 +2244,7 @@ export type Database = {
           is_kit?: boolean
           is_serialized?: boolean
           metadata?: Json
+          model?: string | null
           name: string
           price: number
           season?: string | null
@@ -1950,6 +2263,7 @@ export type Database = {
         }
         Update: {
           allow_negative?: boolean | null
+          attributes?: Json
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -1965,6 +2279,7 @@ export type Database = {
           is_kit?: boolean
           is_serialized?: boolean
           metadata?: Json
+          model?: string | null
           name?: string
           price?: number
           season?: string | null
@@ -2184,6 +2499,7 @@ export type Database = {
       }
       sale_returns: {
         Row: {
+          account_credited: number
           created_at: string
           created_by: string | null
           customer_id: string | null
@@ -2196,6 +2512,7 @@ export type Database = {
           total: number
         }
         Insert: {
+          account_credited?: number
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
@@ -2208,6 +2525,7 @@ export type Database = {
           total?: number
         }
         Update: {
+          account_credited?: number
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
@@ -3372,6 +3690,112 @@ export type Database = {
         Args: { p_body: string; p_tenant: string; p_title: string }
         Returns: string
       }
+      account_accrue_interest: {
+        Args: { p_as_of?: string }
+        Returns: Json
+      }
+      account_add_collection_item: {
+        Args: {
+          p_assignee?: string
+          p_body?: string
+          p_channel?: string
+          p_customer_id: string
+          p_due_at?: string
+          p_promise_amount?: number
+          p_promise_date?: string
+          p_type: string
+        }
+        Returns: string
+      }
+      account_adjust: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_due_date?: string
+          p_kind: string
+          p_reason: string
+        }
+        Returns: Json
+      }
+      account_aging: {
+        Args: { p_as_of?: string }
+        Returns: Json
+      }
+      account_collect: {
+        Args: {
+          p_allocations?: Json
+          p_amount: number
+          p_customer_id: string
+          p_idempotency_key?: string
+          p_method: string
+          p_note?: string
+        }
+        Returns: Json
+      }
+      account_authorize_override: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_pin: string
+          p_reason: string
+          p_supervisor_id: string
+        }
+        Returns: Json
+      }
+      account_clear_supervisor_pin: {
+        Args: { p_user_id?: string | null }
+        Returns: Json
+      }
+      account_pos_info: {
+        Args: { p_customer_id: string }
+        Returns: Json
+      }
+      account_save_settings: {
+        Args: { p_config: Json }
+        Returns: Json
+      }
+      account_set_group_config: {
+        Args: { p_config: Json | null; p_group_id: string }
+        Returns: Json
+      }
+      account_set_supervisor_pin: {
+        Args: { p_pin: string }
+        Returns: Json
+      }
+      account_set_customer_terms: {
+        Args: {
+          p_collector: string | null
+          p_config: Json | null
+          p_credit_limit: number
+          p_credit_status: string
+          p_customer_id: string
+        }
+        Returns: Json
+      }
+      account_statement: {
+        Args: { p_customer_id: string; p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      account_supervisor_pin_status: {
+        Args: never
+        Returns: Json
+      }
+      account_supervisors: {
+        Args: never
+        Returns: Json
+      }
+      account_update_collection_item: {
+        Args: { p_delete?: boolean; p_id: string; p_status: string }
+        Returns: undefined
+      }
+      account_void_payment: {
+        Args: { p_movement_id: string; p_reason: string }
+        Returns: Json
+      }
+      account_waive_interest: {
+        Args: { p_amount: number; p_movement_id: string; p_reason: string }
+        Returns: Json
+      }
       adjust_product_stock: {
         Args: {
           p_delta: number
@@ -3383,6 +3807,7 @@ export type Database = {
       }
       ai_available: { Args: never; Returns: boolean }
       ai_monthly_usage: { Args: never; Returns: number }
+      ai_query: { Args: { p_spec: Json }; Returns: Json }
       ai_public_config: { Args: never; Returns: Json }
       cancel_addon: { Args: { p_addon_key: string }; Returns: undefined }
       close_cash_shift: {

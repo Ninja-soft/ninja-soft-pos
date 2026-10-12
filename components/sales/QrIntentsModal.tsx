@@ -15,6 +15,7 @@ import { formatSaleNumber, type SaleNumberFormat } from "@/lib/utils/saleNumber"
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
+import { paymentIcon } from "@/lib/payments/logos";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -23,14 +24,9 @@ const PROVIDER_LABELS: Record<string, string> = {
   pagos360: "Pagos360",
   payway: "Payway",
   mercadopago_point: "Mercado Point",
-};
-const PROVIDER_LOGOS: Record<string, string> = {
-  mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
-  mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
-  modo: "/img/medios_de_pago/Modo_cube.webp",
-  pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
-  payway: "/img/medios_de_pago/payway_cube.webp",
-  mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
+  nave: "Nave",
+  nave_point: "Nave Point",
+  gocuotas: "GO Cuotas",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -222,9 +218,9 @@ export function QrIntentsModal({
                   </td>
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1.5">
-                      {PROVIDER_LOGOS[i.provider_key] && (
+                      {paymentIcon(i.provider_key) && (
                         <Image
-                          src={PROVIDER_LOGOS[i.provider_key]!}
+                          src={paymentIcon(i.provider_key)!}
                           alt=""
                           width={18}
                           height={18}

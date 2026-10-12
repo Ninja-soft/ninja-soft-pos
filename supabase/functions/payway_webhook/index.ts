@@ -1,28 +1,26 @@
 // =============================================================================
-// Edge Function: payway_webhook — notificaciones + retorno del Formulario de
-// pago de Payway (F8 · H17). verify_jwt = false (lo llama Payway y el
-// navegador del cliente).
+// Edge Function: payway_webhook (F8 · H17). verify_jwt = false.
 //
-// Dos roles:
-//   * GET  ?view=success|cancel → pantalla neutra de retorno para el cliente
-//     que pagó en el formulario hosted (el POS se entera por su propio poll).
-//   * POST ?intent=<uuid> → notificación de Payway. NUNCA acredita a ciegas:
-//     re-verifica contra GET {v2}/payments/{payment_id} con la apikey privada
-//     del tenant (estado + monto exacto en centavos) antes de marcar el intent
-//     como approved — mismo patrón conservador que modo/pagos360/mp_point.
+// Hoy NO es parte del flujo de cobro: el checkout propio (/pagar + Edge
+// payway_checkout) aprueba de forma SINCRÓNICA con la respuesta de POST
+// /payments, y el poll del POS (Edge payway action status) re-verifica los
+// pagos en revisión con row.mp_payment_id. No se manda notifications_url.
+// Se mantiene inofensivo por compatibilidad (links viejos del formulario
+// hosted y notificaciones configuradas a mano en el panel del comercio):
+//   * GET  ?view=success|cancel → pantalla neutra de retorno.
+//   * POST ?i=<12 hex del intent> → NUNCA acredita a ciegas: toma el id de
+//     pago del cuerpo y re-verifica contra GET {v2}/payments/{id} con la apikey
+//     privada del tenant (approved + monto EXACTO en centavos +
+//     site_transaction_id == intent). Lógica en _shared/payway.ts.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
 
 const html = (body: string) =>
   new Response(
     `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>NinjaPos</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100dvh;margin:0;background:#f6f5fc;color:#15111f}main{text-align:center;padding:2rem}h1{font-size:1.4rem}</style></head><body><main>${body}</main></body></html>`,
     { headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
-
-const V2 = {
-  sandbox: "https://developers.decidir.com/api/v2",
-  prod: "https://ventasonline.payway.com.ar/api/v2",
-};
 
 Deno.serve(async (req: Request) => {
   const reqUrl = new URL(req.url);
@@ -59,7 +57,7 @@ Deno.serve(async (req: Request) => {
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data: pendings } = await admin
     .from("mp_payment_intents")
-    .select("id, tenant_id, status, amount, preference_id")
+    .select("id, tenant_id, status, amount")
     .eq("provider_key", "payway")
     .eq("status", "pending")
     .gte("created_at", since)
@@ -69,7 +67,7 @@ Deno.serve(async (req: Request) => {
   );
   if (matches.length !== 1) return new Response("ok", { status: 200 });
   const row = matches[0];
-  if (!row || row.status !== "pending" || !row.preference_id) {
+  if (!row || row.status !== "pending") {
     return new Response("ok", { status: 200 });
   }
 
@@ -88,11 +86,10 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", row.tenant_id)
     .eq("provider_key", "payway")
     .maybeSingle();
-  const base = methodRow?.sandbox ? V2.sandbox : V2.prod;
+  const base = paywayV2Base(methodRow?.sandbox);
 
-  // El payment_id REAL viene en el cuerpo de la notificación (el hash del
-  // checkout guardado en preference_id no es consultable). Se aceptan las
-  // formas conocidas del payload; sin id no se acredita (conservador).
+  // El payment_id viene en el cuerpo de la notificación (sólo como pista: se
+  // re-verifica). Se aceptan las formas conocidas; sin id no se acredita.
   let notifiedId: string | null = null;
   try {
     const body = (await req.json()) as Record<string, unknown>;
@@ -103,7 +100,7 @@ Deno.serve(async (req: Request) => {
       (Array.isArray(body.payments)
         ? (body.payments[0] as { id?: unknown } | undefined)?.id
         : undefined);
-    if (cand != null && /^[0-9]+$/.test(String(cand))) notifiedId = String(cand);
+    notifiedId = paywayPaymentId(cand);
   } catch {
     /* cuerpo no-JSON: se ignora */
   }
@@ -112,34 +109,24 @@ Deno.serve(async (req: Request) => {
   // Verificación independiente (nunca confiar en el cuerpo del webhook).
   const r = await fetch(`${base}/payments/${notifiedId}`, {
     headers: { apikey: sec.private_apikey },
-  });
-  if (!r.ok) return new Response("ok", { status: 200 });
-  const pay = (await r.json()) as { status?: string; amount?: number };
-  const state = String(pay.status ?? "").toLowerCase();
-
-  if (state === "approved" || state === "accredited") {
-    const amountOk =
-      pay.amount == null ||
-      Math.abs(Number(pay.amount) - Math.round(Number(row.amount) * 100)) < 1;
-    await admin
-      .from("mp_payment_intents")
-      .update({
-        status: amountOk ? "approved" : "rejected",
-        mp_payment_id: notifiedId,
-      })
-      .eq("id", row.id);
-  } else if (["rejected", "annulled", "voided"].includes(state)) {
-    await admin
-      .from("mp_payment_intents")
-      .update({ status: "rejected", mp_payment_id: notifiedId })
-      .eq("id", row.id);
-  } else {
-    // Estado intermedio: guardamos el payment_id para que el poll del POS
-    // (Edge payway action status) pueda re-verificar más tarde.
-    await admin
-      .from("mp_payment_intents")
-      .update({ mp_payment_id: notifiedId })
-      .eq("id", row.id);
-  }
+  }).catch(() => null);
+  if (!r || !r.ok) return new Response("ok", { status: 200 });
+  const decision = decidePaymentStatus(
+    await r.json().catch(() => null),
+    Number(row.amount),
+    row.id,
+  );
+  if (decision.status === "ignore") return new Response("ok", { status: 200 });
+  await admin
+    .from("mp_payment_intents")
+    .update(
+      decision.status === "pending"
+        ? // Estado intermedio: guardamos el id para que el poll del POS
+          // (Edge payway action status) lo re-verifique.
+          { mp_payment_id: notifiedId }
+        : { status: decision.status, mp_payment_id: notifiedId },
+    )
+    .eq("id", row.id)
+    .eq("status", "pending");
   return new Response("ok", { status: 200 });
 });

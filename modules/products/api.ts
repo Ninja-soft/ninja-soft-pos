@@ -1,6 +1,13 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
 import type { Paged } from "@/lib/utils/pagination";
+import { normalizeAttributes } from "@/lib/products/attributes";
+import {
+  diffPackages,
+  packageFromRow,
+  type ProductPackage,
+  type ProductPackageRow,
+} from "@/lib/products/packages";
 import { sanitizeIlike } from "@/lib/utils/search";
 import type {
   CategoryInput,
@@ -259,6 +266,8 @@ export const productsApi = {
         tags: toTags(input.tags),
         image_url: input.image_url,
         description: input.description,
+        model: input.model ?? null,
+        attributes: normalizeAttributes(input.attributes),
         is_active: input.is_active,
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
@@ -305,6 +314,8 @@ export const productsApi = {
         season: input.season,
         tags: toTags(input.tags),
         description: input.description,
+        model: input.model ?? null,
+        attributes: normalizeAttributes(input.attributes),
         is_active: input.is_active,
         is_kit: input.is_kit,
         is_serialized: input.is_serialized,
@@ -647,6 +658,51 @@ export function flattenCategories(
   return out;
 }
 
+// ── Medidas por bulto (feature BASE medidas_bultos) ─────────────────────────
+// La tabla product_packages tiene RLS por tenant y un trigger de gating
+// server-side (trg_assert_tenant_feature('medidas_bultos')). Baja lógica.
+export const packagesApi = {
+  list: async (productId: string): Promise<ProductPackage[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("product_packages")
+      .select("id, idx, code, units_per_pack, pack_count, weight_kg, height_cm, width_cm, depth_cm")
+      .eq("product_id", productId)
+      .is("deleted_at", null)
+      .order("idx");
+    if (error) throw error;
+    return ((data ?? []) as ProductPackageRow[]).map(packageFromRow);
+  },
+
+  // Sincroniza la lista editada contra lo guardado (alta / edición / baja lógica).
+  save: async (
+    productId: string,
+    saved: ProductPackage[],
+    edited: ProductPackage[],
+  ): Promise<void> => {
+    const supabase = createClient();
+    const d = diffPackages(saved, edited);
+    if (d.remove.length > 0) {
+      const { error } = await supabase
+        .from("product_packages")
+        .update({ deleted_at: new Date().toISOString() })
+        .in("id", d.remove);
+      if (error) throw error;
+    }
+    for (const u of d.update) {
+      const { id, ...patch } = u;
+      const { error } = await supabase.from("product_packages").update(patch).eq("id", id);
+      if (error) throw error;
+    }
+    if (d.insert.length > 0) {
+      const { error } = await supabase
+        .from("product_packages")
+        .insert(d.insert.map((r) => ({ ...r, product_id: productId })));
+      if (error) throw error;
+    }
+  },
+};
+
 // Nodo del árbol de categorías: la categoría + sus hijos (recursivo) + la
 // profundidad (0 = nivel 1) y el total de descendientes (para los contadores).
 export interface CategoryTreeNode {
@@ -743,6 +799,25 @@ export const categoriesApi = {
       .single();
     if (error) throw error;
     return data as Category;
+  },
+
+  // Resuelve una ruta del árbol (raíz → hoja): reusa los nodos existentes y
+  // crea los nuevos colgando del anterior. Devuelve el id de la hoja (o null).
+  ensurePath: async (
+    nodes: { id: string | null; name: string }[],
+  ): Promise<string | null> => {
+    let parent: string | null = null;
+    for (const n of nodes) {
+      if (n.id) {
+        parent = n.id;
+        continue;
+      }
+      const name = n.name.trim();
+      if (!name) continue;
+      const created: Category = await categoriesApi.create({ name, parent_id: parent });
+      parent = created.id;
+    }
+    return parent;
   },
 
   rename: async (id: string, name: string): Promise<void> => {

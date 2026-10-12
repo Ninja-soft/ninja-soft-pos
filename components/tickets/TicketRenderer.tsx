@@ -8,6 +8,7 @@ import { code39Segments } from "@/lib/barcode/code39";
 import type { Align, TextSize, TicketBlock } from "@/lib/tickets/blocks";
 import { styleProps } from "@/lib/tickets/blocks";
 import type { SampleTicketData } from "@/lib/tickets/sample";
+import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 
 export type TicketData = SampleTicketData;
 
@@ -144,9 +145,9 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
           <div key={b.id} className="flex justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+              src={qrSvgDataUrl(
                 `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
-              )}`}
+              )}
               alt="QR del comprobante"
               width={110}
               height={110}

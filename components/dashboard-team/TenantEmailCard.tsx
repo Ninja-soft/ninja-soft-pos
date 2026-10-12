@@ -2,20 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Eye, Mail, Server, Zap } from "lucide-react";
+import { AlertCircle, Check, ExternalLink, Eye, HelpCircle, Info, KeyRound, Mail, MousePointerClick, Server, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { CredentialInput } from "@/components/ui/CredentialInput";
+import { Segmented } from "@/components/ui/Segmented";
+import { CHOICE_ON_CHECK, choiceClass } from "@/components/ui/ChoiceCard";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
 import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
-import { IntegrationLogo, isIntegrationKey, type IntegrationKey } from "@/components/ui/IntegrationLogo";
+import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
 
 // Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
 type EmailMethod = "smtp" | "resend";
@@ -324,7 +326,7 @@ export function TenantEmailCard() {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-fg-6 text-foreground">
               <Mail size={18} />
             </span>
             <div>
@@ -356,7 +358,7 @@ export function TenantEmailCard() {
         {/* Encabezado + chip de estado */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-fg-6 text-foreground">
               <Mail size={18} />
             </span>
             <div>
@@ -369,7 +371,7 @@ export function TenantEmailCard() {
             </div>
           </div>
           {configured ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success">
               <Check size={13} /> Configurado
             </span>
           ) : (
@@ -381,64 +383,71 @@ export function TenantEmailCard() {
 
         {/* Paso 1 — Método de envío (cuenta de correo vs API) */}
         <Step n={1} title="Elegí cómo enviar los emails">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div role="radiogroup" aria-label="Método de envío" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <MethodCard
               active={method === "smtp"}
               onClick={() => setMethod("smtp")}
+              icon={<Mail size={18} />}
               title="Mi cuenta de correo"
-              desc="Gmail, Outlook u otro (SMTP)"
-              logos={["gmail", "outlook"]}
+              desc={
+                <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <span className="inline-flex items-center gap-1">
+                    <IntegrationLogo name="gmail" size={14} bare /> Gmail
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <IntegrationLogo name="outlook" size={14} bare /> Outlook
+                  </span>
+                  <span>u otro</span>
+                </span>
+              }
             />
             <MethodCard
               active={method === "resend"}
               onClick={() => setMethod("resend")}
-              title="Resend (API)"
-              desc="Servicio de envío por API"
-              logos={["resend"]}
+              icon={<IntegrationLogo name="resend" size={20} bare />}
+              title="Resend"
+              desc="Envío por API, sin servidor propio"
             />
           </div>
 
           {method === "smtp" ? (
             <>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {PROVIDERS.map((p) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => pickProvider(p.key)}
-                    className={cn(
-                      "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition",
-                      provider === p.key
-                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
-                        : "border-border text-muted-foreground hover:bg-muted",
-                    )}
-                  >
-                    {isIntegrationKey(p.key) ? (
-                      <IntegrationLogo name={p.key} size={18} />
-                    ) : (
-                      <Server size={15} />
-                    )}
-                    {p.label}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Tu proveedor</p>
+                <Segmented
+                  aria-label="Proveedor de correo"
+                  value={provider}
+                  onChange={pickProvider}
+                  className="w-full sm:w-auto sm:min-w-[340px]"
+                  options={PROVIDERS.map((p) => ({
+                    value: p.key,
+                    label: p.label,
+                    icon:
+                      p.key === "otro" ? (
+                        <Server size={14} />
+                      ) : (
+                        <IntegrationLogo name={p.key} size={15} bare />
+                      ),
+                  }))}
+                />
               </div>
 
               {provider === "outlook" && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Si Outlook falla, probá el puerto 465 con SSL si tu proveedor lo
-                  soporta.
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <Info size={13} className="mt-px shrink-0" />
+                  Si Outlook falla, probá el puerto 465 con SSL.
                 </p>
               )}
 
               {provider === "otro" ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Input
+                <div className="grid gap-3 rounded-xl bg-fg-4 p-3.5 sm:grid-cols-2">
+                  <CredentialInput
                     label="Servidor SMTP"
                     placeholder="smtp.tudominio.com"
                     value={host}
                     onChange={(e) => setHost(e.target.value)}
                   />
-                  <Input
+                  <CredentialInput
                     label="Puerto"
                     inputMode="numeric"
                     placeholder="587"
@@ -457,18 +466,18 @@ export function TenantEmailCard() {
                 </div>
               ) : (
                 <Disclosure
-                  className="mt-3"
-                  title="Avanzado (servidor y puerto)"
+                  className="border-transparent bg-fg-4"
+                  title="Servidor y puerto (avanzado)"
                   open={showAdvanced}
                   onOpenChange={setShowAdvanced}
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Input
+                    <CredentialInput
                       label="Servidor SMTP"
                       value={host}
                       onChange={(e) => setHost(e.target.value)}
                     />
-                    <Input
+                    <CredentialInput
                       label="Puerto"
                       inputMode="numeric"
                       value={port}
@@ -495,7 +504,7 @@ export function TenantEmailCard() {
         {/* Paso 2 — Cuenta / credenciales */}
         <Step n={2} title={method === "resend" ? "Tu remitente y API key" : "Tu cuenta de email"}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input
+            <CredentialInput
               label={method === "resend" ? "Email remitente" : "Tu email"}
               type="email"
               autoComplete="off"
@@ -503,8 +512,9 @@ export function TenantEmailCard() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <Input
-              label="Nombre del remitente (opcional)"
+            <CredentialInput
+              label="Nombre del remitente"
+              optional
               placeholder="Mi Negocio"
               value={fromName}
               onChange={(e) => setFromName(e.target.value)}
@@ -513,46 +523,45 @@ export function TenantEmailCard() {
 
           {method === "resend" ? (
             <>
-              <Input
+              <CredentialInput
                 label="API key de Resend"
-                type="password"
+                secret
+                mono
                 autoComplete="off"
                 data-1p-ignore
                 data-lpignore="true"
-                placeholder={
-                  hasResendKey
-                    ? "•••••• (guardada • dejá vacío para mantener)"
-                    : "re_xxxxxxxxxxxxxxxxxxxxxxxx"
-                }
+                configured={hasResendKey}
+                placeholder={hasResendKey ? "Dejala vacía para mantenerla" : "re_xxxxxxxxxxxxxxxxxxxxxxxx"}
                 value={resendKey}
                 onChange={(e) => setResendKey(e.target.value)}
+                hint={
+                  <>
+                    El remitente tiene que ser de un dominio verificado en Resend. Para probar, usá{" "}
+                    <code className="rounded bg-fg-6 px-1 py-0.5 font-mono text-[11px]">onboarding@resend.dev</code>.
+                  </>
+                }
               />
-              <p className="text-xs text-muted-foreground">
-                Con Resend, el email remitente debe ser de un dominio verificado
-                en tu cuenta (o usá <code>onboarding@resend.dev</code> para
-                probar). Tu API key se guarda de forma segura y no se vuelve a
-                mostrar.
-              </p>
             </>
           ) : (
             <>
-              <Input
-                label="Contraseña"
-                type="password"
+              <CredentialInput
+                label={provider === "gmail" ? "Contraseña de aplicación" : "Contraseña"}
+                secret
                 autoComplete="new-password"
                 data-1p-ignore
                 data-lpignore="true"
-                placeholder={
-                  hasPassword
-                    ? "•••••• (guardada • dejá vacío para mantener)"
-                    : "Contraseña de aplicación"
-                }
+                configured={hasPassword}
+                placeholder={hasPassword ? "Dejala vacía para mantenerla" : "Contraseña de aplicación"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
 
               {provider === "gmail" && (
-                <Disclosure variant="help" title="¿Cómo consigo la contraseña de aplicación de Gmail?">
+                <Disclosure
+                  className="border-transparent bg-fg-4"
+                  icon={<HelpCircle size={15} />}
+                  title="¿Cómo saco la contraseña de aplicación de Gmail?"
+                >
                   <ol className="space-y-1.5">
                     {[
                       "Activá la verificación en 2 pasos en tu cuenta de Google.",
@@ -560,7 +569,7 @@ export function TenantEmailCard() {
                       "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
                     ].map((step, i) => (
                       <li key={i} className="flex gap-2.5 text-muted-foreground">
-                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-fg-10 text-[10px] font-bold text-foreground">
                           {i + 1}
                         </span>
                         <span>{step}</span>
@@ -571,9 +580,9 @@ export function TenantEmailCard() {
                     href="https://myaccount.google.com/apppasswords"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 inline-block text-xs font-medium text-ninja-flameSoft hover:underline"
+                    className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold text-foreground hover:underline"
                   >
-                    Abrir Contraseñas de aplicaciones de Google →
+                    Abrir Contraseñas de aplicaciones <ExternalLink size={12} />
                   </a>
                 </Disclosure>
               )}
@@ -592,7 +601,7 @@ export function TenantEmailCard() {
               onChange={(e) => setBodyText(e.target.value)}
               rows={3}
               placeholder="¡Gracias por tu compra! Te enviamos tu comprobante."
-              className="w-full rounded-lg border border-input bg-background p-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+              className="w-full rounded-xl border border-transparent bg-fg-6 p-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/80 focus:bg-[var(--background)] focus:shadow-[0_0_0_1px_color-mix(in_srgb,var(--foreground)_22%,transparent)]"
             />
           </div>
 
@@ -619,9 +628,7 @@ export function TenantEmailCard() {
                   title={t.desc}
                   className={cn(
                     "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
-                    bodyTemplate === t.key
-                      ? "border-transparent bg-ninja-flame/[0.12]"
-                      : "border-border hover:bg-muted",
+                    bodyTemplate === t.key ? CHOICE_ON_CHECK : "border-border hover:bg-muted",
                   )}
                 >
                   <DesignPreview k={t.key} accent={accent} logoUrl={logoUrl} />
@@ -641,10 +648,8 @@ export function TenantEmailCard() {
           {result && (
             <div
               className={cn(
-                "flex items-start gap-2 rounded-lg border p-3 text-sm",
-                result.kind === "ok"
-                  ? "border-transparent bg-emerald-500/10 text-emerald-400"
-                  : "border-destructive/30 bg-destructive/10 text-destructive",
+                "flex items-start gap-2 rounded-xl p-3 text-sm",
+                result.kind === "ok" ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
               )}
             >
               {result.kind === "ok" ? (
@@ -666,12 +671,17 @@ export function TenantEmailCard() {
             <Button
               variant="secondary"
               disabled={saving || !formReady}
+              loading={saving && save.variables === false}
               onClick={() => save.mutate(false)}
             >
-              {saving ? "Guardando…" : "Guardar"}
+              Guardar
             </Button>
-            <Button disabled={saving || !formReady} onClick={() => save.mutate(true)}>
-              {saving ? "Enviando…" : "Guardar y enviar prueba"}
+            <Button
+              disabled={saving || !formReady}
+              loading={saving && save.variables === true}
+              onClick={() => save.mutate(true)}
+            >
+              Guardar y enviar prueba
             </Button>
           </div>
         </Step>
@@ -740,113 +750,89 @@ function Step({
   return (
     <div className="space-y-3 border-t border-dashed border-border pt-5 first:border-0 first:pt-0">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ninja-flame/15 text-xs font-bold text-ninja-flameSoft">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background">
           {n}
         </span>
         <span className="text-sm font-semibold text-foreground">{title}</span>
       </div>
-      <div className="space-y-3 pl-[34px]">{children}</div>
+      <div className="space-y-3 sm:pl-[34px]">{children}</div>
     </div>
   );
 }
 
-// Tarjeta seleccionable del método de envío (SMTP vs Resend).
+// Tarjeta seleccionable del método de envío (SMTP vs Resend): un solo ícono
+// por opción y selección premium (relleno neutro + check de marca).
 function MethodCard({
   active,
   onClick,
+  icon,
   title,
   desc,
-  logos,
 }: {
   active: boolean;
   onClick: () => void;
+  icon: React.ReactNode;
   title: string;
-  desc: string;
-  logos: IntegrationKey[];
+  desc: React.ReactNode;
 }) {
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={active}
       onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 pr-16 text-left transition",
-        active
-          ? "border-transparent bg-ninja-flame/[0.12]"
-          : "border-border hover:bg-muted",
-      )}
+      className={choiceClass(active, "flex items-center gap-3 p-3 pr-9")}
     >
       <span
         className={cn(
-          "text-sm font-semibold",
-          active ? "text-foreground" : "text-muted-foreground",
+          "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition",
+          active ? "bg-[var(--seg-thumb)] shadow-[var(--seg-thumb-shadow)]" : "bg-muted",
+          "text-foreground",
         )}
       >
-        {title}
+        {icon}
       </span>
-      <span className="text-xs text-muted-foreground">{desc}</span>
-      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 -space-x-1.5">
-        {logos.map((l) => (
-          <IntegrationLogo key={l} name={l} size={24} />
-        ))}
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{desc}</span>
       </span>
     </button>
   );
 }
 
-// Guía simple de Resend: qué es, cómo crear la cuenta y de dónde sacar la
-// API key. Tono guiado (pasos numerados) + links a la web de Resend.
+// Guía de Resend: qué es y cómo sacar la API key, en pasos con ícono.
 function ResendGuide() {
   const steps = [
-    "Creá una cuenta gratuita en resend.com (te alcanza para empezar).",
-    "En el panel, entrá a “API Keys” y tocá “Create API Key”.",
-    "Copiá la clave (empieza con re_) y pegala abajo. Se muestra una sola vez.",
+    { Icon: UserPlus, text: "Creá una cuenta gratis en resend.com." },
+    { Icon: MousePointerClick, text: "En API Keys, tocá Create API Key." },
+    { Icon: KeyRound, text: "Copiá la clave (empieza con re_) y pegala abajo." },
   ];
   return (
-    <div className="mt-3 rounded-lg bg-ninja-flame/[0.08] p-3.5">
-      <div className="flex items-start gap-2.5">
-        <IntegrationLogo name="resend" size={28} className="mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            ¿Qué es Resend?
-          </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            Es un servicio que envía tus emails por API (no necesitás tu propio
-            servidor SMTP). Es rápido, confiable y tiene un plan gratuito para
-            arrancar. Solo te pedimos una API key.
-          </p>
-        </div>
-      </div>
-
-      <ol className="mt-3 space-y-1.5">
-        {steps.map((step, i) => (
-          <li key={i} className="flex gap-2.5 text-xs text-muted-foreground">
-            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
-              {i + 1}
+    <div className="space-y-3 rounded-xl bg-fg-4 p-3.5">
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Resend envía tus emails por API: no necesitás un servidor SMTP y tiene plan gratis para arrancar.
+      </p>
+      <ol className="space-y-2">
+        {steps.map(({ Icon, text }, i) => (
+          <li key={i} className="flex items-center gap-3">
+            <span className="relative grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-fg-6 text-foreground">
+              <Icon size={15} aria-hidden />
+              <span className="absolute -right-1.5 -top-1.5 grid h-4 w-4 place-items-center rounded-full bg-foreground text-[9px] font-bold text-background">
+                {i + 1}
+              </span>
             </span>
-            <span>{step}</span>
+            <span className="text-[13px] text-foreground">{text}</span>
           </li>
         ))}
       </ol>
-
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-        <a
-          href="https://resend.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-medium text-ninja-flameSoft hover:underline"
-        >
-          Abrir resend.com →
-        </a>
-        <a
-          href="https://resend.com/api-keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-medium text-ninja-flameSoft hover:underline"
-        >
-          Ir a mis API Keys →
-        </a>
-      </div>
+      <a
+        href="https://resend.com/api-keys"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between gap-2 rounded-lg bg-[var(--seg-thumb)] px-3 py-2 text-[13px] font-medium text-foreground shadow-[var(--seg-thumb-shadow)] transition hover:opacity-90"
+      >
+        Ir a mis API Keys en Resend <ExternalLink size={14} className="text-muted-foreground" />
+      </a>
     </div>
   );
 }

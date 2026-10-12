@@ -177,7 +177,7 @@ export function RubroCard() {
                 className={cn(
                   "rounded-lg border p-3 text-left transition disabled:opacity-60",
                   active
-                    ? "border-transparent bg-ninja-flame/[0.12]"
+                    ? "choice-on choice-check"
                     : "border-border hover:bg-muted",
                 )}
               >

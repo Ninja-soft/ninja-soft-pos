@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench, Settings } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench, Settings } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -87,12 +87,25 @@ const TicketTemplatesCard = dynamic(() =>
 const PrintSettingsCard = dynamic(() =>
   import("@/components/dashboard-team/PrintSettingsCard").then((m) => m.PrintSettingsCard),
 );
+const PosLayoutCard = dynamic(() =>
+  import("@/components/pos/settings/PosLayoutCard").then((m) => m.PosLayoutCard),
+);
 const PriceListsCard = dynamic(() =>
   import("@/components/prices/PriceListsCard").then((m) => m.PriceListsCard),
+);
+const AccountSettingsCard = dynamic(() =>
+  import("@/components/account/AccountSettingsCard").then((m) => m.AccountSettingsCard),
+);
+const GroupAccountTermsCard = dynamic(() =>
+  import("@/components/account/GroupAccountTermsCard").then((m) => m.GroupAccountTermsCard),
+);
+const SupervisorPinCard = dynamic(() =>
+  import("@/components/account/SupervisorPinCard").then((m) => m.SupervisorPinCard),
 );
 
 type Section =
   | "apariencia"
+  | "diseno-pos"
   | "rubro"
   | "marca"
   | "tickets"
@@ -106,6 +119,7 @@ type Section =
   | "profesionales"
   | "paquetes"
   | "clientes"
+  | "cuenta-corriente"
   | "devoluciones"
   | "escaner"
   | "pantalla-cliente"
@@ -145,6 +159,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   {
     title: "Operación del POS",
     sections: [
+      { key: "diseno-pos", label: "Diseño del POS", icon: LayoutTemplate },
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "salones", label: "Salones y mesas", icon: Utensils, requiresDining: true },
       { key: "menus", label: "Menús por horario", icon: Clock, requiresDining: true },
@@ -171,7 +186,11 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   },
   {
     title: "Clientes",
-    sections: [{ key: "clientes", label: "Datos del cliente", icon: Users }],
+    sections: [
+      { key: "clientes", label: "Datos del cliente", icon: Users },
+      // Cuenta corriente v2: plazos, cuotas, punitorios, bloqueo y recordatorios.
+      { key: "cuenta-corriente", label: "Cuenta corriente", icon: Wallet, feature: "cuenta_corriente" },
+    ],
   },
   {
     title: "Comprobantes",
@@ -374,7 +393,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 text-left transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on choice-check"
                           : "border-border hover:bg-muted",
                       )}
                     >
@@ -455,7 +474,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on"
                           : "border-border hover:bg-muted",
                       )}
                     >
@@ -486,7 +505,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on choice-check"
                           : "border-border hover:bg-muted",
                       )}
                     >
@@ -531,6 +550,9 @@ function ConfiguracionInner() {
 
           {/* Operación del POS + productos (solo owner; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard view="operacion" />}
+
+          {/* Diseño del POS: preset, grilla, carrito, medios fijados y teclas rápidas */}
+          {section === "diseno-pos" && <PosLayoutCard />}
 
           {/* Salones y mesas (F13 · H44): CRUD de salones/sectores y sus mesas. La
               atención por mesas vive en la sección Salón del menú. Sólo visible
@@ -645,6 +667,13 @@ function ConfiguracionInner() {
           {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
               automático del comprobante (solo owner; se auto-oculta) */}
           {section === "clientes" && <OperationSettingsCard view="clientes" />}
+          {section === "cuenta-corriente" && (
+            <div className="space-y-4">
+              <AccountSettingsCard />
+              <GroupAccountTermsCard />
+              <SupervisorPinCard />
+            </div>
+          )}
 
           {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
           {section === "devoluciones" && <ReturnsSettingsCard />}

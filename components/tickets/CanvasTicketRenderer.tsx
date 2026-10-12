@@ -8,6 +8,7 @@ import { CANVAS_WIDTH, styleProps, type CanvasContent, type CanvasElement } from
 import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { Barcode, alignCls, sizeCls } from "@/components/tickets/TicketRenderer";
+import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 
 interface Props {
   content: CanvasContent["canvas"];
@@ -60,9 +61,9 @@ export function CanvasElementView({
         <div className="flex h-full w-full items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+            src={qrSvgDataUrl(
               `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
-            )}`}
+            )}
             alt="QR del comprobante"
             className="h-full w-full object-contain"
           />

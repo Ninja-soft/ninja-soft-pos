@@ -40,9 +40,33 @@
 // tenant_id resuelto SERVER-SIDE (jamás del modelo) y devuelve functionResponse;
 // repite hasta texto final. Ninguna tool toca datos sensibles (platform_secrets,
 // tokens/credenciales de Mercado Pago, claves, contraseñas, datos de otros
-// tenants). Respuesta incluye tools_used. (Claude usa solo el contexto base.)
+// tenants). Respuesta incluye tools_used.
+//
+// ACCESO TOTAL DE LECTURA (ADR-039): además de las tools curadas, el modelo
+// tiene `ai_schema` (describe la whitelist de entidades/columnas, lógica pura en
+// ../_shared/aiQuery.ts) y `ai_query` (consulta genérica: filtros, agregados,
+// agrupación por fecha). `ai_query` valida el pedido contra la whitelist y lo
+// ejecuta con el cliente del USUARIO (su JWT): la RPC SQL es SECURITY INVOKER,
+// re-valida cada identificador y fuerza tenant_id = current_tenant_id(), así
+// que RLS aplica y nunca se cruza de tenant. Gemini y Claude usan las mismas
+// tools (loop de tool use en ambos proveedores).
+//
+// HISTORIAL (ADR-039): cada turno exitoso se guarda en ai_conversations /
+// ai_messages (por usuario, retención 15 días por pg_cron). body
+// { conversation_id } continúa una conversación propia; la respuesta devuelve
+// { conversation_id, title }. body { action:'delete_conversation',
+// conversation_id } la da de baja lógica (sólo si es del usuario).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import {
+  AGG_OPS,
+  FILTER_OPS,
+  MAX_LIMIT,
+  TRUNCS,
+  describeEntities,
+  schemaIndex,
+  validateQuery,
+} from "../_shared/aiQuery.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -365,7 +389,131 @@ const TOOL_DECLARATIONS = [
       "activos. Usala como vista global antes de profundizar.",
     parameters: { type: "object", properties: {} },
   },
+  {
+    name: "ai_schema",
+    description:
+      "Describe las columnas y relaciones de una o más entidades del negocio " +
+      "(ver la lista en el system prompt). Usala antes de ai_query si no estás " +
+      "seguro de qué columnas existen.",
+    parameters: {
+      type: "object",
+      properties: {
+        entities: {
+          type: "array",
+          items: { type: "string" },
+          description: "Nombres de entidades, ej. ['products','sales'] (máx. 6).",
+        },
+      },
+      required: ["entities"],
+    },
+  },
+  {
+    name: "ai_query",
+    description:
+      "Consulta de SOLO LECTURA sobre cualquier entidad del negocio: listados " +
+      "con filtros y orden, o agregados (count, count_distinct, sum, avg, min, " +
+      "max) agrupados por hasta 2 columnas, con fechas truncadas por " +
+      "day/week/month/year (hora Argentina). Columnas de otra entidad " +
+      "relacionada: 'ref.columna' (ej. 'category.name'). Fechas 'YYYY-MM-DD' " +
+      "se toman como día argentino completo. Máximo " + MAX_LIMIT + " filas: " +
+      "para contar usá aggregates [{op:'count'}], no listes.",
+    parameters: {
+      type: "object",
+      properties: {
+        entity: { type: "string", description: "Entidad raíz, ej. 'sales'." },
+        select: {
+          type: "array",
+          items: { type: "string" },
+          description: "Columnas a listar (sólo sin agregados).",
+        },
+        filters: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              col: { type: "string" },
+              op: { type: "string", enum: [...FILTER_OPS] },
+              value: { type: "string", description: "Valor (eq, neq, gt, gte, lt, lte, ilike)." },
+              values: {
+                type: "array",
+                items: { type: "string" },
+                description: "Valores para 'in' o los 2 extremos de 'between'.",
+              },
+            },
+            required: ["col", "op"],
+          },
+        },
+        group_by: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              col: { type: "string" },
+              trunc: { type: "string", enum: [...TRUNCS] },
+            },
+            required: ["col"],
+          },
+        },
+        aggregates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: [...AGG_OPS] },
+              col: { type: "string", description: "Omitir en count para contar filas." },
+            },
+            required: ["op"],
+          },
+        },
+        order_by: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              col: {
+                type: "string",
+                description:
+                  "Columna, o en consultas agregadas el alias de salida (ej. sum_total, count, created_at_month).",
+              },
+              dir: { type: "string", enum: ["asc", "desc"] },
+            },
+            required: ["col"],
+          },
+        },
+        limit: { type: "integer", description: `Filas (1-${MAX_LIMIT}, default 50).` },
+      },
+      required: ["entity"],
+    },
+  },
 ];
+
+// Mismo catálogo en el formato de tools de Anthropic (input_schema).
+const CLAUDE_TOOLS = TOOL_DECLARATIONS.map((t) => ({
+  name: t.name,
+  description: t.description,
+  input_schema: t.parameters,
+}));
+
+// Tope del JSON que se le devuelve al modelo por tool (evita prompts enormes).
+const MAX_TOOL_RESULT_CHARS = 40_000;
+
+// Recorta filas de un resultado de ai_query hasta que entre en el tope.
+function capToolResult(result: unknown): unknown {
+  let s = JSON.stringify(result ?? null);
+  if (s.length <= MAX_TOOL_RESULT_CHARS) return result;
+  const r = result as { rows?: unknown[] } | null;
+  if (r && Array.isArray(r.rows)) {
+    const rows = [...r.rows];
+    while (rows.length > 1) {
+      rows.length = Math.floor(rows.length / 2);
+      s = JSON.stringify({ ...r, rows });
+      if (s.length <= MAX_TOOL_RESULT_CHARS) {
+        return { ...r, rows, row_count: rows.length, truncated: true };
+      }
+    }
+  }
+  return { error: "Resultado demasiado grande. Pedí menos columnas, filtrá o agregá." };
+}
 
 // Periodos válidos para las tools de ventas (defensa: si el modelo manda algo
 // raro, la RPC igual cae a un default seguro, pero clampeamos acá también).
@@ -384,9 +532,14 @@ function clampLimit(raw: unknown, def: number): number {
 // parámetros del modelo se sanean (query truncada, period/group_by validados,
 // limit clampeado) antes de tocar la base. Devuelve el jsonb del RPC o un sobre
 // { error } legible (que también se le pasa al modelo como functionResponse).
+//
+// `ai_schema` es pura (catálogo local). `ai_query` corre con `userClient` (JWT
+// del usuario, RLS) y NUNCA con service_role.
 async function runTool(
   // deno-lint-ignore no-explicit-any
   admin: any,
+  // deno-lint-ignore no-explicit-any
+  userClient: any,
   tenantId: string,
   name: string,
   // deno-lint-ignore no-explicit-any
@@ -397,6 +550,19 @@ async function runTool(
     typeof a.query === "string" ? a.query.slice(0, 120).trim() || null : null;
   try {
     switch (name) {
+      case "ai_schema":
+        return describeEntities(a.entities);
+      case "ai_query": {
+        const v = validateQuery(a);
+        if (!v.ok) return { error: v.error };
+        const { data, error } = await withTimeout<{ data: unknown; error: unknown }>(
+          userClient.rpc("ai_query", { p_spec: v.spec }),
+          12_000,
+          "ai_query",
+        );
+        if (error) throw error;
+        return capToolResult(data);
+      }
       case "search_products": {
         const { data, error } = await admin.rpc("ai_search_products", {
           p_tenant_id: tenantId,
@@ -471,7 +637,9 @@ async function runTool(
         return { error: `tool_desconocida: ${name}` };
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = e instanceof Error
+      ? e.message
+      : String((e as { message?: string })?.message ?? e);
     console.error(`runTool ${name} failed:`, msg);
     return { error: "No se pudo obtener el dato.", detail: msg.slice(0, 200) };
   }
@@ -498,9 +666,14 @@ type ToolLoopResult =
 // devuelve texto (sin functionCall), termina. Misma robustez que callProvider
 // (non-2xx, cuerpo inesperado, timeout → ai_provider_error). El tope de
 // iteraciones evita loops infinitos si el modelo insiste en llamar tools.
+// Vueltas máximas del loop de tools (ai_schema + ai_query + reintento entran).
+const MAX_TOOL_ITERS = 8;
+
 async function callGeminiWithTools(
   // deno-lint-ignore no-explicit-any
   admin: any,
+  // deno-lint-ignore no-explicit-any
+  userClient: any,
   tenantId: string,
   model: string,
   apiKey: string,
@@ -513,7 +686,7 @@ async function callGeminiWithTools(
   }));
   const toolsUsed: string[] = [];
   let tokens = 0;
-  const MAX_ITERS = 5;
+  const MAX_ITERS = MAX_TOOL_ITERS;
 
   for (let iter = 0; iter < MAX_ITERS; iter++) {
     let r: Response;
@@ -586,7 +759,7 @@ async function callGeminiWithTools(
     for (const p of calls) {
       const fc = p.functionCall!;
       toolsUsed.push(fc.name);
-      const result = await runTool(admin, tenantId, fc.name, fc.args ?? {});
+      const result = await runTool(admin, userClient, tenantId, fc.name, fc.args ?? {});
       responseParts.push({
         functionResponse: {
           name: fc.name,
@@ -608,6 +781,197 @@ async function callGeminiWithTools(
     error: "ai_provider_error",
     detail: "El asistente consultó varios datos pero no cerró una respuesta. Probá reformular.",
   };
+}
+
+// Bloques mínimos del wire de Anthropic Messages para el loop con tools.
+type ClaudeBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+type ClaudeMessage = { role: "user" | "assistant"; content: string | ClaudeBlock[] };
+
+// Loop de tool use de Claude (mismas tools y mismo runTool que Gemini). Mientras
+// stop_reason sea "tool_use", ejecuta las tools pedidas y devuelve
+// tool_result; termina con el texto final. Misma robustez que callProvider.
+async function callClaudeWithTools(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  // deno-lint-ignore no-explicit-any
+  userClient: any,
+  tenantId: string,
+  model: string,
+  apiKey: string,
+  systemPrompt: string,
+  messages: { role: string; content: string }[],
+): Promise<ToolLoopResult> {
+  const convo: ClaudeMessage[] = messages.map((m) => ({
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: m.content,
+  }));
+  const toolsUsed: string[] = [];
+  let tokens = 0;
+
+  for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
+    let r: Response;
+    try {
+      r = await withTimeout(
+        fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 2048,
+            system: systemPrompt,
+            tools: CLAUDE_TOOLS,
+            messages: convo,
+          }),
+        }),
+        45_000,
+        "claude",
+      );
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("claude(tools) fetch failed:", detail);
+      return { ok: false, status: 502, error: "ai_provider_error", detail: detail.slice(0, 300) };
+    }
+    if (!r.ok) {
+      const detail = providerErrText(await safeText(r), model);
+      console.error("claude(tools) non-200:", r.status, detail);
+      return { ok: false, status: 502, error: "ai_provider_error", detail };
+    }
+    const data = (await safeJson(r)) as {
+      content?: ClaudeBlock[];
+      stop_reason?: string;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    } | null;
+    tokens += (data?.usage?.input_tokens ?? 0) + (data?.usage?.output_tokens ?? 0);
+    const blocks = Array.isArray(data?.content) ? data!.content! : [];
+    const calls = blocks.filter(
+      (b): b is Extract<ClaudeBlock, { type: "tool_use" }> => b.type === "tool_use",
+    );
+
+    if (calls.length === 0 || data?.stop_reason !== "tool_use") {
+      const text = blocks
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("")
+        .trim();
+      if (!text) {
+        console.error("claude(tools) empty:", data?.stop_reason);
+        return {
+          ok: false,
+          status: 502,
+          error: "ai_provider_error",
+          detail: `El proveedor no devolvió texto (motivo: ${data?.stop_reason ?? "sin_contenido"}).`,
+        };
+      }
+      return { ok: true, reply: text, tokens, toolsUsed };
+    }
+
+    convo.push({ role: "assistant", content: blocks });
+    const results: ClaudeBlock[] = [];
+    for (const call of calls) {
+      toolsUsed.push(call.name);
+      const result = await runTool(admin, userClient, tenantId, call.name, call.input ?? {});
+      results.push({
+        type: "tool_result",
+        tool_use_id: call.id,
+        content: JSON.stringify(result ?? null),
+      });
+    }
+    convo.push({ role: "user", content: results });
+  }
+
+  console.error("claude(tools) max iters reached");
+  return {
+    ok: false,
+    status: 502,
+    error: "ai_provider_error",
+    detail: "El asistente consultó varios datos pero no cerró una respuesta. Probá reformular.",
+  };
+}
+
+// Título de la conversación: primera línea del primer mensaje, recortada.
+function conversationTitle(text: string): string {
+  const line = text.replace(/\s+/g, " ").replace(/\u2014/g, "-").trim();
+  if (!line) return "Nueva conversación";
+  return line.length > 60 ? `${line.slice(0, 57).trimEnd()}...` : line;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Guarda el turno (pregunta + respuesta) en el historial del usuario. Escribe
+// con el admin client pero con tenant y usuario resueltos server-side; si el
+// conversation_id no es del usuario (o está dado de baja) abre una nueva.
+// Best-effort: un fallo se loguea y no rompe la respuesta del chat.
+async function persistTurn(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  tenantId: string,
+  userId: string,
+  conversationId: unknown,
+  userText: string,
+  userAt: Date,
+  reply: string,
+  toolsUsed: string[],
+): Promise<{ id: string; title: string } | null> {
+  try {
+    let conv: { id: string; title: string } | null = null;
+    if (typeof conversationId === "string" && UUID_RE.test(conversationId)) {
+      const { data } = await admin
+        .from("ai_conversations")
+        .select("id, title")
+        .eq("id", conversationId)
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      conv = (data as { id: string; title: string } | null) ?? null;
+    }
+    if (!conv) {
+      const { data, error } = await admin
+        .from("ai_conversations")
+        .insert({ tenant_id: tenantId, user_id: userId, title: conversationTitle(userText) })
+        .select("id, title")
+        .single();
+      if (error) throw error;
+      conv = data as { id: string; title: string };
+    }
+    const { error: msgErr } = await admin.from("ai_messages").insert([
+      {
+        tenant_id: tenantId,
+        conversation_id: conv.id,
+        role: "user",
+        content: userText.slice(0, 20_000),
+        created_at: userAt.toISOString(),
+      },
+      {
+        tenant_id: tenantId,
+        conversation_id: conv.id,
+        role: "assistant",
+        content: reply.slice(0, 20_000),
+        tool_summary: toolsUsed.length ? { tools: toolsUsed } : null,
+        created_at: new Date(Math.max(Date.now(), userAt.getTime() + 1)).toISOString(),
+      },
+    ]);
+    if (msgErr) throw msgErr;
+    await admin
+      .from("ai_conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", conv.id)
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId);
+    return conv;
+  } catch (e) {
+    console.error(
+      "persistTurn failed:",
+      e instanceof Error ? e.message : (e as { message?: string })?.message ?? e,
+    );
+    return null;
+  }
 }
 
 // Llama al proveedor (Gemini | Claude) con la config dada y devuelve un
@@ -825,6 +1189,30 @@ Deno.serve(async (req: Request) => {
       ?.current_tenant_id;
     if (!tenantId) return json({ error: "no_tenant" }, 400);
 
+    // ── Historial: baja lógica de una conversación propia ────────────────────
+    // No requiere el addon (son datos del propio usuario). Filtra por tenant y
+    // usuario resueltos server-side: nunca toca conversaciones ajenas.
+    if (body.action === "delete_conversation") {
+      const cid = body.conversation_id;
+      if (typeof cid !== "string" || !UUID_RE.test(cid)) {
+        return json({ error: "invalid_conversation" }, 400);
+      }
+      const { data: del, error: delErr } = await admin
+        .from("ai_conversations")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", cid)
+        .eq("tenant_id", tenantId)
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .select("id");
+      if (delErr) {
+        console.error("delete_conversation failed:", delErr.message ?? delErr);
+        return json({ error: "internal", detail: "No se pudo borrar la conversación." }, 500);
+      }
+      return json({ ok: true, deleted: (del ?? []).length });
+    }
+    const userAt = new Date();
+
     // ── Guard server-side (todo con service_role) ───────────────────────────
     // 1) addon accesible: status='active' OR (cancel_at_period_end y el período
     //    sigue vigente). El addon dado de baja a fin de período conserva acceso
@@ -969,48 +1357,76 @@ Deno.serve(async (req: Request) => {
     // ── Contexto READ-ONLY scoped por tenant ────────────────────────────────
     const context = await buildContext(admin, tenantId);
 
-    // Solo Gemini tiene function-calling habilitado (tools de drill-down). Con
-    // Claude se usa el contexto base (single-shot). Lo anticipamos para ajustar
-    // el system prompt: con tools, le indicamos que puede consultar datos finos.
-    const useTools = provider === "gemini";
+    // Fecha/hora actual en Argentina: el modelo la necesita para traducir
+    // "hoy", "este mes" o "el martes pasado" a fechas de los filtros.
+    const nowAr = new Intl.DateTimeFormat("es-AR", {
+      timeZone: AR_TZ,
+      weekday: "long",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date());
+    const { year: ny, month: nm, day: nd } = arYmd(new Date());
+    const todayIso = `${ny}-${String(nm).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
 
     const systemPrompt =
       "Sos el asistente de NinjaPos, un sistema POS. Respondé SOLO sobre el uso " +
-      "del sistema y los datos del negocio. No inventes datos. Español " +
-      "rioplatense. Si te preguntan algo fuera del POS, redirigí amablemente. " +
-      "Usá '•' para listas y nunca uses el guion largo (U+2014).\n\n" +
-      (useTools
-        ? "Tenés HERRAMIENTAS de solo lectura para consultar datos reales del " +
-          "negocio cuando el contexto no alcanza: search_products (buscar " +
-          "productos/precio/stock), sales_summary (ventas por período, con " +
-          "desglose por día/medio de pago/categoría), top_products (más " +
-          "vendidos), list_customers (clientes y deudas), cash_status (caja) y " +
-          "stock_report (inventario). Usalas para preguntas puntuales (un " +
-          "producto, un cliente, un período específico). Para panoramas generales " +
-          "alcanza con el contexto de abajo. Nunca inventes números: si no los " +
-          "tenés, usá una herramienta o decí que no hay datos.\n\n"
-        : "") +
-      "=== CONTEXTO DEL NEGOCIO ===\n" +
+      "del sistema y los datos del negocio. Español rioplatense con voseo. Si " +
+      "te preguntan algo fuera del POS, redirigí amablemente. Usá '•' para " +
+      "listas y nunca uses el guion largo (U+2014).\n\n" +
+      `Hoy es ${nowAr} (hora Argentina, fecha ${todayIso}).\n\n` +
+      "=== CÓMO RESPONDER CON DATOS ===\n" +
+      "• Tenés acceso de SOLO LECTURA a todos los datos del negocio mediante " +
+      "herramientas. Respondé SIEMPRE a partir de los datos: nunca inventes ni " +
+      "estimes números; citá las cifras exactas que devolvieron las " +
+      "herramientas.\n" +
+      "• Para preguntas comunes tenés atajos: search_products, sales_summary, " +
+      "top_products, list_customers, cash_status, stock_report y " +
+      "business_overview.\n" +
+      "• Para CUALQUIER otra pregunta (cantidades, totales, rankings, " +
+      "comparaciones, filtros por fecha, cliente, vendedor, categoría, etc.) " +
+      "usá ai_query sobre la entidad que corresponda. Si dudás de las columnas, " +
+      "llamá antes a ai_schema. Para contar usá aggregates [{op:'count'}]; para " +
+      "sumar usá sum. En ventas filtrá status = completed salvo que pregunten " +
+      "por anuladas.\n" +
+      "• Si una herramienta devuelve error, corregí el pedido y reintentá. Si el " +
+      "dato no existe en las entidades disponibles (ej. facturación electrónica " +
+      "AFIP, proveedores o compras), explicá qué no está accesible en lugar de " +
+      "inventar.\n" +
+      "• Nunca muestres identificadores internos (uuid) salvo que te los pidan.\n\n" +
+      "Entidades disponibles para ai_query:\n" +
+      schemaIndex() +
+      "\n\n=== CONTEXTO DEL NEGOCIO (resumen) ===\n" +
       context +
       "\n\n=== GUÍA DE PANTALLAS ===\n" +
       HELP_GUIDE;
 
     // ── Llamada al proveedor ────────────────────────────────────────────────
-    // Gemini: loop de function-calling (cap 5) — el modelo puede pedir tools de
-    // solo lectura (RPCs ai_*) que se ejecutan con el tenantId server-side.
-    // Claude: single-shot con contexto base. En ambos casos la robustez
-    // (non-2xx, cuerpo inesperado, timeout) se traduce a ai_provider_error (502)
-    // sin dejar escapar throws al runtime.
-    const out = useTools
-      ? await callGeminiWithTools(
+    // Gemini y Claude: loop de tool use (cap MAX_TOOL_ITERS) con las tools de
+    // solo lectura. Las RPCs curadas ai_* corren con el tenantId server-side;
+    // ai_query con el JWT del usuario (RLS). La robustez (non-2xx, cuerpo
+    // inesperado, timeout) se traduce a ai_provider_error (502).
+    const out = provider === "claude"
+      ? await callClaudeWithTools(
           admin,
+          userClient,
           tenantId,
           model,
           apiKey,
           systemPrompt,
           messages,
         )
-      : await callProvider(provider, model, apiKey, systemPrompt, messages);
+      : await callGeminiWithTools(
+          admin,
+          userClient,
+          tenantId,
+          model,
+          apiKey,
+          systemPrompt,
+          messages,
+        );
     if (!out.ok) {
       return json({ error: out.error, detail: out.detail }, out.status);
     }
@@ -1055,12 +1471,29 @@ Deno.serve(async (req: Request) => {
       console.error("ai_usage insert threw:", e instanceof Error ? e.message : e);
     }
 
+    // Historial del usuario (best-effort): pregunta + respuesta.
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const conv = lastUser
+      ? await persistTurn(
+          admin,
+          tenantId,
+          user.id,
+          body.conversation_id,
+          lastUser.content,
+          userAt,
+          reply.trim(),
+          toolsUsed,
+        )
+      : null;
+
     return json({
       reply: reply.trim(),
       quota: { used: usedTokens + tokens, cap: monthlyCap },
       // Nombres de las tools consultadas (vacío si respondió solo con contexto).
       // El front lo usa para un microcopy "consulté tus datos".
       tools_used: toolsUsed,
+      conversation_id: conv?.id ?? null,
+      title: conv?.title ?? null,
     });
   } catch (e) {
     return json({ error: "internal", detail: String(e) }, 500);

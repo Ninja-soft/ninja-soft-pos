@@ -37,8 +37,22 @@ export default function ResetPasswordPage() {
       const supabase = createClient();
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
+      const tokenHash = params.get("token_hash");
 
-      if (code) {
+      if (tokenHash) {
+        // Link de send_password_recovery: verifyOtp funciona en cualquier
+        // navegador/dispositivo (no depende del verifier PKCE).
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          type: "recovery",
+          token_hash: tokenHash,
+        });
+        if (otpError) {
+          setSessionError("El enlace no es válido o ya expiró.");
+          setReady(true);
+          return;
+        }
+        window.history.replaceState({}, document.title, "/reset-password");
+      } else if (code) {
         const { error: exchangeError } =
           await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {

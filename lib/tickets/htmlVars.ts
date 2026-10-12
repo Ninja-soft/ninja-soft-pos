@@ -12,6 +12,7 @@
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
+import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -96,9 +97,9 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
         `<tr><td>${esc(PAYMENT_METHOD_LABELS[p.method] ?? p.method)}</td><td style="text-align:right">${esc(formatCurrency(p.amount))}</td></tr>`,
     )
     .join("");
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+  const qrUrl = qrSvgDataUrl(
     `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
-  )}`;
+  );
 
   // Condición IVA del emisor (si el branding la tiene cargada).
   const emisorIva = brand?.iva_condition

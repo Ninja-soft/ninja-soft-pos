@@ -134,9 +134,9 @@ export function IndustryPresetWizard({
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-full border tabular-nums",
                     active
-                      ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
+                      ? "border-transparent bg-foreground text-background"
                       : done
-                        ? "border-transparent bg-ninja-flame/10 text-ninja-flameSoft"
+                        ? "choice-on"
                         : "border-border text-muted-foreground",
                   )}
                 >
@@ -213,7 +213,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      ? "choice-on choice-check"
                       : "border-border hover:bg-ninja-flame/[0.04]",
                   )}
                 >
@@ -248,7 +248,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "flex flex-col rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      ? "choice-on choice-check"
                       : "border-border hover:bg-ninja-flame/[0.04]",
                   )}
                 >
@@ -375,7 +375,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     seedCatalog
-                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      ? "choice-on choice-check"
                       : "border-border hover:bg-muted",
                   )}
                 >
@@ -391,7 +391,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     !seedCatalog
-                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      ? "choice-on choice-check"
                       : "border-border hover:bg-muted",
                   )}
                 >

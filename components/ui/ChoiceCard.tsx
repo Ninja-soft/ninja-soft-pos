@@ -2,17 +2,22 @@ import { forwardRef } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-// Selección por relleno (regla de marca): la opción activa se tiñe con flame
-// y el borde se vuelve transparente. Nunca borde/ring de color.
-export function choiceClass(selected: boolean, extra?: string) {
+// Selección premium (regla de marca, globals.css → .choice-on/.choice-check):
+// relleno neutro elevado, texto de primer plano e insignia de check con el
+// fuego Ninja en la esquina. Nunca borde/ring de color ni tinte de marca.
+//   check: false → sin insignia (pastillas compactas o cuando ya hay ChoiceDot).
+export function choiceClass(selected: boolean, extra?: string, { check = true }: { check?: boolean } = {}) {
   return cn(
-    "rounded-xl border text-left transition [&>svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-    selected
-      ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
-      : "border-border bg-card hover:bg-muted",
+    "relative rounded-xl border text-left transition [&>svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+    selected ? cn("choice-on", check && "choice-check") : "border-border bg-card hover:bg-muted",
     extra,
   );
 }
+
+/** Clases de selección para pastillas compactas (sin insignia). */
+export const CHOICE_ON = "choice-on";
+/** Clases de selección para cards con título/bajada (con insignia de check). */
+export const CHOICE_ON_CHECK = "choice-on choice-check";
 
 /** Indicador de radio/selección: círculo con gradiente de marca al activarse. */
 export function ChoiceDot({
@@ -68,7 +73,9 @@ export const ChoiceCard = forwardRef<HTMLButtonElement, ChoiceCardProps>(
       type="button"
       role="radio"
       aria-checked={selected}
-      className={choiceClass(selected, cn("flex w-full items-start gap-3 p-3.5", className))}
+      className={choiceClass(selected, cn("flex w-full items-start gap-3 p-3.5", !indicator && "pr-9", className), {
+        check: !indicator,
+      })}
       {...props}
     >
       {indicator && <ChoiceDot selected={selected} className="mt-0.5" />}
@@ -76,7 +83,7 @@ export const ChoiceCard = forwardRef<HTMLButtonElement, ChoiceCardProps>(
         <span
           className={cn(
             "grid h-9 w-9 shrink-0 place-items-center rounded-lg transition",
-            selected ? "bg-ninja-flame/15 text-ninja-flameSoft" : "bg-muted text-muted-foreground",
+            selected ? "bg-[var(--seg-thumb)] text-foreground shadow-[var(--seg-thumb-shadow)]" : "bg-muted text-muted-foreground",
           )}
         >
           {icon}
@@ -91,11 +98,6 @@ export const ChoiceCard = forwardRef<HTMLButtonElement, ChoiceCardProps>(
         )}
         {children}
       </span>
-      {!indicator && selected && (
-        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-ninja-gradient text-white">
-          <Check size={12} strokeWidth={3} />
-        </span>
-      )}
     </button>
   ),
 );

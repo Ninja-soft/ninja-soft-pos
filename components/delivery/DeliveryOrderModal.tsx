@@ -167,7 +167,7 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("delivery")}
               className={
                 orderType === "delivery"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  ? "flex items-center justify-center gap-2 rounded-lg border choice-on px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
                   : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >
@@ -178,7 +178,7 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("takeaway")}
               className={
                 orderType === "takeaway"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  ? "flex items-center justify-center gap-2 rounded-lg border choice-on px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
                   : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >
@@ -189,7 +189,7 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("mostrador")}
               className={
                 orderType === "mostrador"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  ? "flex items-center justify-center gap-2 rounded-lg border choice-on px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
                   : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >

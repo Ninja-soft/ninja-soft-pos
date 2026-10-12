@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import {
   AssistantLauncher,
   AssistantPanel,
   type ChatMessage,
+  type ConversationSummary,
 } from "./AssistantChat";
+
+// Retención del historial (debe coincidir con purge_ai_conversations, 15 días).
+const HISTORY_DAYS = 15;
 
 // ChatMessage: `consultedData` marca respuestas del asistente que usaron
 // herramientas de solo lectura (function-calling) para traer datos reales del
@@ -93,9 +97,14 @@ const FALLBACK_COMMERCIAL =
 // los datos) vive en la Edge Function ai_assistant.
 export function AssistantBubble() {
   const supabase = createClient();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [view, setView] = useState<"chat" | "history">("chat");
+  // La última conversación se carga sola una vez, al primer abrir.
+  const autoLoaded = useRef(false);
   const [quota, setQuota] = useState<{ used: number; cap: number } | null>(
     null,
   );
@@ -183,12 +192,96 @@ export function AssistantBubble() {
     },
   });
 
+  // Historial propio (RLS: sólo las conversaciones del usuario en este negocio).
+  const conversations = useQuery({
+    queryKey: ["ai-conversations"],
+    enabled: open && available === true,
+    queryFn: async (): Promise<ConversationSummary[]> => {
+      const since = new Date(
+        Date.now() - HISTORY_DAYS * 86_400_000,
+      ).toISOString();
+      const { data, error } = await supabase
+        .from("ai_conversations")
+        .select("id, title, updated_at")
+        .is("deleted_at", null)
+        .gte("updated_at", since)
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30_000,
+  });
+
+  const loadConversation = useMutation({
+    mutationFn: async (id: string): Promise<ChatMessage[]> => {
+      const { data, error } = await supabase
+        .from("ai_messages")
+        .select("role, content, tool_summary, created_at")
+        .eq("conversation_id", id)
+        .order("created_at", { ascending: true })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []).map((m): ChatMessage => {
+        const tools = (m.tool_summary as { tools?: unknown } | null)?.tools;
+        return {
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+          consultedData: Array.isArray(tools) && tools.length > 0,
+        };
+      });
+    },
+    onSuccess: (msgs, id) => {
+      setMessages(msgs);
+      setConversationId(id);
+      setView("chat");
+    },
+    onError: (e) => {
+      toast({
+        title: "No se pudo abrir la conversación",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    },
+  });
+
+  const deleteConversation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.functions.invoke("ai_assistant", {
+        body: { action: "delete_conversation", conversation_id: id },
+      });
+      if (error) throw new Error(await edgeErrorToMessage(error));
+      return id;
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData<ConversationSummary[]>(
+        ["ai-conversations"],
+        (prev) => (prev ?? []).filter((c) => c.id !== id),
+      );
+      if (id === conversationId) {
+        setMessages([]);
+        setConversationId(null);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["ai-conversations"] });
+    },
+    onError: (e) => {
+      toast({
+        title: "No se pudo borrar la conversación",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    },
+  });
+
   const send = useMutation({
     mutationFn: async (
       history: ChatMessage[],
     ): Promise<{ reply: string; consultedData: boolean }> => {
       const { data, error } = await supabase.functions.invoke("ai_assistant", {
-        body: { messages: history },
+        body: {
+          messages: history.map(({ role, content }) => ({ role, content })),
+          conversation_id: conversationId,
+        },
       });
       // En un non-2xx (quota_exceeded 429, addon_required 403,
       // ai_not_configured 400, ai_provider_error 502…) supabase-js deja
@@ -202,6 +295,7 @@ export function AssistantBubble() {
         detail?: string;
         quota?: { used: number; cap: number };
         tools_used?: string[];
+        conversation_id?: string | null;
       };
       // Defensa en profundidad: si alguna vez la Edge devolviera un error en un
       // cuerpo 200, igual lo mapeamos al mismo copy amigable.
@@ -209,6 +303,11 @@ export function AssistantBubble() {
         throw new Error(friendlyAiError(res.error, res.detail));
       }
       if (res.quota) setQuota(res.quota);
+      // La Edge guarda el turno y devuelve la conversación (nueva o la misma).
+      if (res.conversation_id) {
+        setConversationId(res.conversation_id);
+        void queryClient.invalidateQueries({ queryKey: ["ai-conversations"] });
+      }
       return {
         reply: res?.reply ?? "",
         consultedData:
@@ -242,6 +341,25 @@ export function AssistantBubble() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, locked]);
 
+  // Al abrir con acceso por primera vez, retoma la última conversación.
+  useEffect(() => {
+    if (
+      !open ||
+      locked ||
+      autoLoaded.current ||
+      !conversations.isSuccess ||
+      send.isPending
+    ) {
+      return;
+    }
+    autoLoaded.current = true;
+    const last = conversations.data[0];
+    if (last && messages.length === 0 && conversationId === null) {
+      loadConversation.mutate(last.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, locked, conversations.isSuccess]);
+
   // Al cerrar, el foco vuelve al launcher (accesibilidad de teclado).
   useEffect(() => {
     if (open) wasOpen.current = true;
@@ -251,7 +369,7 @@ export function AssistantBubble() {
   const close = useCallback(() => setOpen(false), []);
 
   function submit(text: string) {
-    if (!text || send.isPending) return;
+    if (!text || send.isPending || loadConversation.isPending) return;
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     send.mutate(next);
@@ -305,9 +423,35 @@ export function AssistantBubble() {
           onSend={submit}
           onReset={() => {
             // No se limpia con una respuesta en vuelo: llegaría a un chat vacío.
-            if (!send.isPending) setMessages([]);
+            if (send.isPending) return;
+            setMessages([]);
+            setConversationId(null);
           }}
           onClose={close}
+          view={view}
+          onToggleHistory={() => {
+            if (send.isPending) return;
+            setView((v) => (v === "history" ? "chat" : "history"));
+          }}
+          conversations={conversations.data ?? []}
+          conversationsLoading={conversations.isLoading}
+          activeConversationId={conversationId}
+          loadingConversation={loadConversation.isPending}
+          deletingConversationId={
+            deleteConversation.isPending
+              ? (deleteConversation.variables ?? null)
+              : null
+          }
+          onOpenConversation={(id) => {
+            if (send.isPending || loadConversation.isPending) return;
+            if (id === conversationId) {
+              setView("chat");
+              return;
+            }
+            setView("chat");
+            loadConversation.mutate(id);
+          }}
+          onDeleteConversation={(id) => deleteConversation.mutate(id)}
         />
       )}
     </>

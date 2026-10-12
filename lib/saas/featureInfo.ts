@@ -44,9 +44,22 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   cuenta_corriente: {
-    desc: "Cuentas corrientes de clientes: ventas a crédito, saldos, pagos a cuenta y estado de deuda por cliente.",
+    desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",
     minPlan: "Business",
+  },
+  cc_punitorios: {
+    desc: "Punitorios de cuenta corriente: interés por mora configurable (simple o compuesto, mensual o diario, gracia, tope y mínimo), calculado todos los días y con condonación auditada.",
+    impact: "Desactivado, la deuda vencida no genera intereses; la cuenta corriente sigue funcionando.",
+    minPlan: "Business",
+    requires: ["cuenta_corriente"],
+  },
+  cc_cobranza: {
+    desc: "Gestión de cobranza: recordatorios automáticos por email antes y después del vencimiento, estado de cuenta por email, promesas de pago, notas, tareas y cobrador asignado.",
+    impact: "Desactivado, la cobranza se hace a mano: sin recordatorios automáticos ni seguimiento de promesas y tareas.",
+    minPlan: "Business",
+    requires: ["cuenta_corriente"],
+    needs: "Configurar el email del negocio (Configuración, sección Email) para enviar recordatorios.",
   },
   promociones: {
     desc: "Promociones y combos: arma ofertas (2x1, packs, precios promocionales) que el POS aplica automáticamente.",
@@ -72,6 +85,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     // (ver ADR-026).
     minPlan: "Start",
   },
+  pos_quick_keys_pro: {
+    desc: "Teclas rápidas Pro: hasta 48 botones de un toque en la pantalla de venta, con color por tecla para encontrarlos al instante. El diseño del POS (presets, grilla, carrito, acento) es gratis en todos los planes.",
+    impact: "Sin la función se pueden armar hasta 12 teclas rápidas sin color; el resto del diseño del POS sigue disponible.",
+    minPlan: "Pro",
+    requires: ["pos"],
+  },
 
   // ── Pagos ─────────────────────────────────────────────────────────────────
   efectivo: {
@@ -95,7 +114,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   mercado_pago: {
-    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio y cobra desde el celular del cliente. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio, cobra con un QR único por venta en la caja del local o manda el link por WhatsApp. El Point (terminal) es una función aparte.",
     impact: "Sin esto no se puede cobrar con Mercado Pago ni vincular la cuenta del comercio.",
     minPlan: "Pro",
   },
@@ -120,6 +139,19 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",
     impact: "Sin esto Nave no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
+    needs: "Conectar la cuenta de Nave (Client ID, Client Secret y punto de venta) y pasarle a Nave la URL de notificaciones.",
+  },
+  gocuotas: {
+    desc: "Cobros con GO Cuotas por QR y link de pago: el cliente paga en 2 a 4 cuotas sin interés con su tarjeta de débito y la venta se cierra sola al aprobarse. Monto mínimo por cobro: $1.500.",
+    impact: "Desactivado, GO Cuotas no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de GO Cuotas con la API Key de la sucursal (Sucursales, Editar, Ver ApiKeys de la sucursal).",
+  },
+  directo: {
+    desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. El cobro se hace en el portal de comercios de Directo (QR o link) y el POS registra el número de operación.",
+    impact: "Desactivado, Directo no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
   },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
@@ -137,7 +169,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con el Point de Nave: el POS manda el monto a la terminal Nave y el cliente paga con tarjeta, contactless o QR.",
     impact: "Desactivado, la terminal de Nave no queda integrada al cobro del POS.",
     minPlan: "Pro",
-    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point).",
+    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point) y cargar el ID de punto de venta de cada terminal.",
   },
   fiserv: {
     desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",
@@ -160,6 +192,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Control de stock e inventario: descuenta existencias al vender y permite ajustes y movimientos de stock.",
     impact: "Desactivado, las ventas no descuentan stock y no hay control de inventario.",
     minPlan: "Start",
+  },
+  medidas_bultos: {
+    desc: "Medidas por bulto de cada producto: alto, ancho, profundidad, peso y unidades por bulto, con volumen y m³ calculados para logística y envíos.",
+    impact: "Desactivado, no se pueden cargar ni editar bultos en la ficha del producto (el servidor rechaza el alta).",
+    minPlan: "Start",
+    requires: ["productos"],
   },
   categorias: {
     desc: "Categorías de productos: organiza el catálogo en categorías para filtrar y reportar por rubro.",
@@ -252,7 +290,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Extras ──────────────────────────────────────────────────────────────────
   asistente_ia: {
-    desc: "Asistente con IA para el POS: responde consultas y ayuda a operar el negocio con inteligencia artificial.",
+    desc: "Asistente con IA para el POS: responde cualquier consulta sobre los datos del negocio (ventas, stock, clientes, caja, agenda y más) con acceso de solo lectura, y guarda las conversaciones de cada usuario por 15 días.",
     impact: "Se gestiona como add-on: se contrata aparte y no se incluye marcándolo en el plan.",
     minPlan: "Add-on",
   },

@@ -1,0 +1,743 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BellRing,
+  Check,
+  Copy,
+  FlaskConical,
+  KeyRound,
+  Lock,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Unplug,
+} from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
+import { CredentialInput } from "@/components/ui/CredentialInput";
+import { useToast } from "@/components/ui/Toast";
+import { cn } from "@/lib/utils/cn";
+import { SANDBOX_PROVIDERS, type BrandDef } from "@/lib/payments/catalog";
+import { CHANNEL_CAPS, CONNECT_GUIDE, NAVE_WEBHOOK_URL, SECURITY_NOTE, type ChannelCap } from "./copy";
+import {
+  BrandLogo,
+  CapBadge,
+  EnvPicker,
+  Eyebrow,
+  GuideSteps,
+  Notice,
+  SecurityNote,
+  StatusChip,
+  Stepper,
+  WhereRow,
+} from "./ui";
+import { mpEnvOf, type Env, type Method, type MpEnvChange } from "./types";
+
+// =============================================================================
+// Formularios de credenciales por proveedor (config, no JSX repetido). El
+// `name` de cada campo es la key con la que viaja en `secrets` a la Edge
+// set_payment_secret; los opcionales vacíos no se mandan.
+// =============================================================================
+type Field = {
+  name: string;
+  label: string;
+  secret?: boolean;
+  optional?: boolean;
+  min?: number;
+  placeholder?: string;
+  hint?: string;
+};
+
+// envNote: aclaración del paso Ambiente para proveedores sin prueba real.
+type FormSpec = { fields: Field[]; envNote?: string };
+
+const FORMS: Record<string, FormSpec> = {
+  modo: {
+    fields: [
+      { name: "username", label: "Username", min: 4, placeholder: "Tu Username de MODO" },
+      { name: "password", label: "Password", secret: true, min: 6, placeholder: "Tu Password de MODO" },
+      { name: "store_id", label: "Store ID", optional: true, placeholder: "Sólo si tenés varias sucursales" },
+      { name: "processor_code", label: "Processor code", optional: true, placeholder: "Ej: P1293" },
+    ],
+  },
+  nave: {
+    fields: [
+      { name: "client_id", label: "Client ID", min: 6, placeholder: "Tu Client ID de Nave" },
+      { name: "client_secret", label: "Client Secret", secret: true, min: 6, placeholder: "Tu Client Secret de Nave" },
+      { name: "pos_id", label: "ID de punto de venta", min: 4, placeholder: "El pos_id que te dio Nave" },
+      {
+        name: "point_pos_ids",
+        label: "Terminales Nave Point",
+        optional: true,
+        placeholder: "Caja 1: id-terminal, Caja 2: otro-id",
+        hint: "Un ID por terminal, separados por coma.",
+      },
+      { name: "audience", label: "Audience", optional: true, placeholder: "Sólo si Nave te dio uno distinto" },
+    ],
+  },
+  payway: {
+    fields: [
+      { name: "public_apikey", label: "API Key pública", min: 10, placeholder: "Tu API Key pública" },
+      { name: "private_apikey", label: "API Key privada", secret: true, min: 10, placeholder: "Tu API Key privada" },
+      { name: "site", label: "Número de comercio (site)", min: 4, placeholder: "Ej: 00097002" },
+    ],
+  },
+  getnet: {
+    fields: [
+      { name: "client_id", label: "Client ID", min: 4, placeholder: "Tu Client ID" },
+      { name: "client_secret", label: "Client Secret", secret: true, min: 8, placeholder: "Tu Client Secret" },
+    ],
+    envNote: "Getnet no tiene ambiente de prueba: las credenciales son de producción.",
+  },
+  pagos360: {
+    fields: [{ name: "api_key", label: "API Key", secret: true, min: 10, placeholder: "Tu API Key" }],
+  },
+  gocuotas: {
+    fields: [{ name: "api_key", label: "API Key de la sucursal", secret: true, min: 8, placeholder: "Tu API Key" }],
+  },
+  mobbex: {
+    fields: [
+      { name: "api_key", label: "API Key", min: 6, placeholder: "Tu API Key" },
+      { name: "access_token", label: "Access Token", secret: true, min: 6, placeholder: "Tu Access Token" },
+    ],
+    envNote: "Mobbex usa el ambiente de tu cuenta: cargá las credenciales con las que vas a cobrar.",
+  },
+};
+
+const STEPS = ["Datos", "Ambiente", "Listo"];
+
+function fieldError(f: Field, v: string): string | undefined {
+  const t = v.trim();
+  if (f.optional && !t) return undefined;
+  if (!t) return `Falta ${f.label}.`;
+  if (f.min && t.length < f.min) return "Parece incompleto: copialo entero.";
+  return undefined;
+}
+
+export type ConnectSave = { secrets?: Record<string, string>; token?: string; env?: Env };
+
+export function ConnectProviderModal({
+  open,
+  onOpenChange,
+  brand,
+  providerKey,
+  method,
+  channelNames,
+  channelKeys = [],
+  onSave,
+  onDisconnect,
+  onOAuth,
+  oauthPending = false,
+  onMpEnv,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  brand: BrandDef;
+  providerKey: string;
+  method: Method | undefined;
+  // Canales de la marca que usan esta conexión (para el resumen).
+  channelNames: string[];
+  channelKeys?: string[];
+  onSave: (v: ConnectSave) => Promise<void>;
+  onDisconnect: () => Promise<void>;
+  onOAuth?: () => void;
+  oauthPending?: boolean;
+  onMpEnv?: (v: MpEnvChange) => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const isMp = providerKey === "mercadopago";
+  const spec = FORMS[providerKey];
+  const guide = CONNECT_GUIDE[providerKey];
+  const connected = Boolean(method?.config?.connected);
+  const hasSandbox = SANDBOX_PROVIDERS.has(providerKey) || isMp;
+  const currentEnv: Env = isMp ? mpEnvOf(method) : method?.sandbox && hasSandbox ? "test" : "prod";
+  const caps: ChannelCap[] = Array.from(new Set(channelKeys.flatMap((k) => CHANNEL_CAPS[k] ?? [])));
+
+  const [view, setView] = useState<"manage" | "wizard">(connected ? "manage" : "wizard");
+  const [step, setStep] = useState(0);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [showErrors, setShowErrors] = useState(false);
+  const [env, setEnv] = useState<Env>(currentEnv);
+  const [saving, setSaving] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+  // MP: token manual (paso 1) y token de prueba (paso 2 / administrar).
+  const [mpToken, setMpToken] = useState("");
+  const [mpTestToken, setMpTestToken] = useState("");
+  const [showManual, setShowManual] = useState(false);
+
+  // Cada apertura arranca limpia.
+  useEffect(() => {
+    if (!open) return;
+    setView(connected ? "manage" : "wizard");
+    setStep(0);
+    setValues({});
+    setTouched({});
+    setShowErrors(false);
+    setEnv(currentEnv);
+    setSaving(false);
+    setServerError(null);
+    setConfirmOff(false);
+    setMpToken("");
+    setMpTestToken("");
+    setShowManual(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const fields = spec?.fields ?? [];
+  const errorOf = (f: Field) =>
+    showErrors || touched[f.name] ? fieldError(f, values[f.name] ?? "") : undefined;
+  const credsValid = isMp
+    ? mpToken.trim().length >= 8
+    : fields.every((f) => !fieldError(f, values[f.name] ?? ""));
+  const hasTest = Boolean(method?.config?.test_connected);
+  const needsTestToken = isMp && env === "test" && !hasTest;
+  const mpTestValid = mpTestToken.trim().length >= 8;
+
+  const run = async (fn: () => Promise<void>, onOk: () => void) => {
+    setSaving(true);
+    setServerError(null);
+    try {
+      await fn();
+      onOk();
+    } catch {
+      setServerError("No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const nextFromCreds = () => {
+    if (!credsValid) {
+      setShowErrors(true);
+      return;
+    }
+    if (isMp) {
+      run(() => onSave({ token: mpToken.trim() }), () => setStep(1));
+      return;
+    }
+    setStep(1);
+  };
+
+  const finish = () => {
+    if (isMp) {
+      if (needsTestToken && !mpTestValid) {
+        setShowErrors(true);
+        return;
+      }
+      const change: MpEnvChange | null =
+        env === "test" && mpTestValid
+          ? { env: "test", testToken: mpTestToken.trim() }
+          : env !== currentEnv
+            ? { env }
+            : null;
+      if (!change || !onMpEnv) {
+        setStep(2);
+        return;
+      }
+      run(() => onMpEnv(change), () => setStep(2));
+      return;
+    }
+    const secrets: Record<string, string> = {};
+    for (const f of fields) {
+      const v = (values[f.name] ?? "").trim();
+      if (v) secrets[f.name] = v;
+    }
+    run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
+  };
+
+  const closeOrBack = () => (connected ? setView("manage") : onOpenChange(false));
+  const finalEnv = isMp ? env : hasSandbox ? env : "prod";
+
+  // ── Encabezado: logo + nombre + estado ──────────────────────────────────
+  const header = (
+    <div className="flex items-center gap-3">
+      <BrandLogo brandKey={brand.key} name={brand.name} size={44} />
+      <div className="min-w-0">
+        <p className="truncate text-lg font-bold leading-tight tracking-tight">{brand.name}</p>
+        <div className="mt-1">
+          {connected ? (
+            <StatusChip tone={currentEnv === "test" ? "test" : "ok"}>
+              {currentEnv === "test" ? "Conectado en prueba" : "Conectado"}
+            </StatusChip>
+          ) : (
+            <StatusChip tone="idle">Sin conectar</StatusChip>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Pie: acción principal a todo el ancho + acción secundaria en texto ──
+  const textBtn =
+    "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-muted-foreground transition hover:bg-fg-4 hover:text-foreground disabled:opacity-50";
+  let footer: React.ReactNode = null;
+  if (view === "manage") {
+    footer = confirmOff ? (
+      <div className="space-y-2.5 rounded-2xl bg-danger/10 p-3.5">
+        <p className="text-sm">
+          <strong className="text-danger">¿Desconectar {brand.name}?</strong>{" "}
+          <span className="text-muted-foreground">
+            Se borran las credenciales y dejás de cobrar con {channelNames.join(" ni con ")}.
+          </span>
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={() => setConfirmOff(false)} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            loading={saving}
+            onClick={() =>
+              run(onDisconnect, () => {
+                toast({ title: `${brand.name} desconectado`, variant: "success" });
+                onOpenChange(false);
+              })
+            }
+          >
+            Sí, desconectar
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <>
+        {isMp && onOAuth ? (
+          <Button className="w-full" loading={oauthPending} onClick={onOAuth}>
+            <RefreshCw size={15} /> Reconectar con Mercado Pago
+          </Button>
+        ) : (
+          <Button
+            className="w-full"
+            onClick={() => {
+              setView("wizard");
+              setStep(0);
+            }}
+          >
+            <KeyRound size={15} /> Actualizar credenciales
+          </Button>
+        )}
+        <button type="button" onClick={() => setConfirmOff(true)} className={cn(textBtn, "text-danger hover:text-danger")}>
+          <Unplug size={15} /> Desconectar {brand.name}
+        </button>
+      </>
+    );
+  } else if (step === 0) {
+    footer =
+      isMp && !showManual ? (
+        <>
+          <Button className="w-full" loading={oauthPending} onClick={onOAuth}>
+            {connected ? "Reconectar con Mercado Pago" : "Conectar con Mercado Pago"} <ArrowRight size={15} />
+          </Button>
+          <button type="button" onClick={closeOrBack} className={textBtn}>
+            {connected ? "Volver" : "Cancelar"}
+          </button>
+        </>
+      ) : (
+        <>
+          <Button className="w-full" loading={saving} onClick={nextFromCreds}>
+            {isMp ? "Guardar y seguir" : "Siguiente"} <ArrowRight size={15} />
+          </Button>
+          <button type="button" onClick={isMp ? () => setShowManual(false) : closeOrBack} className={textBtn}>
+            {isMp ? "Conectar con Mercado Pago" : connected ? "Volver" : "Cancelar"}
+          </button>
+        </>
+      );
+  } else if (step === 1) {
+    footer = (
+      <>
+        <Button className="w-full" loading={saving} onClick={finish}>
+          {isMp ? "Continuar" : connected ? "Guardar cambios" : `Conectar ${brand.name}`}
+        </Button>
+        {!isMp && (
+          <button type="button" onClick={() => setStep(0)} disabled={saving} className={textBtn}>
+            <ArrowLeft size={15} /> Atrás
+          </button>
+        )}
+      </>
+    );
+  } else {
+    footer = (
+      <Button className="w-full" onClick={() => onOpenChange(false)}>
+        Listo
+      </Button>
+    );
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={view === "manage" ? brand.name : `Conectar ${brand.name}`}
+      header={header}
+      footer={<div className="flex w-full flex-col gap-1.5 sm:!w-full">{footer}</div>}
+    >
+      <form className="space-y-5" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+        {/* Señuelos anti-autocompletado del navegador. */}
+        <input type="text" name="username" autoComplete="username" className="hidden" tabIndex={-1} />
+        <input type="password" name="password" autoComplete="new-password" className="hidden" tabIndex={-1} />
+
+        {view === "wizard" && <Stepper steps={STEPS} current={step} />}
+
+        {/* ── Administrar ─────────────────────────────────────────────── */}
+        {view === "manage" && (
+          <div className="space-y-4">
+            <dl className="divide-y divide-border overflow-hidden rounded-2xl bg-fg-4 text-sm">
+              <SummaryRow
+                icon={currentEnv === "test" ? <FlaskConical size={16} /> : <ShieldCheck size={16} />}
+                tile={currentEnv === "test" ? "bg-warning/15 text-warning" : "bg-success/15 text-success"}
+                label="Ambiente"
+              >
+                {currentEnv === "test" ? "Prueba · sin plata real" : "Producción · cobros reales"}
+              </SummaryRow>
+              {caps.length > 0 && (
+                <SummaryRow icon={<Sparkles size={16} />} label="Con esta cuenta cobrás">
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    {caps.map((c) => (
+                      <CapBadge key={c} cap={c} />
+                    ))}
+                  </span>
+                </SummaryRow>
+              )}
+              <SummaryRow icon={<Lock size={16} />} label="Credenciales">
+                Cifradas en el servidor
+              </SummaryRow>
+            </dl>
+
+            {isMp && onMpEnv && (
+              <MpEnvPanel
+                env={currentEnv}
+                hasTest={hasTest}
+                pending={saving}
+                token={mpTestToken}
+                onToken={setMpTestToken}
+                onChange={(v) => run(() => onMpEnv(v), () => setMpTestToken(""))}
+              />
+            )}
+
+            {isMp && (
+              <button
+                type="button"
+                onClick={() => {
+                  setView("wizard");
+                  setStep(0);
+                  setShowManual(true);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl bg-fg-4 px-3.5 py-3 text-left text-sm font-medium transition hover:bg-fg-6"
+              >
+                <KeyRound size={15} className="text-muted-foreground" /> Pegar un Access Token
+              </button>
+            )}
+
+            {serverError && <Notice tone="danger">{serverError}</Notice>}
+          </div>
+        )}
+
+        {/* ── Paso 1: datos ───────────────────────────────────────────── */}
+        {view === "wizard" && step === 0 && (
+          <div className="space-y-4">
+            {isMp && !showManual ? (
+              <>
+                <div className="rounded-2xl bg-fg-4 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
+                      <Check size={11} strokeWidth={3} /> Recomendado
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[15px] font-semibold">Conectá en un toque</p>
+                  <p className="mt-0.5 text-[13px] text-muted-foreground">
+                    Te llevamos a Mercado Pago, autorizás y volvés. No tenés que copiar nada.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowManual(true)}
+                  className="flex w-full items-center gap-2 rounded-xl px-1 text-left text-[13px] font-medium text-muted-foreground transition hover:text-foreground"
+                >
+                  <KeyRound size={14} /> Prefiero pegar el Access Token
+                </button>
+              </>
+            ) : (
+              <>
+                {guide && (
+                  <div className="space-y-3">
+                    <Eyebrow>Cómo conectarlo</Eyebrow>
+                    <GuideSteps steps={guide.steps} />
+                    <WhereRow href={brand.credentialsUrl} label={brand.credentialsLabel} path={guide.where} />
+                  </div>
+                )}
+                {guide?.warning && <Notice tone="warning" title={guide.warning.title}>{guide.warning.text}</Notice>}
+
+                <div className="space-y-3.5">
+                  <Eyebrow>Tus credenciales</Eyebrow>
+                  {isMp ? (
+                    <CredentialInput
+                      label="Access Token de producción"
+                      secret
+                      mono
+                      name="mp_access_token"
+                      autoComplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      configured={connected}
+                      value={mpToken}
+                      onChange={(e) => setMpToken(e.target.value)}
+                      placeholder="APP_USR-..."
+                      error={showErrors && !credsValid ? "Pegá el Access Token completo." : undefined}
+                    />
+                  ) : (
+                    fields.map((f) => (
+                      <CredentialInput
+                        key={f.name}
+                        label={f.label}
+                        optional={f.optional}
+                        secret={f.secret}
+                        mono
+                        configured={connected && !f.optional}
+                        configuredLabel="Configurada"
+                        name={`${providerKey}_${f.name}`}
+                        autoComplete={f.secret ? "new-password" : "off"}
+                        data-1p-ignore
+                        data-lpignore="true"
+                        value={values[f.name] ?? ""}
+                        onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                        onBlur={() => setTouched((t) => ({ ...t, [f.name]: true }))}
+                        placeholder={connected ? "Pegá el valor nuevo" : f.placeholder}
+                        hint={f.hint}
+                        error={errorOf(f)}
+                      />
+                    ))
+                  )}
+                </div>
+                {guide?.note && <Notice>{guide.note}</Notice>}
+                {providerKey === "nave" && <NaveWebhookBox />}
+              </>
+            )}
+
+            {serverError && <Notice tone="danger">{serverError}</Notice>}
+            <SecurityNote>{SECURITY_NOTE}</SecurityNote>
+          </div>
+        )}
+
+        {/* ── Paso 2: ambiente ────────────────────────────────────────── */}
+        {view === "wizard" && step === 1 && (
+          <div className="space-y-4">
+            <div className="space-y-2.5">
+              <Eyebrow>{isMp ? "¿Dónde vas a cobrar?" : "¿De qué ambiente son estas credenciales?"}</Eyebrow>
+              <EnvPicker
+                value={hasSandbox ? env : "prod"}
+                onChange={setEnv}
+                disabledTest={!hasSandbox}
+                testHint={hasSandbox ? undefined : "No disponible"}
+              />
+            </div>
+            {!hasSandbox && spec?.envNote ? (
+              <Notice tone="warning" title="Sin ambiente de prueba">
+                {spec.envNote}
+              </Notice>
+            ) : (
+              <Notice>
+                {env === "test"
+                  ? "Probá el circuito completo sin mover plata real. Cuando abras, pasá a producción."
+                  : "Los cobros son reales y la plata entra a tu cuenta."}
+                {hasSandbox && spec?.envNote ? ` ${spec.envNote}` : ""}
+              </Notice>
+            )}
+
+            {isMp && env === "test" && (
+              <CredentialInput
+                label="Access Token de prueba"
+                secret
+                mono
+                name="mp_test_access_token"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                configured={hasTest}
+                configuredLabel="Cargado"
+                value={mpTestToken}
+                onChange={(e) => setMpTestToken(e.target.value)}
+                placeholder={hasTest ? "Pegá uno nuevo para reemplazarlo" : "APP_USR-... o TEST-..."}
+                hint="Tus integraciones › Credenciales de prueba. Convive con la conexión de producción."
+                error={showErrors && needsTestToken && !mpTestValid ? "Pegá el Access Token de prueba." : undefined}
+              />
+            )}
+
+            {serverError && <Notice tone="danger">{serverError}</Notice>}
+          </div>
+        )}
+
+        {/* ── Paso 3: listo ───────────────────────────────────────────── */}
+        {view === "wizard" && step === 2 && (
+          <div className="space-y-5 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/15 text-success">
+              <Check size={32} strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{brand.name} quedó conectado</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {finalEnv === "test"
+                  ? "Ambiente de prueba: los cobros no mueven plata real."
+                  : "Ambiente de producción: ya podés cobrar de verdad."}
+              </p>
+            </div>
+            <ul className="space-y-2.5 rounded-2xl bg-fg-4 p-4 text-left text-sm">
+              <NextStep n={1}>Activá los canales que vas a usar ({channelNames.join(", ")}).</NextStep>
+              {isMp && <NextStep n={2}>Configurá la caja QR para mostrar un QR único por venta.</NextStep>}
+              {providerKey === "nave" && <NextStep n={2}>Pasale a Nave la URL de notificaciones.</NextStep>}
+              {(providerKey === "payway" || providerKey === "mobbex") && (
+                <NextStep n={2}>Armá tus planes de cuotas y recargo por tarjeta.</NextStep>
+              )}
+            </ul>
+          </div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+function SummaryRow({
+  icon,
+  tile = "bg-fg-6 text-foreground",
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  tile?: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-3.5 py-3">
+      <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", tile)}>{icon}</span>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{label}</dt>
+        <dd className="text-[13px] font-medium text-foreground">{children}</dd>
+      </div>
+    </div>
+  );
+}
+
+function NextStep({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-2.5">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">
+        {n}
+      </span>
+      <span className="text-muted-foreground">{children}</span>
+    </li>
+  );
+}
+
+function NaveWebhookBox() {
+  const { toast } = useToast();
+  return (
+    <div className="space-y-2.5 rounded-2xl bg-fg-4 p-3.5">
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--seg-thumb)] text-foreground shadow-[var(--seg-thumb-shadow)]">
+          <BellRing size={15} />
+        </span>
+        <div className="min-w-0 leading-tight">
+          <p className="text-[13px] font-semibold">URL de notificaciones</p>
+          <p className="text-xs text-muted-foreground">Pasásela a Nave: así nos avisa cada pago al instante.</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-[var(--background)] px-2.5 py-2 font-mono text-[11px]">
+          {NAVE_WEBHOOK_URL}
+        </code>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            navigator.clipboard
+              .writeText(NAVE_WEBHOOK_URL)
+              .then(() => toast({ title: "URL copiada", variant: "success" }))
+              .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
+          }
+        >
+          <Copy size={14} /> Copiar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Ambiente de Mercado Pago desde Administrar (ADR-032): producción usa la
+// conexión; prueba usa un Access Token de prueba que convive con ella.
+function MpEnvPanel({
+  env,
+  hasTest,
+  pending,
+  token,
+  onToken,
+  onChange,
+}: {
+  env: Env;
+  hasTest: boolean;
+  pending: boolean;
+  token: string;
+  onToken: (v: string) => void;
+  onChange: (v: MpEnvChange) => void;
+}) {
+  const [want, setWant] = useState<Env>(env);
+  useEffect(() => setWant(env), [env]);
+  return (
+    <div className="space-y-2.5">
+      <Eyebrow>Ambiente de cobro</Eyebrow>
+      <EnvPicker
+        value={want}
+        onChange={(v) => {
+          setWant(v);
+          if (v === "prod" && env !== "prod") onChange({ env: "prod" });
+          if (v === "test" && hasTest && env !== "test") onChange({ env: "test" });
+        }}
+      />
+      {want === "test" && (
+        <div className="space-y-2.5 pt-1">
+          <CredentialInput
+            label="Access Token de prueba"
+            secret
+            mono
+            name="mp_test_access_token"
+            autoComplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            configured={hasTest}
+            configuredLabel="Cargado"
+            value={token}
+            onChange={(e) => onToken(e.target.value)}
+            placeholder={hasTest ? "Pegá uno nuevo para reemplazarlo" : "APP_USR-... o TEST-..."}
+            hint="Tus integraciones › Credenciales de prueba."
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={pending}
+              disabled={token.trim().length < 8}
+              onClick={() => onChange({ env: "test", testToken: token.trim() })}
+            >
+              {hasTest ? "Reemplazar token" : "Guardar y usar prueba"}
+            </Button>
+            {hasTest && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-danger"
+                disabled={pending}
+                onClick={() => onChange({ env: "prod", clearTest: true })}
+              >
+                Quitar token de prueba
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

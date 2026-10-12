@@ -45,7 +45,6 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.1);
-  --seg-thumb: rgba(255, 255, 255, 0.13);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.05);
@@ -84,7 +83,6 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.09);
-  --seg-thumb: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.07);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.045);
@@ -118,7 +116,6 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e6e1f3;
-  --seg-thumb: #ffffff;
   --input: #e2dcf1;
   --ring: #ff6a1a;
   --pattern: rgba(30, 22, 60, 0.06);
@@ -154,7 +151,6 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #eadfcf;
-  --seg-thumb: #ffffff;
   --input: #e7dcc9;
   --ring: #ff6a1a;
   --pattern: rgba(60, 40, 20, 0.06);
@@ -243,9 +239,10 @@
   --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.05);
 }
 
-/* Control segmentado estilo iOS (components/ui/SegmentedControl): riel neutro
-   y "pulgar" relleno que se desliza. En oscuro el pulgar es más claro que el
-   riel; en claro es blanco con sombra mínima. Sin bordes de color. */
+/* Control segmentado estilo iOS (components/ui/Segmented): riel neutro y
+   "pulgar" relleno que se desliza. Única definición de --seg-* por tema. En
+   oscuro el pulgar es más claro que el riel; en claro es blanco con sombra
+   mínima. Sin bordes de color. */
 :root,
 [data-theme="ninja-dark"] {
   --seg-track: rgba(255, 255, 255, 0.06);
@@ -266,6 +263,55 @@
   --seg-track: #efe6d7;
   --seg-thumb: #ffffff;
   --seg-thumb-shadow: 0 1px 3px rgba(60, 40, 20, 0.12), 0 1px 1px rgba(60, 40, 20, 0.06);
+}
+
+/* Selección premium (components/ui/ChoiceCard → choiceClass): relleno neutro
+   elevado + texto de primer plano + insignia de check con el fuego Ninja en
+   la esquina. Sin bordes ni anillos de color, sin tinte marrón. */
+:root,
+[data-theme="ninja-dark"] {
+  --choice-fill: rgba(255, 255, 255, 0.09);
+  --choice-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme="ninja-noir"] {
+  --choice-fill: rgba(255, 255, 255, 0.09);
+  --choice-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme="ninja-light"] {
+  --choice-fill: #f0edf9;
+  --choice-shadow: 0 1px 2px rgba(30, 22, 60, 0.08);
+}
+[data-theme="ninja-sand"] {
+  --choice-fill: #f2eadc;
+  --choice-shadow: 0 1px 2px rgba(60, 40, 20, 0.08);
+}
+@layer components {
+  .choice-on {
+    border-color: transparent;
+    background-color: var(--choice-fill);
+    box-shadow: var(--choice-shadow);
+    color: var(--foreground);
+  }
+  /* Insignia de check en la esquina (cards con título/bajada). Para pastillas
+     compactas alcanza .choice-on solo. */
+  .choice-check {
+    position: relative;
+  }
+  .choice-check::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
+        center / 11px no-repeat,
+      linear-gradient(135deg, #ff4b22 0%, #ff8a1f 60%, #ffb21f 100%);
+    box-shadow: 0 1px 3px rgba(255, 75, 34, 0.35);
+    pointer-events: none;
+  }
 }
 
 /* Fondo de las pantallas. Color base por token (theme-aware) + patrón
@@ -686,6 +732,61 @@ html {
   .ai-dot,
   .ai-panel-in,
   .ai-msg-in {
+    animation: none;
+  }
+}
+
+/* ── POS rediseñado ─────────────────────────────────────────────────────────
+   Acento por defecto (fuego Ninja). El POS lo pisa con pos_layout.accent en su
+   contenedor y en sus hojas (que viven en un portal). */
+@layer utilities {
+  /* Rellenos neutros del POS: tinte del color de texto del tema (funciona en
+     claro y oscuro). Desde ADR-040 `bg-foreground/[.04]` genera lo mismo; se
+     mantienen como nombres estables de la escala del POS (4/7/11 %). */
+  .bg-fg-4 { background-color: color-mix(in srgb, var(--foreground) 4%, transparent); }
+  .bg-fg-6 { background-color: color-mix(in srgb, var(--foreground) 7%, transparent); }
+  .bg-fg-10 { background-color: color-mix(in srgb, var(--foreground) 11%, transparent); }
+}
+:root {
+  --pos-from: #ff4b22;
+  --pos-via: #ff8a1f;
+  --pos-to: #ffd21f;
+  --pos-ink: #0b0720;
+}
+/* Hojas del POS (cobro y carrito): suben desde abajo en el celular y aparecen
+   escaladas desde md. Solo transform y opacity. */
+@keyframes pos-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes pos-sheet-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+@keyframes pos-panel-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes pos-panel-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -49%) scale(0.98); }
+}
+@keyframes pos-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.pos-sheet[data-state="open"] { animation: pos-sheet-up 340ms cubic-bezier(0.22, 1, 0.36, 1); }
+.pos-sheet[data-state="closed"] { animation: pos-sheet-down 200ms ease-in forwards; }
+@media (min-width: 768px) {
+  .pos-sheet[data-state="open"] { animation: pos-panel-in 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .pos-sheet[data-state="closed"] { animation: pos-panel-out 140ms ease-in forwards; }
+}
+.pos-pop { animation: pos-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .pos-sheet[data-state="open"],
+  .pos-sheet[data-state="closed"],
+  .pos-pop {
     animation: none;
   }
 }

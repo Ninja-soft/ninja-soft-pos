@@ -1,6 +1,6 @@
 // H9b — Nodo DOM → PNG dataURL y A4/PDF desde un nodo renderizado.
 // Inlinea <img> remotas a dataURL antes de html2canvas para evitar canvas
-// tainted (QR de qrserver, logo de Storage).
+// tainted (logo de Storage). El QR ya es un data URL local (lib/qr/qrcode).
 // html2canvas y jspdf se cargan bajo demanda (import dinámico): pesan ~500 kB
 // y sólo hacen falta al exportar, no al abrir la pantalla.
 async function loadHtml2canvas() {

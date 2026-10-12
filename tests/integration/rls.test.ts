@@ -109,6 +109,10 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       "grupos_clientes",
       "personalizacion_marca",
       "variantes",
+      // Cuenta corriente v2 (bloque "cuenta corriente" al final de la suite).
+      "cuenta_corriente",
+      "cc_punitorios",
+      "cc_cobranza",
     ];
     const { error: addonErr } = await admin.from("subscription_addons").insert(
       [ctx.tenantA, ctx.tenantB].flatMap((t) =>
@@ -523,6 +527,156 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       .select("id")
       .eq("tenant_id", ctx.tenantA);
     expect(cross).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cuenta corriente v2 (migraciones 20261011200000..180200): cargo con cuotas,
+  // ledger sólo por RPC, cobro con caja + recibo + idempotencia, aging y
+  // reversa al anular.
+  // ---------------------------------------------------------------------------
+  describe("cuenta corriente v2", () => {
+    const acc = {} as { customer: string; saleId: string; paymentId: string };
+
+    beforeAll(async () => {
+      const { admin } = ctx;
+      const { data: store, error: sErr } = await admin
+        .from("stores")
+        .insert({ tenant_id: ctx.tenantA, name: `Local ${STAMP}`, is_default: true })
+        .select("id")
+        .single();
+      if (sErr || !store) throw sErr ?? new Error("store");
+      const { data: reg, error: rErr } = await admin
+        .from("cash_registers")
+        .insert({ tenant_id: ctx.tenantA, store_id: store.id, name: `Caja ${STAMP}` })
+        .select("id")
+        .single();
+      if (rErr || !reg) throw rErr ?? new Error("register");
+      const { error: shErr } = await ctx.ownerA.rpc("open_cash_shift" as never, {
+        p_register_id: reg.id,
+        p_opening_amount: 0,
+      } as never);
+      if (shErr) throw shErr;
+      const { data: cust, error: cErr } = await admin
+        .from("customers")
+        .insert({ tenant_id: ctx.tenantA, name: `Cliente CC ${STAMP}` })
+        .select("id")
+        .single();
+      if (cErr || !cust) throw cErr ?? new Error("customer");
+      acc.customer = cust.id;
+    }, 60_000);
+
+    it("config: el owner guarda la config (cuotas habilitadas); el cashier no", async () => {
+      const cfg = { terms: { mode: "days", days: 30 }, installments: { enabled: true, max: 3 } };
+      const { error: cashierErr } = await ctx.cashierA.rpc("account_save_settings" as never, {
+        p_config: cfg,
+      } as never);
+      expect(cashierErr).not.toBeNull();
+      const { error } = await ctx.ownerA.rpc("account_save_settings" as never, { p_config: cfg } as never);
+      expect(error).toBeNull();
+      const { error: badErr } = await ctx.ownerA.rpc("account_save_settings" as never, {
+        p_config: { terms: { cutoff_day: 40 } },
+      } as never);
+      expect(badErr).not.toBeNull();
+    });
+
+    it("venta a cuenta en 2 cuotas → 2 cargos con vencimiento", async () => {
+      const { data, error } = await ctx.ownerA.rpc("create_sale" as never, {
+        p_items: [{ product_id: ctx.productA, quantity: 1, unit_price: 100, discount: 0 }],
+        p_payments: [{ method: "account", amount: 100, reference: JSON.stringify({ installments: 2 }) }],
+        p_customer_id: acc.customer,
+      } as never);
+      expect(error).toBeNull();
+      acc.saleId = (data as unknown as { sale_id: string }).sale_id;
+
+      const { data: movs } = await ctx.ownerA
+        .from("customer_account_movements")
+        .select("kind, delta, installment_no, installments, due_date")
+        .eq("customer_id", acc.customer)
+        .order("installment_no");
+      expect(movs?.length).toBe(2);
+      expect(movs!.map((m) => Number(m.delta))).toEqual([50, 50]);
+      expect(movs!.every((m) => m.kind === "charge" && m.installments === 2 && m.due_date)).toBe(true);
+    });
+
+    it("ledger: nadie inserta directo (sólo RPC)", async () => {
+      const { error } = await ctx.ownerA.from("customer_account_movements").insert({
+        customer_id: acc.customer,
+        delta: -10,
+        reason: "intento directo",
+      } as never);
+      expect(error).not.toBeNull();
+    });
+
+    it("account_collect: cobro en efectivo con recibo, imputación FIFO y caja; idempotente", async () => {
+      const args = {
+        p_customer_id: acc.customer,
+        p_amount: 30,
+        p_method: "cash",
+        p_allocations: null,
+        p_idempotency_key: `k-${STAMP}`,
+        p_note: null,
+      };
+      const { data, error } = await ctx.cashierA.rpc("account_collect" as never, args as never);
+      expect(error).toBeNull();
+      const res = data as unknown as {
+        payment_id: string;
+        receipt_no: number;
+        balance: number;
+        allocations: { amount: number }[];
+      };
+      acc.paymentId = res.payment_id;
+      expect(res.receipt_no).toBe(1);
+      expect(Number(res.balance)).toBe(70);
+      expect(res.allocations.reduce((a, x) => a + Number(x.amount), 0)).toBe(30);
+
+      const again = await ctx.cashierA.rpc("account_collect" as never, args as never);
+      expect((again.data as unknown as { payment_id: string }).payment_id).toBe(res.payment_id);
+
+      const { data: cm } = await ctx.ownerA
+        .from("cash_movements")
+        .select("type, amount, payment_method")
+        .eq("reference_id", res.payment_id);
+      expect(cm?.length).toBe(1);
+      expect(cm![0]!.type).toBe("income");
+      expect(Number(cm![0]!.amount)).toBe(30);
+    });
+
+    it("account_aging: deuda por vencimiento server-side; B no ve a A", async () => {
+      const { data, error } = await ctx.ownerA.rpc("account_aging" as never, {} as never);
+      expect(error).toBeNull();
+      const res = data as unknown as { totals: { total: number }; customers: { customer_id: string }[] };
+      expect(Number(res.totals.total)).toBe(70);
+      expect(res.customers.map((c) => c.customer_id)).toContain(acc.customer);
+
+      const { data: fromB } = await ctx.ownerB.rpc("account_statement" as never, {
+        p_customer_id: acc.customer,
+      } as never);
+      expect(fromB).toBeNull();
+    });
+
+    it("account_adjust: el cashier no puede ajustar", async () => {
+      const { error } = await ctx.cashierA.rpc("account_adjust" as never, {
+        p_customer_id: acc.customer,
+        p_kind: "adjust_credit",
+        p_amount: 10,
+        p_reason: "test",
+      } as never);
+      expect(error).not.toBeNull();
+    });
+
+    it("anular la venta revierte la deuda (lo cobrado queda a favor)", async () => {
+      const { error } = await ctx.ownerA.rpc("void_sale" as never, {
+        p_sale_id: acc.saleId,
+        p_reason: "test",
+      } as never);
+      expect(error).toBeNull();
+      const { data } = await ctx.ownerA.rpc("account_statement" as never, {
+        p_customer_id: acc.customer,
+      } as never);
+      const st = data as unknown as { balance: number; open_items: unknown[] };
+      expect(Number(st.balance)).toBe(-30);
+      expect(st.open_items).toEqual([]);
+    });
   });
 });
 

@@ -3,8 +3,28 @@
 // QR. Lee las credenciales del tenant (payment_secrets: api_key + access_token,
 // service_role), registra un mp_payment_intents (provider 'mobbex') y devuelve
 // la URL del checkout para mostrar como QR.
+//
+// Body: { amount, title?, customer_id? }. El checkout lleva:
+//   * customer {email,name,identification}: del cliente de la venta
+//     (customer_id del tenant) o, si falta, el email del cajero + "Consumidor
+//     Final" + identificación "0" (Mobbex avisa que sin customer el checkout
+//     dejará de crearse).
+//   * webhooksType "final": Mobbex no notifica los intentos fallidos mientras
+//     el checkout está abierto (el cliente puede reintentar).
+//   * SIN installments: el formato de la API son referencias de planes de la
+//     cuenta Mobbex del comercio. Las cuotas e intereses que ve el cliente son
+//     los configurados en Mobbex; el recargo del plan elegido en el POS ya
+//     viene sumado en `amount` (ver ADR-024, addendum 2026-10-11).
+// Mobbex responde HTTP 200 también en error ({ result:false, code, error }).
+// Lógica pura en _shared/mobbex.ts.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import {
+  MOBBEX_API,
+  buildCheckoutBody,
+  mobbexCustomer,
+  parseCheckoutResponse,
+} from "../_shared/mobbex.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -91,69 +111,59 @@ Deno.serve(async (req: Request) => {
 
   const webhook = `${url}/functions/v1/mobbex_webhook?intent=${intent.id}`;
 
-  // Mapeo grid → Mobbex: planes de crédito activos del tenant. Mobbex aplica
-  // las cuotas con su interés en el checkout (a diferencia de MP, que solo
-  // ajusta el precio). NOTA: validar el formato exacto de `installments` contra
-  // la API de Mobbex al probar con credenciales reales.
-  const { data: planRows } = await admin
-    .from("payment_plans")
-    .select("installments, surcharge_pct")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mobbex")
-    .eq("is_active", true)
-    .eq("base", "credito");
-  const seen = new Set<number>();
-  const installments = (planRows ?? [])
-    .filter((p) => {
-      const n = Number(p.installments) || 1;
-      if (n <= 1 || seen.has(n)) return false;
-      seen.add(n);
-      return true;
-    })
-    .map((p) => ({
-      months: Number(p.installments),
-      recharge: Number(p.surcharge_pct) || 0,
-    }))
-    .sort((a, b) => a.months - b.months);
+  // Cliente de la venta (opcional, siempre del mismo tenant).
+  let customerRow: { name: string | null; email: string | null; document_number: string | null } | null =
+    null;
+  const customerId = String(b.customer_id ?? "");
+  if (/^[0-9a-f-]{36}$/i.test(customerId)) {
+    const { data: c } = await admin
+      .from("customers")
+      .select("name, email, document_number")
+      .eq("id", customerId)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    customerRow = c ?? null;
+  }
 
-  const body: Record<string, unknown> = {
-    total: Math.round(amount * 100) / 100,
-    currency: "ARS",
+  const body = buildCheckoutBody({
+    amount,
     reference: intent.id,
     description: title,
-    webhook,
-    return_url: webhook,
-  };
-  if (installments.length > 0) {
-    body.installments = { enabled: true, list: installments };
-  }
-
-  // Crea el checkout en Mobbex.
-  const res = await fetch("https://api.mobbex.com/p/checkout", {
-    method: "POST",
-    headers: {
-      "x-api-key": sec.api_key,
-      "x-access-token": sec.access_token,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    webhookUrl: webhook,
+    customer: mobbexCustomer(customerRow, { email: user.email ?? null }),
   });
 
-  if (!res.ok) {
-    const detail = await res.text();
+  // Crea el checkout en Mobbex.
+  let res: Response;
+  try {
+    res = await fetch(`${MOBBEX_API}/p/checkout`, {
+      method: "POST",
+      headers: {
+        "x-api-key": sec.api_key,
+        "x-access-token": sec.access_token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
     await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
-    return json({ error: "mobbex_error", detail: detail.slice(0, 300) }, 502);
+    return json({ error: "mobbex_error", detail: "unreachable" }, 502);
   }
-  const out = (await res.json()) as { data?: { id?: string; url?: string } };
-  const initPoint = out.data?.url ?? "";
-  if (!initPoint) {
+  const out = parseCheckoutResponse(res.status, await res.json().catch(() => null));
+  if (!out.ok) {
     await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
-    return json({ error: "mobbex_no_url" }, 502);
+    return json(
+      { error: "mobbex_error", code: out.code, detail: `${out.code}: ${out.error}`.slice(0, 300) },
+      502,
+    );
   }
+  if (out.warnings.length) console.warn("[mobbex_create_qr] warnings", out.warnings);
+  const initPoint = out.url;
 
   await admin
     .from("mp_payment_intents")
-    .update({ preference_id: out.data?.id ?? null, init_point: initPoint })
+    .update({ preference_id: out.id, init_point: initPoint })
     .eq("id", intent.id);
 
   return json({ intent_id: intent.id, init_point: initPoint });

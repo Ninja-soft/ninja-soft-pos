@@ -26,8 +26,9 @@ export default function RecoverPage() {
 
   async function onSubmit(values: RecoverInput) {
     const supabase = createClient();
-    await supabase.auth.resetPasswordForEmail(values.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    // Email con la plantilla propia (Resend/SMTP), no el mailer de Supabase.
+    await supabase.functions.invoke("send_password_recovery", {
+      body: { email: values.email, origin: window.location.origin },
     });
     // No revelamos si el email existe (anti enumeración).
     setSent(true);

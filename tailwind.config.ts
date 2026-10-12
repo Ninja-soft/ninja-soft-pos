@@ -1,5 +1,24 @@
 import type { Config } from "tailwindcss";
 
+// Color temado que soporta el modificador de opacidad de Tailwind (ADR-040).
+// Los tokens semánticos son `var(--x)` con valores hex o rgba por tema, y
+// Tailwind no puede inyectar alpha en un var(): `bg-muted/50` no generaba
+// NADA. Con una función de color:
+// - sin modificador (Tailwind pasa `opacityVariable`, o nada en fill/stroke)
+//   devolvemos `var(--x)` tal cual, igual que antes;
+// - con modificador (`/50`, `/[.35]`) mezclamos con transparente vía
+//   color-mix, que respeta el alpha propio del token (rgba).
+type ColorFnArgs = { opacityValue?: string; opacityVariable?: string };
+// Tailwind 3 acepta funciones de color en runtime, pero sus tipos sólo
+// declaran strings: de ahí el cast.
+const themed = (name: string): string => {
+  const fn = ({ opacityValue, opacityVariable }: ColorFnArgs = {}) =>
+    opacityVariable !== undefined || opacityValue === undefined
+      ? `var(--${name})`
+      : `color-mix(in srgb, var(--${name}) calc(${opacityValue} * 100%), transparent)`;
+  return fn as unknown as string;
+};
+
 // Tokens de marca y semánticos de NinjaSoft. Ver UI-NinjaSof.md §13-14.
 // Los tokens semánticos (background, primary, ...) apuntan a variables CSS
 // definidas en app/globals.css, lo que permite cambiar ninja-dark/ninja-light
@@ -22,39 +41,39 @@ const config: Config = {
       },
       colors: {
         // Tokens semánticos (cambian con el tema vía CSS vars).
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        background: themed("background"),
+        foreground: themed("foreground"),
         card: {
-          DEFAULT: "var(--card)",
-          foreground: "var(--card-foreground)",
+          DEFAULT: themed("card"),
+          foreground: themed("card-foreground"),
         },
         popover: {
-          DEFAULT: "var(--popover)",
-          foreground: "var(--popover-foreground)",
+          DEFAULT: themed("popover"),
+          foreground: themed("popover-foreground"),
         },
         primary: {
-          DEFAULT: "var(--primary)",
-          foreground: "var(--primary-foreground)",
+          DEFAULT: themed("primary"),
+          foreground: themed("primary-foreground"),
         },
         secondary: {
-          DEFAULT: "var(--secondary)",
-          foreground: "var(--secondary-foreground)",
+          DEFAULT: themed("secondary"),
+          foreground: themed("secondary-foreground"),
         },
         muted: {
-          DEFAULT: "var(--muted)",
-          foreground: "var(--muted-foreground)",
+          DEFAULT: themed("muted"),
+          foreground: themed("muted-foreground"),
         },
         accent: {
-          DEFAULT: "var(--accent)",
-          foreground: "var(--accent-foreground)",
+          DEFAULT: themed("accent"),
+          foreground: themed("accent-foreground"),
         },
         destructive: {
-          DEFAULT: "var(--destructive)",
-          foreground: "var(--destructive-foreground)",
+          DEFAULT: themed("destructive"),
+          foreground: themed("destructive-foreground"),
         },
-        border: "var(--border)",
-        input: "var(--input)",
-        ring: "var(--ring)",
+        border: themed("border"),
+        input: themed("input"),
+        ring: themed("ring"),
         // Estado temado (texto legible sobre el fondo del tema; pastel en
         // oscuro, tinta en claro). Tripletas RGB en globals.css.
         success: "rgb(var(--status-success) / <alpha-value>)",
@@ -82,6 +101,12 @@ const config: Config = {
           slate: "rgb(var(--ninja-slate) / <alpha-value>)",
           black: "#04020D",
         },
+      },
+      // Sin esto, un `ring-*` sin color caía al azul por defecto de Tailwind
+      // (rgb(59 130 246 / 0.5)). Ahora es el token --ring del tema (al 50%,
+      // la opacidad por defecto de ring en Tailwind 3).
+      ringColor: {
+        DEFAULT: themed("ring"),
       },
       borderRadius: {
         ninjaSm: "10px",

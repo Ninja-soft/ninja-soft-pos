@@ -63,7 +63,7 @@ import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { ReportSection, type ReportChartSpec } from "@/components/reports/ReportSection";
 import { KpiCard } from "@/components/reports/KpiCard";
-import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
+import { Segmented, type SegmentedOption } from "@/components/ui/Segmented";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import {
   bulletOption,
@@ -737,8 +737,8 @@ export default function ReportesPage() {
                 className="lg:col-span-2"
                 chartTypes={TIME_TYPES}
                 controls={
-                  <SegmentedControl<DayMetric>
-                    ariaLabel="Métrica"
+                  <Segmented<DayMetric>
+                    aria-label="Métrica"
                     value={metric}
                     onChange={setMetric}
                     size="sm"

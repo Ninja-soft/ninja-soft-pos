@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type {
   AssignmentKind,
   Branch,
@@ -87,9 +88,16 @@ export const branchesAdminApi = {
   // Sucursales con sus cajas (incluye archivadas: la UI decide qué mostrar).
   list: async (): Promise<Branch[]> => {
     const sb = loose();
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) return [];
     const [stores, registers] = await Promise.all([
-      sb.from<Branch[]>("stores").select(STORE_COLS).order("sort").order("created_at"),
-      sb.from<BranchRegister[]>("cash_registers").select(REGISTER_COLS).order("sort").order("created_at"),
+      sb.from<Branch[]>("stores").select(STORE_COLS).eq("tenant_id", tenantId).order("sort").order("created_at"),
+      sb
+        .from<BranchRegister[]>("cash_registers")
+        .select(REGISTER_COLS)
+        .eq("tenant_id", tenantId)
+        .order("sort")
+        .order("created_at"),
     ]);
     const s = check(stores) ?? [];
     const r = check(registers) ?? [];
@@ -158,11 +166,14 @@ export const branchesAdminApi = {
 
   // Personal por sucursal (todas las filas del negocio; incluye historia).
   assignments: async (): Promise<StaffAssignment[]> => {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) return [];
     const r = await loose()
       .from<StaffAssignment[]>("staff_branch_assignments")
       .select(
         "id, store_id, user_id, cashier_profile_id, kind, role, valid_from, valid_until, reason, transfer_id, superseded_by, deleted_at, cancel_reason, created_at",
       )
+      .eq("tenant_id", tenantId)
       .order("valid_from", { ascending: false })
       .order("created_at", { ascending: false });
     return check(r) ?? [];

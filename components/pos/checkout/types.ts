@@ -49,12 +49,57 @@ export interface ElectronicResult {
   surcharges: { name: string; amount: number }[];
 }
 
+/** QR / link que se deja esperando el pago (ADR-048). */
+export interface ElectronicParkInput {
+  intentId: string;
+  amount: number;
+  surcharges: { name: string; amount: number }[];
+  provider: string;
+  channel: "qr" | "link";
+  shareUrl: string | null;
+  qrData: string | null;
+  expiresMinutes: number;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  sharedVia: { via: "whatsapp" | "email" | "sms" | "copy" | "native" | "qr"; to: string | null }[];
+}
+
+/** Lo que la hoja arma para estacionar la venta: igual que onConfirm + el QR. */
+export interface SheetParkRequest {
+  payments: CheckoutPayment[];
+  extras: PaymentExtra[];
+  promo: Promo | null;
+  qr: ElectronicParkInput;
+}
+
+/** Contexto de "Dejar en espera" que provee el POS. */
+export interface SheetParkOptions {
+  /** Motivo por el que no se puede (plan, caja, mesa...). null = se puede. */
+  blockedReason: string | null;
+  label: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  onPark: (r: SheetParkRequest) => Promise<{ id: string } | null>;
+  onEmail?: (chargeId: string, to: string, note: string) => Promise<void>;
+}
+
 /** Pedido de cobro electrónico que la hoja delega al modal del proveedor. */
 export interface ElectronicRequest {
   tender: ResolvedTender;
   amount: number;
   onApproved: (r: ElectronicResult) => void;
   onClose: () => void;
+  /** Dejar en espera (sólo QR / link que cubren toda la venta). */
+  park?: {
+    blockedReason: string | null;
+    label: string;
+    customerName: string | null;
+    customerEmail: string | null;
+    customerPhone: string | null;
+    onPark: (r: ElectronicParkInput) => Promise<{ id: string } | null>;
+    onEmail?: (chargeId: string, to: string, note: string) => Promise<void>;
+  };
 }
 
 /**

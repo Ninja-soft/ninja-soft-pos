@@ -207,9 +207,16 @@ export function usePosMutations() {
       onSuccess: invalidateShift,
     }),
     close: useMutation({
-      mutationFn: (vars: { shiftId: string; closing: number; notes?: string }) =>
-        posApi.close(vars.shiftId, vars.closing, vars.notes),
-      onSuccess: invalidateShift,
+      mutationFn: (vars: {
+        shiftId: string;
+        closing: number;
+        notes?: string;
+        pendingAction?: "cancel" | "carry" | null;
+      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction),
+      onSuccess: () => {
+        invalidateShift();
+        qc.invalidateQueries({ queryKey: ["pending-charges"] });
+      },
     }),
     sale: useMutation({
       mutationFn: (vars: {

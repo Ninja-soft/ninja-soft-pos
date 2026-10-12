@@ -762,6 +762,17 @@ Migraciones `20261013200000` (features), `20261013200100` (stock por sucursal) y
 - [x] Lecturas: `stock_by_store(product_ids)` (saldo, mínimos y en camino) y `stock_low_by_store(limit)` (faltantes por sucursal con el saldo de todas, para sugerir traslados).
 - [ ] RLS por sucursal (`user_can_access_store`) cuando exista H91.
 
+## 8.8 Extensión F8: cobros en espera (ADR-048)
+
+Migración `20261014100000_cobros_en_espera`.
+
+- [x] `pending_charges`: venta estacionada esperando el pago de un QR o link. `tenant_id`, `store_id`, `register_id`, `cash_shift_id` (turno dueño hoy; null = pasado a la próxima apertura), `origin_shift_id`, `created_by`, cliente (`customer_id`, nombre, email, celular), `sale_args` (argumentos de `create_sale`: ítems, extras, descuentos, promo, cupón), `cart` y `lines` (sólo display), `amount` (monto del intent = total + propina autoritativos), `sale_total`, `provider_key`, `channel` (`qr` | `link`), `intent_id` (único, FK `mp_payment_intents`), `previous_intent_ids`, `share_url`, `qr_data`, `shared_via[]`, `share_count`, `status` (`waiting` | `paid` | `completed` | `cancelled` | `expired`), `expires_at`, `paid_at`, `paid_amount`, `completed_at`, `sale_id`, `sale_number`, cancelación, `carry_over`, `needs_review`, `last_error`, `attempts`, `acknowledged_at/by`, `notes`, `version` (edición optimista), timestamps y `deleted_at`.
+- [x] `pending_charge_events`: línea de tiempo (`created`, `shared`, `edited`, `regenerated`, `extended`, `updated`, `paid`, `payment_rejected`, `completed`, `completion_failed`, `cancelled`, `expired`, `carried_over`, `attached_to_shift`, `paid_after_cancel`, `old_intent_paid`, `acknowledged`).
+- [x] RLS: lectura por negocio y sucursal permitida (`user_allowed_store_ids`); sin policies de escritura. Todo cambio por RPC SECURITY DEFINER con `audit_logs`: `park_pending_charge`, `complete_pending_charge`, `cancel_pending_charge`, `update_pending_charge`, `replace_pending_charge_intent`, `mark_pending_charge_shared`, `ack_pending_charge`. La Edge `pending_charge_share` escribe con service_role (envío de email).
+- [x] Venta del lado del servidor: `_pc_complete` (lock del cobro y del intent, idempotente) corre `create_sale` con el carrito guardado, el monto del intent y el turno abierto (el suyo, el de su caja o el de su sucursal), con los claims de la transacción del usuario que estacionó. Disparadores: trigger `AFTER UPDATE OF status` en `mp_payment_intents`, trigger `AFTER INSERT` en `cash_shifts` (enganche y reintentos al abrir caja), cron `pending-charges-tick` (vencimiento y reintentos) y el POS.
+- [x] `close_cash_shift(p_shift_id, p_closing_amount, p_notes, p_pending_action)`: con cobros abiertos en el turno exige `cancel` o `carry` (se dropea la firma de 3 args).
+- [x] `notifications.type` suma `cobros`; `system_emails.kind` suma `payment_link`.
+
 ---
 
 ## 9. Migraciones iniciales sugeridas

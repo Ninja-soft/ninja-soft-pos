@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
 import { resolveMerchantNumber } from "@/lib/payments/merchantNumbers";
+import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr } from "@/lib/pos/customerDisplay";
@@ -59,6 +60,16 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
     [methods],
   );
 
+  // Precalentado de las Edge de los medios QR / link al abrir la hoja: el
+  // primer "Generar QR" no paga el arranque en frío (ADR-048).
+  const qrProviders = useMemo(
+    () => props.tenders.filter((t) => t.flow === "qr").map((t) => t.qrProvider),
+    [props.tenders],
+  );
+  useEffect(() => {
+    if (props.open && qrProviders.length > 0) warmEdgeFunctions(qrProviders);
+  }, [props.open, qrProviders]);
+
   // Sólo los planes VIGENTES hoy (H27).
   const cardPlans = useMemo(
     () => (allPlans ?? []).filter((p: PaymentPlan) => isPlanActive(p)),
@@ -82,6 +93,17 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       );
     }
     if (t.flow === "qr" && t.qrProvider) {
+      // Planes y modo del medio ya cargados: el QR se pide al abrir, sin
+      // esperar dos consultas más (ADR-048, "QR más rápido").
+      const row = (methods ?? []).find((m) => m.provider_key === t.qrProvider);
+      const prefetched =
+        allPlans && methods
+          ? {
+              plans: cardPlans.filter((p) => p.provider_key === t.qrProvider),
+              mode: row?.plan_mode ?? "plans",
+              pct: Number(row?.surcharge_pct) || 0,
+            }
+          : null;
       return (
         <QrCheckoutModal
           open
@@ -89,6 +111,8 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
           providerName={t.brandLabel}
           channel={t.channel === "link" ? "link" : "qr"}
           customerId={customerId}
+          prefetched={prefetched}
+          park={req.park ?? null}
           base={req.amount}
           onQrState={onQrState}
           onOpenChange={(o) => {

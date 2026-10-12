@@ -43,6 +43,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin esto el cajero no puede procesar devoluciones desde el sistema; habría que hacerlas por fuera.",
     minPlan: "Pro",
   },
+  cobros_en_espera: {
+    desc: "Cobros en espera: compartís el QR o link de pago (WhatsApp, email, SMS o copiar) y seguís vendiendo. Cuando el cliente paga, la venta se registra sola (aunque el POS esté cerrado) y te avisa para imprimir el ticket. Pestaña propia para ver, editar, reenviar, extender o cancelar, y decisión al cerrar la caja.",
+    impact: "Desactivado, el QR o link se cobra sólo con la hoja abierta: no se puede dejar esperando ni mandar el link por email desde el sistema (el servidor lo rechaza).",
+    minPlan: "Pro",
+    needs: "Un medio de cobro por QR o link conectado (Mercado Pago, MODO, Payway, Getnet, Nave, Pagos360, GO Cuotas, Directo o Mobbex).",
+  },
   garantias: {
     desc: "Gestión de garantías de productos: registro de cobertura, plazos y reclamos de garantía por venta.",
     impact: "Se ocultan las garantías en el POS y la ficha del producto; no se registran coberturas.",

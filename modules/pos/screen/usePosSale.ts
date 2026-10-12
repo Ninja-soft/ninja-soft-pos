@@ -3,7 +3,7 @@
 import { useToast } from "@/components/ui/Toast";
 import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/checkout/types";
 import { appointmentsApi } from "@/modules/agenda/api";
-import type { SaleExtraInput } from "@/modules/pos/api";
+import { buildSaleItemsAndExtras, type SaleArgsLine } from "@/modules/pending-charges/logic";
 import { usePosMutations } from "@/modules/pos/hooks";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
@@ -76,6 +76,22 @@ export function saleErrorTitle(msg: string): string {
                                                   : "No se pudo cobrar";
 }
 
+/** Líneas del carrito → líneas de create_sale (sin campos de UI). */
+export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
+  return lines.map((l) => ({
+    productId: l.productId,
+    name: l.name,
+    serial: l.serial ?? null,
+    variantId: l.variantId ?? null,
+    modifiers: l.modifiers ?? null,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    discount: l.discount,
+    packId: l.packId ?? null,
+    packCreditId: l.packCreditId ?? null,
+  }));
+}
+
 export function usePosSale(ctx: {
   lines: CartLine[];
   discountTotal: number;
@@ -97,54 +113,16 @@ export function usePosSale(ctx: {
     appliedPromo?: Promo | null,
   ) {
     try {
-      const items = ctx.lines.map((l) => ({
-        product_id: l.productId,
-        ...(l.productId ? {} : { name: l.name }),
-        ...(l.serial ? { serial: l.serial } : {}),
-        ...(l.variantId ? { variant_id: l.variantId } : {}),
-        // Modificadores (H37): snapshot por línea; el precio ya está en unit_price.
-        ...(l.modifiers && l.modifiers.length > 0 ? { modifiers: l.modifiers } : {}),
-        quantity: l.quantity,
-        // Línea cubierta por una sesión de pack (H41): entra en 0.
-        unit_price: l.packCreditId ? 0 : l.unitPrice,
-        discount: l.packCreditId ? 0 : l.discount,
-      }));
-      // Recargo (H27) y garantía extendida (H28) entran como ítem de venta. La
-      // propina (H39) va a sales.tip_amount y 'professional' es atribución.
-      for (const ex of extras ?? []) {
-        if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {
-          items.push({
-            product_id: null,
-            name: ex.name,
-            quantity: 1,
-            unit_price: ex.amount,
-            discount: 0,
-          } as never);
-        }
-      }
-      const saleExtras: SaleExtraInput[] = (extras ?? [])
-        .filter(
-          (ex) =>
-            (ex.kind === "professional" && ex.id) ||
-            ((ex.kind === "warranty" || ex.kind === "surcharge" || ex.kind === "tip") && (ex.amount ?? 0) > 0),
-        )
-        .map((ex) => ({
-          kind: ex.kind,
-          ...(ex.amount != null ? { amount: ex.amount } : {}),
-          ...(ex.method ? { method: ex.method } : {}),
-          ...(ex.id ? { id: ex.id } : {}),
-        }));
-      // Packs (H41): 'pack' acredita sesiones; 'pack_session' consume una.
-      for (const l of ctx.lines) {
-        if (l.packId) saleExtras.push({ kind: "pack", id: l.packId });
-        if (l.packCreditId) saleExtras.push({ kind: "pack_session", id: l.packCreditId });
-      }
+      // Mismo mapeo que el cobro en espera (ADR-048): la venta diferida es
+      // idéntica a la inmediata. Recargo (H27) y garantía (H28) entran como
+      // ítem; la propina (H39) va a sales.tip_amount; packs (H41) como extras.
+      const { items, extras: saleExtras } = buildSaleItemsAndExtras(cartToSaleLines(ctx.lines), extras);
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
         discountTotal: ctx.discountTotal,
         customerId: ctx.customerId,
-        extras: saleExtras,
+        extras: saleExtras as never,
         // Mesa (H44) y delivery (H49): create_sale los cierra en la MISMA
         // transacción (FOR UPDATE, sin doble cobro).
         tableOrderId: ctx.tableOrderId ?? null,

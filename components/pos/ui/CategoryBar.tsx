@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react";
 import { buildCategoryTree, type Category, type CategoryTreeNode } from "@/modules/products/api";
 import { cn } from "@/lib/utils/cn";
-import { POS_IDLE, POS_SELECTED } from "./posStyles";
+import { POS_EYEBROW, POS_ROW_ON, POS_SEG_OFF, POS_SEG_ON, POS_SEG_TRACK } from "./posStyles";
 
 // Navegación de rubros del POS. Dos formas:
 //  - "top": pestañas horizontales (raíces) + fila de sub-rubros al elegir una.
@@ -43,8 +43,14 @@ function trailOf(
   return out;
 }
 
+// Rubros en un riel segmentado (mismo lenguaje que components/ui/Segmented):
+// el elegido es el "pulgar" neutro elevado, sin relleno invertido.
 const chip =
-  "flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition active:scale-95";
+  "flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium transition-colors [@media(pointer:coarse)]:h-10";
+const track = cn(
+  "inline-flex max-w-full gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+  POS_SEG_TRACK,
+);
 
 export function CategoryChips({
   categories,
@@ -68,9 +74,14 @@ export function CategoryChips({
 
   return (
     <div className="space-y-2">
-      <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button type="button" onClick={() => onSelect(null)} className={cn(chip, selected === null ? POS_SELECTED : POS_IDLE)}>
-          <LayoutGrid size={14} /> Todo
+      <div className={track} role="group" aria-label="Rubros">
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          aria-pressed={selected === null}
+          className={cn(chip, selected === null ? POS_SEG_ON : POS_SEG_OFF)}
+        >
+          <LayoutGrid size={16} aria-hidden /> Todo
         </button>
         {tree.map((n) => {
           const on = trail.includes(n.cat.id);
@@ -79,23 +90,24 @@ export function CategoryChips({
               key={n.cat.id}
               type="button"
               onClick={() => onSelect(n.cat.id === selected ? null : n.cat.id)}
-              className={cn(chip, on ? POS_SELECTED : POS_IDLE)}
+              aria-pressed={on}
+              className={cn(chip, on ? POS_SEG_ON : POS_SEG_OFF)}
             >
               {n.cat.name}
-              {n.children.length > 0 && <ChevronRight size={13} className="opacity-60" />}
+              {n.children.length > 0 && <ChevronRight size={14} className="-mr-1 opacity-50" aria-hidden />}
             </button>
           );
         })}
       </div>
       {drillParent && drillParent.children.length > 0 && (
-        <div className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             onClick={() => onSelect(parentById.get(drillParent.cat.id) ?? null)}
-            className={cn(chip, "h-8 px-2.5 text-xs", POS_IDLE)}
+            className={cn(chip, "h-8 px-2 text-xs text-muted-foreground hover:bg-fg-6 hover:text-foreground")}
             aria-label={`Volver de ${drillParent.cat.name}`}
           >
-            <ChevronLeft size={14} />
+            <ChevronLeft size={16} aria-hidden />
             <span className="max-w-[9rem] truncate">{drillParent.cat.name}</span>
           </button>
           {drillParent.children.map((c) => {
@@ -105,14 +117,15 @@ export function CategoryChips({
                 key={c.cat.id}
                 type="button"
                 onClick={() => onSelect(c.cat.id === selected ? drillParent.cat.id : c.cat.id)}
+                aria-pressed={on}
                 className={cn(
                   chip,
                   "h-8 text-xs",
-                  on ? "bg-[color-mix(in_srgb,var(--pos-from)_22%,transparent)] text-foreground" : POS_IDLE,
+                  on ? "bg-fg-10 font-semibold text-foreground" : "text-muted-foreground hover:bg-fg-6 hover:text-foreground",
                 )}
               >
                 {c.cat.name}
-                {c.children.length > 0 && <ChevronRight size={12} className="opacity-60" />}
+                {c.children.length > 0 && <ChevronRight size={14} className="-mr-1 opacity-50" aria-hidden />}
               </button>
             );
           })}
@@ -145,8 +158,8 @@ export function CategoryRail({
           type="button"
           onClick={() => onSelect(on ? (parentById.get(n.cat.id) ?? null) : n.cat.id)}
           className={cn(
-            "flex w-full items-center justify-between gap-2 rounded-xl py-2 pr-2.5 text-left text-[13px] font-semibold transition",
-            on ? POS_SELECTED : inTrail ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            "flex min-h-9 w-full items-center justify-between gap-2 rounded-md py-1.5 pr-2.5 text-left text-[13px] font-medium transition-colors",
+            on ? POS_ROW_ON : inTrail ? "text-foreground" : "text-muted-foreground hover:bg-fg-4 hover:text-foreground",
           )}
           style={{ paddingLeft: 10 + depth * 14 }}
         >
@@ -166,20 +179,18 @@ export function CategoryRail({
 
   return (
     <nav aria-label="Rubros" className="flex h-full flex-col">
-      <p className="px-2.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Colecciones
-      </p>
+      <p className={cn("px-2.5 pb-2 pt-1", POS_EYEBROW)}>Colecciones</p>
       <ul className="slim-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
         <li>
           <button
             type="button"
             onClick={() => onSelect(null)}
             className={cn(
-              "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] font-semibold transition",
-              selected === null ? POS_SELECTED : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              "flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors",
+              selected === null ? POS_ROW_ON : "text-muted-foreground hover:bg-fg-4 hover:text-foreground",
             )}
           >
-            <LayoutGrid size={14} /> Todo
+            <LayoutGrid size={16} aria-hidden /> Todo
           </button>
         </li>
         {tree.map((n) => row(n, 0))}

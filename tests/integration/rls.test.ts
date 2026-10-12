@@ -678,6 +678,157 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       expect(st.open_items).toEqual([]);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Stock por sucursal y traslados (F17 · H94 + H95, ADR-046)
+  // ---------------------------------------------------------------------------
+  describe("stock por sucursal y traslados", () => {
+    const st = {} as { s1: string; s2: string; transfer: string };
+
+    beforeAll(async () => {
+      const { admin } = ctx;
+      const { error: aErr } = await admin.from("subscription_addons").insert(
+        ["multi_sucursal", "stock_sucursales", "traslados"].map((key) => ({
+          tenant_id: ctx.tenantA,
+          addon_key: key,
+          status: "active",
+          source: "granted",
+        })),
+      );
+      if (aErr) throw aErr;
+      const { data: stores, error: sErr } = await admin
+        .from("stores")
+        .insert([
+          { tenant_id: ctx.tenantA, name: `Centro ${STAMP}` },
+          { tenant_id: ctx.tenantA, name: `Norte ${STAMP}` },
+        ])
+        .select("id");
+      if (sErr || !stores || stores.length !== 2) throw sErr ?? new Error("stores");
+      st.s1 = stores[0]!.id;
+      st.s2 = stores[1]!.id;
+    }, 60_000);
+
+    afterAll(async () => {
+      const { admin } = ctx;
+      await admin.from("stock_transfers" as never).delete().eq("tenant_id", ctx.tenantA);
+      await admin.from("stock_movements").delete().eq("product_id", ctx.productA);
+      await admin.from("product_stock" as never).delete().eq("tenant_id", ctx.tenantA);
+    }, 60_000);
+
+    it("ajuste por sucursal: owner sí, cashier no; B no ve el saldo de A", async () => {
+      const { data, error } = await ctx.ownerA.rpc("adjust_store_stock" as never, {
+        p_store_id: st.s1,
+        p_product_id: ctx.productA,
+        p_variant_id: null,
+        p_qty: 10,
+        p_mode: "delta",
+        p_reason: "purchase",
+        p_notes: null,
+      } as never);
+      expect(error).toBeNull();
+      expect(Number(data)).toBe(10);
+
+      const { error: cashierErr } = await ctx.cashierA.rpc("adjust_store_stock" as never, {
+        p_store_id: st.s1,
+        p_product_id: ctx.productA,
+        p_variant_id: null,
+        p_qty: 1,
+        p_mode: "delta",
+        p_reason: "purchase",
+        p_notes: null,
+      } as never);
+      expect(cashierErr).not.toBeNull();
+
+      const { data: own } = await ctx.ownerA
+        .from("product_stock" as never)
+        .select("qty")
+        .eq("store_id", st.s1)
+        .eq("product_id", ctx.productA);
+      expect((own as unknown as { qty: number }[])?.length).toBe(1);
+
+      const { data: cross } = await ctx.ownerB
+        .from("product_stock" as never)
+        .select("id")
+        .eq("product_id", ctx.productA);
+      expect(cross ?? []).toEqual([]);
+    });
+
+    it("product_stock: nadie escribe directo (sólo movimientos y RPC)", async () => {
+      const { error } = await ctx.ownerA.from("product_stock" as never).insert({
+        tenant_id: ctx.tenantA,
+        store_id: st.s2,
+        product_id: ctx.productA,
+        qty: 999,
+      } as never);
+      expect(error).not.toBeNull();
+    });
+
+    it("traslado completo con faltante: el stock y el total cuadran", async () => {
+      const { data: id, error: saveErr } = await ctx.ownerA.rpc("transfer_save" as never, {
+        p_id: null,
+        p_origin: st.s1,
+        p_dest: st.s2,
+        p_scheduled_for: null,
+        p_notes: "test",
+        p_items: [{ product_id: ctx.productA, qty: 4 }],
+        p_carrier: null,
+      } as never);
+      expect(saveErr).toBeNull();
+      st.transfer = id as unknown as string;
+
+      const { data: status } = await ctx.ownerA.rpc("transfer_submit" as never, { p_id: st.transfer } as never);
+      expect(status).toBe("scheduled");
+      const { error: dErr } = await ctx.ownerA.rpc("transfer_dispatch" as never, {
+        p_id: st.transfer,
+        p_items: null,
+        p_notes: null,
+      } as never);
+      expect(dErr).toBeNull();
+
+      const { data: items } = await ctx.ownerA
+        .from("stock_transfer_items" as never)
+        .select("id")
+        .eq("transfer_id", st.transfer);
+      const itemId = (items as unknown as { id: string }[])[0]!.id;
+      const { data: rec, error: rErr } = await ctx.cashierA.rpc("transfer_receive" as never, {
+        p_id: st.transfer,
+        p_items: [{ item_id: itemId, qty: 3, reason: "faltante" }],
+        p_close: true,
+        p_notes: null,
+      } as never);
+      expect(rErr).toBeNull();
+      expect(rec).toBe("received");
+
+      const { data: rows } = await ctx.ownerA
+        .from("product_stock" as never)
+        .select("store_id, qty")
+        .eq("product_id", ctx.productA);
+      const byStore = Object.fromEntries(
+        (rows as unknown as { store_id: string; qty: number }[]).map((r) => [r.store_id, Number(r.qty)]),
+      );
+      expect(byStore[st.s1]).toBe(6);
+      expect(byStore[st.s2]).toBe(3);
+      // Invariante: el total consolidado es la suma de las sucursales (la venta
+      // del bloque de cuenta corriente cae en la sucursal principal).
+      const { data: prod } = await ctx.ownerA.from("products").select("stock").eq("id", ctx.productA).single();
+      const sum = Object.values(byStore).reduce((t, q) => t + q, 0);
+      expect(Number(prod?.stock)).toBe(sum);
+    });
+
+    it("traslados: B no ve ni opera los de A, y sin plan se rechaza", async () => {
+      const { data: cross } = await ctx.ownerB
+        .from("stock_transfers" as never)
+        .select("id")
+        .eq("id", st.transfer);
+      expect(cross ?? []).toEqual([]);
+      const { error } = await ctx.ownerB.rpc("transfer_cancel" as never, {
+        p_id: st.transfer,
+        p_reason: "x",
+      } as never);
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/feature_not_in_plan|transfer_not_found/);
+    });
+  });
 });
 
 describe.skipIf(enabled)("RLS — suite de integración", () => {

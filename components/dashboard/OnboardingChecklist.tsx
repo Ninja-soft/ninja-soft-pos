@@ -393,7 +393,7 @@ export function OnboardingChecklist() {
                   <div className="min-w-0 flex-1">
                     <div
                       className={cn(
-                        "truncate text-sm font-semibold transition-colors",
+                        "text-sm font-semibold leading-snug transition-colors sm:truncate",
                         ok
                           ? "text-muted-foreground line-through decoration-ninja-flame/30"
                           : "text-foreground",
@@ -402,7 +402,7 @@ export function OnboardingChecklist() {
                       {step.label}
                     </div>
                     {!ok && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">
                         {step.desc}
                       </p>
                     )}

@@ -593,7 +593,14 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto">
+        {/* Fuera del POS flota el Asistente IA abajo a la derecha: reservamos
+            espacio al final para que no tape los CTAs de la última fila. */}
+        <main
+          className={cn(
+            "app-bg slim-scrollbar min-h-0 flex-1 overflow-y-auto",
+            !onPos && "pb-16 sm:pb-20",
+          )}
+        >
           <PastDueBanner />
           <BlockingNotificationBanner />
           {children}

@@ -115,7 +115,7 @@ export function AppearanceSettings() {
                     className="h-11 w-full rounded-md border border-black/10"
                     style={{ backgroundColor: "#14102e", ...BG_PREVIEW[k] }}
                   />
-                  <div className="mt-1.5 truncate text-xs font-medium">{BG_STYLES[k]}</div>
+                  <div className="mt-1.5 text-xs font-medium leading-tight">{BG_STYLES[k]}</div>
                 </button>
               );
             })}

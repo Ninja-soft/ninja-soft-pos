@@ -183,7 +183,7 @@ export default function VentasPage() {
         />
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <div className="relative min-w-0 basis-full sm:max-w-sm sm:flex-1 sm:basis-auto">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"

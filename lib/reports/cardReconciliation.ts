@@ -22,7 +22,11 @@ export interface RawCardPayment {
   reconciled_at: string | null;
   card_voucher: unknown;
   metadata?: unknown;
-  sales: { number: number | string | null } | null;
+  sales: {
+    number: number | string | null;
+    /** Turno de caja de la venta (para saber si el cobro es de "mi caja"). */
+    cash_shift?: { opened_by: string | null } | null;
+  } | null;
 }
 
 export interface CardRecRow {
@@ -44,6 +48,8 @@ export interface CardRecRow {
   /** Referencia del proveedor integrado (intent / operación), si hay. */
   reference: string | null;
   reconciledAt: string | null;
+  /** Usuario que abrió el turno de caja de la venta (null si no hay turno). */
+  shiftOpenedBy: string | null;
 }
 
 export interface CardRecFilters {
@@ -138,6 +144,7 @@ export function normalizeCardPayment(p: RawCardPayment): CardRecRow | null {
     amount: Number(p.amount) || 0,
     reference: str(p.reference) || null,
     reconciledAt: p.reconciled_at,
+    shiftOpenedBy: p.sales?.cash_shift?.opened_by ?? null,
   };
 }
 
@@ -338,6 +345,15 @@ export function batchLabel(lote: string): string {
 export function dayLabel(day: string): string {
   const [y, m, d] = day.split("-");
   return `${d}/${m}/${y}`;
+}
+
+const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/** "Lunes 12/10/2026" de un día yyyy-MM-dd (independiente de la zona horaria). */
+export function dayLongLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const wd = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay();
+  return `${WEEKDAYS[wd]} ${dayLabel(day)}`;
 }
 
 export const XLSX_COLUMNS = [

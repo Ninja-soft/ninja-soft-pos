@@ -26,6 +26,7 @@ import {
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
+import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
 
@@ -226,11 +227,11 @@ export default function InternalEmailsPage() {
           </div>
           <div>
             <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
-            <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
-              <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">
+            <div className="overflow-hidden rounded-lg border border-border bg-white text-sm text-neutral-900">
+              <div className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">
                 Asunto: {renderTemplate(subject, vars)}
               </div>
-              <div dangerouslySetInnerHTML={{ __html: renderTemplate(html, vars) }} />
+              <EmailPreviewFrame html={renderTemplate(html, vars)} minHeight={640} />
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-2">

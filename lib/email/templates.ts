@@ -1,8 +1,14 @@
 // Catálogo de emails del sistema + render de variables. El envío real lo hace la
 // Edge Function send_email (Resend + failover SMTP, ver supabase/functions). Estos
 // son los DEFAULTS: staff los edita en /internal/emails (overrides en
-// system_email_templates). La migración 20260608190000_email_templates_full.sql
-// siembra estos mismos defaults en la tabla (on conflict do nothing).
+// system_email_templates). La migración 20261011160000_emails_diseno_ninja_soft.sql
+// guarda estos mismos defaults en la tabla; se genera con
+// scripts/gen-email-templates-sql.ts (no copiar el HTML a mano).
+//
+// El diseño (header oscuro con la llama, ícono, eyebrow, título, botón pastilla,
+// footer con logos) vive en lib/email/layout.ts.
+
+import { APP_URL, emailLayout } from "./layout";
 
 export interface EmailTemplateDef {
   key: string;
@@ -14,59 +20,26 @@ export interface EmailTemplateDef {
 }
 
 const BASE_VARS = ["negocio", "logo_url"];
-
-// Wordmark de NinjaPos para el header (sobre fondo claro) y para el footer oscuro.
-const NINJA_LOGO_LIGHT =
-  "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Dark_majzi0";
-const NINJA_LOGO_DARK =
-  "https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm";
-
-/**
- * Envoltorio branded de NinjaPos: tarjeta blanca con el logo claro arriba, un
- * acento naranja y footer oscuro (#09051C) con el wordmark dark-mode. Solo estilos
- * inline (los clientes de email descartan <style>/clases). `body` es HTML confiable
- * (proviene del catálogo, no de input de usuario).
- */
-function brandedEmail(body: string): string {
-  return (
-    '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #eef0f3;border-radius:14px;overflow:hidden">' +
-    '<div style="padding:28px 32px 8px;text-align:center">' +
-    `<img src="${NINJA_LOGO_LIGHT}" alt="NinjaPos" style="max-height:26px;display:inline-block" />` +
-    '<div style="height:3px;width:48px;background:#f97316;border-radius:99px;margin:18px auto 0"></div>' +
-    "</div>" +
-    '<div style="padding:20px 32px 32px;color:#1f2937;line-height:1.6;font-size:15px">' +
-    body +
-    "</div>" +
-    '<div style="background:#09051C;padding:18px 12px;text-align:center">' +
-    `<img src="${NINJA_LOGO_DARK}" alt="NinjaPos" style="max-height:20px;display:inline-block" />` +
-    '<div style="color:#9ca3af;font-size:11px;margin-top:8px">Enviado con NinjaPos</div>' +
-    "</div>" +
-    "</div>"
-  );
-}
-
-// Botón de acción primario (naranja NinjaPos). `href` viene del catálogo.
-function ctaButton(href: string, label: string): string {
-  return (
-    `<div style="text-align:center;margin:22px 0 4px">` +
-    `<a href="${href}" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 26px;border-radius:10px;font-size:15px">${label}</a>` +
-    "</div>"
-  );
-}
+const LOGIN = `${APP_URL}/login`;
 
 export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
-  // === Transaccionales — ciclo de cuenta ====================================
+  // === Transaccionales: ciclo de cuenta =====================================
   {
     key: "account_registered",
     label: "Cuenta creada",
     description: "Se envía apenas alguien crea su cuenta en NinjaPos.",
     variables: [...BASE_VARS, "nombre"],
     defaultSubject: "Tu cuenta de NinjaPos está creada",
-    defaultHtml: brandedEmail(
-      "<p>¡Hola {{nombre}}! 🎉</p>" +
-        "<p>Creamos tu cuenta en <b>NinjaPos</b>. Ya podés entrar y empezar a configurar <b>{{negocio}}</b>.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Ingresar a NinjaPos"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tu cuenta está lista. Entrá y configurá {{negocio}} en minutos.",
+      icon: "🎉",
+      eyebrow: "Cuenta creada",
+      title: "¡Hola, {{nombre}}!",
+      intro:
+        "Tu cuenta de <b>NinjaPos</b> ya está lista. Entrá y empezá a configurar <b>{{negocio}}</b>: cargá tus productos, abrí la caja y hacé tu primera venta.",
+      cta: { href: LOGIN, label: "Ingresar a NinjaPos" },
+      note: "Tu usuario es este email. Guardalo para ingresar desde cualquier dispositivo.",
+    }),
   },
   {
     key: "email_confirmation",
@@ -74,12 +47,16 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Enlace para confirmar la dirección de email de la cuenta.",
     variables: [...BASE_VARS, "nombre", "link"],
     defaultSubject: "Confirmá tu email para activar tu cuenta",
-    defaultHtml: brandedEmail(
-      "<p>Hola {{nombre}},</p>" +
-        "<p>Confirmá tu dirección de email para terminar de activar tu cuenta de NinjaPos.</p>" +
-        ctaButton("{{link}}", "Confirmar mi email") +
-        '<p style="color:#6b7280;font-size:13px;margin-top:16px">Si no creaste esta cuenta, podés ignorar este email.</p>',
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Un clic y tu cuenta de NinjaPos queda activa.",
+      icon: "✉️",
+      eyebrow: "Confirmá tu email",
+      title: "Un paso más, {{nombre}}",
+      intro:
+        "Confirmá tu dirección de email para terminar de activar tu cuenta de <b>NinjaPos</b>.",
+      cta: { href: "{{link}}", label: "Confirmar mi email" },
+      note: "Si no creaste esta cuenta, podés ignorar este email.",
+    }),
   },
   {
     key: "welcome",
@@ -87,11 +64,15 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Mensaje de bienvenida al sumarse a un negocio.",
     variables: [...BASE_VARS, "nombre"],
     defaultSubject: "¡Bienvenido a {{negocio}}!",
-    defaultHtml: brandedEmail(
-      "<p>Hola {{nombre}} 👋</p>" +
-        "<p>Te damos la bienvenida a <b>{{negocio}}</b>. Ya podés empezar a usar el sistema y vender en minutos.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Empezar ahora"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Ya formás parte de {{negocio}} en NinjaPos.",
+      icon: "👋",
+      eyebrow: "Bienvenida",
+      title: "¡Bienvenido a {{negocio}}!",
+      intro:
+        "Hola {{nombre}}, ya formás parte del equipo de <b>{{negocio}}</b> en NinjaPos. Entrá y empezá a vender en minutos.",
+      cta: { href: LOGIN, label: "Empezar ahora" },
+    }),
   },
   {
     key: "password_recovery",
@@ -99,26 +80,38 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Enlace para que el usuario restablezca su contraseña.",
     variables: [...BASE_VARS, "nombre", "link"],
     defaultSubject: "Restablecé tu contraseña de NinjaPos",
-    defaultHtml: brandedEmail(
-      "<p>Hola {{nombre}},</p>" +
-        "<p>Pediste restablecer tu contraseña. Hacé clic en el botón para elegir una nueva.</p>" +
-        ctaButton("{{link}}", "Cambiar mi contraseña") +
-        '<p style="color:#6b7280;font-size:13px;margin-top:16px">Si no fuiste vos, ignorá este email: tu contraseña no cambia.</p>',
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Elegí una contraseña nueva para tu cuenta de NinjaPos.",
+      icon: "🔑",
+      eyebrow: "Seguridad de tu cuenta",
+      title: "Restablecé tu contraseña",
+      intro:
+        "Hola {{nombre}}, recibimos un pedido para cambiar la contraseña de tu cuenta. Tocá el botón para elegir una nueva.",
+      cta: { href: "{{link}}", label: "Cambiar mi contraseña" },
+      note: "Si no fuiste vos, ignorá este email: tu contraseña no cambia.",
+    }),
   },
 
-  // === Transaccionales — trial y suscripción ================================
+  // === Transaccionales: trial y suscripción =================================
   {
     key: "trial_started",
     label: "Prueba iniciada",
     description: "Confirma el inicio del período de prueba gratuito.",
     variables: [...BASE_VARS, "dias", "vence"],
     defaultSubject: "Arrancó tu prueba gratis de NinjaPos",
-    defaultHtml: brandedEmail(
-      "<p>¡Listo! Empezó tu prueba gratis de <b>NinjaPos</b> para <b>{{negocio}}</b>.</p>" +
-        "<p>Tenés <b>{{dias}} días</b> con todo desbloqueado (hasta el {{vence}}). Probá el punto de venta, cargá tus productos y sumá a tu equipo.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Explorar NinjaPos"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tenés {{dias}} días con todo desbloqueado para {{negocio}}.",
+      icon: "🚀",
+      eyebrow: "Prueba gratis activa",
+      title: "Arrancó tu prueba de NinjaPos",
+      intro:
+        "Tenés todo desbloqueado para <b>{{negocio}}</b>. Probá el punto de venta, cargá tus productos y sumá a tu equipo.",
+      rows: [
+        ["Duración", "{{dias}} días"],
+        ["Disponible hasta", "{{vence}}"],
+      ],
+      cta: { href: LOGIN, label: "Explorar NinjaPos" },
+    }),
   },
   {
     key: "trial_ending",
@@ -126,11 +119,19 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Aviso antes de que termine el período de prueba.",
     variables: [...BASE_VARS, "dias", "vence"],
     defaultSubject: "Tu prueba de NinjaPos vence pronto",
-    defaultHtml: brandedEmail(
-      "<p>Tu período de prueba termina en <b>{{dias}} días</b> ({{vence}}).</p>" +
-        "<p>Activá tu plan para no perder acceso a <b>{{negocio}}</b> ni a tu información.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Activar mi plan"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Activá tu plan para seguir usando {{negocio}} sin cortes.",
+      icon: "⏳",
+      eyebrow: "Tu prueba termina pronto",
+      title: "Te quedan {{dias}} días de prueba",
+      intro:
+        "Activá tu plan para seguir usando <b>{{negocio}}</b> sin cortes y sin perder tu información.",
+      rows: [
+        ["Negocio", "{{negocio}}"],
+        ["La prueba vence", "{{vence}}"],
+      ],
+      cta: { href: LOGIN, label: "Activar mi plan" },
+    }),
   },
   {
     key: "subscription_activated",
@@ -138,11 +139,20 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Confirma que la suscripción quedó activa.",
     variables: [...BASE_VARS, "plan", "vence"],
     defaultSubject: "Tu suscripción de NinjaPos está activa",
-    defaultHtml: brandedEmail(
-      "<p>¡Gracias por sumarte! Tu plan <b>{{plan}}</b> ya está activo para <b>{{negocio}}</b>.</p>" +
-        "<p>Tu próxima renovación es el {{vence}}. El cobro es automático por Mercado Pago.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Ir a mi panel"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tu plan {{plan}} ya está activo para {{negocio}}.",
+      icon: "✅",
+      tone: "success",
+      eyebrow: "Suscripción activa",
+      title: "¡Gracias por sumarte!",
+      intro: "Tu plan <b>{{plan}}</b> ya está activo para <b>{{negocio}}</b>.",
+      rows: [
+        ["Plan", "{{plan}}"],
+        ["Próxima renovación", "{{vence}}"],
+        ["Cobro", "Automático por Mercado Pago"],
+      ],
+      cta: { href: LOGIN, label: "Ir a mi panel" },
+    }),
   },
   {
     key: "subscription_cancelled",
@@ -150,24 +160,39 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Confirma la cancelación de la suscripción.",
     variables: [...BASE_VARS, "vence"],
     defaultSubject: "Cancelamos tu suscripción de NinjaPos",
-    defaultHtml: brandedEmail(
-      "<p>Tu suscripción de <b>{{negocio}}</b> quedó cancelada.</p>" +
-        "<p>Tenés acceso hasta el {{vence}}. Después, tu cuenta se pausa pero tu información queda guardada por si querés volver.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Reactivar cuando quieras"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tenés acceso hasta el {{vence}}. Tu información queda guardada.",
+      icon: "📦",
+      eyebrow: "Suscripción cancelada",
+      title: "Cancelamos tu suscripción",
+      intro:
+        "La suscripción de <b>{{negocio}}</b> quedó cancelada. Después de esa fecha tu cuenta se pausa, pero tu información queda guardada por si querés volver.",
+      rows: [["Acceso hasta", "{{vence}}"]],
+      cta: { href: LOGIN, label: "Reactivar cuando quieras" },
+    }),
   },
 
-  // === Transaccionales — cobros =============================================
+  // === Transaccionales: cobros ==============================================
   {
     key: "payment_ok",
     label: "Pago confirmado",
     description: "Confirma un cobro exitoso de la suscripción.",
     variables: [...BASE_VARS, "monto", "vence"],
     defaultSubject: "Recibimos tu pago. ¡Gracias!",
-    defaultHtml: brandedEmail(
-      "<p>¡Listo! Recibimos tu pago de <b>{{monto}}</b> por la suscripción de <b>{{negocio}}</b>.</p>" +
-        "<p>Tu acceso sigue activo. Tu próxima renovación es el {{vence}}.</p>",
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Acreditamos {{monto}} por la suscripción de {{negocio}}.",
+      icon: "💳",
+      tone: "success",
+      eyebrow: "Pago recibido",
+      title: "¡Gracias por tu pago!",
+      intro:
+        "Acreditamos el pago de la suscripción de <b>{{negocio}}</b>. Tu acceso sigue activo.",
+      rows: [
+        ["Monto", "{{monto}}"],
+        ["Próxima renovación", "{{vence}}"],
+      ],
+      cta: { href: LOGIN, label: "Ir a mi panel" },
+    }),
   },
   {
     key: "payment_failed",
@@ -175,11 +200,17 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "El cobro no se confirmó: la suscripción pasa a vencida.",
     variables: [...BASE_VARS],
     defaultSubject: "Hubo un problema con tu cobro",
-    defaultHtml: brandedEmail(
-      "<p>No pudimos confirmar el pago de tu suscripción de <b>{{negocio}}</b>.</p>" +
-        "<p>Revisá tu medio de pago en Mercado Pago para no perder acceso. Vamos a reintentar el cobro automáticamente.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Revisar mi pago"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Revisá tu medio de pago para no perder acceso a {{negocio}}.",
+      icon: "⚠️",
+      tone: "danger",
+      eyebrow: "Problema con el cobro",
+      title: "No pudimos cobrar tu suscripción",
+      intro:
+        "No pudimos confirmar el pago de <b>{{negocio}}</b>. Revisá tu medio de pago en Mercado Pago para no perder acceso: vamos a reintentar el cobro automáticamente.",
+      cta: { href: LOGIN, label: "Revisar mi pago" },
+      note: "Si ya pagaste, podés ignorar este aviso.",
+    }),
   },
   {
     key: "payment_reminder",
@@ -187,24 +218,34 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Aviso de renovación próxima de la suscripción.",
     variables: [...BASE_VARS, "vence"],
     defaultSubject: "Tu suscripción se renueva pronto",
-    defaultHtml: brandedEmail(
-      "<p>Tu suscripción de <b>{{negocio}}</b> se renueva el <b>{{vence}}</b>.</p>" +
-        "<p>El cobro es automático por Mercado Pago; verificá que tu medio de pago esté activo para no perder acceso.</p>",
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tu suscripción de {{negocio}} se renueva el {{vence}}.",
+      icon: "🔔",
+      eyebrow: "Renovación próxima",
+      title: "Tu suscripción se renueva pronto",
+      intro:
+        "El cobro es automático por Mercado Pago. Verificá que tu medio de pago esté activo para que <b>{{negocio}}</b> siga sin cortes.",
+      rows: [["Fecha de renovación", "{{vence}}"]],
+      cta: { href: LOGIN, label: "Ver mi suscripción" },
+    }),
   },
 
-  // === Transaccionales — addon IA ===========================================
+  // === Transaccionales: addon IA ============================================
   {
     key: "addon_ai_activated",
     label: "Asistente IA activado",
     description: "Confirma la activación del addon de asistente IA.",
     variables: [...BASE_VARS],
     defaultSubject: "Activaste el Asistente IA en NinjaPos",
-    defaultHtml: brandedEmail(
-      "<p>¡Buenísimo! Activaste el <b>Asistente IA</b> en <b>{{negocio}}</b>.</p>" +
-        "<p>Ya podés pedirle reportes, resúmenes y ayuda en lenguaje natural desde tu panel.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Probar el Asistente IA"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Pedile reportes y resúmenes de {{negocio}} en lenguaje natural.",
+      icon: "✨",
+      eyebrow: "Asistente IA",
+      title: "Tu Asistente IA está listo",
+      intro:
+        "Activaste el <b>Asistente IA</b> en <b>{{negocio}}</b>. Pedile reportes, resúmenes y ayuda en lenguaje natural desde tu panel.",
+      cta: { href: LOGIN, label: "Probar el Asistente IA" },
+    }),
   },
   {
     key: "addon_ai_cancelled",
@@ -212,39 +253,61 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Confirma la baja del addon de asistente IA.",
     variables: [...BASE_VARS, "vence"],
     defaultSubject: "Diste de baja el Asistente IA",
-    defaultHtml: brandedEmail(
-      "<p>Diste de baja el <b>Asistente IA</b> de <b>{{negocio}}</b>.</p>" +
-        "<p>Lo vas a poder seguir usando hasta el {{vence}}. Después, el resto de tu plan sigue igual.</p>",
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Podés seguir usándolo hasta {{vence}}.",
+      icon: "🤖",
+      eyebrow: "Asistente IA",
+      title: "Diste de baja el Asistente IA",
+      intro:
+        "Lo vas a poder seguir usando en <b>{{negocio}}</b> hasta la fecha de abajo. Después, el resto de tu plan sigue igual.",
+      rows: [["Disponible hasta", "{{vence}}"]],
+      cta: { href: LOGIN, label: "Ir a mi panel" },
+    }),
   },
 
-  // === Transaccionales — Tiendita (compra de catálogo) =====================
+  // === Transaccionales: Tiendita (compra de catálogo) ======================
   {
     key: "catalog_purchased",
     label: "Catálogo comprado",
     description: "Confirma la compra de un catálogo de Tiendita (pago único).",
     variables: [...BASE_VARS, "catalogo"],
     defaultSubject: "Ya tenés acceso a tu catálogo en NinjaPos",
-    defaultHtml: brandedEmail(
-      "<p>¡Listo! Tu compra del catálogo <b>{{catalogo}}</b> para <b>{{negocio}}</b> se acreditó.</p>" +
-        "<p>Entrá a Tiendita para buscar productos del catálogo y agregarlos a tu tienda con un clic.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Ir a Tiendita"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "El catálogo {{catalogo}} ya está disponible en Tiendita.",
+      icon: "🛍️",
+      tone: "success",
+      eyebrow: "Compra confirmada",
+      title: "Tu catálogo ya está disponible",
+      intro:
+        "Se acreditó la compra para <b>{{negocio}}</b>. Entrá a Tiendita, buscá productos del catálogo y agregalos a tu tienda con un clic.",
+      rows: [
+        ["Catálogo", "{{catalogo}}"],
+        ["Pago", "Único, sin renovación"],
+      ],
+      cta: { href: LOGIN, label: "Ir a Tiendita" },
+    }),
   },
 
-  // === Legacy / catálogo previo (no romper flujos existentes) ===============
-  // Estas claves ya existían (dunning, invitaciones). Se conservan tal cual para
-  // no romper overrides ni el HTML que arma el cron por su cuenta.
+  // === Ciclo de cobro e invitaciones ========================================
+  // Estas claves ya existían (dunning, invitaciones): se conservan las claves y
+  // las variables para no romper a quien las encola.
   {
     key: "user_invite",
     label: "Invitación de usuario",
     description: "Invitación para que un usuario se una con su cuenta.",
     variables: [...BASE_VARS, "nombre", "link"],
     defaultSubject: "Te invitaron a {{negocio}}",
-    defaultHtml: brandedEmail(
-      "<p>Hola {{nombre}}, te sumaron a <b>{{negocio}}</b>.</p>" +
-        ctaButton("{{link}}", "Activar mi cuenta"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Activá tu cuenta y empezá a usar NinjaPos en {{negocio}}.",
+      icon: "🤝",
+      eyebrow: "Invitación",
+      title: "Te sumaron a {{negocio}}",
+      intro:
+        "Hola {{nombre}}, te invitaron a usar <b>NinjaPos</b> en <b>{{negocio}}</b>. Activá tu cuenta para empezar.",
+      cta: { href: "{{link}}", label: "Activar mi cuenta" },
+      note: "Si no esperabas esta invitación, podés ignorar este email.",
+      reason: "Recibiste este email porque te invitaron a un negocio en NinjaPos.",
+    }),
   },
   {
     key: "trial_expired",
@@ -252,11 +315,15 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "La prueba terminó sin conversión: la cuenta queda pausada.",
     variables: [...BASE_VARS],
     defaultSubject: "Tu prueba de {{negocio}} terminó",
-    defaultHtml: brandedEmail(
-      "<p>Tu período de prueba terminó y pausamos tu cuenta.</p>" +
-        "<p>Activá un plan cuando quieras para retomar <b>{{negocio}}</b> donde lo dejaste.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Activar un plan"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tu información queda guardada. Activá un plan cuando quieras.",
+      icon: "⌛",
+      eyebrow: "Prueba finalizada",
+      title: "Terminó tu prueba gratis",
+      intro:
+        "Pausamos la cuenta de <b>{{negocio}}</b>. Tu información queda guardada: activá un plan cuando quieras y retomá donde lo dejaste.",
+      cta: { href: LOGIN, label: "Activar un plan" },
+    }),
   },
   {
     key: "suspended_dunning",
@@ -264,11 +331,17 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Suspensión automática tras superar los días de gracia.",
     variables: [...BASE_VARS],
     defaultSubject: "Tu cuenta de {{negocio}} fue suspendida",
-    defaultHtml: brandedEmail(
-      "<p>Suspendimos tu cuenta por falta de pago.</p>" +
-        "<p>Regularizá tu suscripción para reactivar <b>{{negocio}}</b>.</p>" +
-        ctaButton("https://pos.soft.ninja/login", "Regularizar ahora"),
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Regularizá el pago para reactivar {{negocio}}.",
+      icon: "⛔",
+      tone: "danger",
+      eyebrow: "Cuenta suspendida",
+      title: "Suspendimos tu cuenta",
+      intro:
+        "No registramos el pago de la suscripción de <b>{{negocio}}</b>, así que pausamos el acceso. Regularizá el pago y tu cuenta vuelve con toda tu información.",
+      cta: { href: LOGIN, label: "Regularizar ahora" },
+      note: "Si ya pagaste, tu cuenta se reactiva sola cuando se acredita el pago.",
+    }),
   },
   {
     key: "price_increase",
@@ -276,10 +349,19 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     description: "Aviso de aumento de precio a los suscriptos del plan.",
     variables: [...BASE_VARS, "precio_anterior", "precio_nuevo"],
     defaultSubject: "Actualización de tarifa de tu plan",
-    defaultHtml: brandedEmail(
-      "<p>Te avisamos que tu tarifa pasa de <b>{{precio_anterior}}</b> a <b>{{precio_nuevo}}</b> por mes, a partir de tu próximo ciclo de facturación.</p>" +
-        "<p>No tenés que hacer nada: el cobro sigue siendo automático.</p>",
-    ),
+    defaultHtml: emailLayout({
+      preheader: "Tu tarifa pasa a {{precio_nuevo}} por mes desde tu próximo ciclo.",
+      icon: "📈",
+      eyebrow: "Actualización de tarifa",
+      title: "Actualizamos la tarifa de tu plan",
+      intro:
+        "A partir de tu próximo ciclo de facturación cambia la tarifa mensual de <b>{{negocio}}</b>. No tenés que hacer nada: el cobro sigue siendo automático.",
+      rows: [
+        ["Tarifa actual", "{{precio_anterior}} / mes"],
+        ["Nueva tarifa", "{{precio_nuevo}} / mes"],
+      ],
+      cta: { href: LOGIN, label: "Ver mi suscripción" },
+    }),
   },
 ];
 

@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Emails: rediseño completo con el diseño de Ninja Soft.** Todos los emails del sistema (alta, confirmación, bienvenida, contraseña, prueba, suscripción, cobros, Asistente IA, Tiendita, invitación, suspensión, tarifa) usan el mismo sistema visual que ninja-soft-web: header oscuro con la llama y el logo de NinjaPOS, ícono en círculo, eyebrow, título, datos clave en tarjeta, botón pastilla y footer con logos y dirección. Layout de tablas con estilos inline y logos PNG (Gmail / Outlook). Builder reutilizable en `lib/email/layout.ts`; la migración `20261011160000_emails_diseno_ninja_soft.sql` se genera desde el catálogo (`scripts/gen-email-templates-sql.ts`) y también rediseña `_dunning_email_html`. Los comprobantes por email mantienen la marca del negocio (logo o su inicial, color, 5 diseños) con el mismo pulido. Las vistas previas (/internal/emails y Configuración → Email) ahora renderizan el documento real en un iframe aislado.
+
 ### Fixed
 
 - **CI — el job `rls` volvió a verde después de un mes rojo.** Fallaba en todos los merges desde el 2026-06-13. Dos causas apiladas: (1) **breaking change del Supabase CLI v2.106.0** (el workflow usa `setup-cli latest`): el start local ahora revoca los privilegios Data API por defecto → `permission denied for table tenants` en el setup de la suite — fix con `auto_expose_new_tables = true` en `supabase/config.toml` (solo local/CI; follow-up durable: migración de GRANTs explícitos preservando el hardening); (2) los **triggers de gating de escritura** de f13 (9-jun) rompían 4 tests — el setup ahora habilita todas las features gateadas vía addon (patrón `listas_precios`). Bisect por historial de runs + changelog oficial del CLI.

@@ -23,6 +23,12 @@ function breakdown(z: ZClosure): [string, number][] {
   return Object.entries(b);
 }
 
+// Cobros de cuenta corriente del turno por medio (Cuenta corriente v2).
+function accountCollected(z: ZClosure): [string, number][] {
+  const b = (z.account_collected ?? {}) as Record<string, number>;
+  return Object.entries(b);
+}
+
 export function ZClosuresHistory() {
   const [range, setRange] = useState<DateRange | undefined>();
   const { data: closures, isLoading } = useZClosures(range);
@@ -59,6 +65,17 @@ export function ZClosuresHistory() {
           { header: "Monto", key: "a", type: "money" },
         ],
         rows: breakdown(z).map(([k, v]) => ({
+          m: METHOD_LABELS[k] ?? k,
+          a: v,
+        })),
+      },
+      {
+        name: "Cobros cuenta corriente",
+        columns: [
+          { header: "Medio", key: "m", width: 18 },
+          { header: "Monto", key: "a", type: "money" },
+        ],
+        rows: accountCollected(z).map(([k, v]) => ({
           m: METHOD_LABELS[k] ?? k,
           a: v,
         })),
@@ -196,6 +213,18 @@ export function ZClosuresHistory() {
                   </div>
                   {breakdown(sel).map(([k, v]) => (
                     <Row key={k} k={METHOD_LABELS[k] ?? k} v={formatCurrency(v)} />
+                  ))}
+                </>
+              )}
+
+              {accountCollected(sel).length > 0 && (
+                <>
+                  <hr className="border-border" />
+                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Cobros de cuenta corriente
+                  </div>
+                  {accountCollected(sel).map(([k, v]) => (
+                    <Row key={`cc-${k}`} k={METHOD_LABELS[k] ?? k} v={formatCurrency(v)} />
                   ))}
                 </>
               )}

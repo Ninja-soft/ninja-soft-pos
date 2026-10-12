@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench, Settings } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench, Settings } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -93,6 +93,15 @@ const PosLayoutCard = dynamic(() =>
 const PriceListsCard = dynamic(() =>
   import("@/components/prices/PriceListsCard").then((m) => m.PriceListsCard),
 );
+const AccountSettingsCard = dynamic(() =>
+  import("@/components/account/AccountSettingsCard").then((m) => m.AccountSettingsCard),
+);
+const GroupAccountTermsCard = dynamic(() =>
+  import("@/components/account/GroupAccountTermsCard").then((m) => m.GroupAccountTermsCard),
+);
+const SupervisorPinCard = dynamic(() =>
+  import("@/components/account/SupervisorPinCard").then((m) => m.SupervisorPinCard),
+);
 
 type Section =
   | "apariencia"
@@ -110,6 +119,7 @@ type Section =
   | "profesionales"
   | "paquetes"
   | "clientes"
+  | "cuenta-corriente"
   | "devoluciones"
   | "escaner"
   | "pantalla-cliente"
@@ -176,7 +186,11 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   },
   {
     title: "Clientes",
-    sections: [{ key: "clientes", label: "Datos del cliente", icon: Users }],
+    sections: [
+      { key: "clientes", label: "Datos del cliente", icon: Users },
+      // Cuenta corriente v2: plazos, cuotas, punitorios, bloqueo y recordatorios.
+      { key: "cuenta-corriente", label: "Cuenta corriente", icon: Wallet, feature: "cuenta_corriente" },
+    ],
   },
   {
     title: "Comprobantes",
@@ -653,6 +667,13 @@ function ConfiguracionInner() {
           {/* Datos del cliente: requeridos, documento obligatorio, c/c y email
               automático del comprobante (solo owner; se auto-oculta) */}
           {section === "clientes" && <OperationSettingsCard view="clientes" />}
+          {section === "cuenta-corriente" && (
+            <div className="space-y-4">
+              <AccountSettingsCard />
+              <GroupAccountTermsCard />
+              <SupervisorPinCard />
+            </div>
+          )}
 
           {/* Devoluciones: política, validez de vale y motivos (se auto-oculta) */}
           {section === "devoluciones" && <ReturnsSettingsCard />}

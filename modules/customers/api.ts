@@ -29,14 +29,6 @@ function payload(input: CustomerOutput) {
 
 const DAY_MS = 86_400_000;
 
-// Inicio del día de hoy (medianoche local) en epoch ms. Un vencimiento se
-// considera vencido cuando su fecha es estrictamente anterior a hoy.
-function startOfTodayMs(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 // Movimiento de cuenta corriente para el cálculo FIFO.
 export type AccountMovement = {
   delta: number | string | null;
@@ -164,91 +156,9 @@ export const customersApi = {
     return (data ?? []).reduce((acc, r) => acc + Number(r.delta || 0), 0);
   },
 
-  // Cuentas por cobrar: deuda por cliente con buckets de antigüedad (FIFO).
-  // Los pagos cancelan los cargos más viejos primero; lo que queda se ubica en
-  // el tramo según su antigüedad (0-30 / 31-60 / 61-90 / +90 días).
-  accountsReceivable: async (): Promise<{
-    rows: {
-      customer_id: string;
-      name: string;
-      total: number;
-      overdue: number;
-      b0_30: number;
-      b31_60: number;
-      b61_90: number;
-      b90plus: number;
-    }[];
-    totals: { total: number; overdue: number; b0_30: number; b31_60: number; b61_90: number; b90plus: number };
-  }> => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("customer_account_movements")
-      .select("customer_id, delta, created_at, due_date, customers(name)")
-      .order("created_at", { ascending: true });
-    if (error) throw error;
-
-    type Row = {
-      customer_id: string;
-      delta: number;
-      created_at: string;
-      due_date: string | null;
-      customers: { name: string } | null;
-    };
-    const byCustomer = new Map<
-      string,
-      { name: string; movements: AccountMovement[] }
-    >();
-
-    for (const m of (data ?? []) as unknown as Row[]) {
-      if (!m.customer_id) continue;
-      const entry =
-        byCustomer.get(m.customer_id) ??
-        { name: m.customers?.name ?? "Sin nombre", movements: [] };
-      if (!byCustomer.has(m.customer_id)) byCustomer.set(m.customer_id, entry);
-      entry.movements.push({ delta: m.delta, created_at: m.created_at, due_date: m.due_date });
-    }
-
-    const now = Date.now();
-    const today = startOfTodayMs();
-    const totals = { total: 0, overdue: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
-    const rows = [...byCustomer.entries()]
-      .map(([customer_id, e]) => {
-        const r = { customer_id, name: e.name, total: 0, overdue: 0, b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
-        for (const c of remainingCharges(e.movements)) {
-          const days = (now - c.date) / DAY_MS;
-          r.total += c.amount;
-          if (c.due < today) r.overdue += c.amount;
-          if (days <= 30) r.b0_30 += c.amount;
-          else if (days <= 60) r.b31_60 += c.amount;
-          else if (days <= 90) r.b61_90 += c.amount;
-          else r.b90plus += c.amount;
-        }
-        return r;
-      })
-      .filter((r) => r.total > 0.009)
-      .sort((a, b) => b.total - a.total);
-
-    for (const r of rows) {
-      totals.total += r.total;
-      totals.overdue += r.overdue;
-      totals.b0_30 += r.b0_30;
-      totals.b31_60 += r.b31_60;
-      totals.b61_90 += r.b61_90;
-      totals.b90plus += r.b90plus;
-    }
-    return { rows, totals };
-  },
-
-  // Registra un pago de deuda de cuenta corriente (reduce la deuda).
-  payDebt: async (customerId: string, amount: number): Promise<void> => {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("customer_account_movements")
-      .insert({ customer_id: customerId, delta: -Math.abs(amount), reason: "Pago de deuda" });
-    if (error) throw error;
-  },
-
   // Historial del cliente: saldo a favor + ventas + devoluciones.
+  // (Cuenta corriente v2: el aging y el cobro de deuda viven en accountApi, por
+  // RPC server-side; acá sólo el saldo y el próximo vencimiento para la ficha.)
   history: async (
     customerId: string,
   ): Promise<{
@@ -264,7 +174,8 @@ export const customersApi = {
       supabase
         .from("customer_account_movements")
         .select("delta, created_at, due_date")
-        .eq("customer_id", customerId),
+        .eq("customer_id", customerId)
+        .is("voided_at", null),
       supabase
         .from("sales")
         .select("id, number, total, status, created_at")

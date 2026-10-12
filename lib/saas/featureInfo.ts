@@ -44,9 +44,22 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   cuenta_corriente: {
-    desc: "Cuentas corrientes de clientes: ventas a crédito, saldos, pagos a cuenta y estado de deuda por cliente.",
+    desc: "Cuentas corrientes de clientes: ventas a cuenta con plazos (días o corte mensual) y cuotas, cobros con medio, caja y recibo, estado de cuenta, antigüedad de deuda por vencimiento y bloqueo por mora o límite con autorización por PIN de supervisor.",
     impact: "Desactivado, no se puede vender en cuenta corriente ni llevar el saldo deudor de los clientes.",
     minPlan: "Business",
+  },
+  cc_punitorios: {
+    desc: "Punitorios de cuenta corriente: interés por mora configurable (simple o compuesto, mensual o diario, gracia, tope y mínimo), calculado todos los días y con condonación auditada.",
+    impact: "Desactivado, la deuda vencida no genera intereses; la cuenta corriente sigue funcionando.",
+    minPlan: "Business",
+    requires: ["cuenta_corriente"],
+  },
+  cc_cobranza: {
+    desc: "Gestión de cobranza: recordatorios automáticos por email antes y después del vencimiento, estado de cuenta por email, promesas de pago, notas, tareas y cobrador asignado.",
+    impact: "Desactivado, la cobranza se hace a mano: sin recordatorios automáticos ni seguimiento de promesas y tareas.",
+    minPlan: "Business",
+    requires: ["cuenta_corriente"],
+    needs: "Configurar el email del negocio (Configuración, sección Email) para enviar recordatorios.",
   },
   promociones: {
     desc: "Promociones y combos: arma ofertas (2x1, packs, precios promocionales) que el POS aplica automáticamente.",

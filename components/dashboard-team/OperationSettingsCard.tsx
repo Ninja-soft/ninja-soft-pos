@@ -13,7 +13,6 @@ import {
   Hash,
   ClipboardCheck,
   Mail,
-  CalendarClock,
   Rows3,
   Users,
   IdCard,
@@ -167,7 +166,6 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [salePad, setSalePad] = useState(0);
   const [customerReq, setCustomerReq] = useState<CustomerRequired>({});
   const [autoEmailReceipt, setAutoEmailReceipt] = useState(false);
-  const [accountDueDays, setAccountDueDays] = useState(30);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_DEFAULT);
   const [requireCustomerDoc, setRequireCustomerDoc] = useState(true);
   const [pluEnabled, setPluEnabled] = useState(false);
@@ -215,7 +213,6 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setSalePad(settings.sale_pad ?? 0);
     setCustomerReq((settings.customer_required as CustomerRequired) ?? {});
     setAutoEmailReceipt(settings.auto_email_receipt ?? false);
-    setAccountDueDays(settings.account_due_days ?? 30);
     setPageSize(settings.page_size ?? PAGE_SIZE_DEFAULT);
     setRequireCustomerDoc(settings.require_customer_doc ?? true);
     setPluEnabled(settings.plu_enabled ?? false);
@@ -252,7 +249,6 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           sale_pad: Math.max(0, Math.min(12, Number(salePad) || 0)),
           customer_required: customerReq,
           auto_email_receipt: autoEmailReceipt,
-          account_due_days: Math.max(1, Number(accountDueDays) || 30),
           page_size: clampPageSize(pageSize),
           require_customer_doc: requireCustomerDoc,
           plu_enabled: pluEnabled,
@@ -896,30 +892,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         </CardContent>
       </Card>
 
-      {/* Plazo de cuenta corriente */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
-          <div>
-            <div className="flex items-center gap-2 font-semibold">
-              <CalendarClock size={16} className="text-ninja-flameSoft" /> Plazo de cuenta corriente (días)
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Vencimiento de cada venta fiada (cuenta corriente).
-            </p>
-          </div>
-          <span className="flex items-center gap-1">
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={accountDueDays}
-              onChange={(e) => setAccountDueDays(Number(e.target.value) || 30)}
-              className={numCls}
-            />
-            <span className="text-sm text-muted-foreground">días</span>
-          </span>
-        </CardContent>
-      </Card>
+      {/* El plazo de cuenta corriente se movió a Configuración → Cuenta corriente
+          (Cuenta corriente v2: plazos, cuotas, punitorios, bloqueo). */}
 
       {/* Comprobante por email automático */}
       <Card>

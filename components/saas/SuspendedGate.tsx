@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { Isotype } from "@/components/brand/Logo";
+import { appOrigin } from "@/lib/site";
 
 // =============================================================================
 // Pantalla de bloqueo por cuenta SUSPENDIDA. Cubre toda la app del POS con un
@@ -54,7 +55,7 @@ export function SuspendedGate({
 
   const startCheckout = useMutation({
     mutationFn: async () => {
-      const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
+      const backUrl = `${appOrigin()}/dashboard-team?sub=ok`;
       return startOwnerSubscriptionCheckout(backUrl);
     },
     onSuccess: (initPoint) => {

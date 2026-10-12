@@ -1,9 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileDown, Plus, Save, Upload, X } from "lucide-react";
+import { Download, FileDown, Info, Plus, Save, Upload, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
@@ -18,11 +17,13 @@ import {
   BRAND_OPTIONS,
   DEBIT_BRANDS,
   DEFAULT_INSTALLMENTS,
-  brandLogo,
   planLabel,
 } from "@/modules/pos/planConstants";
 import { parsePlansXlsx, type PlanRow } from "@/modules/pos/plansXlsx";
 import { exportXlsx } from "@/lib/utils/xlsx";
+import { Callout } from "@/components/ui/Callout";
+import { CardBrandLogo } from "@/components/ui/ThemedLogo";
+import { BrandLogo } from "@/components/dashboard-team/payments/ui";
 
 type MethodConfig = { installments?: number[]; brands?: string[]; plan_mode?: "global" | "plans" };
 
@@ -273,8 +274,22 @@ export function PaymentPlansGridModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`Planes · ${providerName}`}
+      title={`Planes de cuotas · ${providerName}`}
       className="max-w-3xl"
+      header={
+        <div className="flex items-center gap-3">
+          <BrandLogo brandKey={providerKey} name={providerName} size={40} />
+          <div className="min-w-0">
+            <p className="text-lg font-bold leading-tight tracking-tight">Planes de cuotas</p>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+              {providerName} ·{" "}
+              {plans.length > 0
+                ? `${plans.length} ${plans.length === 1 ? "plan cargado" : "planes cargados"}`
+                : "Sin planes"}
+            </p>
+          </div>
+        </div>
+      }
     >
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -282,32 +297,7 @@ export function PaymentPlansGridModal({
           Al cobrar con {providerName}, el cajero elige el plan y el recargo se suma
           al total.
         </p>
-        {providerKey === "mobbex" ? (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
-            En Mobbex el plan <strong>solo aumenta el precio base</strong>: el recargo se
-            suma al total del cobro, pero las cuotas y el interés que ve el cliente en el
-            checkout son los que tengas configurados en tu cuenta de Mobbex. Revisá ahí
-            tus planes de cuotas para que coincidan con lo que cargás acá. Dejá la celda
-            en <strong>0</strong> para sin recargo.
-          </div>
-        ) : (
-          <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-xs leading-relaxed text-muted-foreground">
-            En Mercado Pago el plan <strong>solo aumenta el precio base</strong>: el QR no
-            fija las cuotas, las elige el cliente. Tenés que controlar que pague en las
-            cuotas acordadas. Para que el interés se cobre automáticamente en las cuotas,
-            configurá la financiación en Mercado Pago:{" "}
-            <strong>Tu negocio → Costos → Cuotas</strong> (
-            <a
-              href="https://www.mercadopago.com.ar/costs-section/installments"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ninja-flameSoft underline"
-            >
-              mercadopago.com.ar/costs-section/installments
-            </a>
-            ). Dejá la celda en <strong>0</strong> para sin recargo.
-          </div>
-        )}
+        <PlansProviderNote providerKey={providerKey} />
 
         {/* Recargo único del medio */}
         <div className="rounded-lg border border-border bg-muted/30 p-4">
@@ -412,19 +402,22 @@ export function PaymentPlansGridModal({
 
         {/* Editor de marcas */}
         {editBrands && (
-          <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-wrap gap-2 rounded-xl bg-fg-4 p-3">
             {BRAND_OPTIONS.map((b) => {
               const on = brands.includes(b.value);
               return (
                 <button
                   key={b.value}
+                  type="button"
+                  aria-pressed={on}
                   onClick={() => toggleBrand(b.value)}
                   className={
                     on
-                      ? "rounded-full border border-ninja-flameSoft bg-ninja-flame/15 px-3 py-1 text-xs font-semibold text-ninja-flameSoft"
-                      : "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+                      ? "inline-flex h-9 items-center gap-2 rounded-full bg-fg-10 pl-2 pr-3 text-xs font-semibold text-foreground"
+                      : "inline-flex h-9 items-center gap-2 rounded-full pl-2 pr-3 text-xs text-muted-foreground opacity-60 transition hover:bg-fg-6 hover:opacity-100"
                   }
                 >
+                  <CardBrandLogo brand={b.value} label={b.label} height={18} />
                   {b.label}
                 </button>
               );
@@ -593,15 +586,10 @@ function Section({
 }
 
 function BrandRow({ brand, children }: { brand: string; children: React.ReactNode }) {
-  const logo = brandLogo(brand);
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
-      <div className="flex w-36 shrink-0 items-center gap-2.5">
-        <span className="flex h-7 w-11 shrink-0 items-center justify-center">
-          {logo && (
-            <Image src={logo} alt={brand} width={44} height={28} className="h-7 w-auto object-contain" />
-          )}
-        </span>
+    <div className="flex flex-col gap-2.5 rounded-xl bg-fg-4 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2.5 sm:w-40">
+        <CardBrandLogo brand={brand} label={BRAND_LABEL[brand] ?? brand} height={26} />
         <span className="text-sm font-medium leading-tight">{BRAND_LABEL[brand] ?? brand}</span>
       </div>
       <div className="flex flex-1 flex-wrap gap-3">{children}</div>
@@ -710,3 +698,54 @@ function PlanCell({
     </div>
   );
 }
+
+// Cómo usa cada proveedor los planes cargados acá: el texto depende de quién
+// fija las cuotas (nuestro checkout, la terminal o la cuenta del proveedor).
+function PlansProviderNote({ providerKey }: { providerKey: string }) {
+  if (providerKey === "payway") {
+    return (
+      <Callout icon={Info} title="Cómo se usan en Payway">
+        El cliente paga en tu checkout de Payway y <strong>elige ahí la tarjeta y las
+        cuotas</strong> entre los planes que cargues acá. El recargo de cada plan se
+        suma al total en el momento. Celda vacía: ese plan no se ofrece. Celda en{" "}
+        <strong>0</strong>: cuotas sin recargo.
+      </Callout>
+    );
+  }
+  if (providerKey === "mobbex") {
+    return (
+      <Callout icon={Info} title="Cómo se usan en Mobbex">
+        El plan <strong>solo suma el recargo</strong> al total del cobro. Las cuotas y el
+        interés que ve el cliente en el checkout son los que tengas configurados en tu
+        cuenta de Mobbex: revisá que coincidan con lo que cargás acá. Celda en{" "}
+        <strong>0</strong>: sin recargo.
+      </Callout>
+    );
+  }
+  if (providerKey === "mercadopago" || providerKey === "mercadopago_point") {
+    return (
+      <Callout icon={Info} title="Cómo se usan en Mercado Pago">
+        El cajero elige el plan al cobrar y el recargo se suma al total. En el Point
+        podés dejar preseleccionadas las cuotas; con QR o link las cuotas{" "}
+        <strong>las elige el cliente</strong>, así que controlá que pague en las
+        acordadas. Para que Mercado Pago cobre el interés de las cuotas, configuralo en{" "}
+        <a
+          href="https://www.mercadopago.com.ar/costs-section/installments"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-ninja-flameSoft underline"
+        >
+          Tu negocio › Costos › Cuotas
+        </a>
+        . Celda en <strong>0</strong>: sin recargo.
+      </Callout>
+    );
+  }
+  return (
+    <Callout icon={Info} title="Cómo se usan">
+      El cajero elige el plan al cobrar y el recargo se suma al total. Celda vacía: ese
+      plan no se ofrece. Celda en <strong>0</strong>: sin recargo.
+    </Callout>
+  );
+}
+

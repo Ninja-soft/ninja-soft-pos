@@ -263,7 +263,7 @@ export default async function InternalHomePage() {
 
       {/* ── Alertas ── */}
       {nProblemas > 0 && (
-        <div className="mt-4 flex items-start gap-3 rounded-lg border border-orange-400/30 bg-orange-400/5 p-4 text-sm text-warning">
+        <div className="mt-4 flex items-start gap-3 rounded-xl bg-warning/10 p-4 text-sm text-warning">
           <AlertTriangle size={18} className="mt-0.5 shrink-0" />
           <div>
             <span className="font-semibold">

@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/supabase/currentUser";
 export interface MyTenant {
   tenantId: string;
   industry: string | null;
+  // Nombre del negocio (lo usan textos listos para enviar, p. ej. el mail a Nave).
+  name: string | null;
   role: string;
   canManage: boolean;
 }
@@ -30,12 +32,13 @@ export function useMyTenant() {
       if (!mem) return null;
       const { data: t } = await supabase
         .from("tenants")
-        .select("industry")
+        .select("industry, name")
         .eq("id", mem.tenant_id)
         .maybeSingle();
       return {
         tenantId: mem.tenant_id,
         industry: t?.industry ?? null,
+        name: t?.name ?? null,
         role: mem.role,
         canManage: ["owner", "manager"].includes(mem.role),
       };

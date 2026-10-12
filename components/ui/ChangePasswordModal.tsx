@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthProvider } from "@/modules/auth/hooks";
+import { appOrigin } from "@/lib/site";
 
 export function ChangePasswordModal({
   open,
@@ -100,7 +101,7 @@ export function ChangePasswordModal({
 
     // Email con la plantilla propia (Resend/SMTP), no el mailer de Supabase.
     const { error: err } = await supabase.functions.invoke("send_password_recovery", {
-      body: { email: user.email, origin: window.location.origin },
+      body: { email: user.email, origin: appOrigin() },
     });
     setResetLoading(false);
     if (err) {

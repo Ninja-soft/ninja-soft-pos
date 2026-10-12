@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Image from "next/image";
 import { AlertTriangle, Download } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +15,7 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
 import { paymentIcon } from "@/lib/payments/logos";
+import { ThemedLogo } from "@/components/ui/ThemedLogo";
 
 const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: "Mercado Pago",
@@ -27,6 +27,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   nave: "Nave",
   nave_point: "Nave Point",
   gocuotas: "GO Cuotas",
+  directo: "Directo",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
@@ -219,13 +220,7 @@ export function QrIntentsModal({
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1.5">
                       {paymentIcon(i.provider_key) && (
-                        <Image
-                          src={paymentIcon(i.provider_key)!}
-                          alt=""
-                          width={18}
-                          height={18}
-                          className="h-[18px] w-[18px] rounded object-contain"
-                        />
+                        <ThemedLogo src={paymentIcon(i.provider_key)!} alt="" className="h-[18px] w-[18px]" />
                       )}
                       {PROVIDER_LABELS[i.provider_key] ?? i.provider_key}
                     </span>

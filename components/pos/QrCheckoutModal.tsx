@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, Copy, Link2, Share2 } from "lucide-react";
@@ -10,7 +9,8 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { posApi, type PaymentPlan } from "@/modules/pos/api";
 import { useProviderPlans } from "@/modules/pos/hooks";
-import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants";
+import { BASE_LABEL, BRAND_LABEL } from "@/modules/pos/planConstants";
+import { CardBrandLogo, ThemedLogo } from "@/components/ui/ThemedLogo";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
@@ -103,6 +103,12 @@ function qrErrorCopy(code: string, providerName: string): string {
       return "GO Cuotas rechazó la API Key de la sucursal. Verificá que sea del mismo ambiente que el switch Sandbox del medio.";
     case "gocuotas_error":
       return "GO Cuotas devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "directo_auth_failed":
+      return "Directo rechazó las credenciales del comercio. Verificá que sean del mismo ambiente que el switch Sandbox del medio.";
+    case "directo_base_url_missing":
+      return "Falta la URL de la API de Directo. Cargala en Configuración → Medios de pago.";
+    case "directo_error":
+      return "Directo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -143,7 +149,8 @@ export function QrCheckoutModal({
     | "payway"
     | "getnet"
     | "nave"
-    | "gocuotas";
+    | "gocuotas"
+    | "directo";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -168,13 +175,15 @@ export function QrCheckoutModal({
   // Nave; medio y cuotas se resuelven del lado de Nave.
   // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
   // débito ahí).
+  // Directo: el cliente arma su crédito en la página de Directo.
   const selfManaged =
     provider === "modo" ||
     provider === "pagos360" ||
     provider === "payway" ||
     provider === "getnet" ||
     provider === "nave" ||
-    provider === "gocuotas";
+    provider === "gocuotas" ||
+    provider === "directo";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -285,7 +294,9 @@ export function QrCheckoutModal({
                   ? posApi.createNaveQr
                   : provider === "gocuotas"
                     ? posApi.createGoCuotasLink
-                    : posApi.createMpQr;
+                    : provider === "directo"
+                      ? posApi.createDirectoLink
+                      : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
@@ -359,7 +370,7 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas: baja local del intent (Redirect no anula checkouts).
+  //  - GO Cuotas y Directo: baja local del intent (no anulan órdenes por API).
   function close() {
     if (intentId && phase === "waiting") {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -368,6 +379,8 @@ export function QrCheckoutModal({
         posApi.cancelNaveIntent(intentId).catch(() => null);
       } else if (provider === "gocuotas") {
         posApi.cancelGoCuotasIntent(intentId).catch(() => null);
+      } else if (provider === "directo") {
+        posApi.cancelDirectoIntent(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -449,7 +462,9 @@ export function QrCheckoutModal({
                 ? posApi.naveIntentStatus(intentId!)
                 : provider === "gocuotas"
                   ? posApi.gocuotasIntentStatus(intentId!)
-                  : posApi.mpIntentStatus(intentId!),
+                  : provider === "directo"
+                    ? posApi.directoIntentStatus(intentId!)
+                    : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching,
@@ -529,8 +544,7 @@ export function QrCheckoutModal({
     >
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={providerLogo} alt={providerName} className="h-12 w-auto object-contain" />
+          <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
         </div>
 
         {selecting && (
@@ -543,27 +557,20 @@ export function QrCheckoutModal({
               <>
                 <div className="text-sm font-medium">Elegí la tarjeta</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {brands.map((b) => {
-                    const logo = brandLogo(b);
-                    return (
-                      <button
-                        key={b}
-                        onClick={() => setBrand(b)}
-                        className="flex flex-col items-center gap-1 rounded-lg border border-border p-3 transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
-                      >
-                        {logo ? (
-                          <Image src={logo} alt={b} width={48} height={30} className="h-7 w-auto object-contain" />
-                        ) : (
-                          <span className="h-7" />
-                        )}
-                        <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
-                      </button>
-                    );
-                  })}
+                  {brands.map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setBrand(b)}
+                      className="flex flex-col items-center gap-1.5 rounded-xl bg-fg-6 p-3 transition hover:bg-fg-10"
+                    >
+                      <CardBrandLogo brand={b} label={BRAND_LABEL[b] ?? b} height={28} />
+                      <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
+                    </button>
+                  ))}
                 </div>
                 <button
                   onClick={payNoPlan}
-                  className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground"
+                  className="w-full rounded-xl bg-fg-4 py-2.5 text-sm text-muted-foreground transition hover:bg-fg-6 hover:text-foreground"
                 >
                   Sin plan · contado ({formatCurrency(base)})
                 </button>

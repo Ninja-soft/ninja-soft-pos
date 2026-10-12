@@ -230,7 +230,7 @@ export default function ProductosPage() {
           icon={Package}
           help={<InfoHint section="productos" size={18} />}
           actions={
-          <div className="-mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"

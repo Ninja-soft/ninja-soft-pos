@@ -1,43 +1,49 @@
 import { HandCoins, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { ThemedLogo } from "@/components/ui/ThemedLogo";
+import { logoSrcFullBleed } from "@/lib/payments/logos";
 
-// Logo oficial de un medio de pago en un "ícono de app" blanco (estilo iOS):
-// los logos de marca están pensados para fondo claro, así se leen igual en los
-// temas oscuros sin invertir colores ni teñir la marca.
+// Logo oficial de un medio de pago (fuente única lib/payments/logos.ts). Los
+// isotipos (public/images/payments) y los logos de red de tarjetas son de fondo
+// transparente: se muestran tal cual, sin placa blanca, sobre la superficie del
+// botón, con la variante para fondo oscuro en los temas oscuros (ThemedLogo).
+// Los isotipos que ya son un cuadrado lleno (Fiserv) se redondean. Sin logo,
+// ícono lucide en el color de texto atenuado del tema.
 export function BrandIcon({
   logo,
   alt,
   size = 40,
   fallback,
+  inverse,
   className,
 }: {
   logo: string | null;
   alt: string;
   size?: number;
   fallback?: "wallet" | "account";
+  /** El logo está sobre una superficie invertida (bg-foreground). */
+  inverse?: boolean;
   className?: string;
 }) {
+  const Fallback = fallback === "account" ? HandCoins : Wallet;
+  const fullBleed = logo ? logoSrcFullBleed(logo) : false;
   return (
+    // Alto fijo; los logos apaisados (redes de tarjeta) crecen a lo ancho
+    // hasta 1.6× en vez de achicarse dentro de un cuadrado.
     <span
-      className={cn(
-        "grid shrink-0 place-items-center overflow-hidden rounded-[28%] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.18),inset_0_0_0_1px_rgba(11,7,32,0.06)]",
-        className,
-      )}
-      style={{ width: size, height: size }}
+      className={cn("grid shrink-0 place-items-center", className)}
+      style={{ height: size, minWidth: size, maxWidth: Math.round(size * 1.6) }}
     >
       {logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ThemedLogo
           src={logo}
           alt={alt}
           loading="lazy"
-          className="h-[72%] w-[72%] object-contain"
-          draggable={false}
+          inverse={inverse}
+          className={cn("h-full w-auto max-w-full", fullBleed && "rounded-[24%]")}
         />
-      ) : fallback === "account" ? (
-        <HandCoins size={size * 0.5} className="text-[#3B237A]" aria-hidden />
       ) : (
-        <Wallet size={size * 0.5} className="text-[#3B237A]" aria-hidden />
+        <Fallback size={Math.round(size * 0.6)} className="text-muted-foreground" aria-hidden />
       )}
     </span>
   );

@@ -17,8 +17,9 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   nave: "nave",
   nave_point: "nave_point",
   gocuotas: "gocuotas",
-  // Directo es un tender manual (payments.method = 'directo'): el trigger lo
-  // gatea por el método (payment_method_plan_key('directo')).
+  // Directo (ADR-041): QR + link por API (method 'qr' + intent directo) o
+  // respaldo manual (payments.method = 'directo'); ambos caminos los gatea el
+  // trigger vía payment_method_plan_key('directo').
   directo: "directo",
 };
 

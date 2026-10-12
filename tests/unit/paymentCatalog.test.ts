@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  MANUAL_FALLBACK,
   PLANS_KEY_BY_CHANNEL,
+  SANDBOX_PROVIDERS,
   connectionKeyOf,
   groupProvidersByBrand,
   surchargeModeOf,
@@ -48,14 +50,16 @@ describe("groupProvidersByBrand", () => {
     expect(g!.channels.map((c) => c.key)).toEqual(["nave"]);
   });
 
-  it("GO Cuotas es QR + link con conexión propia; Directo es manual sin conexión", () => {
-    const groups = groupProvidersByBrand([row("gocuotas", 1), row("directo", 2, { kind: "manual" })]);
+  it("GO Cuotas y Directo son QR + link con conexión propia (Directo con respaldo manual)", () => {
+    const groups = groupProvidersByBrand([row("gocuotas", 1), row("directo", 2)]);
     expect(groups.map((g) => [g.brand.key, g.channels[0]!.channel])).toEqual([
       ["gocuotas", "qr_link"],
-      ["directo", "manual"],
+      ["directo", "qr_link"],
     ]);
     expect(connectionKeyOf("gocuotas")).toBe("gocuotas");
-    expect(connectionKeyOf("directo")).toBeNull();
+    expect(connectionKeyOf("directo")).toBe("directo");
+    expect(MANUAL_FALLBACK.has("directo")).toBe(true);
+    expect(SANDBOX_PROVIDERS.has("directo")).toBe(true);
     expect(paymentIcon("gocuotas")).toBe("/images/payments/gocuotas-icon.webp");
     expect(paymentWordmark("directo")).toBe("/images/payments/directo-wordmark.webp");
   });

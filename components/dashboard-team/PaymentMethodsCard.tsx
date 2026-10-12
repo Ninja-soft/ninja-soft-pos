@@ -5,8 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
+import { withDefaultMethods } from "@/lib/payments/defaults";
 import { useToast } from "@/components/ui/Toast";
 import { useGating, useGlobalPlansForUpgrade } from "@/modules/saas/gating";
+import { usePaymentPlans } from "@/modules/pos/hooks";
+import { summarizePlans } from "@/modules/pos/planConstants";
 import {
   BRAND_BY_KEY,
   SANDBOX_PROVIDERS,
@@ -105,7 +108,15 @@ export function PaymentMethodsCard() {
         .from("tenant_payment_methods")
         .select("provider_key, enabled, sandbox, surcharge_pct, config")
         .eq("tenant_id", tenantId);
-      return (data ?? []) as Method[];
+      // Efectivo y transferencia sin fila cuentan como prendidos, igual que
+      // en el POS (lib/payments/defaults).
+      return withDefaultMethods((data ?? []) as Method[], (provider_key) => ({
+        provider_key,
+        enabled: true,
+        sandbox: false,
+        surcharge_pct: 0,
+        config: null,
+      }));
     },
   });
 
@@ -116,6 +127,9 @@ export function PaymentMethodsCard() {
   }, [methods]);
 
   const { data: gating } = useGating();
+  // Planes de cuotas activos por medio: cantidad + tarjetas en cada canal.
+  const { data: activePlans } = usePaymentPlans();
+  const planSummary = useMemo(() => summarizePlans(activePlans ?? []), [activePlans]);
   const { data: plans = [] } = useGlobalPlansForUpgrade();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
 
@@ -207,6 +221,7 @@ export function PaymentMethodsCard() {
         methods={methods}
         features={gating?.features}
         plans={plans}
+        planSummary={planSummary}
         handlers={{
           onToggle: (key, enabled) => save.mutate({ key, enabled }),
           onSurcharge: (key, pct) => save.mutate({ key, surcharge_pct: pct }),
@@ -214,9 +229,13 @@ export function PaymentMethodsCard() {
           onConnect: (b) => setConnectBrand(b),
           renderChannelExtra: (key, m) =>
             key === "mercadopago" && m?.config?.connected ? (
-              <MpQrPosSetup method={m} />
+              <MpQrPosSetup
+                method={m}
+                onReconnect={() => setConnectBrand("mercadopago")}
+                onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
+              />
             ) : key === "directo" ? (
-              <DirectoInfo />
+              <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
             ) : null,
         }}
       />

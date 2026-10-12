@@ -34,6 +34,7 @@ import type { Vertical } from "@/lib/verticals/config";
 import { callbackUrl } from "@/lib/auth/redirect";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
+import { appOrigin } from "@/lib/site";
 
 const ivaSelectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
@@ -224,7 +225,7 @@ function SignupWizard() {
   async function onGoogle() {
     setGoogleLoading(true);
     const supabase = createClient();
-    const origin = window.location.origin;
+    const origin = appOrigin();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callbackUrl(origin, "/signup?step=2") },
@@ -345,7 +346,7 @@ function SignupWizard() {
     }
     // 2) Crear el preapproval y redirigir a Mercado Pago.
     try {
-      const backUrl = `${window.location.origin}/dashboard?sub=ok`;
+      const backUrl = `${appOrigin()}/dashboard?sub=ok`;
       const initPoint = await startOwnerSubscriptionCheckout(backUrl);
       toast({ title: "Te llevamos a Mercado Pago para activar tu plan", variant: "info" });
       window.location.href = initPoint;

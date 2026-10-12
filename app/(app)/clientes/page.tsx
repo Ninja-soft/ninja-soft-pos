@@ -111,7 +111,7 @@ export default function ClientesPage() {
               <InfoHint section="clientes" size={18} />
             </Display>
           </div>
-          <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"

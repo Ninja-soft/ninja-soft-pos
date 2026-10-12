@@ -24,6 +24,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card } from "@/components/ui/Card";
+import { Segmented } from "@/components/ui/Segmented";
+
+const ALL_AREAS = "__todos";
 
 // Vista de Salón (F13 · H44): grid de mesas por salón, color por estado, total
 // vivo. Tap mesa libre → abrir + cargar; tap ocupada → ver/editar cuenta y cobrar.
@@ -187,35 +190,18 @@ export default function SalonPage() {
         }
       />
 
-      {/* Filtro por salón (pills). Sólo si hay más de un salón. */}
+      {/* Filtro por salón (control segmentado). Sólo si hay más de un salón. */}
       {(areas ?? []).length > 1 && (
-        <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-muted p-1 sm:inline-flex">
-          <button
-            type="button"
-            onClick={() => setAreaFilter(null)}
-            className={
-              areaFilter === null
-                ? "rounded-lg bg-[var(--seg-thumb)] px-3 py-1.5 text-sm font-medium text-foreground shadow-ninjaSoft"
-                : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            }
-          >
-            Todos
-          </button>
-          {(areas ?? []).map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setAreaFilter(a.id)}
-              className={
-                areaFilter === a.id
-                  ? "rounded-lg bg-[var(--seg-thumb)] px-3 py-1.5 text-sm font-medium text-foreground shadow-ninjaSoft"
-                  : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              }
-            >
-              {a.name}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          className="mb-4"
+          aria-label="Filtrar por salón"
+          value={areaFilter ?? ALL_AREAS}
+          onChange={(v) => setAreaFilter(v === ALL_AREAS ? null : v)}
+          options={[
+            { value: ALL_AREAS, label: "Todos" },
+            ...(areas ?? []).map((a) => ({ value: a.id, label: a.name })),
+          ]}
+        />
       )}
 
       {/* Leyenda de estados */}

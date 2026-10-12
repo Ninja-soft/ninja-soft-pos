@@ -204,8 +204,8 @@ export function ReturnsSettingsCard() {
       </p>
 
       <div className="flex justify-end">
-        <Button disabled={save.isPending} onClick={persist}>
-          {save.isPending ? "Guardando…" : "Guardar cambios"}
+        <Button loading={save.isPending} onClick={persist}>
+          Guardar cambios
         </Button>
       </div>
 

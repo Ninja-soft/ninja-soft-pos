@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   applyRounding,
   checkoutTotals,
+  defaultKeypadField,
+  keypadFieldFor,
   quickCashAmounts,
   settleLine,
+  splitRemainder,
   splitShare,
   tipFromPercent,
   tipMethodFor,
@@ -124,5 +127,31 @@ describe("propina", () => {
     expect(tipMethodFor("qr")).toBe("qr");
     expect(tipMethodFor("account")).toBe("cash");
     expect(tipMethodFor(undefined)).toBe("cash");
+  });
+});
+
+describe("teclado y división en todas las variantes", () => {
+  it("en efectivo el teclado escribe en el campo elegido", () => {
+    expect(keypadFieldFor("cash", "received")).toBe("received");
+    expect(keypadFieldFor("cash", "portion")).toBe("portion");
+  });
+
+  it("fuera de efectivo el teclado siempre escribe el monto del medio", () => {
+    expect(keypadFieldFor("manual", "received")).toBe("portion");
+    expect(keypadFieldFor("qr", "received")).toBe("portion");
+    expect(keypadFieldFor(null, "received")).toBe("portion");
+  });
+
+  it("arranca en recibido para efectivo y en monto para el resto", () => {
+    expect(defaultKeypadField("cash")).toBe("received");
+    expect(defaultKeypadField("card")).toBe("portion");
+    expect(defaultKeypadField(undefined)).toBe("portion");
+  });
+
+  it("calcula lo que queda para otro medio", () => {
+    expect(splitRemainder(1250, 625)).toBe(625);
+    expect(splitRemainder(100, 33.33)).toBe(66.67);
+    expect(splitRemainder(100, 100)).toBe(0);
+    expect(splitRemainder(100, 150)).toBe(0);
   });
 });

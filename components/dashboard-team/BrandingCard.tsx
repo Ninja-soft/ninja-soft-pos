@@ -324,8 +324,8 @@ export function BrandingCard() {
         </label>
 
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
-            {save.isPending ? "Guardando…" : "Guardar marca"}
+          <Button onClick={() => save.mutate()} loading={save.isPending}>
+            Guardar marca
           </Button>
         </div>
       </CardContent>

@@ -5,6 +5,7 @@ import { AlertTriangle, Zap } from "lucide-react";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { fetchOwnerBillingSummary, startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
 import { useToast } from "@/components/ui/Toast";
+import { appOrigin } from "@/lib/site";
 
 // =============================================================================
 // Aviso NO bloqueante para cuentas en `past_due` (el pago falló pero todavía hay
@@ -22,7 +23,7 @@ export function PastDueBanner() {
       // Confirma que el invocador es owner (resumen owner-gated) antes de checkout.
       const summary = await fetchOwnerBillingSummary().catch(() => null);
       if (summary == null) throw new Error("not_owner");
-      const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
+      const backUrl = `${appOrigin()}/dashboard-team?sub=ok`;
       return startOwnerSubscriptionCheckout(backUrl);
     },
     onSuccess: (initPoint) => {

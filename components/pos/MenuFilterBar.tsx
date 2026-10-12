@@ -22,8 +22,12 @@ export function MenuFilterBar({
   if (menus.length === 0) return null;
 
   return (
-    <div className="slim-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
-      <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <div
+      className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="group"
+      aria-label="Menú"
+    >
+      <span className="shrink-0 pr-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         Menú
       </span>
       <Chip label="Todos" active={selected === null} onClick={() => onSelect(null)} />
@@ -58,19 +62,20 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={
         active
-          ? "flex shrink-0 items-center gap-1.5 rounded-lg bg-ninja-flame/15 px-3 py-1.5 text-sm font-semibold text-ninja-flameSoft"
-          : "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          ? "flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-fg-10 px-3 text-[13px] font-semibold text-foreground"
+          : "flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-fg-6 hover:text-foreground"
       }
     >
       {label}
       {now && (
         <span
-          className="inline-flex items-center gap-0.5 rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
+          className="inline-flex items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold text-success"
           title="Menú vigente ahora"
         >
-          <Clock size={9} /> ahora
+          <Clock size={12} aria-hidden /> ahora
         </span>
       )}
     </button>

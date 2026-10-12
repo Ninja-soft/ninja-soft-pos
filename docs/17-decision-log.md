@@ -1145,6 +1145,7 @@ Mercado Pago unificó el cobro presencial en la **Orders API** (`/v1/orders`): "
 - Configurar en la app de MP de NinjaSoft (Webhooks → evento Order) la URL `.../functions/v1/mp_orders_webhook`. Los comercios con token manual usan su propia app: sin esa configuración el polling igual resuelve el cobro con el modal abierto.
 - **Pendiente de validación:** alta de sucursal (MP valida `city_name` contra su catálogo de localidades: puede rechazar nombres que no coincidan), cuotas preseleccionadas en Point (las habilita el equipo comercial de MP), y el primer cobro QR + Point en sandbox y en vivo.
 - La pantalla del cliente (H25) recibe el `qr_data` igual que antes recibía el link; sigue dibujando con el servicio externo hasta el rediseño del POS (fuera de alcance).
+- **2026-10-12, "QR en el mostrador":** la alta ya no pide coordenadas. Acción `geocode` de `mp_qr`: sin dirección arma el borrador con `tenants.name` + `tenant_branding.address` (o la del local por defecto) y lo ubica con OpenStreetMap Nominatim (`countrycodes=ar`, User-Agent `NinjaPOS/1.0 (soporte@soft.ninja)`, 1 req/s por instancia, cache del último resultado en `config.mp_qr_geo`). `setup` acepta `latitude`/`longitude` o geocodifica él mismo (`geocode_not_found` / `geocode_unavailable`); en Capital, `city_name` es el barrio del mapa (MP no toma "CABA"); `mp_store_error` devuelve el campo señalado por MP. Lógica pura en `mpOrders.ts` (`parseBusinessAddress`, `normalizeArState`, `pickGeocodeResult`, `mpCityName`, `mapMpQrError`), testeada en `tests/unit/mpQrLocal.test.ts`. Coordenadas a mano sólo como respaldo oculto.
 
 ### Referencias
 
@@ -1186,7 +1187,7 @@ El dueño pidió integrar GO Cuotas: el cliente paga en 2 a 4 cuotas sin interé
 
 ## ADR-034 — Directo como tender manual (sin API pública)
 
-**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** F8 · H21e
+**Fecha:** 2026-10-11 · **Estado:** parcialmente reemplazada por ADR-041 (el tender manual queda como respaldo sin API conectada) · **Hito:** F8 · H21e
 
 ### Contexto
 
@@ -1400,6 +1401,60 @@ Los valores de los tokens son hex en unos temas y `rgba()` en otros, por lo que 
 - Requiere `color-mix()` (Chrome 111, Safari 16.2, Firefox 113), ya usado en la app.
 
 Archivos: `tailwind.config.ts`, `app/globals.css` (comentario de `bg-fg-*`).
+
+---
+
+## ADR-041: Directo por API de comercios (QR + link) con respaldo manual
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración, deploy y validación en QA) · **Hito:** F8 · H21e · **Reemplaza parcialmente:** ADR-034
+
+### Contexto
+
+ADR-034 asumió que Directo (Crédito Directo S.A.) no tenía API. El dueño confirmó que sí: Directo ofrece plugins (WooCommerce, etc.), "integración personalizada o botón de pago" por API, "Multiconsulta" (validación de oferta sin generar orden) y su portal de comercios. Las guías técnicas (`IntegracionApiCommerce20.pdf`, `IntegracionApiMulti20.pdf`) están en Drive con descarga deshabilitada, así que la superficie de la API se tomó del **código del plugin oficial de WooCommerce** (`directo-gateway.php`, "Wanderlust Directo" 0.0.1).
+
+### Decisión
+
+- **Canal QR + link** (provider/feature `directo`, marca `directo`, canal `qr_link`, OPTIONAL desde Pro, sin cambio de plan). Edge `directo` (JWT): `create` (gating `tenant_has_feature_for(tenant,'directo')`) hace login (`POST {base}api/merchant/login`, `{ user, password }` con headers `ApiKey` y `Ocp-Apim-Subscription-Key`, devuelve `credentials`, que se cachea por invocación) y crea la orden (`POST {base}api/merchant/orders`, headers `Credentials` y `MerchantHash`) con `Merchant_Order_Id` = id del intent, `Notify_Url` = `directo_webhook?intent=<uuid>` y retornos a la pantalla neutra. El `redirect_Url` es el `init_point` que `QrCheckoutModal` muestra como QR y link (provider self-managed: el cliente arma su crédito en Directo). `status` re-verifica sólo si el webhook ya dejó el id de notificación; `cancel` es baja local (no hay endpoint conocido para anular).
+- **MerchantHash:** `base64(AES-256-CBC(PKCS#7)(cuerpo JSON exacto))` con la clave e IV fijos publicados en el plugin. Se pueden pisar con los secrets de función `DIRECTO_HASH_KEY` / `DIRECTO_HASH_IV` si Directo los rota. Test cruzado contra `openssl` (Node `createCipheriv`).
+- **Edge `directo_webhook`** (verify_jwt **false**): el cuerpo `{ notification_id }` es sólo una pista. Re-consulta `GET {base}api/merchant/notification/{id}` con las credenciales del tenant (y MerchantHash de `{ Merchanthash, notification_id }`) y acredita sólo `status = "Successful"` + `merchant_Order_Id` = intent + **monto exacto si la notificación lo informa** (si no lo informa, se audita `amount_not_reported`: el monto lo fijó nuestro servidor al crear la orden). `Cancel` → cancelled. Idempotente (updates condicionales; un approved verificado pasa también desde rejected/cancelled para la conciliación). Siempre 200. GET sirve la pantalla neutra de retorno. El id de notificación queda en `preference_id` y, si aprueba, en `mp_payment_id`.
+- **Credenciales por tenant** vía `set_payment_secret('directo')`: `api_key`, `merchant_username`, `merchant_password`, `merchant_name`, `api_base_url` y `subscription_key` (opcional). **Ambiente:** switch Sandbox del medio (QA). El plugin no trae hosts (el comercio carga `API_BASE_URL`) y no se pudieron leer los PDF técnicos, así que `DIRECTO_BASE` queda sin hosts y la **URL de la API es un campo obligatorio** de la conexión (https, sin parámetros). Cuando Directo confirme los hosts de QA y producción se completan en `_shared/directo.ts` y el campo pasa a ser opcional (override avanzado). El intent guarda `mp_env` y status/webhook usan ese ambiente.
+- **Respaldo manual (se mantiene ADR-034):** si el negocio no conectó la API, el POS sigue ofreciendo "Directo (crédito)" con número de operación (`payments.method = 'directo'`). Con la API conectada, ese tender se oculta (`manualFallback` en `lib/pos/tenders.ts`) y aparecen Directo QR y Link. La tarjeta de Medios de pago muestra "Registro manual" sin conexión y el modal de conexión con stepper (Datos, Ambiente, Listo) y "Dónde lo encuentro".
+- Lógica pura en `supabase/functions/_shared/directo.ts` (Vitest, `tests/unit/directo.test.ts`); helpers server en `_shared/directo_server.ts`. Auditoría: `directo_order_created`, `directo_order_cancelled`, `directo_payment_<estado>`.
+- Migración `20261012020000_directo_api`: `payment_providers(directo)` pasa a `kind='gateway'`, `channel='qr_link'` y se actualiza la descripción de la feature. El gating ya existía: `payment_method_plan_key('directo')='directo'` cubre tanto `method='qr'` con intent `directo` (trigger de `payments`) como `method='directo'`.
+
+**Verificado (código del plugin oficial):** rutas `api/merchant/login`, `api/merchant/orders`, `api/merchant/notification/{id}`; headers `ApiKey`, `Ocp-Apim-Subscription-Key`, `Credentials` (token crudo, sin Bearer) y `MerchantHash`; cuerpo de login `{ user, password }` y respuesta `credentials`; campos de la orden y respuesta `redirect_Url`; webhook `{ notification_id }`; notificación `{ merchant_Order_Id, status }` con `Successful` y `Cancel`; algoritmo, clave e IV del MerchantHash.
+
+**Inferido (a confirmar en QA):** hosts de QA y producción; si la Subscription Key es obligatoria; otros estados (rechazo, vencimiento) y si la notificación informa el monto; `Integration_Type` para integraciones propias (mandamos `API`; el plugin manda `WOO`); que `Phone_Number`/`Email` acepten `null`; que el token de login no expire dentro de una invocación.
+
+### Consecuencias
+
+- Deploy: migración `20261012020000_directo_api`; Edges `directo`, `directo_webhook` (`--no-verify-jwt`) y `set_payment_secret`.
+- QA: tarjetas de prueba de Directo (VISA débito 4978 2600 0000 0000 y Mastercard débito 5100 1200 0000 0004, 01/30, CVV 123); el ambiente QA además muestra una barra para elegirlas.
+- Pendiente: pedir a Directo los PDF técnicos (Commerce 2.0 y Multiconsulta 2.0) para confirmar hosts y estados. **Multiconsulta** (mostrar cuotas y elegibilidad del cliente antes de cobrar) queda como próximo paso: su API no es descubrible sin ese PDF.
+
+---
+
+## ADR-042: Hoja de cobro rediseñada, variantes en pos_layout.checkout y Tarjeta en posnet
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada · **Hito:** POS (diseño)
+
+### Contexto
+
+El dueño marcó la hoja de cobro como fea: muchos degradados (monto en degradado rojo a rosa, botón naranja a amarillo), esquinas muy redondeadas, logos sobre placas blancas, selección con tinte marrón y un rótulo por cada grupo. Pidió más variantes, sacar la burbuja de IA del POS y un acceso rápido a la venta desde cualquier pantalla. La "tarjeta manual" (dos accesos, Débito y Crédito) en realidad es cobrar con un posnet no integrado y cargar el cupón a mano.
+
+### Decisión
+
+- **Lenguaje visual del cobro** igual al resto del POS: superficies neutras con borde sutil, esquinas de 8px (`rounded-lg`) en tiles y botones y `rounded-xl` sólo en la hoja; selección con relleno neutro + insignia de check (`choice-on` / `choice-check`); montos en el color de primer plano con números tabulares; un solo color sólido en el CTA (`--pos-via` del acento con su tinta), sin texto en degradado. Partir el monto, propina, garantía y vendedor usan `Segmented`. Logos con su fondo transparente directo sobre el tile (`TenderLogo` + `lib/pos/tenderLogo.ts`, preparado para la variante oscura de cada logo).
+- **Variantes** en `pos_layout.checkout` (jsonb, sin migración; FLAG-OPERATIVO, sin gating de plan): `layout` (`two_columns`, `compact_list`, `keypad_first`, `big_buttons`), `favorites` (hasta 6 medios arriba), `hiddenGroups` (nunca deja la hoja vacía), `channelChips` (marcas con varios canales en una fila segmentada) y `density`. Caja rápida arranca en "Teclado primero". Validación por sub-campo como `payments`; el usuario pisa al negocio campo por campo. Se editan en Configuración, Diseño del POS, con miniaturas en vivo.
+- **Tarjeta en posnet:** un solo tender `card` (los ids viejos `card:debit` / `card:credit` guardados en el diseño se traducen solos). Asistente de 3 pasos: entidad (logos; según los planes cargados, siempre "Otra"), tipo y cuotas (se salta si la entidad es sólo débito; recargo y total por plan), datos del cupón con resumen tipo cupón y "Registrar cobro con tarjeta". El pago sigue saliendo como `debit`/`credit` con `card_voucher`; se suman `marca` y `ultimos4` (opcionales) al jsonb, sin cambio de esquema.
+- **IA fuera del POS:** la burbuja del asistente no se monta en `/pos` (ni subrutas).
+- **Acceso rápido "Vender / Cobrar":** botón primario arriba del menú lateral y en el header mobile (fuera de `/pos`), atajo global **F1** (el POS ya usa F2 buscar y F12 cobrar). Con carrito en curso lleva a `/pos?cobrar=1`, que abre la hoja (o pide abrir caja) y limpia el parámetro. Sólo para roles que venden (owner, manager, cashier).
+
+### Consecuencias
+
+- Los selectores de diseño (presets del POS y del cobro) usan el mismo sistema: relleno neutro + check, wireframes en tonos del tema y un único acento mínimo. Salón sin modo gastronómico muestra candado y "Activar modo gastronómico" (lleva a Configuración, Operación).
+- Logos integrados con el sistema de logos oficiales (`lib/payments/logos.ts`): `TenderLogo` delega en `ThemedLogo` (variante `-on-dark` según `data-theme`, sin placa), `tenderLogoSrc` deriva la variante oscura con `logoOnDark` y `cardBrandLogo` / `cardLogoKey` usan `cardLogo` (`public/images/cards/*.webp`; Visa débito con su logo). El asistente y los chips de cuotas muestran el logo de la tarjeta con `CardBrandLogo`.
+- En "Billeteras y links", cada marca con más de un canal (GO Cuotas QR + Link, Mobbex, Directo con API) va en una fila con canales como Payway o Nave (`brandRuns`); las de un canal siguen como tile. Los favoritos siguen siendo tiles por canal.
 
 ---
 

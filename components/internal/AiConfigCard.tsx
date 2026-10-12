@@ -502,8 +502,8 @@ export function AiConfigCard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Guardando…" : "Guardar"}
+            <Button loading={save.isPending} onClick={() => save.mutate()}>
+              Guardar
             </Button>
             <Button
               variant="secondary"

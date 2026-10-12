@@ -10,34 +10,54 @@ import {
   Lock,
   QrCode,
   ShieldCheck,
+  SlidersHorizontal,
   Smartphone,
-  Sparkles,
   Trash2,
   UserRound,
 } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Segmented } from "@/components/ui/Segmented";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils/cn";
 import {
   checkoutTotals,
+  defaultKeypadField,
+  keypadFieldFor,
   quickCashAmounts,
   round2,
   settleLine,
+  splitRemainder,
   splitShare,
   tipFromPercent,
   tipMethodFor,
   type CheckoutLine,
+  type KeypadField,
 } from "@/lib/pos/checkoutMath";
 import {
+  checkoutSections,
   groupTenders,
+  normalizeTenderId,
   type ResolvedTender,
   type SaleMethod,
   type TenderPrefs,
 } from "@/lib/pos/tenders";
-import { BrandIcon } from "../ui/BrandIcon";
+import { PRESET_DEFAULTS, type CheckoutPrefs } from "@/lib/pos/layout";
+import {
+  availableCardBrands,
+  cardBrandByKey,
+  cardBrandLogo,
+  cardLogoKey,
+  plansForCard,
+  type CardKind,
+} from "@/lib/pos/cardBrands";
 import { Keypad, applyKey, keypadNumber, type KeypadKey } from "../ui/Keypad";
 import { PosSheet } from "../ui/PosSheet";
-import { POS_CTA, POS_IDLE, POS_SELECTED, money } from "../ui/posStyles";
-import { TenderPicker } from "./TenderPicker";
+import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
+import { POS_CTA, money } from "../ui/posStyles";
+import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
+import { CardWizard, EMPTY_VOUCHER, PlanChip, type CardStep } from "./CardWizard";
 import type {
   AccountPayRequest,
   AccountPayState,
@@ -54,6 +74,8 @@ export interface CheckoutPlan {
   id: string;
   label: string;
   base: string | null;
+  /** Entidad (payment_plans.brand): su logo va en el chip. null = aplica a todas. */
+  brand?: string | null;
   installments: number | null;
   surcharge_pct: number | string | null;
 }
@@ -108,6 +130,8 @@ export interface CheckoutSheetProps {
   tipPresets: number[];
   quickCash: number[];
   keypad?: boolean;
+  /** Diseño de la hoja (pos_layout.checkout). */
+  checkout?: CheckoutPrefs;
   loading: boolean;
   style?: CSSProperties;
   onConfirm: (
@@ -126,6 +150,13 @@ export interface CheckoutSheetProps {
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
+const DEFAULT_CHECKOUT = PRESET_DEFAULTS.mostrador.checkout;
+const LABEL = "block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground";
+const INPUT =
+  "rounded-lg border border-border bg-background text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+const PILL =
+  "inline-flex h-9 items-center rounded-lg px-3 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const PILL_IDLE = "border border-border bg-card text-muted-foreground hover:text-foreground";
 const SPLITS = [
   { n: 2, label: "½" },
   { n: 3, label: "⅓" },
@@ -155,6 +186,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     tipPresets,
     quickCash,
     keypad,
+    checkout = DEFAULT_CHECKOUT,
     loading,
     style,
     onConfirm,
@@ -166,19 +198,32 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Cuenta corriente: una sola línea por venta (el cargo, sus cuotas y el token
   // de autorización de un solo uso van en ese único pago; ver ADR-037).
   const hasAccountLine = lines.some((l) => l.method === "account");
-  const sections = useMemo(
-    () => groupTenders(hasAccountLine ? tenders.filter((t) => t.flow !== "account") : tenders, prefs),
-    [tenders, prefs, hasAccountLine],
+  const usable = useMemo(
+    () => (hasAccountLine ? tenders.filter((t) => t.flow !== "account") : tenders),
+    [tenders, hasAccountLine],
   );
-  const visible = useMemo(() => sections.flatMap((s) => s.tenders), [sections]);
+  // Selector: favoritos arriba y grupos ocultos fuera (pos_layout.checkout).
+  const sections = useMemo(
+    () => checkoutSections(usable, prefs, { favorites: checkout.favorites, hiddenGroups: checkout.hiddenGroups }),
+    [usable, prefs, checkout.favorites, checkout.hiddenGroups],
+  );
+  // Todos los medios usables (también los de grupos ocultos: un medio fijado
+  // en el carrito abre la hoja aunque su grupo no se muestre en el selector).
+  const visible = useMemo(() => groupTenders(usable, prefs).flatMap((s) => s.tenders), [usable, prefs]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<"tenders" | "editor">("tenders");
   const [portionStr, setPortionStr] = useState("");
   const [receivedStr, setReceivedStr] = useState("");
-  const [cardKind, setCardKind] = useState<"debit" | "credit">("debit");
+  // Campo que escribe el teclado (monto con este medio o, en efectivo, recibido).
+  const [keypadChoice, setKeypadChoice] = useState<KeypadField>("received");
+  const [cardKind, setCardKind] = useState<CardKind>("debit");
+  // Tarjeta en posnet: entidad elegida y paso del asistente (1 entidad, 2 tipo
+  // y cuotas, 3 datos del cupón).
+  const [cardBrand, setCardBrand] = useState<string | null>(null);
+  const [cardStep, setCardStep] = useState<CardStep>(1);
   const [planId, setPlanId] = useState("");
-  const [voucher, setVoucher] = useState({ lote: "", cupon: "", autorizacion: "" });
+  const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
   // Número de operación (Directo): obligatorio, viaja como reference del pago.
   const [opRef, setOpRef] = useState("");
   const [itemsOpen, setItemsOpen] = useState(false);
@@ -199,8 +244,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Reset al abrir (la hoja queda montada entre ventas).
   useEffect(() => {
     if (!open) return;
+    const initialId = initialTenderId ? normalizeTenderId(initialTenderId) : null;
     const initial =
-      (initialTenderId && visible.find((t) => t.id === initialTenderId)) ||
+      (initialId && visible.find((t) => t.id === initialId)) ||
       visible.find((t) => t.id === "cash") ||
       visible[0] ||
       null;
@@ -209,9 +255,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setView(initialTenderId && initial ? "editor" : "tenders");
     setPortionStr("");
     setReceivedStr("");
+    setKeypadChoice(defaultKeypadField(initial?.flow));
     setCardKind("debit");
+    setCardBrand(null);
+    setCardStep(1);
     setPlanId("");
-    setVoucher({ lote: "", cupon: "", autorizacion: "" });
+    setVoucher(EMPTY_VOUCHER);
     setItemsOpen(false);
     setPickedItems([]);
     setTipPct(null);
@@ -228,12 +277,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const active = visible.find((t) => t.id === activeId) ?? null;
 
   // Método efectivo del tender activo (tarjeta/terminal: según el switch).
-  const activeMethod: SaleMethod | null = active
-    ? active.flow === "terminal"
-      ? cardKind
-      : active.method
-    : null;
   const isCard = active?.flow === "card" || active?.flow === "terminal";
+  const isPosnet = active?.flow === "card";
+  const activeMethod: SaleMethod | null = active ? (isCard ? cardKind : active.method) : null;
 
   // ── Promo por medio de pago (sólo si se paga TODO con un único medio) ─────────
   const pfm = useCallback(
@@ -301,12 +347,16 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   // ── Editor del tender activo ───────────────────────────────────────────────
   const plansForActive = useMemo(() => {
+    if (!isCard) return [];
+    // Tarjeta en posnet: planes de la entidad elegida (y los sin entidad).
+    if (isPosnet) return plansForCard(cardPlans, cardBrand === "other" ? null : cardBrand, cardKind);
     const b = activeMethod ? PLAN_BASE[activeMethod] : undefined;
-    if (!isCard || !b) return [];
+    if (!b) return [];
     return cardPlans
       .filter((p) => p.base === b)
       .sort((a, z) => (a.installments ?? 1) - (z.installments ?? 1));
-  }, [cardPlans, activeMethod, isCard]);
+  }, [cardPlans, activeMethod, isCard, isPosnet, cardBrand, cardKind]);
+  const cardBrands = useMemo(() => availableCardBrands(cardPlans), [cardPlans]);
   const plan = plansForActive.find((p) => p.id === planId) ?? null;
   const surchargePct = !active
     ? 0
@@ -336,10 +386,14 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     active?.flow === "cash" && received != null ? Math.max(0, round2(received - settle.amount)) : 0;
   const receivedShort = active?.flow === "cash" && received != null && received < settle.amount - 0.005;
 
+  const last4Ok = voucher.ultimos4.trim() === "" || /^\d{4}$/.test(voucher.ultimos4.trim());
   const voucherOk =
-    !voucherRequired ||
     !isCard ||
-    (voucher.lote.trim() !== "" && voucher.cupon.trim() !== "" && voucher.autorizacion.trim() !== "");
+    ((!voucherRequired ||
+      (voucher.lote.trim() !== "" && voucher.cupon.trim() !== "" && voucher.autorizacion.trim() !== "")) &&
+      last4Ok);
+  // Tarjeta en posnet: se registra recién en el paso del cupón.
+  const posnetReady = !isPosnet || (cardBrand !== null && cardStep === 3);
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
   const refOk = !active?.requiresReference || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
@@ -351,6 +405,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     portion > 0 &&
     settle.amount > 0 &&
     voucherOk &&
+    posnetReady &&
     refOk &&
     !belowMin &&
     !receivedShort &&
@@ -360,7 +415,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   useEffect(() => {
     setPlanId("");
     setReceivedStr("");
-    setVoucher({ lote: "", cupon: "", autorizacion: "" });
+    setVoucher(EMPTY_VOUCHER);
     setOpRef("");
     // El estado de cuenta corriente NO se resetea acá: el panel lo reporta al
     // montarse (y su efecto corre antes que éste, lo pisaría).
@@ -369,7 +424,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   function pickTender(t: ResolvedTender) {
     setActiveId(t.id);
     setView("editor");
+    setKeypadChoice(defaultKeypadField(t.flow));
     if (t.method === "debit" || t.method === "credit") setCardKind(t.method);
+    if (t.flow === "card") {
+      setCardBrand(null);
+      setCardStep(1);
+    }
     // En mobile el editor queda debajo: lo traemos a la vista.
     requestAnimationFrame(() => editorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
   }
@@ -405,8 +465,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setPickedItems([]);
     setItemsOpen(false);
     setPlanId("");
-    setVoucher({ lote: "", cupon: "", autorizacion: "" });
+    setVoucher(EMPTY_VOUCHER);
     setOpRef("");
+    setCardBrand(null);
+    setCardStep(1);
     const t = tipFor(next, null);
     if (totalsFor(next, promoFor(next, null, t), t).settled) {
       finalize(next);
@@ -428,11 +490,24 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ? `Recargo ${plan.label}`
       : `Recargo ${active.label} (${surchargePct}%)`;
     const hasVoucher =
-      isCard && (voucherRequired || Object.values(voucher).some((v) => v.trim() !== ""));
+      isCard &&
+      (voucherRequired ||
+        isPosnet ||
+        voucher.lote.trim() !== "" ||
+        voucher.cupon.trim() !== "" ||
+        voucher.autorizacion.trim() !== "" ||
+        voucher.ultimos4.trim() !== "");
+    const brandInfo = isPosnet ? cardBrandByKey(cardBrand) : null;
+    const kindLabel = cardKind === "debit" ? "Débito" : "Crédito";
     addLine({
       key: `l${++keySeq}`,
       tenderId: active.id,
-      title: active.flow === "terminal" ? `${active.brandLabel} Point` : active.label,
+      title:
+        active.flow === "terminal"
+          ? `${active.brandLabel} Point`
+          : isPosnet
+            ? `${brandInfo && brandInfo.key !== "other" ? brandInfo.label : "Tarjeta"} ${kindLabel.toLowerCase()}`
+            : active.label,
       detail:
         active.flow === "cash" && received != null && received > settle.amount
           ? `Recibido ${money(received)}, vuelto ${money(received - settle.amount)}`
@@ -443,7 +518,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
               : isAccount
                 ? accountDetail(accountPay.reference)
                 : undefined,
-      logo: active.logo,
+      logo: isPosnet && cardBrand ? cardBrandLogo(cardBrand, cardKind) : active.logo,
       method: activeMethod,
       amount: settle.amount,
       surcharge: settle.surcharge,
@@ -459,6 +534,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             lote: voucher.lote.trim(),
             cupon: voucher.cupon.trim(),
             autorizacion: voucher.autorizacion.trim(),
+            ...(brandInfo ? { marca: brandInfo.label } : {}),
+            ...(voucher.ultimos4.trim() ? { ultimos4: voucher.ultimos4.trim() } : {}),
           }
         : undefined,
       locked: false,
@@ -506,12 +583,21 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const amt = money(settle.amount);
     if (active.flow === "qr") ctaLabel = active.channel === "link" ? `Generar link ${amt}` : `Generar QR ${amt}`;
     else if (active.flow === "point") ctaLabel = `Enviar al Point ${amt}`;
+    else if (isPosnet && cardStep < 3) ctaLabel = cardBrand ? "Continuar" : "Elegí la entidad de la tarjeta";
+    else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
     else ctaLabel = settle.closes ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
   }
-  const ctaDisabled = readyToConfirm ? loading : !canCommit || loading;
+  const posnetNext = !readyToConfirm && isPosnet && cardStep < 3;
+  const ctaDisabled = readyToConfirm
+    ? loading
+    : posnetNext
+      ? cardBrand === null || portion <= 0
+      : !canCommit || loading;
   function onCta() {
     if (readyToConfirm) finalize(lines);
-    else commit();
+    else if (posnetNext) {
+      if (cardBrand) setCardStep(3);
+    } else commit();
   }
 
   // Badge de promo por medio en cada botón (sólo antes del primer pago).
@@ -527,64 +613,691 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     totals.productsTotal - deliveryFee - (base - promoExtra + warranty + totals.surcharges),
   );
 
+  const keypadTarget = keypadFieldFor(active?.flow, keypadChoice);
   const onKeypad = (k: KeypadKey) => {
-    if (active?.flow === "cash") setReceivedStr((v) => applyKey(v, k));
+    if (keypadTarget === "received") setReceivedStr((v) => applyKey(v, k));
     else setPortionStr((v) => applyKey(v, k));
   };
+  const leftover = splitRemainder(remaining, portion);
+  // ¿Se puede editar el monto? En el cupón de la tarjeta en posnet ya quedó fijo.
+  const kfEditable = Boolean(active) && !(isPosnet && cardStep === 3);
 
-  return (
-    <PosSheet
-      open={open}
-      onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}
-      onRequestClose={requestClose}
-      title="Cobrar"
-      description={`Total ${money(totals.grandTotal)}`}
-      size="xl"
-      style={style}
-    >
-      <div className="grid min-h-0 flex-1 md:h-[min(92dvh,860px)] md:grid-cols-[minmax(0,1fr)_minmax(360px,410px)]">
-        {/* ── Medios ─────────────────────────────────────────────────────── */}
+  const dense = checkout.density === "compact";
+  const layoutKind = checkout.layout;
+  const big = layoutKind === "big_buttons";
+
+  // Partido rápido del monto (Todo / ½ / ⅓ / ¼) como control segmentado.
+  const splitValue =
+    portionStr === ""
+      ? "all"
+      : (SPLITS.find((s) => Math.abs(portion - splitShare(maxPortion, s.n)) < 0.005)?.n.toString() ?? "custom");
+  const onSplit = (v: string) => {
+    if (v === "all") setPortionStr("");
+    else setPortionStr(String(splitShare(maxPortion, Number(v))).replace(".", ","));
+  };
+
+  const pending = lines.length > 0 && !totals.settled;
+
+  // ── Piezas ──────────────────────────────────────────────────────────────────
+  const totalBlock = (
+    <div>
+      <p className={LABEL}>{pending ? "Resta cobrar" : "Total a cobrar"}</p>
+      <p
+        key={pending ? remaining : totals.grandTotal}
+        className={cn(
+          "font-price font-bold leading-tight tracking-tight tabular-nums text-foreground",
+          layoutKind === "keypad_first" || big ? "text-5xl" : "text-4xl",
+        )}
+      >
+        {money(pending ? remaining : totals.grandTotal)}
+      </p>
+      {(lines.length > 0 || totals.change > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {pending && (
+            <span className="text-xs text-muted-foreground">
+              Pagado {money(totals.paid)} de {money(totals.grandTotal)}
+            </span>
+          )}
+          {totals.settled && lines.length > 0 && (
+            <Badge tone="success">
+              <Check size={12} /> Cubierto
+            </Badge>
+          )}
+          {totals.change > 0 && <Badge tone="success">Vuelto {money(totals.change)}</Badge>}
+        </div>
+      )}
+    </div>
+  );
+
+  const hasBreakdown =
+    deliveryFee > 0 || warranty > 0 || totals.surcharges > 0 || promoExtra > 0 || Math.abs(roundingAdj) >= 0.01 || tip > 0;
+  const breakdown = hasBreakdown ? (
+    <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
+      {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
+      {warranty > 0 && <Row label={`Garantía ${wplan?.label ?? ""}`} value={`+${money(warranty)}`} />}
+      {totals.surcharges > 0 && <Row label="Recargos" value={`+${money(totals.surcharges)}`} />}
+      {promoExtra > 0 && (
+        <Row label={promo?.name ?? "Promo por medio de pago"} value={`-${money(promoExtra)}`} tone="success" />
+      )}
+      {Math.abs(roundingAdj) >= 0.01 && (
+        <Row label="Redondeo" value={`${roundingAdj > 0 ? "+" : "-"}${money(Math.abs(roundingAdj))}`} />
+      )}
+      {tip > 0 && <Row label="Propina" value={`+${money(tip)}`} />}
+    </dl>
+  ) : null;
+
+  const paidList =
+    lines.length > 0 ? (
+      <ul className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card" aria-label="Pagos">
+        {lines.map((l) => (
+          <li key={l.key} className="flex items-center gap-2.5 px-3 py-2">
+            <TenderLogo source={l} alt={l.title} size={24} />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1 truncate text-[13px] font-semibold">
+                {l.title}
+                {l.locked && <Check size={13} className="shrink-0 text-success" aria-label="Aprobado" />}
+              </span>
+              {l.detail && <span className="block truncate text-[11px] text-muted-foreground">{l.detail}</span>}
+            </span>
+            <span className="font-price text-sm font-semibold tabular-nums">{money(l.amount)}</span>
+            {l.locked ? (
+              <Lock size={14} className="text-muted-foreground" aria-label="Cobro aprobado" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => removeLine(l.key)}
+                className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-danger/10 hover:text-danger"
+                aria-label={`Quitar pago ${l.title}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  const activeDesc = !active
+    ? ""
+    : active.flow === "qr"
+      ? active.channel === "link"
+        ? "Se genera un link para compartir y se acredita solo."
+        : "El cliente escanea y se acredita solo."
+      : active.flow === "point"
+        ? "La terminal recibe el cobro y el cliente pasa la tarjeta."
+        : active.flow === "terminal"
+          ? "Cobrá en la terminal y confirmá acá."
+          : active.flow === "store_credit"
+            ? `Saldo disponible ${money(storeCreditBalance)}`
+            : active.flow === "account"
+              ? "Queda en la cuenta corriente del cliente."
+              : (active.hint ?? "Se registra al confirmar.");
+
+  const editorHeader = active ? (
+    <div className="flex items-center gap-2.5">
+      <TenderLogo
+        source={active}
+        alt={active.brandLabel}
+        size={30}
+        fallback={tenderFallback(active)}
+      />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">
+          {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
+            ? active.label
+            : `${active.brandLabel} ${active.label}`}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">{activeDesc}</p>
+      </div>
+    </div>
+  ) : null;
+
+  // Partir el pago: Todo / ½ / ⅓ / ¼ + por ítem + lo que queda para otro medio.
+  // Lo comparten todas las variantes (con o sin teclado).
+  const splitControls = (fill: boolean) => (
+    <div>
+      <div className={cn("flex flex-wrap items-center gap-2", fill && "flex-nowrap")}>
+        <Segmented
+          size={fill ? undefined : "sm"}
+          fill={fill}
+          className={fill ? "min-w-0 flex-1" : undefined}
+          aria-label="Dividir el monto"
+          value={splitValue}
+          onChange={onSplit}
+          options={[
+            { value: "all", label: "Todo" },
+            ...SPLITS.map((s) => ({ value: String(s.n), label: s.label })),
+          ]}
+        />
+        {splitItems.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setItemsOpen((o) => !o)}
+            aria-pressed={itemsOpen}
+            className={cn(PILL, itemsOpen ? "choice-on" : PILL_IDLE)}
+          >
+            Por ítem
+          </button>
+        )}
+      </div>
+      {itemsOpen && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {splitItems.map((it) => {
+            const on = pickedItems.includes(it.id);
+            return (
+              <button
+                key={it.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  const next = on ? pickedItems.filter((x) => x !== it.id) : [...pickedItems, it.id];
+                  setPickedItems(next);
+                  const sum = splitItems.filter((x) => next.includes(x.id)).reduce((a, x) => a + x.amount, 0);
+                  setPortionStr(sum > 0 ? String(round2(sum)).replace(".", ",") : "");
+                }}
+                className={cn(PILL, "h-8 text-xs", on ? "choice-on" : PILL_IDLE)}
+              >
+                {it.label} · {money(it.amount)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {leftover > 0.005 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Quedan {money(leftover)} para cobrar con otro medio.
+        </p>
+      )}
+    </div>
+  );
+
+  // Monto de esta línea (input + partir el pago). En el cupón de la tarjeta en
+  // posnet el monto ya quedó fijo (se ve en el resumen).
+  const amountField = active && !(isPosnet && cardStep === 3) ? (
+    <div>
+      <label htmlFor="checkout-portion" className={LABEL}>
+        Monto con este medio
+      </label>
+      <input
+        id="checkout-portion"
+        inputMode="decimal"
+        value={portionStr}
+        onChange={(e) => setPortionStr(e.target.value.replace(/[^\d,.]/g, ""))}
+        onFocus={() => setKeypadChoice("portion")}
+        onKeyDown={(e) => e.key === "Enter" && onCta()}
+        placeholder={money(maxPortion)}
+        className={cn(
+          INPUT,
+          "mt-1.5 h-12 w-full px-3.5 font-price text-xl font-semibold tabular-nums placeholder:text-foreground",
+          keypad && active.flow === "cash" && keypadTarget === "portion" && "border-ring",
+        )}
+      />
+      <div className="mt-2">{splitControls(false)}</div>
+    </div>
+  ) : null;
+
+  // Efectivo: recibido rápido + vuelto.
+  const cashBlock =
+    active?.flow === "cash" ? (
+      <div>
+        <p className={LABEL}>Recibido</p>
+        <div className={cn("mt-1.5 grid gap-1.5", big ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-3")}>
+          <AmountButton on={receivedStr === ""} onClick={() => setReceivedStr("")} big={big}>
+            Exacto
+          </AmountButton>
+          {quick.map((q) => (
+            <AmountButton key={q} on={received === q} onClick={() => setReceivedStr(String(q))} big={big}>
+              {money(q)}
+            </AmountButton>
+          ))}
+          {layoutKind !== "keypad_first" && (
+            <input
+              inputMode="decimal"
+              value={quick.includes(received ?? -1) ? "" : receivedStr}
+              onChange={(e) => setReceivedStr(e.target.value.replace(/[^\d,.]/g, ""))}
+              onFocus={() => setKeypadChoice("received")}
+              onKeyDown={(e) => e.key === "Enter" && onCta()}
+              placeholder="Otro"
+              aria-label="Monto recibido"
+              className={cn(
+                INPUT,
+                "min-w-0 px-3 text-center font-price text-sm font-semibold tabular-nums",
+                big ? "h-14" : "h-11",
+                keypad && keypadTarget === "received" && "border-ring",
+              )}
+            />
+          )}
+        </div>
+        <ChangeBox short={receivedShort} amount={receivedShort ? settle.amount - (received ?? 0) : changePreview} />
+      </div>
+    ) : null;
+
+  // Tarjeta en posnet: asistente entidad, tipo y cuotas, cupón.
+  const cardBlock = isPosnet ? (
+    <CardWizard
+      brands={cardBrands}
+      brand={cardBrand}
+      onBrand={setCardBrand}
+      step={cardStep}
+      onStep={setCardStep}
+      kind={cardKind}
+      onKind={setCardKind}
+      plans={plansForActive}
+      planId={planId}
+      onPlan={setPlanId}
+      portion={portion}
+      amount={settle.amount}
+      surcharge={settle.surcharge}
+      voucher={voucher}
+      onVoucher={setVoucher}
+      voucherRequired={voucherRequired}
+      onEnter={onCta}
+    />
+  ) : // Terminal de la marca sin integración: débito / crédito + cuotas + voucher.
+  active ? (
+    <>
+      {active.flow === "terminal" && (
+        <Segmented
+          fill
+          aria-label="Tipo de tarjeta"
+          value={cardKind}
+          onChange={(v) => setCardKind(v)}
+          options={[
+            { value: "debit", label: "Débito" },
+            { value: "credit", label: "Crédito" },
+          ]}
+        />
+      )}
+      {isCard && plansForActive.length > 0 && (
+        <div>
+          <p className={LABEL}>Cuotas</p>
+          <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3" role="radiogroup" aria-label="Cuotas">
+            <PlanChip on={planId === ""} onClick={() => setPlanId("")} title="Sin plan" sub={money(portion)} />
+            {plansForActive.map((p) => {
+              const pct = Number(p.surcharge_pct) || 0;
+              return (
+                <PlanChip
+                  key={p.id}
+                  on={planId === p.id}
+                  onClick={() => setPlanId(p.id)}
+                  title={p.label}
+                  brand={cardLogoKey(p.brand)}
+                  sub={pct > 0 ? `+${pct}% · ${money(round2(portion * (1 + pct / 100)))}` : "Sin recargo"}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {isCard && voucherRequired && (
+        <div>
+          <p className={LABEL}>Voucher de la tarjeta</p>
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ["lote", "Lote"],
+                ["cupon", "Cupón"],
+                ["autorizacion", "Autoriz."],
+              ] as const
+            ).map(([k, label]) => (
+              <input
+                key={k}
+                inputMode="numeric"
+                value={voucher[k]}
+                onChange={(e) => setVoucher((v) => ({ ...v, [k]: e.target.value }))}
+                placeholder={label}
+                aria-label={label}
+                className={cn(INPUT, "h-11 min-w-0 px-3 text-sm font-medium")}
+              />
+            ))}
+          </div>
+          {!voucherOk && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Completá lote, cupón y autorización para registrar el pago.
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  ) : null;
+
+  const otherBlock = active ? (
+    <>
+      {active.requiresReference && (
+        <div>
+          <label htmlFor="checkout-opref" className={LABEL}>
+            Número de operación
+          </label>
+          <input
+            id="checkout-opref"
+            value={opRef}
+            maxLength={64}
+            autoComplete="off"
+            onChange={(e) => setOpRef(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onCta()}
+            placeholder="Ej. 123456"
+            className={cn(INPUT, "mt-1.5 h-11 w-full px-3 text-sm font-medium")}
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Cobrá {money(settle.amount)} en el portal de {active.brandLabel} y cargá el número que te da al
+            aprobarse.
+          </p>
+        </div>
+      )}
+      {/* Cuenta corriente v2: saldo, disponible, vencido, cuotas y bloqueo
+          con autorización (motivo de encargado o PIN de supervisor). */}
+      {isAccount && renderAccount && settle.amount > 0 && (
+        <div>{renderAccount({ amount: settle.amount, onChange: onAccountChange })}</div>
+      )}
+      {belowMin && active.minAmount && (
+        <Callout tone="warning" className="p-3 text-xs">
+          {active.brandLabel} acepta cobros desde {money(active.minAmount)}. Usá otro medio para montos menores.
+        </Callout>
+      )}
+      {settle.surcharge > 0 && !isPosnet && (
+        <p className="text-xs text-muted-foreground">Incluye recargo de {money(settle.surcharge)}.</p>
+      )}
+      {isElectronic && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {active.flow === "point" ? <Smartphone size={13} /> : active.channel === "link" ? <Link2 size={13} /> : <QrCode size={13} />}
+          Al aprobarse se registra solo{settle.closes ? " y se cierra la venta" : ""}.
+        </p>
+      )}
+    </>
+  ) : null;
+
+  // Editor completo (Dos columnas / Botones grandes / Lista compacta).
+  const showEditor = Boolean(active) && !readyToConfirm;
+  const editorBody = (
+    <div className={cn("space-y-4", dense && "space-y-3")}>
+      {amountField}
+      {cashBlock}
+      {cardBlock}
+      {otherBlock}
+      {keypad && <Keypad square compact={!big} lastKey="," onKey={onKeypad} />}
+    </div>
+  );
+  const editorCard = showEditor ? (
+    <div ref={editorRef} className={cn("mt-4 rounded-lg border border-border bg-card", dense ? "p-3" : "p-4")}>
+      {editorHeader}
+      <div className="mt-4">{editorBody}</div>
+    </div>
+  ) : null;
+
+  const extras =
+    tipPresets.length > 0 || warrantyPlans.length > 0 || professionals.length > 0 ? (
+      <div className="mt-4 rounded-lg border border-border bg-card">
+        <button
+          type="button"
+          onClick={() => setExtrasOpen((o) => !o)}
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-3.5 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-expanded={extrasOpen}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <SlidersHorizontal size={15} className="text-muted-foreground" />
+            Propina, garantía y vendedor
+          </span>
+          <ChevronDown size={16} className={cn("text-muted-foreground transition", extrasOpen && "rotate-180")} />
+        </button>
+        {extrasOpen && (
+          <div className="space-y-4 border-t border-border px-3.5 pb-4 pt-3">
+            {tipPresets.length > 0 && (
+              <div>
+                <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
+                  <Gift size={12} /> Propina
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Segmented
+                    size="sm"
+                    aria-label="Propina"
+                    value={tipPct == null ? ((Number(tipCustom) || 0) === 0 ? "none" : "custom") : String(tipPct)}
+                    onChange={(v) => {
+                      setTipCustom("");
+                      setTipPct(v === "none" ? null : Number(v));
+                    }}
+                    options={[
+                      { value: "none", label: "Sin propina" },
+                      ...tipPresets.map((p) => ({ value: String(p), label: `${p}%` })),
+                    ]}
+                  />
+                  <input
+                    inputMode="decimal"
+                    value={tipCustom}
+                    onChange={(e) => {
+                      setTipPct(null);
+                      setTipCustom(e.target.value.replace(/[^\d.]/g, ""));
+                    }}
+                    placeholder="Otro $"
+                    aria-label="Propina en pesos"
+                    className={cn(INPUT, "h-9 w-24 px-3 text-center text-[13px] font-medium")}
+                  />
+                </div>
+              </div>
+            )}
+            {warrantyPlans.length > 0 && (
+              <div>
+                <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
+                  <ShieldCheck size={12} /> Garantía extendida
+                </p>
+                <Segmented
+                  size="sm"
+                  aria-label="Garantía extendida"
+                  value={warrantyId || "none"}
+                  onChange={(v) => setWarrantyId(v === "none" ? "" : v)}
+                  options={[
+                    { value: "none", label: "Sin garantía" },
+                    ...warrantyPlans.map((w) => ({ value: w.id, label: `${w.label} · ${w.months} meses` })),
+                  ]}
+                />
+              </div>
+            )}
+            {professionals.length > 0 && (
+              <div>
+                <p className={cn(LABEL, "mb-1.5 flex items-center gap-1.5")}>
+                  <UserRound size={12} /> Vendedor
+                </p>
+                <Segmented
+                  size="sm"
+                  aria-label="Vendedor"
+                  value={professionalId || "none"}
+                  onChange={(v) => setProfessionalId(v === "none" ? "" : v)}
+                  options={[
+                    { value: "none", label: "Sin asignar" },
+                    ...professionals.map((p) => ({
+                      value: p.id,
+                      label: `${p.name}${p.commission_pct != null ? ` · ${Number(p.commission_pct)}%` : ""}`,
+                    })),
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  const ctaHint = readyToConfirm
+    ? "Se registra la venta y se imprime el ticket si está activo."
+    : lines.length > 0
+      ? "Elegí otro medio para cobrar lo que resta."
+      : "Podés dividir el pago entre varios medios.";
+  const cta = (
+    <div className={cn("shrink-0 border-t border-border bg-popover px-4 pb-4 pt-3", layoutKind === "two_columns" || big ? "md:px-5" : "md:px-6")}>
+      <button
+        type="button"
+        onClick={onCta}
+        disabled={ctaDisabled}
+        className={cn(
+          "flex w-full items-center justify-center gap-2 rounded-lg font-semibold tracking-tight",
+          // Mismo CTA sólido que "Cobrar" en el POS (posStyles, --pos-solid).
+          POS_CTA,
+          // Deshabilitado ("Elegí la entidad…"): relleno neutro legible, no el acento al 40%.
+          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
+          big ? "h-16 text-lg" : "h-14 text-base",
+        )}
+      >
+        {loading || electronic ? <Spinner size={18} className="border-current/30 border-t-current" /> : null}
+        <span>{electronic ? "Esperando el cobro" : ctaLabel}</span>
+      </button>
+      <p className="mt-2 text-center text-xs text-muted-foreground">{ctaHint}</p>
+    </div>
+  );
+
+  const emptyTenders = (
+    <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
+      No hay medios de cobro habilitados. Activalos en Configuración, Medios de pago.
+    </p>
+  );
+
+  const picker = (variant: TenderPickerVariant, extra?: { renderExpanded?: () => React.ReactNode }) =>
+    sections.length === 0 ? (
+      emptyTenders
+    ) : (
+      <TenderPicker
+        sections={sections}
+        activeId={activeId}
+        onPick={pickTender}
+        promoBadge={promoBadge}
+        disabled={readyToConfirm || Boolean(electronic)}
+        variant={variant}
+        channelChips={checkout.channelChips}
+        dense={dense}
+        renderExpanded={extra?.renderExpanded}
+      />
+    );
+
+  const heading = <h2 className="font-display text-lg font-bold tracking-tight">¿Cómo paga?</h2>;
+
+  // ── Distribuciones ─────────────────────────────────────────────────────────
+  let content: React.ReactNode;
+  if (layoutKind === "compact_list") {
+    content = (
+      <>
+        <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-6 md:pt-6">
+          <div className="pr-10">{totalBlock}</div>
+          {breakdown}
+          {paidList}
+          <div className="mb-2 mt-5">{heading}</div>
+          {picker("list", {
+            renderExpanded: showEditor ? () => <div ref={editorRef}>{editorBody}</div> : undefined,
+          })}
+          {extras}
+        </div>
+        {cta}
+      </>
+    );
+  } else if (layoutKind === "keypad_first") {
+    content = (
+      <>
+        <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto md:grid md:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] md:overflow-hidden">
+          <section className="px-4 pb-4 pt-3 md:slim-scrollbar md:overflow-y-auto md:px-6 md:pt-6">
+            <div className="pr-10 md:pr-0">{totalBlock}</div>
+            {breakdown}
+            {showEditor && active && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                  <TenderLogo source={active} alt={active.brandLabel} size={18} fallback={tenderFallback(active)} />
+                  {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
+                    ? active.label
+                    : `${active.brandLabel} ${active.label}`}
+                </div>
+                {/* Campos del teclado: el que está marcado es el que escribe. En
+                    efectivo hay dos (monto con este medio y recibido). */}
+                {kfEditable ? (
+                  <div className={cn("grid gap-2", active.flow === "cash" && "grid-cols-2")}>
+                    <KeypadFieldBox
+                      label="Monto con este medio"
+                      value={portionStr === "" ? money(maxPortion) : `$ ${portionStr}`}
+                      sub={portionStr === "" ? "Todo el saldo" : settle.closes ? "Cierra la cuenta" : "Pago parcial"}
+                      on={keypadTarget === "portion"}
+                      showOn={active.flow === "cash"}
+                      ariaLabel="Escribir con el teclado el monto con este medio"
+                      onClick={() => setKeypadChoice("portion")}
+                    />
+                    {active.flow === "cash" && (
+                      <KeypadFieldBox
+                        label="Recibido"
+                        value={receivedStr === "" ? money(settle.amount) : `$ ${receivedStr}`}
+                        sub={receivedStr === "" ? "Exacto" : `Cobro ${money(settle.amount)}`}
+                        on={keypadTarget === "received"}
+                        showOn
+                        ariaLabel="Escribir con el teclado el monto recibido"
+                        onClick={() => setKeypadChoice("received")}
+                      />
+                    )}
+                  </div>
+                ) : null}
+                {kfEditable && splitControls(true)}
+                {active.flow === "cash" && (
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                    <AmountButton
+                      on={receivedStr === ""}
+                      onClick={() => {
+                        setReceivedStr("");
+                        setKeypadChoice("received");
+                      }}
+                    >
+                      Exacto
+                    </AmountButton>
+                    {quick.map((q) => (
+                      <AmountButton
+                        key={q}
+                        on={received === q}
+                        onClick={() => {
+                          setReceivedStr(String(q));
+                          setKeypadChoice("received");
+                        }}
+                      >
+                        {money(q)}
+                      </AmountButton>
+                    ))}
+                  </div>
+                )}
+                {kfEditable && <Keypad square lastKey="," onKey={onKeypad} />}
+                {active.flow === "cash" && (
+                  <ChangeBox short={receivedShort} amount={receivedShort ? settle.amount - (received ?? 0) : changePreview} />
+                )}
+              </div>
+            )}
+          </section>
+          <aside className="border-t border-border bg-fg-4 px-4 pb-4 pt-4 md:slim-scrollbar md:overflow-y-auto md:border-l md:border-t-0 md:px-5 md:pt-6">
+            <div className="mb-2">{heading}</div>
+            {picker("compact")}
+            {paidList}
+            {showEditor && active && active.flow !== "cash" && (
+              <div ref={editorRef} className={cn("mt-4 space-y-4 rounded-lg border border-border bg-card", dense ? "p-3" : "p-4")}>
+                {editorHeader}
+                {cardBlock}
+                {otherBlock}
+              </div>
+            )}
+            {extras}
+          </aside>
+        </div>
+        {cta}
+      </>
+    );
+  } else {
+    // Dos columnas (y Botones grandes, con la misma estructura en grande).
+    content = (
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 md:h-[min(92dvh,860px)]",
+          big ? "md:grid-cols-[minmax(0,1fr)_minmax(380px,430px)]" : "md:grid-cols-[minmax(0,1fr)_minmax(340px,390px)]",
+        )}
+      >
         <section
           className={cn(
             "slim-scrollbar min-h-0 overflow-y-auto px-4 pb-6 pt-3 md:px-6 md:pt-6",
             view === "editor" && "max-md:hidden",
           )}
         >
-          {/* Encabezado compacto (sólo celular). */}
-          <div className="mb-4 flex items-end justify-between gap-3 pr-10 md:hidden">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {lines.length > 0 ? "Resta cobrar" : "Total a cobrar"}
-              </p>
-              <p className="price-hl font-price text-4xl font-black tabular-nums leading-tight">
-                {money(lines.length > 0 ? remaining : totals.grandTotal)}
-              </p>
-            </div>
-            {lines.length > 0 && (
-              <p className="pb-1 text-right text-xs text-muted-foreground">
-                Pagado {money(totals.paid)}
-                <br />
-                de {money(totals.grandTotal)}
-              </p>
-            )}
-          </div>
-          <h2 className="mb-4 hidden font-display text-xl font-black tracking-tight md:block">¿Cómo paga?</h2>
-          {sections.length === 0 ? (
-            <p className="rounded-2xl bg-fg-6 p-4 text-sm text-muted-foreground">
-              No hay medios de cobro habilitados. Activalos en Configuración, Medios de pago.
-            </p>
-          ) : (
-            <TenderPicker
-              sections={sections}
-              activeId={activeId}
-              onPick={pickTender}
-              promoBadge={promoBadge}
-              disabled={readyToConfirm || Boolean(electronic)}
-            />
-          )}
+          <div className="mb-4 pr-10 md:hidden">{totalBlock}</div>
+          <div className="mb-3 hidden md:block">{heading}</div>
+          {picker(big ? "big" : "tiles")}
         </section>
 
-        {/* ── Ticket del cobro ───────────────────────────────────────────── */}
         <aside
           className={cn(
             "flex min-h-0 flex-col bg-fg-4 md:border-l md:border-border",
@@ -599,479 +1312,59 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             >
               <ChevronLeft size={16} /> Medios de pago
             </button>
-
-            {/* Total */}
-            <div className="pr-10 md:pr-8">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Total a cobrar
-              </p>
-              <p className="price-hl font-price text-[2.6rem] font-black leading-tight tabular-nums">
-                {money(totals.grandTotal)}
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {lines.length > 0 && !totals.settled && (
-                  <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-bold text-warning">
-                    Resta {money(remaining)}
-                  </span>
-                )}
-                {totals.settled && lines.length > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">
-                    <Check size={13} /> Cubierto
-                  </span>
-                )}
-                {totals.change > 0 && (
-                  <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">
-                    Vuelto {money(totals.change)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Desglose */}
-            <dl className="mt-3 space-y-1 text-[13px]">
-              {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
-              {warranty > 0 && <Row label={`Garantía ${wplan?.label ?? ""}`} value={`+${money(warranty)}`} />}
-              {totals.surcharges > 0 && <Row label="Recargos" value={`+${money(totals.surcharges)}`} />}
-              {promoExtra > 0 && (
-                <Row label={promo?.name ?? "Promo por medio de pago"} value={`−${money(promoExtra)}`} tone="success" />
-              )}
-              {Math.abs(roundingAdj) >= 0.01 && (
-                <Row label="Redondeo" value={`${roundingAdj > 0 ? "+" : "−"}${money(Math.abs(roundingAdj))}`} />
-              )}
-              {tip > 0 && <Row label="Propina" value={`+${money(tip)}`} />}
-            </dl>
-
-            {/* Pagos cargados */}
-            {lines.length > 0 && (
-              <ul className="mt-4 space-y-1.5" aria-label="Pagos">
-                {lines.map((l) => (
-                  <li key={l.key} className="flex items-center gap-2.5 rounded-2xl bg-card p-2 pr-2.5">
-                    <BrandIcon logo={l.logo} alt={l.title} size={30} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1 truncate text-[13px] font-bold">
-                        {l.title}
-                        {l.locked && <Check size={13} className="shrink-0 text-success" aria-label="Aprobado" />}
-                      </span>
-                      {l.detail && <span className="block truncate text-[11px] text-muted-foreground">{l.detail}</span>}
-                    </span>
-                    <span className="font-price text-sm font-black tabular-nums">{money(l.amount)}</span>
-                    {l.locked ? (
-                      <Lock size={14} className="text-muted-foreground" aria-label="Cobro aprobado" />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => removeLine(l.key)}
-                        className="grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition hover:bg-danger/15 hover:text-danger"
-                        aria-label={`Quitar pago ${l.title}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Editor del medio activo */}
-            {active && !readyToConfirm && (
-              <div ref={editorRef} className="mt-4 rounded-3xl bg-card p-3.5 shadow-sm">
-                <div className="flex items-center gap-2.5">
-                  <BrandIcon logo={active.logo} alt={active.brandLabel} size={36} fallback={active.flow === "account" ? "account" : "wallet"} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">
-                      {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
-                        ? active.label
-                        : `${active.brandLabel} · ${active.label}`}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {active.flow === "qr"
-                        ? active.channel === "link"
-                          ? "Se genera un link para compartir; se acredita solo."
-                          : "El cliente escanea y se acredita solo."
-                        : active.flow === "point"
-                          ? "La terminal recibe el cobro; el cliente pasa la tarjeta."
-                          : active.flow === "terminal"
-                            ? "Cobrá en la terminal y confirmá acá."
-                            : active.flow === "store_credit"
-                              ? `Saldo disponible ${money(storeCreditBalance)}`
-                              : active.flow === "account"
-                                ? "Queda en la cuenta corriente del cliente."
-                                : active.hint ?? "Se registra al confirmar."}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Monto de esta línea */}
-                <label className="mt-3 block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Monto a cobrar con este medio
-                </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    inputMode="decimal"
-                    value={portionStr}
-                    onChange={(e) => setPortionStr(e.target.value.replace(/[^\d,.]/g, ""))}
-                    onKeyDown={(e) => e.key === "Enter" && onCta()}
-                    placeholder={money(maxPortion)}
-                    aria-label="Monto a cobrar con este medio"
-                    className="h-12 min-w-0 flex-1 rounded-2xl bg-fg-6 px-4 font-price text-xl font-black tabular-nums text-foreground outline-none placeholder:text-foreground focus:bg-muted"
-                  />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Chip on={portionStr === ""} onClick={() => setPortionStr("")}>
-                    Todo
-                  </Chip>
-                  {SPLITS.map((s) => (
-                    <Chip
-                      key={s.n}
-                      on={portionStr !== "" && Math.abs(portion - splitShare(maxPortion, s.n)) < 0.005}
-                      onClick={() => setPortionStr(String(splitShare(maxPortion, s.n)).replace(".", ","))}
-                    >
-                      {s.label}
-                    </Chip>
-                  ))}
-                  {splitItems.length > 1 && (
-                    <Chip on={itemsOpen} onClick={() => setItemsOpen((o) => !o)}>
-                      Por ítem
-                    </Chip>
-                  )}
-                </div>
-                {itemsOpen && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {splitItems.map((it) => {
-                      const on = pickedItems.includes(it.id);
-                      return (
-                        <button
-                          key={it.id}
-                          type="button"
-                          onClick={() => {
-                            const next = on ? pickedItems.filter((x) => x !== it.id) : [...pickedItems, it.id];
-                            setPickedItems(next);
-                            const sum = splitItems.filter((x) => next.includes(x.id)).reduce((a, x) => a + x.amount, 0);
-                            setPortionStr(sum > 0 ? String(round2(sum)).replace(".", ",") : "");
-                          }}
-                          className={cn(
-                            "rounded-full px-2.5 py-1 text-[11px] font-semibold transition",
-                            on ? POS_SELECTED : POS_IDLE,
-                          )}
-                        >
-                          {it.label} · {money(it.amount)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Efectivo: recibido + vuelto */}
-                {active.flow === "cash" && (
-                  <div className="mt-4">
-                    <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Recibido
-                    </label>
-                    <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                      <QuickCash on={receivedStr === ""} onClick={() => setReceivedStr("")}>
-                        Exacto
-                      </QuickCash>
-                      {quick.map((q) => (
-                        <QuickCash
-                          key={q}
-                          on={received === q}
-                          onClick={() => setReceivedStr(String(q))}
-                        >
-                          {money(q)}
-                        </QuickCash>
-                      ))}
-                      <input
-                        inputMode="decimal"
-                        value={quick.includes(received ?? -1) ? "" : receivedStr}
-                        onChange={(e) => setReceivedStr(e.target.value.replace(/[^\d,.]/g, ""))}
-                        onKeyDown={(e) => e.key === "Enter" && onCta()}
-                        placeholder="Otro"
-                        aria-label="Monto recibido"
-                        className="h-11 min-w-0 rounded-xl bg-fg-6 px-3 text-center font-price text-sm font-bold tabular-nums outline-none focus:bg-muted"
-                      />
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-3 flex items-center justify-between rounded-2xl px-4 py-3",
-                        receivedShort ? "bg-danger/15" : "bg-success/15",
-                      )}
-                    >
-                      <span className={cn("text-sm font-bold", receivedShort ? "text-danger" : "text-success")}>
-                        {receivedShort ? "Falta" : "Vuelto"}
-                      </span>
-                      <span
-                        key={changePreview}
-                        className={cn(
-                          "pos-pop font-price text-2xl font-black tabular-nums",
-                          receivedShort ? "text-danger" : "text-success",
-                        )}
-                      >
-                        {money(receivedShort ? settle.amount - (received ?? 0) : changePreview)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Tarjeta: débito / crédito + cuotas */}
-                {active.flow === "terminal" && (
-                  <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-2xl bg-fg-6 p-1">
-                    {(["debit", "credit"] as const).map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setCardKind(k)}
-                        className={cn(
-                          "h-10 rounded-xl text-sm font-bold transition",
-                          cardKind === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-                        )}
-                      >
-                        {k === "debit" ? "Débito" : "Crédito"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {isCard && plansForActive.length > 0 && (
-                  <div className="mt-4">
-                    <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Cuotas
-                    </label>
-                    <div className="mt-1.5 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                      <PlanChip on={planId === ""} onClick={() => setPlanId("")} title="Sin plan" sub={money(portion)} />
-                      {plansForActive.map((p) => {
-                        const pct = Number(p.surcharge_pct) || 0;
-                        return (
-                          <PlanChip
-                            key={p.id}
-                            on={planId === p.id}
-                            onClick={() => setPlanId(p.id)}
-                            title={p.label}
-                            sub={pct > 0 ? `+${pct}% · ${money(round2(portion * (1 + pct / 100)))}` : "Sin recargo"}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                {isCard && voucherRequired && (
-                  <div className="mt-4">
-                    <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Voucher de la tarjeta
-                    </label>
-                    <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                      {(
-                        [
-                          ["lote", "Lote"],
-                          ["cupon", "Cupón"],
-                          ["autorizacion", "Autoriz."],
-                        ] as const
-                      ).map(([k, label]) => (
-                        <input
-                          key={k}
-                          inputMode="numeric"
-                          value={voucher[k]}
-                          onChange={(e) => setVoucher((v) => ({ ...v, [k]: e.target.value }))}
-                          placeholder={label}
-                          aria-label={label}
-                          className="h-11 min-w-0 rounded-xl bg-fg-6 px-3 text-sm font-semibold outline-none focus:bg-muted"
-                        />
-                      ))}
-                    </div>
-                    {!voucherOk && (
-                      <p className="mt-1.5 text-[11px] text-muted-foreground">
-                        Completá lote, cupón y autorización para registrar el pago.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {active.requiresReference && (
-                  <div className="mt-4">
-                    <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Número de operación
-                    </label>
-                    <input
-                      value={opRef}
-                      maxLength={64}
-                      autoComplete="off"
-                      onChange={(e) => setOpRef(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && onCta()}
-                      placeholder="Ej. 123456"
-                      aria-label="Número de operación"
-                      className="mt-1.5 h-11 w-full rounded-xl bg-fg-6 px-3 text-sm font-semibold outline-none focus:bg-muted"
-                    />
-                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      Cobrá {money(settle.amount)} en el portal de {active.brandLabel} y cargá el número que
-                      te da al aprobarse.
-                    </p>
-                  </div>
-                )}
-                {/* Cuenta corriente v2: saldo, disponible, vencido, cuotas y bloqueo
-                    con autorización (motivo de encargado o PIN de supervisor). */}
-                {isAccount && renderAccount && settle.amount > 0 && (
-                  <div className="mt-4">
-                    {renderAccount({ amount: settle.amount, onChange: onAccountChange })}
-                  </div>
-                )}
-                {belowMin && active.minAmount && (
-                  <p className="mt-3 rounded-xl bg-warning/15 px-3 py-2 text-xs font-semibold text-warning">
-                    {active.brandLabel} acepta cobros desde {money(active.minAmount)}. Usá otro medio para
-                    montos menores.
-                  </p>
-                )}
-                {settle.surcharge > 0 && (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Incluye recargo de {money(settle.surcharge)}.
-                  </p>
-                )}
-                {isElectronic && (
-                  <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {active.flow === "point" ? <Smartphone size={13} /> : active.channel === "link" ? <Link2 size={13} /> : <QrCode size={13} />}
-                    Al aprobarse se registra solo{settle.closes ? " y se cierra la venta" : ""}.
-                  </p>
-                )}
-
-                {keypad && (
-                  <Keypad className="mt-4" compact lastKey="," onKey={onKeypad} />
-                )}
-              </div>
-            )}
-
-            {/* Extras: propina, garantía, vendedor */}
-            {(tipPresets.length > 0 || warrantyPlans.length > 0 || professionals.length > 0) && (
-              <div className="mt-4 rounded-3xl bg-card">
-                <button
-                  type="button"
-                  onClick={() => setExtrasOpen((o) => !o)}
-                  className="flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left"
-                  aria-expanded={extrasOpen}
-                >
-                  <span className="flex items-center gap-2 text-sm font-bold">
-                    <Sparkles size={15} className="text-muted-foreground" />
-                    Propina, garantía y vendedor
-                  </span>
-                  <ChevronDown size={16} className={cn("text-muted-foreground transition", extrasOpen && "rotate-180")} />
-                </button>
-                {extrasOpen && (
-                  <div className="space-y-4 px-3.5 pb-4">
-                    <div>
-                      <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        <Gift size={12} /> Propina
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <Chip on={tipPct == null && (Number(tipCustom) || 0) === 0} onClick={() => { setTipPct(null); setTipCustom(""); }}>
-                          Sin propina
-                        </Chip>
-                        {tipPresets.map((p) => (
-                          <Chip key={p} on={tipPct === p} onClick={() => { setTipPct(p); setTipCustom(""); }}>
-                            {p}%
-                          </Chip>
-                        ))}
-                        <input
-                          inputMode="decimal"
-                          value={tipCustom}
-                          onChange={(e) => {
-                            setTipPct(null);
-                            setTipCustom(e.target.value.replace(/[^\d.]/g, ""));
-                          }}
-                          placeholder="Otro $"
-                          aria-label="Propina en pesos"
-                          className="h-9 w-24 rounded-full bg-fg-6 px-3 text-center text-[13px] font-semibold outline-none focus:bg-muted"
-                        />
-                      </div>
-                    </div>
-                    {warrantyPlans.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          <ShieldCheck size={12} /> Garantía extendida
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Chip on={warrantyId === ""} onClick={() => setWarrantyId("")}>
-                            Sin garantía
-                          </Chip>
-                          {warrantyPlans.map((w) => (
-                            <Chip key={w.id} on={warrantyId === w.id} onClick={() => setWarrantyId(w.id)}>
-                              {w.label} · {w.months} meses
-                            </Chip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {professionals.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          <UserRound size={12} /> Vendedor
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Chip on={professionalId === ""} onClick={() => setProfessionalId("")}>
-                            Sin asignar
-                          </Chip>
-                          {professionals.map((p) => (
-                            <Chip key={p.id} on={professionalId === p.id} onClick={() => setProfessionalId(p.id)}>
-                              {p.name}
-                              {p.commission_pct != null ? ` · ${Number(p.commission_pct)}%` : ""}
-                            </Chip>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="pr-10 md:pr-8">{totalBlock}</div>
+            {breakdown}
+            {paidList}
+            {editorCard}
+            {extras}
           </div>
-
-          {/* CTA */}
-          <div className="shrink-0 border-t border-border bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pb-5">
-            <button
-              type="button"
-              onClick={onCta}
-              disabled={ctaDisabled}
-              className={cn(
-                "flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-base font-black tracking-tight",
-                POS_CTA,
-              )}
-            >
-              {loading || electronic ? <Spinner size={18} className="!border-black/20 !border-t-[color:var(--pos-ink)]" /> : null}
-              {electronic ? "Esperando el cobro" : ctaLabel}
-            </button>
-            <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              {readyToConfirm
-                ? "Se registra la venta y se imprime el ticket si está activo."
-                : lines.length > 0
-                  ? "Elegí otro medio para cobrar lo que resta."
-                  : "Podés dividir el pago entre varios medios."}
-            </p>
-          </div>
+          {cta}
         </aside>
       </div>
+    );
+  }
+
+  return (
+    <PosSheet
+      open={open}
+      onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}
+      onRequestClose={requestClose}
+      title="Cobrar"
+      description={`Total ${money(totals.grandTotal)}`}
+      size="xl"
+      style={style}
+      focusContainer
+      className={cn(
+        "rounded-t-xl md:rounded-xl",
+        layoutKind === "compact_list" && "md:h-[min(92dvh,860px)] md:max-w-xl",
+        layoutKind === "keypad_first" && "md:h-[min(92dvh,860px)] md:max-w-4xl",
+      )}
+    >
+      {content}
 
       {/* Confirmación inline: salir con cobros electrónicos aprobados */}
       {confirmLeave && (
         <div className="absolute inset-0 z-10 flex items-end bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] backdrop-blur-sm md:items-center md:justify-center">
-          <div className="w-full rounded-t-[28px] bg-popover p-5 shadow-2xl md:max-w-md md:rounded-[28px]">
-            <p className="font-display text-lg font-black">Hay cobros aprobados</p>
+          <div className="w-full rounded-t-xl border border-border bg-popover p-5 shadow-2xl md:max-w-md md:rounded-xl">
+            <p className="font-display text-lg font-bold">Hay cobros aprobados</p>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Ya se cobraron {money(lockedTotal)} con QR o Point. Si salís sin confirmar la venta, el
-              cobro queda en Cobros QR para conciliar y el carrito sigue abierto.
+              Ya se cobraron {money(lockedTotal)} con QR o Point. Si salís sin confirmar la venta, el cobro queda
+              en Cobros QR para conciliar y el carrito sigue abierto.
             </p>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmLeave(false)}
-                className="h-12 rounded-2xl bg-muted text-sm font-bold transition hover:bg-fg-10"
-              >
+              <Button variant="secondary" size="lg" onClick={() => setConfirmLeave(false)}>
                 Volver al cobro
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="destructive"
+                size="lg"
                 onClick={() => {
                   setConfirmLeave(false);
                   onOpenChange(false);
                 }}
-                className="h-12 rounded-2xl bg-danger/15 text-sm font-bold text-danger transition hover:bg-danger/25"
               >
                 Salir igual
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1111,28 +1404,26 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "suc
   );
 }
 
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={cn("h-9 rounded-full px-3.5 text-[13px] font-bold transition active:scale-95", on ? POS_SELECTED : POS_IDLE)}
-    >
-      {children}
-    </button>
-  );
-}
-
-function QuickCash({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+function AmountButton({
+  on,
+  onClick,
+  big,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  big?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
       className={cn(
-        "h-11 rounded-xl font-price text-sm font-black tabular-nums transition active:scale-95",
-        on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
+        "rounded-lg font-price text-sm font-semibold tabular-nums transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        big ? "h-14 text-base" : "h-11",
+        on ? "choice-on border border-transparent" : "border border-border bg-card text-foreground hover:bg-muted/60",
       )}
     >
       {children}
@@ -1140,19 +1431,70 @@ function QuickCash({ on, onClick, children }: { on: boolean; onClick: () => void
   );
 }
 
-function PlanChip({ on, onClick, title, sub }: { on: boolean; onClick: () => void; title: string; sub: string }) {
+// Campo del teclado en "Teclado primero": tocarlo lo vuelve el destino del
+// teclado. `showOn` marca el activo sólo cuando hay más de un campo.
+function KeypadFieldBox({
+  label,
+  value,
+  sub,
+  on,
+  showOn,
+  ariaLabel,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  on: boolean;
+  showOn: boolean;
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  const marked = on && showOn;
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
+      aria-label={ariaLabel}
       className={cn(
-        "flex flex-col items-start rounded-xl px-3 py-2 text-left transition active:scale-95",
-        on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
+        "min-w-0 rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        marked ? "border-ring bg-card ring-1 ring-ring" : "border-border bg-card hover:bg-muted/60",
       )}
     >
-      <span className="text-[13px] font-bold">{title}</span>
-      <span className={cn("text-[11px] tabular-nums", on ? "opacity-70" : "text-muted-foreground")}>{sub}</span>
+      <span className="flex items-center justify-between gap-2">
+        <span className={cn(LABEL, "truncate")}>{label}</span>
+        {marked && (
+          <span className="shrink-0 rounded bg-fg-10 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+            Teclado
+          </span>
+        )}
+      </span>
+      <span className="mt-1 block truncate text-right font-price text-3xl font-semibold tabular-nums text-foreground">
+        {value}
+      </span>
+      <span className="block truncate text-right text-xs text-muted-foreground">{sub}</span>
     </button>
+  );
+}
+
+function ChangeBox({ short, amount }: { short: boolean; amount: number }) {
+  return (
+    <div
+      className={cn(
+        "mt-3 flex items-center justify-between rounded-lg px-4 py-3",
+        short ? "bg-danger/10" : "bg-success/10",
+      )}
+    >
+      <span className={cn("text-sm font-semibold", short ? "text-danger" : "text-success")}>
+        {short ? "Falta" : "Vuelto"}
+      </span>
+      <span
+        key={amount}
+        className={cn("pos-pop font-price text-2xl font-bold tabular-nums", short ? "text-danger" : "text-success")}
+      >
+        {money(amount)}
+      </span>
+    </div>
   );
 }

@@ -1,7 +1,15 @@
 // Tipos compartidos de la configuración de medios de pago.
 
 // Caja QR de Mercado Pago (Orders API) guardada por ambiente en config.mp_qr.
-export type MpQrPos = { store_name?: string; address?: string; external_pos_id?: string };
+export type MpQrPos = {
+  store_name?: string;
+  address?: string;
+  external_pos_id?: string;
+  store_id?: string;
+  pos_id?: string;
+  user_id?: string;
+  created_at?: string;
+};
 
 export type MethodConfig = {
   connected?: boolean;

@@ -63,6 +63,7 @@ import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
+import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -456,6 +457,11 @@ export function AppShell({
         </div>
       </div>
 
+      {/* Sucursal actual (F17 · H90): sólo con más de una sucursal. */}
+      <div className="mb-2 shrink-0 px-1 empty:hidden">
+        <BranchSwitcher />
+      </div>
+
       {canSell && (
         <div className="mb-3 shrink-0 px-1">
           <SellQuickAction onNavigate={() => setDrawer(false)} />
@@ -584,6 +590,7 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
+          <BranchSwitcher compact />
           <div className="ml-auto flex items-center gap-2">
             {canSell && !onPos && <SellQuickAction compact />}
             <NotificationBell />

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import type { Paged } from "@/lib/utils/pagination";
+import { getActiveShiftId } from "@/modules/branches/store";
 
 // types/database.ts no se regenera en este PR: las RPC nuevas (return_sale_v2,
 // lookup/redeem voucher) y la tabla store_credit_vouchers aún no están tipadas.
@@ -19,6 +20,13 @@ interface LooseClient {
 }
 function looseClient(): LooseClient {
   return createClient() as unknown as LooseClient;
+}
+
+// Turno de la caja en uso (F17 · H90): el servidor lo valida; sin turno conocido
+// lo infiere (una sola sucursal = criterio de siempre).
+function shiftArg(): { p_cash_shift_id?: string } {
+  const id = getActiveShiftId();
+  return id ? { p_cash_shift_id: id } : {};
 }
 
 export interface ReturnItemInput {
@@ -151,6 +159,8 @@ export interface SalesPageParams {
   search?: string;
   status?: string; // 'completed' | 'voided' | ''
   range?: { from?: Date; to?: Date };
+  // F17 · H90: sucursal (null/undefined = todas las que el usuario ve por RLS).
+  storeId?: string | null;
 }
 
 // Solo dígitos del N°: evita romper filtros / inyección.
@@ -168,7 +178,7 @@ export const salesApi = {
   // nombre de cliente (ilike con inner join). Nunca tira error si está vacío.
   listPaged: async (params: SalesPageParams): Promise<Paged<SaleRow>> => {
     const supabase = createClient();
-    const { page, pageSize, search, status, range } = params;
+    const { page, pageSize, search, status, range, storeId } = params;
     const start = Math.max(0, (page - 1) * pageSize);
     const end = start + pageSize - 1;
     const q = (search ?? "").trim();
@@ -184,6 +194,7 @@ export const salesApi = {
       .order("created_at", { ascending: false });
 
     if (status) query = query.eq("status", status);
+    if (storeId) query = query.eq("store_id", storeId);
     if (range?.from) query = query.gte("created_at", range.from.toISOString());
     if (range?.to) {
       const rangeEnd = new Date(range.to);
@@ -332,6 +343,8 @@ export const salesApi = {
       p_refund: input.refund,
       p_customer_id: input.customerId ?? undefined,
       p_allowed_branch_ids: input.allowedBranchIds ?? undefined,
+      // F17 · H90: turno de la caja en uso (si este dispositivo tiene uno).
+      ...shiftArg(),
     });
     if (error) throw error;
     return data as unknown as ReturnV2Result;
@@ -365,6 +378,7 @@ export const salesApi = {
       p_allowed_branch_ids: input.allowedBranchIds ?? undefined,
       p_surplus_to: input.surplusTo ?? undefined,
       p_notes: input.notes ?? undefined,
+      ...shiftArg(),
     });
     if (error) throw error;
     return data as unknown as ExchangeResult;

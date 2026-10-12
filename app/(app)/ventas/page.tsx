@@ -23,6 +23,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { BranchDot } from "@/components/branches/BranchSwitcher";
 
 // Modales en chunks aparte, montados recién al abrirlos (ticket, devolución /
 // cambio y cobros QR son pesados y no hacen falta para listar ventas).
@@ -52,6 +54,12 @@ export default function VentasPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search, 350);
+  // F17 · H90: filtro global de sucursal (chip del panel). Con "todas" se
+  // muestra la columna Sucursal.
+  const branch = useBranchContext();
+  const storeId = branch.filterStoreId;
+  const showBranchCol = branch.isMulti && !storeId;
+  const cols = showBranchCol ? 7 : 6;
 
   const saleRange = range?.from
     ? { from: range.from, to: range.to ?? range.from }
@@ -60,7 +68,7 @@ export default function VentasPage() {
   // Volver a la página 1 cuando cambian los filtros (búsqueda, estado, fechas).
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, range?.from, range?.to, pageSize]);
+  }, [debouncedSearch, statusFilter, range?.from, range?.to, pageSize, storeId]);
 
   const { data, isLoading, isPlaceholderData, isError, refetch } = useSalesPaged({
     page,
@@ -68,6 +76,7 @@ export default function VentasPage() {
     search: debouncedSearch,
     status: statusFilter,
     range: saleRange,
+    storeId,
   });
   const visible = data?.rows ?? [];
   const total = data?.total ?? 0;
@@ -97,6 +106,7 @@ export default function VentasPage() {
         search: debouncedSearch,
         status: statusFilter,
         range: saleRange,
+        storeId,
       });
       await exportXlsx("ventas", [
         {
@@ -106,6 +116,7 @@ export default function VentasPage() {
             { header: "N°", key: "number", type: "number", width: 10 },
             { header: "Fecha", key: "fecha", width: 22 },
             { header: "Cliente", key: "cliente", width: 24 },
+            ...(branch.isMulti ? [{ header: "Sucursal", key: "sucursal", width: 20 }] : []),
             { header: "Total", key: "total", type: "money" },
             { header: "Estado", key: "estado", width: 14 },
           ],
@@ -113,6 +124,7 @@ export default function VentasPage() {
             number: s.number,
             fecha: new Date(s.created_at).toLocaleString("es-AR"),
             cliente: s.customers?.name ?? "",
+            sucursal: branch.branchName(s.store_id) ?? "",
             total: s.total,
             estado: SALE_STATUS[s.status] ?? s.status,
           })),
@@ -156,6 +168,7 @@ export default function VentasPage() {
         <PageHeader
           eyebrow="Operación"
           title="Ventas"
+          description={branch.isMulti ? (branch.filterStore ? `Sucursal ${branch.filterStore.name}` : "Todas las sucursales") : undefined}
           icon={Receipt}
           help={<InfoHint section="ventas" size={18} />}
           actions={
@@ -223,16 +236,17 @@ export default function VentasPage() {
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Cliente</th>
+                {showBranchCol && <th className="px-4 py-3">Sucursal</th>}
                 <th className="px-4 py-3 text-right">Total</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-foreground">
-              {isLoading && <TableStateRow colSpan={6} loading />}
+              {isLoading && <TableStateRow colSpan={cols} loading />}
               {isError && !isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-danger">
+                  <td colSpan={cols} className="px-4 py-10 text-center text-danger">
                     Error al cargar.{" "}
                     <button onClick={() => refetch()} className="underline">
                       Reintentar
@@ -241,7 +255,7 @@ export default function VentasPage() {
                 </tr>
               )}
               {!isLoading && !isError && visible.length === 0 && (
-                <TableStateRow colSpan={6}>
+                <TableStateRow colSpan={cols}>
                   {search ? (
                     <EmptyState
                       compact
@@ -268,6 +282,14 @@ export default function VentasPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     {s.customers?.name ?? <NoData />}
                   </td>
+                  {showBranchCol && (
+                    <td className="px-4 py-3 text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        <BranchDot branch={branch.all.find((b) => b.id === s.store_id) ?? null} className="h-2 w-2" />
+                        {branch.branchName(s.store_id) ?? <NoData />}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-right font-semibold">
                     {formatCurrency(s.total)}
                   </td>

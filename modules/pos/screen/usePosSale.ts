@@ -13,6 +13,10 @@ import { formatCurrency } from "@/lib/utils/format";
 // mapeo de errores del server a mensajes.
 
 export function saleErrorTitle(msg: string): string {
+  // F17 · H90: turno y sucursal de la caja en uso.
+  if (msg.includes("shift_ambiguous")) return "Hay cajas abiertas en varias sucursales: elegí tu caja arriba";
+  if (msg.includes("shift_not_open")) return "El turno de esta caja ya se cerró: abrí la caja de nuevo";
+  if (msg.includes("store_not_allowed")) return "No tenés acceso a la sucursal de esta caja";
   return msg.includes("account_inactive")
     ? "Tu suscripción venció. Renovala para volver a cobrar."
     : msg.includes("coupon_usage_exceeded")

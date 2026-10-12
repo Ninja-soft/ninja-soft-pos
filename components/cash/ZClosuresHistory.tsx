@@ -12,6 +12,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { format } from "date-fns";
+import { useBranchContext } from "@/modules/branches/hooks";
 
 function fdate(s: string | null): string {
   if (!s) return "Sin datos";
@@ -31,7 +32,10 @@ function accountCollected(z: ZClosure): [string, number][] {
 
 export function ZClosuresHistory() {
   const [range, setRange] = useState<DateRange | undefined>();
-  const { data: closures, isLoading } = useZClosures(range);
+  // F17 · H90: filtro global de sucursal; con "todas" se ve la columna.
+  const branch = useBranchContext();
+  const showBranchCol = branch.isMulti && !branch.filterStoreId;
+  const { data: closures, isLoading } = useZClosures(range, branch.filterStoreId);
   const [sel, setSel] = useState<ZClosure | null>(null);
 
   async function exportZ(z: ZClosure) {
@@ -45,6 +49,7 @@ export function ZClosuresHistory() {
         ],
         rows: [
           { k: "Z número", v: z.z_number },
+          ...(branch.isMulti ? [{ k: "Sucursal", v: branch.branchName(z.store_id) ?? "" }] : []),
           { k: "Apertura", v: formatCurrency(z.opening_amount) },
           { k: "Ventas (cantidad)", v: z.sales_count },
           { k: "Ventas (total)", v: formatCurrency(z.sales_total) },
@@ -115,6 +120,7 @@ export function ZClosuresHistory() {
               <tr>
                 <th className="whitespace-nowrap px-4 py-3">Z</th>
                 <th className="whitespace-nowrap px-4 py-3">Cierre</th>
+                {showBranchCol && <th className="whitespace-nowrap px-4 py-3">Sucursal</th>}
                 <th className="whitespace-nowrap px-4 py-3 text-right">Ventas</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Total</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Diferencia</th>
@@ -130,6 +136,11 @@ export function ZClosuresHistory() {
                   <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                     {fdate(z.closed_at)}
                   </td>
+                  {showBranchCol && (
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                      {branch.branchName(z.store_id) ?? "-"}
+                    </td>
+                  )}
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {z.sales_count}
                   </td>
@@ -161,7 +172,7 @@ export function ZClosuresHistory() {
               {!isLoading && (closures?.length ?? 0) === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={showBranchCol ? 7 : 6}
                     className="px-4 py-8 text-center text-sm text-muted-foreground"
                   >
                     Todavía no hay cierres Z. Cuando cierres una caja, el Z aparece acá.

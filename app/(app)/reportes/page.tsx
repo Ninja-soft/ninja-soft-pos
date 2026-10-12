@@ -2,13 +2,23 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, SlidersHorizontal } from "lucide-react";
-import { format, startOfDay, startOfMonth, subDays } from "date-fns";
+import {
+  ChartArea,
+  ChartBar,
+  ChartBarStacked,
+  ChartColumn,
+  ChartLine,
+  ChartPie,
+  Download,
+  Grid3x3,
+  LayoutGrid,
+  SlidersHorizontal,
+} from "lucide-react";
+import { addDays, format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
-import { Card, CardContent } from "@/components/ui/Card";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { Switch } from "@/components/ui/Switch";
 import {
@@ -26,7 +36,19 @@ import {
   useGastroKitchenReport,
   useGastroDeliveryReport,
   useGastroTopItemsReport,
+  useSaleTimes,
+  useCashFlow,
 } from "@/modules/reports/hooks";
+import {
+  byHour,
+  cashFlowByDay,
+  fillDays,
+  hourMatrix,
+  peakHour,
+  previousRange,
+  rangeDays,
+  type DayPoint,
+} from "@/modules/reports/derive";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import {
@@ -39,17 +61,36 @@ import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
-import { ReportSection } from "@/components/reports/ReportSection";
-import type { ReportChartDatum } from "@/components/reports/ReportChart";
+import { ReportSection, type ReportChartSpec } from "@/components/reports/ReportSection";
+import { KpiCard } from "@/components/reports/KpiCard";
+import { SegmentedControl, type SegmentedOption } from "@/components/ui/SegmentedControl";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import {
+  bulletOption,
+  cashFlowOption,
+  columnBarOption,
+  doughnutOption,
+  heatmapOption,
+  rankingBarOption,
+  stackedBarOption,
+  timeSeriesOption,
+  treemapOption,
+  WEEKDAYS,
+  type CategoryDatum,
+  type SeriesKind,
+} from "@/components/charts/builders";
+import { deltaPct, formatChartValue, type ValueFormat } from "@/components/charts/chartTheme";
 import { NoData } from "@/components/ui/NoData";
 
 const REPORTS = [
-  { key: "by_day", label: "Por día" },
-  { key: "by_method", label: "Por medio de pago" },
-  { key: "by_category", label: "Por categoría" },
+  { key: "by_day", label: "Evolución de ventas" },
+  { key: "by_hour", label: "Ventas por día y hora" },
+  { key: "by_method", label: "Medios de pago" },
+  { key: "by_category", label: "Categorías" },
   { key: "by_user", label: "Por cajero" },
   { key: "by_product", label: "Top productos" },
   { key: "by_customer", label: "Top clientes" },
+  { key: "cash_flow", label: "Flujo de caja" },
   { key: "warranties", label: "Garantías y comisiones" },
   { key: "staff", label: "Productividad del staff" },
   { key: "low_stock", label: "Stock bajo" },
@@ -63,11 +104,13 @@ const REPORTS = [
 type ReportKey = (typeof REPORTS)[number]["key"];
 const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_day: true,
+  by_hour: true,
   by_method: true,
   by_category: true,
   by_user: true,
   by_product: true,
   by_customer: true,
+  cash_flow: true,
   warranties: true,
   staff: true,
   low_stock: true,
@@ -389,96 +432,168 @@ export default function ReportesPage() {
     },
   });
 
-  // --- Datos para los gráficos por sección (es-AR / ARS). ---
+  // ── Comparación con el período anterior (misma cantidad de días). Se pide
+  // recién cuando el reporte principal ya está: no compite con el primer paint.
+  const [compare, setCompare] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("rep-compare") === "0") setCompare(false);
+    } catch {
+      /* sin storage */
+    }
+  }, []);
+  function toggleCompare(v: boolean) {
+    setCompare(v);
+    try {
+      window.localStorage.setItem("rep-compare", v ? "1" : "0");
+    } catch {
+      /* sin storage */
+    }
+  }
+  const { rangeFrom, rangeTo, prev } = useMemo(() => {
+    const f = startOfDay(range?.from ?? new Date());
+    const t = startOfDay(range?.to ?? range?.from ?? new Date());
+    return { rangeFrom: f, rangeTo: t, prev: previousRange(f, t) };
+  }, [range]);
+  const nDays = rangeDays(rangeFrom, rangeTo);
+  const prevFromISO = prev.from.toISOString();
+  const prevToISO = addDays(prev.to, 1).toISOString();
+  const { data: prevData, isLoading: prevLoading } = useSalesReport(prevFromISO, prevToISO, {
+    enabled: compare && !!data,
+  });
+  const prevHint = nDays === 1 ? "vs. día anterior" : `vs. ${nDays} días anteriores`;
+
+  // ── Consultas diferidas (sólo cuando la sección entra en pantalla).
+  const [wantHours, setWantHours] = useState(false);
+  const [wantCash, setWantCash] = useState(false);
+  const { data: saleTimes, isLoading: hoursLoading } = useSaleTimes(
+    fromISO,
+    toISO,
+    wantHours && vis.by_hour,
+  );
+  const { data: cashMoves, isLoading: cashLoading } = useCashFlow(
+    fromISO,
+    toISO,
+    wantCash && vis.cash_flow,
+  );
+
+  // ── Series derivadas (client-side, sin consultas extra).
+  const days = useMemo(
+    () => fillDays(rangeFrom, rangeTo, data?.by_day ?? []),
+    [data, rangeFrom, rangeTo],
+  );
+  const prevDays = useMemo(
+    () => (prevData ? fillDays(prev.from, prev.to, prevData.by_day) : null),
+    [prevData, prev],
+  );
+  const hours = useMemo(() => (saleTimes ? hourMatrix(saleTimes) : null), [saleTimes]);
+  const peak = hours ? peakHour(hours.totals) : null;
+  const flow = useMemo(
+    () => (cashMoves ? cashFlowByDay(rangeFrom, rangeTo, cashMoves) : null),
+    [cashMoves, rangeFrom, rangeTo],
+  );
+
+  const total = data?.total ?? 0;
+  const count = data?.count ?? 0;
+  const ticket = count ? total / count : 0;
+  const prevTicket = prevData && prevData.count ? prevData.total / prevData.count : null;
+  const bestDay = days.reduce<DayPoint | null>(
+    (b, d) => (d.total > 0 && (!b || d.total > b.total) ? d : b),
+    null,
+  );
+  const showDelta = compare && !!data;
+
+  const [metric, setMetric] = useState<DayMetric>("total");
+  const metricValue = (d: DayPoint) =>
+    metric === "total" ? d.total : metric === "count" ? d.count : d.count ? d.total / d.count : 0;
+  const metricFormat: ValueFormat = metric === "count" ? "number" : "currency";
+  const metricName = METRIC_LABELS[metric];
+
+  // --- Datos categóricos por sección (es-AR / ARS). ---
   const chart = useMemo(() => {
-    const dayLabel = (iso: string) => {
-      const [, mm, dd] = iso.split("-");
-      return dd && mm ? `${dd}/${mm}` : iso;
-    };
     return {
-      by_day: (data?.by_day ?? []).map<ReportChartDatum>((r) => ({
-        label: dayLabel(r.day),
-        value: r.total,
-        secondary: r.count,
-      })),
-      by_method: (data?.by_method ?? []).map<ReportChartDatum>((r) => ({
+      by_method: (data?.by_method ?? []).map<CategoryDatum>((r) => ({
         label: METHOD_LABELS[r.method] ?? r.method,
         value: r.total,
       })),
-      by_category: (data?.by_category ?? []).map<ReportChartDatum>((r) => ({
+      by_category: (data?.by_category ?? []).map<CategoryDatum>((r) => ({
         label: r.category,
         value: r.total,
-        secondary: r.qty,
+        note: `${formatQty(r.qty)} unidades`,
       })),
-      by_user: (data?.by_user ?? []).map<ReportChartDatum>((r) => ({
+      by_user: (data?.by_user ?? []).map<CategoryDatum>((r) => ({
         label: r.cashier,
         value: r.total,
-        secondary: r.count,
+        note: `${r.count} ventas`,
       })),
-      // Top 8 para que el gráfico no se sature; la tabla mantiene todo.
-      by_product: (data?.by_product ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+      // Top 10 para que el gráfico no se sature; la tabla mantiene todo.
+      by_product: (data?.by_product ?? []).slice(0, 10).map<CategoryDatum>((r) => ({
         label: r.product,
         value: r.total,
-        secondary: r.qty,
+        note: `${formatQty(r.qty)} unidades`,
       })),
-      by_customer: (data?.by_customer ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+      by_customer: (data?.by_customer ?? []).slice(0, 10).map<CategoryDatum>((r) => ({
         label: r.customer,
         value: r.total,
-        secondary: r.count,
+        note: `${r.count} ventas`,
       })),
-      warranties: (warranty?.rows ?? []).map<ReportChartDatum>((r) => ({
+      warranties: (warranty?.rows ?? []).map<CategoryDatum>((r) => ({
         label: r.label,
         value: r.total,
-        secondary: r.qty,
+        note: `${r.qty} vendidas · comisión ${formatCurrency(r.commission)}`,
       })),
-      // Comisión por profesional (la barra principal); facturado como secundario.
-      staff: (staff ?? []).map<ReportChartDatum>((r) => ({
-        label: r.professional,
-        value: r.commission,
-        secondary: r.billed,
-      })),
-      low_stock: lowStock.slice(0, 10).map<ReportChartDatum>((p) => ({
+      low_stock: lowStock.slice(0, 10).map((p) => ({
         label: p.name,
         value: p.stock,
+        target: p.stock_min ?? 0,
+        unit: p.unit,
       })),
       // ── Gastronomía (F13 · H52) ──────────────────────────────────────────
-      gastro_area: (gTables?.by_area ?? []).map<ReportChartDatum>((r) => ({
+      gastro_area: (gTables?.by_area ?? []).map<CategoryDatum>((r) => ({
         label: r.area,
         value: r.total,
-        secondary: r.orders,
+        note: `${r.orders} pedidos · ticket ${formatCurrency(r.avg_ticket)}`,
       })),
       // Tiempo promedio por estación (en minutos para que el gráfico sea legible).
-      gastro_kitchen: (gKitchen?.by_station ?? []).map<ReportChartDatum>((r) => ({
+      gastro_kitchen: (gKitchen?.by_station ?? []).map<CategoryDatum>((r) => ({
         label: r.station,
         value: Math.round((r.avg_seconds / 60) * 10) / 10,
-        secondary: r.items,
+        note: `${r.items} ítems · mín. ${formatDuration(r.min_seconds)} · máx. ${formatDuration(r.max_seconds)}`,
       })),
-      gastro_delivery_channel: (gDelivery?.by_channel ?? []).map<ReportChartDatum>(
-        (r) => ({
-          label:
-            DELIVERY_CHANNEL_LABELS[r.channel as DeliveryChannel] ?? r.channel,
-          value: r.total,
-          secondary: r.orders,
-        }),
-      ),
-      gastro_top_items: (gTop?.top ?? []).slice(0, 8).map<ReportChartDatum>((r) => ({
+      gastro_delivery_channel: (gDelivery?.by_channel ?? []).map<CategoryDatum>((r) => ({
+        label: DELIVERY_CHANNEL_LABELS[r.channel as DeliveryChannel] ?? r.channel,
+        value: r.total,
+        note: `${r.orders} pedidos`,
+      })),
+      gastro_top_items: (gTop?.top ?? []).slice(0, 10).map<CategoryDatum>((r) => ({
         label: r.name,
         value: r.qty,
-        secondary: r.total,
+        note: `Importe ${formatCurrency(r.total)}`,
       })),
     };
-  }, [data, warranty, staff, lowStock, gTables, gKitchen, gDelivery, gTop]);
+  }, [data, warranty, lowStock, gTables, gKitchen, gDelivery, gTop]);
+
+  // Horas con actividad (para el gráfico "Por hora"; recorta madrugadas vacías).
+  const activeHours = useMemo(() => {
+    if (!hours) return [];
+    const perHour = byHour(hours.totals);
+    const first = perHour.findIndex((v) => v > 0);
+    if (first < 0) return [];
+    let last = 23;
+    while (last > first && (perHour[last] ?? 0) <= 0) last--;
+    return perHour.slice(first, last + 1).map((v, i) => ({ h: first + i, v }));
+  }, [hours]);
 
   return (
     <>
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <Eyebrow>Información</Eyebrow>
         <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
           Reportes
           <InfoHint section="reportes" size={18} />
         </Display>
 
-        <div className="-mx-6 mt-6 flex items-end gap-3 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="-mx-4 mt-6 flex items-end gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex shrink-0 flex-col gap-1">
             <label className="text-xs text-muted-foreground">Período</label>
             <DateRangePicker value={range} onChange={setRange} />
@@ -511,6 +626,17 @@ export default function ReportesPage() {
                   {p.label}
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Comparar</span>
+            <div className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={compare}
+                onCheckedChange={toggleCompare}
+                label="Comparar con el período anterior"
+              />
+              <span className="whitespace-nowrap">Período anterior</span>
             </div>
           </div>
           <GatedButton
@@ -555,74 +681,184 @@ export default function ReportesPage() {
           </Dropdown>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">Total vendido</p>
-              <p className="mt-2 price-hl font-price tabular-nums text-3xl font-black">
-                {formatCurrency(data?.total ?? 0)}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">Cantidad de ventas</p>
-              <p className="mt-2 font-display text-3xl font-black">
-                {data?.count ?? 0}
-              </p>
-            </CardContent>
-          </Card>
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KpiCard
+            label="Total vendido"
+            value={formatChartValue(total, "currency")}
+            valueClassName="price-hl font-price"
+            delta={showDelta && prevData ? deltaPct(total, prevData.total) : undefined}
+            deltaLoading={showDelta && prevLoading}
+            deltaHint={showDelta ? prevHint : undefined}
+            spark={days.map((d) => d.total)}
+          />
+          <KpiCard
+            label="Cantidad de ventas"
+            value={count.toLocaleString("es-AR")}
+            delta={showDelta && prevData ? deltaPct(count, prevData.count) : undefined}
+            deltaLoading={showDelta && prevLoading}
+            deltaHint={showDelta ? prevHint : undefined}
+            spark={days.map((d) => d.count)}
+          />
+          <KpiCard
+            label="Ticket promedio"
+            value={formatChartValue(ticket, "currency")}
+            delta={showDelta && prevData ? deltaPct(ticket, prevTicket) : undefined}
+            deltaLoading={showDelta && prevLoading}
+            deltaHint={showDelta ? prevHint : undefined}
+            spark={days.map((d) => (d.count ? d.total / d.count : 0))}
+          />
+          <KpiCard
+            label="Mejor día"
+            value={bestDay ? formatChartValue(bestDay.total, "currency") : <NoData />}
+            hint={
+              bestDay
+                ? `${bestDay.long} · ${bestDay.count} ventas`
+                : "Sin ventas en el período"
+            }
+          />
         </div>
 
         {isLoading ? (
-          <p className="mt-8 text-center text-sm text-muted-foreground">Cargando…</p>
+          <SpinnerBlock className="mt-8" />
         ) : (
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <div className="mt-6 grid gap-4 lg:grid-flow-dense lg:grid-cols-2">
             {vis.by_day && (
-              <ReportSection
+              <ReportSection<SeriesKind>
                 id="by_day"
-                title="Por día"
-                chartData={chart.by_day}
-                chartTypes={["bar", "line", "area"]}
-                valueName="Vendido"
+                title="Evolución de ventas"
+                subtitle={
+                  days.length > 1
+                    ? `${metricName} · promedio diario ${formatChartValue(
+                        days.reduce((a, d) => a + metricValue(d), 0) / days.length,
+                        metricFormat,
+                      )}`
+                    : metricName
+                }
                 className="lg:col-span-2"
+                chartTypes={TIME_TYPES}
+                controls={
+                  <SegmentedControl<DayMetric>
+                    ariaLabel="Métrica"
+                    value={metric}
+                    onChange={setMetric}
+                    size="sm"
+                    options={METRIC_OPTIONS}
+                  />
+                }
+                chart={(kind) => ({
+                  option: timeSeriesOption({
+                    labels: days.map((d) => d.label),
+                    tooltipLabels: days.map((d) => d.long),
+                    values: days.map(metricValue),
+                    name: metricName,
+                    format: metricFormat,
+                    kind,
+                    showAverage: true,
+                    previous:
+                      compare && prevDays
+                        ? {
+                            values: prevDays.map(metricValue),
+                            labels: prevDays.map((d) => d.long),
+                            name: "Período anterior",
+                          }
+                        : null,
+                  }),
+                  height: 300,
+                  compactHeight: 260,
+                  empty: !days.some((d) => d.count > 0),
+                  ariaLabel: `${metricName} por día`,
+                  summary: {
+                    columns: ["Día", metricName],
+                    rows: days.map((d) => [d.long, formatChartValue(metricValue(d), metricFormat)]),
+                  },
+                })}
                 table={
                   <BareTable
-                    cols={["Día", "Total", "Ventas"]}
-                    rows={(data?.by_day ?? []).map((r) => [
-                      r.day,
-                      formatCurrency(r.total),
-                      String(r.count),
+                    cols={["Día", "Total", "Ventas", "Ticket prom."]}
+                    rows={days.map((d) => [
+                      d.long,
+                      formatCurrency(d.total),
+                      String(d.count),
+                      d.count ? formatCurrency(d.total / d.count) : <NoData key="nd" />,
                     ])}
+                  />
+                }
+              />
+            )}
+            {vis.by_hour && (
+              <ReportSection<"heatmap" | "bar">
+                id="by_hour"
+                title="Ventas por día y hora"
+                subtitle={
+                  peak
+                    ? `Pico: ${WEEKDAYS[peak.weekday]} de ${peak.hour} a ${peak.hour + 1} h`
+                    : "Cuándo se concentran tus ventas"
+                }
+                className="lg:col-span-2"
+                onVisible={() => setWantHours(true)}
+                loading={!hours && (hoursLoading || !wantHours)}
+                chartTypes={HOUR_TYPES}
+                chart={(kind) => ({
+                  option:
+                    kind === "heatmap"
+                      ? heatmapOption({
+                          totals: hours?.totals ?? [],
+                          counts: hours?.counts ?? [],
+                          format: "currency",
+                        })
+                      : columnBarOption({
+                          items: activeHours.map((x) => ({ label: `${x.h}h`, value: x.v })),
+                          name: "Vendido",
+                          format: "currency",
+                        }),
+                  height: kind === "heatmap" ? 300 : 260,
+                  compactHeight: kind === "heatmap" ? 320 : 240,
+                  empty: activeHours.length === 0,
+                  ariaLabel: "Ventas por día de la semana y hora",
+                  summary: {
+                    columns: ["Hora", "Vendido"],
+                    rows: activeHours.map((x) => [`${x.h} h`, formatCurrency(x.v)]),
+                  },
+                })}
+                table={
+                  <BareTable
+                    cols={["Día", "Hora pico", "Vendido", "Ventas"]}
+                    rows={(hours?.totals ?? []).map((day, w) => {
+                      const h = day.indexOf(Math.max(...day));
+                      const sum = day.reduce((a, v) => a + v, 0);
+                      const c = (hours?.counts[w] ?? []).reduce((a, v) => a + v, 0);
+                      return [
+                        WEEKDAYS[w] ?? "",
+                        sum > 0 ? `${h} a ${h + 1} h` : <NoData key="nd" />,
+                        formatCurrency(sum),
+                        String(c),
+                      ];
+                    })}
                   />
                 }
               />
             )}
             {vis.by_method && (
-              <ReportSection
+              <ReportSection<"doughnut" | "ranking">
                 id="by_method"
-                title="Por medio de pago"
-                chartData={chart.by_method}
-                chartTypes={["pie", "bar"]}
-                valueName="Total"
-                table={
-                  <BareTable
-                    cols={["Medio", "Total"]}
-                    rows={(data?.by_method ?? []).map((r) => [
-                      METHOD_LABELS[r.method] ?? r.method,
-                      formatCurrency(r.total),
-                    ])}
-                  />
+                title="Medios de pago"
+                subtitle={topShare(chart.by_method)}
+                chartTypes={MIX_TYPES}
+                chart={(kind) =>
+                  categoryChart(kind, chart.by_method, "Total", "currency", "Total por medio de pago")
                 }
+                table={<BareTable cols={["Medio", "Total", "%"]} rows={withShare(chart.by_method)} />}
               />
             )}
             {vis.by_category && (
-              <ReportSection
+              <ReportSection<"treemap" | "doughnut" | "ranking">
                 id="by_category"
-                title="Por categoría"
-                chartData={chart.by_category}
-                chartTypes={["pie", "bar"]}
-                valueName="Total"
+                title="Categorías"
+                subtitle={topShare(chart.by_category)}
+                chartTypes={WEIGHT_TYPES}
+                chart={(kind) =>
+                  categoryChart(kind, chart.by_category, "Total", "currency", "Total por categoría")
+                }
                 table={
                   <BareTable
                     cols={["Categoría", "Total", "Cant."]}
@@ -635,32 +871,15 @@ export default function ReportesPage() {
                 }
               />
             )}
-            {vis.by_user && (
-              <ReportSection
-                id="by_user"
-                title="Por cajero"
-                chartData={chart.by_user}
-                chartTypes={["bar", "pie"]}
-                valueName="Total"
-                table={
-                  <BareTable
-                    cols={["Cajero", "Total", "Ventas"]}
-                    rows={(data?.by_user ?? []).map((r) => [
-                      r.cashier,
-                      formatCurrency(r.total),
-                      String(r.count),
-                    ])}
-                  />
-                }
-              />
-            )}
             {vis.by_product && (
-              <ReportSection
+              <ReportSection<"ranking" | "treemap">
                 id="by_product"
                 title="Top productos"
-                chartData={chart.by_product}
-                chartTypes={["bar", "pie"]}
-                valueName="Total"
+                subtitle="Los 10 que más facturaron"
+                chartTypes={TOP_TYPES}
+                chart={(kind) =>
+                  categoryChart(kind, chart.by_product, "Total", "currency", "Top productos por facturación")
+                }
                 table={
                   <BareTable
                     cols={["Producto", "Total", "Cant."]}
@@ -674,12 +893,13 @@ export default function ReportesPage() {
               />
             )}
             {vis.by_customer && (
-              <ReportSection
+              <ReportSection<"ranking">
                 id="by_customer"
                 title="Top clientes"
-                chartData={chart.by_customer}
-                chartTypes={["bar", "pie"]}
-                valueName="Total"
+                subtitle="Los 10 que más compraron"
+                chart={() =>
+                  categoryChart("ranking", chart.by_customer, "Total", "currency", "Top clientes por compras")
+                }
                 table={
                   <BareTable
                     cols={["Cliente", "Total", "Ventas"]}
@@ -692,13 +912,38 @@ export default function ReportesPage() {
                 }
               />
             )}
+            {vis.by_user && (
+              <ReportSection<"ranking" | "doughnut">
+                id="by_user"
+                title="Por cajero"
+                subtitle={topShare(chart.by_user)}
+                chartTypes={RANK_MIX_TYPES}
+                chart={(kind) => categoryChart(kind, chart.by_user, "Total", "currency", "Total por cajero")}
+                table={
+                  <BareTable
+                    cols={["Cajero", "Total", "Ventas"]}
+                    rows={(data?.by_user ?? []).map((r) => [
+                      r.cashier,
+                      formatCurrency(r.total),
+                      String(r.count),
+                    ])}
+                  />
+                }
+              />
+            )}
             {vis.warranties && (
-              <ReportSection
+              <ReportSection<"ranking" | "doughnut">
                 id="warranties"
                 title="Garantías y comisiones"
-                chartData={chart.warranties}
-                chartTypes={["bar", "pie"]}
-                valueName="Total"
+                subtitle={
+                  warranty && warranty.qty > 0
+                    ? `${warranty.qty} vendidas · comisión ${formatCurrency(warranty.commission)}`
+                    : undefined
+                }
+                chartTypes={RANK_MIX_TYPES}
+                chart={(kind) =>
+                  categoryChart(kind, chart.warranties, "Total", "currency", "Garantías vendidas")
+                }
                 table={
                   <BareTable
                     cols={["Garantía", "Vend.", "Total", "Com.%", "Comisión"]}
@@ -713,14 +958,98 @@ export default function ReportesPage() {
                 }
               />
             )}
+            {vis.cash_flow && (
+              <ReportSection<"flow">
+                id="cash_flow"
+                title="Flujo de caja"
+                subtitle={
+                  flow
+                    ? `Neto del período ${formatCurrency(
+                        flow.reduce((a, d) => a + d.inflow - d.outflow, 0),
+                      )}`
+                    : "Ingresos y egresos de las cajas por día"
+                }
+                className="lg:col-span-2"
+                onVisible={() => setWantCash(true)}
+                loading={!flow && (cashLoading || !wantCash)}
+                chart={() => ({
+                  option: cashFlowOption({
+                    labels: (flow ?? []).map((d) => d.label),
+                    tooltipLabels: (flow ?? []).map((d) => d.long),
+                    inflow: (flow ?? []).map((d) => d.inflow),
+                    outflow: (flow ?? []).map((d) => d.outflow),
+                  }),
+                  height: 300,
+                  compactHeight: 280,
+                  empty: !flow || !flow.some((d) => d.inflow > 0 || d.outflow > 0),
+                  ariaLabel: "Flujo de caja diario: ingresos, egresos y neto",
+                  summary: {
+                    columns: ["Día", "Ingresos", "Egresos", "Neto"],
+                    rows: (flow ?? []).map((d) => [
+                      d.long,
+                      formatCurrency(d.inflow),
+                      formatCurrency(d.outflow),
+                      formatCurrency(d.inflow - d.outflow),
+                    ]),
+                  },
+                })}
+                table={
+                  <BareTable
+                    cols={["Día", "Ingresos", "Egresos", "Neto"]}
+                    rows={(flow ?? []).map((d) => [
+                      d.long,
+                      formatCurrency(d.inflow),
+                      formatCurrency(d.outflow),
+                      formatCurrency(d.inflow - d.outflow),
+                    ])}
+                  />
+                }
+              />
+            )}
             {vis.staff && (
-              <ReportSection
+              <ReportSection<"stacked" | "ranking">
                 id="staff"
                 title="Productividad del staff"
-                chartData={chart.staff}
-                chartTypes={["bar", "pie"]}
-                valueName="Comisión"
+                subtitle="Comisión y propinas por profesional"
                 className="lg:col-span-2"
+                chartTypes={STAFF_TYPES}
+                chart={(kind) => {
+                  const rows = staff ?? [];
+                  return {
+                    option:
+                      kind === "stacked"
+                        ? stackedBarOption({
+                            categories: rows.map((r) => r.professional),
+                            series: [
+                              { name: "Comisión", values: rows.map((r) => r.commission) },
+                              { name: "Propinas", values: rows.map((r) => r.tips) },
+                            ],
+                            format: "currency",
+                            horizontal: true,
+                          })
+                        : rankingBarOption({
+                            items: rows.map((r) => ({
+                              label: r.professional,
+                              value: r.billed,
+                              note: `${r.sales_count} ventas · ticket ${formatCurrency(r.avg_ticket)}`,
+                            })),
+                            name: "Facturado",
+                            format: "currency",
+                          }),
+                    height: barsHeight(rows.length, kind === "stacked" ? 48 : 0),
+                    empty: rows.length === 0,
+                    ariaLabel: "Comisión y propinas por profesional",
+                    summary: {
+                      columns: ["Profesional", "Facturado", "Comisión", "Propinas"],
+                      rows: rows.map((r) => [
+                        r.professional,
+                        formatCurrency(r.billed),
+                        formatCurrency(r.commission),
+                        formatCurrency(r.tips),
+                      ]),
+                    },
+                  };
+                }}
                 table={
                   <BareTable
                     cols={[
@@ -748,13 +1077,24 @@ export default function ReportesPage() {
               />
             )}
             {vis.low_stock && (
-              <ReportSection
+              <ReportSection<"bullet">
                 id="low_stock"
                 title="Stock bajo"
-                chartData={chart.low_stock}
-                chartTypes={["bar"]}
-                valueFormat="number"
-                valueName="Stock"
+                subtitle={
+                  lowStock.length
+                    ? `${lowStock.length} productos por debajo del mínimo`
+                    : "Todo por encima del mínimo"
+                }
+                chart={() => ({
+                  option: bulletOption({ items: chart.low_stock }),
+                  height: barsHeight(chart.low_stock.length, 40),
+                  empty: chart.low_stock.length === 0,
+                  ariaLabel: "Stock actual contra stock mínimo",
+                  summary: {
+                    columns: ["Producto", "Stock", "Mínimo"],
+                    rows: chart.low_stock.map((p) => [p.label, formatQty(p.value), formatQty(p.target)]),
+                  },
+                })}
                 table={
                   <BareTable
                     cols={["Producto", "Stock", "Mínimo"]}
@@ -776,15 +1116,21 @@ export default function ReportesPage() {
           <div className="mt-12">
             <Eyebrow>Operación gastronómica</Eyebrow>
             <Display className="mt-2 text-2xl md:text-3xl">Gastronomía</Display>
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="mt-6 grid gap-4 lg:grid-flow-dense lg:grid-cols-2">
               {diningEnabled && vis.gastro_tables && (
-                <ReportSection
+                <ReportSection<"ranking" | "doughnut">
                   id="gastro_tables"
                   title="Mesas y salón"
-                  chartData={chart.gastro_area}
-                  chartTypes={["bar", "pie"]}
-                  valueName="Vendido"
+                  subtitle={
+                    gTables && gTables.orders > 0
+                      ? `${gTables.orders} pedidos · ticket prom. ${formatCurrency(gTables.avg_ticket)}`
+                      : undefined
+                  }
                   className="lg:col-span-2"
+                  chartTypes={RANK_MIX_TYPES}
+                  chart={(kind) =>
+                    categoryChart(kind, chart.gastro_area, "Vendido", "currency", "Vendido por salón")
+                  }
                   table={
                     <div className="space-y-6 p-4">
                       <div>
@@ -835,52 +1181,57 @@ export default function ReportesPage() {
                 />
               )}
               {vis.gastro_kitchen && (
-                <ReportSection
+                <ReportSection<"column">
                   id="gastro_kitchen"
                   title="Tiempos de cocina (KDS)"
-                  chartData={chart.gastro_kitchen}
-                  chartTypes={["bar"]}
-                  valueFormat="number"
-                  valueName="Min. promedio"
+                  subtitle={
+                    gKitchen && gKitchen.items > 0
+                      ? `${gKitchen.items} ítems · promedio global ${formatDuration(gKitchen.avg_seconds)}`
+                      : undefined
+                  }
+                  chart={() => ({
+                    option: columnBarOption({
+                      items: chart.gastro_kitchen,
+                      name: "Promedio",
+                      format: "minutes",
+                    }),
+                    height: 260,
+                    empty: chart.gastro_kitchen.length === 0,
+                    ariaLabel: "Minutos promedio de preparación por estación",
+                    summary: {
+                      columns: ["Estación", "Minutos promedio"],
+                      rows: chart.gastro_kitchen.map((d) => [d.label, d.value]),
+                    },
+                  })}
                   table={
-                    <div className="p-4">
-                      <p className="mb-3 text-sm text-muted-foreground">
-                        {gKitchen && gKitchen.items > 0
-                          ? `${gKitchen.items} ítems · promedio global ${formatDuration(
-                              gKitchen.avg_seconds,
-                            )}`
-                          : "Sin datos en el período"}
-                      </p>
-                      <BareTable
-                        cols={["Estación", "Ítems", "Prom.", "Mín.", "Máx."]}
-                        rows={(gKitchen?.by_station ?? []).map((r) => [
-                          r.station,
-                          String(r.items),
-                          formatDuration(r.avg_seconds),
-                          formatDuration(r.min_seconds),
-                          formatDuration(r.max_seconds),
-                        ])}
-                      />
-                    </div>
+                    <BareTable
+                      cols={["Estación", "Ítems", "Prom.", "Mín.", "Máx."]}
+                      rows={(gKitchen?.by_station ?? []).map((r) => [
+                        r.station,
+                        String(r.items),
+                        formatDuration(r.avg_seconds),
+                        formatDuration(r.min_seconds),
+                        formatDuration(r.max_seconds),
+                      ])}
+                    />
                   }
                 />
               )}
               {deliveryEnabled && vis.gastro_delivery && (
-                <ReportSection
+                <ReportSection<"doughnut" | "ranking">
                   id="gastro_delivery"
                   title="Delivery / take away"
-                  chartData={chart.gastro_delivery_channel}
-                  chartTypes={["bar", "pie"]}
-                  valueName="Vendido"
+                  subtitle={
+                    gDelivery && gDelivery.orders > 0
+                      ? `${gDelivery.orders} pedidos · envíos ${formatCurrency(gDelivery.delivery_fees)}`
+                      : undefined
+                  }
+                  chartTypes={MIX_TYPES}
+                  chart={(kind) =>
+                    categoryChart(kind, chart.gastro_delivery_channel, "Vendido", "currency", "Vendido por canal")
+                  }
                   table={
                     <div className="space-y-6 p-4">
-                      <p className="text-sm text-muted-foreground">
-                        {gDelivery && gDelivery.orders > 0
-                          ? `${gDelivery.orders} pedidos · envíos ${formatCurrency(
-                              gDelivery.delivery_fees,
-                            )} · ticket prom. ${formatCurrency(gDelivery.avg_ticket)}`
-                          : "Sin datos en el período"}
-                      </p>
                       <div>
                         <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
                           Por canal
@@ -929,14 +1280,15 @@ export default function ReportesPage() {
                 />
               )}
               {vis.gastro_top_items && (
-                <ReportSection
+                <ReportSection<"ranking" | "treemap">
                   id="gastro_top_items"
                   title="Top ítems (mesa + delivery)"
-                  chartData={chart.gastro_top_items}
-                  chartTypes={["bar", "pie"]}
-                  valueFormat="number"
-                  valueName="Cantidad"
+                  subtitle="Los 10 más pedidos, por cantidad"
                   className="lg:col-span-2"
+                  chartTypes={TOP_TYPES}
+                  chart={(kind) =>
+                    categoryChart(kind, chart.gastro_top_items, "Cantidad", "number", "Top ítems por cantidad")
+                  }
                   table={
                     <div className="space-y-6 p-4">
                       <div>
@@ -951,7 +1303,7 @@ export default function ReportesPage() {
                             formatCurrency(r.total),
                             // Margen sólo significativo si el producto tiene receta
                             // cargada (cost > 0); si no, <NoData /> (H50/H52).
-                            r.cost > 0 ? formatCurrency(r.margin) : <NoData />,
+                            r.cost > 0 ? formatCurrency(r.margin) : <NoData key="nd" />,
                           ])}
                         />
                       </div>
@@ -993,6 +1345,107 @@ export default function ReportesPage() {
       </div>
     </>
   );
+}
+
+// ── Tipos de gráfico por familia de datos ──────────────────────────────────
+type DayMetric = "total" | "count" | "ticket";
+const METRIC_LABELS: Record<DayMetric, string> = {
+  total: "Vendido",
+  count: "Ventas",
+  ticket: "Ticket promedio",
+};
+const METRIC_OPTIONS: SegmentedOption<DayMetric>[] = [
+  { value: "total", label: "Vendido" },
+  { value: "count", label: "Ventas" },
+  { value: "ticket", label: "Ticket" },
+];
+const ICON = { size: 14, strokeWidth: 1.75 } as const;
+const TIME_TYPES: SegmentedOption<SeriesKind>[] = [
+  { value: "area", label: "Área", icon: <ChartArea {...ICON} /> },
+  { value: "line", label: "Línea", icon: <ChartLine {...ICON} /> },
+  { value: "bar", label: "Barras", icon: <ChartColumn {...ICON} /> },
+];
+const HOUR_TYPES: SegmentedOption<"heatmap" | "bar">[] = [
+  { value: "heatmap", label: "Mapa de calor", icon: <Grid3x3 {...ICON} /> },
+  { value: "bar", label: "Por hora", icon: <ChartColumn {...ICON} /> },
+];
+const MIX_TYPES: SegmentedOption<"doughnut" | "ranking">[] = [
+  { value: "doughnut", label: "Dona", icon: <ChartPie {...ICON} /> },
+  { value: "ranking", label: "Barras", icon: <ChartBar {...ICON} /> },
+];
+const RANK_MIX_TYPES: SegmentedOption<"ranking" | "doughnut">[] = [
+  { value: "ranking", label: "Barras", icon: <ChartBar {...ICON} /> },
+  { value: "doughnut", label: "Dona", icon: <ChartPie {...ICON} /> },
+];
+const WEIGHT_TYPES: SegmentedOption<"treemap" | "doughnut" | "ranking">[] = [
+  { value: "treemap", label: "Mosaico", icon: <LayoutGrid {...ICON} /> },
+  { value: "doughnut", label: "Dona", icon: <ChartPie {...ICON} /> },
+  { value: "ranking", label: "Barras", icon: <ChartBar {...ICON} /> },
+];
+const TOP_TYPES: SegmentedOption<"ranking" | "treemap">[] = [
+  { value: "ranking", label: "Ranking", icon: <ChartBar {...ICON} /> },
+  { value: "treemap", label: "Mosaico", icon: <LayoutGrid {...ICON} /> },
+];
+const STAFF_TYPES: SegmentedOption<"stacked" | "ranking">[] = [
+  { value: "stacked", label: "Comisión + propinas", icon: <ChartBarStacked {...ICON} /> },
+  { value: "ranking", label: "Facturado", icon: <ChartBar {...ICON} /> },
+];
+
+/** Alto de un gráfico de barras horizontales según la cantidad de filas. */
+function barsHeight(rows: number, extra = 0) {
+  return Math.max(180, Math.min(rows, 12) * 36 + 24 + extra);
+}
+
+/** Gráfico categórico (ranking / dona / mosaico) con resumen accesible. */
+function categoryChart(
+  kind: "ranking" | "doughnut" | "treemap",
+  items: CategoryDatum[],
+  name: string,
+  format: ValueFormat,
+  ariaLabel: string,
+): ReportChartSpec {
+  const summary = {
+    columns: ["Categoría", name],
+    rows: items.map((d) => [d.label, formatChartValue(d.value, format)]),
+  };
+  const empty = !items.some((d) => d.value > 0);
+  if (kind === "doughnut") {
+    return {
+      option: doughnutOption({ items, name, format }),
+      height: 260,
+      compactHeight: 320,
+      empty,
+      ariaLabel,
+      summary,
+    };
+  }
+  if (kind === "treemap") {
+    return { option: treemapOption({ items, name, format }), height: 280, empty, ariaLabel, summary };
+  }
+  return {
+    option: rankingBarOption({ items, name, format }),
+    height: barsHeight(items.length),
+    empty,
+    ariaLabel,
+    summary,
+  };
+}
+
+/** "Efectivo concentra el 62%" (o undefined sin datos). */
+function topShare(items: CategoryDatum[]): string | undefined {
+  const total = items.reduce((a, d) => a + d.value, 0);
+  const top = [...items].sort((a, b) => b.value - a.value)[0];
+  if (!top || total <= 0) return undefined;
+  return `${top.label} concentra el ${Math.round((top.value / total) * 100)}%`;
+}
+
+function withShare(items: CategoryDatum[]): ReactNode[][] {
+  const total = items.reduce((a, d) => a + d.value, 0);
+  return items.map((d) => [
+    d.label,
+    formatCurrency(d.value),
+    total ? `${(Math.round((d.value / total) * 1000) / 10).toLocaleString("es-AR")}%` : "0%",
+  ]);
 }
 
 // Formatea una duración en segundos como "Xm Ys" (o "Ys" si < 1 min). Para los

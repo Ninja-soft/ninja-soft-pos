@@ -11,6 +11,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Reportes: gráficos con ECharts y sección rediseñada.** Recharts se reemplaza por ECharts (carga diferida, colores de cada tema, accesible con tabla oculta para lectores, exportar cada gráfico a PNG). Nuevo switch Gráfico / Tabla estilo iOS que recuerda la elección por sección. KPIs con variación vs. el período anterior y mini tendencia (total, ventas, ticket promedio, mejor día). Evolución de ventas en área/línea/barras con métrica Vendido/Ventas/Ticket, línea del período anterior, promedio y zoom en rangos largos. Nuevas secciones **Ventas por día y hora** (mapa de calor u horas) y **Flujo de caja** (ingresos, egresos y neto por día), que consultan recién al entrar en pantalla. Medios de pago y categorías en dona/mosaico/barras, top productos y clientes en ranking, staff apilado comisión + propinas, stock bajo como bullet (stock vs. mínimo). ADR-032.
+
+### Changed
+
 - **Emails: rediseño completo con el diseño de Ninja Soft.** Todos los emails del sistema (alta, confirmación, bienvenida, contraseña, prueba, suscripción, cobros, Asistente IA, Tiendita, invitación, suspensión, tarifa) usan el mismo sistema visual que ninja-soft-web: header oscuro con la llama y el logo de NinjaPOS, ícono en círculo, eyebrow, título, datos clave en tarjeta, botón pastilla y footer con logos y dirección. Layout de tablas con estilos inline y logos PNG (Gmail / Outlook). Builder reutilizable en `lib/email/layout.ts`; la migración `20261011160000_emails_diseno_ninja_soft.sql` se genera desde el catálogo (`scripts/gen-email-templates-sql.ts`) y también rediseña `_dunning_email_html`. Los comprobantes por email mantienen la marca del negocio (logo o su inicial, color, 5 diseños) con el mismo pulido. Las vistas previas (/internal/emails y Configuración → Email) ahora renderizan el documento real en un iframe aislado.
 
 ### Fixed

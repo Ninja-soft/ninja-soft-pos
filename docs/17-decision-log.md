@@ -1055,6 +1055,34 @@ Sigue "Próximamente". La integración de terminales de Getnet ("Integrated POS"
 
 ---
 
+## ADR-032 — Gráficos con ECharts (reemplaza Recharts)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** Reportes
+
+### Contexto
+
+El dueño pidió ECharts para los gráficos y marcó como mal diseñado el switch de íconos gráfico/tabla de `ReportSection`. Recharts sólo se usaba en Reportes.
+
+### Decisión
+
+- `echarts@5.5.1` (exacto, igual que ninja-soft-web); `recharts` se quita. Registro mínimo en `components/charts/echarts-core.ts` (bar, line, pie, heatmap, treemap + grid, tooltip, legend, dataZoom, visualMap, markLine, title, canvas) importado **siempre de forma dinámica** por `components/charts/EChart.tsx`, que además lo carga recién cuando el gráfico entra al viewport.
+- Colores leídos de las CSS vars del tema en el contenedor (los 4 temas) y re-dibujo al cambiar `data-theme`. Paleta categórica fija de 6 tonos (dark y light), validada con el validador de dataviz (banda OKLCH, croma, CVD adyacente, contraste 3:1); lo que excede 6 se pliega en "Otros".
+- Builders puros en `components/charts/builders.ts` (serie temporal con comparación, ranking, dona, mosaico, heatmap día × hora, apiladas, flujo de caja, bullet), testeados.
+- Switch Gráfico/Tabla: `components/ui/SegmentedControl.tsx` (radiogroup, flechas/Inicio/Fin, pulgar relleno deslizante, sin bordes de color), preferencia por sección en localStorage con try/catch.
+- Datos nuevos sin backend nuevo: comparación vs. período anterior = la misma RPC `sales_report` con el rango previo (se pide después del reporte principal); heatmap día × hora y flujo de caja = lecturas bajo RLS de `sales` y `cash_movements`, paginadas de a 1000 y diferidas hasta que la sección entra en pantalla.
+
+### Consecuencias
+
+- El chunk de ECharts (~228 kB gzip) no entra en el First Load de Reportes: se baja sólo con el primer gráfico visible. La ruta pasa de ~14 kB a ~28 kB por el código de las secciones nuevas.
+- El heatmap y el flujo de caja no tienen key de plan propia: son parte del módulo Reportes existente. Si comercialmente se quieren como "métricas avanzadas", hay que moverlos a RPCs con `tenant_has_feature_for` (la lectura directa bajo RLS no se puede gatear por plan).
+- La hora del heatmap es la local del navegador (Argentina en la práctica).
+
+### Referencias
+
+- `components/charts/*`, `components/reports/ReportSection.tsx`, `components/reports/KpiCard.tsx`, `components/ui/SegmentedControl.tsx`, `modules/reports/derive.ts`, `app/(app)/reportes/page.tsx`, `tests/unit/reportCharts.test.ts`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

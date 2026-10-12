@@ -105,6 +105,9 @@ export interface StaffProductivityRow {
   avg_ticket: number; // billed / sales_count
 }
 
+// Tope de páginas (x1000 filas) para las consultas diferidas de gráficos.
+const MAX_PAGES = 30;
+
 export const reportsApi = {
   sales: async (fromISO: string, toISO: string): Promise<SalesReport> => {
     const supabase = createClient();
@@ -239,5 +242,55 @@ export const reportsApi = {
     } as never);
     if (error) throw error;
     return data as unknown as GastroTopItemsReport;
+  },
+  // ── Consultas diferidas de gráficos (sólo cuando la sección entra en
+  // pantalla). Lecturas directas bajo RLS de tablas existentes, paginadas de a
+  // 1000 (tope de PostgREST) con un máximo para no explotar en rangos enormes.
+
+  /** created_at + total de ventas completadas (heatmap día × hora). */
+  saleTimes: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<{ created_at: string; total: number }[]> => {
+    const supabase = createClient();
+    const out: { created_at: string; total: number }[] = [];
+    const PAGE = 1000;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { data, error } = await supabase
+        .from("sales")
+        .select("created_at, total")
+        .eq("status", "completed")
+        .gte("created_at", fromISO)
+        .lt("created_at", toISO)
+        .order("created_at", { ascending: true })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) throw error;
+      out.push(...((data ?? []) as { created_at: string; total: number }[]));
+      if (!data || data.length < PAGE) break;
+    }
+    return out;
+  },
+
+  /** Movimientos de caja del período (flujo de caja diario). */
+  cashMovements: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<{ type: string; amount: number; created_at: string }[]> => {
+    const supabase = createClient();
+    const out: { type: string; amount: number; created_at: string }[] = [];
+    const PAGE = 1000;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const { data, error } = await supabase
+        .from("cash_movements")
+        .select("type, amount, created_at")
+        .gte("created_at", fromISO)
+        .lt("created_at", toISO)
+        .order("created_at", { ascending: true })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) throw error;
+      out.push(...((data ?? []) as { type: string; amount: number; created_at: string }[]));
+      if (!data || data.length < PAGE) break;
+    }
+    return out;
   },
 };

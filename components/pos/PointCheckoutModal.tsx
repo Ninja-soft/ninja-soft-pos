@@ -20,8 +20,53 @@ import { posApi } from "@/modules/pos/api";
 //
 // El último lector usado se recuerda por caja (localStorage) para que el cobro
 // habitual sea de un toque.
+//
+// H21c: el mismo modal cobra con Nave Point (provider "nave_point", Edge
+// nave_point): las terminales son los ids de punto de venta cargados en la
+// conexión de Nave (no hay modo PDV) y Nave empuja el cobro a esa terminal.
 
 const DEVICE_LS_KEY = "ninja-point-device";
+
+type PointProvider = "mercadopago_point" | "nave_point";
+type PointDevice = { id: string; operating_mode: string; label?: string };
+type PointStatus = {
+  status: string;
+  card_type: "debit" | "credit" | null;
+  reason?: string | null;
+};
+
+// Motivos de baja que informa Nave para una intención en la terminal.
+const NAVE_REASON_COPY: Record<string, string> = {
+  low_battery: "La terminal tiene poca batería (menos de 5%). Cargala y reintentá.",
+  "low battery": "La terminal tiene poca batería (menos de 5%). Cargala y reintentá.",
+  manual_disabled_by_user: "El cobro se canceló desde la terminal.",
+  device_already_on_payment_flow: "La terminal está ocupada con otro cobro.",
+  disabled_by_user_timeout: "La terminal no respondió a tiempo y el cobro se dio de baja.",
+};
+
+const API: Record<
+  PointProvider,
+  {
+    devices: () => Promise<PointDevice[]>;
+    create: (deviceId: string, amount: number) => Promise<{ intent_id: string }>;
+    status: (intentId: string) => Promise<PointStatus>;
+    cancel: (intentId: string) => Promise<void>;
+  }
+> = {
+  mercadopago_point: {
+    devices: () => posApi.pointDevices(),
+    create: (d, a) => posApi.createPointIntent(d, a),
+    status: (id) => posApi.pointIntentStatus(id),
+    cancel: (id) => posApi.cancelPointIntent(id),
+  },
+  nave_point: {
+    devices: async () =>
+      (await posApi.navePointDevices()).map((d) => ({ ...d, operating_mode: "PDV" })),
+    create: (d, a) => posApi.createNavePointIntent(d, a),
+    status: (id) => posApi.navePointIntentStatus(id),
+    cancel: (id) => posApi.cancelNavePointIntent(id),
+  },
+};
 
 type Phase = "device" | "creating" | "on_terminal" | "error";
 
@@ -30,7 +75,9 @@ export function PointCheckoutModal({
   onOpenChange,
   base,
   onApproved,
+  provider = "mercadopago_point",
 }: {
+  provider?: PointProvider;
   open: boolean;
   onOpenChange: (o: boolean) => void;
   base: number;
@@ -46,6 +93,10 @@ export function PointCheckoutModal({
   const [intentId, setIntentId] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string>("");
   const firedRef = useRef(false);
+  const isNave = provider === "nave_point";
+  const brand = isNave ? "Nave Point" : "Mercado Point";
+  const lsKey = isNave ? `${DEVICE_LS_KEY}-nave` : DEVICE_LS_KEY;
+  const api = API[provider];
 
   // Lectores Point de la cuenta MP conectada (solo con el modal abierto).
   const {
@@ -54,11 +105,11 @@ export function PointCheckoutModal({
     isError: devicesError,
     refetch: refetchDevices,
   } = useQuery({
-    queryKey: ["point-devices"],
+    queryKey: ["point-devices", provider],
     enabled: open,
     staleTime: 60_000,
     retry: 1,
-    queryFn: () => posApi.pointDevices(),
+    queryFn: () => api.devices(),
   });
 
   // Al abrir: reset + preseleccionar el último lector usado.
@@ -69,11 +120,11 @@ export function PointCheckoutModal({
     setErrorDetail("");
     firedRef.current = false;
     try {
-      setDevice(window.localStorage.getItem(DEVICE_LS_KEY));
+      setDevice(window.localStorage.getItem(lsKey));
     } catch {
       setDevice(null);
     }
-  }, [open]);
+  }, [open, lsKey]);
 
   // Un solo lector → seleccionarlo directo.
   useEffect(() => {
@@ -92,7 +143,7 @@ export function PointCheckoutModal({
     let alive = true;
     const tick = async () => {
       try {
-        const r = await posApi.pointIntentStatus(intentId);
+        const r = await api.status(intentId);
         if (!alive) return;
         if (r.status === "approved" && !firedRef.current) {
           firedRef.current = true;
@@ -105,7 +156,9 @@ export function PointCheckoutModal({
           return;
         }
         if (r.status === "cancelled") {
-          setErrorDetail("El cobro se canceló.");
+          setErrorDetail(
+            (r.reason && NAVE_REASON_COPY[r.reason]) || "El cobro se canceló.",
+          );
           setPhase("error");
           return;
         }
@@ -126,12 +179,12 @@ export function PointCheckoutModal({
     if (!device) return;
     setPhase("creating");
     try {
-      window.localStorage.setItem(DEVICE_LS_KEY, device);
+      window.localStorage.setItem(lsKey, device);
     } catch {
       /* sin persistencia, no bloquea */
     }
-    posApi
-      .createPointIntent(device, base)
+    api
+      .create(device, base)
       .then((r) => {
         setIntentId(r.intent_id);
         setPhase("on_terminal");
@@ -140,17 +193,21 @@ export function PointCheckoutModal({
         const msg = e instanceof Error ? e.message : "";
         setErrorDetail(
           msg === "payment_method_not_allowed"
-            ? "Tu plan no incluye Mercado Point."
+            ? `Tu plan no incluye ${brand}.`
             : msg === "not_connected"
-              ? "Conectá tu cuenta de Mercado Pago en Medios de pago."
-              : "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
+              ? isNave
+                ? "Conectá tu cuenta de Nave en Medios de pago."
+                : "Conectá tu cuenta de Mercado Pago en Medios de pago."
+              : isNave
+                ? "No se pudo enviar el cobro a la terminal Nave. ¿Está encendida y con el punto de venta correcto?"
+                : "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
         );
         setPhase("error");
       });
   }
 
   function cancel() {
-    if (intentId) posApi.cancelPointIntent(intentId).catch(() => null);
+    if (intentId) api.cancel(intentId).catch(() => null);
     onOpenChange(false);
   }
 
@@ -167,7 +224,7 @@ export function PointCheckoutModal({
         }
         onOpenChange(o);
       }}
-      title="Cobrar con Mercado Point"
+      title={`Cobrar con ${brand}`}
       description={`Total a cobrar: ${formatCurrency(base)} · el cliente paga con tarjeta en el lector.`}
       className="max-w-md"
     >
@@ -175,17 +232,19 @@ export function PointCheckoutModal({
         <div className="space-y-4">
           {devicesLoading ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Spinner size={18} /> Buscando lectores Point de tu cuenta…
+              <Spinner size={18} />{" "}
+              {isNave ? "Buscando tus terminales Nave…" : "Buscando lectores Point de tu cuenta…"}
             </div>
           ) : devicesError ? (
             <div className="rounded-lg border border-danger/40 bg-destructive/10 p-3 text-sm">
-              No pudimos listar tus lectores. Revisá la conexión con Mercado
-              Pago en Medios de pago.
+              No pudimos listar tus lectores. Revisá la conexión con{" "}
+              {isNave ? "Nave" : "Mercado Pago"} en Medios de pago.
             </div>
           ) : (devices?.length ?? 0) === 0 ? (
             <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-              Tu cuenta de Mercado Pago no tiene lectores Point asociados.
-              Vinculá el lector desde la app de Mercado Pago y volvé a intentar.
+              {isNave
+                ? "No hay terminales Nave Point cargadas. Agregá el ID de punto de venta de cada terminal al conectar Nave en Medios de pago."
+                : "Tu cuenta de Mercado Pago no tiene lectores Point asociados. Vinculá el lector desde la app de Mercado Pago y volvé a intentar."}
             </div>
           ) : (
             <div className="space-y-2">
@@ -205,7 +264,7 @@ export function PointCheckoutModal({
                   >
                     <span className="flex items-center gap-2 font-medium">
                       <CreditCard size={15} className="text-ninja-flameSoft" />
-                      {d.id}
+                      {d.label ?? d.id}
                     </span>
                     <span
                       className={cn(
@@ -215,7 +274,11 @@ export function PointCheckoutModal({
                           : "text-warning",
                       )}
                     >
-                      {d.operating_mode === "PDV" ? "Listo (PDV)" : d.operating_mode}
+                      {isNave
+                        ? "Listo"
+                        : d.operating_mode === "PDV"
+                          ? "Listo (PDV)"
+                          : d.operating_mode}
                     </span>
                   </button>
                 ))}
@@ -279,8 +342,10 @@ export function PointCheckoutModal({
               Cobro de {formatCurrency(base)} en el lector
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pedile al cliente que pase o apoye la tarjeta en el Point. La
-              venta se registra sola cuando el pago se apruebe.
+              {isNave
+                ? "Pedile al cliente que pague en la terminal Nave (tarjeta, contactless o QR)."
+                : "Pedile al cliente que pase o apoye la tarjeta en el Point."}{" "}
+              La venta se registra sola cuando el pago se apruebe.
             </p>
           </div>
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

@@ -59,7 +59,12 @@ function qrErrorCopy(code: string, providerName: string): string {
     case "modo_error":
     case "pagos360_error":
     case "payway_error":
+    case "nave_error":
       return `${providerName} devolvió un error al crear el cobro. Probá de nuevo en unos segundos.`;
+    case "nave_auth_failed":
+      return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
+    case "nave_unreachable":
+      return "No pudimos comunicarnos con Nave. Revisá tu conexión y probá de nuevo.";
     case "modo_unreachable":
       return "No pudimos comunicarnos con MODO. Revisá tu conexión y probá de nuevo.";
     default:
@@ -84,7 +89,7 @@ export function QrCheckoutModal({
     amount: number,
     extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
-  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway";
+  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway" | "nave";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -99,14 +104,21 @@ export function QrCheckoutModal({
   // Payway abre el checkout PROPIO de la tienda (/pagar/{intent}): el CLIENTE
   // elige tarjeta y cuotas ahí (Planes del negocio, recargo en vivo) → acá se
   // auto-arranca con el monto base y el total final viene en el poll.
+  // Nave: QR interoperable (cualquier billetera/banco) + checkout hosted de
+  // Nave; medio y cuotas se resuelven del lado de Nave.
   const selfManaged =
-    provider === "modo" || provider === "pagos360" || provider === "payway";
+    provider === "modo" ||
+    provider === "pagos360" ||
+    provider === "payway" ||
+    provider === "nave";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
   const [amount, setAmount] = useState(base);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [initPoint, setInitPoint] = useState("");
+  // Nave devuelve el QR EMV (qr_data) aparte del link: se codifica TAL CUAL.
+  const [qrData, setQrData] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const firedRef = useRef(false);
   const startedRef = useRef(false);
@@ -160,11 +172,14 @@ export function QrCheckoutModal({
             ? posApi.createPagos360Link
             : provider === "payway"
               ? posApi.createPaywayLink
-              : posApi.createMpQr;
+              : provider === "nave"
+                ? posApi.createNaveQr
+                : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
         setInitPoint(r.init_point);
+        setQrData((r as { qr_data?: string }).qr_data ?? "");
         setPhase("waiting");
       })
       .catch(async (e) => {
@@ -196,6 +211,7 @@ export function QrCheckoutModal({
     setAmount(base);
     setIntentId(null);
     setInitPoint("");
+    setQrData("");
     setErrorMsg("");
     firedRef.current = false;
     instRef.current = 1;
@@ -240,7 +256,9 @@ export function QrCheckoutModal({
           ? posApi.modoIntentStatus(intentId!)
           : provider === "payway"
             ? posApi.paywayIntentStatus(intentId!)
-            : posApi.mpIntentStatus(intentId!),
+            : provider === "nave"
+              ? posApi.naveIntentStatus(intentId!)
+              : posApi.mpIntentStatus(intentId!),
     enabled: open && phase === "waiting" && Boolean(intentId),
     refetchInterval: 3000,
   });
@@ -286,21 +304,33 @@ export function QrCheckoutModal({
   useEffect(() => {
     if (!onQrState) return;
     if (open && phase === "waiting" && initPoint) {
-      onQrState({ initPoint, amount, providerName });
+      // Nave: la pantalla del cliente muestra el QR interoperable (qr_data).
+      onQrState({ initPoint: qrData || initPoint, amount, providerName });
     } else {
       onQrState(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, phase, initPoint, amount, providerName]);
+  }, [open, phase, initPoint, qrData, amount, providerName]);
 
-  const qrSrc = initPoint
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(initPoint)}`
+  // Nave: QR denso (EMV) → al menos 208 px y con margen (quiet zone).
+  const qrValue = qrData || initPoint;
+  const qrSrc = qrValue
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260${qrData ? "&margin=8" : ""}&data=${encodeURIComponent(qrValue)}`
     : "";
 
   // Pantalla de selección: MP / Mobbex con planes y sin modo recargo único.
   // MODO no la usa (sus cuotas se eligen en la app del cliente).
   const selecting =
     phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
+
+  // Cerrar con un cobro Nave abierto da de baja la intención (best-effort): si
+  // el cliente ya pagó, el pago gana y queda para conciliar en Cobros QR.
+  function handleOpenChange(o: boolean) {
+    if (!o && provider === "nave" && intentId && phase === "waiting") {
+      posApi.cancelNaveIntent(intentId).catch(() => null);
+    }
+    onOpenChange(o);
+  }
 
   // Logo del proveedor REAL del cobro (antes todo lo no mapeado caía al logo
   // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
@@ -310,12 +340,13 @@ export function QrCheckoutModal({
     modo: "/img/medios_de_pago/Modo_cube.webp",
     pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
     payway: "/img/medios_de_pago/payway_cube.webp",
+    nave: "/img/medios_de_pago/nave_cube.webp",
   };
   const providerLogo =
     PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={`Cobrar con QR · ${providerName}`}>
+    <Modal open={open} onOpenChange={handleOpenChange} title={`Cobrar con QR · ${providerName}`}>
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -471,7 +502,7 @@ export function QrCheckoutModal({
         )}
 
         {(phase === "creating" || phase === "waiting" || selecting) && (
-          <Button variant="ghost" className="w-full" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" className="w-full" onClick={() => handleOpenChange(false)}>
             Cancelar
           </Button>
         )}

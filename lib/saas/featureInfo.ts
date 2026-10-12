@@ -119,6 +119,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",
     impact: "Sin esto Nave no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
+    needs: "Conectar la cuenta de Nave (Client ID, Client Secret y punto de venta) y pasarle a Nave la URL de notificaciones.",
   },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
@@ -136,7 +137,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con el Point de Nave: el POS manda el monto a la terminal Nave y el cliente paga con tarjeta, contactless o QR.",
     impact: "Desactivado, la terminal de Nave no queda integrada al cobro del POS.",
     minPlan: "Pro",
-    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point).",
+    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point) y cargar el ID de punto de venta de cada terminal.",
   },
   fiserv: {
     desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",

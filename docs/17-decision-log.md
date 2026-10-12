@@ -1016,6 +1016,41 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 ---
 
+## ADR-030 — Nave (QR/link + Point) vía Payment Requests de Ranty
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de validar con credenciales sandbox del comercio) · **Hito:** F8 · H21c
+
+### Contexto
+
+Nave (Banco Galicia / Naranja X, plataforma Ranty) expone APIs públicas cloud para cobrar por **QR interoperable + checkout hosted** (`payment_requests/ecommerce` → `qr_data` + `checkout_url`) y por **terminal Nave Point** (`payment_requests/smart_pos` al terminal del `seller.pos_id`). Auth `client_credentials` contra apinaranja (`homoservices` sandbox / `services` prod, audience `https://naranja.com/ranty/merchants/api`, token 86400 s). La URL de notificaciones **se registra en el onboarding** (no viaja por request) y la notificación trae `{payment_id, payment_check_url, external_payment_id}`. Desde ADR-027 Nave estaba en el catálogo con credenciales aceptadas pero sin cobro; desde `20261011150000_payment_channels` existen las features `nave` (QR + link) y `nave_point` (Point, desde Pro), ya mapeadas en `payment_method_plan_key`.
+
+### Decisión
+
+- **Una conexión por marca:** `payment_secrets` provider `nave` guarda `client_id`, `client_secret`, `pos_id` (QR + link), `point_pos_ids` (terminales, "Nombre: id" separados por coma) y `audience` opcional; ambiente por `tenant_payment_methods.sandbox` de la fila `nave`. Nave Point **reutiliza** esa conexión (no hay secretos `nave_point`). Sin migraciones.
+- **Edge `nave`** (create/status/cancel) y **Edge `nave_point`** (devices/create/status/cancel) sobre la tabla compartida `mp_payment_intents` (`provider_key` `nave` | `nave_point`): `external_payment_id` = id del intent (36 chars), `preference_id` = `payment_request_id`, `init_point` = `checkout_url`; el `qr_data` se devuelve al POS y se codifica **tal cual**. El intent se persiste antes de entregar el QR/link. Sin reintento automático del POST (Nave no documenta idempotencia).
+- **Edge `nave_webhook`** (verify_jwt=false): nunca confía en el cuerpo. Correlación por `external_payment_id`; la URL a consultar se valida (https, host Nave **exacto del ambiente**: `api.ranty.io` en prod, `api-sandbox.ranty.io`/`e3-api.ranty.io` en sandbox, sin userinfo/puerto/query, path `/integrations/payments/{payment_id}` con el mismo id) o se construye desde la base confiable (anti-SSRF). Sólo `status.name=APPROVED` + correlación + **monto exacto** (transacción PURCHASE, sin propina) acredita. Transiciones condicionales (idempotente ante los 5 reintentos de Nave); 5xx ante fallas transitorias para que Nave reintente. También procesa la baja de intenciones Point (`DISABLED` por batería, cancelación en terminal, timeout).
+- **Fallback del poll** (`status`): `GET payment_requests/{id}` → pago aprobado en `payment_attempts` → verificación contra `GET payments/{id}` con la MISMA lógica del webhook. `EXPIRED/DISABLED/BLOCKED` → cancelled; `FAILURE_PROCESSED` → rejected en Point, pendiente en QR (el cliente puede reintentar).
+- **Cancelar** = `DELETE payment_requests/{id}` best-effort; si el pago ya estaba aprobado, gana el pago (queda approved para la conciliación "Cobros QR", nunca se pierde plata cobrada). Un pago verificado que llega tarde sobre un intent cancelado/rechazado también queda approved + auditoría `approved_after_*`.
+- **Token:** cache en memoria por isolate (nunca en DB), renovado 60 s antes del vencimiento; 401 en cualquier llamada → descarta, re-autentica y reintenta UNA vez.
+- **Gating server-side** en create: `tenant_has_feature_for(tenant,'nave' | 'nave_point')`; además el trigger de `payments` resuelve el provider del intent QR (`nave` → feature `nave`). El `pos_id` de Point debe ser una terminal configurada del tenant.
+- **Auditoría** (`audit_logs`, entity `mp_payment_intents`): creación de la intención, aprobación, rechazo, mismatch de monto/correlación, cancelación, baja y estados post-pago (CANCELLED/REFUNDED/…, que se preservan sin remapear).
+- Lógica pura (ambientes, payload, mapeo de estados, validación de host, verificación de monto, cliente con 401) en `supabase/functions/_shared/nave.ts`, testeada con Vitest (`tests/unit/nave.test.ts`).
+
+### Consecuencias
+
+- El dueño conecta Nave con Client ID + Client Secret + punto de venta (+ terminales Point) y elige Producción/Prueba al conectar; el form muestra la URL de notificaciones que tiene que pasarle a Nave (una por ambiente).
+- `QrCheckoutModal` gana el provider `nave` (self-managed, QR = `qr_data`, link = `checkout_url`, cancelar da de baja la intención) y `PointCheckoutModal` el provider `nave_point` (terminales configuradas, sin modo PDV, débito/crédito según `payment_method.card_type`; QR pagado en la terminal cuenta como débito). Los botones de cobro del POS quedan para el rediseño del POS (tenders).
+- `payment_link` no se usa: `checkout_url` del tipo ecommerce ya cubre "mandar link" y la guía oficial lo deja fuera de alcance. Devoluciones/anulaciones quedan fuera (sin flujo de negocio definido).
+- **Pendiente:** validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave, `integraciones@navenegocios.com`) y luego producción. Sandbox de Point documentado en `e3-api.ranty.io`, el de QR en `api-sandbox.ranty.io`: confirmar en el primer cobro de prueba.
+
+### Referencias
+
+- `supabase/functions/nave/index.ts`, `supabase/functions/nave_point/index.ts`, `supabase/functions/nave_webhook/index.ts`, `supabase/functions/_shared/nave.ts`, `supabase/functions/_shared/nave_server.ts`.
+- `components/pos/QrCheckoutModal.tsx`, `components/pos/PointCheckoutModal.tsx`, `modules/pos/api.ts`, `components/dashboard-team/PaymentMethodsCard.tsx`, `components/sales/QrIntentsModal.tsx`.
+- Docs oficiales: developer-portal-doc-mfe-website-mfe.ranty.io (guía "Nave Dynamic QR Integration" V1.1 y sección Nave Point).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **F8 · H21c — Nave (Banco Galicia): QR interoperable + link y Nave Point.** Integración en código con las Payment Requests de Ranty: **QR + link** (Edge `nave`: QR EMV que paga cualquier billetera o app bancaria + checkout hosted de Nave como link) y **Nave Point** (Edge `nave_point`: el POS manda el monto a la terminal del punto de venta elegido; venta como débito o crédito según la tarjeta). Confirmación por **`nave_webhook`**, que nunca confía en el cuerpo: valida que la URL sea de un host Nave del ambiente (anti-SSRF), re-consulta el pago con el token del comercio y acredita sólo `APPROVED` con **monto exacto**; idempotente ante los reintentos de Nave; el poll del POS es el respaldo. Una sola conexión en Medios de pago (Client ID/Secret, punto de venta, terminales Point, Producción/Prueba y la URL de notificaciones para pasarle a Nave); Nave Point la reutiliza. Gating de plan server-side (`nave`/`nave_point`) + auditoría de cada paso crítico. Lógica pura testeada (`tests/unit/nave.test.ts`). ADR-030. *Pendiente: deploy de las Edge y validar con credenciales sandbox de Nave.*
+
 ### Fixed
 
 - **CI — el job `rls` volvió a verde después de un mes rojo.** Fallaba en todos los merges desde el 2026-06-13. Dos causas apiladas: (1) **breaking change del Supabase CLI v2.106.0** (el workflow usa `setup-cli latest`): el start local ahora revoca los privilegios Data API por defecto → `permission denied for table tenants` en el setup de la suite — fix con `auto_expose_new_tables = true` en `supabase/config.toml` (solo local/CI; follow-up durable: migración de GRANTs explícitos preservando el hardening); (2) los **triggers de gating de escritura** de f13 (9-jun) rompían 4 tests — el setup ahora habilita todas las features gateadas vía addon (patrón `listas_precios`). Bisect por historial de runs + changelog oficial del CLI.

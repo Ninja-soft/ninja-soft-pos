@@ -24,6 +24,10 @@ describe("dependencias de features", () => {
     }
   });
 
+  it("Nave QR + link aclara que hay que conectar la cuenta", () => {
+    expect(FEATURE_INFO.nave?.needs).toMatch(/Conectar la cuenta de Nave/);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

@@ -22,6 +22,8 @@ const PROVIDER_LABELS: Record<string, string> = {
   pagos360: "Pagos360",
   payway: "Payway",
   mercadopago_point: "Mercado Point",
+  nave: "Nave",
+  nave_point: "Nave Point",
 };
 const PROVIDER_LOGOS: Record<string, string> = {
   mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
@@ -30,6 +32,8 @@ const PROVIDER_LOGOS: Record<string, string> = {
   pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
   payway: "/img/medios_de_pago/payway_cube.webp",
   mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
+  nave: "/img/medios_de_pago/nave_cube.webp",
+  nave_point: "/img/medios_de_pago/nave_cube.webp",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",

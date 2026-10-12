@@ -688,6 +688,109 @@ export const posApi = {
     return data as { status: string; mp_payment_id: string | null };
   },
 
+  // ── Nave (H21c): QR interoperable + link (Edge nave) ───────────────────────
+  // create devuelve qr_data (QR EMV: se renderiza TAL CUAL) y el checkout_url
+  // como init_point ("Abrir link de pago"). La confirmación principal llega por
+  // el webhook (nave_webhook); status es el respaldo que re-verifica contra
+  // la API de Nave.
+  createNaveQr: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string; qr_data: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("nave", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string; qr_data: string };
+  },
+
+  naveIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("nave", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // Baja best-effort de la intención (si el pago ya entró, gana el pago).
+  cancelNaveIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("nave", {
+      body: { action: "cancel", intent_id: id },
+    });
+  },
+
+  // ── Nave Point (H21c): terminal smart_pos (Edge nave_point) ────────────────
+  // Usa la MISMA conexión de Nave; las terminales son los ids de punto de
+  // venta que el dueño cargó al conectar Nave.
+  navePointDevices: async (): Promise<{ id: string; label: string }[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("nave_point", {
+      body: { action: "devices" },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return (data as { devices: { id: string; label: string }[] }).devices;
+  },
+
+  createNavePointIntent: async (
+    deviceId: string,
+    amount: number,
+  ): Promise<{ intent_id: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("nave_point", {
+      body: { action: "create", device_id: deviceId, amount },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string };
+  },
+
+  navePointIntentStatus: async (
+    intentId: string,
+  ): Promise<{
+    status: string;
+    mp_payment_id: string | null;
+    card_type: "debit" | "credit" | null;
+    reason?: string | null;
+  }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("nave_point", {
+      body: { action: "status", intent_id: intentId },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as {
+      status: string;
+      mp_payment_id: string | null;
+      card_type: "debit" | "credit" | null;
+      reason?: string | null;
+    };
+  },
+
+  cancelNavePointIntent: async (intentId: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("nave_point", {
+      body: { action: "cancel", intent_id: intentId },
+    });
+  },
+
   // Estado del intent MODO sincronizado server-side (Edge modo_create_qr,
   // action status): MODO no tiene webhook por intención, así que el poll del
   // POS consulta la API real en cada tick (patrón pagos360).

@@ -41,6 +41,9 @@ import {
   FileText,
   PackageCheck,
   Truck,
+  Undo2,
+  Boxes,
+  Landmark,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -232,8 +235,12 @@ const NAV: { top: Item[]; groups: Group[] } = {
       items: [
         { href: "/compras/ordenes", label: "Órdenes de compra", icon: ClipboardList, feature: "compras" },
         { href: "/compras/recepciones", label: "Recepciones", icon: PackageCheck, feature: "compras" },
+        { href: "/compras/devoluciones", label: "Devoluciones a proveedor", icon: Undo2, feature: "compras" },
         { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
+        { href: "/compras/lotes", label: "Lotes y despachos", icon: Boxes, feature: "compras" },
         { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
+        // Tesorería (F18 · H111, ADR-059): cuentas, cheques y flujo de fondos.
+        { href: "/tesoreria", label: "Tesorería", icon: Landmark, feature: "tesoreria", managersOnly: true },
       ],
     },
     {

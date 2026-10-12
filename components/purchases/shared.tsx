@@ -72,7 +72,9 @@ export const textareaCls =
 const TABS: Array<{ href: string; label: string }> = [
   { href: "/compras/ordenes", label: "Órdenes" },
   { href: "/compras/recepciones", label: "Recepciones" },
+  { href: "/compras/devoluciones", label: "Devoluciones" },
   { href: "/compras/facturas", label: "Facturas y pagos" },
+  { href: "/compras/lotes", label: "Lotes" },
   { href: "/compras/proveedores", label: "Proveedores" },
 ];
 
@@ -170,6 +172,10 @@ export const PURCHASE_EVENT_LABEL: Record<string, string> = {
   cancelled: "Cancelada",
   costing_applied: "Costeo de importación aplicado",
   voided: "Anulado",
+  returned: "Devolución al proveedor",
+  receipt_voided: "Recepción anulada",
+  credit_linked: "Nota de crédito vinculada",
+  credit_unlinked: "Nota de crédito desvinculada",
 };
 
 export function Timeline({ events }: { events: PurchaseEvent[] }) {
@@ -205,6 +211,46 @@ export function Info({ label, value, wide }: { label: string; value: React.React
     <div className={cn(wide && "col-span-2 sm:col-span-4")}>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="font-medium">{value}</dd>
+    </div>
+  );
+}
+
+/** Campo con etiqueta (formularios de compras y tesorería). */
+export function FormField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={cn("block", className)}>
+      <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** Lista de errores de validación (bloquean el guardado). */
+export function ErrorList({ errors }: { errors: string[] }) {
+  if (errors.length === 0) return null;
+  return (
+    <ul className="list-disc pl-4 text-xs text-danger">
+      {errors.map((x) => (
+        <li key={x}>{x}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** Encabezado de sección dentro de un formulario. */
+export function SectionTitle({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</h4>
+      {action}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Ban, Banknote, Download, FileText, Plus, Receipt } from "lucide-react";
+import { Ban, Banknote, Download, FileText, HandCoins, Plus, Receipt } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -16,14 +16,15 @@ import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import {
   INVOICE_KIND_LABEL,
-  PAYMENT_METHOD_LABEL,
   formatInvoiceNumber,
+  paymentMethodLabel,
 } from "@/lib/purchases/invoices";
 import { formatPaymentNumber, purchaseErrorMessage } from "@/lib/purchases/orders";
 import { AGING_BUCKETS, AGING_LABEL, agingBySupplier, type AgingBucket } from "@/lib/purchases/aging";
 import { formatCuit } from "@/lib/purchases/suppliers";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import {
+  usePaymentAllocations,
   usePurchaseMutations,
   usePurchasesAccess,
   useSupplierBalances,
@@ -45,6 +46,8 @@ import {
 } from "@/components/purchases/shared";
 import { InvoiceFormModal } from "@/components/purchases/InvoiceFormModal";
 import { PaymentFormModal } from "@/components/purchases/PaymentFormModal";
+import { PaymentOrderModal } from "@/components/purchases/PaymentOrderModal";
+import { PaymentOrderDetailModal } from "@/components/purchases/PaymentOrderDetailModal";
 
 type Tab = "invoices" | "payments" | "balances";
 
@@ -67,6 +70,8 @@ export default function FacturasPage() {
     invoice: null,
   });
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [paymentDetail, setPaymentDetail] = useState<string | null>(null);
   const [voiding, setVoiding] = useState<{ type: "invoice" | "payment"; id: string } | null>(null);
 
   const filters = {
@@ -80,20 +85,21 @@ export default function FacturasPage() {
   const paymentsQ = useSupplierPayments(filters, access.enabled && tab === "payments");
   const { data: balances = [] } = useSupplierBalances(access.enabled && tab === "balances");
   const entriesQ = useSupplierEntries(null, access.enabled && tab === "balances");
+  const { data: allocations = [] } = usePaymentAllocations(access.enabled && tab === "balances");
 
   const invoices = invoicesQ.data ?? [];
   const payments = paymentsQ.data ?? [];
   const now = today();
 
   const agingRows = useMemo(() => {
-    const by = agingBySupplier(entriesQ.data ?? [], now);
+    const by = agingBySupplier(entriesQ.data ?? [], now, allocations);
     return balances
       .filter((b) => Math.abs(b.balance_ars) > 0.004 || by.has(b.supplier_id))
       .filter((b) => !supplierId || b.supplier_id === supplierId)
       .map((b) => ({ b, aging: by.get(b.supplier_id) }))
       .filter((r) => Math.abs(r.b.balance_ars) > 0.004)
       .sort((a, c) => c.b.balance_ars - a.b.balance_ars);
-  }, [balances, entriesQ.data, now, supplierId]);
+  }, [balances, entriesQ.data, allocations, now, supplierId]);
 
   const agingTotals = useMemo(() => {
     const t: Record<AgingBucket | "balance", number> = {
@@ -194,7 +200,7 @@ export default function FacturasPage() {
             fecha: fmtDate(p.paid_date),
             proveedor: supplierName(suppliers, p.supplier_id),
             cuit: cuitOf(p.supplier_id),
-            medio: PAYMENT_METHOD_LABEL[p.method],
+            medio: paymentMethodLabel(p.method),
             ref: p.reference ?? "",
             neto: p.net_paid,
             ret: p.withholdings_total,
@@ -255,8 +261,13 @@ export default function FacturasPage() {
               </Button>
             )}
             {canManage && (
+              <Button variant="secondary" onClick={() => setOrderOpen(true)}>
+                <HandCoins size={16} /> Orden de pago
+              </Button>
+            )}
+            {canManage && (
               <Button variant="secondary" onClick={() => setPaymentOpen(true)}>
-                <Banknote size={16} /> Registrar pago
+                <Banknote size={16} /> Pago simple
               </Button>
             )}
             <Button variant="secondary" onClick={exportTab}>
@@ -443,7 +454,11 @@ export default function FacturasPage() {
                 {payments.map((p) => {
                   const voided = p.status === "voided";
                   return (
-                    <tr key={p.id} className={cn(voided && "opacity-60")}>
+                    <tr
+                      key={p.id}
+                      onClick={() => setPaymentDetail(p.id)}
+                      className={cn("cursor-pointer transition hover:bg-muted/40", voided && "opacity-60")}
+                    >
                       <td className="px-4 py-3">
                         <div className="font-mono font-semibold">{formatPaymentNumber(p.number)}</div>
                         <div className="text-xs text-muted-foreground">{fmtDate(p.paid_date)}</div>
@@ -457,7 +472,7 @@ export default function FacturasPage() {
                         )}
                       </td>
                       <td className="hidden px-4 py-3 md:table-cell">
-                        <div>{PAYMENT_METHOD_LABEL[p.method]}</div>
+                        <div>{paymentMethodLabel(p.method)}</div>
                         {p.reference && <div className="text-xs text-muted-foreground">{p.reference}</div>}
                       </td>
                       <td className="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
@@ -476,7 +491,10 @@ export default function FacturasPage() {
                             variant="ghost"
                             aria-label="Anular pago"
                             className="text-danger"
-                            onClick={() => setVoiding({ type: "payment", id: p.id })}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVoiding({ type: "payment", id: p.id });
+                            }}
                           >
                             <Ban size={14} />
                           </Button>
@@ -570,11 +588,22 @@ export default function FacturasPage() {
         supplierId={null}
       />
       <PaymentFormModal open={paymentOpen} onOpenChange={setPaymentOpen} supplierId={null} />
+      <PaymentOrderModal
+        open={orderOpen}
+        onOpenChange={setOrderOpen}
+        supplierId={supplierId || null}
+        onCreated={(id) => setPaymentDetail(id)}
+      />
+      <PaymentOrderDetailModal paymentId={paymentDetail} onOpenChange={(o) => !o && setPaymentDetail(null)} />
       <ConfirmDialog
         open={Boolean(voiding)}
         onOpenChange={(o) => !o && setVoiding(null)}
         title={voiding?.type === "invoice" ? "¿Anular el comprobante?" : "¿Anular el pago?"}
-        description="Deja de contar en la cuenta corriente del proveedor. Queda registrado con el motivo; no se borra."
+        description={
+          voiding?.type === "payment"
+            ? "Deja de contar en la cuenta corriente y libera la imputación. Si era una orden de pago, el efectivo vuelve a tu caja abierta, se revierten los movimientos de tesorería y los cheques vuelven a cartera o se anulan. Queda registrado con el motivo; no se borra."
+            : "Deja de contar en la cuenta corriente del proveedor. Queda registrado con el motivo; no se borra."
+        }
         confirmLabel="Anular"
         danger
         withReason

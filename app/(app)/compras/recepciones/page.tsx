@@ -103,7 +103,7 @@ export default function RecepcionesPage() {
           valor: r.total_cost,
           landed: r.landed_total,
           despacho: r.dispatch_number ?? "",
-          facturada: r.invoice_id ? "Sí" : "No",
+          facturada: r.status === "voided" ? "Anulada" : r.invoice_id ? "Sí" : "No",
         })),
         totals: {
           unidades: list.reduce((t, r) => t + r.total_units, 0),
@@ -244,7 +244,7 @@ export default function RecepcionesPage() {
                 <tr
                   key={r.id}
                   onClick={() => setDetailId(r.id)}
-                  className="cursor-pointer transition hover:bg-muted/40"
+                  className={cn("cursor-pointer transition hover:bg-muted/40", r.status === "voided" && "opacity-60")}
                 >
                   <td className="px-4 py-3">
                     <div className="font-mono font-semibold">{formatReceiptNumber(r.number)}</div>
@@ -253,7 +253,9 @@ export default function RecepcionesPage() {
                   <td className="px-4 py-3">
                     <div>{supplierName(suppliers, r.supplier_id)}</div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {r.invoice_id ? (
+                      {r.status === "voided" ? (
+                        <Badge tone="danger">Anulada</Badge>
+                      ) : r.invoice_id ? (
                         <Badge tone="success">Facturada</Badge>
                       ) : (
                         <Badge tone="neutral">Sin facturar</Badge>

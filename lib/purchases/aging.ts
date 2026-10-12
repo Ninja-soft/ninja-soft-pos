@@ -40,6 +40,12 @@ export const AGING_LABEL: Record<AgingBucket, string> = {
   d90_plus: "Más de 90 días",
 };
 
+/** Imputación de una orden de pago a un comprobante (en pesos). */
+export interface AgingAllocation {
+  invoice_id: string;
+  amount: number;
+}
+
 export interface OpenDocument {
   doc_id: string;
   doc_label: string;
@@ -86,7 +92,11 @@ export function accountBalance(entries: Pick<AccountEntry, "amount_ars">[]): num
  * atraso a `today`. Si los créditos superan la deuda, el excedente es saldo a
  * favor.
  */
-export function supplierAging(entries: AccountEntry[], today: string): AgingResult {
+export function supplierAging(
+  entries: AccountEntry[],
+  today: string,
+  allocations: AgingAllocation[] = [],
+): AgingResult {
   const debts = entries
     .filter((e) => Number(e.amount_ars) > 0)
     .sort(
@@ -101,6 +111,20 @@ export function supplierAging(entries: AccountEntry[], today: string): AgingResu
     entries.filter((e) => Number(e.amount_ars) < 0).reduce((t, e) => t - Number(e.amount_ars), 0),
     2,
   );
+
+  // Imputación explícita de órdenes de pago (ADR-059): baja el comprobante
+  // imputado y sale del crédito disponible; el resto se aplica FIFO.
+  if (allocations.length > 0) {
+    const byDoc = new Map<string, number>();
+    for (const a of allocations) byDoc.set(a.invoice_id, round((byDoc.get(a.invoice_id) ?? 0) + Number(a.amount), 2));
+    for (const d of debts) {
+      const a = byDoc.get(d.e.doc_id);
+      if (!a) continue;
+      const used = Math.min(d.open, a, Math.max(credit, 0));
+      d.open = round(d.open - used, 2);
+      credit = round(credit - used, 2);
+    }
+  }
 
   for (const d of debts) {
     if (credit <= 0) break;
@@ -146,6 +170,7 @@ export function supplierAging(entries: AccountEntry[], today: string): AgingResu
 export function agingBySupplier(
   entries: AccountEntry[],
   today: string,
+  allocations: Array<AgingAllocation & { supplier_id?: string }> = [],
 ): Map<string, AgingResult> {
   const by = new Map<string, AccountEntry[]>();
   for (const e of entries) {
@@ -155,7 +180,10 @@ export function agingBySupplier(
     by.set(k, list);
   }
   const out = new Map<string, AgingResult>();
-  for (const [k, list] of by) out.set(k, supplierAging(list, today));
+  for (const [k, list] of by) {
+    const docs = new Set(list.map((e) => e.doc_id));
+    out.set(k, supplierAging(list, today, allocations.filter((a) => docs.has(a.invoice_id))));
+  }
   return out;
 }
 

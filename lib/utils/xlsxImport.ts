@@ -298,6 +298,26 @@ export async function parseXlsx<R>(
   return gridToRows<R>(grid, columns, options);
 }
 
+/**
+ * Lee la primera hoja como matriz de textos (fila 0 = encabezado), sin spec de
+ * columnas: para imports donde el usuario mapea las columnas (lista de precios
+ * del proveedor, ADR-059).
+ */
+export async function readXlsxGrid(buffer: ArrayBuffer): Promise<{ grid: string[][]; fatalError: string | null }> {
+  try {
+    const { default: Excel } = await import("exceljs");
+    const wb = new Excel.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
+    if (!ws) return { grid: [], fatalError: "El archivo no tiene hojas." };
+    const grid = worksheetToGrid(ws);
+    if (grid.length === 0) return { grid, fatalError: "El archivo está vacío." };
+    return { grid, fatalError: null };
+  } catch {
+    return { grid: [], fatalError: "No se pudo leer el archivo. Asegurate de que sea un .xlsx válido." };
+  }
+}
+
 /** Devuelve solo las filas válidas (sin errores) ya tipadas. */
 export function validRows<R>(result: ParseXlsxResult<R>): R[] {
   return result.rows.filter((r) => r.errors.length === 0).map((r) => r.data);

@@ -14,6 +14,7 @@ import {
   Pencil,
   Star,
   Tag,
+  FileUp,
   Trash2,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -38,6 +39,7 @@ import { useMyTenant } from "@/modules/tenants/hooks";
 import {
   usePurchaseMutations,
   usePurchasesAccess,
+  usePaymentAllocations,
   useSupplierEntries,
   useSupplierProducts,
   useSuppliers,
@@ -49,6 +51,8 @@ import { SupplierFormModal } from "./SupplierFormModal";
 import { ProductPicker } from "./ProductPicker";
 import { PaymentFormModal } from "./PaymentFormModal";
 import { InvoiceFormModal } from "./InvoiceFormModal";
+import { PriceListImportModal } from "./PriceListImportModal";
+import { PaymentOrderModal } from "./PaymentOrderModal";
 
 type Tab = "datos" | "productos" | "cuenta";
 
@@ -192,6 +196,7 @@ function ProductsTab({ s }: { s: Supplier }) {
   const canManage = Boolean(me?.canManage) && !s.deleted_at;
   const { data: rows = [], isLoading } = useSupplierProducts({ supplierId: s.id });
   const [adding, setAdding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function add(p: Product, v: ProductVariant | null) {
     const exists = rows.some((r) => r.product_id === p.id && (r.variant_id ?? null) === (v?.id ?? null));
@@ -226,10 +231,16 @@ function ProductsTab({ s }: { s: Supplier }) {
             <ProductPicker onPick={(p, v) => void add(p, v)} />
           </div>
         ) : (
-          <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
-            <Tag size={15} /> Agregar productos
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
+              <Tag size={15} /> Agregar productos
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
+              <FileUp size={15} /> Importar lista de precios
+            </Button>
+          </div>
         ))}
+      <PriceListImportModal open={importOpen} onOpenChange={setImportOpen} supplier={s} />
       {isLoading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Cargando...</p>
       ) : rows.length === 0 ? (
@@ -470,9 +481,18 @@ function AccountTab({ s }: { s: Supplier }) {
   const canManage = Boolean(me?.canManage);
   const { data: entries = [], isLoading } = useSupplierEntries(s.id);
   const [payOpen, setPayOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
+  const { data: allocations = [] } = usePaymentAllocations();
   const now = today();
-  const aging = useMemo(() => supplierAging(entries, now), [entries, now]);
+  const aging = useMemo(() => {
+    const docs = new Set(entries.map((e) => e.doc_id));
+    return supplierAging(
+      entries,
+      now,
+      allocations.filter((a) => docs.has(a.invoice_id)),
+    );
+  }, [entries, allocations, now]);
   const ledger = useMemo(() => ledgerWithRunning(entries), [entries]);
 
   function exportLedger() {
@@ -507,8 +527,11 @@ function AccountTab({ s }: { s: Supplier }) {
       <div className="flex flex-wrap gap-2">
         {canManage && !s.deleted_at && (
           <>
-            <Button size="sm" onClick={() => setPayOpen(true)}>
-              <HandCoins size={15} /> Registrar pago
+            <Button size="sm" onClick={() => setOrderOpen(true)}>
+              <HandCoins size={15} /> Orden de pago
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setPayOpen(true)}>
+              <HandCoins size={15} /> Pago simple
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setInvOpen(true)}>
               <FileText size={15} /> Cargar factura
@@ -630,6 +653,7 @@ function AccountTab({ s }: { s: Supplier }) {
       )}
 
       <PaymentFormModal open={payOpen} onOpenChange={setPayOpen} supplierId={s.id} />
+      <PaymentOrderModal open={orderOpen} onOpenChange={setOrderOpen} supplierId={s.id} />
       <InvoiceFormModal open={invOpen} onOpenChange={setInvOpen} supplierId={s.id} />
     </div>
   );

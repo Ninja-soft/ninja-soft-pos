@@ -5,10 +5,13 @@
 // de la factura del proveedor y costeo de importación (modo profesional).
 
 import { useState } from "react";
-import { Calculator, Download, FileText, Printer } from "lucide-react";
+import { Ban, Calculator, Download, FileText, Printer, Undo2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Callout } from "@/components/ui/Callout";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { webPrintCopies } from "@/lib/print/webPrint";
@@ -19,10 +22,14 @@ import {
   receiptDifference,
 } from "@/lib/purchases/orders";
 import { formatInvoiceNumber } from "@/lib/purchases/invoices";
+import { RECEIPT_VOID_BLOCKER_LABEL, receiptVoidBlockers, returnableQty } from "@/lib/purchases/returns";
+import { purchaseErrorMessage } from "@/lib/purchases/orders";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useStores } from "@/modules/stock/hooks";
 import {
   usePurchaseOrder,
+  usePurchaseReturns,
+  usePurchaseV2Mutations,
   usePurchasesAccess,
   useReceipt,
   useSupplierInvoices,
@@ -39,6 +46,7 @@ import {
 } from "./shared";
 import { InvoiceFormModal } from "./InvoiceFormModal";
 import { LandedCostModal } from "./LandedCostModal";
+import { ReturnModal } from "./ReturnModal";
 
 export function ReceiptDetailModal({
   receiptId,
@@ -59,11 +67,39 @@ export function ReceiptDetailModal({
   );
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [costingOpen, setCostingOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const { toast } = useToast();
+  const v2 = usePurchaseV2Mutations();
+  const { data: returns = [] } = usePurchaseReturns({ receiptId: receiptId ?? null }, Boolean(receiptId));
 
   const canManage = Boolean(me?.canManage);
   const invoice = r?.invoice_id ? invoices.find((i) => i.id === r.invoice_id) : null;
   const foreign = Boolean(r && r.currency !== "ARS");
   const landed = Boolean(r?.items.some((i) => i.landed_unit_cost != null));
+  const voided = r?.status === "voided";
+  const canReturn = Boolean(r && !voided && r.supplier_id && r.items.some((i) => returnableQty(i) > 0));
+  // Lotes consumidos y stock de la sucursal los valida el servidor al anular.
+  const blockers = r
+    ? receiptVoidBlockers({
+        status: r.status,
+        invoice_id: r.invoice_id,
+        has_returns: returns.length > 0,
+        lots_consumed: false,
+        short_lines: [],
+      })
+    : [];
+
+  async function doVoid(reason: string) {
+    if (!r) return;
+    try {
+      await v2.voidReceipt.mutateAsync({ id: r.id, reason });
+      toast({ title: "Recepción anulada", description: "Se revirtieron el stock, los costos y la orden de compra.", variant: "success" });
+      setVoidOpen(false);
+    } catch (e) {
+      toast({ title: "No se pudo anular", description: purchaseErrorMessage(e), variant: "error" });
+    }
+  }
 
   function exportReceipt(rc: ReceiptDetail) {
     void exportXlsx(formatReceiptNumber(rc.number), [
@@ -119,12 +155,17 @@ export function ReceiptDetailModal({
       ) : (
         <div className="space-y-5">
           <div className="no-print flex flex-wrap gap-2">
-            {canManage && !r.invoice_id && r.supplier_id && (
+            {canManage && !voided && !r.invoice_id && r.supplier_id && (
               <Button size="sm" onClick={() => setInvoiceOpen(true)}>
                 <FileText size={15} /> Cargar factura
               </Button>
             )}
-            {canManage && access.importEnabled && access.pro && (
+            {canManage && canReturn && (
+              <Button size="sm" variant="secondary" onClick={() => setReturnOpen(true)}>
+                <Undo2 size={15} /> Devolver al proveedor
+              </Button>
+            )}
+            {canManage && !voided && access.importEnabled && access.pro && (
               <Button size="sm" variant={landed ? "secondary" : "primary"} onClick={() => setCostingOpen(true)}>
                 <Calculator size={15} /> Costeo de importación
               </Button>
@@ -136,7 +177,26 @@ export function ReceiptDetailModal({
             <Button size="sm" variant="secondary" onClick={() => exportReceipt(r)}>
               <Download size={15} /> XLSX
             </Button>
+            {canManage && !voided && (
+              <Button size="sm" variant="ghost" className="text-danger" onClick={() => setVoidOpen(true)}>
+                <Ban size={15} /> Anular
+              </Button>
+            )}
           </div>
+
+          {voided && (
+            <Callout tone="danger" title="Recepción anulada">
+              {r.void_reason}
+              {r.voided_at ? ` · ${fmtDate(r.voided_at)}` : ""}. El stock, los costos y la orden de compra se
+              revirtieron.
+            </Callout>
+          )}
+          {returns.length > 0 && !voided && (
+            <Callout tone="neutral" title="Devoluciones al proveedor">
+              Esta recepción tiene {returns.length === 1 ? "una devolución" : `${returns.length} devoluciones`}: se
+              ven en Compras, Devoluciones.
+            </Callout>
+          )}
 
           <dl className="grid grid-cols-2 gap-3 rounded-xl bg-muted p-3.5 text-sm sm:grid-cols-4">
             <Info label="Fecha" value={fmtDate(r.received_date)} />
@@ -201,6 +261,9 @@ export function ReceiptDetailModal({
                       </td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">
                         {formatQty(i.qty)} {i.unit}
+                        {i.qty_returned > 0 && (
+                          <div className="text-xs font-normal text-warning">devuelto {formatQty(i.qty_returned)}</div>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {diff !== 0 ? (
@@ -252,6 +315,23 @@ export function ReceiptDetailModal({
             orderId={r.order_id}
           />
           <LandedCostModal receipt={r} open={costingOpen} onOpenChange={setCostingOpen} />
+          <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} receipt={r} />
+          <ConfirmDialog
+            open={voidOpen}
+            onOpenChange={setVoidOpen}
+            title="¿Anular la recepción?"
+            description={
+              blockers.length
+                ? blockers.map((b) => RECEIPT_VOID_BLOCKER_LABEL[b]).join(" ")
+                : "Saca de la sucursal lo recibido, revierte el costo promedio y el último costo, vuelve las cantidades de la orden de compra y da de baja sus lotes. Exige que haya stock en la sucursal y que los lotes no se hayan vendido. Queda registrada con el motivo."
+            }
+            confirmLabel="Anular recepción"
+            danger
+            withReason
+            reasonPlaceholder="Cargada dos veces, cantidades equivocadas..."
+            loading={v2.voidReceipt.isPending}
+            onConfirm={(reason) => (blockers.length ? setVoidOpen(false) : void doVoid(reason))}
+          />
         </div>
       )}
     </Modal>

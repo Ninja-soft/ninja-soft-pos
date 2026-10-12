@@ -28,11 +28,19 @@ import { downloadA4FromNode } from "@/lib/tickets/exportPng";
 import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { type TicketData } from "@/components/tickets/TicketRenderer";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
-import { NoData } from "@/components/ui/NoData";
 import { useBranches } from "@/modules/branches/hooks";
 import { ticketLocation } from "@/lib/tickets/location";
 import { printTargetLabel } from "@/lib/print/printers";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { Segmented } from "@/components/ui/Segmented";
+import { cn } from "@/lib/utils/cn";
+import { SalePayments } from "@/components/sales/SalePayments";
+
+type DetailTab = "ticket" | "cobros";
+const TABS: { value: DetailTab; label: string }[] = [
+  { value: "ticket", label: "Ticket" },
+  { value: "cobros", label: "Cobros" },
+];
 
 interface Props {
   open: boolean;
@@ -76,6 +84,12 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const printedRef = useRef(false);
   const emailedRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
+  // Detalle de la venta (ADR-061): el ticket queda montado aunque se vea la
+  // pestaña Cobros (imprimir y el email lo usan). Cada apertura arranca en Ticket.
+  const [tab, setTab] = useState<DetailTab>("ticket");
+  useEffect(() => {
+    if (open) setTab("ticket");
+  }, [open, saleId]);
 
   // Sucursal y caja de la venta (F17 · H90): sólo con 2+ sucursales.
   const { data: branches } = useBranches();
@@ -251,12 +265,32 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Ticket" className="max-w-sm">
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={tab === "cobros" ? "Cobros de la venta" : "Ticket"}
+      className={tab === "cobros" ? "max-w-2xl" : "max-w-sm"}
+    >
       {isLoading || !data || !ticketData ? (
         <SpinnerBlock className="py-6" />
       ) : (
         <>
-          <div ref={ticketRef}>
+          <Segmented
+            value={tab}
+            options={TABS}
+            onChange={setTab}
+            aria-label="Vista del detalle"
+            size="sm"
+            fill
+            className="no-print mb-3"
+          />
+          {/* En Cobros el ticket sale de pantalla pero sigue montado: imprimir
+              (visibility) y el PNG del email lo necesitan. */}
+          <div
+            ref={ticketRef}
+            aria-hidden={tab === "cobros" || undefined}
+            className={cn(tab === "cobros" && "pointer-events-none fixed -left-[9999px] top-0")}
+          >
             <TemplateRenderer
               template={printTpl ?? null}
               fallbackBlocks={fallbackBlocks}
@@ -283,10 +317,18 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
             </div>
           )}
 
-          {/* Voucher de tarjeta (H27): lote / cupón / nº de autorización de los
-              pagos con débito/crédito que lo cargaron. Bloque informativo en el
-              detalle (no se imprime en el ticket). */}
-          <CardVoucherDetail payments={data.payments} />
+          {/* Cobros (ADR-061): procesador, tarjeta, cupón, ids, conciliación y
+              datos del procesador. Reemplaza el bloque de voucher (H27). */}
+          {tab === "cobros" && (
+            <div className="no-print">
+              <SalePayments
+                saleId={data.sale.id}
+                saleCreatedAt={data.sale.created_at}
+                initialPayments={data.payments}
+                active={open && tab === "cobros"}
+              />
+            </div>
+          )}
 
           <div className="no-print mt-4 space-y-3">
             {/* Estado de envío + hint SMTP + formulario inline (bloque propio). */}
@@ -347,52 +389,5 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
         </>
       )}
     </Modal>
-  );
-}
-
-// Voucher de tarjeta (H27) por pago. payments.card_voucher (jsonb) guarda
-// { lote, cupon, autorizacion, comercio } (comercio: n° de comercio de la marca,
-// para conciliar).
-// Sólo renderiza si algún pago tiene voucher cargado. No se imprime en el ticket.
-type VoucherPay = { method: string; card_voucher?: { lote?: string; cupon?: string; autorizacion?: string; comercio?: string } | null };
-
-function CardVoucherDetail({ payments }: { payments: unknown[] }) {
-  const METHOD_LABEL: Record<string, string> = { debit: "Débito", credit: "Crédito" };
-  const withVoucher = (payments as VoucherPay[]).filter((p) => {
-    const v = p.card_voucher;
-    return v && (v.lote || v.cupon || v.autorizacion || v.comercio);
-  });
-  if (withVoucher.length === 0) return null;
-  return (
-    <div className="no-print mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-      <div className="mb-2 font-semibold text-ninja-flameSoft">Voucher de tarjeta</div>
-      <div className="space-y-2">
-        {withVoucher.map((p, i) => {
-          const v = p.card_voucher!;
-          return (
-            <div key={i} className="grid grid-cols-3 gap-2">
-              <Field label="Lote" value={v.lote} />
-              <Field label="Cupón" value={v.cupon} />
-              <Field label="Autorización" value={v.autorizacion} />
-              {v.comercio && <Field label="N° de comercio" value={v.comercio} />}
-              {METHOD_LABEL[p.method] && (
-                <span className="col-span-3 text-xs text-muted-foreground">
-                  {METHOD_LABEL[p.method]}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="font-mono text-foreground">{value || <NoData />}</div>
-    </div>
   );
 }

@@ -2,10 +2,22 @@
 
 import { useMemo } from "react";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
+import { cn } from "@/lib/utils/cn";
 
 // QR dibujado local (SVG) a partir del texto: el qr_data EMVCo de MP o el
-// link de pago. Sin servicios externos de imágenes.
-export function LocalQr({ value, label, size = 260 }: { value: string; label: string; size?: number }) {
+// link de pago. Sin servicios externos de imágenes. `className` permite
+// dimensionarlo por CSS (p. ej. según el alto de la ventana).
+export function LocalQr({
+  value,
+  label,
+  size = 260,
+  className,
+}: {
+  value: string;
+  label: string;
+  size?: number;
+  className?: string;
+}) {
   const svg = useMemo(() => {
     try {
       const qr = encodeQr(value, "M");
@@ -23,7 +35,7 @@ export function LocalQr({ value, label, size = 260 }: { value: string; label: st
       width={size}
       height={size}
       shapeRendering="crispEdges"
-      className="rounded-lg border border-border bg-white"
+      className={cn("rounded-lg border border-border bg-white", className)}
     >
       <rect width={svg.dim} height={svg.dim} fill="#fff" />
       <path d={svg.path} fill="#000" />

@@ -198,7 +198,7 @@ export function CardWizard({
                 className={choiceClass(on, "flex min-h-[64px] items-center gap-2.5 rounded-md px-3 py-2 pr-8")}
               >
                 <TenderLogo source={{ logo: acquirerLogo(a.key) }} alt={a.label} size={28} fallback="card" />
-                <span className="min-w-0 text-[13px] font-semibold leading-tight">{a.label}</span>
+                <span className="min-w-0 text-[13px] font-semibold leading-tight" title={a.label}>{a.short}</span>
               </button>
             );
           })}

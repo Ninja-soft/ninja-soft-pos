@@ -34,7 +34,7 @@ export const ACQUIRERS: AcquirerDef[] = [
     providers: ["mercadopago_point", "mercadopago"],
     logoKey: "mercadopago",
   },
-  { key: "fiserv", label: "Fiserv / Clover", short: "Fiserv", providers: ["fiserv", "fiserv_point"], logoKey: "fiserv_point" },
+  { key: "fiserv", label: "Fiserv / Clover", short: "Clover", providers: ["fiserv", "fiserv_point"], logoKey: "fiserv_point" },
   { key: "nave", label: "Nave", short: "Nave", providers: ["nave_point", "nave"], logoKey: "nave" },
   { key: "other", label: "Otra", short: "Otra", providers: [], logoKey: null },
 ];

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, ShoppingBag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
 import {
   useCustomerDisplayState,
   idleState,
@@ -302,26 +303,40 @@ function Row({
   );
 }
 
-// QR de cobro: imagen grande sobre tarjeta blanca + monto.
+// QR de cobro: SVG grande sobre tarjeta blanca + monto. Se dibuja local
+// (lib/qr/qrcode.ts, sin servicios externos) con el contenido que publica el
+// POS: el qr_data del proveedor (EMV de Nave / order de MP) o el link de pago.
 function QrPanel({ state }: { state: DisplayState }) {
   const qr = state.qr!;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=0&data=${encodeURIComponent(
-    qr.initPoint,
-  )}`;
+  const svg = useMemo(() => {
+    try {
+      const m = encodeQr(qr.initPoint, "M");
+      // Quiet zone de 4 módulos (los QR EMV densos la necesitan para leerse).
+      return { path: qrSvgPath(m, 4), dim: m.size + 8 };
+    } catch {
+      return null;
+    }
+  }, [qr.initPoint]);
   return (
     <div className="flex flex-1 flex-col items-center justify-center text-center">
       <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
         Escaneá para pagar
       </div>
       <div className="mt-4 rounded-3xl bg-white p-4 shadow-2xl">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={qrSrc}
-          alt={`QR de pago ${qr.providerName}`}
-          width={300}
-          height={300}
-          className="h-[clamp(220px,30vh,340px)] w-[clamp(220px,30vh,340px)]"
-        />
+        {svg && (
+          <svg
+            role="img"
+            aria-label={`QR de pago ${qr.providerName}`}
+            viewBox={`0 0 ${svg.dim} ${svg.dim}`}
+            width={300}
+            height={300}
+            shapeRendering="crispEdges"
+            className="h-[clamp(220px,30vh,340px)] w-[clamp(220px,30vh,340px)]"
+          >
+            <rect width={svg.dim} height={svg.dim} fill="#fff" />
+            <path d={svg.path} fill="#000" />
+          </svg>
+        )}
       </div>
       <div className="mt-5 text-lg text-white/60">{qr.providerName}</div>
       <div className="font-price text-5xl font-black tabular-nums text-[var(--cd-accent)] md:text-6xl">

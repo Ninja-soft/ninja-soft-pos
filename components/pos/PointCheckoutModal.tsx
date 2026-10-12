@@ -12,11 +12,13 @@ import { formatCurrency } from "@/lib/utils/format";
 import { posApi } from "@/modules/pos/api";
 
 // F8 · H15 (resto) — Cobro presencial con lectores Mercado Point.
-// Flujo: elegir lector → la Edge mp_point empuja el cobro AL dispositivo →
-// el cliente pasa/apoya la tarjeta en el Point → el POS sondea el estado y,
-// con "approved" (verificado contra /v1/payments), registra la venta como
-// débito/crédito según la tarjeta usada. Las cuotas las elige el cliente en
-// el lector (como MODO: el POS no muestra selección de planes).
+// Flujo: elegir lector → la Edge mp_point empuja una order "point" (Orders
+// API, ADR-032) AL dispositivo → el cliente pasa/apoya la tarjeta en el Point
+// → el POS sondea el estado y, con "approved" (pago processed + monto exacto),
+// registra la venta como débito/crédito según la tarjeta usada. Por defecto
+// medio y cuotas se eligen en el lector; el cajero puede preseleccionar
+// débito o crédito en cuotas (las cuotas preconfiguradas requieren que MP las
+// haya habilitado en la cuenta).
 //
 // El último lector usado se recuerda por caja (localStorage) para que el cobro
 // habitual sea de un toque.
@@ -26,6 +28,28 @@ import { posApi } from "@/modules/pos/api";
 // conexión de Nave (no hay modo PDV) y Nave empuja el cobro a esa terminal.
 
 const DEVICE_LS_KEY = "ninja-point-device";
+
+type Phase = "device" | "creating" | "on_terminal" | "cancelling" | "error";
+
+// Preselección del medio en el lector. "reader" = lo elige el cliente ahí.
+type PayPreset = "reader" | "debit" | "c1" | "c3" | "c6" | "c12";
+const PRESETS: { key: PayPreset; label: string }[] = [
+  { key: "reader", label: "En el lector" },
+  { key: "debit", label: "Débito" },
+  { key: "c1", label: "Crédito 1 pago" },
+  { key: "c3", label: "3 cuotas" },
+  { key: "c6", label: "6 cuotas" },
+  { key: "c12", label: "12 cuotas" },
+];
+type PresetOpts = { installments?: number; defaultType?: "debit_card" | "credit_card" };
+// Sólo Mercado Point acepta preselección (Nave resuelve medio y cuotas en la
+// terminal): para nave_point el selector no se muestra y no se envía nada.
+function presetOpts(p: PayPreset): PresetOpts | undefined {
+  if (p === "reader") return undefined;
+  if (p === "debit") return { defaultType: "debit_card" };
+  const n = Number(p.slice(1));
+  return n > 1 ? { installments: n } : { defaultType: "credit_card" };
+}
 
 type PointProvider = "mercadopago_point" | "nave_point";
 type PointDevice = { id: string; operating_mode: string; label?: string };
@@ -48,14 +72,16 @@ const API: Record<
   PointProvider,
   {
     devices: () => Promise<PointDevice[]>;
-    create: (deviceId: string, amount: number) => Promise<{ intent_id: string }>;
+    create: (deviceId: string, amount: number, opts?: PresetOpts) => Promise<{ intent_id: string }>;
     status: (intentId: string) => Promise<PointStatus>;
-    cancel: (intentId: string) => Promise<void>;
+    // MP (Orders API) devuelve si la cancelación quedó pedida en la terminal
+    // (asíncrona); Nave da de baja al toque (void).
+    cancel: (intentId: string) => Promise<{ status: string; cancel_requested: boolean } | void>;
   }
 > = {
   mercadopago_point: {
     devices: () => posApi.pointDevices(),
-    create: (d, a) => posApi.createPointIntent(d, a),
+    create: (d, a, o) => posApi.createPointIntent(d, a, o),
     status: (id) => posApi.pointIntentStatus(id),
     cancel: (id) => posApi.cancelPointIntent(id),
   },
@@ -68,7 +94,6 @@ const API: Record<
   },
 };
 
-type Phase = "device" | "creating" | "on_terminal" | "error";
 
 export function PointCheckoutModal({
   open,
@@ -92,6 +117,7 @@ export function PointCheckoutModal({
   const [device, setDevice] = useState<string | null>(null);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string>("");
+  const [preset, setPreset] = useState<PayPreset>("reader");
   const firedRef = useRef(false);
   const isNave = provider === "nave_point";
   const brand = isNave ? "Nave Point" : "Mercado Point";
@@ -118,6 +144,7 @@ export function PointCheckoutModal({
     setPhase("device");
     setIntentId(null);
     setErrorDetail("");
+    setPreset("reader");
     firedRef.current = false;
     try {
       setDevice(window.localStorage.getItem(lsKey));
@@ -137,9 +164,10 @@ export function PointCheckoutModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, devices]);
 
-  // Sondeo del estado mientras el cobro está en el lector.
+  // Sondeo del estado mientras el cobro está en el lector (o mientras se
+  // cancela desde el POS: si el cliente ya pagó, la venta se registra igual).
   useEffect(() => {
-    if (!open || phase !== "on_terminal" || !intentId) return;
+    if (!open || (phase !== "on_terminal" && phase !== "cancelling") || !intentId) return;
     let alive = true;
     const tick = async () => {
       try {
@@ -155,9 +183,15 @@ export function PointCheckoutModal({
           setPhase("error");
           return;
         }
-        if (r.status === "cancelled") {
+        if (r.status === "cancelled" || r.status === "expired") {
+          if (phase === "cancelling") {
+            onOpenChange(false);
+            return;
+          }
           setErrorDetail(
-            (r.reason && NAVE_REASON_COPY[r.reason]) || "El cobro se canceló.",
+            r.status === "expired"
+              ? "El cobro venció en el lector."
+              : (r.reason && NAVE_REASON_COPY[r.reason]) || "El cobro se canceló.",
           );
           setPhase("error");
           return;
@@ -184,7 +218,7 @@ export function PointCheckoutModal({
       /* sin persistencia, no bloquea */
     }
     api
-      .create(device, base)
+      .create(device, base, isNave ? undefined : presetOpts(preset))
       .then((r) => {
         setIntentId(r.intent_id);
         setPhase("on_terminal");
@@ -200,15 +234,33 @@ export function PointCheckoutModal({
                 : "Conectá tu cuenta de Mercado Pago en Medios de pago."
               : isNave
                 ? "No se pudo enviar el cobro a la terminal Nave. ¿Está encendida y con el punto de venta correcto?"
-                : "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
+                : preset !== "reader"
+                  ? "No se pudo enviar el cobro al lector. Si elegiste cuotas, puede que Mercado Pago no las tenga habilitadas en tu cuenta: probá con En el lector."
+                  : "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
         );
         setPhase("error");
       });
   }
 
+  // Cancelar: si la order sigue sin tomar en el lector se cancela al toque;
+  // si ya está en la terminal, MP la cancela de forma asíncrona (202) y el
+  // modal espera la confirmación sondeando (nunca se pierde un pago hecho).
   function cancel() {
-    if (intentId) api.cancel(intentId).catch(() => null);
-    onOpenChange(false);
+    if (!intentId) {
+      onOpenChange(false);
+      return;
+    }
+    setPhase("cancelling");
+    api
+      .cancel(intentId)
+      .then((r) => {
+        // Nave (void) o MP que ya resolvió la order: se cierra. MP con la
+        // cancelación pedida en la terminal: se espera el "cancelled" del poll.
+        if (!r || (!r.cancel_requested && r.status !== "pending" && r.status !== "approved")) {
+          onOpenChange(false);
+        }
+      })
+      .catch(() => onOpenChange(false));
   }
 
   const selected = devices?.find((d) => d.id === device) ?? null;
@@ -222,6 +274,7 @@ export function PointCheckoutModal({
           cancel();
           return;
         }
+        if (!o && phase === "cancelling") return;
         onOpenChange(o);
       }}
       title={`Cobrar con ${brand}`}
@@ -233,7 +286,7 @@ export function PointCheckoutModal({
           {devicesLoading ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
               <Spinner size={18} />{" "}
-              {isNave ? "Buscando tus terminales Nave…" : "Buscando lectores Point de tu cuenta…"}
+              {isNave ? "Buscando tus terminales Nave" : "Buscando lectores Point de tu cuenta"}
             </div>
           ) : devicesError ? (
             <div className="rounded-lg border border-danger/40 bg-destructive/10 p-3 text-sm">
@@ -315,6 +368,29 @@ export function PointCheckoutModal({
             </div>
           )}
 
+          {!isNave && (devices?.length ?? 0) > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Medio en el lector</p>
+              <div className="grid grid-cols-3 gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setPreset(p.key)}
+                    className={cn(
+                      "rounded-lg border px-2 py-2 text-xs transition",
+                      preset === p.key
+                        ? "border-ninja-flame font-semibold ring-2 ring-ninja-flame/30"
+                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
@@ -328,7 +404,7 @@ export function PointCheckoutModal({
 
       {phase === "creating" && (
         <div className="flex items-center gap-3 py-8 text-sm text-muted-foreground">
-          <Spinner size={20} /> Enviando el cobro al lector…
+          <Spinner size={20} /> {isNave ? "Enviando el cobro a la terminal" : "Enviando el cobro al lector"}
         </div>
       )}
 
@@ -349,13 +425,29 @@ export function PointCheckoutModal({
             </p>
           </div>
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Spinner size={14} /> Esperando el pago…
+            <Spinner size={14} /> Esperando el pago
           </div>
           <div className="flex justify-center">
             <Button variant="secondary" onClick={cancel}>
               <XCircle size={15} /> Cancelar cobro
             </Button>
           </div>
+        </div>
+      )}
+
+      {phase === "cancelling" && (
+        <div className="flex flex-col items-center gap-3 py-8 text-center text-sm text-muted-foreground">
+          <Spinner size={22} />
+          <p>
+            Cancelando el cobro en el lector. Si el cliente ya pagó, la venta se
+            registra igual.
+          </p>
+          <p className="text-xs">
+            Si {isNave ? "la terminal no responde, cancelalo también desde la terminal Nave" : "el lector no responde, cancelalo también desde el Point"}.
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            Cerrar igual
+          </Button>
         </div>
       )}
 

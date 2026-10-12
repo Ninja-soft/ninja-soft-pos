@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Copy, Link2, Share2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,8 +13,40 @@ import { useProviderPlans } from "@/modules/pos/hooks";
 import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
+import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
+// Canal de Mercado Pago (ADR-032): "order" = QR dinámico de la caja (Orders
+// API, se escanea en el local); "link" = Checkout Pro (link compartible).
+type MpChannel = "order" | "link";
+
+// QR dibujado local (SVG) a partir del texto: el qr_data EMVCo de MP o el
+// link de pago. Sin servicios externos de imágenes.
+function LocalQr({ value, label, size = 260 }: { value: string; label: string; size?: number }) {
+  const svg = useMemo(() => {
+    try {
+      const qr = encodeQr(value, "M");
+      return { path: qrSvgPath(qr, 4), dim: qr.size + 8 };
+    } catch {
+      return null;
+    }
+  }, [value]);
+  if (!svg) return null;
+  return (
+    <svg
+      role="img"
+      aria-label={label}
+      viewBox={`0 0 ${svg.dim} ${svg.dim}`}
+      width={size}
+      height={size}
+      shapeRendering="crispEdges"
+      className="rounded-lg border border-border bg-white"
+    >
+      <rect width={svg.dim} height={svg.dim} fill="#fff" />
+      <path d={svg.path} fill="#000" />
+    </svg>
+  );
+}
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -68,6 +100,8 @@ function qrErrorCopy(code: string, providerName: string): string {
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
       return "No pudimos comunicarnos con Nave. Revisá tu conexión y probá de nuevo.";
+    case "qr_pos_not_found":
+      return "Mercado Pago no encuentra la caja QR del negocio. Volvé a configurarla en Configuración → Medios de pago.";
     case "modo_unreachable":
       return "No pudimos comunicarnos con MODO. Revisá tu conexión y probá de nuevo.";
     default:
@@ -125,6 +159,8 @@ export function QrCheckoutModal({
   // Nave devuelve el QR EMV (qr_data) aparte del link: se codifica TAL CUAL.
   const [qrData, setQrData] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [mpChannel, setMpChannel] = useState<MpChannel>("order");
+  const [switching, setSwitching] = useState(false);
   const firedRef = useRef(false);
   const startedRef = useRef(false);
   const chosenRef = useRef<{ label: string; surcharge: number } | null>(null);
@@ -165,9 +201,42 @@ export function QrCheckoutModal({
     [activePlans, brand],
   );
 
+  function onCreated(r: { intent_id: string; init_point: string; qr_data?: string }) {
+    setIntentId(r.intent_id);
+    setInitPoint(r.init_point);
+    setQrData(r.qr_data ?? "");
+    setPhase("waiting");
+  }
+
+  function onCreateError(code: string) {
+    const msg = qrErrorCopy(code, providerName);
+    setErrorMsg(msg);
+    setPhase("error");
+    toast({ title: msg, variant: "error" });
+  }
+
   function startQr(amt: number) {
     setAmount(amt);
     setPhase("creating");
+    // Mercado Pago: primero el QR dinámico de la caja (Orders API). Si el
+    // negocio todavía no configuró su caja QR, cae al link de Checkout Pro
+    // (comportamiento previo: el cliente lo escanea igual).
+    if (provider === "mercadopago") {
+      setMpChannel("order");
+      posApi
+        .createMpOrderQr(amt, "Venta NinjaPos")
+        .then(onCreated)
+        .catch(async (e) => {
+          const { code } = await edgeErrorCode(e);
+          if (code !== "qr_pos_not_configured") return onCreateError(code);
+          setMpChannel("link");
+          posApi
+            .createMpQr(amt, "Venta NinjaPos")
+            .then(onCreated)
+            .catch(async (e2) => onCreateError((await edgeErrorCode(e2)).code));
+        });
+      return;
+    }
     const create =
       provider === "mobbex"
         ? posApi.createMobbexQr
@@ -183,19 +252,87 @@ export function QrCheckoutModal({
                   ? posApi.createNaveQr
                   : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
-      .then((r) => {
-        setIntentId(r.intent_id);
-        setInitPoint(r.init_point);
-        setQrData((r as { qr_data?: string }).qr_data ?? "");
-        setPhase("waiting");
-      })
-      .catch(async (e) => {
-        const { code } = await edgeErrorCode(e);
-        const msg = qrErrorCopy(code, providerName);
-        setErrorMsg(msg);
-        setPhase("error");
-        toast({ title: msg, variant: "error" });
+      .then(onCreated)
+      .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
+  }
+
+  // "Enviar link" (sólo MP con QR de caja): cancela la order QR y genera un
+  // link de Checkout Pro por el mismo monto, para mandar por WhatsApp o mail.
+  // Antes de generar el link se cancela la order y se re-consulta su estado:
+  // si el cliente justo pagó el QR, se registra ESE cobro (nunca dos cobros).
+  async function switchToLink() {
+    if (!intentId || switching) return;
+    const prev = intentId;
+    setSwitching(true);
+    try {
+      await posApi.cancelMpOrder(prev).catch(() => null);
+      const last = await posApi.mpOrderStatus(prev).catch(() => null);
+      if (last?.status === "approved") {
+        if (!firedRef.current) {
+          firedRef.current = true;
+          setPhase("approved");
+          const c = chosenRef.current;
+          onApproved(
+            prev,
+            amount,
+            c ? [{ name: `Recargo ${c.label}`, amount: c.surcharge, kind: "surcharge" }] : [],
+          );
+        }
+        return;
+      }
+      if (!last || last.status === "pending") {
+        // No se pudo cancelar (sigue pagable): no se ofrece un segundo cobro.
+        toast({ title: "No se pudo cambiar a link. Probá de nuevo.", variant: "error" });
+        return;
+      }
+      const r = await posApi.createMpQr(amount, "Venta NinjaPos");
+      setMpChannel("link");
+      onCreated(r);
+    } catch (e) {
+      onCreateError((await edgeErrorCode(e)).code);
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(initPoint);
+      toast({ title: "Link copiado", variant: "success" });
+    } catch {
+      toast({ title: "No se pudo copiar el link", variant: "error" });
+    }
+  }
+
+  async function shareLink() {
+    if (typeof navigator.share !== "function") return copyLink();
+    try {
+      await navigator.share({
+        title: "Link de pago",
+        text: `Pagá ${formatCurrency(amount)}`,
+        url: initPoint,
       });
+    } catch {
+      /* el usuario cerró el diálogo de compartir */
+    }
+  }
+
+  // Cerrar el modal con un cobro abierto lo da de baja en el proveedor
+  // (best-effort; si el cliente ya pagó, el pago gana y queda para conciliar
+  // en Cobros QR):
+  //  - Mercado Pago, order QR de la caja: se cancela para que el QR deje de
+  //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
+  //    compartible y, si se paga, la conciliación lo muestra).
+  //  - Nave: se da de baja la intención (QR EMV + link).
+  function close() {
+    if (intentId && phase === "waiting") {
+      if (provider === "mercadopago" && mpChannel === "order") {
+        posApi.cancelMpOrder(intentId).catch(() => null);
+      } else if (provider === "nave") {
+        posApi.cancelNaveIntent(intentId).catch(() => null);
+      }
+    }
+    onOpenChange(false);
   }
 
   function pickPlan(p: PaymentPlan) {
@@ -220,6 +357,8 @@ export function QrCheckoutModal({
     setInitPoint("");
     setQrData("");
     setErrorMsg("");
+    setMpChannel("order");
+    setSwitching(false);
     firedRef.current = false;
     instRef.current = 1;
     startedRef.current = false;
@@ -253,11 +392,14 @@ export function QrCheckoutModal({
   }, [open, loadingAll, globalMode, globalPct, activePlans.length]);
 
   const { data: status } = useQuery({
-    queryKey: ["mp-intent", provider, intentId],
-    // MP/Mobbex/MODO actualizan el intent por webhook → basta leer la fila.
-    // Pagos360 no exige webhook: la Edge sincroniza contra su API en cada poll.
+    queryKey: ["mp-intent", provider, mpChannel, intentId],
+    // Mobbex/MODO y el link de MP actualizan el intent por webhook → basta
+    // leer la fila. Pagos360 y el QR de caja de MP (Orders API) sincronizan
+    // contra la API del proveedor en cada poll (no dependen del webhook).
     queryFn: () =>
-      provider === "pagos360"
+      provider === "mercadopago" && mpChannel === "order"
+        ? posApi.mpOrderStatus(intentId!)
+        : provider === "pagos360"
         ? posApi.pagos360IntentStatus(intentId!)
         : provider === "modo"
           ? posApi.modoIntentStatus(intentId!)
@@ -268,12 +410,14 @@ export function QrCheckoutModal({
               : provider === "nave"
                 ? posApi.naveIntentStatus(intentId!)
                 : posApi.mpIntentStatus(intentId!),
-    enabled: open && phase === "waiting" && Boolean(intentId),
+    // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
+    // está cancelando y su "cancelled" no debe cerrar el cobro.
+    enabled: open && phase === "waiting" && Boolean(intentId) && !switching,
     refetchInterval: 3000,
   });
 
   useEffect(() => {
-    if (!status || firedRef.current) return;
+    if (!status || firedRef.current || switching) return;
     if (status.status === "approved") {
       firedRef.current = true;
       setPhase("approved");
@@ -304,7 +448,7 @@ export function QrCheckoutModal({
     } else if (status.status === "rejected" || status.status === "cancelled") {
       setPhase("rejected");
     }
-  }, [status, onApproved, intentId, amount, provider]);
+  }, [status, onApproved, intentId, amount, provider, switching]);
 
   // Espeja el QR de cobro activo a la pantalla del cliente (H25): cuando el QR
   // está listo (waiting), publica init_point + monto; en cualquier otro caso
@@ -321,25 +465,17 @@ export function QrCheckoutModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, phase, initPoint, qrData, amount, providerName]);
 
-  // Nave: QR denso (EMV) → al menos 208 px y con margen (quiet zone).
+  // Contenido del QR: qr_data cuando el proveedor lo devuelve aparte (Nave:
+  // EMV interoperable, se codifica TAL CUAL); si no, init_point (la order QR
+  // de MP ya trae su qr_data ahí; el resto es la URL del link de pago).
   const qrValue = qrData || initPoint;
-  const qrSrc = qrValue
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260${qrData ? "&margin=8" : ""}&data=${encodeURIComponent(qrValue)}`
-    : "";
+  const isMpOrder = provider === "mercadopago" && mpChannel === "order";
+  const isLink = !isMpOrder && /^https?:\/\//.test(initPoint);
 
   // Pantalla de selección: MP / Mobbex con planes y sin modo recargo único.
   // MODO no la usa (sus cuotas se eligen en la app del cliente).
   const selecting =
     phase === "select" && !selfManaged && !globalMode && (loadingAll || activePlans.length > 0);
-
-  // Cerrar con un cobro Nave abierto da de baja la intención (best-effort): si
-  // el cliente ya pagó, el pago gana y queda para conciliar en Cobros QR.
-  function handleOpenChange(o: boolean) {
-    if (!o && provider === "nave" && intentId && phase === "waiting") {
-      posApi.cancelNaveIntent(intentId).catch(() => null);
-    }
-    onOpenChange(o);
-  }
 
   // Logo del proveedor REAL del cobro (antes todo lo no mapeado caía al logo
   // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
@@ -356,7 +492,11 @@ export function QrCheckoutModal({
     PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";
 
   return (
-    <Modal open={open} onOpenChange={handleOpenChange} title={`Cobrar con QR · ${providerName}`}>
+    <Modal
+      open={open}
+      onOpenChange={(o) => (o ? onOpenChange(true) : close())}
+      title={`Cobrar con QR · ${providerName}`}
+    >
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -449,36 +589,50 @@ export function QrCheckoutModal({
         {phase === "creating" && (
           <div className="flex flex-col items-center gap-2 py-8">
             <Spinner size={28} />
-            <span className="text-sm text-muted-foreground">Generando QR…</span>
+            <span className="sr-only">Generando QR</span>
           </div>
         )}
 
         {phase === "waiting" && (
           <>
             <div className="flex justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrSrc}
-                alt={`QR de pago ${providerName}`}
-                className="rounded-lg border border-border bg-white p-2"
-                width={260}
-                height={260}
-              />
+              <LocalQr value={qrValue} label={`QR de pago ${providerName}`} />
             </div>
             <p className="text-sm text-muted-foreground">
-              El cliente escanea el QR para pagar con {providerName}. La pantalla se
-              actualiza sola al acreditarse.
+              {isMpOrder
+                ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
+                : `El cliente escanea el QR para pagar con ${providerName}. La pantalla se actualiza sola al acreditarse.`}
             </p>
-            <a
-              href={initPoint}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-xs text-ninja-flameSoft hover:underline"
-            >
-              Abrir link de pago
-            </a>
+            {isMpOrder ? (
+              <Button variant="secondary" size="sm" disabled={switching} onClick={switchToLink}>
+                {switching ? <Spinner size={14} /> : <Link2 size={14} />} Enviar link
+              </Button>
+            ) : (
+              isLink && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <a
+                    href={initPoint}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-xs text-ninja-flameSoft hover:underline"
+                  >
+                    Abrir link de pago
+                  </a>
+                  {provider === "mercadopago" && (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={copyLink}>
+                        <Copy size={14} /> Copiar link
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={shareLink}>
+                        <Share2 size={14} /> Compartir
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )
+            )}
             <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Spinner size={14} /> Esperando pago…
+              <Spinner size={14} /> Esperando pago
             </div>
           </>
         )}
@@ -512,7 +666,7 @@ export function QrCheckoutModal({
         )}
 
         {(phase === "creating" || phase === "waiting" || selecting) && (
-          <Button variant="ghost" className="w-full" onClick={() => handleOpenChange(false)}>
+          <Button variant="ghost" className="w-full" onClick={close}>
             Cancelar
           </Button>
         )}

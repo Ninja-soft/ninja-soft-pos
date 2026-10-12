@@ -1087,6 +1087,46 @@ Sigue "Próximamente". La integración de terminales de Getnet ("Integrated POS"
 
 - `supabase/functions/getnet/index.ts`, `supabase/functions/getnet_webhook/index.ts`, `supabase/functions/_shared/getnet.ts`, `tests/unit/getnet.test.ts`, `components/pos/QrCheckoutModal.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`, `modules/pos/api.ts`, `lib/saas/featureInfo.ts`.
 - Plugin oficial: wordpress.org/plugins/integrar-getnet-con-woo (v0.1.5, `wanderlust-getnet.php`).
+
+---
+
+## ADR-032 — Mercado Pago presencial sobre Orders API (QR dinámico + Point)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de deploy y validación en sandbox) · **Hito:** F8 · H15
+
+### Contexto
+
+Mercado Pago unificó el cobro presencial en la **Orders API** (`/v1/orders`): "todas las nuevas funcionalidades se desarrollarán sobre esta API" (migration hub). NinjaPos cobraba (a) el "QR" de MP renderizando como QR el `init_point` de una preferencia de Checkout Pro (un link web, no un QR de caja interoperable) y (b) Point con la Payment Intents API, que la doc ya marca como legacy (ADR-027). Además el QR se dibujaba con un servicio externo de imágenes (`api.qrserver.com`), filtrando el payload de cobro a un tercero.
+
+### Decisión
+
+1. **QR dinámico en la caja** (Edge nueva `mp_qr`, feature `mercado_pago`): `POST /v1/orders` type `qr`, `config.qr.mode = "dynamic"`, `external_pos_id` de la caja del tenant, `X-Idempotency-Key` = id del intent, `expiration_time` PT15M; status por `GET /v1/orders/{id}` (polling server-side, no depende del webhook) y cancel por `POST /v1/orders/{id}/cancel`. **Alta única de sucursal + caja** desde Medios de pago (`GET /users/me` → `POST /users/{id}/stores` → `POST /v2/pos`, reutilizando los existentes por `external_id` estable del tenant); los ids se guardan por ambiente en `tenant_payment_methods(mercadopago).config.mp_qr.{prod|test}`. El QR se dibuja **local** desde `qr_data` con un encoder propio sin dependencias (`lib/qr/qrcode.ts`, mismo criterio que ADR-021), validado decodificando con zxing en los tests.
+2. **Link de Checkout Pro se mantiene** como "Enviar link" (compartible) y como **fallback automático** cuando el negocio no configuró la caja (`qr_pos_not_configured`): nadie pierde el cobro por MP al deployar. Pasar de QR a link cancela la order y re-consulta su estado antes de generar el link (si el cliente justo pagó, se registra ese cobro; nunca dos).
+3. **Point sobre Orders API** (`mp_point`, feature `mercadopago_point`): terminales `GET /terminals/v1/list`, modo PDV `PATCH /terminals/v1/setup`, `POST /v1/orders` type `point` con `terminal_id`, preselección opcional débito / crédito / cuotas (`default_installments` + `installments_cost: buyer`), cancel con `x-allow-cancelable-status: at_terminal` (202 = cancelación pedida: el modal sigue sondeando y si el cliente ya pagó la venta se registra igual). **Compatibilidad:** los intents sin `mp_order_id` (Payment Intents API) siguen resolviendo status/cancel por el camino legacy.
+4. **Webhook topic `order`** (Edge nueva `mp_orders_webhook`, `--no-verify-jwt`): sólo toma `data.id`, busca el intent por `mp_order_id`, **re-lee la order con el token del tenant** en el ambiente del intent y aplica la misma regla que el polling (`_shared/mpIntents.ts`): acredita sólo order `processed` (detalle processed/accredited) + pago `processed` + **monto exacto en centavos** + `external_reference` = intent; idempotente (transiciones desde pending; `approved` se registra aunque el intent se haya cerrado localmente, para que la conciliación lo vea). Responde 200 enseguida (`EdgeRuntime.waitUntil`). La firma `x-signature` no se valida: el ancla de confianza es la re-lectura con el token del tenant (y con token manual el secreto sería el de la app del comercio, no el nuestro).
+5. **Sandbox de Mercado Pago**: no hay host de prueba; cambia la credencial. `payment_secrets(mercadopago).test_access_token` convive con la conexión de producción (`set_payment_secret` gana `merge`/`remove`; el OAuth y el reemplazo del token de producción lo conservan). Se usa sólo con el switch (`tenant_payment_methods.sandbox`) **y** token de prueba cargado; el intent guarda `mp_env` para que status/cancel/webhooks usen la misma credencial. La migración normaliza `sandbox=false` en las filas MP (nacieron con default true y nunca tuvo efecto). Point comparte conexión y switch.
+6. Lógica pura (payloads, mapeo de estados, monto, credencial, parseo de webhook, validación de sucursal) en `supabase/functions/_shared/mpOrders.ts`, sin imports, testeada con Vitest (`tests/unit/mpOrders.test.ts`). Gating sin cambios: `tenant_has_feature_for` en las Edge + trigger de `payments` (`payment_method_plan_key`: mercadopago → mercado_pago, mercadopago_point → mercadopago_point). Auditoría: alta/reset de caja, modo PDV, cancelaciones, acreditaciones y montos que no cierran.
+
+### Alternativas consideradas
+
+- **Seguir con Checkout Pro como QR:** funciona, pero no es un QR de caja (no interoperable, abre un checkout web) y queda fuera de la evolución de MP.
+- **QR estático por caja:** un sticker sirve para cualquier monto, pero exige asociar la order a la caja en el momento y es más propenso a cobros cruzados entre cajeros; el dinámico (un QR por cobro) es más seguro para un POS.
+- **Agregar una librería de QR (`qrcode`):** tocaba `package.json`/lockfile (archivos sensibles) para ~350 líneas de algoritmo estable; se prefirió el encoder propio testeado.
+
+### Consecuencias
+
+- Deploy: migración `20261011170000_mp_orders_api` **antes** de las Edge (usan `mp_order_id`/`mp_env`). Edges: `mp_qr`, `mp_point`, `mp_orders_webhook` (`--no-verify-jwt`), `mp_create_qr`, `mp_webhook`, `set_payment_secret`, `mp_oauth_callback`.
+- Configurar en la app de MP de NinjaSoft (Webhooks → evento Order) la URL `.../functions/v1/mp_orders_webhook`. Los comercios con token manual usan su propia app: sin esa configuración el polling igual resuelve el cobro con el modal abierto.
+- **Pendiente de validación:** alta de sucursal (MP valida `city_name` contra su catálogo de localidades: puede rechazar nombres que no coincidan), cuotas preseleccionadas en Point (las habilita el equipo comercial de MP), y el primer cobro QR + Point en sandbox y en vivo.
+- La pantalla del cliente (H25) recibe el `qr_data` igual que antes recibía el link; sigue dibujando con el servicio externo hasta el rediseño del POS (fuera de alcance).
+
+### Referencias
+
+- Docs oficiales: developers/es/docs/qr-code/overview · reference/in-person-payments/qr-code/orders/create-order/post · docs/qr-code/notifications · docs/qr-code/create-store-and-pos · docs/qr-code/resources/status-order-transaction · docs/mp-point/payment-processing · docs/mp-point/notifications · docs/qr-code/resources/migration-hub.
+- `supabase/functions/mp_qr/index.ts`, `supabase/functions/mp_point/index.ts`, `supabase/functions/mp_orders_webhook/index.ts`, `supabase/functions/_shared/{mpOrders,mpAuth,mpIntents}.ts`, `supabase/migrations/20261011170000_mp_orders_api.sql`, `lib/qr/qrcode.ts`, `components/pos/QrCheckoutModal.tsx`, `components/pos/PointCheckoutModal.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`, `modules/pos/api.ts`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

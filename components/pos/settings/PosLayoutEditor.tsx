@@ -362,37 +362,41 @@ export function PosLayoutEditor({
               const favorite = value.checkout.favorites.includes(t.id);
               const group = TENDER_GROUPS.find((g) => g.key === t.group)?.label;
               return (
-                <li key={t.id} className={cn("flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 pr-2.5", hidden && "opacity-50")}>
-                  <TenderLogo source={t} alt={t.brandLabel} size={28} fallback={tenderFallback(t)} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold">
-                      {t.group === "cash" || t.group === "transfer" ? t.label : `${t.brandLabel} · ${t.label}`}
+                <li key={t.id} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-card p-2.5", hidden && "opacity-50")}>
+                  <div className="flex items-center gap-2.5">
+                    <TenderLogo source={t} alt={t.brandLabel} size={28} fallback={tenderFallback(t)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-bold leading-tight">
+                        {t.group === "cash" || t.group === "transfer" ? t.label : `${t.brandLabel} · ${t.label}`}
+                      </span>
+                      {group && group !== t.label && (
+                        <span className="block text-[11px] leading-tight text-muted-foreground">{group}</span>
+                      )}
                     </span>
-                    {group && group !== t.label && (
-                      <span className="block truncate text-[11px] text-muted-foreground">{group}</span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleFavorite(t.id)}
-                    aria-pressed={favorite}
-                    disabled={hidden}
-                    title="Mostrarlo primero en la pantalla de cobro"
-                    className={cn(PILL, favorite ? PILL_ON : PILL_IDLE)}
-                  >
-                    <Star size={12} className={favorite ? "fill-current" : undefined} /> Favorito
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => togglePin(t.id)}
-                    aria-pressed={pinned}
-                    disabled={hidden}
-                    title="Botón de cobro rápido en el carrito"
-                    className={cn(PILL, pinned ? PILL_ON : PILL_IDLE)}
-                  >
-                    <Pin size={12} /> {pinned ? "En el carrito" : "Al carrito"}
-                  </button>
-                  <Switch checked={!hidden} onCheckedChange={() => toggleHidden(t.id)} label={`Mostrar ${t.brandLabel} ${t.label}`} />
+                    <Switch checked={!hidden} onCheckedChange={() => toggleHidden(t.id)} label={`Mostrar ${t.brandLabel} ${t.label}`} />
+                  </div>
+                  <div className="flex gap-1.5 pl-[38px]">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(t.id)}
+                      aria-pressed={favorite}
+                      disabled={hidden}
+                      title="Mostrarlo primero en la pantalla de cobro"
+                      className={cn(PILL, favorite ? PILL_ON : PILL_IDLE)}
+                    >
+                      <Star size={12} className={favorite ? "fill-current" : undefined} /> Favorito
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePin(t.id)}
+                      aria-pressed={pinned}
+                      disabled={hidden}
+                      title="Botón de cobro rápido en el carrito"
+                      className={cn(PILL, pinned ? PILL_ON : PILL_IDLE)}
+                    >
+                      <Pin size={12} /> {pinned ? "En el carrito" : "Al carrito"}
+                    </button>
+                  </div>
                 </li>
               );
             })}

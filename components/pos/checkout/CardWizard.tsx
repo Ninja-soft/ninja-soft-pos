@@ -136,7 +136,7 @@ export function CardWizard({
       </div>
 
       {step === 1 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Entidad de la tarjeta">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Entidad de la tarjeta">
           {brands.map((b) => {
             const logo = cardLogoKey(b.key);
             const on = brand === b.key;
@@ -147,14 +147,16 @@ export function CardWizard({
                 role="radio"
                 aria-checked={on}
                 onClick={() => pickBrand(b)}
-                className={choiceClass(on, "flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-lg px-2 py-2.5")}
+                className={choiceClass(on, "flex min-h-[84px] flex-col items-center justify-center gap-1.5 rounded-lg px-1.5 py-2.5")}
               >
                 {logo ? (
                   <CardBrandLogo brand={logo} label={b.label} height={28} />
                 ) : (
-                  <CreditCard size={24} className="text-muted-foreground" aria-hidden />
+                  <span className="grid h-[38px] w-[38px] place-items-center rounded-[22.5%] bg-muted ring-1 ring-border">
+                    <CreditCard size={20} className="text-muted-foreground" aria-hidden />
+                  </span>
                 )}
-                <span className="text-xs font-medium">{b.label}</span>
+                <span className="w-full truncate text-center text-xs font-medium" title={b.label}>{b.short ?? b.label}</span>
               </button>
             );
           })}
@@ -386,7 +388,7 @@ export function PlanChip({
       className={choiceClass(on, "flex min-w-0 flex-col items-start gap-1 rounded-lg px-3 py-2 pr-8 text-left")}
     >
       {/* Logo arriba: los chips van de a 3 por fila y no hay ancho para ponerlo al costado. */}
-      {brand && <CardBrandLogo brand={brand} height={16} natural className="max-w-[56px] justify-start" />}
+      {brand && <CardBrandLogo brand={brand} height={16} />}
       <span className="text-[13px] font-semibold">{title}</span>
       <span className="text-[11px] tabular-nums text-muted-foreground">{sub}</span>
     </button>

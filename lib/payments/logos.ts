@@ -106,6 +106,25 @@ export function cardLogoAspect(brand: string): number {
   return CARD_ASPECT[brand] ?? 1.6;
 }
 
+// Ícono de app de la red (cuadrado, mismo set que soft.ninja,
+// public/images/cards/app): va sobre una placa blanca redondeada
+// (CardBrandLogo). Visa débito usa el de Visa.
+const CARD_APP_FILE: Record<string, string> = {
+  visa: "visa",
+  visa_debito: "visa",
+  master: "mastercard",
+  maestro: "maestro",
+  amex: "amex",
+  cabal: "cabal",
+  naranja: "naranja-x",
+  diners: "diners",
+};
+
+export function cardAppIcon(brand: string | null | undefined): string | null {
+  const file = brand ? CARD_APP_FILE[brand] : undefined;
+  return file ? `${CARDS}/app/${file}.webp` : null;
+}
+
 export function cardLogo(brand: string | null | undefined, opts?: LogoOpts): string | null {
   if (!brand) return null;
   const file = CARD_FILE[brand];

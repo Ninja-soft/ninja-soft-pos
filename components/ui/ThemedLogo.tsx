@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils/cn";
-import { cardLogo, cardLogoAspect, logoOnDark } from "@/lib/payments/logos";
+import { cardAppIcon, logoOnDark } from "@/lib/payments/logos";
 
 type Surface = "auto" | "light" | "dark";
 
@@ -46,43 +46,41 @@ export function ThemedLogo({
   );
 }
 
-// Logo de una red de tarjeta, sin placa, en una caja fija (alto `height`,
-// ancho 2.4x, salvo `natural`) para que todas las marcas ocupen el mismo
-// lugar. Dentro, cada logo se escala por su proporción para igualar el peso
-// visual: Visa o Naranja X (apaisados) no quedan enormes ni Amex o Cabal
-// (cuadrados) chicos.
+// Logo de una red de tarjeta como ícono de app, igual que en soft.ninja:
+// placa blanca cuadrada y redondeada (radio 22.5%) con el ícono de la red
+// (cardAppIcon). Es la excepción a "sin placa": así se reconocen las redes en
+// cualquier tema. El lado de la placa es ~1.35x `height`, para que entre en
+// el mismo renglón que antes ocupaba el logo apaisado.
 export function CardBrandLogo({
   brand,
   label,
   height = 24,
-  on = "auto",
-  inverse = false,
-  natural = false,
   className,
 }: {
   brand: string;
   label?: string;
   height?: number;
+  /** Compatibilidad: la placa ya tiene ancho propio. */
+  natural?: boolean;
   on?: Surface;
   inverse?: boolean;
-  /** Ancho propio del logo (filas de adelanto) en vez de la caja fija. */
-  natural?: boolean;
   className?: string;
 }) {
-  const src = cardLogo(brand);
-  const scale = Math.min(1, Math.max(0.55, Math.sqrt(1.6 / cardLogoAspect(brand))));
+  const src = cardAppIcon(brand);
+  const side = Math.max(20, Math.round(height * 1.35));
+  if (!src) {
+    return <span className={cn("truncate text-[11px] font-bold", className)}>{label ?? brand}</span>;
+  }
   return (
     <span
-      className={cn("inline-flex max-w-full shrink-0 items-center justify-center", className)}
-      style={{ height, width: natural ? undefined : Math.round(height * 2.4) }}
-    >
-      {src ? (
-        <span className="inline-flex max-w-full items-center justify-center" style={{ height: Math.round(height * scale) }}>
-          <ThemedLogo src={src} alt={label ?? brand} on={on} inverse={inverse} className="h-full w-auto max-w-full" />
-        </span>
-      ) : (
-        <span className="truncate text-[11px] font-bold">{label ?? brand}</span>
+      className={cn(
+        "grid shrink-0 place-items-center overflow-hidden rounded-[22.5%] bg-white shadow-[0_1px_2px_rgba(0,0,0,.12)] ring-1 ring-black/[.06]",
+        className,
       )}
+      style={{ width: side, height: side }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={label ?? brand} draggable={false} className="h-full w-full select-none object-contain" />
     </span>
   );
 }

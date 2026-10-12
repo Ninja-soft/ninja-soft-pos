@@ -35,8 +35,9 @@ export function PageContainer({
 PageContainer.displayName = "PageContainer";
 
 // Encabezado de pantalla: eyebrow + título (con ícono y ayuda opcionales),
-// bajada y acciones. En mobile las acciones bajan debajo del título y
-// pueden scrollear en horizontal sin romper el ancho.
+// bajada y acciones. El título se ve siempre completo (nunca se trunca, si no
+// entra pasa a otra línea) y las acciones van siempre en su propia fila debajo,
+// alineadas a la izquierda y con wrap, en cualquier ancho.
 export function PageHeader({
   eyebrow,
   title,
@@ -57,11 +58,11 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between",
+        "flex flex-col gap-4",
         className,
       )}
     >
-      <div className="min-w-0 lg:flex-1">
+      <div className="min-w-0">
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
         <Display
           className={cn(
@@ -77,7 +78,7 @@ export function PageHeader({
               aria-hidden
             />
           )}
-          <span className="min-w-0 truncate">{title}</span>
+          <span className="min-w-0 break-words">{title}</span>
           {help}
         </Display>
         {description && (
@@ -87,7 +88,7 @@ export function PageHeader({
         )}
       </div>
       {actions && (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">{actions}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>
       )}
     </header>
   );

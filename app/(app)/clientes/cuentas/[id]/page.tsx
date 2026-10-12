@@ -229,10 +229,10 @@ export default function CustomerAccountPage() {
           </div>
         ) : (
           <>
-            <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <div className="mt-2 flex flex-col gap-4">
               <div className="min-w-0">
                 <Eyebrow>Cuenta corriente</Eyebrow>
-                <Display className="mt-3 truncate text-3xl md:text-4xl">{st.customer.name}</Display>
+                <Display className="mt-3 break-words text-3xl md:text-4xl">{st.customer.name}</Display>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <CreditStatusPill status={st.customer.credit_status} />
                   {st.max_days_overdue > 0 && (

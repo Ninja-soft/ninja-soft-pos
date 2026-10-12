@@ -54,11 +54,14 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
-import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { formatCurrency } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
+import { ProductThumb } from "@/components/products/ProductThumb";
+import { productStockStatus } from "@/modules/products/stockStatus";
+import { cn } from "@/lib/utils/cn";
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
@@ -364,23 +367,27 @@ export default function ProductosPage() {
                 </TableStateRow>
               )}
               {products.map((p) => {
-                const low =
-                  (p.stock_min ?? 0) > 0 && p.stock <= (p.stock_min ?? 0);
+                const stock = productStockStatus(p);
                 return (
                   <tr key={p.id} className="transition hover:bg-muted/40">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{p.name}</div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        {p.plu && (
-                          <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
-                            PLU {p.plu}
-                          </span>
-                        )}
-                        {p.sku && (
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {p.sku}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <ProductThumb src={p.image_url} size={40} />
+                        <div className="min-w-0">
+                          <div className="font-medium text-foreground">{p.name}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {p.plu && (
+                              <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
+                                PLU {p.plu}
+                              </span>
+                            )}
+                            {p.sku && (
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {p.sku}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
@@ -398,8 +405,15 @@ export default function ProductosPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={low ? "font-semibold text-[#FFD21F]" : ""}>
-                        {formatQty(p.stock)} {p.unit}
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          stock.tone === "untracked" && "whitespace-nowrap text-xs text-muted-foreground",
+                          stock.tone === "low" && "font-semibold text-warning",
+                          stock.tone === "out" && "font-semibold text-danger",
+                        )}
+                      >
+                        {stock.label}
                       </span>
                     </td>
                     <td className="px-4 py-3">

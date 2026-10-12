@@ -174,10 +174,10 @@ export default function CuentasPage() {
         <Link href="/clientes" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft size={14} /> Clientes
         </Link>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-          <div>
+        <div className="mt-2 flex flex-col gap-4">
+          <div className="min-w-0">
             <Eyebrow>Cobranza</Eyebrow>
-            <Display className="mt-3 text-3xl md:text-4xl">Cuentas corrientes</Display>
+            <Display className="mt-3 break-words text-3xl md:text-4xl">Cuentas corrientes</Display>
           </div>
           {enabled !== false && (
             <div className="flex flex-wrap gap-2">

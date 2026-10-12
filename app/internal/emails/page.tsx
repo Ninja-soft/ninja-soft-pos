@@ -497,7 +497,7 @@ function SlotEditor({
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition",
               state.kind === opt.key
-                ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                ? "choice-on choice-check"
                 : "border-border text-muted-foreground hover:bg-muted",
             )}
           >
@@ -551,7 +551,7 @@ function SlotEditor({
                     className={cn(
                       "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition",
                       smtpPreset === p.key
-                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                        ? "choice-on"
                         : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >

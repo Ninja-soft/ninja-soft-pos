@@ -260,4 +260,4 @@ Si el cambio afecta POS, internal, reportes o configuración, el control es bloq
 | App de terceros | `IntegrationLogo` con el logo oficial (`public/images/integrations/<app>.webp`). |
 | Modal | `Modal` con `footer` para las acciones (hoja inferior en mobile). |
 
-Reglas: lo seleccionado o destacado se marca con **relleno** (`border-transparent bg-ninja-flame/[0.12]`), nunca con borde o ring de color; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).
+Reglas: lo seleccionado se marca con **relleno neutro elevado** (`choiceClass` o las clases `choice-on` + `choice-check`: relleno tonal del tema, texto de primer plano e insignia de check con el fuego Ninja en la esquina; `choice-on` solo para pastillas compactas o cuando ya hay `ChoiceDot`), nunca con borde o ring de color ni tinte marrón de flame; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).

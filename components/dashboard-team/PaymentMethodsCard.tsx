@@ -167,12 +167,13 @@ export function PaymentMethodsCard() {
 
   const brand = connectBrand ? BRAND_BY_KEY[connectBrand] : undefined;
   const connKey = connectBrand ? connectionKeyOf(connectBrand) : null;
-  const channelNames = connectBrand
+  const connectChannels = connectBrand
     ? (groupProvidersByBrand(providers)
         .find((g) => g.brand.key === connectBrand)
-        ?.channels.filter((c) => c.implemented)
-        .map((c) => (c.channel === "point" ? "Point" : "QR + link")) ?? [])
+        ?.channels.filter((c) => c.implemented) ?? [])
     : [];
+  const channelNames = connectChannels.map((c) => (c.channel === "point" ? "la terminal Point" : "QR y link"));
+  const channelKeys = connectChannels.map((c) => c.key);
 
   // Guarda credenciales (y el ambiente elegido, en proveedores con prueba real).
   const saveConnection = async (key: string, v: ConnectSave) => {
@@ -228,6 +229,7 @@ export function PaymentMethodsCard() {
           providerKey={connKey}
           method={byKey.get(connKey)}
           channelNames={channelNames}
+          channelKeys={channelKeys}
           onSave={(v) => saveConnection(connKey, v)}
           onDisconnect={async () => {
             await invokeSecret({ provider_key: connKey, action: "clear" });

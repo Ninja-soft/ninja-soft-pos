@@ -124,7 +124,7 @@ export function ReturnsSettingsCard() {
                   onClick={() => setPolicy(p.value)}
                   className={
                     active
-                      ? "flex w-full items-start gap-3 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-4 py-3 text-left"
+                      ? "flex w-full items-start gap-3 rounded-lg border choice-on px-4 py-3 text-left"
                       : "flex w-full items-start gap-3 rounded-lg border border-border px-4 py-3 text-left transition hover:bg-muted"
                   }
                 >

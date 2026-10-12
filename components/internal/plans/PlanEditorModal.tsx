@@ -118,7 +118,7 @@ function FeatureInfoButton({ featureKey }: { featureKey: string }) {
           // Solo fade-in: `animate-modal-in` forzaba translate(-50%,-50%) y pisaba
           // el transform de posicionamiento de Radix → el popover saltaba. Ver
           // misma corrección en InfoHint.
-          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-ninjaSoft backdrop-blur-xl data-[state=open]:animate-fade-in"
+          className="z-[60] w-64 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground backdrop-blur-xl data-[state=open]:animate-fade-in"
         >
           <p className="text-foreground">{info.desc}</p>
           <p className="mt-2 text-muted-foreground">

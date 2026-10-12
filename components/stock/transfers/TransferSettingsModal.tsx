@@ -121,7 +121,7 @@ export function TransferSettingsModal({
       }
     >
       <div className="space-y-4">
-        <div className="divide-y divide-border rounded-2xl bg-muted">
+        <div className="divide-y divide-border rounded-lg bg-muted">
           <Row
             title="Pedir aprobación"
             description="Los traslados que arma un encargado los aprueba el dueño u otro encargado."
@@ -157,7 +157,7 @@ export function TransferSettingsModal({
             </div>
           )}
         </div>
-        <div className="divide-y divide-border rounded-2xl bg-muted">
+        <div className="divide-y divide-border rounded-lg bg-muted">
           <Row
             title="El cajero puede recibir"
             description="Quien está en la sucursal de destino registra lo que llegó."
@@ -171,7 +171,7 @@ export function TransferSettingsModal({
             onChange={(v) => set("cashier_can_dispatch", v)}
           />
         </div>
-        <div className="divide-y divide-border rounded-2xl bg-muted">
+        <div className="divide-y divide-border rounded-lg bg-muted">
           <Row
             title="Exigir motivo en las diferencias"
             description="Faltantes y sobrantes quedan con motivo (dañado, vencido, error de despacho)."

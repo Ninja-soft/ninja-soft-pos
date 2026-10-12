@@ -79,7 +79,7 @@ const STEPS: {
 
 const COLLAPSE_KEY = "onboarding-checklist-collapsed";
 
-// Anillo de progreso (SVG) con gradiente flame.
+// Anillo de progreso (SVG) con trazo sólido de marca.
 function ProgressRing({ pct }: { pct: number }) {
   const size = 56;
   const stroke = 5;
@@ -89,13 +89,6 @@ function ProgressRing({ pct }: { pct: number }) {
   return (
     <span className="relative inline-flex h-14 w-14 shrink-0 items-center justify-center">
       <svg width={size} height={size} className="-rotate-90" aria-hidden>
-        <defs>
-          <linearGradient id="onb-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FF4B22" />
-            <stop offset="50%" stopColor="#FF8A1F" />
-            <stop offset="100%" stopColor="#FFD21F" />
-          </linearGradient>
-        </defs>
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -111,7 +104,7 @@ function ProgressRing({ pct }: { pct: number }) {
           fill="none"
           strokeWidth={stroke}
           strokeLinecap="round"
-          stroke="url(#onb-ring)"
+          stroke="var(--pos-solid, #db3a14)"
           strokeDasharray={c}
           strokeDashoffset={offset}
           style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.22,1,0.36,1)" }}
@@ -248,10 +241,9 @@ export function OnboardingChecklist() {
     if (!celebrate) return null;
     return (
       <div className="mt-6 animate-slide-up">
-        <div className="relative overflow-hidden rounded-ninjaLg border border-border bg-card/80 p-5 shadow-ninjaSoft glass-blur sm:p-6">
-          <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-ninja-flame/15 blur-3xl" />
+        <div className="relative overflow-hidden rounded-lg border border-border bg-card p-5 sm:p-6">
           <div className="relative flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-ninjaMd bg-ninja-gradient text-white shadow-ninjaGlow">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft">
               <Rocket size={22} />
             </span>
             <div className="min-w-0 flex-1">
@@ -280,9 +272,9 @@ export function OnboardingChecklist() {
     return (
       <button
         onClick={() => setCollapsedPersist(false)}
-        className="group mt-6 inline-flex items-center gap-2.5 rounded-ninjaFull bg-ninja-flame/[0.08] py-2 pl-2 pr-4 text-sm font-medium text-foreground shadow-sm transition hover:bg-ninja-flame/10"
+        className="group mt-6 inline-flex items-center gap-2.5 rounded-md border border-border bg-card py-2 pl-2 pr-4 text-sm font-medium text-foreground transition hover:bg-muted/60"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ninja-gradient text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded bg-ninja-flame/10 text-ninja-flameSoft">
           <Flame size={13} />
         </span>
         <span>Puesta en marcha</span>
@@ -299,10 +291,7 @@ export function OnboardingChecklist() {
 
   return (
     <>
-      <div className="relative mt-6 animate-slide-up overflow-hidden rounded-ninjaLg border border-border bg-card/70 shadow-ninjaSoft glass-blur">
-        {/* Glow decorativo flame */}
-        <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-ninja-flame/10 blur-3xl" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ninja-flame/40 to-transparent" />
+      <div className="relative mt-6 animate-slide-up overflow-hidden rounded-lg border border-border bg-card">
 
         <div className="relative p-5 sm:p-6">
           {/* Cerrar para siempre */}
@@ -316,7 +305,7 @@ export function OnboardingChecklist() {
 
           {/* Header: medallón + título + anillo de progreso */}
           <div className="flex items-start gap-4 pr-8">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-ninjaMd bg-ninja-gradient text-white shadow-ninjaGlow">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft">
               <Flame size={20} />
             </span>
             <div className="min-w-0 flex-1">
@@ -337,9 +326,9 @@ export function OnboardingChecklist() {
 
           {/* Barra de progreso (visible siempre; el anillo se oculta en mobile) */}
           <div className="mt-4 flex items-center gap-3 sm:hidden">
-            <div className="h-2 flex-1 overflow-hidden rounded-ninjaFull bg-muted">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-ninjaFull bg-ninja-gradient transition-[width] duration-700 ease-out"
+                className="h-full rounded-full bg-[var(--pos-solid)] transition-[width] duration-700 ease-out"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -357,10 +346,10 @@ export function OnboardingChecklist() {
                 <li
                   key={step.key}
                   className={cn(
-                    "group flex items-center gap-3.5 rounded-ninjaMd border px-3 py-3 transition-colors sm:gap-4",
+                    "group flex items-center gap-3.5 rounded-md border px-3 py-3 transition-colors sm:gap-4",
                     ok
                       ? "border-transparent bg-transparent"
-                      : "border-border/70 bg-background/40 hover:bg-ninja-flame/[0.04]",
+                      : "border-border/70 bg-background/40 hover:bg-muted/50",
                   )}
                 >
                   {/* Indicador de estado */}
@@ -382,7 +371,7 @@ export function OnboardingChecklist() {
                   {/* Ícono + textos */}
                   <span
                     className={cn(
-                      "hidden h-9 w-9 shrink-0 items-center justify-center rounded-ninjaSm sm:flex",
+                      "hidden h-9 w-9 shrink-0 items-center justify-center rounded-md sm:flex",
                       ok
                         ? "text-muted-foreground/50"
                         : "bg-ninja-flame/[0.08] text-ninja-flameSoft",
@@ -418,7 +407,7 @@ export function OnboardingChecklist() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="gap-1.5 border-transparent bg-ninja-flame/10 text-ninja-flameSoft hover:bg-ninja-flame/15"
+                        className="gap-1.5"
                       >
                         {step.cta}
                         <ArrowRight size={14} />
@@ -434,7 +423,7 @@ export function OnboardingChecklist() {
               catálogo de muestra cuando todavía no se cargaron productos. Deja
               el negocio listo para cobrar sin Excel ni SQL. */}
           {!status.producto && (
-            <div className="mt-4 flex flex-col gap-3 rounded-ninjaMd bg-ninja-flame/[0.08] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-4 flex flex-col gap-3 rounded-md border border-border/70 bg-muted/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">
                   ¿Heladería, peluquería, cafetería?
@@ -443,7 +432,7 @@ export function OnboardingChecklist() {
               </p>
               <IndustryPresetButton
                 size="sm"
-                className="shrink-0 border-transparent bg-ninja-flame/10 text-ninja-flameSoft hover:bg-ninja-flame/15"
+                className="shrink-0"
               />
             </div>
           )}

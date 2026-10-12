@@ -31,7 +31,7 @@ export function AttributesEditor({
     <div className="space-y-3">
       {value.length === 0 ? (
         !compact && (
-          <div className="rounded-2xl bg-muted">
+          <div className="rounded-lg bg-muted">
             <EmptyState
               compact
               icon={Tag}

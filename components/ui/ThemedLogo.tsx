@@ -74,7 +74,7 @@ export function CardBrandLogo({
   return (
     <span
       className={cn(
-        "grid shrink-0 place-items-center overflow-hidden rounded-[22.5%] bg-white shadow-[0_1px_2px_rgba(0,0,0,.12)] ring-1 ring-black/[.06]",
+        "grid shrink-0 place-items-center overflow-hidden rounded-[22.5%] bg-white ring-1 ring-black/[.06]",
         className,
       )}
       style={{ width: side, height: side }}

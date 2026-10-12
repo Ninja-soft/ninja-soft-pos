@@ -83,7 +83,7 @@ export function PosLocationPicker({
         <Popover.Content
           align="start"
           sideOffset={8}
-          className="z-50 w-[min(92vw,340px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl animate-fade-in"
+          className="z-50 w-[min(92vw,340px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground animate-fade-in"
         >
           <p className="flex items-center gap-1.5 px-1 text-sm font-semibold">
             <MapPin size={15} aria-hidden /> ¿Dónde vendés hoy?

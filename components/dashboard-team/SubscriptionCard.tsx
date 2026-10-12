@@ -36,6 +36,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { PlanBadge } from "@/components/internal/plans/PlanBadge";
+import { AssistantMark } from "@/components/ai/AssistantMark";
 import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { PaymentHistory, type PaymentRecord } from "@/components/saas/PaymentHistory";
 import { useMyPaymentHistory } from "@/modules/saas/paymentHistory";
@@ -558,12 +559,14 @@ export function SubscriptionCard() {
         <div>
           <CardContent className="p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex min-w-0 items-start gap-4">
+              <div className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-3">
                 <PlanBadge
                   plan={{
                     name: sub.plan.name,
                     secondaryName: sub.plan.secondary_name,
-                    imageUrl: sub.plan.image_url,
+                    // Insignia tipográfica plana (nombre + secundario): la
+                    // imagen del plan trae degradado y brillo horneados.
+                    imageUrl: null,
                     icon: sub.plan.icon,
                   }}
                   size="md"
@@ -585,7 +588,7 @@ export function SubscriptionCard() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-2xl font-black tracking-tight text-foreground">
+                  <p className="mt-1.5 whitespace-nowrap text-2xl font-black tracking-tight text-foreground">
                     {fmtMoney(sub.plan.monthly_price_ars)}
                     <span className="text-sm font-normal text-muted-foreground">
                       {" "}
@@ -740,7 +743,7 @@ export function SubscriptionCard() {
             // Contratado: estado + acción discreta.
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3.5">
               <div className="flex min-w-0 items-center gap-3">
-                <AiAvatar src={aiCfg?.image_url} />
+                <AiAvatar />
                 <div className="min-w-0">
                   <div className="font-medium">Asistente IA</div>
                   <div className="text-xs">
@@ -797,7 +800,7 @@ export function SubscriptionCard() {
             <div className="mt-3 rounded-lg bg-muted/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
-                  <AiAvatar src={aiCfg?.image_url} />
+                  <AiAvatar />
                   <div className="min-w-0">
                     <div className="font-semibold text-foreground">
                       Sumá inteligencia a tu negocio
@@ -823,7 +826,7 @@ export function SubscriptionCard() {
                 </div>
                 <div className="text-right">
                   {aiPrice && (
-                    <div className="mb-2">
+                    <div className="mb-2 whitespace-nowrap">
                       <span className="text-lg font-black text-foreground">
                         {fmtMoney(Number(aiPrice))}
                       </span>
@@ -1077,20 +1080,8 @@ export function SubscriptionCard() {
 }
 
 // Avatar del asistente IA (imagen del proveedor o ícono de marca).
-function AiAvatar({ src }: { src?: string }) {
-  if (src) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt="Asistente IA"
-        className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-      />
-    );
-  }
-  return (
-    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-flame/15 text-ninja-flameSoft">
-      <Sparkles size={18} />
-    </span>
-  );
+// Avatar del Asistente IA: la misma marca plana del chat (sin degradados ni
+// brillos), así el complemento se reconoce igual en todo el sistema.
+function AiAvatar() {
+  return <AssistantMark size={40} sparkle={false} />;
 }

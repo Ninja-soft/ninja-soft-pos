@@ -86,7 +86,7 @@ export function CategoryPathEditor({
               <span className="mt-2.5 grid h-5 w-5 shrink-0 place-items-center text-muted-foreground" aria-hidden>
                 {i === 0 ? <FolderTree size={15} /> : <CornerDownRight size={15} />}
               </span>
-              <div className="min-w-0 flex-1 rounded-2xl bg-muted p-2.5">
+              <div className="min-w-0 flex-1 rounded-lg bg-muted p-2.5">
                 <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {levelLabel(i)}

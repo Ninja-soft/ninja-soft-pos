@@ -29,7 +29,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1156,7 +1156,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente.
   - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización.
   - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock.
-  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador).
+  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(ADR-059: import XLSX de la lista del proveedor con mapeo guardado, vista previa de la variación y costo de reposición; falta la versión de lista de venta en borrador)*
   - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente).
   - [ ] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió.
 
@@ -1166,7 +1166,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [x] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo. *(borrador → enviada → recibida en parte → recibida / cancelada; sugerencia por sucursal; impresión y envío por WhatsApp o mail)*
   - [x] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
   - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías). *(v1: todo como líneas libres y vínculo con recepciones; falta control de tres vías automático)*
-  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder; faltan órdenes de pago con aplicación y anticipos)*
+  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder. v2 (ADR-059): órdenes de pago con imputación, pago parcial y a cuenta, efectivo de la caja propia, banco y cheques, retenciones con certificado e impresión; falta el cálculo como agente, H106)*
+  - [x] Devoluciones al proveedor con salida de stock por sucursal, lote, recálculo del promedio y NC vinculada; anulación de recepciones con reversa de stock, costos y OC. *(ADR-059, `feat/compras-v2`)*
   - [x] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
   - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109). *(v1: moneda y TC por operación en modo profesional; falta diferencia de cambio)*
   - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente. *(cubierto por `tests/integration/rls-compras.test.ts`; falta validar en producción)*
@@ -1177,7 +1178,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios.
   - [ ] Prorrateo configurable por concepto (valor, peso, volumen o cantidad) y costo unitario puesto en depósito por producto y lote; crédito fiscal separado del costo.
   - [ ] Tipo de cambio por operación (oficializado del despacho y del pago) y diferencia de cambio.
-  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias.
+  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias. *(ADR-059: consumo por lote FEFO/FIFO en la venta y trazabilidad lote y despacho → ventas; falta imprimirlo en la factura, F3/H107)*
   - [ ] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote.
 
 - [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.*
@@ -1245,7 +1246,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] BIN de tarjeta → banco y medio (opcional).
   - [ ] *Criterio:* el dueño sube la liquidación de Prisma de Norte y ve qué cupones se acreditaron, cuáles faltan y cuánto se llevó de comisión y retenciones.
 
-- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.*
+- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.* · *Básica en `feat/compras-v2` (ADR-059, requiere `compras`): cuentas de caja general y bancos, movimientos, transferencias, conciliación manual, cheques propios y de terceros y flujo de fondos proyectado.*
   - [ ] Caja fuerte por sucursal, retiros del cajón (por límite con motivo), depósitos al banco y transferencias entre sucursales, con comprobante adjunto.
   - [ ] Rendiciones por medio de pago con estados (pendiente de aprobación → entregado) y fondo fijo de cambio.
   - [ ] Saldo teórico vs. contado por cuenta (cajero, caja fuerte, banco) y asiento (H109).

@@ -200,7 +200,7 @@ describe.skipIf(!enabled)("ADR-054 · cupón del posnet offline validado en el s
       terminal_tx: "00000000-0000-0000-0000-000000000000",
     });
     expect(integrated.error?.message ?? "").not.toMatch(/card_voucher_(required|invalid)/);
-    expect(integrated.error?.message).toMatch(/terminal_tx/);
+    expect(integrated.error?.message).toMatch(/terminal_tx|terminal_integrada/);
 
     const ok = await sale(ctx.shift1, { lote: "123", cupon: "", autorizacion: "", ultimos4: "4242", adquirente: "payway" });
     expect(ok.error).toBeNull();

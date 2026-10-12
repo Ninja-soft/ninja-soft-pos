@@ -40,6 +40,8 @@ export interface StatementMovement {
   method: string | null;
   receipt_no: number | null;
   period: string | null;
+  // Tasa diaria: último día devengado del movimiento mensual de punitorio.
+  accrued_through: string | null;
   voided_at: string | null;
   running: number;
 }
@@ -56,6 +58,8 @@ export interface OpenItemRow {
   installment_no: number | null;
   installments: number | null;
   parent_id: string | null;
+  period: string | null;
+  accrued_through: string | null;
   days_overdue: number;
 }
 

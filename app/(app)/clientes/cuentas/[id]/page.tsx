@@ -27,6 +27,7 @@ import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { downloadStatementPdf } from "@/lib/account/statementPdf";
 import { todayIso } from "@/lib/account/terms";
+import { interestConcept } from "@/lib/account/interest";
 import type { AccountConfig } from "@/lib/account/config";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
@@ -75,7 +76,10 @@ function concept(m: StatementMovement): string {
     return `${base}${m.receipt_no ? ` recibo #${m.receipt_no}` : ""}${m.method ? ` · ${METHOD_LABEL[m.method] ?? m.method}` : ""}`;
   }
   if (m.kind === "charge") return m.reason ?? base;
-  if (m.kind === "interest") return `${base}${m.note ? ` · ${m.note}` : ""}`;
+  if (m.kind === "interest") {
+    const label = m.accrued_through ? interestConcept(m.period, m.accrued_through) : base;
+    return `${label}${m.note ? ` · ${m.note}` : ""}`;
+  }
   return `${base}${m.note ? ` · ${m.note}` : m.reason ? ` · ${m.reason}` : ""}`;
 }
 
@@ -403,7 +407,9 @@ export default function CustomerAccountPage() {
                     >
                       <div className="min-w-0">
                         <div className="font-medium">
-                          {it.kind === "interest" ? "Punitorio" : it.reason ?? KIND_LABEL[it.kind]}
+                          {it.kind === "interest"
+                            ? interestConcept(it.period, it.accrued_through)
+                            : it.reason ?? KIND_LABEL[it.kind]}
                         </div>
                         <div className={cn("text-xs", it.days_overdue > 0 ? "text-danger" : "text-muted-foreground")}>
                           {it.due_date ? `Vence ${fmtDate(it.due_date)}` : <NoData />}

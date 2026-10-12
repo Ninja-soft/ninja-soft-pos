@@ -42,6 +42,7 @@ alter table customer_account_movements
   add column if not exists idempotency_key text,
   add column if not exists note            text,
   add column if not exists period          date,
+  add column if not exists accrued_through date,
   add column if not exists voided_at       timestamptz,
   add column if not exists voided_by       uuid references public.users(id);
 
@@ -103,13 +104,17 @@ create unique index if not exists cam_receipt_uniq
 -- Idempotencia de cobros (doble click / reintento de red).
 create unique index if not exists cam_idempotency_uniq
   on customer_account_movements (tenant_id, idempotency_key) where idempotency_key is not null;
--- Un movimiento de interés por cargo y período.
+-- Un movimiento de interés por cargo y período. Tasa mensual: period = inicio
+-- del período. Tasa diaria: period = día 1 del mes calendario y el cron diario
+-- ACTUALIZA ese movimiento (upsert) hasta accrued_through.
 create unique index if not exists cam_interest_period_uniq
   on customer_account_movements (parent_id, period) where kind = 'interest';
 
 comment on column customer_account_movements.kind is
   'charge|payment|interest|interest_waiver|adjust_debit|adjust_credit|reversal. '
   'Débitos (charge/interest/adjust_debit) delta>=0; créditos delta<=0.';
+comment on column customer_account_movements.accrued_through is
+  'Interés con tasa diaria: último día devengado en el movimiento mensual (null en tasa mensual).';
 comment on column customer_account_movements.parent_id is
   'Débito al que aplica un interest (cargo), interest_waiver (interés) o reversal (cargo).';
 

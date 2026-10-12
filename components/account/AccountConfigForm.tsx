@@ -203,7 +203,14 @@ export function AccountConfigForm({
               <Num label="Tope" value={i.cap_pct} min={0} max={1000} placeholder="Sin tope" onChange={(v) => set("interest", { cap_pct: v })} />
               <span className="text-sm text-muted-foreground">%</span>
             </Row>
-            <Row title="Mínimo por liquidación" hint="Montos menores esperan a la próxima liquidación.">
+            <Row
+              title="Mínimo por liquidación"
+              hint={
+                i.period === "daily"
+                  ? "Con tasa diaria se mide contra el total del mes; montos menores esperan."
+                  : "Montos menores esperan a la próxima liquidación."
+              }
+            >
               <Num label="Mínimo" value={i.min_amount} step={0.01} min={0} onChange={(v) => set("interest", { min_amount: v ?? 0 })} />
             </Row>
             <div className="pt-3">

@@ -810,9 +810,89 @@ begin
 end;
 $$;
 
+-- ESPEJO de accrueDailyInterest() (lib/account/interest.ts). Tasa diaria: UN
+-- movimiento por cargo y MES CALENDARIO. Devuelve, por mes, el monto a SUMAR al
+-- movimiento de ese mes (o a crear) y hasta qué día cubre. Casos (tests):
+--   1000 al 0,1% diario, vto 10/10, gracia 5, al 20/10 -> (2026-10-01, 20/10, 5 días, 5)
+--   al día siguiente (accrued_through 20/10)           -> (2026-10-01, 21/10, 1, 1)
+--   corrida atrasada al 03/11 desde cero                -> oct 16 días 16 + nov 3 días 3
+--   mínimo: se mide contra el total del mes; un mes cerrado que no llega pasa
+--   sus días al mes siguiente.
+create or replace function account_interest_daily_calc(
+  p_as_of date, p_due date, p_original numeric, p_outstanding numeric,
+  p_unpaid_interest numeric, p_posted numeric, p_accrued_through date,
+  p_existing numeric, p_cfg jsonb
+)
+returns table (o_period date, o_through date, o_units int, o_amount numeric)
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare
+  v_rate     numeric := coalesce((p_cfg ->> 'rate_pct')::numeric, 0) / 100;
+  v_grace    int := greatest(0, coalesce((p_cfg ->> 'grace_days')::int, 0));
+  v_cap      numeric := (p_cfg ->> 'cap_pct')::numeric;
+  v_min      numeric := coalesce((p_cfg ->> 'min_amount')::numeric, 0);
+  v_compound boolean := coalesce(p_cfg ->> 'method', 'simple') = 'compound';
+  v_room     numeric;
+  v_unpaid   numeric := greatest(coalesce(p_unpaid_interest, 0), 0);
+  v_existing numeric := coalesce(p_existing, 0);
+  v_from     date;
+  v_end      date;
+  v_units    int;
+  v_raw      numeric;
+  v_amt      numeric;
+  v_carry    numeric := 0;
+  v_carry_u  int := 0;
+begin
+  if not coalesce((p_cfg ->> 'enabled')::boolean, false) or v_rate <= 0 then return; end if;
+  if coalesce(p_outstanding, 0) <= 0.004 or p_due is null or p_as_of is null then return; end if;
+
+  v_from := p_due + v_grace + 1;
+  if p_accrued_through is not null and p_accrued_through + 1 > v_from then
+    v_from := p_accrued_through + 1;
+  end if;
+  if v_cap is not null and v_cap >= 0 then
+    v_room := round(p_original * v_cap / 100 - coalesce(p_posted, 0), 2);
+  end if;
+
+  while v_from <= p_as_of loop
+    v_end := least((date_trunc('month', v_from) + interval '1 month - 1 day')::date, p_as_of);
+    v_units := v_end - v_from + 1;
+    if v_compound then
+      v_raw := (p_outstanding + v_unpaid) * (power(1 + v_rate, v_units) - 1);
+    else
+      v_raw := p_outstanding * v_rate * v_units;
+    end if;
+    v_raw := round(v_raw + v_carry, 2);
+    v_amt := case when v_room is null then v_raw else least(v_raw, v_room) end;
+    exit when v_amt <= 0.004;
+    if v_existing + v_amt < v_min then
+      exit when v_end >= p_as_of;
+      v_carry := v_raw;
+      v_carry_u := v_carry_u + v_units;
+    else
+      o_period := date_trunc('month', v_from)::date;
+      o_through := v_end;
+      o_units := v_units + v_carry_u;
+      o_amount := v_amt;
+      return next;
+      if v_room is not null then v_room := v_room - v_amt; end if;
+      v_unpaid := v_unpaid + v_amt;
+      v_carry := 0;
+      v_carry_u := 0;
+    end if;
+    v_existing := 0;
+    v_from := v_end + 1;
+  end loop;
+end;
+$$;
+
 -- Devengo de punitorios. Cron diario (pg_cron, sin auth → todos los tenants con
 -- cc_punitorios); un dueño/encargado puede correrlo a mano para su negocio.
--- Idempotente: único por (cargo, período).
+-- Idempotente: único por (cargo, período). Tasa mensual: un movimiento por
+-- período. Tasa diaria: un movimiento por cargo y mes calendario que se
+-- actualiza (upsert) día a día; accrued_through evita sumar dos veces el mismo día.
 create or replace function account_accrue_interest(p_as_of date default null)
 returns jsonb
 language plpgsql
@@ -835,6 +915,10 @@ declare
   v_total   numeric;
   v_all     int := 0;
   v_id      uuid;
+  v_through date;
+  v_from0   date;
+  v_exist   numeric;
+  b         record;
 begin
   if auth.uid() is not null then
     v_only := account_assert('cc_punitorios');
@@ -870,13 +954,54 @@ begin
       end if;
       continue when not coalesce((v_cfg ->> 'enabled')::boolean, false);
 
-      select coalesce(sum(i.delta), 0), max(i.period)
-        into v_posted, v_lastp
+      select coalesce(sum(i.delta), 0), max(i.period), max(i.accrued_through)
+        into v_posted, v_lastp, v_through
         from customer_account_movements i
        where i.parent_id = d.id and i.kind = 'interest' and i.voided_at is null;
       select coalesce(sum(oi.open_amount), 0) into v_unpaid
         from account_open_debits(t.tenant_id, d.customer_id) oi
        where oi.kind = 'interest' and oi.parent_id = d.id;
+
+      if coalesce(v_cfg ->> 'period', 'monthly') = 'daily' then
+        -- Lo ya liquidado en el mes del primer día a devengar (para el mínimo).
+        v_from0 := d.due_date + greatest(0, coalesce((v_cfg ->> 'grace_days')::int, 0)) + 1;
+        if v_through is not null and v_through + 1 > v_from0 then
+          v_from0 := v_through + 1;
+        end if;
+        select coalesce(sum(i.delta), 0) into v_exist
+          from customer_account_movements i
+         where i.parent_id = d.id and i.kind = 'interest' and i.voided_at is null
+           and i.period = date_trunc('month', v_from0)::date;
+
+        for b in
+          select * from account_interest_daily_calc(
+            v_as_of, d.due_date, d.amount, d.open_amount, v_unpaid, v_posted, v_through, v_exist, v_cfg)
+        loop
+          v_id := null;
+          insert into customer_account_movements as m
+            (tenant_id, customer_id, kind, delta, parent_id, sale_id, period, accrued_through,
+             due_date, reason, note)
+          values
+            (t.tenant_id, d.customer_id, 'interest', b.o_amount, d.id, d.sale_id, b.o_period, b.o_through,
+             v_as_of, 'Punitorio',
+             (v_cfg ->> 'rate_pct') || '% diario '
+               || case when v_cfg ->> 'method' = 'compound' then 'compuesto' else 'simple' end
+               || ' sobre ' || d.open_amount)
+          on conflict (parent_id, period) where kind = 'interest'
+          do update set delta = m.delta + excluded.delta,
+                        accrued_through = excluded.accrued_through,
+                        note = excluded.note
+           where m.voided_at is null
+             and coalesce(m.accrued_through, m.period - 1) < excluded.accrued_through
+          returning m.id into v_id;
+
+          if v_id is not null then
+            v_count := v_count + 1;
+            v_total := v_total + b.o_amount;
+          end if;
+        end loop;
+        continue;
+      end if;
 
       select * into v_calc from account_interest_calc(
         v_as_of, d.due_date, d.amount, d.open_amount, v_unpaid, v_posted, v_lastp, v_cfg);
@@ -888,8 +1013,7 @@ begin
       values
         (t.tenant_id, d.customer_id, 'interest', v_calc.o_amount, d.id, d.sale_id, v_calc.o_period, v_as_of,
          'Punitorio',
-         v_calc.o_units || ' ' || case when v_cfg ->> 'period' = 'daily' then 'día(s)' else 'mes(es)' end
-           || ' al ' || (v_cfg ->> 'rate_pct') || '% '
+         v_calc.o_units || ' mes(es) al ' || (v_cfg ->> 'rate_pct') || '% '
            || case when v_cfg ->> 'method' = 'compound' then 'compuesto' else 'simple' end
            || ' sobre ' || d.open_amount)
       on conflict (parent_id, period) where kind = 'interest' do nothing
@@ -1056,21 +1180,21 @@ begin
   with mv as (
     select m.*,
            sum(case when m.voided_at is null then m.delta else 0 end)
-             over (order by m.created_at, m.id) as running,
+             over (order by m.created_at, m.period nulls first, m.id) as running,
            (m.created_at at time zone 'America/Argentina/Buenos_Aires')::date as local_date
       from customer_account_movements m
      where m.tenant_id = v_tenant and m.customer_id = v_cust.id
   )
   select
     coalesce((select running - case when voided_at is null then delta else 0 end
-                from mv where local_date >= v_from order by created_at, id limit 1),
-             (select running from mv order by created_at desc, id desc limit 1), 0),
+                from mv where local_date >= v_from order by created_at, period nulls first, id limit 1),
+             (select running from mv order by created_at desc, period desc nulls last, id desc limit 1), 0),
     coalesce(jsonb_agg(jsonb_build_object(
       'id', id, 'kind', kind, 'delta', delta, 'reason', reason, 'note', note,
       'created_at', created_at, 'due_date', due_date, 'sale_id', sale_id,
       'installment_no', installment_no, 'installments', installments, 'parent_id', parent_id,
-      'method', method, 'receipt_no', receipt_no, 'period', period,
-      'voided_at', voided_at, 'running', round(running, 2)) order by created_at, id)
+      'method', method, 'receipt_no', receipt_no, 'period', period, 'accrued_through', accrued_through,
+      'voided_at', voided_at, 'running', round(running, 2)) order by created_at, period nulls first, id)
       filter (where local_date between v_from and v_to), '[]'::jsonb)
     into v_opening, v_mov
   from mv;
@@ -1079,7 +1203,7 @@ begin
            'id', od.id, 'kind', od.kind, 'reason', m.reason, 'due_date', od.due_date,
            'created_at', od.created_at, 'amount', od.amount, 'open', od.open_amount,
            'sale_id', od.sale_id, 'installment_no', od.installment_no, 'installments', od.installments,
-           'parent_id', od.parent_id,
+           'parent_id', od.parent_id, 'period', m.period, 'accrued_through', m.accrued_through,
            'days_overdue', greatest(v_today - od.due_date, 0))
            order by (od.kind <> 'interest'), od.due_date nulls last, od.created_at, od.id), '[]'::jsonb)
     into v_open

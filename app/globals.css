@@ -192,6 +192,25 @@
     caret-color: var(--foreground);
   }
 
+  /* <select> nativo. El popup de opciones en Chrome / Edge de Windows toma el
+     fondo del propio select; con un fondo translúcido (bg-card en oscuro) lo
+     compone sobre blanco y la lista se veía blanca con texto claro. Las
+     opciones llevan siempre el popover opaco del tema. El foco usa el mismo
+     anillo que <Input> en lugar del contorno blanco del navegador. */
+  select {
+    color: var(--foreground);
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select:focus {
+    outline: none;
+    border-color: rgb(var(--ninja-flame-soft));
+    box-shadow: 0 0 0 2px rgb(var(--ninja-flame-soft) / 0.2);
+  }
+
   /* Autofill: el navegador fuerza un fondo claro y el texto blanco quedaba
      invisible. Forzamos color del texto al foreground del tema y matamos el
      fondo de autofill con el truco de transition + box-shadow. */

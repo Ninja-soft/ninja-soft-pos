@@ -365,6 +365,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Más útil con los números de comercio cargados en Medios de pago, Planes de cuotas, y con los datos del cupón (lote y cupón) de Tarjeta en posnet.",
   },
+  conciliacion_procesadores: {
+    desc: "Conciliación de procesadores: los cobros de Mercado Pago llegan solos todos los días por API (y con \"Actualizar ahora\"), la liquidación de Payway, Getnet, Fiserv u otro adquirente se importa desde el Excel o CSV, y se cruzan solos con tus ventas. Muestra en palabras simples cuánto vendiste, cuánto te cobraron de comisiones e impuestos, cuánto te acreditaron y cuánto falta (con fecha), y te deja resolver los cobros sin venta, las ventas sin cobro y las diferencias de monto. Exporta a Excel.",
+    impact: "Desactivado, la liquidación de cada procesador se controla a mano o con un sistema aparte; los cobros con tarjeta se siguen conciliando por lote si el plan trae la conciliación de tarjetas.",
+    minPlan: "Business",
+    needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
+  },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
     impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",

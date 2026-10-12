@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
@@ -21,30 +22,73 @@ import {
   type PriceAccent,
 } from "@/lib/theme/AppearanceProvider";
 import { formatCurrency } from "@/lib/utils/format";
-import { BrandingCard } from "@/components/dashboard-team/BrandingCard";
-import { PaymentMethodsCard } from "@/components/dashboard-team/PaymentMethodsCard";
-import { OperationSettingsCard } from "@/components/dashboard-team/OperationSettingsCard";
-import { ReturnsSettingsCard } from "@/components/dashboard-team/ReturnsSettingsCard";
-import { ScannerCard } from "@/components/dashboard-team/ScannerCard";
-import { CustomerDisplayCard } from "@/components/dashboard-team/CustomerDisplayCard";
-import { HardwareCard } from "@/components/dashboard-team/HardwareCard";
-import { WarrantyPlansManager } from "@/components/products/WarrantyPlansManager";
-import { RubroCard } from "@/components/dashboard-team/RubroCard";
-import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
-import { SalonesManager } from "@/components/dining/SalonesManager";
-import { MenusManager } from "@/components/dining/MenusManager";
-import { PromotionsManager } from "@/components/promotions/PromotionsManager";
-import { CouponsManager } from "@/components/coupons/CouponsManager";
-import { ZonasManager } from "@/components/delivery/ZonasManager";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
-import { ServicePacksManager } from "@/components/packs/ServicePacksManager";
-import { TenantEmailCard } from "@/components/dashboard-team/TenantEmailCard";
-import { TicketTemplatesCard } from "@/components/tickets/TicketTemplatesCard";
-import { PrintSettingsCard } from "@/components/dashboard-team/PrintSettingsCard";
-import { PriceListsCard } from "@/components/prices/PriceListsCard";
 import { useFeature } from "@/modules/saas/gating";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
+
+// Cada sección de Configuración se muestra sola (una por vez): su componente
+// se carga en un chunk aparte en lugar de bajar las 20 juntas al entrar.
+const BrandingCard = dynamic(() =>
+  import("@/components/dashboard-team/BrandingCard").then((m) => m.BrandingCard),
+);
+const PaymentMethodsCard = dynamic(() =>
+  import("@/components/dashboard-team/PaymentMethodsCard").then((m) => m.PaymentMethodsCard),
+);
+const OperationSettingsCard = dynamic(() =>
+  import("@/components/dashboard-team/OperationSettingsCard").then((m) => m.OperationSettingsCard),
+);
+const ReturnsSettingsCard = dynamic(() =>
+  import("@/components/dashboard-team/ReturnsSettingsCard").then((m) => m.ReturnsSettingsCard),
+);
+const ScannerCard = dynamic(() =>
+  import("@/components/dashboard-team/ScannerCard").then((m) => m.ScannerCard),
+);
+const CustomerDisplayCard = dynamic(() =>
+  import("@/components/dashboard-team/CustomerDisplayCard").then((m) => m.CustomerDisplayCard),
+);
+const HardwareCard = dynamic(() =>
+  import("@/components/dashboard-team/HardwareCard").then((m) => m.HardwareCard),
+);
+const WarrantyPlansManager = dynamic(() =>
+  import("@/components/products/WarrantyPlansManager").then((m) => m.WarrantyPlansManager),
+);
+const RubroCard = dynamic(() =>
+  import("@/components/dashboard-team/RubroCard").then((m) => m.RubroCard),
+);
+const ProfessionalsManager = dynamic(() =>
+  import("@/components/agenda/ProfessionalsManager").then((m) => m.ProfessionalsManager),
+);
+const SalonesManager = dynamic(() =>
+  import("@/components/dining/SalonesManager").then((m) => m.SalonesManager),
+);
+const MenusManager = dynamic(() =>
+  import("@/components/dining/MenusManager").then((m) => m.MenusManager),
+);
+const PromotionsManager = dynamic(() =>
+  import("@/components/promotions/PromotionsManager").then((m) => m.PromotionsManager),
+);
+const CouponsManager = dynamic(() =>
+  import("@/components/coupons/CouponsManager").then((m) => m.CouponsManager),
+);
+const ZonasManager = dynamic(() =>
+  import("@/components/delivery/ZonasManager").then((m) => m.ZonasManager),
+);
+const ServicePacksManager = dynamic(() =>
+  import("@/components/packs/ServicePacksManager").then((m) => m.ServicePacksManager),
+);
+const TenantEmailCard = dynamic(() =>
+  import("@/components/dashboard-team/TenantEmailCard").then((m) => m.TenantEmailCard),
+);
+const TicketTemplatesCard = dynamic(() =>
+  import("@/components/tickets/TicketTemplatesCard").then((m) => m.TicketTemplatesCard),
+);
+const PrintSettingsCard = dynamic(() =>
+  import("@/components/dashboard-team/PrintSettingsCard").then((m) => m.PrintSettingsCard),
+);
+const PriceListsCard = dynamic(() =>
+  import("@/components/prices/PriceListsCard").then((m) => m.PriceListsCard),
+);
 
 type Section =
   | "apariencia"

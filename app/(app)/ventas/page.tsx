@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Ban, Download, Lock, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
-import { TicketModal } from "@/components/sales/TicketModal";
-import { ReturnModal } from "@/components/sales/ReturnModal";
-import { QrIntentsModal } from "@/components/sales/QrIntentsModal";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { GatedButton, useFeatureGate } from "@/components/saas/GatedAction";
@@ -20,6 +19,21 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+
+// Modales en chunks aparte, montados recién al abrirlos (ticket, devolución /
+// cambio y cobros QR son pesados y no hacen falta para listar ventas).
+const TicketModal = dynamic(
+  () => import("@/components/sales/TicketModal").then((m) => m.TicketModal),
+  { ssr: false },
+);
+const ReturnModal = dynamic(
+  () => import("@/components/sales/ReturnModal").then((m) => m.ReturnModal),
+  { ssr: false },
+);
+const QrIntentsModal = dynamic(
+  () => import("@/components/sales/QrIntentsModal").then((m) => m.QrIntentsModal),
+  { ssr: false },
+);
 
 const SALE_STATUS: Record<string, string> = {
   completed: "Completada",
@@ -330,9 +344,15 @@ export default function VentasPage() {
       </div>
 
       {returnGate.modal}
-      <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
-      <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
-      <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />
+      <MountWhenOpened open={ticketOpen}>
+        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+      </MountWhenOpened>
+      <MountWhenOpened open={returnOpen}>
+        <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrOpen}>
+        <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />
+      </MountWhenOpened>
       <ConfirmDialog
         open={voidTarget !== null}
         onOpenChange={(o) => !o && setVoidTarget(null)}

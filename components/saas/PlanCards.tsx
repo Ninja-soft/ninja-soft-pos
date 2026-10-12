@@ -189,7 +189,7 @@ function PlanCardItem({
       className={cn(
         "relative flex flex-col gap-4 rounded-2xl border p-5 text-left transition",
         selected
-          ? "border-ninja-flame bg-ninja-flame/[0.06] ring-2 ring-ninja-flame/40"
+          ? "border-transparent bg-ninja-flame/10"
           : recommended
             ? "border-ninja-flame/45 bg-muted/60 shadow-ninjaGlow"
             : "border-border bg-muted/60",

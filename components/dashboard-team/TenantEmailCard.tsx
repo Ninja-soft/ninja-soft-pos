@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Eye, Mail, Zap } from "lucide-react";
+import { AlertCircle, Check, Eye, Mail, Server, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -20,10 +20,10 @@ type EmailMethod = "smtp" | "resend";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
-const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean }[] = [
-  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true },
-  { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false },
-  { key: "otro", label: "Otro", host: "", port: "587", secure: false },
+const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean; logo: string | null }[] = [
+  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true, logo: "/images/integrations/gmail.webp" },
+  { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false, logo: "/images/integrations/outlook.webp" },
+  { key: "otro", label: "Otro", host: "", port: "587", secure: false, logo: null },
 ];
 
 function inferProvider(host: string): ProviderKey {
@@ -385,12 +385,14 @@ export function TenantEmailCard() {
               onClick={() => setMethod("smtp")}
               title="Mi cuenta de correo"
               desc="Gmail, Outlook u otro (SMTP)"
+              logos={["/images/integrations/gmail.webp", "/images/integrations/outlook.webp"]}
             />
             <MethodCard
               active={method === "resend"}
               onClick={() => setMethod("resend")}
               title="Resend (API)"
               desc="Servicio de envío por API"
+              logos={["/images/integrations/resend.webp"]}
             />
           </div>
 
@@ -403,12 +405,18 @@ export function TenantEmailCard() {
                     type="button"
                     onClick={() => pickProvider(p.key)}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                      "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition",
                       provider === p.key
-                        ? "border-ninja-flame ring-2 ring-ninja-flame/30 text-foreground"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                        ? "border-transparent bg-ninja-flame/15 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
+                    {p.logo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.logo} alt="" width={20} height={20} className="h-5 w-5 object-contain" />
+                    ) : (
+                      <Server size={16} className="text-muted-foreground" />
+                    )}
                     {p.label}
                   </button>
                 ))}
@@ -611,8 +619,8 @@ export function TenantEmailCard() {
                   className={cn(
                     "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
                     bodyTemplate === t.key
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/15"
+                      : "border-border hover:bg-muted",
                   )}
                 >
                   <DesignPreview k={t.key} accent={accent} logoUrl={logoUrl} />
@@ -747,21 +755,24 @@ function MethodCard({
   onClick,
   title,
   desc,
+  logos,
 }: {
   active: boolean;
   onClick: () => void;
   title: string;
   desc: string;
+  logos: string[];
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
+        "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 pr-16 text-left transition",
         active
-          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-          : "border-border hover:border-ninja-flameSoft/40",
+          ? "border-transparent bg-ninja-flame/15"
+          : "border-border hover:bg-muted",
       )}
     >
       <span
@@ -773,6 +784,19 @@ function MethodCard({
         {title}
       </span>
       <span className="text-xs text-muted-foreground">{desc}</span>
+      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center -space-x-1.5">
+        {logos.map((src) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={src}
+            src={src}
+            alt=""
+            width={24}
+            height={24}
+            className="h-6 w-6 rounded-md bg-white object-contain p-0.5 shadow-sm"
+          />
+        ))}
+      </span>
     </button>
   );
 }

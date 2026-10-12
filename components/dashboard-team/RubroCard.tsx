@@ -177,8 +177,8 @@ export function RubroCard() {
                 className={cn(
                   "rounded-lg border p-3 text-left transition disabled:opacity-60",
                   active
-                    ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                    : "border-border hover:border-ninja-flameSoft/40",
+                    ? "border-transparent bg-ninja-flame/15"
+                    : "border-border hover:bg-muted",
                 )}
               >
                 <div className="flex items-center gap-2">

@@ -213,8 +213,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40 hover:bg-ninja-flame/[0.04]",
+                      ? "border-transparent bg-ninja-flame/15"
+                      : "border-border hover:bg-muted hover:bg-ninja-flame/[0.04]",
                   )}
                 >
                   <span className="text-sm font-semibold">{o.label}</span>
@@ -248,8 +248,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "flex flex-col rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40 hover:bg-ninja-flame/[0.04]",
+                      ? "border-transparent bg-ninja-flame/15"
+                      : "border-border hover:bg-muted hover:bg-ninja-flame/[0.04]",
                   )}
                 >
                   <span className="flex items-center gap-2.5">
@@ -375,8 +375,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     seedCatalog
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/15"
+                      : "border-border hover:bg-muted",
                   )}
                 >
                   <span className="text-sm font-semibold">Sí, precargar</span>
@@ -391,8 +391,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     !seedCatalog
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/15"
+                      : "border-border hover:bg-muted",
                   )}
                 >
                   <span className="text-sm font-semibold">No, sólo configurar</span>

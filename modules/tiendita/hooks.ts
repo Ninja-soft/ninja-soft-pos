@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { storefrontApi } from "./storefront";
+import { storefrontApi, type CatalogImportOverrides } from "./storefront";
 
 // Catálogos disponibles para el tenant + estado de acceso (Acceder / Comprar).
 export function useStorefrontCatalogs() {
@@ -37,6 +37,36 @@ export function useAddCatalogProduct(catalogId: string | null) {
       storefrontApi.addProduct(catalogId as string, catalogProductId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+// Import con edición previa. Tras crear, dispara la copia de la foto al bucket
+// del negocio en segundo plano (no bloquea ni falla el import).
+export function useImportCatalogProduct(catalogId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      catalogProductId: number;
+      overrides: CatalogImportOverrides;
+    }) => {
+      const res = await storefrontApi.importProduct(
+        catalogId as string,
+        vars.catalogProductId,
+        vars.overrides,
+      );
+      if (res.imagePending && res.productId) {
+        void storefrontApi.copyImage(res.productId).then(() => {
+          qc.invalidateQueries({ queryKey: ["product-images", res.productId] });
+          qc.invalidateQueries({ queryKey: ["products"] });
+        });
+      }
+      return res;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["categories"] });
+      qc.invalidateQueries({ queryKey: ["brands"] });
     },
   });
 }

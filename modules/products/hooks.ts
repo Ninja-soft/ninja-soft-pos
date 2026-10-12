@@ -10,6 +10,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   brandsApi,
   categoriesApi,
+  packagesApi,
   pluSettingsApi,
   productsApi,
   serialsApi,
@@ -354,4 +355,13 @@ export function useBrandMutations() {
       onSuccess: inv,
     }),
   };
+}
+
+// Medidas por bulto de un producto (null = producto nuevo, sin bultos guardados).
+export function useProductPackages(productId: string | null) {
+  return useQuery({
+    queryKey: ["product-packages", productId],
+    queryFn: () => packagesApi.list(productId as string),
+    enabled: Boolean(productId),
+  });
 }

@@ -1974,6 +1974,72 @@ export type Database = {
           },
         ]
       }
+      product_packages: {
+        Row: {
+          code: string | null
+          created_at: string
+          deleted_at: string | null
+          depth_cm: number | null
+          height_cm: number | null
+          id: string
+          idx: number
+          pack_count: number
+          product_id: string
+          tenant_id: string
+          units_per_pack: number
+          updated_at: string
+          weight_kg: number | null
+          width_cm: number | null
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          depth_cm?: number | null
+          height_cm?: number | null
+          id?: string
+          idx?: number
+          pack_count?: number
+          product_id: string
+          tenant_id?: string
+          units_per_pack?: number
+          updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          depth_cm?: number | null
+          height_cm?: number | null
+          id?: string
+          idx?: number
+          pack_count?: number
+          product_id?: string
+          tenant_id?: string
+          units_per_pack?: number
+          updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_packages_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_packages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           barcode: string | null
@@ -2037,6 +2103,7 @@ export type Database = {
       products: {
         Row: {
           allow_negative: boolean | null
+          attributes: Json
           barcode: string | null
           brand_id: string | null
           category_id: string | null
@@ -2052,6 +2119,7 @@ export type Database = {
           is_kit: boolean
           is_serialized: boolean
           metadata: Json
+          model: string | null
           name: string
           price: number
           season: string | null
@@ -2070,6 +2138,7 @@ export type Database = {
         }
         Insert: {
           allow_negative?: boolean | null
+          attributes?: Json
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -2085,6 +2154,7 @@ export type Database = {
           is_kit?: boolean
           is_serialized?: boolean
           metadata?: Json
+          model?: string | null
           name: string
           price: number
           season?: string | null
@@ -2103,6 +2173,7 @@ export type Database = {
         }
         Update: {
           allow_negative?: boolean | null
+          attributes?: Json
           barcode?: string | null
           brand_id?: string | null
           category_id?: string | null
@@ -2118,6 +2189,7 @@ export type Database = {
           is_kit?: boolean
           is_serialized?: boolean
           metadata?: Json
+          model?: string | null
           name?: string
           price?: number
           season?: string | null

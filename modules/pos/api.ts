@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
-import { getActiveShiftId } from "@/modules/branches/store";
+import { getActiveShiftId, useBranchStore } from "@/modules/branches/store";
 import { withSupervisor } from "@/modules/security/supervisor";
 import { effectivePlans } from "@/lib/payments/planScope";
 
@@ -593,6 +593,14 @@ function locationBody(loc?: PaymentLocation): Record<string, string> {
   return out;
 }
 
+// Sucursal del POS de este dispositivo (F17 · ADR-057): las Edges de cobro la
+// usan para elegir la credencial de la sucursal (o la del negocio si no tiene
+// propia). Sin sucursal elegida, no se manda y vale la del negocio.
+function posStoreBody(): Record<string, string> {
+  const id = useBranchStore.getState().posStoreId;
+  return id ? { store_id: id } : {};
+}
+
 // supabase-js envuelve los no-2xx: se lee el código del body para mostrarlo.
 async function edgeError(error: unknown): Promise<Error> {
   const ctx = (error as { context?: Response }).context;
@@ -677,7 +685,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mobbex_create_qr", {
-      body: { amount, title, customer_id: customerId ?? null },
+      body: { amount, title, customer_id: customerId ?? null, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -695,7 +703,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("modo_create_qr", {
-      body: { amount, title },
+      body: { amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -773,7 +781,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_create_qr", {
-      body: { amount, title },
+      body: { amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -883,7 +891,7 @@ export const posApi = {
   pointDevices: async (): Promise<{ id: string; operating_mode: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -895,7 +903,7 @@ export const posApi = {
   pointSetPdv: async (deviceId: string): Promise<void> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
-      body: { action: "pdv", device_id: deviceId },
+      body: { action: "pdv", device_id: deviceId, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -974,7 +982,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("pagos360", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -999,6 +1007,7 @@ export const posApi = {
         amount,
         title,
         origin: appOrigin(),
+        ...posStoreBody(),
       },
     });
     if (error) throw error;
@@ -1031,7 +1040,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1064,7 +1073,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("gocuotas", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1105,7 +1114,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("directo", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1147,7 +1156,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string; qr_data: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1184,7 +1193,7 @@ export const posApi = {
   navePointDevices: async (): Promise<{ id: string; label: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1246,7 +1255,7 @@ export const posApi = {
   cloverDevices: async (): Promise<{ id: string; label: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("clover_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1258,7 +1267,7 @@ export const posApi = {
   cloverPing: async (deviceId: string): Promise<boolean> => {
     const supabase = createClient();
     const { data } = await supabase.functions.invoke("clover_point", {
-      body: { action: "ping", device_id: deviceId },
+      body: { action: "ping", device_id: deviceId, ...posStoreBody() },
     });
     return Boolean((data as { connected?: boolean } | null)?.connected);
   },

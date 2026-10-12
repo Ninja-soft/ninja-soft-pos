@@ -17,6 +17,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 - **UI: la opacidad de Tailwind sobre los colores del tema funciona.** Clases como `bg-muted/50`, `border-border/60`, `bg-destructive/10` o `text-muted-foreground/70` no generaban CSS porque los tokens son `var(--x)`; ahora se resuelven con `color-mix` y los rellenos, hovers y textos atenuados se ven como estaban diseñados. El `ring` sin color usa el acento del tema en lugar del azul de Tailwind. ADR-040.
 - **Tickets: el QR se genera local.** El QR del comprobante (ticket por bloques, lienzo y plantillas HTML con `{{qr_url}}`) se pedía a `api.qrserver.com`, mandando negocio, número, total y fecha de la venta a un tercero. Ahora es un SVG en data URL del encoder propio (`lib/qr/qrcode`), con el mismo tamaño de impresión y sin red.
+- **Tiendita: la copia de la foto importada ya no falla con JPEG/PNG.** La Edge `tiendita_copy_image` esperaba un encoder WebP que `imagescript` no tiene en Deno (1.3.0 ni 1.4.0), así que sólo copiaba fotos que ya eran WebP y el resto quedaba como enlace externo. Ahora conserva el formato de origen con su content-type y extensión (`uuid.jpg`, `uuid.png`...), achicando JPEG/PNG a 900 px de ancho; WebP/GIF/AVIF se copian tal cual.
 
 ### Changed
 

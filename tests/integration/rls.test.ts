@@ -689,15 +689,28 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
 
     beforeAll(async () => {
       const { admin } = ctx;
-      const { data: store, error: sErr } = await admin
+      // Usa la sucursal existente: una segunda sucursal exige multi_sucursal
+      // (enforce_store_rules). Sólo crea una si el tenant no tiene ninguna.
+      const { data: existing } = await admin
         .from("stores")
-        .insert({ tenant_id: ctx.tenantA, name: `Local conciliación ${STAMP}` })
         .select("id")
-        .single();
-      if (sErr || !store) throw sErr ?? new Error("store");
+        .eq("tenant_id", ctx.tenantA)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+      let storeId = existing?.id as string | undefined;
+      if (!storeId) {
+        const { data: store, error: sErr } = await admin
+          .from("stores")
+          .insert({ tenant_id: ctx.tenantA, name: `Local conciliación ${STAMP}` })
+          .select("id")
+          .single();
+        if (sErr || !store) throw sErr ?? new Error("store");
+        storeId = store.id;
+      }
       const { data: sale, error: saleErr } = await admin
         .from("sales")
-        .insert({ tenant_id: ctx.tenantA, store_id: store.id, number: 990001, subtotal: 300, total: 300 })
+        .insert({ tenant_id: ctx.tenantA, store_id: storeId, number: 990001, subtotal: 300, total: 300 })
         .select("id")
         .single();
       if (saleErr || !sale) throw saleErr ?? new Error("sale");

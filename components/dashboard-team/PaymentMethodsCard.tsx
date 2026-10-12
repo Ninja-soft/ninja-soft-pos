@@ -3,319 +3,53 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Link2, Check, Clock, ChevronDown, Percent, Lock, QrCode } from "lucide-react";
 import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Card } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
-import { Switch } from "@/components/ui/Switch";
-import { Modal } from "@/components/ui/Modal";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Spinner } from "@/components/ui/Spinner";
-import { posApi } from "@/modules/pos/api";
-import { MP_AR_STATES } from "@/supabase/functions/_shared/mpOrders";
-import { UpgradeModal } from "@/components/saas/UpgradeModal";
+import { useGating, useGlobalPlansForUpgrade } from "@/modules/saas/gating";
 import {
-  useGating,
-  useGlobalPlansForUpgrade,
-  firstPlanWithFeature,
-  type PlanForUpgrade,
-} from "@/modules/saas/gating";
-import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
+  BRAND_BY_KEY,
+  SANDBOX_PROVIDERS,
+  connectionKeyOf,
+  groupProvidersByBrand,
+  type ProviderRow,
+} from "@/lib/payments/catalog";
+import { PaymentMethodsView } from "@/components/dashboard-team/payments/PaymentMethodsView";
+import {
+  ConnectProviderModal,
+  type ConnectSave,
+} from "@/components/dashboard-team/payments/ConnectProviderModal";
+import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
+import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
+import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 
-// PROVIDER_FEATURE (lib/payments/providerFeature.ts) decide qué medio se puede
-// ACTIVAR en config; el bloqueo real es el trigger en payments + las Edge.
+// Configuración de medios de pago, agrupada por marca → canal (QR + link ·
+// Point). Este componente sólo trae datos y guarda; la vista vive en
+// components/dashboard-team/payments/*. PROVIDER_FEATURE decide qué canal se
+// puede ACTIVAR acá; el bloqueo real es el trigger de payments + las Edge.
 
-
-const KIND_LABELS: Record<string, string> = {
-  manual: "Lo cobrás vos",
-  gateway: "Tarjeta / online",
-  qr: "Pago con QR",
-  orchestrator: "Varias pasarelas",
-};
-
-// Proveedores con flujo de cobro real implementado. El resto se muestra como
-// "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set([
-  "mercadopago",
-  "mobbex",
-  "modo",
-  "mercadopago_point",
-  "pagos360",
-  "payway",
-  "getnet",
-  "nave",
-  "nave_point",
-]);
-
-// Canales Point que NO piden credenciales propias: usan la conexión de su
-// marca (Mercado Point → Mercado Pago, Nave Point → Nave). Su "Conectado" se
-// deriva de la fila de la marca, y las cuotas/recargos los resuelve la
-// terminal (sin grid de planes ni recargo acá).
-const USES_CONNECTION_OF: Record<string, { key: string; name: string }> = {
-  mercadopago_point: { key: "mercadopago", name: "Mercado Pago" },
-  nave_point: { key: "nave", name: "Nave" },
-};
-
-// Proveedores cuyo switch Sandbox cambia de verdad el ambiente de la Edge
-// (MODO → merchants.preprod.playdigital.com.ar · Pagos360 → api.sandbox.pagos360.com).
-// Sólo para estos se muestra el toggle; en el resto no haría nada.
-// Mercado Pago tiene su propio selector (ADR-032): no cambia de host sino de
-// credencial (token de prueba), y convive con la conexión de producción.
-const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave"]);
-
-// Caja QR de Mercado Pago (Orders API) guardada por ambiente en config.mp_qr.
-type MpQrPos = { store_name?: string; address?: string; external_pos_id?: string };
-type MpConfig = {
-  connected?: boolean;
-  test_connected?: boolean;
-  mp_qr?: { prod?: MpQrPos; test?: MpQrPos };
-};
-// Ambiente efectivo de MP: prueba sólo con el switch + token de prueba cargado.
-const mpEnvOf = (m: Method | undefined): "prod" | "test" =>
-  m?.sandbox && (m.config as MpConfig | null)?.test_connected ? "test" : "prod";
-
-// Proveedores donde el grid de "Planes" (cuotas por tarjeta + recargo) SÍ se
-// aplica en el POS antes de generar el cobro. MODO/Pagos360/Payway resuelven
-// las cuotas en su propia app/checkout hosted: para esos el grid es inerte y
-// no se ofrece (su recargo se configura con el % plano del medio).
-const PLANS_PROVIDERS = new Set(["mercadopago", "mobbex", "payway"]);
-
-// Logo (ícono cuadrado) por proveedor. En public/img/medios_de_pago.
-const PROVIDER_LOGO: Record<string, string> = {
-  cash: "/img/medios_de_pago/Cash_cube.webp",
-  transfer: "/img/medios_de_pago/Transferencia_cube.webp",
-  mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
-  mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
-  modo: "/img/medios_de_pago/Modo_cube.webp",
-  payway: "/img/medios_de_pago/payway_cube.webp",
-  getnet: "/img/medios_de_pago/getnet_cube.webp",
-  fiserv: "/img/medios_de_pago/Fiserv_cube.webp",
-  mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
-  pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
-  nave: "/img/medios_de_pago/nave_cube.webp",
-  nave_point: "/img/medios_de_pago/nave_cube.webp",
-};
-
-// URL de notificaciones que el dueño informa a Nave en el onboarding (Nave la
-// registra de su lado; no viaja por request).
-const NAVE_WEBHOOK_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/nave_webhook`;
-
-// Resumen corto bajo el nombre (qué tipo de medio es).
-const PROVIDER_CHIP: Record<string, string> = {
-  manual: "Lo cobrás vos · sin conexión",
-  gateway: "Cobro online · tarjeta",
-  qr: "Cobro online · QR",
-  orchestrator: "Conecta varias pasarelas",
-};
-
-// Explicación desplegable por medio: qué pasa al activar, conexión y proceso.
-type Explain = {
-  activa: string;
-  conexion?: string;
-  pasos?: string[];
-  recargo?: string;
-};
-const PROVIDER_INFO: Record<string, Explain> = {
-  cash: {
-    activa:
-      "Aparece como forma de pago en el POS. El monto cobrado entra al arqueo de caja.",
-    pasos: [
-      "En el POS tocás Cobrar y elegís Efectivo.",
-      "Recibís la plata en mano y das el vuelto.",
-      "La venta queda registrada y suma al cierre de caja (Z).",
-    ],
-    recargo:
-      "Si ponés un %, se suma al total al pagar con este medio. Efectivo suele quedar en 0.",
-  },
-  transfer: {
-    activa:
-      "Aparece como forma de pago en el POS para cobrar por transferencia a tu cuenta.",
-    pasos: [
-      "El cliente transfiere a tu CBU/alias.",
-      "Verificás que la plata haya llegado.",
-      "Registrás la venta (la confirmación es manual, no se valida sola).",
-    ],
-    recargo: "Si ponés un %, se suma al total al pagar por transferencia.",
-  },
-  mercadopago: {
-    activa:
-      "Habilita el botón Cobrar con QR en el POS. La plata entra a tu cuenta de Mercado Pago.",
-    conexion:
-      "Conectá tu cuenta en un click (Conectar con Mercado Pago) o pegando tu Access Token. Después configurá la caja QR (una sola vez) para cobrar con QR en el local. Para probar sin plata real, cargá un Access Token de prueba y elegí Prueba.",
-    pasos: [
-      "En el POS tocás Cobrar con QR.",
-      "El cliente escanea el QR de tu caja con la app de Mercado Pago o su billetera y paga. Si no está en el local, tocás Enviar link y se lo mandás.",
-      "Al acreditarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo: "Si ponés un %, se suma al total al cobrar con Mercado Pago.",
-  },
-  mobbex: {
-    activa:
-      "Habilita el botón Cobrar con QR (Mobbex) en el POS. La plata entra a tu cuenta de Mobbex.",
-    conexion:
-      "Pegá tu API Key y Access Token (Mobbex → Desarrollo → Credenciales). Se guardan cifrados del lado del servidor.",
-    pasos: [
-      "En el POS tocás Cobrar con QR · Mobbex.",
-      "El cliente escanea el QR y paga (tarjeta o saldo).",
-      "Al acreditarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
-  },
-  mercadopago_point: {
-    activa:
-      "Habilita el botón Cobrar con Point en el POS: el cobro se envía a tu lector Mercado Point y el cliente paga con tarjeta ahí.",
-    conexion:
-      "Usa tu conexión de Mercado Pago (no pide credenciales nuevas). Vinculá el lector a tu cuenta desde la app de MP y ponelo en modo PDV (el POS te lo ofrece).",
-    pasos: [
-      "En el POS tocás Cobrar con Point y elegís el lector.",
-      "El cliente pasa o apoya la tarjeta en el Point (las cuotas se eligen ahí, o las preseleccionás desde el POS si Mercado Pago te las habilitó).",
-      "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
-    ],
-    recargo:
-      "Los recargos/cuotas los maneja Mercado Pago en el lector; acá no se configura un % aparte.",
-  },
-  pagos360: {
-    activa:
-      "Habilita el botón Cobrar con link en el POS: se genera una solicitud de pago de Pagos360 y el cliente paga desde el link/QR (tarjeta, débito, DEBIN o efectivo según tu cuenta).",
-    conexion:
-      "Pegá tu API Key de Pagos360 (Panel → Configuración → Credenciales). Con el switch Sandbox activado se usa el entorno de prueba de Pagos360 (sin plata real).",
-    pasos: [
-      "En el POS tocás Cobrar con link · Pagos360.",
-      "El cliente escanea el QR o abre el link y paga en el checkout de Pagos360.",
-      "Al acreditarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo:
-      "Si ponés un %, se suma al total al cobrar por este medio.",
-  },
-  payway: {
-    activa:
-      "Habilita el botón Cobrar con link en el POS: el QR abre el checkout de TU tienda (tu logo y tus colores) donde el cliente carga la tarjeta y elige cuotas de tus Planes (con su recargo). Procesa Payway por atrás.",
-    conexion:
-      "Pegá tus llaves de Payway (API Key pública y privada) y tu Nº de comercio (site). Con el switch Sandbox activado se usa el ambiente de prueba de Payway/Decidir (sin plata real).",
-    pasos: [
-      "En el POS tocás Cobrar con link · Payway.",
-      "El cliente escanea el QR o abre el link y paga en el formulario de Payway.",
-      "Al aprobarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo:
-      "Si ponés un %, se suma al total al cobrar por este medio.",
-  },
-  getnet: {
-    activa:
-      "Habilita el cobro con Getnet por QR y link: se genera una orden en el checkout de Getnet y el cliente paga desde su celular con tarjeta de crédito o débito.",
-    conexion:
-      "Pegá tu Client ID y Client Secret de Getnet (Portal Getnet → Credenciales). Getnet no ofrece ambiente de prueba: las credenciales son de producción y los cobros son reales.",
-    pasos: [
-      "En el POS elegís cobrar con Getnet.",
-      "El cliente escanea el QR o abre el link y paga en el checkout de Getnet.",
-      "Al aprobarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
-  },
-  nave: {
-    activa:
-      "Habilita el cobro con Nave en el POS: se genera un QR interoperable (lo paga cualquier billetera o app bancaria) y un link de pago de Nave. La plata entra a tu cuenta de Nave.",
-    conexion:
-      "Pegá el Client ID, el Client Secret y el ID de punto de venta que te da Nave (Integraciones). Informale a Nave la URL de notificaciones que te mostramos al conectar. Con el switch Sandbox se usa el ambiente de prueba de Nave (sin plata real).",
-    pasos: [
-      "En el POS elegís cobrar con Nave.",
-      "El cliente escanea el QR o abre el link y paga en Nave.",
-      "Nave nos avisa, verificamos el pago contra Nave y la venta se cierra sola.",
-    ],
-    recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
-  },
-  nave_point: {
-    activa:
-      "Habilita el cobro con la terminal Nave Point: el POS manda el monto a la terminal y el cliente paga con tarjeta, contactless o QR.",
-    conexion:
-      "Usa tu conexión de Nave (no pide credenciales nuevas). Cargá el ID de punto de venta de cada terminal al conectar Nave (Nave › Integraciones › Sistema de gestión).",
-    pasos: [
-      "En el POS elegís cobrar con Nave Point y la terminal.",
-      "El cliente paga en la terminal (las cuotas se eligen ahí).",
-      "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
-    ],
-    recargo:
-      "Los recargos y cuotas los maneja Nave en la terminal; acá no se configura un % aparte.",
-  },
-  modo: {
-    activa:
-      "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
-    conexion:
-      "Pegá las credenciales de comercio de MODO (Client ID y Client Secret; Store ID si tenés varias sucursales). Se guardan cifradas del lado del servidor.",
-    pasos: [
-      "En el POS tocás Cobrar con QR · MODO.",
-      "El cliente escanea el QR con la app MODO y paga.",
-      "Al acreditarse, la venta se cierra sola y queda registrada.",
-    ],
-    recargo: "Definí los recargos por marca/cuota en Planes (botón del medio).",
-  },
-};
-
-type Provider = { key: string; name: string; kind: string; sort: number };
-type Method = {
-  provider_key: string;
-  enabled: boolean;
-  sandbox: boolean;
-  surcharge_pct: number;
-  config: MpConfig | null;
-};
+async function invokeSecret(body: Record<string, unknown>) {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("set_payment_secret", { body });
+  if (error) throw error;
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+}
 
 export function PaymentMethodsCard() {
   const supabase = createClient();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [connectKey, setConnectKey] = useState<string | null>(null);
-  const [token, setToken] = useState("");
-  const [mbApiKey, setMbApiKey] = useState("");
-  const [p360ApiKey, setP360ApiKey] = useState("");
-  const [pwPublic, setPwPublic] = useState("");
-  const [pwPrivate, setPwPrivate] = useState("");
-  const [pwSite, setPwSite] = useState("");
-  // Getnet: credenciales OAuth del Portal Getnet (sin sandbox en AR).
-  const [gnClientId, setGnClientId] = useState("");
-  const [gnClientSecret, setGnClientSecret] = useState("");
-  // Ambiente elegido al conectar (solo proveedores con sandbox real). Se
-  // precarga con el valor actual del medio y se guarda junto a las credenciales:
-  // es el momento natural para decidirlo (antes vivía escondido en el detalle).
-  const [connEnv, setConnEnv] = useState<"prod" | "test">("prod");
-  const [mbToken, setMbToken] = useState("");
-  // MODO: credenciales de comercio (client_id + client_secret, store_id opcional).
-  const [modoClientId, setModoClientId] = useState("");
-  const [modoClientSecret, setModoClientSecret] = useState("");
-  const [modoStoreId, setModoStoreId] = useState("");
-  const [modoProcessor, setModoProcessor] = useState("");
-  // Nave: client credentials + punto de venta (QR + link) + terminales Point.
-  const [naveClientId, setNaveClientId] = useState("");
-  const [naveClientSecret, setNaveClientSecret] = useState("");
-  const [navePosId, setNavePosId] = useState("");
-  const [navePointIds, setNavePointIds] = useState("");
-  const [naveAudience, setNaveAudience] = useState("");
-  const [showManual, setShowManual] = useState(false);
-  // Mercado Pago · token de PRUEBA (switch Sandbox, ADR-032).
-  const [mpTestToken, setMpTestToken] = useState("");
-  const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const toggleExpand = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [connectBrand, setConnectBrand] = useState<string | null>(null);
+  const [plansFor, setPlansFor] = useState<{ key: string; name: string } | null>(null);
 
   // Resultado del redirect del OAuth de Mercado Pago (?mp=ok|err|denied).
   useEffect(() => {
     const mp = searchParams.get("mp");
     if (!mp) return;
     if (mp === "ok") toast({ title: "Mercado Pago conectado", variant: "success" });
-    else if (mp === "denied")
-      toast({ title: "Conexión cancelada", variant: "error" });
+    else if (mp === "denied") toast({ title: "Conexión cancelada", variant: "error" });
     else toast({ title: "No se pudo conectar Mercado Pago", variant: "error" });
     qc.invalidateQueries({ queryKey: ["tenant-payment-methods"] });
     router.replace("/configuracion");
@@ -337,23 +71,29 @@ export function PaymentMethodsCard() {
         .limit(1)
         .maybeSingle();
       if (!mem) return null;
-      return {
-        tenantId: mem.tenant_id,
-        canManage: ["owner", "manager"].includes(mem.role),
-      };
+      return { tenantId: mem.tenant_id, canManage: ["owner", "manager"].includes(mem.role) };
     },
   });
   const tenantId = ctx?.tenantId ?? "";
 
+  // brand/channel pueden no existir todavía en la base (migración
+  // 20261011150000): si el select falla, se reintenta sin ellas y la UI usa el
+  // mapeo local de lib/payments/catalog.
   const { data: providers = [] } = useQuery({
     queryKey: ["payment-providers"],
-    queryFn: async (): Promise<Provider[]> => {
+    queryFn: async (): Promise<ProviderRow[]> => {
+      const full = await supabase
+        .from("payment_providers")
+        .select("key, name, kind, sort, brand, channel")
+        .eq("is_active", true)
+        .order("sort");
+      if (!full.error) return (full.data ?? []) as ProviderRow[];
       const { data } = await supabase
         .from("payment_providers")
         .select("key, name, kind, sort")
         .eq("is_active", true)
         .order("sort");
-      return (data ?? []) as Provider[];
+      return (data ?? []) as ProviderRow[];
     },
   });
 
@@ -375,86 +115,36 @@ export function PaymentMethodsCard() {
     return m;
   }, [methods]);
 
-  // Gating por plan: features activas del tenant + catálogo de planes globales
-  // (para resolver el plan mínimo que incluye cada medio en el UpgradeModal).
   const { data: gating } = useGating();
-  const features = gating?.features;
   const { data: plans = [] } = useGlobalPlansForUpgrade();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
+
+  const upsertMethod = async (key: string, patch: Partial<Pick<Method, "enabled" | "sandbox" | "surcharge_pct">>) => {
+    const cur = byKey.get(key);
+    const { error } = await supabase.from("tenant_payment_methods").upsert(
+      {
+        tenant_id: tenantId,
+        provider_key: key,
+        enabled: patch.enabled ?? cur?.enabled ?? false,
+        sandbox: patch.sandbox ?? cur?.sandbox ?? true,
+        surcharge_pct: patch.surcharge_pct ?? cur?.surcharge_pct ?? 0,
+      },
+      { onConflict: "tenant_id,provider_key" },
+    );
+    if (error) throw error;
+  };
 
   const save = useMutation({
-    mutationFn: async (vars: {
-      provider_key: string;
-      enabled?: boolean;
-      sandbox?: boolean;
-      surcharge_pct?: number;
-    }) => {
-      const cur = byKey.get(vars.provider_key);
-      const { error } = await supabase.from("tenant_payment_methods").upsert(
-        {
-          tenant_id: tenantId,
-          provider_key: vars.provider_key,
-          enabled: vars.enabled ?? cur?.enabled ?? false,
-          sandbox: vars.sandbox ?? cur?.sandbox ?? true,
-          surcharge_pct: vars.surcharge_pct ?? cur?.surcharge_pct ?? 0,
-        },
-        { onConflict: "tenant_id,provider_key" },
-      );
-      if (error) throw error;
-    },
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] }),
+    mutationFn: (v: { key: string; enabled?: boolean; surcharge_pct?: number }) =>
+      upsertMethod(v.key, { enabled: v.enabled, surcharge_pct: v.surcharge_pct }),
+    onSuccess: invalidate,
     onError: () => toast({ title: "No se pudo guardar", variant: "error" }),
-  });
-
-  const connect = useMutation({
-    mutationFn: async (vars: {
-      provider_key: string;
-      token?: string;
-      secrets?: Record<string, string>;
-      clear?: boolean;
-    }) => {
-      const body = vars.clear
-        ? { provider_key: vars.provider_key, action: "clear" }
-        : {
-            provider_key: vars.provider_key,
-            secrets: vars.secrets ?? { access_token: vars.token },
-          };
-      const { data, error } = await supabase.functions.invoke("set_payment_secret", {
-        body,
-      });
-      if (error) throw error;
-      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      // Ambiente elegido en el modal (solo proveedores con sandbox real): se
-      // persiste junto con las credenciales.
-      if (!vars.clear && SANDBOX_PROVIDERS.has(vars.provider_key)) {
-        const cur = byKey.get(vars.provider_key);
-        await supabase.from("tenant_payment_methods").upsert(
-          {
-            tenant_id: tenantId,
-            provider_key: vars.provider_key,
-            enabled: cur?.enabled ?? false,
-            sandbox: connEnv === "test",
-            surcharge_pct: cur?.surcharge_pct ?? 0,
-          },
-          { onConflict: "tenant_id,provider_key" },
-        );
-      }
-    },
-    onSuccess: () => {
-      toast({ title: "Listo", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
-      setConnectKey(null);
-      setToken("");
-    },
-    onError: () => toast({ title: "No se pudo guardar la conexión", variant: "error" }),
   });
 
   // OAuth: pide la URL de autorización y redirige a Mercado Pago.
   const oauthStart = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("mp_oauth_start", {
-        body: {},
-      });
+      const { data, error } = await supabase.functions.invoke("mp_oauth_start", { body: {} });
       if (error) throw error;
       const res = data as { url?: string; error?: string };
       if (res?.error || !res?.url) throw new Error(res?.error ?? "no_url");
@@ -463,1451 +153,102 @@ export function PaymentMethodsCard() {
     onSuccess: (url) => {
       window.location.href = url;
     },
-    onError: (e: Error) => {
+    onError: (e: Error) =>
       toast({
         title:
           e.message === "platform_not_configured"
             ? "Mercado Pago no está configurado por NinjaSoft todavía"
             : "No se pudo iniciar la conexión",
         variant: "error",
-      });
-    },
-  });
-
-  // MP: guarda el token de prueba (sin pisar la conexión de producción) y
-  // pasa el medio a Prueba; o vuelve a Producción. Point comparte el switch.
-  const mpEnv = useMutation({
-    mutationFn: async (vars: { env: "prod" | "test"; testToken?: string; clearTest?: boolean }) => {
-      if (vars.testToken || vars.clearTest) {
-        const { data, error } = await supabase.functions.invoke("set_payment_secret", {
-          body: {
-            provider_key: "mercadopago",
-            merge: true,
-            secrets: vars.testToken ? { test_access_token: vars.testToken } : {},
-            remove: vars.clearTest ? ["test_access_token"] : [],
-          },
-        });
-        if (error) throw error;
-        if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
-      }
-      const cur = byKey.get("mercadopago");
-      const { error } = await supabase.from("tenant_payment_methods").upsert(
-        {
-          tenant_id: tenantId,
-          provider_key: "mercadopago",
-          enabled: cur?.enabled ?? false,
-          sandbox: vars.env === "test",
-          surcharge_pct: cur?.surcharge_pct ?? 0,
-        },
-        { onConflict: "tenant_id,provider_key" },
-      );
-      if (error) throw error;
-    },
-    onSuccess: (_d, vars) => {
-      toast({
-        title: vars.env === "test" ? "Mercado Pago en modo prueba" : "Mercado Pago en producción",
-        variant: "success",
-      });
-      setMpTestToken("");
-      qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
-    },
-    onError: () => toast({ title: "No se pudo cambiar el ambiente", variant: "error" }),
+      }),
   });
 
   if (!ctx || !ctx.canManage) return null;
 
-  const connectingProvider = providers.find((p) => p.key === connectKey);
-  const connectingConnected = Boolean(byKey.get(connectKey ?? "")?.config?.connected);
+  const brand = connectBrand ? BRAND_BY_KEY[connectBrand] : undefined;
+  const connKey = connectBrand ? connectionKeyOf(connectBrand) : null;
+  const channelNames = connectBrand
+    ? (groupProvidersByBrand(providers)
+        .find((g) => g.brand.key === connectBrand)
+        ?.channels.filter((c) => c.implemented)
+        .map((c) => (c.channel === "point" ? "Point" : "QR + link")) ?? [])
+    : [];
 
-  return (
-    <section>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <CreditCard size={18} /> Medios de pago
-        </Heading>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Activá los medios que aceptás y su recargo. Tocá la flecha{" "}
-        <ChevronDown size={13} className="inline align-middle" /> de cada medio para
-        ver qué hace al activarlo y cómo es el proceso.
-      </p>
-      <div className="mt-3 flex flex-col gap-2.5">
-        {providers.map((p) => (
-          <PaymentMethodRow
-            key={p.key}
-            provider={p}
-            method={byKey.get(p.key)}
-            plans={plans}
-            features={features}
-            parentConnected={Boolean(
-              byKey.get(USES_CONNECTION_OF[p.key]?.key ?? "")?.config?.connected,
-            )}
-            isOpen={expanded.has(p.key)}
-            onToggleExpand={() => toggleExpand(p.key)}
-            onConnect={() => {
-              setConnectKey(p.key);
-              setToken("");
-              setMbApiKey("");
-              setP360ApiKey("");
-              setPwPublic("");
-              setPwPrivate("");
-              setPwSite("");
-              setGnClientId("");
-              setGnClientSecret("");
-              setConnEnv(byKey.get(p.key)?.sandbox ? "test" : "prod");
-              setMbToken("");
-              setModoClientId("");
-              setModoClientSecret("");
-              setModoStoreId("");
-              setModoProcessor("");
-              setNaveClientId("");
-              setNaveClientSecret("");
-              setNavePosId("");
-              setNavePointIds("");
-              setNaveAudience("");
-              setShowManual(false);
-              setMpTestToken("");
-            }}
-            onOpenPlans={() => setPlansProvider({ key: p.key, name: p.name })}
-            onSaveEnabled={(v) => save.mutate({ provider_key: p.key, enabled: v })}
-            onSaveSurcharge={(pct) =>
-              save.mutate({ provider_key: p.key, surcharge_pct: pct })
-            }
-          />
-        ))}
-      </div>
+  // Guarda credenciales (y el ambiente elegido, en proveedores con prueba real).
+  const saveConnection = async (key: string, v: ConnectSave) => {
+    await invokeSecret({ provider_key: key, secrets: v.secrets ?? { access_token: v.token } });
+    if (v.env && SANDBOX_PROVIDERS.has(key)) await upsertMethod(key, { sandbox: v.env === "test" });
+    await invalidate();
+  };
 
-      <Modal
-        open={connectKey !== null}
-        onOpenChange={(o) => !o && setConnectKey(null)}
-        title={connectingProvider ? `Conectar ${connectingProvider.name}` : "Conectar"}
-      >
-        <form
-          className="space-y-4"
-          autoComplete="off"
-          onSubmit={(e) => e.preventDefault()}
-        >
-          {/* Señuelos anti-autocompletado del navegador. */}
-          <input type="text" name="username" autoComplete="username" className="hidden" />
-          <input type="password" name="password" autoComplete="new-password" className="hidden" />
-          {connectKey && PROVIDER_LOGO[connectKey] && (
-            <div className="flex items-center justify-center py-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={PROVIDER_LOGO[connectKey]}
-                alt={connectingProvider?.name ?? ""}
-                className="h-14 w-auto object-contain"
-              />
-            </div>
-          )}
-          {connectKey === "modo" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> MODO está conectado.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá las credenciales que te mandó MODO por email (Username y
-                  Password; Store ID sólo si tenés varias sucursales). Si son de
-                  ambiente de prueba (terminan en “-preprod”), activá el switch
-                  Sandbox del medio. Se guardan cifradas del lado del servidor.
-                </p>
-              )}
-              <Input
-                label="Username"
-                name="modo_client_id"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={modoClientId}
-                onChange={(e) => setModoClientId(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Username de MODO"}
-              />
-              <Input
-                label="Password"
-                type="password"
-                name="modo_client_secret"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={modoClientSecret}
-                onChange={(e) => setModoClientSecret(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Password de MODO"}
-              />
-              <Input
-                label="Store ID (opcional)"
-                name="modo_store_id"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={modoStoreId}
-                onChange={(e) => setModoStoreId(e.target.value)}
-                placeholder="Sólo si tenés varias sucursales"
-              />
-              <Input
-                label="Processor code (opcional)"
-                name="modo_processor_code"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={modoProcessor}
-                onChange={(e) => setModoProcessor(e.target.value)}
-                placeholder="Ej: P1293 (viene en el email de MODO)"
-              />
-              {SANDBOX_PROVIDERS.has(connectKey!) && (
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("prod")}
-                      className={
-                        connEnv === "prod"
-                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Producción (cobros reales)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("test")}
-                      className={
-                        connEnv === "test"
-                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Prueba (sandbox)
-                    </button>
-                  </div>
-                </div>
-              )}
-              <Button
-                className="w-full"
-                disabled={
-                  connect.isPending ||
-                  modoClientId.trim().length < 4 ||
-                  modoClientSecret.trim().length < 6
-                }
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "modo",
-                    secrets: {
-                      username: modoClientId.trim(),
-                      password: modoClientSecret.trim(),
-                      ...(modoStoreId.trim() ? { store_id: modoStoreId.trim() } : {}),
-                      ...(modoProcessor.trim()
-                        ? { processor_code: modoProcessor.trim() }
-                        : {}),
-                    },
-                  })
-                }
-              >
-                {connect.isPending
-                  ? "Guardando…"
-                  : connectingConnected
-                    ? "Actualizar credenciales"
-                    : "Conectar MODO"}
-              </Button>
-            </>
-          ) : connectKey === "nave" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Nave está conectado. Para cambiar algo, cargá
-                  todos los datos de nuevo.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá las credenciales que te dio Nave (Integraciones) y el ID de
-                  punto de venta. Sandbox y producción usan credenciales distintas.
-                  Se guardan cifradas del lado del servidor.
-                </p>
-              )}
-              <Input
-                label="Client ID"
-                name="nave_client_id"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={naveClientId}
-                onChange={(e) => setNaveClientId(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID de Nave"}
-              />
-              <Input
-                label="Client Secret"
-                type="password"
-                name="nave_client_secret"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={naveClientSecret}
-                onChange={(e) => setNaveClientSecret(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret de Nave"}
-              />
-              <Input
-                label="ID de punto de venta (QR y link)"
-                name="nave_pos_id"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={navePosId}
-                onChange={(e) => setNavePosId(e.target.value)}
-                placeholder="pos_id que te dio Nave"
-              />
-              <Input
-                label="Terminales Nave Point (opcional)"
-                name="nave_point_pos_ids"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={navePointIds}
-                onChange={(e) => setNavePointIds(e.target.value)}
-                placeholder="Caja 1: id-de-la-terminal, Caja 2: otro-id"
-                hint="ID de punto de venta de cada terminal (Nave › Integraciones › Sistema de gestión), separados por coma."
-              />
-              <Input
-                label="Audience (opcional)"
-                name="nave_audience"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={naveAudience}
-                onChange={(e) => setNaveAudience(e.target.value)}
-                placeholder="Sólo si Nave te dio uno distinto al estándar"
-              />
-              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                <p className="font-semibold text-foreground">URL de notificaciones para Nave</p>
-                <p className="mt-1">
-                  Pasásela a Nave al pedir las credenciales (una para sandbox y otra
-                  para producción): así nos avisan cada pago al instante.
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1 text-[11px]">
-                    {NAVE_WEBHOOK_URL}
-                  </code>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() =>
-                      navigator.clipboard
-                        .writeText(NAVE_WEBHOOK_URL)
-                        .then(() => toast({ title: "URL copiada", variant: "success" }))
-                        .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
-                    }
-                  >
-                    Copiar
-                  </Button>
-                </div>
-              </div>
-              <div className="rounded-md border border-border p-3">
-                <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConnEnv("prod")}
-                    className={
-                      connEnv === "prod"
-                        ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
-                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                    }
-                  >
-                    Producción (cobros reales)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConnEnv("test")}
-                    className={
-                      connEnv === "test"
-                        ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
-                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                    }
-                  >
-                    Prueba (sandbox)
-                  </button>
-                </div>
-              </div>
-              <Button
-                className="w-full"
-                disabled={
-                  connect.isPending ||
-                  naveClientId.trim().length < 6 ||
-                  naveClientSecret.trim().length < 6 ||
-                  navePosId.trim().length < 4
-                }
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "nave",
-                    secrets: {
-                      client_id: naveClientId.trim(),
-                      client_secret: naveClientSecret.trim(),
-                      pos_id: navePosId.trim(),
-                      ...(navePointIds.trim() ? { point_pos_ids: navePointIds.trim() } : {}),
-                      ...(naveAudience.trim() ? { audience: naveAudience.trim() } : {}),
-                    },
-                  })
-                }
-              >
-                {connect.isPending
-                  ? "Guardando…"
-                  : connectingConnected
-                    ? "Actualizar credenciales"
-                    : "Conectar Nave"}
-              </Button>
-            </>
-          ) : connectKey === "payway" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Payway está conectado.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá tus llaves de Payway (Panel de comercio → Credenciales) y
-                  tu Nº de comercio (site). Si son de prueba, activá el switch
-                  Sandbox del medio. Se guardan cifradas del lado del servidor.
-                </p>
-              )}
-              <Input
-                label="API Key pública"
-                name="payway_public_apikey"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={pwPublic}
-                onChange={(e) => setPwPublic(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu public API Key"}
-              />
-              <Input
-                label="API Key privada"
-                type="password"
-                name="payway_private_apikey"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={pwPrivate}
-                onChange={(e) => setPwPrivate(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu private API Key"}
-              />
-              <Input
-                label="Nº de comercio (site)"
-                name="payway_site"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={pwSite}
-                onChange={(e) => setPwSite(e.target.value)}
-                placeholder="Ej: 00097002"
-              />
-              {SANDBOX_PROVIDERS.has(connectKey!) && (
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("prod")}
-                      className={
-                        connEnv === "prod"
-                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Producción (cobros reales)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("test")}
-                      className={
-                        connEnv === "test"
-                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Prueba (sandbox)
-                    </button>
-                  </div>
-                </div>
-              )}
-              <Button
-                className="w-full"
-                disabled={
-                  connect.isPending ||
-                  pwPublic.trim().length < 10 ||
-                  pwPrivate.trim().length < 10 ||
-                  pwSite.trim().length < 4
-                }
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "payway",
-                    secrets: {
-                      public_apikey: pwPublic.trim(),
-                      private_apikey: pwPrivate.trim(),
-                      site: pwSite.trim(),
-                    },
-                  })
-                }
-              >
-                {connect.isPending
-                  ? "Guardando…"
-                  : connectingConnected
-                    ? "Actualizar credenciales"
-                    : "Conectar Payway"}
-              </Button>
-            </>
-          ) : connectKey === "getnet" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Getnet está conectado.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá tu Client ID y Client Secret de Getnet (Portal Getnet →
-                  Credenciales). Se guardan cifrados del lado del servidor.
-                  Getnet no tiene ambiente de prueba: los cobros son reales.
-                </p>
-              )}
-              <Input
-                label="Client ID"
-                name="getnet_client_id"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={gnClientId}
-                onChange={(e) => setGnClientId(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID"}
-              />
-              <Input
-                label="Client Secret"
-                type="password"
-                name="getnet_client_secret"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={gnClientSecret}
-                onChange={(e) => setGnClientSecret(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret"}
-              />
-              <Button
-                className="w-full"
-                disabled={
-                  connect.isPending ||
-                  gnClientId.trim().length < 4 ||
-                  gnClientSecret.trim().length < 8
-                }
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "getnet",
-                    secrets: {
-                      client_id: gnClientId.trim(),
-                      client_secret: gnClientSecret.trim(),
-                    },
-                  })
-                }
-              >
-                {connect.isPending ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Spinner size={14} /> Guardando
-                  </span>
-                ) : connectingConnected ? (
-                  "Actualizar credenciales"
-                ) : (
-                  "Conectar Getnet"
-                )}
-              </Button>
-            </>
-          ) : connectKey === "pagos360" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Pagos360 está conectado.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá tu API Key de Pagos360 (Panel → Configuración →
-                  Credenciales). Se guarda cifrada del lado del servidor. Con el
-                  switch Sandbox del medio activado se usa el entorno de prueba
-                  de Pagos360.
-                </p>
-              )}
-              <Input
-                label="API Key"
-                type="password"
-                name="pagos360_api_key"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={p360ApiKey}
-                onChange={(e) => setP360ApiKey(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurada)" : "Tu API Key"}
-              />
-              {SANDBOX_PROVIDERS.has(connectKey!) && (
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("prod")}
-                      className={
-                        connEnv === "prod"
-                          ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Producción (cobros reales)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConnEnv("test")}
-                      className={
-                        connEnv === "test"
-                          ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
-                          : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-                      }
-                    >
-                      Prueba (sandbox)
-                    </button>
-                  </div>
-                </div>
-              )}
-              <Button
-                className="w-full"
-                disabled={connect.isPending || p360ApiKey.trim().length < 10}
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "pagos360",
-                    secrets: { api_key: p360ApiKey.trim() },
-                  })
-                }
-              >
-                {connect.isPending
-                  ? "Guardando…"
-                  : connectingConnected
-                    ? "Actualizar API Key"
-                    : "Conectar Pagos360"}
-              </Button>
-            </>
-          ) : connectKey === "mobbex" ? (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Mobbex está conectado.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Pegá tus credenciales de Mobbex (Mobbex → Desarrollo →
-                  Credenciales). Se guardan cifradas del lado del servidor.
-                </p>
-              )}
-              <Input
-                label="API Key"
-                name="mobbex_api_key"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                value={mbApiKey}
-                onChange={(e) => setMbApiKey(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu API Key"}
-              />
-              <Input
-                label="Access Token"
-                type="password"
-                name="mobbex_access_token"
-                autoComplete="new-password"
-                data-1p-ignore
-                data-lpignore="true"
-                value={mbToken}
-                onChange={(e) => setMbToken(e.target.value)}
-                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Access Token"}
-              />
-              <Button
-                className="w-full"
-                disabled={
-                  connect.isPending || mbApiKey.trim().length < 6 || mbToken.trim().length < 6
-                }
-                onClick={() =>
-                  connect.mutate({
-                    provider_key: "mobbex",
-                    secrets: { api_key: mbApiKey.trim(), access_token: mbToken.trim() },
-                  })
-                }
-              >
-                {connect.isPending
-                  ? "Guardando…"
-                  : connectingConnected
-                    ? "Actualizar credenciales"
-                    : "Conectar Mobbex"}
-              </Button>
-            </>
-          ) : (
-            <>
-              {connectingConnected ? (
-                <p className="flex items-center gap-2 text-sm text-success">
-                  <Check size={16} /> Tu cuenta de Mercado Pago está conectada.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Conectá tu cuenta de Mercado Pago para cobrar online. Te lleva a
-                  Mercado Pago para autorizar; no tenés que copiar nada.
-                </p>
-              )}
-
-              {/* Opción principal: OAuth en un click. */}
-              <Button
-                className="w-full"
-                disabled={oauthStart.isPending}
-                onClick={() => oauthStart.mutate()}
-              >
-                {oauthStart.isPending
-                  ? "Redirigiendo…"
-                  : connectingConnected
-                    ? "Reconectar con Mercado Pago"
-                    : "Conectar con Mercado Pago"}
-              </Button>
-
-              {/* Opción avanzada: pegar Access Token manualmente. */}
-              {showManual ? (
-                <div className="space-y-3 rounded-md border border-border p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Pegá el <strong>Access Token</strong> de tu cuenta (MP → Tus
-                    integraciones → Credenciales). Se guarda cifrado del lado del
-                    servidor; nunca se expone al navegador.
-                  </p>
-                  <Input
-                    label="Access Token"
-                    type="password"
-                    name="mp_access_token"
-                    autoComplete="new-password"
-                    data-1p-ignore
-                    data-lpignore="true"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder={connectingConnected ? "•••••• (ya configurado)" : "APP_USR-..."}
-                  />
-                  <Button
-                    className="w-full"
-                    variant="secondary"
-                    disabled={connect.isPending || token.trim().length < 8}
-                    onClick={() =>
-                      connect.mutate({ provider_key: connectKey!, token: token.trim() })
-                    }
-                  >
-                    {connect.isPending ? "Guardando…" : "Guardar Access Token"}
-                  </Button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowManual(true)}
-                  className="text-xs text-muted-foreground underline hover:text-foreground"
-                >
-                  o pegá tu Access Token manualmente
-                </button>
-              )}
-
-              {/* Ambiente: producción (la conexión de arriba) o prueba (token
-                  de prueba de MP, convive con la de producción). */}
-              {connectKey === "mercadopago" && (
-                <MpEnvPicker
-                  method={byKey.get("mercadopago")}
-                  token={mpTestToken}
-                  onToken={setMpTestToken}
-                  pending={mpEnv.isPending}
-                  onSave={(v) => mpEnv.mutate(v)}
-                />
-              )}
-            </>
-          )}
-
-          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-            {connectingConnected ? (
-              <Button
-                variant="ghost"
-                className="text-destructive"
-                disabled={connect.isPending}
-                onClick={() =>
-                  connect.mutate({ provider_key: connectKey!, clear: true })
-                }
-              >
-                Desconectar
-              </Button>
-            ) : (
-              <span />
-            )}
-            <Button variant="secondary" onClick={() => setConnectKey(null)}>
-              Cerrar
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {plansProvider && (
-        <PaymentPlansGridModal
-          open={plansProvider !== null}
-          onOpenChange={(o) => !o && setPlansProvider(null)}
-          providerKey={plansProvider.key}
-          providerName={plansProvider.name}
-        />
-      )}
-    </section>
-  );
-}
-
-// =============================================================================
-// PaymentMethodRow — fila de un medio de pago, con gating por plan.
-//
-// BUG #5/#14: antes el switch quedaba activable aunque el plan no incluyera el
-// medio (p. ej. Mercado Pago en Start). Se podía activar en config, pero el
-// backend lo bloqueaba al cobrar → incoherencia. Ahora, si el medio mapea a una
-// feature de plan que el tenant NO tiene, los controles (activar / conectar /
-// planes) quedan DISABLED con un tooltip "Desactivado — disponible desde el
-// plan <X>" y, al click, abren el UpgradeModal (imagen del plan, precio,
-// descripción y botón de pago). El gating real sigue viviendo en el backend;
-// esto sólo cierra el agujero de UX. Va como componente para poder usar hooks
-// de gating por fila (no se puede en un .map()).
-// =============================================================================
-function PaymentMethodRow({
-  provider: p,
-  method: m,
-  plans,
-  features,
-  isOpen,
-  onToggleExpand,
-  onConnect,
-  onOpenPlans,
-  onSaveEnabled,
-  onSaveSurcharge,
-  parentConnected = false,
-}: {
-  provider: Provider;
-  method: Method | undefined;
-  plans: PlanForUpgrade[];
-  // Conexión de la fila de la marca (para canales Point que la reutilizan).
-  parentConnected?: boolean;
-  // Features activas del tenant. undefined mientras carga (optimista: no bloquea).
-  features: Record<string, boolean> | undefined;
-  isOpen: boolean;
-  onToggleExpand: () => void;
-  onConnect: () => void;
-  onOpenPlans: () => void;
-  onSaveEnabled: (v: boolean) => void;
-  onSaveSurcharge: (pct: number) => void;
-}) {
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-
-  const parent = USES_CONNECTION_OF[p.key];
-  const connected = parent ? parentConnected : Boolean(m?.config?.connected);
-  const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
-  const info = PROVIDER_INFO[p.key];
-  // Medios con grid de planes: el recargo se configura ahí, no en la fila.
-  const hasPlans = PLANS_PROVIDERS.has(p.key) && p.kind !== "manual";
-  // Point: cuotas/recargo se resuelven en el lector → sin input de recargo.
-  // Con grid de planes, el recargo vive en el grid. El resto (modo/pagos360/
-  // payway y manuales) usa el % plano del medio, que el POS aplica al cobrar.
-  const hideSurcharge = hasPlans || Boolean(parent);
-
-  // Gating por plan. Optimista mientras `features` es undefined (no parpadea).
-  // Sólo gateamos medios IMPLEMENTADOS (no `soon`): ahí el switch se podía
-  // activar y existía el bypass que reportó el usuario. Los `soon` ya tienen el
-  // switch deshabilitado ("Próximamente") y no prometemos upgrade sobre algo que
-  // todavía no cobra. El backend igual bloquea cualquier medio fuera del plan.
-  const featureKey: string | undefined = PROVIDER_FEATURE[p.key];
-  const locked =
-    !soon &&
-    featureKey !== undefined &&
-    features !== undefined &&
-    features[featureKey] !== true;
-  const target = locked && featureKey ? firstPlanWithFeature(plans, featureKey) : null;
-  const planName = target?.name ?? "superior";
-  const lockTip = `Desactivado: disponible desde el plan ${planName}. Tocá para mejorar tu plan.`;
-  const openUpgrade = () => setUpgradeOpen(true);
-
-  return (
-    <Card
-      className={
-        connected
-          ? "overflow-hidden border-emerald-500/30"
-          : locked
-            ? "overflow-hidden border-ninja-flameSoft/25"
-            : "overflow-hidden"
-      }
-    >
-      <div className="flex items-center gap-3 p-3.5 sm:gap-4 sm:p-4">
-        {/* Logo */}
-        <span
-          className={
-            locked
-              ? "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden opacity-50 grayscale"
-              : "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden"
-          }
-        >
-          {PROVIDER_LOGO[p.key] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={PROVIDER_LOGO[p.key]}
-              alt={p.name}
-              className="h-full w-full object-contain"
-            />
-          ) : (
-            <CreditCard size={18} className="text-muted-foreground" />
-          )}
-        </span>
-
-        {/* Nombre + chip de tipo */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate font-semibold">{p.name}</span>
-            {((SANDBOX_PROVIDERS.has(p.key) && m?.sandbox) ||
-              (p.key === "mercadopago" && mpEnvOf(m) === "test")) &&
-              !soon && (
-              <span
-                title="Este medio apunta al ambiente de PRUEBA del proveedor (sin cobros reales). Lo cambiás al conectar o en el detalle."
-                className="inline-flex shrink-0 items-center rounded-ninjaFull border border-warning/50 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning"
-              >
-                Prueba
-              </span>
-            )}
-            {locked && (
-              <span
-                title={lockTip}
-                className="inline-flex shrink-0 items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft"
-              >
-                <Lock size={10} /> Plan {planName}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 inline-flex items-center rounded-ninjaFull border border-ninja-brightViolet/30 bg-ninja-brightViolet/10 px-2 py-0.5 text-[11px] text-muted-foreground">
-            {PROVIDER_CHIP[p.kind] ?? KIND_LABELS[p.kind] ?? p.kind}
-          </div>
-        </div>
-
-        {/* Estado de conexión / acción de mejora */}
-        <div className="hidden shrink-0 sm:block">
-          {locked ? (
-            <button
-              type="button"
-              onClick={openUpgrade}
-              title={lockTip}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
-            >
-              <Lock size={13} /> Mejorar plan
-            </button>
-          ) : p.kind === "manual" ? (
-            <span className="text-xs text-muted-foreground">No requiere</span>
-          ) : soon ? (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock size={13} /> Próximamente
-            </span>
-          ) : parent ? (
-            connected ? (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
-                <Check size={13} /> Vía {parent.name}
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                title={`Conectá ${parent.name} para usar ${p.name}`}
-              >
-                <Link2 size={13} /> Requiere conectar {parent.name}
-              </span>
-            )
-          ) : (
-            <button
-              onClick={onConnect}
-              className={
-                connected
-                  ? "inline-flex items-center gap-1 text-xs font-semibold text-success hover:underline"
-                  : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft hover:underline"
-              }
-            >
-              {connected ? (
-                <>
-                  <Check size={13} /> Conectado
-                </>
-              ) : (
-                <>
-                  <Link2 size={13} /> Conectar
-                </>
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* Planes por marca (solo medios con grid; bloqueado abre el upgrade) */}
-        {hasPlans &&
-          (locked ? (
-            <button
-              onClick={openUpgrade}
-              title={lockTip}
-              aria-disabled
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/30 bg-ninja-flame/5 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft opacity-60 transition hover:opacity-80"
-            >
-              <Lock size={13} /> Planes
-            </button>
-          ) : (
-            <button
-              onClick={onOpenPlans}
-              title="Planes por tarjeta y cuotas"
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2.5 py-1.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/20"
-            >
-              <Percent size={13} /> Planes
-            </button>
-          ))}
-
-        {/* Recargo (oculto en medios con planes: se configura en el grid) */}
-        <div
-          className={
-            hideSurcharge
-              ? "hidden"
-              : "hidden shrink-0 flex-col items-end gap-0.5 md:flex"
-          }
-        >
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Recargo %
-          </span>
-          <input
-            type="number"
-            step="0.5"
-            min="0"
-            defaultValue={m?.surcharge_pct ?? 0}
-            disabled={soon || locked}
-            title={locked ? lockTip : undefined}
-            onBlur={(e) => onSaveSurcharge(Number(e.target.value) || 0)}
-            className="h-9 w-[68px] rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft disabled:opacity-40"
-          />
-        </div>
-
-        {/* Switch activar — bloqueado por plan: se ve apagado/atenuado y NO se
-            puede activar; un botón superpuesto captura el click y abre el
-            upgrade (un <button disabled> traga el click, por eso el overlay). */}
-        {locked ? (
-          <span className="relative inline-flex shrink-0 items-center">
-            <span aria-hidden className="pointer-events-none opacity-50">
-              <Switch checked={false} onCheckedChange={() => {}} disabled />
-            </span>
-            <button
-              type="button"
-              onClick={openUpgrade}
-              title={lockTip}
-              aria-label={`${p.name}: disponible desde el plan ${planName}. Tocá para mejorar tu plan.`}
-              className="absolute inset-0 cursor-pointer rounded-full"
-            />
-          </span>
-        ) : (
-          <Switch
-            checked={m?.enabled ?? false}
-            disabled={soon}
-            onCheckedChange={onSaveEnabled}
-            label={`Activar ${p.name}`}
-          />
-        )}
-
-        {/* Desplegar explicación */}
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
-          aria-expanded={isOpen}
-          className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:text-foreground"
-        >
-          <ChevronDown
-            size={18}
-            className={isOpen ? "rotate-180 transition" : "transition"}
-          />
-        </button>
-      </div>
-
-      {/* Detalle desplegable */}
-      {isOpen && (
-        <div className="space-y-3 border-t border-dashed border-border bg-muted/30 px-4 py-4 text-sm">
-          {/* Aviso de gating dentro del detalle (refuerza el motivo del bloqueo). */}
-          {locked && (
-            <button
-              type="button"
-              onClick={openUpgrade}
-              className="flex w-full items-start gap-2 rounded-md border border-ninja-flameSoft/30 bg-ninja-flame/5 p-2.5 text-left text-xs text-muted-foreground transition hover:bg-ninja-flame/10"
-            >
-              <Lock size={14} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
-              <span>
-                <strong className="text-ninja-flameSoft">Disponible desde el plan {planName}.</strong>{" "}
-                Tu plan actual no incluye {p.name}, por eso no se puede activar.
-                Tocá para mejorar tu plan y empezar a cobrar con {p.name}.
-              </span>
-            </button>
-          )}
-
-          {/* En mobile, conexión + planes viven acá (se ocultan en la fila). */}
-          <div className="flex flex-wrap items-center gap-3 sm:hidden">
-            {locked ? (
-              <button
-                type="button"
-                onClick={openUpgrade}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
-              >
-                <Lock size={13} /> Mejorar plan
-              </button>
-            ) : p.kind === "manual" ? (
-              <span className="text-xs text-muted-foreground">Sin conexión</span>
-            ) : soon ? (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock size={13} /> Próximamente
-              </span>
-            ) : parent ? (
-              <span
-                className={
-                  connected
-                    ? "inline-flex items-center gap-1 text-xs font-semibold text-success"
-                    : "inline-flex items-center gap-1 text-xs text-muted-foreground"
-                }
-              >
-                {connected ? (
-                  <>
-                    <Check size={13} /> Vía {parent.name}
-                  </>
-                ) : (
-                  <>
-                    <Link2 size={13} /> Requiere conectar {parent.name}
-                  </>
-                )}
-              </span>
-            ) : (
-              <button
-                onClick={onConnect}
-                className={
-                  connected
-                    ? "inline-flex items-center gap-1 text-xs font-semibold text-success"
-                    : "inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
-                }
-              >
-                {connected ? (
-                  <>
-                    <Check size={13} /> Conectado
-                  </>
-                ) : (
-                  <>
-                    <Link2 size={13} /> Conectar
-                  </>
-                )}
-              </button>
-            )}
-            {hasPlans && !locked && (
-              <button
-                onClick={onOpenPlans}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-ninja-flameSoft"
-              >
-                <Percent size={13} /> Planes por tarjeta
-              </button>
-            )}
-          </div>
-
-          {p.key === "mercadopago" && connected && !locked && <MpQrPosSetup method={m} />}
-
-          {info ? (
-            <>
-              <div>
-                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                  Qué pasa al activar
-                </div>
-                <p className="text-muted-foreground">{info.activa}</p>
-              </div>
-              {info.conexion && (
-                <div>
-                  <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                    Conexión
-                  </div>
-                  <p className="text-muted-foreground">{info.conexion}</p>
-                </div>
-              )}
-              {info.pasos && (
-                <div>
-                  <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                    Cómo es el proceso
-                  </div>
-                  <ol className="space-y-1.5">
-                    {info.pasos.map((step, i) => (
-                      <li key={i} className="flex gap-2.5 text-muted-foreground">
-                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
-                          {i + 1}
-                        </span>
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              {info.recargo && !hasPlans && (
-                <div>
-                  <div className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ninja-flameSoft">
-                    Recargo
-                  </div>
-                  <p className="text-muted-foreground">{info.recargo}</p>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-muted-foreground">
-              Integración en camino. Pronto vas a poder conectar tu cuenta y
-              cobrar con {p.name} desde el POS.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* UpgradeModal reutilizado (imagen/logo del plan, precio, descripción y
-          botón "Mejorar a <plan> y pagar"). Sólo se monta si el medio está
-          gateado por plan. */}
-      {locked && featureKey && (
-        <UpgradeModal
-          open={upgradeOpen}
-          onOpenChange={setUpgradeOpen}
-          featureKey={featureKey}
-          featureLabel={p.name}
-        />
-      )}
-    </Card>
-  );
-}
-
-// =============================================================================
-// MpEnvPicker — ambiente de Mercado Pago (ADR-032). Producción usa la conexión
-// (OAuth o token); Prueba usa un Access Token de prueba de MP (Tus
-// integraciones → Credenciales de prueba) que convive con la de producción.
-// =============================================================================
-function MpEnvPicker({
-  method,
-  token,
-  onToken,
-  pending,
-  onSave,
-}: {
-  method: Method | undefined;
-  token: string;
-  onToken: (v: string) => void;
-  pending: boolean;
-  onSave: (v: { env: "prod" | "test"; testToken?: string; clearTest?: boolean }) => void;
-}) {
-  const env = mpEnvOf(method);
-  const hasTest = Boolean((method?.config as MpConfig | null)?.test_connected);
-  const [want, setWant] = useState<"prod" | "test">(env);
-  useEffect(() => setWant(env), [env]);
-
-  return (
-    <div className="space-y-3 rounded-md border border-border p-3">
-      <p className="text-xs font-semibold">Ambiente de cobro</p>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setWant("prod");
-            if (env !== "prod") onSave({ env: "prod" });
-          }}
-          className={
-            want === "prod"
-              ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
-              : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-          }
-        >
-          Producción (cobros reales)
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setWant("test");
-            if (hasTest && env !== "test") onSave({ env: "test" });
-          }}
-          className={
-            want === "test"
-              ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
-              : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
-          }
-        >
-          Prueba (sandbox)
-        </button>
-      </div>
-      {want === "test" && (
-        <>
-          <p className="text-xs text-muted-foreground">
-            {hasTest
-              ? "Hay un Access Token de prueba cargado. Podés reemplazarlo o quitarlo."
-              : "Pegá el Access Token de prueba (Mercado Pago → Tus integraciones → Credenciales de prueba). Los cobros no mueven plata real."}
-          </p>
-          <Input
-            label="Access Token de prueba"
-            type="password"
-            name="mp_test_access_token"
-            autoComplete="new-password"
-            data-1p-ignore
-            data-lpignore="true"
-            value={token}
-            onChange={(e) => onToken(e.target.value)}
-            placeholder={hasTest ? "•••••• (configurado)" : "APP_USR-... o TEST-..."}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={pending || token.trim().length < 8}
-              onClick={() => onSave({ env: "test", testToken: token.trim() })}
-            >
-              {pending ? <Spinner size={14} /> : null} Guardar y usar prueba
-            </Button>
-            {hasTest && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive"
-                disabled={pending}
-                onClick={() => onSave({ env: "prod", clearTest: true })}
-              >
-                Quitar token de prueba
-              </Button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// =============================================================================
-// MpQrPosSetup — caja QR de Mercado Pago (alta única por ambiente). Crea la
-// sucursal y la caja en la cuenta de MP del negocio (Edge mp_qr setup) para
-// cobrar con QR dinámico de la Orders API. Sin caja, el POS cobra con el QR
-// del link de pago (Checkout Pro), como antes.
-// =============================================================================
-const MP_QR_ERRORS: Record<string, string> = {
-  name: "Poné el nombre del local.",
-  street_name: "Falta la calle.",
-  street_number: "Falta la altura.",
-  city_name: "Falta la ciudad o localidad.",
-  state_name: "Elegí la provincia.",
-  coordinates: "Pegá las coordenadas como las copia Google Maps (ej. -34.6037, -58.3816).",
-};
-
-function MpQrPosSetup({ method }: { method: Method | undefined }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const env = mpEnvOf(method);
-  const pos = (method?.config as MpConfig | null)?.mp_qr?.[env];
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    street_name: "",
-    street_number: "",
-    city_name: "",
-    state_name: "",
-    coordinates: "",
-    reference: "",
-  });
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const setup = useMutation({
-    mutationFn: () => posApi.mpQrSetup(form),
-    onSuccess: () => {
-      toast({ title: "Caja QR lista", variant: "success" });
-      setEditing(false);
-      qc.invalidateQueries({ queryKey: ["tenant-payment-methods"] });
-    },
-    onError: (e: Error) => {
-      const [code, field] = e.message.split(":");
-      toast({
-        title:
-          code === "invalid_store" && field
-            ? (MP_QR_ERRORS[field] ?? "Revisá los datos del local.")
-            : code === "payment_method_not_allowed"
-              ? "Tu plan no incluye Mercado Pago."
-              : "Mercado Pago no aceptó la sucursal o la caja. Revisá la dirección y probá de nuevo.",
-        variant: "error",
+  // MP: token de prueba (sin pisar producción) y ambiente (ADR-032).
+  const changeMpEnv = async (v: MpEnvChange) => {
+    if (v.testToken || v.clearTest) {
+      await invokeSecret({
+        provider_key: "mercadopago",
+        merge: true,
+        secrets: v.testToken ? { test_access_token: v.testToken } : {},
+        remove: v.clearTest ? ["test_access_token"] : [],
       });
-    },
-  });
+    }
+    await upsertMethod("mercadopago", { sandbox: v.env === "test" });
+    toast({
+      title: v.env === "test" ? "Mercado Pago en modo prueba" : "Mercado Pago en producción",
+      variant: "success",
+    });
+    await invalidate();
+  };
 
   return (
-    <div className="rounded-md border border-border bg-background/40 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <QrCode size={14} className="text-ninja-flameSoft" /> Caja QR en el local
-          {env === "test" && <span className="font-normal text-warning">(prueba)</span>}
-        </div>
-        {pos && !editing && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-xs text-muted-foreground underline hover:text-foreground"
-          >
-            Reconfigurar
-          </button>
-        )}
-      </div>
+    <>
+      <PaymentMethodsView
+        providers={providers}
+        methods={methods}
+        features={gating?.features}
+        plans={plans}
+        handlers={{
+          onToggle: (key, enabled) => save.mutate({ key, enabled }),
+          onSurcharge: (key, pct) => save.mutate({ key, surcharge_pct: pct }),
+          onOpenPlans: (key, name) => setPlansFor({ key, name }),
+          onConnect: (b) => setConnectBrand(b),
+          renderChannelExtra: (key, m) =>
+            key === "mercadopago" && m?.config?.connected ? (
+              <MpQrPosSetup method={m} />
+            ) : key === "directo" ? (
+              <DirectoInfo />
+            ) : null,
+        }}
+      />
 
-      {pos && !editing ? (
-        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-success">
-          <Check size={13} className="mt-0.5 shrink-0" />
-          <span>
-            Lista: {pos.store_name}
-            {pos.address ? `, ${pos.address}` : ""}. El POS genera un QR único por cobro.
-          </span>
-        </p>
-      ) : (
-        <div className="mt-2 space-y-2.5">
-          <p className="text-xs text-muted-foreground">
-            Una sola vez: damos de alta tu local y una caja en tu cuenta de Mercado Pago
-            para cobrar con QR en el mostrador. Mientras tanto, el POS cobra con el QR del
-            link de pago.
-          </p>
-          <Input label="Nombre del local" value={form.name} onChange={set("name")} />
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2">
-              <Input label="Calle" value={form.street_name} onChange={set("street_name")} />
-            </div>
-            <Input label="Altura" value={form.street_number} onChange={set("street_number")} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Input label="Ciudad o localidad" value={form.city_name} onChange={set("city_name")} />
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium">Provincia</span>
-              <select
-                value={form.state_name}
-                onChange={set("state_name")}
-                className="h-10 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
-              >
-                <option value="">Elegí</option>
-                {MP_AR_STATES.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <Input
-            label="Coordenadas (de Google Maps)"
-            value={form.coordinates}
-            onChange={set("coordinates")}
-            placeholder="-34.6037, -58.3816"
-          />
-          <Input
-            label="Referencia (opcional)"
-            value={form.reference}
-            onChange={set("reference")}
-            placeholder="Ej: local 2, entre calles"
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={setup.isPending} onClick={() => setup.mutate()}>
-              {setup.isPending ? <Spinner size={14} /> : <QrCode size={14} />} Crear caja QR
-            </Button>
-            {editing && (
-              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                Cancelar
-              </Button>
-            )}
-          </div>
-        </div>
+      {brand && connKey && (
+        <ConnectProviderModal
+          open
+          onOpenChange={(o) => !o && setConnectBrand(null)}
+          brand={brand}
+          providerKey={connKey}
+          method={byKey.get(connKey)}
+          channelNames={channelNames}
+          onSave={(v) => saveConnection(connKey, v)}
+          onDisconnect={async () => {
+            await invokeSecret({ provider_key: connKey, action: "clear" });
+            await invalidate();
+          }}
+          onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate() : undefined}
+          oauthPending={oauthStart.isPending}
+          onMpEnv={connKey === "mercadopago" ? changeMpEnv : undefined}
+        />
       )}
-    </div>
+
+      {/* Planes (cuotas por tarjeta + recargo). Se abren desde el canal que
+          los usa; se guardan con su provider_key (MP: 'mercadopago'). */}
+      {plansFor && (
+        <PaymentPlansGridModal
+          open
+          onOpenChange={(o) => !o && setPlansFor(null)}
+          providerKey={plansFor.key}
+          providerName={plansFor.name}
+        />
+      )}
+    </>
   );
 }

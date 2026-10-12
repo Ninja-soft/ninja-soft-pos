@@ -1178,7 +1178,7 @@ El dueño pidió integrar GO Cuotas: el cliente paga en 2 a 4 cuotas sin interé
 ### Consecuencias
 
 - Deploy: migración `20261011180000_gocuotas_directo` antes de usar el medio; Edges `gocuotas`, `gocuotas_webhook` (`--no-verify-jwt`) y `set_payment_secret`.
-- Pendiente de cablear (fuera de este cambio): botón "Cobrar con GO Cuotas" en el POS (igual que Payway) y `GoCuotasConnectForm` dentro de Medios de pago (rediseño en curso).
+- Pendiente de cablear (fuera de este cambio): botón "Cobrar con GO Cuotas" en el POS (igual que Payway). La conexión de GO Cuotas quedó en el modal genérico de Medios de pago (ADR-035; `GoCuotasConnectForm` se reemplazó).
 - Credenciales de prueba: la API Key de prueba sale del panel de la sucursal (Sucursales, Editar, Ver ApiKeys) o pidiéndola a integraciones@gocuotas.com. El comprador de prueba del sandbox es público (FAQ oficial).
 
 ---
@@ -1206,7 +1206,31 @@ El dueño pidió sumar "Directo, medio de pago de crédito directo": **Crédito 
 ### Consecuencias
 
 - No hay verificación automática del cobro: el número de operación es la evidencia para conciliar con las liquidaciones de Directo.
-- Pendiente: cablear `DirectoInfo` en Medios de pago (rediseño en curso).
+- `DirectoInfo` cableado en Medios de pago (ADR-035).
+
+---
+
+## ADR-035 — Configuración de medios de pago por marca y canal (rediseño)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
+
+### Contexto
+
+El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
+
+### Decisión
+
+- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
+- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
+- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
+- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
+- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
+- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
+
+### Consecuencias
+
+- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
+- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
 
 ---
 

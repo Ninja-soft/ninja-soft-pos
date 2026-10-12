@@ -9,32 +9,39 @@ import { ExternalLink } from "lucide-react";
 const PORTAL_URL = "https://minegocio.directo.com.ar/login";
 const ALTA_URL = "https://sumatucomercio.directo.com.ar/flow";
 
+const STEPS = [
+  "En el POS elegís Directo (crédito) al cobrar.",
+  "Generás el cobro por el total en el portal de comercios de Directo (QR o link).",
+  "Cuando Directo lo aprueba, cargás el número de operación y confirmás la venta.",
+];
+
 export function DirectoInfo() {
   return (
     <div className="space-y-3 text-sm">
-      <div className="flex items-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/payments/directo.webp" alt="Directo" className="h-6 w-auto" />
-      </div>
       <p className="text-muted-foreground">
-        Con Directo tu cliente compra en cuotas fijas sin tarjeta de crédito. Directo no ofrece
-        integración automática, así que el cobro se hace en su portal y el POS lo registra.
+        Tu cliente compra en cuotas fijas sin tarjeta de crédito. Directo no ofrece integración
+        automática: el cobro se hace en su portal y el POS lo registra.
       </p>
-      <ol className="list-decimal space-y-1 rounded-md bg-muted/40 py-3 pl-8 pr-3 text-muted-foreground">
-        <li>En el POS elegí el medio Directo (crédito) al cobrar.</li>
-        <li>Generá el cobro por el total en el portal de comercios de Directo (QR o link).</li>
-        <li>Cuando Directo lo aprueba, cargá el número de operación y confirmá la venta.</li>
+      <ol className="space-y-1.5">
+        {STEPS.map((step, i) => (
+          <li key={i} className="flex gap-2.5 text-muted-foreground">
+            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)] text-[10px] font-bold text-foreground">
+              {i + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
       </ol>
       <p className="text-xs text-muted-foreground">
-        Requiere tener cuenta de comercio en Directo. El número de operación queda guardado en
-        el pago para conciliar con las liquidaciones de Directo.
+        Requiere cuenta de comercio en Directo. El número de operación queda guardado en el pago
+        para conciliar con sus liquidaciones.
       </p>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         <a
           href={PORTAL_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-ninja-flameSoft hover:underline"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-muted px-2.5 text-xs font-semibold text-foreground transition hover:bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"
         >
           Portal de comercios <ExternalLink size={12} />
         </a>
@@ -42,7 +49,7 @@ export function DirectoInfo() {
           href={ALTA_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-ninja-flameSoft hover:underline"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-muted px-2.5 text-xs font-semibold text-foreground transition hover:bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)]"
         >
           Sumar mi comercio <ExternalLink size={12} />
         </a>

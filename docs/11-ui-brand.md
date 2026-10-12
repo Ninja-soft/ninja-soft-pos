@@ -261,3 +261,19 @@ Si el cambio afecta POS, internal, reportes o configuración, el control es bloq
 | Modal | `Modal` con `footer` para las acciones (hoja inferior en mobile). |
 
 Reglas: lo seleccionado se marca con **relleno neutro elevado** (`choiceClass` o las clases `choice-on` + `choice-check`: relleno tonal del tema, texto de primer plano e insignia de check con el fuego Ninja en la esquina; `choice-on` solo para pastillas compactas o cuando ya hay `ChoiceDot`), nunca con borde o ring de color ni tinte marrón de flame; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).
+
+## 18. Pantallas del POS (2026-10)
+
+Tokens en `components/pos/ui/posStyles.ts`; mismo lenguaje que el resto de la app.
+
+| Pieza | Regla |
+|---|---|
+| Radios | `rounded-md` chips, pastillas y steppers; `rounded-lg` botones, campos, tiles y líneas; `rounded-xl` paneles y hojas. Nada de `rounded-2xl`/`3xl`. |
+| Superficies | `POS_PANEL` (paneles) y `POS_TILE` (tiles): `bg-card` + borde sutil del tema. Sin degradados decorativos ni sombras pesadas. |
+| CTA | `POS_CTA` sólo para Cobrar: relleno sólido del acento con texto blanco AA (`--pos-solid` / `--pos-on`). Acciones secundarias con `POS_QUIET`. |
+| Selección | Rubros y áreas en riel segmentado (`POS_SEG_*`, como `Segmented`); filas y mesas con `choice-on`. Nunca relleno invertido ni tinte de flame. |
+| Productos | Precios `font-price` + `tabular-nums`, peso `semibold`. Boutique: foto 4:5 `object-cover`, diferida y con tamaño; sin foto, iniciales sobre relleno neutro. Stock bajo / sin stock como pastilla tonal. |
+| Teclas rápidas | Tile neutro; el color elegido es una barrita de acento (`QUICK_KEY_DOT`). |
+| Mesas | Tile neutro, estado como punto + texto. |
+| Logos | Isotipos de fondo transparente, sin placa blanca (`BrandIcon`). |
+| Táctil | Controles de 44px en la barra superior; steppers y acciones de línea crecen a 44px con `pointer: coarse`. Foco visible de 2px en todo el POS. |

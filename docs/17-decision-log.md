@@ -853,6 +853,20 @@ Integrar **Mobbex** (kind `orchestrator`) como segunda pasarela de cobro QR: Edg
 - **Negativas:** dos proveedores que conciliar (mitigado por ADR-025); comisión de Mobbex sobre cada cobro.
 - **Seguimiento:** conciliación contra liquidaciones de Mobbex cuando haya volumen; evaluar Mobbex como orquestador de otros adquirentes (su rol natural).
 
+### Addendum 2026-10-11: validación contra la API demo de mobbex.dev
+
+Se replicaron `mobbex_create_qr` y `mobbex_webhook` con las credenciales demo públicas de mobbex.dev y se contrastó con la doc oficial (Checkout, Webhooks, Consulta de operaciones, Códigos de estado). Cambios:
+
+- **Errores con HTTP 200.** Mobbex responde `200 { result:false, code, error }` (p. ej. `MRPERR` "Parametros obligatorios faltantes"); antes se tomaba como éxito. Ahora es `502 mobbex_error` con `code`/`detail`.
+- **Re-consulta del webhook.** `GET /p/operations/{CHK:…}` devuelve `result:false GENERIC:EFCS`: el id del checkout (lo que se guardaba en `preference_id` y se consultaba primero) **no es una operación**. Ahora se consulta `data.payment.id` del cuerpo (`GET /p/operations/{uid}` → `data.transaction.payment`) y, si no resuelve, `GET /p/entity/operations?reference=<intentId>` (`docs[]`, con `status` string plano). Nunca el CHK. `mp_payment_id` guarda el id real de la operación.
+- **Estados** (mobbex.dev/codigos-de-estado): aprobado = 200 Paga, 300 Acreditado, 301 Liquidado; pendiente = 0, 1, 2 En espera, 3 Autorizada, 100 En revisión, 210 Retenida; el resto (4xx/6xx) rechazo. Se aceptan códigos número o string.
+- **`webhooksType: "final"`** (parámetro de raíz del checkout, aceptado por la API): no llegan los intentos fallidos. Además, un rechazo con el checkout abierto deja el intent **pendiente** (el cliente puede reintentar); sólo el webhook `checkout:expired` sin pago aprobado lo rechaza. Un `pending`/`rejected` ya no pisa un intent que no esté pendiente; `approved` sí gana sobre uno cancelado (queda en la conciliación).
+- **Monto:** se compara `requestedTotal` (lo que pidió el checkout) y, si no viene, `total`, contra `mp_payment_intents.amount`.
+- **`customer` obligatorio en la práctica:** sin él Mobbex devuelve el warning "No customer declared … your checkout won't be created on the future". Se manda `{ email, name, identification }` del cliente de la venta (`customer_id` desde el POS, validado contra el tenant) y, si falta algún dato, el email del cajero, "Consumidor Final" e identificación `"0"` (aceptado por la API demo sin warning; Mobbex no documenta un placeholder oficial).
+- **Cuotas: se deja de mandar `installments`.** El formato documentado es un array de **referencias de planes de la cuenta Mobbex del comercio** (`["1","3","ahora_12"]`, `"-ref"` para ocultar, `"+uid:…"` reglas avanzadas); nuestro `{ enabled, list:[{ months, recharge }] }` no existe en la API y se ignoraba. Lo que se vio en la validación de junio eran los planes que la cuenta Mobbex ya tenía configurados, no los del grid. No se mapea grid → referencias porque las referencias (salvo `ahora_N`) dependen de cada cuenta y no son verificables desde acá. Consecuencia: en Mobbex el grid de Planes **sólo suma el recargo al total** (como en Mercado Pago); las cuotas e interés que ve el cliente son los de su cuenta Mobbex. Copy del editor de planes actualizado; no se promete `surcharge_pct` por checkout.
+- Lógica pura en `supabase/functions/_shared/mobbex.ts`, testeada con las respuestas reales (`tests/unit/mobbexSandbox.test.ts`).
+- **Pendiente:** confirmar con un pago real la forma exacta de `docs[]` del listado y de `requestedTotal` cuando el cliente elige cuotas con interés.
+
 ---
 
 ## ADR-025 — Conciliación de cobros QR vía `payments.reference`
@@ -1013,6 +1027,18 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 - `supabase/functions/payway/index.ts`, `supabase/functions/payway_webhook/index.ts`, `components/pos/QrCheckoutModal.tsx`, `modules/pos/api.ts`, `app/(app)/pos/page.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`.
 - SDK oficial: github.com/payway-ar/sdk-node-ventaonline (endpoints, headers, payload y URLs de formulario).
+
+### Addendum 2026-10-11: checkout propio validado en el sandbox público
+
+Desde H17b el cobro no usa el formulario hosted: `/pagar/{intent}` tokeniza la tarjeta en el navegador (`POST {v2}/tokens`, API Key pública) y `payway_checkout` cobra con la privada (`POST {v2}/payments`). El link del formulario hosted no se pudo validar (412 con las keys públicas). Validado en `developers.decidir.com` con las keys públicas de los SDK oficiales: token 201, pago 201 approved con **monto en centavos** (eco exacto), `GET /payments/{id}` igual al 201. Cambios:
+
+- **Errores vs rechazos.** Sólo `status:"rejected"` (402, motivo en `status_details.error.reason.description`) es rechazo del emisor → `402 rejected_attempt`. Los errores reales de request/gateway (`404 not_found_error` por token inexistente, `400 invalid_request_error` con `validation_errors` como `repeated:token` o `CardData:expired card`, `400 api_error`) ahora son `502 payway_error` con `reason` (`token` / `card_data` / `gateway`), `error_type` y `detail`. Antes todo era "rechazado por el emisor". El copy del cliente en `/pagar` sale de `lib/payments/paywayMessages.ts`.
+- **Eco del monto:** se aprueba sólo si `amount` de la respuesta == centavos calculados server-side; si difiere, el intent queda `rejected` y la respuesta es `502 payway_error amount_mismatch`.
+- **Estados intermedios** (2xx sin approved/rejected): se guarda el id de pago, el intent sigue pendiente, la página muestra "en revisión" y no acepta otro pago (`409 payment_in_review`). El poll del POS (Edge `payway` action `status`) re-verifica con `row.mp_payment_id` contra `GET /payments/{id}` (approved + centavos exactos + `site_transaction_id` == intent).
+- **Webhook:** no se manda `notifications_url` y la aprobación es sincrónica, así que `payway_webhook` queda **inofensivo**: se quitó el guard muerto de `preference_id` (que `create` nunca setea) y sólo actualiza con la misma verificación que el status (incluida la correlación por `site_transaction_id`).
+- Ya no se escribe el string `"null"` en `mp_payment_id` (el status usaba `String(row.preference_id)`).
+- **Marcas → `payment_method_id`** (tabla `PAYWAY_BRANDS` en `supabase/functions/_shared/payway.ts`): Visa 1 y **Visa Débito 31** aprobados en sandbox; Amex 65 aceptado por el sandbox (emisor de prueba fuera de línea); Mastercard 104, Maestro 106, Cabal 63, Naranja 24 y Diners 8 son de la doc pública, **sin verificar** (Mastercard devolvió `api_error` de 3DS en sandbox). Débito siempre en 1 pago.
+- Lógica pura en `supabase/functions/_shared/payway.ts`, testeada con las respuestas reales (`tests/unit/paywaySandbox.test.ts`).
 
 ---
 

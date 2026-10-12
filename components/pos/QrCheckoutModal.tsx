@@ -125,6 +125,7 @@ export function QrCheckoutModal({
   providerName = "Mercado Pago",
   onQrState,
   channel = "qr",
+  customerId = null,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -151,6 +152,8 @@ export function QrCheckoutModal({
   // Canal elegido en la hoja de cobro: "link" arranca directo con un link
   // compartible (Mercado Pago: Checkout Pro) y ofrece copiarlo o compartirlo.
   channel?: "qr" | "link";
+  // Cliente de la venta (sólo lo usa Mobbex para el customer del checkout).
+  customerId?: string | null;
 }) {
   // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
@@ -269,7 +272,7 @@ export function QrCheckoutModal({
     }
     const create =
       provider === "mobbex"
-        ? posApi.createMobbexQr
+        ? (a: number, t: string) => posApi.createMobbexQr(a, t, customerId)
         : provider === "modo"
           ? posApi.createModoQr
           : provider === "pagos360"

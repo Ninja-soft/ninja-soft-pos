@@ -16,15 +16,34 @@
 //   * pay {intent_id, token, bin, brand, installments} → cobra con la API Key
 //     PRIVADA: POST {v2}/payments con monto RECALCULADO SERVER-SIDE (base +
 //     recargo del plan elegido, en CENTAVOS — nunca se confía en el cliente),
-//     payment_method_id derivado de la marca. approved → intent approved con
-//     el monto final (el POS registra la venta por ese total, con el recargo
-//     como extra). Rechazo → el intent QUEDA pendiente para reintentar con
-//     otra tarjeta (se marca rejected recién si el cajero cancela).
+//     payment_method_id derivado de la marca (tabla PAYWAY_BRANDS de
+//     _shared/payway.ts). Resultado (validado en el sandbox público):
+//       - 201 approved con eco del monto EXACTO en centavos → intent approved
+//         con el monto final y el id de pago (200).
+//       - status 'rejected' (402) → rechazo del emisor: el intent QUEDA
+//         pendiente para reintentar con otra tarjeta (402 rejected_attempt).
+//       - 400/404 {error_type, validation_errors} o api_error → NO es rechazo:
+//         502 payway_error con reason/detail (el intent sigue pendiente).
+//       - approved con monto distinto → intent rejected + 502 amount_mismatch.
+//       - 2xx con estado intermedio (review) → se guarda el id y el intent
+//         sigue pendiente; el poll del POS (Edge payway status) lo resuelve y
+//         no se acepta otro pago mientras tanto (409 payment_in_review).
 //
 // Dialecto del SDK oficial payway-ar/sdk-node-ventaonline (tokens/payments v2,
 // amount entero en centavos, payment_type single).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import {
+  PAYWAY_BRANDS,
+  buildPaymentBody,
+  classifyPayResponse,
+  finalAmountWithSurcharge,
+  payHttpResponse,
+  paywayBrand,
+  paywayPaymentId,
+  paywayV2Base,
+  toCents,
+} from "../_shared/payway.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -37,24 +56,6 @@ const json = (b: unknown, s = 200) =>
     status: s,
     headers: { ...cors, "Content-Type": "application/json" },
   });
-
-const V2 = {
-  sandbox: "https://developers.decidir.com/api/v2",
-  prod: "https://ventasonline.payway.com.ar/api/v2",
-};
-
-// payment_method_id de Decidir/Payway por marca (ids públicos de su doc).
-const BRAND_METHOD: Record<string, number> = {
-  visa: 1,
-  master: 104,
-  maestro: 106,
-  cabal: 63,
-  amex: 65,
-  naranja: 24,
-  diners: 8,
-};
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -88,8 +89,7 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", row.tenant_id)
     .eq("provider_key", "payway")
     .maybeSingle();
-  const sandbox = Boolean(methodRow?.sandbox);
-  const base = sandbox ? V2.sandbox : V2.prod;
+  const base = paywayV2Base(methodRow?.sandbox);
 
   const { data: secretRow } = await admin
     .from("payment_secrets")
@@ -136,7 +136,8 @@ Deno.serve(async (req: Request) => {
         label: p.label,
         surcharge_pct: Number(p.surcharge_pct) || 0,
       })),
-      brands: Object.keys(BRAND_METHOD),
+      brands: PAYWAY_BRANDS.map((x) => x.key),
+      debit_brands: PAYWAY_BRANDS.filter((x) => x.debit).map((x) => x.key),
       public_apikey: sec.public_apikey,
       tokens_url: `${base}/tokens`,
     });
@@ -147,84 +148,104 @@ Deno.serve(async (req: Request) => {
     if (row.status !== "pending") {
       return json({ error: "intent_not_pending", status: row.status }, 409);
     }
+    // Un pago anterior quedó en revisión: no se cobra otra vez.
+    if (paywayPaymentId(row.mp_payment_id)) {
+      return json({ error: "payment_in_review" }, 409);
+    }
     const token = String(b.token ?? "");
     const bin = String(b.bin ?? "").slice(0, 6);
-    const brand = String(b.brand ?? "").toLowerCase();
+    const brandInfo = paywayBrand(b.brand);
     const installments = Math.min(36, Math.max(1, Math.trunc(Number(b.installments)) || 1));
     if (token.length < 20) return json({ error: "invalid_token" }, 400);
-    const methodId = BRAND_METHOD[brand];
-    if (!methodId) return json({ error: "invalid_brand" }, 400);
+    if (!brandInfo) return json({ error: "invalid_brand" }, 400);
+    const brand = brandInfo.key;
+    // Débito: siempre 1 pago.
+    if (brandInfo.debit && installments > 1) return json({ error: "plan_not_available" }, 400);
 
     // Monto final SERVER-SIDE: base + recargo del plan (tenant/brand/cuotas).
     // Cuotas sin plan cargado solo se aceptan para 1 cuota (sin recargo).
     let surchargePct = 0;
-    if (installments > 1 || brand) {
-      const { data: plan } = await admin
-        .from("payment_plans")
-        .select("surcharge_pct")
-        .eq("tenant_id", row.tenant_id)
-        .eq("provider_key", "payway")
-        .eq("is_active", true)
-        .eq("installments", installments)
-        .or(`brand.eq.${brand},brand.is.null`)
-        .order("brand", { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle();
-      if (plan) surchargePct = Number(plan.surcharge_pct) || 0;
-      else if (installments > 1) return json({ error: "plan_not_available" }, 400);
+    const { data: plan } = await admin
+      .from("payment_plans")
+      .select("surcharge_pct")
+      .eq("tenant_id", row.tenant_id)
+      .eq("provider_key", "payway")
+      .eq("is_active", true)
+      .eq("installments", installments)
+      .or(`brand.eq.${brand},brand.is.null`)
+      .order("brand", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+    if (plan) surchargePct = Number(plan.surcharge_pct) || 0;
+    else if (installments > 1) return json({ error: "plan_not_available" }, 400);
+    const finalAmount = finalAmountWithSurcharge(Number(row.amount), surchargePct);
+
+    let r: Response;
+    try {
+      r = await fetch(`${base}/payments`, {
+        method: "POST",
+        headers: {
+          apikey: sec.private_apikey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          buildPaymentBody({
+            siteTransactionId: row.id,
+            token,
+            methodId: brandInfo.methodId,
+            bin,
+            finalAmount,
+            installments,
+          }),
+        ),
+      });
+    } catch {
+      return json({ ok: false, error: "payway_error", reason: "gateway", detail: "unreachable" }, 502);
     }
-    const finalAmount = round2(Number(row.amount) * (1 + surchargePct / 100));
+    const body = await r.json().catch(() => null);
+    const outcome = classifyPayResponse(r.status, body, toCents(finalAmount));
 
-    const r = await fetch(`${base}/payments`, {
-      method: "POST",
-      headers: {
-        apikey: sec.private_apikey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        site_transaction_id: row.id,
-        token,
-        payment_method_id: methodId,
-        bin,
-        // Payway v2: entero en CENTAVOS.
-        amount: Math.round(finalAmount * 100),
-        currency: "ARS",
-        installments,
-        description: "Venta NinjaPos",
-        payment_type: "single",
-        sub_payments: [],
-      }),
-    });
-    const pay = (await r.json().catch(() => ({}))) as {
-      id?: number | string;
-      status?: string;
-      status_details?: { error?: unknown };
-    };
-    const state = String(pay.status ?? "").toLowerCase();
-
-    if (r.ok && (state === "approved" || state === "accredited")) {
+    if (outcome.kind === "approved") {
       await admin
         .from("mp_payment_intents")
         .update({
           status: "approved",
           amount: finalAmount,
-          mp_payment_id: pay.id != null ? String(pay.id) : null,
+          mp_payment_id: outcome.paymentId,
         })
         .eq("id", row.id)
         .eq("status", "pending");
-      return json({ ok: true, status: "approved", amount: finalAmount });
+    } else if (outcome.kind === "amount_mismatch") {
+      // Payway confirmó un monto distinto al calculado: no se acredita.
+      console.error("[payway_checkout] amount_mismatch", {
+        intent: row.id,
+        expected: outcome.expectedCents,
+        got: outcome.gotCents,
+      });
+      await admin
+        .from("mp_payment_intents")
+        .update({ status: "rejected", mp_payment_id: outcome.paymentId })
+        .eq("id", row.id)
+        .eq("status", "pending");
+    } else if (outcome.kind === "pending" && outcome.paymentId) {
+      // En revisión: guardamos el id (con el monto final) para que el poll del
+      // POS lo re-verifique contra GET /payments.
+      await admin
+        .from("mp_payment_intents")
+        .update({ amount: finalAmount, mp_payment_id: outcome.paymentId })
+        .eq("id", row.id)
+        .eq("status", "pending");
+    } else if (outcome.kind === "error") {
+      console.error("[payway_checkout] payway_error", {
+        intent: row.id,
+        http: outcome.httpStatus,
+        detail: outcome.detail,
+      });
     }
-
-    // Rechazo del emisor / token inválido: el intent sigue pendiente para que
-    // el cliente reintente con otra tarjeta (el POS puede cancelar).
-    return json(
-      {
-        ok: false,
-        status: "rejected_attempt",
-        detail: JSON.stringify(pay?.status_details ?? pay?.status ?? "").slice(0, 200),
-      },
-      402,
-    );
+    // Rechazo del emisor / error: el intent sigue pendiente para que el
+    // cliente reintente con otra tarjeta (el POS puede cancelar).
+    const res = payHttpResponse(outcome, finalAmount);
+    return json(res.body, res.status);
   }
 
   return json({ error: "invalid_action" }, 400);

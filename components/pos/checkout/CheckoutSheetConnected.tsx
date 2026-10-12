@@ -26,11 +26,13 @@ type Connected = Omit<
 > & {
   /** Reporta el QR activo a la pantalla del cliente (H25). */
   onQrState?: (qr: DisplayQr | null) => void;
+  /** Cliente de la venta (Mobbex lo informa como customer del checkout). */
+  customerId?: string | null;
 };
 
 // Hoja de cobro con sus datos (planes de cuotas, garantías, vendedores,
 // voucher) y los modales de QR / link / Point de cada proveedor.
-export function CheckoutSheetConnected({ onQrState, ...props }: Connected) {
+export function CheckoutSheetConnected({ onQrState, customerId = null, ...props }: Connected) {
   const { data: allPlans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
   const { data: professionals } = useProfessionals();
@@ -65,6 +67,7 @@ export function CheckoutSheetConnected({ onQrState, ...props }: Connected) {
           provider={t.qrProvider}
           providerName={t.brandLabel}
           channel={t.channel === "link" ? "link" : "qr"}
+          customerId={customerId}
           base={req.amount}
           onQrState={onQrState}
           onOpenChange={(o) => {

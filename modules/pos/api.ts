@@ -435,13 +435,16 @@ export const posApi = {
     posApi.providerMethod("mercadopago"),
 
   // Crea el checkout/QR de Mobbex y devuelve el init_point (URL para QR).
+  // customerId (opcional): cliente de la venta, para el `customer` que pide
+  // Mobbex; sin cliente la Edge usa un consumidor final neutro.
   createMobbexQr: async (
     amount: number,
     title: string,
+    customerId?: string | null,
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mobbex_create_qr", {
-      body: { amount, title },
+      body: { amount, title, customer_id: customerId ?? null },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {

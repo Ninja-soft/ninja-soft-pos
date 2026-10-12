@@ -933,6 +933,7 @@ function PosPageInner() {
           cartPromo={pricing.cartPromo}
           promoForMethod={pricing.promoForMethod}
           tenders={tenders}
+          customerId={customer?.id ?? null}
           prefs={layout.payments}
           initialTenderId={checkoutTender}
           initialWarrantyId={offeredWarrantyId}

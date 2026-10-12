@@ -819,7 +819,7 @@ Migración `20261018400000_transferencias_cuentas`.
 
 ---
 
-## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
+## 8.12 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
 
 Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja` y `20261017130000_monitor_cajas_auditoria`.
 
@@ -829,7 +829,7 @@ Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_po
 - [x] Guardas por trigger: `cash_shifts_guard`, `cash_movements_guard`, `sales_supervisor`, `sale_returns_supervisor`. Policy RESTRICTIVE `audit_logs_role_scope`.
 - [x] Lecturas por RPC: `cash_monitor`, `owner_dashboard_stats`, `audit_log_search`, `audit_log_facets`, `staff_people`, `my_staff_status`, `supervisor_list`, `supervisor_pin_status`.
 
-## 8.11 Extensión F8: terminal integrada (ADR-053)
+## 8.13 Extensión F8: terminal integrada (ADR-053)
 
 Migración `20261018100000_terminal_integrada` (no aplicada).
 
@@ -838,7 +838,7 @@ Migración `20261018100000_terminal_integrada` (no aplicada).
 - [x] `terminal_transactions(tenant_id, terminal_id, store_id, cash_register_id, op sale|void|refund|close_batch|test, status approved|declined|timeout|cancelled|error, amount, installments, adapter, simulated, result jsonb, raw, client_ref, payment_id unique, created_by, created_at)`. RLS sólo lectura (`internal_scope()` o negocio actual y sucursales del usuario). Escritura sólo por `terminal_tx_record(...)` (SECURITY DEFINER: rol, terminal del usuario, feature, `audit_logs`, `last_seen_at`).
 - [x] Triggers `payments_terminal_tx` (BEFORE INSERT: un `card_voucher` con `origen = 'terminal'` exige `terminal_tx` de una venta aprobada, mismo negocio y monto, menos de 24 h y sin usar; pisa lote, cupón, autorización y últimos 4 con la bitácora; `simulado` si vino del simulador) y `payments_terminal_tx_link` (AFTER INSERT: vincula `payment_id`).
 
-## 8.12 Extensión F17: credenciales, planes, plantilla, clientes, comparativo y monitor por sucursal (ADR-057)
+## 8.14 Extensión F17: credenciales, planes, plantilla, clientes, comparativo y monitor por sucursal (ADR-057)
 
 Migraciones `20261020100000_credenciales_por_sucursal`, `20261020110000_planes_por_sucursal`, `20261020120000_plantilla_sucursal`, `20261020130000_clientes_sucursal_alta`, `20261020140000_reportes_comparativos` y `20261020150000_monitor_sucursales`.
 
@@ -850,7 +850,7 @@ Migraciones `20261020100000_credenciales_por_sucursal`, `20261020110000_planes_p
 - [x] `branch_compare_report(desde, hasta, sucursales[])`: KPIs por sucursal (ventas, tickets, ticket promedio, unidades, anulaciones, devoluciones por la sucursal de la venta, margen estimado con el costo actual y su cobertura, diferencias de Z, clientes nuevos, compradores y recurrentes, medios de pago y ventas por día) y totales. Acceso por sucursal; comparar más de una exige `multi_sucursal`.
 - [x] `branch_monitor_overview()`: por sucursal permitida, cajas abiertas y totales, turnos, ventas de hoy, personal en turno y asignado, faltantes, cobros en espera (esperando y pagados sin venta), terminales con última señal y último Z con la tolerancia efectiva. `monitor_cajas` y dueño o encargado. Las alertas se calculan en `lib/branches/monitorAlerts.ts`.
 
-## 8.13 Extensión F18: compras v2 y tesorería (ADR-059)
+## 8.15 Extensión F18: compras v2 y tesorería (ADR-059)
 
 Migraciones `20261022100000_features_compras_v2`, `20261022100100_lotes_consumo`, `20261022100200_compras_devoluciones_anulacion`, `20261022100300_tesoreria`, `20261022100400_compras_ordenes_pago` y `20261022100500_listas_proveedor`. Lectura: `tenant_id = current_tenant_id() or internal_scope()` (ADR-052); escrituras por RPC `SECURITY DEFINER` con auditoría, salvo `treasury_accounts` (tabla con RLS de escritura para dueño o encargado con la feature).
 
@@ -863,7 +863,7 @@ Migraciones `20261022100000_features_compras_v2`, `20261022100100_lotes_consumo`
 - [x] `supplier_payments.kind` (`simple | order`) y método `mixto` (check NOT VALID). `supplier_payment_lines` (medio, importe, turno y `cash_movements` del efectivo, cuenta y movimiento de tesorería, cheque) y `supplier_payment_allocations` (imputación en pesos con `released_at`). Vista `supplier_invoice_open`. RPC `supplier_payment_order_create` y `supplier_payment_void` recreada con reversas. `treasury_receivables(p_to)` para el flujo de fondos.
 - [x] `suppliers.price_list_mapping` y `supplier_price_list_imports` (archivo, moneda, TC, contadores y resumen). RPC `supplier_price_list_apply`.
 
-## 8.13 Extensión F18: listas de precios PRO (ADR-058)
+## 8.16 Extensión F18: listas de precios PRO (ADR-058)
 
 Migraciones `20261021100000_features_listas_precios_pro`, `20261021100100_listas_precios_pro`, `20261021100200_resolver_listas_pro` y `20261021100300_precios_masivos_etiquetas`.
 

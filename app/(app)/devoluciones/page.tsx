@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Receipt, RotateCcw, Search, Tags, Ticket } from "lucide-react";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Button } from "@/components/ui/Button";
 import { ReturnModal } from "@/components/sales/ReturnModal";
@@ -17,6 +16,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber, saleMatchesQuery } from "@/lib/utils/saleNumber";
 import { NoData } from "@/components/ui/NoData";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // Sección dedicada de devoluciones (H29): buscás la venta por ticket / N° de
 // comprobante y arrancás la devolución desde acá.
@@ -52,23 +53,24 @@ export default function DevolucionesPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <Eyebrow>Operación</Eyebrow>
-            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
-              Devoluciones
-              <InfoHint section="devoluciones" size={18} />
-            </Display>
-          </div>
-          <Button variant="secondary" className="mt-2 shrink-0" onClick={() => setReasonsOpen(true)}>
-            <Tags size={16} /> Motivos
-          </Button>
-        </div>
-        <p className="mt-2 text-muted-foreground">
-          Buscá la venta por su <strong>N° de comprobante o ticket</strong> y registrá
-          la devolución o el cambio.
-        </p>
+      <div className="mx-auto w-full max-w-3xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+        <PageHeader
+          eyebrow="Operación"
+          title="Devoluciones"
+          icon={RotateCcw}
+          help={<InfoHint section="devoluciones" size={18} />}
+          description={
+            <>
+              Buscá la venta por su <strong>N° de comprobante o ticket</strong> y
+              registrá la devolución o el cambio.
+            </>
+          }
+          actions={
+            <Button variant="secondary" onClick={() => setReasonsOpen(true)}>
+              <Tags size={16} /> Motivos
+            </Button>
+          }
+        />
 
         <div className="relative mt-6">
           <Search
@@ -93,11 +95,16 @@ export default function DevolucionesPage() {
             <SpinnerBlock className="py-6" />
           )}
           {!isLoading && results.length === 0 && (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {search.trim()
-                ? "Sin ventas para esa búsqueda."
-                : "No hay ventas completadas."}
-            </p>
+            <EmptyState
+              compact
+              icon={search.trim() ? Search : Receipt}
+              title={search.trim() ? "Sin ventas para esa búsqueda" : "Todavía no hay ventas completadas"}
+              description={
+                search.trim()
+                  ? "Revisá el número de comprobante o ticket."
+                  : "Cuando cobres desde el punto de venta, vas a poder devolverlas desde acá."
+              }
+            />
           )}
           {results.map((s) => (
             <button

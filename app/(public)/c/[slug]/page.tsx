@@ -61,7 +61,7 @@ export default async function PublicCatalogPage({
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-8">
+      <section className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
         {catalog.products.length === 0 ? (
           <p className="py-16 text-center text-neutral-500">
             Todavía no hay productos publicados.

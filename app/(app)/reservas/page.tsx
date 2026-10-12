@@ -14,8 +14,7 @@ import {
   Utensils,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useDiningEnabled, useDiningAreas, useDiningTables } from "@/modules/dining/hooks";
@@ -30,6 +29,10 @@ import {
 } from "@/modules/dining/reservations";
 import { ReservationModal } from "@/components/dining/ReservationModal";
 import { formatCurrency } from "@/lib/utils/format";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Segmented } from "@/components/ui/Segmented";
+import { Card } from "@/components/ui/Card";
 
 // Agenda de reservas gastronómicas (F13 · H51). Parte de la suite de mesas:
 // lista las reservas de hoy / próximos días con cliente, hora, comensales,
@@ -143,18 +146,19 @@ export default function ReservasPage() {
   // Modo gastronómico apagado → aviso para activarlo.
   if (!loadingFlag && !diningEnabled) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <CalendarClock size={36} className="mx-auto text-ninja-flameSoft" />
-        <Display className="mt-4">Modo gastronómico desactivado</Display>
-        <p className="mt-2 text-muted-foreground">
-          Activá el modo gastronómico para tomar reservas de mesas. El POS de
-          mostrador sigue funcionando igual mientras tanto.
-        </p>
-        <Link href="/configuracion?seccion=operacion" className="mt-6 inline-block">
-          <Button>
-            <Settings size={16} /> Ir a Configuración
-          </Button>
-        </Link>
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:py-16">
+        <Card>
+          <EmptyState
+            icon={CalendarClock}
+            title="Modo gastronómico desactivado"
+            description="Activá el modo gastronómico para tomar reservas de mesas. El POS de mostrador sigue funcionando igual mientras tanto."
+            action={
+              <Link href="/configuracion?seccion=operacion" className={buttonVariants({ size: "sm" })}>
+                <Settings size={16} /> Ir a Configuración
+              </Link>
+            }
+          />
+        </Card>
       </div>
     );
   }
@@ -162,61 +166,50 @@ export default function ReservasPage() {
   const hasReservations = (reservations ?? []).length > 0;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Eyebrow>Gastronomía</Eyebrow>
-          <Display className="mt-2 flex items-center gap-2">
-            <CalendarClock size={26} className="text-ninja-flameSoft" /> Reservas
-          </Display>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/salon">
-            <Button variant="secondary" size="sm">
+    <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        className="mb-6"
+        eyebrow="Gastronomía"
+        title="Reservas"
+        icon={CalendarClock}
+        actions={
+          <>
+            <Link href="/salon" className={buttonVariants({ variant: "secondary", size: "sm" })}>
               <Utensils size={16} /> Salón
+            </Link>
+            <Button size="sm" onClick={() => setNewOpen(true)}>
+              <CalendarPlus size={16} /> Nueva reserva
             </Button>
-          </Link>
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <CalendarPlus size={16} /> Nueva reserva
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filtro de rango */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {(
-          [
-            { k: "today" as const, label: "Hoy" },
-            { k: "week" as const, label: "Próximos 7 días" },
-          ]
-        ).map((f) => (
-          <button
-            key={f.k}
-            type="button"
-            onClick={() => setRange(f.k)}
-            className={
-              range === f.k
-                ? "rounded-lg bg-ninja-flame/15 px-3 py-1.5 text-sm font-medium text-ninja-flameSoft"
-                : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            }
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="mb-4"
+        aria-label="Rango"
+        value={range}
+        onChange={setRange}
+        options={[
+          { value: "today", label: "Hoy" },
+          { value: "week", label: "Próximos 7 días" },
+        ]}
+      />
 
       {/* Aviso si no hay reservas */}
       {!isLoading && !hasReservations && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
-          <CalendarClock size={30} className="text-ninja-flameSoft" />
-          <p className="text-sm text-muted-foreground">
-            No hay reservas {range === "today" ? "para hoy" : "en los próximos días"}.
-            Tomá una reserva para empezar a llenar la agenda.
-          </p>
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <CalendarPlus size={15} /> Nueva reserva
-          </Button>
-        </div>
+        <Card>
+          <EmptyState
+            icon={CalendarClock}
+            title={range === "today" ? "No hay reservas para hoy" : "No hay reservas en los próximos días"}
+            description="Tomá una reserva para empezar a llenar la agenda."
+            action={
+              <Button size="sm" onClick={() => setNewOpen(true)}>
+                <CalendarPlus size={15} /> Nueva reserva
+              </Button>
+            }
+          />
+        </Card>
       )}
 
       {/* Agenda agrupada por día */}

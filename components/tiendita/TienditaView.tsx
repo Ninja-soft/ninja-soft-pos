@@ -127,7 +127,7 @@ export function TienditaView() {
     <>
       <TienditaIntro />
 
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
         {openCatalogFresh && openCatalogFresh.owned ? (
           <CatalogAccess
             catalog={openCatalogFresh}

@@ -2,12 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Building2, CreditCard, Palette } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { buttonVariants } from "@/components/ui/Button";
 import { TeamSection } from "@/components/dashboard-team/TeamSection";
 import { SubscriptionCard } from "@/components/dashboard-team/SubscriptionCard";
 import { NoData } from "@/components/ui/NoData";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -52,17 +53,19 @@ export default async function DashboardTeamPage() {
 
   if (!membership?.tenants) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-8">
-        <Eyebrow>Administración</Eyebrow>
-        <Display className="mt-3">Panel del dueño</Display>
+      <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+        <PageHeader eyebrow="Administración" title="Panel del dueño" icon={Building2} />
         <Card className="mt-6">
-          <CardContent className="p-6 text-muted-foreground">
-            Todavía no tenés un negocio.{" "}
-            <Link href="/onboarding" className="text-ninja-flameSoft hover:underline">
-              Creá uno
-            </Link>{" "}
-            para administrarlo.
-          </CardContent>
+          <EmptyState
+            icon={Building2}
+            title="Todavía no tenés un negocio"
+            description="Creá uno para administrar tu equipo, tu suscripción y la configuración."
+            action={
+              <Link href="/onboarding" className={buttonVariants({ size: "sm" })}>
+                Crear mi negocio
+              </Link>
+            }
+          />
         </Card>
       </div>
     );
@@ -94,12 +97,12 @@ export default async function DashboardTeamPage() {
   const tenantLogo = branding?.logo_url ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <Eyebrow>Administración</Eyebrow>
-      <Display className="mt-3">{tenant.name}</Display>
-      <p className="mt-2 text-muted-foreground">
-        Acá administrás tu NinjaPos: equipo, suscripción y configuración.
-      </p>
+    <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        eyebrow="Administración"
+        title={tenant.name}
+        description="Acá administrás tu NinjaPos: equipo, suscripción y configuración."
+      />
 
       {/* Negocio — usa el logo y el color de marca del tenant si los cargó. */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2">

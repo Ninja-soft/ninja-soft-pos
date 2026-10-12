@@ -14,8 +14,7 @@ import {
   ShoppingBag,
   Truck,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import {
   useDeliveryEnabled,
@@ -36,6 +35,10 @@ import {
 import { DeliveryOrderModal } from "@/components/delivery/DeliveryOrderModal";
 import { DeliveryAccountModal } from "@/components/delivery/DeliveryAccountModal";
 import { formatCurrency } from "@/lib/utils/format";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Segmented } from "@/components/ui/Segmented";
+import { Card } from "@/components/ui/Card";
 
 // Tablero de delivery / take away (F13 · H49): columnas por estado (recibido →
 // preparando → en camino → entregado), cada tarjeta con cliente/tel/dirección/
@@ -134,19 +137,19 @@ export default function DeliveryPage() {
   // Delivery apagado → aviso para activarlo.
   if (!loadingFlag && !enabled) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <Bike size={36} className="mx-auto text-ninja-flameSoft" />
-        <Display className="mt-4">Delivery desactivado</Display>
-        <p className="mt-2 text-muted-foreground">
-          Activá delivery y take away para tomar pedidos con dirección, cadete y
-          costo de envío. El POS de mostrador sigue funcionando igual mientras
-          tanto.
-        </p>
-        <Link href="/configuracion?seccion=operacion" className="mt-6 inline-block">
-          <Button>
-            <Settings size={16} /> Ir a Configuración
-          </Button>
-        </Link>
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:py-16">
+        <Card>
+          <EmptyState
+            icon={Bike}
+            title="Delivery desactivado"
+            description="Activá delivery y take away para tomar pedidos con dirección, cadete y costo de envío. El POS de mostrador sigue funcionando igual mientras tanto."
+            action={
+              <Link href="/configuracion?seccion=operacion" className={buttonVariants({ size: "sm" })}>
+                <Settings size={16} /> Ir a Configuración
+              </Link>
+            }
+          />
+        </Card>
       </div>
     );
   }
@@ -154,15 +157,14 @@ export default function DeliveryPage() {
   const hasOrders = (orders ?? []).length > 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Eyebrow>Gastronomía</Eyebrow>
-          <Display className="mt-2 flex items-center gap-2">
-            <Bike size={26} className="text-ninja-flameSoft" /> Delivery y take away
-          </Display>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="mx-auto w-full max-w-7xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        className="mb-6"
+        eyebrow="Gastronomía"
+        title="Delivery y take away"
+        icon={Bike}
+        actions={
+          <>
           <Button
             variant="secondary"
             size="sm"
@@ -173,46 +175,38 @@ export default function DeliveryPage() {
           <Button size="sm" onClick={() => setNewOpen(true)}>
             <Plus size={16} /> Nuevo pedido
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filtro por tipo */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {(
-          [
-            { k: "all" as const, label: "Todos" },
-            { k: "delivery" as const, label: "Delivery" },
-            { k: "takeaway" as const, label: "Take away" },
-            { k: "mostrador" as const, label: "Mostrador" },
-          ]
-        ).map((f) => (
-          <button
-            key={f.k}
-            type="button"
-            onClick={() => setTypeFilter(f.k)}
-            className={
-              typeFilter === f.k
-                ? "rounded-lg bg-ninja-flame/15 px-3 py-1.5 text-sm font-medium text-ninja-flameSoft"
-                : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            }
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="mb-4"
+        aria-label="Tipo de pedido"
+        value={typeFilter}
+        onChange={setTypeFilter}
+        options={[
+          { value: "all", label: "Todos" },
+          { value: "delivery", label: "Delivery" },
+          { value: "takeaway", label: "Take away" },
+          { value: "mostrador", label: "Mostrador" },
+        ]}
+      />
 
       {/* Aviso si no hay pedidos */}
       {!isLoading && !hasOrders && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
-          <Bike size={30} className="text-ninja-flameSoft" />
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay pedidos. Tomá un pedido de delivery o take away para
-            empezar.
-          </p>
-          <Button size="sm" onClick={() => setNewOpen(true)}>
-            <Plus size={15} /> Nuevo pedido
-          </Button>
-        </div>
+        <Card>
+          <EmptyState
+            icon={Bike}
+            title="Todavía no hay pedidos"
+            description="Tomá un pedido de delivery o take away para empezar."
+            action={
+              <Button size="sm" onClick={() => setNewOpen(true)}>
+                <Plus size={15} /> Nuevo pedido
+              </Button>
+            }
+          />
+        </Card>
       )}
 
       {/* Tablero (kanban) por estado */}

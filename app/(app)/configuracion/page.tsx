@@ -2,8 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench, Settings } from "lucide-react";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
@@ -45,6 +44,7 @@ import { PrintSettingsCard } from "@/components/dashboard-team/PrintSettingsCard
 import { PriceListsCard } from "@/components/prices/PriceListsCard";
 import { useFeature } from "@/modules/saas/gating";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Section =
   | "apariencia"
@@ -281,16 +281,14 @@ function ConfiguracionInner() {
   })).filter((g) => g.sections.length > 0);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <Eyebrow>Preferencias</Eyebrow>
-      <Display className="mt-3 flex items-center gap-2">
-        Configuración
-        <InfoHint section="configuracion" size={18} />
-      </Display>
-      <p className="mt-2 text-muted-foreground">
-        Ajustá NinjaPos a tu medida. Los cambios se aplican al instante y quedan
-        guardados en tu cuenta, disponibles en cualquier dispositivo.
-      </p>
+    <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        eyebrow="Preferencias"
+        title="Configuración"
+        icon={Settings}
+        help={<InfoHint section="configuracion" size={18} />}
+        description="Ajustá NinjaPos a tu medida. Los cambios se aplican al instante y quedan guardados en tu cuenta, disponibles en cualquier dispositivo."
+      />
 
       <div className="mt-8 grid gap-6 md:grid-cols-[210px_1fr]">
         {/* Menú de secciones, agrupado por bloque temático. En mobile es una

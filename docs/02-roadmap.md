@@ -1002,8 +1002,8 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] `staff_branch_assignments` (en lugar de `tenant_user_stores`): base, cobertura temporal exclusiva y acceso adicional con vigencias, rol por sucursal, usuarios y perfiles sin cuenta, traslados programados con cancelación que restaura e historial. Sin asignaciones: encargado = todas, cajero = principal.
   - [ ] Alcance central vs sucursal: los maestros (productos, clientes, medios, listas) sólo los edita quien tiene alcance central.
   - [~] RLS restrictiva de lectura con `user_allowed_store_ids()` en `sales`, `cash_shifts` (con `store_id` desnormalizado), `cash_movements` y `cash_z_closures`; tests RLS por rol y sucursal. *(Pendiente: `payments`, `stock_levels`, `stock_transfers`, `payment_terminals` y `EXPLAIN` sobre datos reales.)*
-  - [ ] `store_id` en `audit_logs` para filtrar la auditoría por sucursal.
-  - [ ] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas").
+  - [x] `store_id` en `audit_logs` para filtrar la auditoría por sucursal. *(ADR-049; visor por sucursal en H117)*
+  - [x] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas").
   - [ ] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo.
 
 - [ ] **H92: Configuración heredable negocio → grupo → sucursal → caja ("compartir configuración").** · *OPTIONAL dentro de `multi_sucursal` (nivel caja: `multi_caja`). Primer corte concreto de F14/H57; la clonación con diff es parte de F14/H62.*
@@ -1074,42 +1074,42 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
 
 Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md). Cada hito indica su clasificación según la convención de features de plan.
 
-- [ ] **H113: Ciclo de vida del personal.** · *BASE `personal_estados` (nueva). Requiere H91 para sucursal base y traslados.*
-  - [ ] Estados `activo`, `suspendido` (motivo, desde y hasta: vuelve solo), `licencia` (tipo, desde y hasta), `baja` (despido, renuncia, fin de contrato u otro; fecha y motivo) y `reingreso`, para usuarios y perfiles sin cuenta. Historial `staff_status_events` con baja lógica, evaluación perezosa por fecha (sin cron).
-  - [ ] RPC `staff_set_status`, `staff_cancel_status`, `staff_rehire`, `staff_board` (owner/manager; un encargado no toca al dueño ni a otro encargado), auditadas.
-  - [ ] La suspensión y la licencia cortan la operación al instante en el servidor (turnos, ventas, alcance por sucursal vacío); la baja además revoca sesiones y el negocio activo del JWT, pasa la membresía a `inactive` y libera el cupo de usuarios.
-  - [ ] Tablero visual por sucursal con avatares y chips de estado, filtros por estado, ficha con timeline (estados y traslados).
-  - [ ] Invitar desde el Panel del dueño (fix del acceso rápido) con sucursal base, adicionales y rol por sucursal; reinvitar a alguien de baja es un reingreso explícito.
-  - [ ] Fixes: el encargado no degrada ni suspende al dueño (`member_admin`), invitar no pisa el rol de un miembro existente, el invitado recibe el negocio activo (`app_metadata.current_tenant_id`) y se autocura al entrar.
+- [x] **H113: Ciclo de vida del personal.** *(2026-10-12, ADR-051)* · *BASE `personal_estados` (nueva). Requiere H91 para sucursal base y traslados.*
+  - [x] Estados `activo`, `suspendido` (motivo, desde y hasta: vuelve solo), `licencia` (tipo, desde y hasta), `baja` (despido, renuncia, fin de contrato u otro; fecha y motivo) y `reingreso`, para usuarios y perfiles sin cuenta. Historial `staff_status_events` con baja lógica, evaluación perezosa por fecha (sin cron).
+  - [x] RPC `staff_set_status`, `staff_cancel_status`, `staff_rehire`, `staff_board` (owner/manager; un encargado no toca al dueño ni a otro encargado), auditadas.
+  - [x] La suspensión y la licencia cortan la operación al instante en el servidor (turnos, ventas, alcance por sucursal vacío); la baja además revoca sesiones y el negocio activo del JWT, pasa la membresía a `inactive` y libera el cupo de usuarios.
+  - [x] Tablero visual por sucursal con avatares y chips de estado, filtros por estado, ficha con timeline (estados y traslados).
+  - [x] Invitar desde el Panel del dueño (fix del acceso rápido) con sucursal base, adicionales y rol por sucursal; reinvitar a alguien de baja es un reingreso explícito.
+  - [x] Fixes: el encargado no degrada ni suspende al dueño (`member_admin`), invitar no pisa el rol de un miembro existente, el invitado recibe el negocio activo (`app_metadata.current_tenant_id`) y se autocura al entrar.
   - [ ] *Criterio:* el dueño da de baja a un cajero; ese cajero no puede abrir caja, vender ni leer datos del negocio después de su próximo refresh de sesión; la historia y sus ventas quedan.
 
-- [ ] **H114: Propiedad de la caja.** · *BASE (control interno, sin key nueva) + FLAG-OPERATIVO `shared_shift` (caja compartida, apagado).*
-  - [ ] `assert_shift_owner(shift)`: sólo quien abrió el turno vende, retira, ingresa o cierra. `resolve_sale_shift` lo exige (ventas, devoluciones y cambios) sin recrear `create_sale`.
-  - [ ] Un turno abierto por usuario en todo el negocio (`open_cash_shift`).
-  - [ ] Guarda en `cash_shifts` (cierre sólo del dueño del turno o por `cash_force_close`; sin inserts ni borrados directos) y en `cash_movements` (desde el cliente sólo ingreso, retiro o contramovimiento de una anulación real; sin UPDATE ni DELETE).
-  - [ ] `cash_force_close(shift, monto contado, motivo)` para supervisores (sesión o PIN), con Z y auditoría.
-  - [ ] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
+- [x] **H114: Propiedad de la caja.** *(2026-10-12, ADR-051)* · *BASE (control interno, sin key nueva) + FLAG-OPERATIVO `shared_shift` (caja compartida, apagado).*
+  - [x] `assert_shift_owner(shift)`: sólo quien abrió el turno vende, retira, ingresa o cierra. `resolve_sale_shift` lo exige (ventas, devoluciones y cambios) sin recrear `create_sale`.
+  - [x] Un turno abierto por usuario en todo el negocio (`open_cash_shift`).
+  - [x] Guarda en `cash_shifts` (cierre sólo del dueño del turno o por `cash_force_close`; sin inserts ni borrados directos) y en `cash_movements` (desde el cliente sólo ingreso, retiro o contramovimiento de una anulación real; sin UPDATE ni DELETE).
+  - [x] `cash_force_close(shift, monto contado, motivo)` para supervisores (sesión o PIN), con Z y auditoría.
+  - [x] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
   - [ ] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja.
 
-- [ ] **H115: Monitor de cajas abiertas.** · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
-  - [ ] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
-  - [ ] Pantalla Caja · Cajas abiertas con contador en vivo y acciones Ver detalle y Cierre forzado (PIN); widget en el Panel del dueño.
+- [~] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas y heartbeat en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
+  - [x] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
+  - [x] Pantalla Caja · Cajas abiertas con contador en vivo y acciones Ver detalle y Cierre forzado (PIN); widget en el Panel del dueño.
   - [ ] Pendiente (H99): heartbeat, alertas por caja abierta hace más de N horas, terminales.
 
-- [ ] **H116: PIN de supervisor y políticas por acción.** · *BASE `pin_supervisor` (nueva). Reemplaza el gating por `cuenta_corriente` del PIN (las RPC `account_*` siguen).*
-  - [ ] `security_settings` por negocio: acciones que piden PIN con umbral (descuento sobre X %, anulación desde $Y, devolución desde $Y, retiro desde $Y, ingreso, cierre forzado), roles y usuarios supervisores, intentos y minutos de bloqueo, rotación del PIN en días, caja compartida.
-  - [ ] RPC generales `supervisor_pin_status`, `supervisor_set_pin`, `supervisor_clear_pin`, `supervisor_list`, `supervisor_authorize` (token de un solo uso atado a acción, cajero y monto, 5 minutos).
-  - [ ] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
-  - [ ] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
+- [x] **H116: PIN de supervisor y políticas por acción.** *(2026-10-12, ADR-051)* · *BASE `pin_supervisor` (nueva). Reemplaza el gating por `cuenta_corriente` del PIN (las RPC `account_*` siguen).*
+  - [x] `security_settings` por negocio: acciones que piden PIN con umbral (descuento sobre X %, anulación desde $Y, devolución desde $Y, retiro desde $Y, ingreso, cierre forzado), roles y usuarios supervisores, intentos y minutos de bloqueo, rotación del PIN en días, caja compartida.
+  - [x] RPC generales `supervisor_pin_status`, `supervisor_set_pin`, `supervisor_clear_pin`, `supervisor_list`, `supervisor_authorize` (token de un solo uso atado a acción, cajero y monto, 5 minutos).
+  - [x] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
+  - [x] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
 
-- [ ] **H117: Visor de auditoría del negocio.** · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
-  - [ ] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
-  - [ ] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
+- [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
+  - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
+  - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
   - [ ] Pendiente: retención por plan, alertas (muchos PIN fallidos, anulaciones fuera de horario), firma o hash encadenado para inmutabilidad.
 
-- [ ] **H118: Panel del dueño operativo y por sucursal.** · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
-  - [ ] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
-  - [ ] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
+- [~] **H118: Panel del dueño operativo y por sucursal.** *(2026-10-12, ADR-051: tarjetas, gráficos y selector hechos; `current_tenant_id()` con membresía y lint pendientes)* · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
+  - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
+  - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
   - [ ] Pendiente: `current_tenant_id()` que valide la membresía activa como initplan (raíz de S-07, medir con `EXPLAIN`), helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
 - [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*

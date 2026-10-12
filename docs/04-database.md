@@ -764,6 +764,16 @@ Migraciones `20261013200000` (features), `20261013200100` (stock por sucursal) y
 
 ---
 
+## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
+
+Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja` y `20261017130000_monitor_cajas_auditoria`.
+
+- [x] `staff_status_events(tenant_id, user_id | cashier_profile_id, kind, subtype, starts_on, ends_on, reason, notes, deleted_at, ...)`: suspensiones, licencias, bajas y reingresos con vigencias. Lectura: dueño, encargado o la propia persona; escritura sólo por RPC (`staff_set_status`, `staff_end_status`, `staff_rehire`). `tenant_users.status` suma `inactive`.
+- [x] `security_settings(tenant_id pk, pin_policy jsonb, supervisor_roles, supervisor_user_ids, pin_max_attempts, pin_lock_minutes, pin_rotation_days, shared_shift)`: lectura del negocio, escritura `security_settings_save` (dueño).
+- [x] `supervisor_auth_tokens`: autorizaciones de un solo uso (acción, supervisor, quien pidió, monto, vencimiento). Sin acceso de clientes. `account_supervisor_pins.pin_set_at` para la rotación.
+- [x] Guardas por trigger: `cash_shifts_guard`, `cash_movements_guard`, `sales_supervisor`, `sale_returns_supervisor`. Policy RESTRICTIVE `audit_logs_role_scope`.
+- [x] Lecturas por RPC: `cash_monitor`, `owner_dashboard_stats`, `audit_log_search`, `audit_log_facets`, `staff_people`, `my_staff_status`, `supervisor_list`, `supervisor_pin_status`.
+
 ## 9. Migraciones iniciales sugeridas
 
 Orden recomendado de migraciones para el Hito 0:

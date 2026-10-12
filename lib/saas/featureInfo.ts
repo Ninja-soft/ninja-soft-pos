@@ -38,6 +38,21 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, cada sucursal opera con una sola caja (la primera caja siempre está incluida).",
     minPlan: "Pro",
   },
+  personal_estados: {
+    desc: "Estados del personal: licencias, suspensiones con fecha de vuelta, bajas y reingresos, con motivo e historial. Quien no está activo no abre caja ni vende y la baja corta el acceso al negocio.",
+    impact: "Desactivado, no se puede suspender, dar licencia ni dar de baja con historial; sólo queda borrar el acceso a mano.",
+    minPlan: "Start",
+  },
+  pin_supervisor: {
+    desc: "PIN de supervisor por acción: anulaciones, devoluciones, retiros, ingresos y descuentos por encima de un monto piden el PIN de un dueño o encargado; cierre forzado de cajas ajenas. Exigido por el servidor y auditado.",
+    impact: "Desactivado, nadie puede autorizar con PIN desde la caja de otro.",
+    minPlan: "Start",
+  },
+  monitor_cajas: {
+    desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
+    impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",
+    minPlan: "Start",
+  },
   devoluciones: {
     desc: "Devoluciones y notas de crédito sobre ventas: permite reintegrar productos y emitir el comprobante de devolución.",
     impact: "Sin esto el cajero no puede procesar devoluciones desde el sistema; habría que hacerlas por fuera.",
@@ -331,8 +346,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   auditoria: {
-    desc: "Registro de auditoría: deja traza de las acciones críticas (quién hizo qué y cuándo) dentro del negocio.",
-    impact: "Sin auditoría no queda registro de las acciones sensibles del equipo.",
+    desc: "Visor de auditoría: filtrá todo lo que pasa en el negocio por usuario, sucursal, acción y fecha, mirá el detalle de cada cambio y exportalo a Excel. El registro se guarda siempre, en todos los planes.",
+    impact: "Sin el visor el registro se guarda igual, pero no se puede consultar ni exportar desde la app.",
     minPlan: "Business",
   },
   backup: {

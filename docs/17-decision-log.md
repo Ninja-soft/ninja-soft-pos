@@ -1658,7 +1658,7 @@ El dueño pidió que cada usuario trabaje sólo en su sucursal, que el dueño co
 
 ### Consecuencias
 
-- Migraciones `20261017100000_personal_estados`, `20261017110000_propiedad_caja`, `20261017120000_pin_supervisor_politicas`, `20261017130000_monitor_auditoria` (sin aplicar). Orden de deploy: **front primero** (el cliente nuevo cae a la ruta vieja si una RPC no existe), después las migraciones en orden, después las Edge `invite_user` y `member_admin`.
+- Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja`, `20261017130000_monitor_cajas_auditoria` (sin aplicar). Orden de deploy: **front primero** (el cliente nuevo cae a la ruta vieja si una RPC no existe), después las migraciones en orden, después las Edge `invite_user` y `member_admin`.
 - **Cambio de conducta:** desde el deploy nadie vende en el turno de otro. Si hoy dos personas comparten un turno, el dueño activa "Caja compartida" en Seguridad o cada uno abre su caja. Los turnos abiertos al momento del deploy siguen; sólo su dueño los opera y cierra (o un supervisor con cierre forzado).
 - Un usuario con turno abierto en Centro tiene que cerrarlo para abrir otro en Norte (un turno por usuario).
 - Residual S-07: un suspendido o de licencia con sesión viva todavía puede **leer** datos del negocio por API hasta H118; no puede operar caja ni vender.

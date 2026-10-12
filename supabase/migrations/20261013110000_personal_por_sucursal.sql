@@ -224,7 +224,7 @@ grant execute on function user_store_role(uuid) to authenticated;
 drop policy if exists cash_shifts_branch_scope on cash_shifts;
 create policy cash_shifts_branch_scope on cash_shifts
   as restrictive for select
-  using (is_internal() or store_id = any ((select user_allowed_store_ids())));
+  using (is_internal() or store_id = any ((select user_allowed_store_ids())::uuid[]));
 
 drop policy if exists cash_movements_branch_scope on cash_movements;
 create policy cash_movements_branch_scope on cash_movements
@@ -233,19 +233,19 @@ create policy cash_movements_branch_scope on cash_movements
     is_internal() or exists (
       select 1 from cash_shifts cs
        where cs.id = cash_movements.cash_shift_id
-         and cs.store_id = any ((select user_allowed_store_ids()))
+         and cs.store_id = any ((select user_allowed_store_ids())::uuid[])
     )
   );
 
 drop policy if exists czc_branch_scope on cash_z_closures;
 create policy czc_branch_scope on cash_z_closures
   as restrictive for select
-  using (is_internal() or store_id = any ((select user_allowed_store_ids())));
+  using (is_internal() or store_id = any ((select user_allowed_store_ids())::uuid[]));
 
 drop policy if exists sales_branch_scope on sales;
 create policy sales_branch_scope on sales
   as restrictive for select
-  using (is_internal() or store_id = any ((select user_allowed_store_ids())));
+  using (is_internal() or store_id = any ((select user_allowed_store_ids())::uuid[]));
 
 create index if not exists sales_tenant_store_created_idx on sales (tenant_id, store_id, created_at desc);
 

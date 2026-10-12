@@ -48,6 +48,7 @@ import {
 import { InheritBadge, useScopeNamer, type ScopeSel } from "./ScopedConfig";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 
 // =============================================================================
 // Impresoras por sucursal y caja (F17 · ADR-049; extiende F10/H22).
@@ -364,7 +365,13 @@ export function ScopedPrintProfiles({ scope }: { scope: Exclude<ScopeSel, { scop
   const raw = useQuery({
     queryKey: ["print-profiles", "base"],
     queryFn: async () => {
-      const { data } = await createClient().from("pos_settings").select("print_profiles").maybeSingle();
+      const t = await getCurrentTenantId();
+      if (!t) return normalizePrintProfiles(null);
+      const { data } = await createClient()
+        .from("pos_settings")
+        .select("print_profiles")
+        .eq("tenant_id", t)
+        .maybeSingle();
       return normalizePrintProfiles((data as { print_profiles?: unknown } | null)?.print_profiles);
     },
   });

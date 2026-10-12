@@ -85,7 +85,7 @@ function TileCheck() {
   return (
     <span
       aria-hidden
-      className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-ninja-flame text-white shadow-sm"
+      className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-ninja-flame text-white"
     >
       <Check size={10} strokeWidth={3.5} />
     </span>

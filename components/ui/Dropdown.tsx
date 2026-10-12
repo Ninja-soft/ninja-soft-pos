@@ -19,7 +19,7 @@ export function DropdownContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-ninjaSoft data-[state=open]:animate-fade-in",
+          "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground data-[state=open]:animate-fade-in",
           className,
         )}
         {...props}

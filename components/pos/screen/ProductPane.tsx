@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, forwardRef } from "react";
+import { memo, forwardRef, useSyncExternalStore } from "react";
 import { Banknote, PackageSearch, ScanBarcode, Search, Star } from "lucide-react";
 import type { Category, Product } from "@/modules/products/api";
 import type { PosLayout } from "@/lib/pos/layout";
@@ -17,6 +17,23 @@ import type { ResolvedQuickKey } from "./types";
 // Panel de productos del POS: búsqueda/escáner, rubros, teclas rápidas,
 // frecuentes y la grilla. La forma de los tiles sale del diseño elegido.
 
+// Placeholder del buscador según el ancho: en teléfonos el largo se corta
+// ("Buscar por nombre, PLU, SKU..."), así que va uno corto. En el servidor se
+// asume desktop y el cliente lo corrige al hidratar (sin mismatch).
+const SMALL_SCREEN = "(max-width: 639px)";
+function subscribeSmall(cb: () => void) {
+  const mq = window.matchMedia(SMALL_SCREEN);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+function useSmallScreen() {
+  return useSyncExternalStore(
+    subscribeSmall,
+    () => window.matchMedia(SMALL_SCREEN).matches,
+    () => false,
+  );
+}
+
 export const PosSearch = forwardRef<
   HTMLInputElement,
   {
@@ -28,6 +45,7 @@ export const PosSearch = forwardRef<
     onEnter?: () => void;
   }
 >(function PosSearch({ value, onChange, onScan, placeholder, big, onEnter }, ref) {
+  const small = useSmallScreen();
   return (
     <div className="relative">
       <Search
@@ -40,7 +58,7 @@ export const PosSearch = forwardRef<
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
-        placeholder={placeholder ?? "Buscar por nombre, PLU, SKU o código"}
+        placeholder={placeholder ?? (small ? "Buscar producto o código" : "Buscar por nombre, PLU, SKU o código")}
         autoFocus
         aria-label="Buscar producto"
         className={cn(

@@ -29,7 +29,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🔴 No iniciado (auditoría fiscal 2026-10-12, ADR-043) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -440,6 +440,11 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 - [ ] **Payway Point.** Próximamente. **Bloqueo:** Payway no publica una API para mandar cobros a la terminal (sólo reversas y cierres PayStore). **Paso:** pedir al ejecutivo de Payway el kit de integradores (API de terminales, homologación PayStore, SDK Terminal Smart).
 - [ ] **Getnet Point.** Próximamente. **Bloqueo:** Cloud2Cloud de "Integrated POS" es para partners y no está confirmado en Argentina. **Paso:** contactar Partnerships de Getnet AR y pedir disponibilidad y credenciales.
 - [x] **Descartados como Point** (sin terminal propia o sin API): Mobbex, MODO, Ualá Bis, Viumi, Naranja X (cubierto por Nave), Posnet/LaPos legacy (protocolo local), Cuenta DNI, Personal Pay.
+
+#### F8 · Cobros en espera y QR más rápido (ADR-048)
+
+- [~] **H21f · Cobros en espera.** *Integrado en código (2026-10-12, rama `feat/cobros-en-espera`):* compartir el QR o link (sistema, WhatsApp, email del servidor con el diseño del negocio, copiar, SMS) y "Dejar en espera": la venta queda en `pending_charges` y se registra sola del lado del servidor al acreditarse (trigger sobre `mp_payment_intents`, idempotente), con aviso en el POS (imprimir ticket o factura) y en la campana. Pestaña propia en el POS y en Operación (filtros, sucursal, detalle con línea de tiempo, cancelar, editar en el POS, reenviar, extender, regenerar, reintentar). Cierre de caja con decisión obligatoria (cancelar o pasar a la próxima apertura). Feature `cobros_en_espera` (Pro+). **Pasos:** aplicar `20261014100000_cobros_en_espera`, deploy de `pending_charge_share` y `pending_charges_sync` (y de las Edges de cobro tocadas), probar en sandbox con Mercado Pago (link) y Pagos360 (sin webhook). **Pendiente:** Realtime en vez de sondeo, factura electrónica desde el aviso (F3), "visto por el cliente" (los proveedores no lo informan).
+- [~] **H21g · QR más rápido.** Prechecks en una ronda y intent en paralelo con el proveedor en `mp_qr`, `mp_create_qr`, `pagos360` y `modo_create_qr` (token de MODO cacheado), planes y modo del medio pasados por la hoja (sin dos consultas antes de pedir el QR), precalentado de Edges al abrir la hoja y link directo cuando MP no tiene caja QR. Tiempos por etapa en el log y `Server-Timing`. **Pendiente:** medir antes y después en producción con esos logs; mismo patrón en `mobbex_create_qr`, `payway`, `getnet`, `nave`, `gocuotas` y `directo`.
 
 ### F10 — Hardware y mostrador PRO
 
@@ -1095,18 +1100,18 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente).
   - [ ] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió.
 
-- [ ] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.*
-  - [ ] Proveedores: CUIT validado contra padrón (H104), condición IVA, alícuotas de padrones, condición de pago, moneda, contactos, baja lógica.
-  - [ ] Producto por proveedor: código del proveedor, último costo, mínimo de pedido, unidad de compra y conversión.
-  - [ ] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo.
-  - [ ] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
-  - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías).
-  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos.
-  - [ ] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
-  - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109).
-  - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente.
+- [ ] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.* · *v1 en `feat/compras-proveedores` (ADR-050, migraciones `20261016100000` a `20261016100300` sin aplicar).*
+  - [ ] Proveedores: CUIT validado contra padrón (H104), condición IVA, alícuotas de padrones, condición de pago, moneda, contactos, baja lógica. *(v1: CUIT con dígito verificador, condición IVA, plazo, moneda, contacto, CBU/alias, baja lógica; falta padrón H104)*
+  - [x] Producto por proveedor: código del proveedor, último costo, mínimo de pedido, unidad de compra y conversión. *(conversión en la OC: pendiente)*
+  - [x] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo. *(borrador → enviada → recibida en parte → recibida / cancelada; sugerencia por sucursal; impresión y envío por WhatsApp o mail)*
+  - [x] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
+  - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías). *(v1: todo como líneas libres y vínculo con recepciones; falta control de tres vías automático)*
+  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder; faltan órdenes de pago con aplicación y anticipos)*
+  - [x] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
+  - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109). *(v1: moneda y TC por operación en modo profesional; falta diferencia de cambio)*
+  - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente. *(cubierto por `tests/integration/rls-compras.test.ts`; falta validar en producción)*
 
-- [ ] **H102: Importaciones y costeo de importación.** · *OPTIONAL `importaciones` (nueva, Enterprise). Requiere H101.*
+- [ ] **H102: Importaciones y costeo de importación.** · *OPTIONAL `importaciones` (nueva, Enterprise). Requiere H101.* · *v1 como `compras_importacion` (Business, ADR-050): hoja de costeo sobre la recepción con prorrateo por concepto y n° de despacho en el lote; faltan carpeta de importación, TC del pago y despacho en la venta.*
   - [ ] Carpeta de importación: proveedor del exterior, factura comercial, incoterm, FOB, flete internacional, seguro, **CIF**.
   - [ ] Tributos aduaneros sobre CIF con vigencia: derechos de importación por posición NCM, tasa de estadística, IVA, percepción de IVA adicional, percepción de Ganancias, percepción de IIBB aduanera y "otros tributos" parametrizables.
   - [ ] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios.

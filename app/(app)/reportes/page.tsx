@@ -679,52 +679,57 @@ export default function ReportesPage() {
               <span className="whitespace-nowrap">Período anterior</span>
             </div>
           </div>
-          <Link
-            href="/reportes/conciliacion"
-            className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
-          >
-            <CreditCard size={16} /> Conciliación de tarjetas
-          </Link>
-          <GatedButton
-            feature="export_xlsx"
-            featureLabel="Exportar a Excel"
-            variant="secondary"
-            className="shrink-0"
-            onClick={exportReporte}
-            disabled={!data}
-          >
-            <Download size={16} /> Exportar XLSX
-          </GatedButton>
-          <Dropdown>
-            <DropdownTrigger asChild>
-              <Button variant="secondary" className="shrink-0">
-                <SlidersHorizontal size={16} /> Personalizar
-              </Button>
-            </DropdownTrigger>
-            <DropdownContent align="end" className="w-60">
-              <DropdownLabel>Reportes a mostrar</DropdownLabel>
-              {REPORTS.filter((r) => {
-                // Los toggles gastro sólo se ofrecen si el tenant usa el modo.
-                if (r.key === "gastro_tables") return diningEnabled;
-                if (r.key === "gastro_delivery") return deliveryEnabled;
-                if (r.key === "gastro_kitchen" || r.key === "gastro_top_items")
-                  return showGastro;
-                return true;
-              }).map((r) => (
-                <div
-                  key={r.key}
-                  className="flex items-center justify-between gap-3 px-2 py-1.5 text-sm"
-                >
-                  {r.label}
-                  <Switch
-                    checked={vis[r.key]}
-                    onCheckedChange={() => toggle(r.key)}
-                    label={r.label}
-                  />
-                </div>
-              ))}
-            </DropdownContent>
-          </Dropdown>
+          {/* Acciones agrupadas a la derecha: si no entran en la fila bajan
+              juntas (nunca queda un botón suelto en una segunda fila). */}
+          <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+            <Link
+              href="/reportes/conciliacion"
+              title="Conciliación de tarjetas"
+              className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
+            >
+              <CreditCard size={16} /> Conciliación
+            </Link>
+            <GatedButton
+              feature="export_xlsx"
+              featureLabel="Exportar a Excel"
+              variant="secondary"
+              className="shrink-0"
+              onClick={exportReporte}
+              disabled={!data}
+            >
+              <Download size={16} /> Exportar XLSX
+            </GatedButton>
+            <Dropdown>
+              <DropdownTrigger asChild>
+                <Button variant="secondary" className="shrink-0">
+                  <SlidersHorizontal size={16} /> Personalizar
+                </Button>
+              </DropdownTrigger>
+              <DropdownContent align="end" className="w-60">
+                <DropdownLabel>Reportes a mostrar</DropdownLabel>
+                {REPORTS.filter((r) => {
+                  // Los toggles gastro sólo se ofrecen si el tenant usa el modo.
+                  if (r.key === "gastro_tables") return diningEnabled;
+                  if (r.key === "gastro_delivery") return deliveryEnabled;
+                  if (r.key === "gastro_kitchen" || r.key === "gastro_top_items")
+                    return showGastro;
+                  return true;
+                }).map((r) => (
+                  <div
+                    key={r.key}
+                    className="flex items-center justify-between gap-3 px-2 py-1.5 text-sm"
+                  >
+                    {r.label}
+                    <Switch
+                      checked={vis[r.key]}
+                      onCheckedChange={() => toggle(r.key)}
+                      label={r.label}
+                    />
+                  </div>
+                ))}
+              </DropdownContent>
+            </Dropdown>
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">

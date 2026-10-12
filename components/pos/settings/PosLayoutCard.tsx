@@ -97,7 +97,7 @@ export function PosLayoutCard() {
               onClick={() => setScope(k)}
               className={cn(
                 "h-8 rounded-md px-3 text-[13px] font-semibold transition disabled:opacity-40",
-                scope === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+                scope === k ? "bg-card text-foreground ring-1 ring-border" : "text-muted-foreground",
               )}
             >
               {label}

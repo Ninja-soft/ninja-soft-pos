@@ -61,7 +61,7 @@ export function PosSheet({
           }
           style={style}
           className={cn(
-            "pos-sheet fixed z-50 flex flex-col overflow-hidden border-border bg-popover text-popover-foreground shadow-[0_-12px_40px_-16px_rgba(0,0,0,0.45)] outline-none max-md:border-t md:border",
+            "pos-sheet fixed z-50 flex flex-col overflow-hidden border-border bg-popover text-popover-foreground outline-none max-md:border-t md:border",
             // Mobile: bottom sheet.
             "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-xl pb-[env(safe-area-inset-bottom)]",
             // Desde md: panel centrado.

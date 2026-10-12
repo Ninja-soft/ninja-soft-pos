@@ -115,7 +115,7 @@ export function TienditaView() {
             {isLoading ? (
               <SpinnerBlock className="py-20" />
             ) : (catalogs?.length ?? 0) === 0 ? (
-              <div className="mt-8 rounded-3xl bg-card shadow-ninjaSoft">
+              <div className="mt-8 rounded-lg border border-border bg-card">
                 <EmptyState
                   icon={ShoppingBag}
                   title="Todavía no hay catálogos"
@@ -173,7 +173,7 @@ function Cover({ catalog, className }: { catalog: StorefrontCatalog; className?:
           className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
         />
       ) : (
-        <div className="grid h-full w-full place-items-center bg-[radial-gradient(80%_80%_at_30%_20%,rgba(255,106,26,0.35),transparent_60%),radial-gradient(70%_70%_at_80%_90%,rgba(109,74,255,0.35),transparent_60%)]">
+        <div className="grid h-full w-full place-items-center bg-ninja-deepViolet">
           <Package size={34} className="text-white/50" />
         </div>
       )}
@@ -195,7 +195,7 @@ function CatalogCard({
   const [expanded, setExpanded] = useState(false);
   const long = (catalog.description?.length ?? 0) > 140;
   return (
-    <article className="group flex flex-col overflow-hidden rounded-3xl bg-card shadow-ninjaSoft">
+    <article className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card">
       <button
         type="button"
         onClick={catalog.owned ? onAccess : undefined}
@@ -297,7 +297,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
 
       {/* Encabezado del catálogo */}
       <div className="flex items-center gap-4">
-        <Cover catalog={catalog} className="h-16 w-16 shrink-0 rounded-2xl sm:h-20 sm:w-20" />
+        <Cover catalog={catalog} className="h-16 w-16 shrink-0 rounded-lg sm:h-20 sm:w-20" />
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Catálogo
@@ -341,7 +341,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
         {isLoading ? (
           <SpinnerBlock className="py-16" />
         ) : isError ? (
-          <div className="rounded-3xl bg-card shadow-ninjaSoft">
+          <div className="rounded-lg border border-border bg-card">
             <EmptyState
               icon={SearchX}
               title="No se pudo buscar en el catálogo"
@@ -349,7 +349,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
             />
           </div>
         ) : empty ? (
-          <div className="rounded-3xl bg-card shadow-ninjaSoft">
+          <div className="rounded-lg border border-border bg-card">
             <EmptyState
               icon={hasQuery ? SearchX : PackageSearch}
               title={hasQuery ? "No encontramos ese producto" : "Buscá en el catálogo"}
@@ -403,7 +403,7 @@ function ProductTile({
   const leaf = path[path.length - 1];
   const onSale = p.precioLista != null && p.precio != null && p.precioLista > p.precio;
   return (
-    <article className="flex flex-col overflow-hidden rounded-3xl bg-card shadow-ninjaSoft">
+    <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
       <div className="relative aspect-square bg-white">
         {p.fotoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

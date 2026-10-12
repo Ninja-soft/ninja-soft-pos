@@ -2,7 +2,8 @@
 -- 20261015120000_venta_config_efectiva  (F17 · H92 y H94 · ADR-049)
 --
 -- create_sale: copia exacta de 20261013120000_venta_sucursal_del_turno.sql
--- (misma firma de 13 args) con dos cambios:
+-- (misma firma de 13 args; cobros en espera, 20261014100000, no la recrea:
+-- la usa en vivo desde _pc_dry_run y _pc_complete) con dos cambios:
 --   1) Descuento máximo por rol, redondeo y venta sin stock salen de la
 --      configuración efectiva de la sucursal y la caja del turno
 --      (_effective_config 'pos_settings'): el servidor resuelve con la caja
@@ -681,12 +682,14 @@ $function$;
 revoke all on function public.create_sale(jsonb, jsonb, numeric, uuid, text, jsonb, uuid, uuid, numeric, uuid, text, uuid, uuid) from public, anon;
 grant execute on function public.create_sale(jsonb, jsonb, numeric, uuid, text, jsonb, uuid, uuid, numeric, uuid, text, uuid, uuid) to authenticated;
 
+
 -- =============================================================================
--- close_cash_shift: copia exacta de 20261011200200_cuenta_corriente_v2_reversas
--- (misma firma, SECURITY INVOKER como siempre) con el motivo obligatorio y la
--- tolerancia efectivos de la sucursal y la caja del turno. Como corre con los
--- permisos del usuario, lee la configuración por _pos_close_config (SECURITY
--- DEFINER, sólo para el turno abierto del negocio del JWT).
+-- close_cash_shift: copia EXACTA de la última versión
+-- (20261014100000_cobros_en_espera: firma de 4 args con p_pending_action y
+-- manejo de cobros en espera) con el motivo obligatorio y la tolerancia
+-- efectivos de la sucursal y la caja del turno. Sigue SECURITY INVOKER: lee la
+-- configuración por _pos_close_config (SECURITY DEFINER, sólo para un turno
+-- del negocio del JWT).
 -- =============================================================================
 create or replace function _pos_close_config(p_shift_id uuid)
 returns jsonb
@@ -712,7 +715,8 @@ grant execute on function _pos_close_config(uuid) to authenticated;
 create or replace function close_cash_shift(
   p_shift_id       uuid,
   p_closing_amount numeric,
-  p_notes          text default null
+  p_notes          text default null,
+  p_pending_action text default null
 )
 returns numeric
 language plpgsql
@@ -737,11 +741,11 @@ declare
   v_req        boolean;
   v_tol        numeric;
   v_account    jsonb;
-  v_register   uuid;
+  v_pending    integer;
   v_eff        jsonb;
 begin
-  select cs.opening_amount, cs.opened_at, cs.opened_by, cr.store_id, cs.cash_register_id
-    into v_opening, v_opened_at, v_opened_by, v_store, v_register
+  select cs.opening_amount, cs.opened_at, cs.opened_by, cr.store_id
+    into v_opening, v_opened_at, v_opened_by, v_store
   from cash_shifts cs
   join cash_registers cr on cr.id = cs.cash_register_id
   where cs.id = p_shift_id and cs.tenant_id = current_tenant_id() and cs.status = 'open';
@@ -771,6 +775,19 @@ begin
      and abs(v_diff) > coalesce(v_tol, 0)
      and (p_notes is null or btrim(p_notes) = '') then
     raise exception 'close_needs_reason';
+  end if;
+
+  -- Cobros en espera (ADR-048): sin estados huérfanos. Con cobros abiertos en
+  -- el turno hay que decidir: cancelarlos o pasarlos a la próxima apertura.
+  select count(*) into v_pending
+  from pending_charges
+  where tenant_id = current_tenant_id() and cash_shift_id = p_shift_id
+    and status in ('waiting', 'paid') and deleted_at is null;
+  if v_pending > 0 then
+    if p_pending_action is null then
+      raise exception 'pending_charges_decision_required';
+    end if;
+    perform _pc_on_close(p_shift_id, p_pending_action);
   end if;
 
   update cash_shifts
@@ -838,3 +855,52 @@ begin
   return v_diff;
 end;
 $$;
+
+revoke execute on function close_cash_shift(uuid, numeric, text, text) from public, anon;
+grant  execute on function close_cash_shift(uuid, numeric, text, text) to authenticated;
+
+-- =============================================================================
+-- _pc_dry_run: copia EXACTA de 20261014100000_cobros_en_espera con el flag
+-- ninja.pc_dry_run (ver trg_payments_branch_method). Mismos permisos.
+-- =============================================================================
+create or replace function _pc_dry_run(p_sale jsonb, p_shift uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_res    jsonb;
+  v_msg    text;
+  v_detail text;
+begin
+  -- ADR-049: el pago ficticio en efectivo del ensayo no pasa por el control de
+  -- medio apagado en la sucursal (el cobro real es por QR o link, que la Edge
+  -- ya validó). Flag local a la transacción; se apaga en las dos salidas.
+  perform set_config('ninja.pc_dry_run', 'on', true);
+  begin
+    v_res := create_sale(
+      p_items          := coalesce(p_sale -> 'items', '[]'::jsonb),
+      p_payments       := jsonb_build_array(jsonb_build_object('method', 'cash', 'amount', 999999999)),
+      p_discount_total := coalesce((p_sale ->> 'discount_total')::numeric, 0),
+      p_customer_id    := nullif(p_sale ->> 'customer_id', '')::uuid,
+      p_notes          := nullif(p_sale ->> 'notes', ''),
+      p_extras         := coalesce(p_sale -> 'extras', '[]'::jsonb),
+      p_promo_discount := coalesce((p_sale ->> 'promo_discount')::numeric, 0),
+      p_promo_id       := nullif(p_sale ->> 'promo_id', '')::uuid,
+      p_promo_name     := nullif(p_sale ->> 'promo_name', ''),
+      p_coupon_id      := nullif(p_sale ->> 'coupon_id', '')::uuid,
+      p_cash_shift_id  := p_shift
+    );
+    raise exception using message = 'pc_dry_run_ok', detail = v_res::text;
+  exception when others then
+    get stacked diagnostics v_msg = message_text, v_detail = pg_exception_detail;
+    perform set_config('ninja.pc_dry_run', '', true);
+    if v_msg = 'pc_dry_run_ok' then
+      return v_detail::jsonb;
+    end if;
+    raise exception '%', v_msg;
+  end;
+end;
+$$;
+revoke all on function _pc_dry_run(jsonb, uuid) from public, anon, authenticated;

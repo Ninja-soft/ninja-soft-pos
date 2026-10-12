@@ -365,7 +365,7 @@ export function ConnectProviderModal({
   let footer: React.ReactNode = null;
   if (view === "manage") {
     footer = confirmOff ? (
-      <div className="space-y-2.5 rounded-2xl bg-danger/10 p-3.5">
+      <div className="space-y-2.5 rounded-lg bg-danger/10 p-3.5">
         <p className="text-sm">
           <strong className="text-danger">¿Desconectar {brand.name}?</strong>{" "}
           <span className="text-muted-foreground">
@@ -472,7 +472,7 @@ export function ConnectProviderModal({
         {/* ── Administrar ─────────────────────────────────────────────── */}
         {view === "manage" && (
           <div className="space-y-4">
-            <dl className="divide-y divide-border overflow-hidden rounded-2xl bg-fg-4 text-sm">
+            <dl className="divide-y divide-border overflow-hidden rounded-lg bg-fg-4 text-sm">
               <SummaryRow
                 icon={currentEnv === "test" ? <FlaskConical size={16} /> : <ShieldCheck size={16} />}
                 tile={currentEnv === "test" ? "bg-warning/15 text-warning" : "bg-success/15 text-success"}
@@ -528,7 +528,7 @@ export function ConnectProviderModal({
           <div className="space-y-4">
             {isMp && !showManual ? (
               <>
-                <div className="rounded-2xl bg-fg-4 p-4">
+                <div className="rounded-lg bg-fg-4 p-4">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success">
                       <Check size={11} strokeWidth={3} /> Recomendado
@@ -671,7 +671,7 @@ export function ConnectProviderModal({
                   : "Ambiente de producción: ya podés cobrar de verdad."}
               </p>
             </div>
-            <ul className="space-y-2.5 rounded-2xl bg-fg-4 p-4 text-left text-sm">
+            <ul className="space-y-2.5 rounded-lg bg-fg-4 p-4 text-left text-sm">
               <NextStep n={1}>Activá los canales que vas a usar ({channelNames.join(", ")}).</NextStep>
               {isMp && <NextStep n={2}>Configurá la caja QR para mostrar un QR único por venta.</NextStep>}
               {providerKey === "nave" && <NextStep n={2}>Pasale a Nave la URL de notificaciones.</NextStep>}
@@ -739,7 +739,7 @@ function NaveWebhookBox() {
       .then(() => toast({ title, variant: "success" }))
       .catch(() => toast({ title: "No se pudo copiar", variant: "error" }));
   return (
-    <div className="space-y-2.5 rounded-2xl bg-fg-4 p-3.5">
+    <div className="space-y-2.5 rounded-lg bg-fg-4 p-3.5">
       <div className="flex items-center gap-2.5">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--seg-thumb)] text-foreground shadow-[var(--seg-thumb-shadow)]">
           <BellRing size={15} />

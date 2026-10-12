@@ -38,26 +38,8 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- 0) internal_scope() (ADR-052): las políticas nuevas usan internal_scope(),
---    nunca "or is_internal()". La define 20261013900000_aislamiento_staff_interno
---    (fix/sucursales-tenant); se repite IDÉNTICA para que esta rama aplique
---    sola. Con las dos mergeadas, la de acá la redefine igual (sin cambio).
--- -----------------------------------------------------------------------------
-create or replace function public.internal_scope()
-returns boolean
-language sql
-stable
-set search_path = ''
-as $$
-  select public.is_internal()
-     and coalesce(
-       (nullif(current_setting('request.headers', true), '')::json ->> 'x-ninja-scope') = 'internal',
-       false
-     );
-$$;
-
-grant execute on function public.internal_scope() to anon, authenticated, service_role;
-
+-- 0) Las políticas nuevas usan internal_scope() (ADR-052,
+--    20261013900000_aislamiento_staff_interno), nunca "or is_internal()".
 -- -----------------------------------------------------------------------------
 -- A) Grupos de sucursales
 -- -----------------------------------------------------------------------------
@@ -735,8 +717,12 @@ declare
   v_store    uuid;
   v_register uuid;
   v_provider text;
+  v_intent   uuid;
 begin
   if coalesce(new.amount, 0) <= 0 then return new; end if;
+  -- Ensayo de cobros en espera (_pc_dry_run): el pago ficticio en efectivo no
+  -- se controla (el cobro real es por QR o link y ya lo validó la Edge).
+  if coalesce(current_setting('ninja.pc_dry_run', true), '') = 'on' then return new; end if;
   -- Barato: sin overrides de medios en el negocio no hay nada que mirar.
   if not exists (select 1 from config_overrides o
                   where o.tenant_id = new.tenant_id and o.domain = 'payment_method'
@@ -749,12 +735,21 @@ begin
    where s.id = new.sale_id;
 
   if new.reference is not null then
-    select i.provider_key into v_provider
+    select i.provider_key, i.id into v_provider, v_intent
       from mp_payment_intents i
      where i.tenant_id = new.tenant_id
        and (i.id::text = new.reference or i.mp_payment_id = new.reference)
      order by i.created_at desc
      limit 1;
+  end if;
+  -- Cobro en espera ya pagado (ADR-048): la plata entró con un medio que
+  -- estaba habilitado al estacionar; si después la sucursal lo apaga, la venta
+  -- se registra igual (nunca se pierde un cobro hecho).
+  if v_intent is not null and exists (
+       select 1 from pending_charges pc
+        where pc.tenant_id = new.tenant_id
+          and (pc.intent_id = v_intent or v_intent = any (pc.previous_intent_ids))) then
+    return new;
   end if;
   if v_provider is null and new.method in ('cash', 'transfer') then
     v_provider := new.method;

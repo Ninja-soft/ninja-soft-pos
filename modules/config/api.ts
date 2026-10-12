@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import { getCurrentUser } from "@/lib/supabase/currentUser";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { Printer, PrinterConnection, PrinterKind } from "@/lib/print/printers";
 import type { ConfigDomain, ConfigOverride, ConfigScope } from "@/lib/config/inheritance";
 import type { PaymentTerminal, TerminalKind } from "@/lib/payments/terminals";
@@ -24,12 +24,8 @@ interface Loose {
 }
 const loose = () => createClient() as unknown as Loose;
 
-// Negocio actual del JWT. Las listas se filtran por negocio además de la RLS:
-// el staff interno pasa la RLS de todos los negocios (is_internal()).
-async function tenantId(): Promise<string | null> {
-  const user = await getCurrentUser();
-  return ((user?.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id as string | undefined) ?? null;
-}
+// Las listas se filtran por el negocio actual además de la RLS (ADR-052).
+const tenantId = getCurrentTenantId;
 
 function check<T>(r: { data: T | null; error: { message: string } | null }): T {
   if (r.error) throw new Error(r.error.message);

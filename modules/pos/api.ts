@@ -526,13 +526,17 @@ export const posApi = {
     shiftId: string,
     closing: number,
     notes?: string,
+    // Cobros en espera del turno (ADR-048): cancelarlos o pasarlos a la
+    // próxima apertura. Sin cobros abiertos no hace falta.
+    pendingAction?: "cancel" | "carry" | null,
   ): Promise<number> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("close_cash_shift", {
       p_shift_id: shiftId,
       p_closing_amount: closing,
       p_notes: notes,
-    });
+      ...(pendingAction ? { p_pending_action: pendingAction } : {}),
+    } as never);
     if (error) throw error;
     return data as number;
   },

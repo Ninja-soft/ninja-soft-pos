@@ -36,7 +36,7 @@ Detalle: [`docs/03-architecture.md`](docs/03-architecture.md).
 
 Estas reglas son **arquitectónicas**: romper alguna obliga a detener y revisar.
 
-1. **Multi-tenant desde el commit 1.** Toda tabla operativa lleva `tenant_id` con RLS activa.
+1. **Multi-tenant desde el commit 1.** Toda tabla operativa lleva `tenant_id` con RLS activa. **Nunca** `OR is_internal()` en una política de tabla de negocio: el staff interno accede a otros negocios sólo con `internal_scope()` (exige el header del panel interno, ADR-052). Las listas del panel del negocio además filtran por `getCurrentTenantId()`. El test `rls_internal_scope_leaks` en CI lo vigila.
 2. **`service_role` nunca en frontend.** Solo en Edge Functions o scripts server-side.
 3. **Auditoría obligatoria.** Acciones críticas escriben en `audit_logs` antes de responder.
 4. **Migraciones versionadas.** Todo cambio de esquema vive en `supabase/migrations/`.

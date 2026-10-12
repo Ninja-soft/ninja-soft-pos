@@ -216,7 +216,7 @@ export function TableAccountModal({
                           type="button"
                           onClick={() => fire(g.course)}
                           disabled={fireCourse.isPending}
-                          className="flex items-center gap-1.5 rounded-lg bg-ninja-flame px-2.5 py-1 text-xs font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-110 disabled:opacity-50"
+                          className="flex items-center gap-1.5 rounded-lg bg-ninja-flame px-2.5 py-1 text-xs font-semibold text-ninja-voidViolet transition hover:brightness-110 disabled:opacity-50"
                           title={`Disparar ${courseLabel(g.course)} a cocina`}
                         >
                           <Flame size={13} /> Disparar Tiempo {g.course}

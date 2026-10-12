@@ -86,7 +86,7 @@ function concept(m: StatementMovement): string {
 
 function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "danger" | "success" }) {
   return (
-    <div className="rounded-xl bg-card p-3 shadow-sm ring-1 ring-border">
+    <div className="rounded-lg bg-card p-3 ring-1 ring-border">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
         className={cn(
@@ -320,7 +320,7 @@ export default function CustomerAccountPage() {
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl bg-card shadow-sm ring-1 ring-border">
+                <div className="overflow-hidden rounded-lg bg-card ring-1 ring-border">
                   <div className="flex justify-between bg-muted/50 px-4 py-2 text-sm">
                     <span className="text-muted-foreground">Saldo inicial al {fmtDate(st.from)}</span>
                     <span className="font-semibold tabular-nums">{formatCurrency(st.opening_balance)}</span>
@@ -402,8 +402,8 @@ export default function CustomerAccountPage() {
                     <li
                       key={it.id}
                       className={cn(
-                        "flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm",
-                        it.days_overdue > 0 ? "bg-red-400/10" : "bg-card shadow-sm ring-1 ring-border",
+                        "flex items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm",
+                        it.days_overdue > 0 ? "bg-red-400/10" : "bg-card ring-1 ring-border",
                       )}
                     >
                       <div className="min-w-0">
@@ -557,7 +557,7 @@ function CollectionRow({ item }: { item: CollectionItem }) {
     );
 
   return (
-    <li className={cn("rounded-xl px-4 py-3 text-sm", broken ? "bg-red-400/10" : "bg-card shadow-sm ring-1 ring-border")}>
+    <li className={cn("rounded-lg px-4 py-3 text-sm", broken ? "bg-red-400/10" : "bg-card ring-1 ring-border")}>
       <div className="flex items-start gap-3">
         <span className="mt-0.5 text-ninja-flameSoft">{icon}</span>
         <div className="min-w-0 flex-1">
@@ -650,7 +650,7 @@ function TermsTab({ st, canManage, cobranza }: { st: AccountStatement; canManage
           Sólo el dueño o un encargado pueden cambiar las condiciones del cliente.
         </p>
       )}
-      <fieldset disabled={!canManage} className="space-y-3 rounded-xl bg-card p-4 shadow-sm ring-1 ring-border">
+      <fieldset disabled={!canManage} className="space-y-3 rounded-lg bg-card p-4 ring-1 ring-border">
         <label className="flex flex-wrap items-center justify-between gap-2">
           <span>
             <span className="block text-sm font-medium">Límite de crédito</span>

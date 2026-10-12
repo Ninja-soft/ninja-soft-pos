@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import {
   useSignupPlans,
   formatPlanPrice,
@@ -12,6 +12,7 @@ import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
+import { AssistantMark } from "@/components/ai/AssistantMark";
 
 // Mapea un SignupPlan (forma del selector) al modelo de PlanCards.
 function toPlanCardModel(p: SignupPlan): PlanCardModel {
@@ -113,7 +114,7 @@ export function SignupStepPlan({
         onClick={() => onAddonAiChange(!addonAi)}
         aria-pressed={addonAi}
         className={cn(
-          "mt-4 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition",
+          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 text-left transition",
           addonAi
             ? "choice-on choice-check"
             : "border-white/10 bg-white/[0.03] hover:bg-muted",
@@ -121,9 +122,7 @@ export function SignupStepPlan({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ninja-gradient text-ninja-voidViolet">
-              <Sparkles size={18} />
-            </span>
+            <AssistantMark size={40} sparkle={false} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-ninja-softWhite">

@@ -89,7 +89,7 @@ export function DateRangePicker({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="z-50 max-h-[min(38rem,calc(100dvh-1.5rem))] w-[calc(100vw-1.5rem)] overflow-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-ninjaSoft outline-none sm:w-auto"
+          className="z-50 max-h-[min(38rem,calc(100dvh-1.5rem))] w-[calc(100vw-1.5rem)] overflow-auto rounded-lg border border-border bg-popover p-3 text-popover-foreground outline-none sm:w-auto"
         >
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex flex-row flex-wrap gap-1 sm:flex-col sm:border-r sm:border-border sm:pr-3">

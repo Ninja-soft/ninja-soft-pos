@@ -241,7 +241,7 @@ export function CapBadge({ cap, muted = false }: { cap: ChannelCap; muted?: bool
 export function ChannelLegend() {
   const caps: ChannelCap[] = ["qr", "link", "point"];
   return (
-    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-fg-4 p-2">
+    <div className="grid grid-cols-3 gap-1 rounded-lg bg-fg-4 p-2">
       {caps.map((c) => {
         const Icon = CAP_ICON[c];
         return (

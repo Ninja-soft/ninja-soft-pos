@@ -32,6 +32,7 @@ import {
   type QuickAction,
 } from "@/components/dashboard-team/OwnerOverview";
 import { OwnerLive } from "@/components/dashboard-team/OwnerLive";
+import { PlanBadge } from "@/components/internal/plans/PlanBadge";
 import { NoData } from "@/components/ui/NoData";
 import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -129,7 +130,13 @@ export default async function DashboardTeamPage() {
     current_period_end: string | null;
     cancel_at_period_end: boolean | null;
     is_lifetime: boolean;
-    plans: { name: string; key: string } | null;
+    plans: {
+      name: string;
+      key: string;
+      secondary_name: string | null;
+      image_url: string | null;
+      icon: string | null;
+    } | null;
   };
   const tenant = membership.tenants;
   const isOwner = membership.role === "owner";
@@ -147,7 +154,7 @@ export default async function DashboardTeamPage() {
     await Promise.all([
       supabase
         .from("subscriptions")
-        .select("status, current_period_end, cancel_at_period_end, is_lifetime, plans(name, key)")
+        .select("status, current_period_end, cancel_at_period_end, is_lifetime, plans(name, key, secondary_name, image_url, icon)")
         .eq("tenant_id", tenant.id)
         .limit(1),
       // Marca del negocio (logo + acento) para personalizar el tile "Negocio".
@@ -353,6 +360,19 @@ export default async function DashboardTeamPage() {
         </SummaryTile>
 
         <SummaryTile icon={CreditCard} label="Plan">
+          {/* Imagen del plan (se carga en internal › Planes); sin imagen, nombre. */}
+          {sub?.plans?.image_url && (
+            <PlanBadge
+              plan={{
+                name: sub.plans.name,
+                secondaryName: sub.plans.secondary_name,
+                imageUrl: sub.plans.image_url,
+                icon: sub.plans.icon,
+              }}
+              size="sm"
+              className="mb-2"
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-lg font-semibold leading-tight">{sub?.plans?.name ?? "Sin plan"}</p>
             {sub && (

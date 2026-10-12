@@ -564,9 +564,9 @@ export function SubscriptionCard() {
                   plan={{
                     name: sub.plan.name,
                     secondaryName: sub.plan.secondary_name,
-                    // Insignia tipográfica plana (nombre + secundario): la
-                    // imagen del plan trae degradado y brillo horneados.
-                    imageUrl: null,
+                    // Imagen del plan cargada en internal › Planes (si no hay,
+                    // insignia tipográfica).
+                    imageUrl: sub.plan.image_url,
                     icon: sub.plan.icon,
                   }}
                   size="md"

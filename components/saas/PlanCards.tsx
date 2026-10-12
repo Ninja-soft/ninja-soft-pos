@@ -215,9 +215,9 @@ function PlanCardItem({
           plan={{
             name: plan.name,
             secondaryName: plan.secondaryName,
-            // Insignia tipográfica plana: la imagen del plan trae degradado
-            // y brillo horneados (dirección visual sin degradados).
-            imageUrl: null,
+            // Imagen del plan cargada en internal › Planes (si no hay,
+            // insignia tipográfica).
+            imageUrl: plan.imageUrl,
             icon: plan.icon,
           }}
           size="sm"

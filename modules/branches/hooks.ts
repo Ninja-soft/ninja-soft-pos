@@ -32,13 +32,10 @@ export function useBranchScope() {
         ((user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id as
           | string
           | undefined) ?? null;
-      const { data } = await createClient()
-        .from("tenant_users")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      // B-04: rol en el negocio ACTIVO (con dos membresías no vale cualquiera).
+      let q = createClient().from("tenant_users").select("role").eq("user_id", user.id).eq("status", "active");
+      if (tenantId) q = q.eq("tenant_id", tenantId);
+      const { data } = await q.limit(1).maybeSingle();
       return { userId: user.id, tenantId, role: (data?.role ?? null) as StaffRole | null };
     },
     staleTime: 5 * 60_000,
@@ -185,10 +182,10 @@ export function useCurrentRegister(): {
     queryKey: ["pos", "register", "fallback"],
     enabled: fallbackOn,
     queryFn: async () => {
-      const { data: r } = await createClient()
-        .from("cash_registers")
-        .select("*")
-        .eq("is_active", true)
+      const tid = scope.data?.tenantId ?? null;
+      let rq = createClient().from("cash_registers").select("*").eq("is_active", true);
+      if (tid) rq = rq.eq("tenant_id", tid);
+      const { data: r } = await rq
         .order("created_at")
         .limit(1)
         .maybeSingle();
@@ -272,10 +269,10 @@ export function useStaffDirectory() {
     queryKey: ["branches", "people"],
     queryFn: async (): Promise<StaffPerson[]> => {
       const sb = createClient();
-      const [members, profiles] = await Promise.all([
-        sb.rpc("tenant_members"),
-        sb.from("cashier_profiles").select("id, display_name, status").is("deleted_at", null),
-      ]);
+      const tenantId = (await getCurrentUser())?.app_metadata?.current_tenant_id as string | undefined;
+      let profilesQ = sb.from("cashier_profiles").select("id, display_name, status").is("deleted_at", null);
+      if (tenantId) profilesQ = profilesQ.eq("tenant_id", tenantId);
+      const [members, profiles] = await Promise.all([sb.rpc("tenant_members"), profilesQ]);
       const out: StaffPerson[] = [];
       for (const m of (members.data ?? []) as {
         user_id: string;
@@ -285,7 +282,8 @@ export function useStaffDirectory() {
         role: string;
         status: string;
       }[]) {
-        if (m.status === "suspended") continue;
+        // B-07: sólo miembros activos (suspendidos, invitados y de baja, no).
+        if (m.status !== "active") continue;
         out.push({
           key: `u:${m.user_id}`,
           userId: m.user_id,

@@ -4,13 +4,14 @@
 //   1. Valida usuario autenticado (JWT).
 //   2. Crea tenant (trial 14d) + subscription (plan start) + tenant_users(owner).
 //   3. Setea app_metadata.current_tenant_id en el usuario (service_role).
+//      Siembra efectivo y transferencia habilitados en tenant_payment_methods.
 //   4. Audita la creación.
 //   5. Encola los emails de alta (account_registered + trial_started) en
 //      system_emails usando las plantillas de system_email_templates. El envío
 //      real lo hace process_pending_emails (cron cada 5 min, por Resend/failover).
 // El frontend debe refrescar la sesión para que el JWT tome el nuevo tenant.
 // =============================================================================
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +38,7 @@ function renderTemplate(tpl: string, vars: Record<string, string>): string {
 // Encola un email del sistema resolviendo subject+html de system_email_templates.
 // Best-effort: nunca rompe el alta del tenant (cualquier error se traga).
 async function enqueueSystemEmail(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient,
   tenantId: string,
   recipient: string,
   key: string,
@@ -222,6 +223,17 @@ Deno.serve(async (req: Request) => {
       name: "Caja 1",
     });
   }
+
+  // 3b'. Medios de pago por defecto: efectivo y transferencia prendidos (no
+  // necesitan cuenta ni conexión). Best-effort: sin filas la app igual los
+  // trata como prendidos (lib/payments/defaults.ts).
+  await admin.from("tenant_payment_methods").upsert(
+    [
+      { tenant_id: tenant.id, provider_key: "cash", enabled: true, sandbox: false, sort: 0 },
+      { tenant_id: tenant.id, provider_key: "transfer", enabled: true, sandbox: false, sort: 1 },
+    ],
+    { onConflict: "tenant_id,provider_key", ignoreDuplicates: true },
+  );
 
   // 3c. Datos fiscales opcionales → tenant_branding (con service_role, así no
   // dependemos de que el JWT ya tenga current_tenant_id para pasar la RLS).

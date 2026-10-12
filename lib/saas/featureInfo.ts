@@ -257,8 +257,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Al menos dos sucursales activas.",
   },
   compras: {
-    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado.",
-    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes ni cuenta corriente de proveedores (el servidor lo rechaza).",
+    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",
+    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes, devoluciones, órdenes de pago ni cuenta corriente de proveedores (el servidor lo rechaza).",
     minPlan: "Pro",
   },
   compras_importacion: {
@@ -267,6 +267,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
     requires: ["compras"],
     needs: "Activá el modo profesional en Configuración de compras.",
+  },
+  tesoreria: {
+    desc: "Tesorería: caja general y cuentas bancarias con saldo, movimientos, transferencias entre cuentas y conciliación manual contra el extracto; cheques y e-cheqs propios y de terceros (en cartera, entregados, depositados o rechazados) y flujo de fondos proyectado con lo que vence de proveedores y lo que entra de clientes y cheques. Las órdenes de pago pueden pagar desde un banco o con cheques.",
+    impact: "Desactivado, las órdenes de pago sólo registran efectivo de la caja y transferencias con su referencia; no hay cuentas, cheques ni flujo de fondos (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["compras"],
   },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",

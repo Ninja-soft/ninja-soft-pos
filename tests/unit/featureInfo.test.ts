@@ -62,6 +62,11 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.multi_caja?.impact).toMatch(/primera caja/);
   });
 
+  it("tesorería es Business y depende de compras (ADR-059)", () => {
+    expect(FEATURE_INFO.tesoreria?.minPlan).toBe("Business");
+    expect(featureRequires("tesoreria")).toEqual(["compras"]);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

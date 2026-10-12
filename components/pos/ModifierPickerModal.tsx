@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { choiceClass } from "@/components/ui/ChoiceCard";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProductModifiers,
@@ -175,11 +176,9 @@ export function ModifierPickerModal({
                     return (
                       <label
                         key={o.id}
-                        className={`flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition ${
-                          checked
-                            ? "border-ninja-flameSoft/60 bg-ninja-flame/10"
-                            : "border-border hover:bg-muted"
-                        }`}
+                        className={choiceClass(checked, "flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm", {
+                          check: false,
+                        })}
                       >
                         <span className="flex items-center gap-2">
                           <input

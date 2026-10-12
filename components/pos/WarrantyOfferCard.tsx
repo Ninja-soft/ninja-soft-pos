@@ -69,7 +69,7 @@ export function WarrantyOfferCard({
   if (!eligible || activePlans.length === 0 || dismissed) return null;
 
   return (
-    <div className="rounded-lg border border-ninja-flameSoft/40 bg-ninja-flame/[0.06] p-3">
+    <div className="rounded-xl bg-ninja-flame/[0.08] p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           <ShieldCheck size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />

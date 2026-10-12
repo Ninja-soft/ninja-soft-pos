@@ -922,11 +922,8 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           larga el botón quedaba al final y el usuario no lo encontraba). El pb
           extra deja aire para la burbuja IA en mobile sin que la tape. */}
       <div className="sticky bottom-0 z-20 -mx-1 mt-2 flex items-center justify-end gap-3 border-t border-border bg-background/95 px-1 py-3 pr-20 backdrop-blur supports-[backdrop-filter]:bg-background/80 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pr-1">
-        {save.isPending && (
-          <span className="text-xs text-muted-foreground">Guardando cambios…</span>
-        )}
-        <Button disabled={save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Guardando…" : "Guardar cambios"}
+        <Button loading={save.isPending} onClick={() => save.mutate()}>
+          Guardar cambios
         </Button>
       </div>
     </section>

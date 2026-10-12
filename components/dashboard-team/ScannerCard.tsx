@@ -205,8 +205,8 @@ export function ScannerCard() {
           </div>
 
           <div className="flex justify-end">
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "Guardando…" : "Guardar cambios"}
+            <Button loading={save.isPending} onClick={() => save.mutate()}>
+              Guardar cambios
             </Button>
           </div>
         </CardContent>

@@ -171,7 +171,7 @@ export function ImportCustomersModal({
         </button>
 
         {requireDoc && (
-          <p className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-warning">
+          <p className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning">
             Tu configuración exige documento: el tipo y número son obligatorios
             en cada fila.
           </p>
@@ -189,7 +189,7 @@ export function ImportCustomersModal({
         </label>
 
         {fatal && (
-          <div className="rounded-lg border border-red-400/20 bg-red-400/10 p-3 text-sm text-danger">
+          <div className="rounded-xl bg-danger/10 p-3 text-sm text-danger">
             {fatal}
           </div>
         )}

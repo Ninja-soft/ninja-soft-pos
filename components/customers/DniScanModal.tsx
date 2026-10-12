@@ -175,7 +175,7 @@ export function DniScanModal({
 
           {/* Validación visual de lo parseado */}
           {parsed && (
-            <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4">
+            <div className="rounded-xl bg-success/10 p-4">
               <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-success">
                 <IdCard size={16} /> Datos leídos del DNI
               </p>

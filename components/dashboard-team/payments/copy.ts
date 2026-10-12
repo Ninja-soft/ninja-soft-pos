@@ -2,7 +2,44 @@
 
 // URL de notificaciones que el dueño informa a Nave en el onboarding (Nave la
 // registra de su lado; no viaja por request).
-export const NAVE_WEBHOOK_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/nave_webhook`;
+export function naveWebhookUrl(supabaseUrl: string | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL): string {
+  let host = "";
+  try {
+    host = supabaseUrl ? new URL(supabaseUrl).host : "";
+  } catch {
+    host = "";
+  }
+  return `https://${host}/functions/v1/nave_webhook`;
+}
+
+export const NAVE_WEBHOOK_URL = naveWebhookUrl();
+
+// Mail listo para mandar a Nave: pide registrar la URL de notificaciones en
+// sandbox y producción, y las credenciales que el dueño carga en el paso 1.
+export const NAVE_INTEGRATIONS_EMAIL = "integraciones@navenegocios.com";
+
+export function naveRegistrationEmail(businessName: string | null | undefined, webhookUrl = NAVE_WEBHOOK_URL) {
+  const name = businessName?.trim() || "mi negocio";
+  const subject = `Registro de URL de notificaciones - ${name}`;
+  const body = [
+    "Hola, equipo de Integraciones de Nave:",
+    "",
+    `Les escribo de ${name}. Usamos NinjaSoft POS para cobrar con Nave y necesitamos que registren nuestra URL de notificaciones (webhook) en los ambientes de sandbox y de producción:`,
+    "",
+    webhookUrl,
+    "",
+    "Además, les pedimos:",
+    "1. Client ID y Client Secret (sandbox y producción).",
+    "2. El ID de punto de venta (pos_id) para cobrar con QR y link de pago.",
+    "3. Los IDs de las terminales Nave Point que vamos a usar.",
+    "",
+    "Muchas gracias.",
+    name,
+  ].join("\n");
+  const mailto = `mailto:${NAVE_INTEGRATIONS_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const text = `Para: ${NAVE_INTEGRATIONS_EMAIL}\nAsunto: ${subject}\n\n${body}`;
+  return { to: NAVE_INTEGRATIONS_EMAIL, subject, body, mailto, text };
+}
 
 // Resumen de una línea por canal (bajo el título del canal).
 export const CHANNEL_SUMMARY: Record<string, string> = {

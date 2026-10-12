@@ -36,17 +36,19 @@ export function PosTopBar({
   onResetPreset: () => void;
 }) {
   return (
-    <header className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3 md:px-4">
+    // En el celular no hay título: la caja va a la izquierda y la fila arranca
+    // pegada al header de la app (sin franja vacía arriba).
+    <header className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-2 sm:pt-3 md:px-4">
       <h1 className="hidden items-center gap-2 font-display text-lg font-black tracking-tight sm:flex">
         Punto de venta
         <InfoHint section="pos" />
       </h1>
-      <div className="ml-auto flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:ml-auto sm:flex-none">
         <button
           type="button"
           onClick={hasShift ? onCloseShift : onOpenShift}
           className={cn(
-            "flex h-10 min-w-0 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold transition",
+            "mr-auto flex h-10 min-w-0 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold transition sm:mr-0",
             hasShift ? "bg-success/15 text-success hover:bg-success/20" : "bg-muted text-muted-foreground hover:text-foreground",
           )}
           title={hasShift ? "Cerrar caja (arqueo)" : "Abrir caja"}

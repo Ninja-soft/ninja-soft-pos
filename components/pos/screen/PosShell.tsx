@@ -128,7 +128,7 @@ export function PosShell(p: PosShellProps) {
 
   return (
     <div
-      className="pos-root relative flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden lg:h-dvh"
+      className="pos-root relative flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top))] flex-col overflow-hidden lg:h-dvh"
       style={{ ...accentVars(layout.accent), zoom: layout.fontScale !== 1 ? layout.fontScale : undefined }}
     >
       {/* Lleva la burbuja del asistente fuera del cobro: arriba de la barra en

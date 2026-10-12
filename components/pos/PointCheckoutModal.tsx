@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CreditCard, RefreshCw, XCircle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { choiceClass } from "@/components/ui/ChoiceCard";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
@@ -289,7 +290,7 @@ export function PointCheckoutModal({
               {isNave ? "Buscando tus terminales Nave" : "Buscando lectores Point de tu cuenta"}
             </div>
           ) : devicesError ? (
-            <div className="rounded-lg border border-danger/40 bg-destructive/10 p-3 text-sm">
+            <div className="rounded-xl bg-danger/10 p-3 text-sm">
               No pudimos listar tus lectores. Revisá la conexión con{" "}
               {isNave ? "Nave" : "Mercado Pago"} en Medios de pago.
             </div>
@@ -308,12 +309,9 @@ export function PointCheckoutModal({
                     key={d.id}
                     type="button"
                     onClick={() => setDevice(d.id)}
-                    className={cn(
-                      "flex items-center justify-between rounded-lg border p-3 text-left text-sm transition",
-                      device === d.id
-                        ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                        : "border-border hover:border-ninja-flameSoft/40",
-                    )}
+                    className={choiceClass(device === d.id, "flex items-center justify-between p-3 text-sm", {
+                      check: false,
+                    })}
                   >
                     <span className="flex items-center gap-2 font-medium">
                       <CreditCard size={15} className="text-ninja-flameSoft" />
@@ -337,7 +335,7 @@ export function PointCheckoutModal({
                 ))}
               </div>
               {needsPdv && (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-warning/40 bg-ninja-flame/[0.06] p-3 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-warning/10 p-3 text-xs text-muted-foreground">
                   <span>
                     El lector tiene que estar en <strong>modo PDV</strong> para
                     recibir cobros del POS.
@@ -377,11 +375,10 @@ export function PointCheckoutModal({
                     key={p.key}
                     type="button"
                     onClick={() => setPreset(p.key)}
-                    className={cn(
-                      "rounded-lg border px-2 py-2 text-xs transition",
-                      preset === p.key
-                        ? "border-ninja-flame font-semibold ring-2 ring-ninja-flame/30"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                    className={choiceClass(
+                      preset === p.key,
+                      cn("px-2 py-2 text-center text-xs", preset === p.key ? "font-semibold" : "text-muted-foreground"),
+                      { check: false },
                     )}
                   >
                     {p.label}
@@ -453,7 +450,7 @@ export function PointCheckoutModal({
 
       {phase === "error" && (
         <div className="space-y-4">
-          <div className="rounded-lg border border-danger/40 bg-destructive/10 p-3 text-sm">
+          <div className="rounded-xl bg-danger/10 p-3 text-sm">
             {errorDetail || "No se pudo completar el cobro."}
           </div>
           <div className="flex justify-end gap-2">

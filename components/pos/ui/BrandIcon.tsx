@@ -1,43 +1,48 @@
 import { HandCoins, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { ThemedLogo } from "@/components/ui/ThemedLogo";
+import { logoSrcFullBleed } from "@/lib/payments/logos";
 
-// Logo oficial de un medio de pago en un "ícono de app" blanco (estilo iOS):
-// los logos de marca están pensados para fondo claro, así se leen igual en los
-// temas oscuros sin invertir colores ni teñir la marca.
+// Logo oficial de un medio de pago, transparente y sin placa: se apoya directo
+// sobre la superficie y usa la variante para fondo oscuro en los temas oscuros
+// (ThemedLogo). Los isotipos que ya son un cuadrado lleno (Fiserv) se redondean.
 export function BrandIcon({
   logo,
   alt,
   size = 40,
   fallback,
+  inverse = false,
   className,
 }: {
   logo: string | null;
   alt: string;
   size?: number;
   fallback?: "wallet" | "account";
+  inverse?: boolean;
   className?: string;
 }) {
+  const fullBleed = logo ? logoSrcFullBleed(logo) : false;
   return (
     <span
       className={cn(
-        "grid shrink-0 place-items-center overflow-hidden rounded-[28%] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.18),inset_0_0_0_1px_rgba(11,7,32,0.06)]",
+        "grid shrink-0 place-items-center",
+        !logo && "rounded-[28%] bg-fg-6 text-foreground",
         className,
       )}
       style={{ width: size, height: size }}
     >
       {logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ThemedLogo
           src={logo}
           alt={alt}
           loading="lazy"
-          className="h-[72%] w-[72%] object-contain"
-          draggable={false}
+          inverse={inverse}
+          className={fullBleed ? "h-[86%] w-[86%] rounded-[24%]" : "h-[86%] w-[86%]"}
         />
       ) : fallback === "account" ? (
-        <HandCoins size={size * 0.5} className="text-[#3B237A]" aria-hidden />
+        <HandCoins size={size * 0.5} aria-hidden />
       ) : (
-        <Wallet size={size * 0.5} className="text-[#3B237A]" aria-hidden />
+        <Wallet size={size * 0.5} aria-hidden />
       )}
     </span>
   );

@@ -10,7 +10,7 @@
 
 import { isProviderEnabled } from "@/lib/payments/defaults";
 import { providerFeature } from "@/lib/payments/providerFeature";
-import { paymentIcon } from "@/lib/payments/logos";
+import { cardLogo, paymentIcon } from "@/lib/payments/logos";
 
 export type SaleMethod =
   | "cash"
@@ -116,8 +116,8 @@ const LOGO = {
   pagos360: icon("pagos360"),
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
-  visa: "/img/medios_de_pago/cards/visa_credito.svg",
-  visaDebit: "/img/medios_de_pago/cards/visa_debito.svg",
+  visa: cardLogo("visa") ?? "",
+  visaDebit: cardLogo("visa_debito") ?? "",
 } as const;
 
 // Proveedores que habilitan la tarjeta manual (débito/crédito con posnet

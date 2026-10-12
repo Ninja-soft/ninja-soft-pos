@@ -6,7 +6,7 @@ export const BRAND_OPTIONS = [
   { value: "maestro", label: "Maestro" },
   { value: "cabal", label: "Cabal" },
   { value: "amex", label: "Amex" },
-  { value: "naranja", label: "Naranja" },
+  { value: "naranja", label: "Naranja X" },
   { value: "diners", label: "Diners" },
 ] as const;
 
@@ -29,23 +29,7 @@ export const DEFAULT_INSTALLMENTS = [1, 3, 6, 12];
 // Marcas que existen en débito (las de crédito son todas).
 export const DEBIT_BRANDS = new Set(["visa", "master", "maestro", "cabal"]);
 
-// Logo de la marca. Usamos la variante "crédito" (limpia, solo logo) para todas
-// las bases; la sección ya indica Débito/Crédito. Evita los SVG de débito con
-// fondo blanco y subtítulo que se veían recortados.
-export function brandLogo(brand: string | null): string | null {
-  if (!brand) return null;
-  const files: Record<string, string> = {
-    visa: "visa_credito",
-    master: "martercard_credito",
-    maestro: "maestro_debito",
-    cabal: "cabal_credito",
-    amex: "amex_credito",
-    naranja: "naranja_credito",
-    diners: "dinners_credito",
-  };
-  const file = files[brand];
-  return file ? `/img/medios_de_pago/cards/${file}.svg` : null;
-}
+// Los logos de las marcas viven en lib/payments/logos (cardLogo).
 
 // Etiqueta legible de un plan (para el campo label).
 export function planLabel(base: string, brand: string | null, installments: number): string {
@@ -53,4 +37,27 @@ export function planLabel(base: string, brand: string | null, installments: numb
   const brandTxt = brand ? ` ${BRAND_LABEL[brand] ?? brand}` : "";
   const cuotas = installments > 1 ? ` ${installments} cuotas` : base === "credito" ? " 1 pago" : "";
   return `${b}${brandTxt}${cuotas}`.trim();
+}
+
+// Resumen de los planes activos por medio (provider_key): cantidad y marcas
+// con al menos un plan, en el orden de BRAND_OPTIONS. Lo usa la fila del canal
+// en Configuración (botón "Planes de cuotas").
+export type PlanSummary = { count: number; brands: string[] };
+
+export function summarizePlans(
+  plans: { provider_key: string | null; brand: string | null }[],
+): Record<string, PlanSummary> {
+  const out: Record<string, PlanSummary> = {};
+  for (const p of plans) {
+    if (!p.provider_key) continue;
+    const s = (out[p.provider_key] ??= { count: 0, brands: [] });
+    s.count += 1;
+    if (p.brand && !s.brands.includes(p.brand)) s.brands.push(p.brand);
+  }
+  const order = (b: string) => {
+    const i = (ALL_BRANDS as readonly string[]).indexOf(b);
+    return i === -1 ? ALL_BRANDS.length : i;
+  };
+  for (const s of Object.values(out)) s.brands.sort((a, b) => order(a) - order(b));
+  return out;
 }

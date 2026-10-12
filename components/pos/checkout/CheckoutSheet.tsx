@@ -16,6 +16,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
+import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { cn } from "@/lib/utils/cn";
 import {
   checkoutTotals,
@@ -54,6 +55,8 @@ export interface CheckoutPlan {
   id: string;
   label: string;
   base: string | null;
+  /** Red de la tarjeta (payment_plans.brand): muestra su logo en el chip. */
+  brand?: string | null;
   installments: number | null;
   surcharge_pct: number | string | null;
 }
@@ -845,6 +848,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                             on={planId === p.id}
                             onClick={() => setPlanId(p.id)}
                             title={p.label}
+                            brand={p.brand}
                             sub={pct > 0 ? `+${pct}% · ${money(round2(portion * (1 + pct / 100)))}` : "Sin recargo"}
                           />
                         );
@@ -1140,19 +1144,34 @@ function QuickCash({ on, onClick, children }: { on: boolean; onClick: () => void
   );
 }
 
-function PlanChip({ on, onClick, title, sub }: { on: boolean; onClick: () => void; title: string; sub: string }) {
+function PlanChip({
+  on,
+  onClick,
+  title,
+  sub,
+  brand,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  sub: string;
+  brand?: string | null;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
       className={cn(
-        "flex flex-col items-start rounded-xl px-3 py-2 text-left transition active:scale-95",
+        "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition active:scale-95",
         on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
       )}
     >
-      <span className="text-[13px] font-bold">{title}</span>
-      <span className={cn("text-[11px] tabular-nums", on ? "opacity-70" : "text-muted-foreground")}>{sub}</span>
+      {brand && <CardBrandLogo brand={brand} height={20} inverse={on} />}
+      <span className="flex min-w-0 flex-col items-start">
+        <span className="text-[13px] font-bold">{title}</span>
+        <span className={cn("text-[11px] tabular-nums", on ? "opacity-70" : "text-muted-foreground")}>{sub}</span>
+      </span>
     </button>
   );
 }

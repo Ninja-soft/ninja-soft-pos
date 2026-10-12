@@ -14,8 +14,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { brandLogo } from "@/modules/pos/planConstants";
-import { paymentWordmark } from "@/lib/payments/logos";
+import { cardLogo, paymentWordmark } from "@/lib/payments/logos";
 import { paywayPayMessage, paywayTokenMessage } from "@/lib/payments/paywayMessages";
 import {
   accentPalette,
@@ -292,7 +291,7 @@ export default function PagarPage() {
                 <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Tarjeta">
                   {offered.map((br) => {
                     const debit = (info.debit_brands ?? []).includes(br);
-                    const logo = brandLogo(brandFamily(br));
+                    const logo = cardLogo(br, { on: "light" }) ?? cardLogo(brandFamily(br), { on: "light" });
                     const active = brand === br;
                     const label = BRAND_LABELS[br] ?? br;
                     return (
@@ -411,10 +410,10 @@ export default function PagarPage() {
                         onBlur={() => setTouched((t) => ({ ...t, number: true }))}
                         aria-invalid={!!showErr("number")}
                       />
-                      {family && brandLogo(family) && (
+                      {family && cardLogo(family, { on: "light" }) && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={brandLogo(family)!}
+                          src={cardLogo(family, { on: "light" })!}
                           alt={BRAND_LABELS[family] ?? family}
                           className="pointer-events-none absolute right-3 top-1/2 h-6 w-auto -translate-y-1/2"
                         />

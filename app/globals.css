@@ -790,3 +790,13 @@ html {
     animation: none;
   }
 }
+
+/* Logos de marca con variante por tema (components/ui/ThemedLogo): en los
+   temas claros se oculta la versión para fondo oscuro y viceversa. */
+[data-theme="ninja-light"] .logo-on-dark,
+[data-theme="ninja-sand"] .logo-on-dark {
+  display: none !important;
+}
+:root:not([data-theme="ninja-light"]):not([data-theme="ninja-sand"]) .logo-on-light {
+  display: none !important;
+}

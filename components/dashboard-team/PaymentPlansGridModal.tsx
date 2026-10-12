@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileDown, Info, Plus, Save, Upload, X } from "lucide-react";
@@ -18,12 +17,13 @@ import {
   BRAND_OPTIONS,
   DEBIT_BRANDS,
   DEFAULT_INSTALLMENTS,
-  brandLogo,
   planLabel,
 } from "@/modules/pos/planConstants";
 import { parsePlansXlsx, type PlanRow } from "@/modules/pos/plansXlsx";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { Callout } from "@/components/ui/Callout";
+import { CardBrandLogo } from "@/components/ui/ThemedLogo";
+import { BrandLogo } from "@/components/dashboard-team/payments/ui";
 
 type MethodConfig = { installments?: number[]; brands?: string[]; plan_mode?: "global" | "plans" };
 
@@ -274,8 +274,22 @@ export function PaymentPlansGridModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`Planes · ${providerName}`}
+      title={`Planes de cuotas · ${providerName}`}
       className="max-w-3xl"
+      header={
+        <div className="flex items-center gap-3">
+          <BrandLogo brandKey={providerKey} name={providerName} size={40} />
+          <div className="min-w-0">
+            <p className="text-lg font-bold leading-tight tracking-tight">Planes de cuotas</p>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+              {providerName} ·{" "}
+              {plans.length > 0
+                ? `${plans.length} ${plans.length === 1 ? "plan cargado" : "planes cargados"}`
+                : "Sin planes"}
+            </p>
+          </div>
+        </div>
+      }
     >
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -388,19 +402,22 @@ export function PaymentPlansGridModal({
 
         {/* Editor de marcas */}
         {editBrands && (
-          <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="flex flex-wrap gap-2 rounded-xl bg-fg-4 p-3">
             {BRAND_OPTIONS.map((b) => {
               const on = brands.includes(b.value);
               return (
                 <button
                   key={b.value}
+                  type="button"
+                  aria-pressed={on}
                   onClick={() => toggleBrand(b.value)}
                   className={
                     on
-                      ? "rounded-full border border-ninja-flameSoft bg-ninja-flame/15 px-3 py-1 text-xs font-semibold text-ninja-flameSoft"
-                      : "rounded-full border border-border px-3 py-1 text-xs text-muted-foreground"
+                      ? "inline-flex h-9 items-center gap-2 rounded-full bg-fg-10 pl-2 pr-3 text-xs font-semibold text-foreground"
+                      : "inline-flex h-9 items-center gap-2 rounded-full pl-2 pr-3 text-xs text-muted-foreground opacity-60 transition hover:bg-fg-6 hover:opacity-100"
                   }
                 >
+                  <CardBrandLogo brand={b.value} label={b.label} height={18} />
                   {b.label}
                 </button>
               );
@@ -569,15 +586,10 @@ function Section({
 }
 
 function BrandRow({ brand, children }: { brand: string; children: React.ReactNode }) {
-  const logo = brandLogo(brand);
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
-      <div className="flex w-36 shrink-0 items-center gap-2.5">
-        <span className="flex h-7 w-11 shrink-0 items-center justify-center">
-          {logo && (
-            <Image src={logo} alt={brand} width={44} height={28} className="h-7 w-auto object-contain" />
-          )}
-        </span>
+    <div className="flex flex-col gap-2.5 rounded-xl bg-fg-4 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2.5 sm:w-40">
+        <CardBrandLogo brand={brand} label={BRAND_LABEL[brand] ?? brand} height={26} />
         <span className="text-sm font-medium leading-tight">{BRAND_LABEL[brand] ?? brand}</span>
       </div>
       <div className="flex flex-1 flex-wrap gap-3">{children}</div>

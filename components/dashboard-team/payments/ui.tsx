@@ -26,9 +26,11 @@ import { cn } from "@/lib/utils/cn";
 import { choiceClass } from "@/components/ui/ChoiceCard";
 import { CAP_COPY, type ChannelCap, type ConnectGuide, type GuideIcon } from "./copy";
 import { paymentIcon, paymentIconFullBleed, paymentWordmark } from "@/lib/payments/logos";
+import { ThemedLogo } from "@/components/ui/ThemedLogo";
 import type { Env } from "./types";
 
-// Isotipo cuadrado del medio (los canales Point usan el de su marca).
+// Isotipo del medio, transparente y sin placa (los canales Point usan el de su
+// marca). En los temas oscuros usa la variante para fondo oscuro si existe.
 export function BrandLogo({
   brandKey,
   name,
@@ -43,31 +45,31 @@ export function BrandLogo({
   className?: string;
 }) {
   const src = paymentIcon(brandKey);
+  const fullBleed = paymentIconFullBleed(brandKey);
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-[22%] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.06)]",
+        "flex shrink-0 items-center justify-center",
+        !src && "rounded-[22%] bg-fg-6",
         muted && "opacity-55 grayscale",
         className,
       )}
       style={{ width: size, height: size }}
     >
       {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <ThemedLogo
           src={src}
           alt={name}
-          className={cn("h-full w-full", paymentIconFullBleed(brandKey) ? "object-cover" : "object-contain p-[16%]")}
-          draggable={false}
+          className={cn("h-[88%] w-[88%]", fullBleed && "rounded-[22%]")}
         />
       ) : (
-        <CreditCard size={size * 0.45} className="text-neutral-500" />
+        <CreditCard size={size * 0.45} className="text-muted-foreground" />
       )}
     </span>
   );
 }
 
-// Logo horizontal sobre placa clara (legible en los 4 temas).
+// Logo horizontal completo, transparente y adaptado al tema.
 export function BrandWordmark({
   brandKey,
   name,
@@ -80,14 +82,8 @@ export function BrandWordmark({
   const src = paymentWordmark(brandKey);
   if (!src) return <BrandLogo brandKey={brandKey} name={name} size={56} />;
   return (
-    <span
-      className={cn(
-        "inline-flex h-16 items-center justify-center rounded-2xl bg-white px-6 shadow-[0_1px_2px_rgba(0,0,0,0.10),0_0_0_1px_rgba(0,0,0,0.05)]",
-        className,
-      )}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={name} className="max-h-9 w-auto max-w-[180px] object-contain" draggable={false} />
+    <span className={cn("inline-flex h-14 items-center justify-center", className)}>
+      <ThemedLogo src={src} alt={name} className="max-h-10 w-auto max-w-[200px]" />
     </span>
   );
 }

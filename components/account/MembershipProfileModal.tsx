@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileModalBody } from "@/components/account/ProfileModalBody";
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  manager: "Encargado",
+  cashier: "Cajero",
+  viewer: "Solo lectura",
+};
+
 // Perfil del usuario en el POS = su membresía (tenant_users.display_name/avatar),
 // lo mismo que se ve y edita en la sección Equipo. La UI (recorte de foto,
 // ver/descargar, campos) la aporta ProfileModalBody, idéntica a la de Internal;
@@ -23,6 +30,9 @@ export function MembershipProfileModal({
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [business, setBusiness] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -31,19 +41,24 @@ export function MembershipProfileModal({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+      setEmail(user.email ?? null);
       setTenantId(
         ((user.app_metadata as { current_tenant_id?: string } | null)
           ?.current_tenant_id) ?? null,
       );
       const { data } = await supabase
         .from("tenant_users")
-        .select("display_name, avatar")
+        .select("display_name, avatar, role, tenants(name)")
         .eq("user_id", user.id)
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
       setName(data?.display_name ?? "");
       setAvatar(data?.avatar ?? null);
+      setRole(data?.role ?? null);
+      // El embed puede venir como objeto o como array según la relación.
+      const t = data?.tenants as { name?: string | null } | { name?: string | null }[] | null;
+      setBusiness((Array.isArray(t) ? t[0]?.name : t?.name) ?? null);
     })();
   }, [open, supabase]);
 
@@ -75,6 +90,9 @@ export function MembershipProfileModal({
       uploadPathPrefix={tenantId ? `${tenantId}/members` : null}
       onSave={() => save.mutate()}
       saving={save.isPending}
+      email={email}
+      roleLabel={role ? (ROLE_LABELS[role] ?? role) : null}
+      contextLabel={business}
     />
   );
 }

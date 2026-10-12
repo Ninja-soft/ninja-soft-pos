@@ -18,15 +18,7 @@ import { cropToWebp } from "@/lib/utils/image";
  * Se usa tanto en "Editar mi perfil" (bucket user-avatars) como en el panel del
  * dueño / equipo (bucket tenant-assets).
  */
-export function AvatarUploader({
-  value,
-  onChange,
-  name,
-  bucket,
-  pathPrefix,
-  size = 64,
-  disabled,
-}: {
+export interface AvatarUploadOptions {
   value: string | null;
   onChange: (url: string | null) => void;
   name: string;
@@ -34,9 +26,14 @@ export function AvatarUploader({
   bucket: string;
   /** Carpeta destino (sin slash final), ej. `${userId}` o `${tenantId}/members`. */
   pathPrefix: string;
-  size?: number;
-  disabled?: boolean;
-}) {
+}
+
+/**
+ * Lógica del uploader sin layout: elegir archivo, recortar, subir, ver y
+ * descargar. Devuelve acciones + `dialogs` (input oculto y modales de recorte y
+ * vista) para que cada pantalla arme su propia UI alrededor del avatar.
+ */
+export function useAvatarUpload({ value, onChange, name, bucket, pathPrefix }: AvatarUploadOptions) {
   const supabase = createClient();
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -125,55 +122,8 @@ export function AvatarUploader({
 
   const hasPhoto = !!value && /^https?:\/\//.test(value);
 
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Avatar name={name || "?"} avatar={value} size={size} />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={disabled || uploading}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Upload size={15} /> {hasPhoto ? "Cambiar foto" : "Subir foto"}
-        </Button>
-
-        {hasPhoto && (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => setViewing(true)}
-            >
-              <Eye size={15} /> Ver
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={disabled || downloading}
-              onClick={download}
-            >
-              <Download size={15} /> Descargar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive"
-              disabled={disabled}
-              onClick={() => onChange(null)}
-            >
-              <Trash2 size={15} /> Quitar
-            </Button>
-          </>
-        )}
-      </div>
-
+  const dialogs = (
+    <>
       <input
         ref={inputRef}
         type="file"
@@ -270,6 +220,80 @@ export function AvatarUploader({
           </div>
         </div>
       </Modal>
+    </>
+  );
+
+  return {
+    hasPhoto,
+    uploading,
+    downloading,
+    openPicker: () => inputRef.current?.click(),
+    openViewer: () => setViewing(true),
+    download,
+    dialogs,
+  };
+}
+
+/** Uploader en línea: avatar + botones de texto (Subir/Ver/Descargar/Quitar). */
+export function AvatarUploader({
+  size = 64,
+  disabled,
+  ...opts
+}: AvatarUploadOptions & { size?: number; disabled?: boolean }) {
+  const { value, onChange, name } = opts;
+  const { hasPhoto, uploading, downloading, openPicker, openViewer, download, dialogs } =
+    useAvatarUpload(opts);
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Avatar name={name || "?"} avatar={value} size={size} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={disabled || uploading}
+          onClick={openPicker}
+        >
+          <Upload size={15} /> {hasPhoto ? "Cambiar foto" : "Subir foto"}
+        </Button>
+
+        {hasPhoto && (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disabled}
+              onClick={openViewer}
+            >
+              <Eye size={15} /> Ver
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disabled || downloading}
+              onClick={download}
+            >
+              <Download size={15} /> Descargar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              disabled={disabled}
+              onClick={() => onChange(null)}
+            >
+              <Trash2 size={15} /> Quitar
+            </Button>
+          </>
+        )}
+      </div>
+
+      {dialogs}
     </div>
   );
 }

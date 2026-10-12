@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, IdCard } from "lucide-react";
+import { UserPlus, Pencil, IdCard, Check, ImagePlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -10,9 +10,9 @@ import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { Segmented } from "@/components/ui/Segmented";
 import { Avatar, AVATAR_ICONS, AVATAR_PRESETS } from "@/components/ui/Avatar";
-import { AvatarUploader } from "@/components/account/AvatarUploader";
+import { useAvatarUpload } from "@/components/account/AvatarUploader";
+import { ChoiceCard, CHOICE_ON } from "@/components/ui/ChoiceCard";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
@@ -46,6 +46,60 @@ type Profile = {
   status: string;
 };
 
+const ROLE_OPTIONS: { value: AssignableRole; label: string; desc: string }[] = [
+  { value: "manager", label: "Encargado", desc: "Opera todo: ventas, caja y stock. No cambia el plan." },
+  { value: "cashier", label: "Cajero", desc: "Vende y cobra en el POS con su propia caja." },
+  { value: "viewer", label: "Solo lectura", desc: "Ve reportes y comprobantes, no modifica nada." },
+];
+
+// Selector de rol como tarjetas con una línea que explica qué puede hacer.
+function RolePicker({
+  value,
+  onChange,
+}: {
+  value: AssignableRole;
+  onChange: (v: AssignableRole) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Rol" className="grid gap-2 sm:grid-cols-3">
+      {ROLE_OPTIONS.map((o) => (
+        <ChoiceCard
+          key={o.value}
+          selected={value === o.value}
+          onClick={() => onChange(o.value)}
+          title={o.label}
+          description={o.desc}
+          className="p-3 pr-8"
+        />
+      ))}
+    </div>
+  );
+}
+
+// Insignia de check compacta para tiles chicos (la de .choice-check es para cards).
+function TileCheck() {
+  return (
+    <span
+      aria-hidden
+      className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-ninja-flame text-white shadow-sm"
+    >
+      <Check size={10} strokeWidth={3.5} />
+    </span>
+  );
+}
+
+const TILE =
+  "relative grid aspect-square w-full place-items-center rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const tileClass = (on: boolean) =>
+  cn(
+    TILE,
+    on
+      ? cn(CHOICE_ON, "text-foreground")
+      : "bg-muted text-muted-foreground hover:bg-secondary hover:text-foreground",
+  );
+
+// Grilla de avatares: iniciales + iconos + foto propia (subir / la ya subida),
+// todos como tiles iguales. La vista previa vive fuera (encabezado del modal).
 function AvatarPicker({
   value,
   onChange,
@@ -58,49 +112,146 @@ function AvatarPicker({
   tenantId: string;
 }) {
   const isUrl = !!value && /^https?:\/\//.test(value);
+  // Recordamos la última foto para poder volver a elegirla tras probar un icono.
+  const [photo, setPhoto] = useState<string | null>(isUrl ? value : null);
+  const upload = useAvatarUpload({
+    value: isUrl ? value : photo,
+    onChange: (url) => {
+      setPhoto(url);
+      onChange(url);
+    },
+    name,
+    bucket: "tenant-assets",
+    pathPrefix: `${tenantId}/members`,
+  });
 
   return (
-    <div className="space-y-3">
-      {/* Iniciales + iconos */}
-      <div className="flex flex-wrap items-center gap-2">
+    <div>
+      <div
+        role="radiogroup"
+        aria-label="Avatar"
+        className="grid grid-cols-7 gap-1.5 sm:grid-cols-10"
+      >
         <button
           type="button"
+          role="radio"
+          aria-checked={value === null}
           onClick={() => onChange(null)}
-          className={cn(
-            "grid h-10 w-10 place-items-center rounded-full transition",
-            value === null ? "bg-ninja-flame/20" : "hover:bg-muted",
-          )}
+          className={tileClass(value === null)}
           title="Iniciales"
+          aria-label="Iniciales"
         >
-          <Avatar name={name || "?"} size={32} />
+          <Avatar name={name || "?"} size={26} />
+          {value === null && <TileCheck />}
         </button>
         {AVATAR_PRESETS.map((key) => {
           const Icon = AVATAR_ICONS[key];
+          const on = value === key;
           return (
             <button
               key={key}
               type="button"
+              role="radio"
+              aria-checked={on}
               onClick={() => onChange(key)}
-              className={cn(
-                "grid h-10 w-10 place-items-center rounded-full transition",
-                value === key ? "bg-ninja-flame/20 text-ninja-flameSoft" : "hover:bg-muted",
-              )}
+              className={tileClass(on)}
               title={key}
+              aria-label={key}
             >
-              {Icon ? <Icon size={18} /> : null}
+              {Icon ? <Icon size={20} strokeWidth={1.9} /> : null}
+              {on && <TileCheck />}
             </button>
           );
         })}
+        {photo && (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={value === photo}
+            onClick={() => onChange(photo)}
+            className={cn(tileClass(value === photo), "p-1")}
+            title="Foto propia"
+            aria-label="Foto propia"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photo} alt="" className="h-full w-full rounded object-cover" />
+            {value === photo && <TileCheck />}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={upload.openPicker}
+          disabled={upload.uploading}
+          className={cn(
+            TILE,
+            "border border-dashed border-border text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50",
+          )}
+          title={photo ? "Subir otra foto" : "Subir foto"}
+          aria-label={photo ? "Subir otra foto" : "Subir foto"}
+        >
+          {upload.uploading ? <Spinner /> : <ImagePlus size={20} strokeWidth={1.9} />}
+        </button>
       </div>
-      {/* Foto propia: recorte + ver + descargar */}
-      <AvatarUploader
-        value={isUrl ? value : null}
-        onChange={onChange}
-        name={name}
-        bucket="tenant-assets"
-        pathPrefix={`${tenantId}/members`}
-        size={36}
-      />
+      {isUrl && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>Foto propia</span>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            onClick={upload.openViewer}
+            className="font-medium text-foreground hover:underline"
+          >
+            Ver
+          </button>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            onClick={upload.download}
+            disabled={upload.downloading}
+            className="font-medium text-foreground hover:underline disabled:opacity-50"
+          >
+            Descargar
+          </button>
+        </div>
+      )}
+      {upload.dialogs}
+    </div>
+  );
+}
+
+// Vista previa del miembro: se actualiza mientras se completa el formulario.
+function MemberPreview({
+  name,
+  email,
+  avatar,
+  role,
+}: {
+  name: string;
+  email: string;
+  avatar: string | null;
+  role: AssignableRole;
+}) {
+  const n = name.trim();
+  const e = email.trim();
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-muted p-3.5">
+      <Avatar name={n || e || "?"} avatar={avatar} size={48} />
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "truncate text-sm font-semibold",
+            n ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {n ? capitalizeName(n) : "Nombre del miembro"}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {e || "persona@ejemplo.com"}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs font-medium text-foreground">
+        {ROLE_LABELS[role]}
+      </span>
     </div>
   );
 }
@@ -351,52 +502,51 @@ export function TeamSection({
           open={open}
           onOpenChange={setOpen}
           title="Invitar usuario"
-          description="Con cuenta y contraseña propias."
+          description="Tendrá su propio acceso con email y contraseña."
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" form="invite-user-form" loading={m.isPending}>
+                <UserPlus size={16} /> Enviar invitación
+              </Button>
+            </>
+          }
         >
           <form
+            id="invite-user-form"
             onSubmit={(e) => {
               e.preventDefault();
               m.mutate();
             }}
             className="space-y-5"
           >
+            <MemberPreview name={name} email={email} avatar={avatar} role={role} />
             <Input
               label="Email"
               type="email"
               required
+              autoComplete="off"
               placeholder="persona@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
             <Input
-              label="Nombre (real o genérico, ej. “Cajero A”)"
+              label="Nombre"
               required
+              placeholder="Ej. Ana Pérez"
+              hint="Puede ser real o genérico, ej. “Cajero A”."
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Rol</span>
-              <Segmented<AssignableRole>
-                value={role}
-                onChange={setRole}
-                options={[
-                  { value: "manager", label: "Encargado" },
-                  { value: "cashier", label: "Cajero" },
-                  { value: "viewer", label: "Solo lectura" },
-                ]}
-              />
+              <RolePicker value={role} onChange={setRole} />
             </div>
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">Avatar</span>
               <AvatarPicker value={avatar} onChange={setAvatar} name={name} tenantId={tenantId} />
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" loading={m.isPending}>
-                Enviar invitación
-              </Button>
             </div>
           </form>
         </Modal>
@@ -481,15 +631,7 @@ export function TeamSection({
             {!isSelf && (
               <div>
                 <span className="mb-2 block text-sm font-medium text-muted-foreground">Rol</span>
-                <Segmented<AssignableRole>
-                  value={role}
-                  onChange={setRole}
-                  options={[
-                    { value: "manager", label: "Encargado" },
-                    { value: "cashier", label: "Cajero" },
-                    { value: "viewer", label: "Solo lectura" },
-                  ]}
-                />
+                <RolePicker value={role} onChange={setRole} />
               </div>
             )}
             <div>

@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { CredentialInput } from "@/components/ui/CredentialInput";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Segmented } from "@/components/ui/Segmented";
 import { CHOICE_ON_CHECK, choiceClass } from "@/components/ui/ChoiceCard";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Modal } from "@/components/ui/Modal";
@@ -414,8 +414,8 @@ export function TenantEmailCard() {
             <>
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Tu proveedor</p>
-                <SegmentedControl
-                  ariaLabel="Proveedor de correo"
+                <Segmented
+                  aria-label="Proveedor de correo"
                   value={provider}
                   onChange={pickProvider}
                   className="w-full sm:w-auto sm:min-w-[340px]"

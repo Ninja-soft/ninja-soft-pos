@@ -454,7 +454,7 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       <InactivityGuard />
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>
 
@@ -478,7 +478,7 @@ export function AppShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>

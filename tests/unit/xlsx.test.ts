@@ -56,3 +56,25 @@ describe("buildWorkbook (export XLSX con diseño)", () => {
     expect(ws.views?.[0]).toMatchObject({ state: "frozen", ySplit: 2 });
   });
 });
+
+describe("buildWorkbook · listas desplegables", () => {
+  it("agrega validación de lista en las filas de la columna con options", () => {
+    const wb = buildWorkbook([
+      {
+        name: "Planes",
+        columns: [
+          { header: "tipo", key: "tipo", options: ["Crédito", "Débito"] },
+          { header: "cuotas", key: "cuotas", type: "number" },
+        ],
+        rows: [{ tipo: "Crédito", cuotas: 3 }],
+      },
+    ]);
+    const ws = wb.getWorksheet("Planes")!;
+    const dv = ws.getCell(2, 1).dataValidation;
+    expect(dv?.type).toBe("list");
+    expect(dv?.formulae?.[0]).toBe('"Crédito,Débito"');
+    // También en filas vacías para que el usuario sume planes.
+    expect(ws.getCell(200, 1).dataValidation?.type).toBe("list");
+    expect(ws.getCell(2, 2).dataValidation?.type).toBeUndefined();
+  });
+});

@@ -78,6 +78,8 @@ export interface CheckoutPlan {
   brand?: string | null;
   installments: number | null;
   surcharge_pct: number | string | null;
+  /** Medio del plan (payment_plans.provider_key): define el n° de comercio. */
+  provider_key?: string | null;
 }
 export interface CheckoutWarrantyPlan {
   id: string;
@@ -121,6 +123,8 @@ export interface CheckoutSheetProps {
   prefs?: TenderPrefs;
   initialTenderId?: string | null;
   cardPlans: CheckoutPlan[];
+  /** N° de comercio para la marca y el medio del plan (null = sin cargar). */
+  merchantNumberFor?: (brand: string | null, providerKey: string | null) => string | null;
   warrantyPlans: CheckoutWarrantyPlan[];
   initialWarrantyId?: string;
   professionals: CheckoutProfessional[];
@@ -177,6 +181,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     prefs,
     initialTenderId,
     cardPlans,
+    merchantNumberFor,
     warrantyPlans,
     initialWarrantyId = "",
     professionals,
@@ -498,6 +503,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         voucher.autorizacion.trim() !== "" ||
         voucher.ultimos4.trim() !== "");
     const brandInfo = isPosnet ? cardBrandByKey(cardBrand) : null;
+    const comercio =
+      isPosnet && cardBrand && cardBrand !== "other"
+        ? (merchantNumberFor?.(cardBrand, plan?.provider_key ?? null) ?? null)
+        : null;
     const kindLabel = cardKind === "debit" ? "Débito" : "Crédito";
     addLine({
       key: `l${++keySeq}`,
@@ -536,6 +545,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             autorizacion: voucher.autorizacion.trim(),
             ...(brandInfo ? { marca: brandInfo.label } : {}),
             ...(voucher.ultimos4.trim() ? { ultimos4: voucher.ultimos4.trim() } : {}),
+            ...(comercio ? { comercio } : {}),
           }
         : undefined,
       locked: false,

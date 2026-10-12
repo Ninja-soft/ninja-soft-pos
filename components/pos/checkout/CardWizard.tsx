@@ -220,6 +220,7 @@ export function CardWizard({
           <div className="grid grid-cols-2 gap-2">
             <VoucherField
               id="cv-cupon"
+              autoFocus
               label="N° de cupón"
               value={voucher.cupon}
               onChange={(v) => set("cupon", v)}
@@ -331,6 +332,7 @@ function VoucherField({
   invalid,
   maxLength = 20,
   numeric = true,
+  autoFocus,
   onEnter,
 }: {
   id: string;
@@ -341,6 +343,8 @@ function VoucherField({
   invalid?: boolean;
   maxLength?: number;
   numeric?: boolean;
+  /** Primer campo del paso: recibe el foco al entrar (el botón del paso anterior ya no existe). */
+  autoFocus?: boolean;
   onEnter: () => void;
 }) {
   return (
@@ -356,7 +360,18 @@ function VoucherField({
         maxLength={maxLength}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && onEnter()}
+        autoFocus={autoFocus}
+        data-voucher-field
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          // Enter pasa al campo siguiente, como Tab; en el último, confirma.
+          const fields = Array.from(document.querySelectorAll<HTMLInputElement>("[data-voucher-field]"));
+          const next = fields[fields.indexOf(e.currentTarget) + 1];
+          if (next) {
+            e.preventDefault();
+            next.focus();
+          } else onEnter();
+        }}
         aria-invalid={invalid || undefined}
         aria-required={required || undefined}
         className={cn(INPUT, invalid ? "border-danger" : "border-border")}

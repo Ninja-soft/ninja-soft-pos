@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
+import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
+import { resolveMerchantNumber } from "@/lib/payments/merchantNumbers";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr } from "@/lib/pos/customerDisplay";
@@ -50,6 +52,12 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
   const { data: wplans } = useWarrantyPlans(true);
   const { data: professionals } = useProfessionals();
   const { data: posSettings } = usePosSettings();
+  const { data: methods } = usePaymentMethodsStatus();
+  const merchantNumberFor = useCallback(
+    (brand: string | null, providerKey: string | null) =>
+      resolveMerchantNumber(methods ?? [], brand, providerKey),
+    [methods],
+  );
 
   // Sólo los planes VIGENTES hoy (H27).
   const cardPlans = useMemo(
@@ -115,6 +123,7 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
     <CheckoutSheet
       {...props}
       cardPlans={cardPlans}
+      merchantNumberFor={merchantNumberFor}
       warrantyPlans={(wplans ?? []) as WarrantyPlan[]}
       professionals={professionals ?? []}
       voucherRequired={Boolean(posSettings?.requireCardVoucher)}

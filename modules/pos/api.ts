@@ -13,6 +13,8 @@ export interface CardVoucher {
   lote: string;
   cupon: string;
   autorizacion: string;
+  /** N° de comercio de la marca (config del medio), para conciliar. */
+  comercio?: string;
 }
 
 export interface SalePaymentInput {
@@ -532,7 +534,13 @@ export const posApi = {
   // Alimenta el registro de tenders del POS (lib/pos/tenders.ts): un Point usa
   // la conexión de su marca aunque el QR de esa marca esté apagado.
   paymentMethodsStatus: async (): Promise<
-    Array<{ provider_key: string; enabled: boolean; connected: boolean; surcharge_pct: number }>
+    Array<{
+      provider_key: string;
+      enabled: boolean;
+      connected: boolean;
+      surcharge_pct: number;
+      merchant_numbers: Partial<Record<string, string>>;
+    }>
   > => {
     const supabase = createClient();
     const { data } = await supabase
@@ -544,6 +552,8 @@ export const posApi = {
       enabled: Boolean(r.enabled),
       connected: Boolean((r.config as { connected?: boolean } | null)?.connected),
       surcharge_pct: Number(r.surcharge_pct) || 0,
+      merchant_numbers:
+        ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
     }));
   },
 

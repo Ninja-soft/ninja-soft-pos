@@ -7,6 +7,8 @@ import type { XlsxCellType, XlsxOptions, XlsxSheet } from "./xlsx";
 const DEFAULT_ACCENT = "EC3F17"; // ninja flame
 const ZEBRA = "FFF3F3F5";
 const WHITE = "FFFFFFFF";
+// Filas con lista desplegable: las cargadas y unas cuantas vacías para sumar.
+const LIST_ROWS = 300;
 
 function numFmtFor(type?: XlsxCellType): string | undefined {
   if (type === "money") return '"$"#,##0.00';
@@ -80,6 +82,23 @@ export function buildWorkbook(
         cell.border = { top: { style: "thin", color: { argb: "FFD0D0D5" } } };
       });
     }
+
+    sheet.columns.forEach((col, ci) => {
+      if (!col.options?.length) return;
+      const formula = `"${col.options.join(",")}"`;
+      const last = headerRow + Math.max(LIST_ROWS, sheet.rows.length + 50);
+      for (let r = headerRow + 1; r <= last; r++) {
+        ws.getCell(r, ci + 1).dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: [formula],
+          showErrorMessage: true,
+          errorStyle: "error",
+          errorTitle: col.header,
+          error: `Elegí un valor de la lista: ${col.options.join(", ")}.`,
+        };
+      }
+    });
 
     sheet.columns.forEach((col, i) => {
       ws.getColumn(i + 1).width = col.width ?? Math.max(12, col.header.length + 4);

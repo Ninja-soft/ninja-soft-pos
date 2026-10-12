@@ -18,14 +18,32 @@ import {
   DEBIT_BRANDS,
   DEFAULT_INSTALLMENTS,
   planLabel,
+  BASE_LABEL,
 } from "@/modules/pos/planConstants";
 import { parsePlansXlsx, type PlanRow } from "@/modules/pos/plansXlsx";
-import { exportXlsx } from "@/lib/utils/xlsx";
+import { exportXlsx, type XlsxColumn } from "@/lib/utils/xlsx";
+import { cleanMerchantNumber, type MerchantNumbers } from "@/lib/payments/merchantNumbers";
 import { Callout } from "@/components/ui/Callout";
 import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { BrandLogo } from "@/components/dashboard-team/payments/ui";
 
-type MethodConfig = { installments?: number[]; brands?: string[]; plan_mode?: "global" | "plans" };
+type MethodConfig = {
+  installments?: number[];
+  brands?: string[];
+  plan_mode?: "global" | "plans";
+  /** N° de comercio por marca (opcional, para conciliación). */
+  merchant_numbers?: MerchantNumbers;
+};
+
+// Columnas del Excel de planes: tipo y marca con lista desplegable (los nombres
+// que entiende el import) y el n° de comercio opcional por marca.
+const XLSX_COLUMNS: XlsxColumn[] = [
+  { header: "tipo", key: "tipo", width: 12, options: ["Crédito", "Débito"] },
+  { header: "marca", key: "marca", width: 14, options: BRAND_OPTIONS.map((b) => b.label) },
+  { header: "cuotas", key: "cuotas", type: "number" },
+  { header: "recargo", key: "recargo", type: "number" },
+  { header: "n° de comercio", key: "comercio", width: 18 },
+];
 
 function keyOf(base: string, brand: string | null, n: number) {
   return `${base}|${brand ?? ""}|${n}`;
@@ -49,6 +67,8 @@ export function PaymentPlansGridModal({
   const m = usePaymentPlanMutations(providerKey);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importRows, setImportRows] = useState<PlanRow[] | null>(null);
+  const [importMerchants, setImportMerchants] = useState<MerchantNumbers>({});
+  const [merchants, setMerchants] = useState<MerchantNumbers>({});
   const [editBrands, setEditBrands] = useState(false);
   // Recargo único del medio + modo (global desactiva los planes).
   const [globalMode, setGlobalMode] = useState(false);
@@ -80,6 +100,7 @@ export function PaymentPlansGridModal({
     if (!cfg) return;
     setGlobalMode(cfg.config.plan_mode === "global");
     setGlobalPct(String(cfg.surcharge ?? 0));
+    setMerchants(cfg.config.merchant_numbers ?? {});
   }, [cfg]);
 
   // Inicializa la vigencia visible desde el primer plan que tenga una ventana
@@ -121,7 +142,7 @@ export function PaymentPlansGridModal({
         .from("tenant_payment_methods")
         .update({
           surcharge_pct: Number(globalPct) || 0,
-          config: { ...cur, plan_mode: globalMode ? "global" : "plans" },
+          config: { ...cur, plan_mode: globalMode ? "global" : "plans", merchant_numbers: cleanMerchants(merchants) },
         })
         .eq("provider_key", providerKey);
       if (error) throw error;
@@ -187,10 +208,11 @@ export function PaymentPlansGridModal({
     e.target.value = "";
     if (!file) return;
     try {
-      const { rows, errors } = await parsePlansXlsx(await file.arrayBuffer());
+      const { rows, errors, merchantNumbers } = await parsePlansXlsx(await file.arrayBuffer());
       if (errors.length) toast({ title: errors[0]!, variant: "error" });
       if (rows.length === 0) return;
       setImportRows(rows);
+      setImportMerchants(merchantNumbers);
     } catch {
       toast({ title: "No se pudo leer el archivo", variant: "error" });
     }
@@ -202,7 +224,14 @@ export function PaymentPlansGridModal({
     fn.mutate(importRows, {
       onSuccess: () => {
         toast({ title: `${importRows.length} planes importados`, variant: "success" });
+        // Los n° de comercio del archivo se suman a los cargados (no borran otros).
+        if (Object.keys(importMerchants).length > 0) {
+          const next = { ...merchants, ...importMerchants };
+          setMerchants(next);
+          saveConfig.mutate({ merchant_numbers: cleanMerchants(next) });
+        }
         setImportRows(null);
+        setImportMerchants({});
       },
       onError: () => toast({ title: "No se pudo importar", variant: "error" }),
     });
@@ -213,38 +242,29 @@ export function PaymentPlansGridModal({
       {
         name: "Planes",
         title: `Planes · ${providerName}`,
-        columns: [
-          { header: "base", key: "base", width: 14 },
-          { header: "marca", key: "marca", width: 14 },
-          { header: "cuotas", key: "cuotas", type: "number" },
-          { header: "recargo", key: "recargo", type: "number" },
-        ],
+        columns: XLSX_COLUMNS,
         rows: plans.map((p) => ({
-          base: p.base,
-          marca: p.brand ?? "",
+          tipo: BASE_LABEL[p.base ?? ""] ?? p.base,
+          marca: p.brand ? (BRAND_LABEL[p.brand] ?? p.brand) : "",
           cuotas: p.installments ?? 1,
           recargo: Number(p.surcharge_pct) || 0,
+          comercio: p.brand ? (merchants[p.brand] ?? "") : "",
         })),
       },
     ]);
   }
 
-  // Plantilla vacía con ejemplos para que el usuario sume filas y recargos.
+  // Plantilla con ejemplos: tipo y marca se eligen de una lista desplegable.
   async function downloadTemplate() {
     await exportXlsx(`plantilla-planes-${providerKey}`, [
       {
         name: "Planes",
         title: `Plantilla de planes · ${providerName} • completá y reimportá`,
-        columns: [
-          { header: "base", key: "base", width: 14 },
-          { header: "marca", key: "marca", width: 14 },
-          { header: "cuotas", key: "cuotas", type: "number" },
-          { header: "recargo", key: "recargo", type: "number" },
-        ],
+        columns: XLSX_COLUMNS,
         rows: [
-          { base: "debito", marca: "visa", cuotas: 1, recargo: 0 },
-          { base: "credito", marca: "visa", cuotas: 3, recargo: 8 },
-          { base: "credito", marca: "master", cuotas: 6, recargo: 15 },
+          { tipo: "Débito", marca: "Visa", cuotas: 1, recargo: 0, comercio: "" },
+          { tipo: "Crédito", marca: "Visa", cuotas: 3, recargo: 8, comercio: "" },
+          { tipo: "Crédito", marca: "Mastercard", cuotas: 6, recargo: 15, comercio: "" },
         ],
       },
     ]);
@@ -375,6 +395,36 @@ export function PaymentPlansGridModal({
                 Sin límite
               </button>
             )}
+          </div>
+        </div>
+
+        {/* N° de comercio por marca (opcional): se guarda con el cobro para
+            conciliar contra la liquidación de la tarjeta. Se guarda al Guardar. */}
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="font-semibold">
+            Números de comercio <span className="text-sm font-normal text-muted-foreground">(opcional)</span>
+          </div>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Si tenés un n° de comercio por tarjeta con {providerName}, cargalo y queda guardado en cada
+            cobro para conciliar con la liquidación.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {brands.map((b) => (
+              <label key={b} className="flex items-center gap-2.5">
+                <CardBrandLogo brand={b} label={BRAND_LABEL[b] ?? b} height={20} />
+                <span className="w-24 shrink-0 text-sm">{BRAND_LABEL[b] ?? b}</span>
+                <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={20}
+                  placeholder="Sin cargar"
+                  aria-label={`N° de comercio ${BRAND_LABEL[b] ?? b}`}
+                  value={merchants[b] ?? ""}
+                  onChange={(e) => setMerchants((m) => ({ ...m, [b]: cleanMerchantNumber(e.target.value) }))}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 text-sm tabular-nums outline-none focus:border-ninja-flameSoft"
+                />
+              </label>
+            ))}
           </div>
         </div>
 
@@ -749,3 +799,12 @@ function PlansProviderNote({ providerKey }: { providerKey: string }) {
   );
 }
 
+
+/** Sin vacíos: una marca sin número no se guarda. */
+function cleanMerchants(m: MerchantNumbers): MerchantNumbers {
+  return Object.fromEntries(
+    Object.entries(m)
+      .map(([k, v]) => [k, cleanMerchantNumber(v ?? "")] as const)
+      .filter(([, v]) => v !== ""),
+  );
+}

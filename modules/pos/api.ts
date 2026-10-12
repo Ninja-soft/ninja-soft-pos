@@ -476,6 +476,25 @@ export const posApi = {
     }>;
   },
 
+  // Estado de TODOS los medios del tenant (habilitado + conectado + recargo).
+  // Alimenta el registro de tenders del POS (lib/pos/tenders.ts): un Point usa
+  // la conexión de su marca aunque el QR de esa marca esté apagado.
+  paymentMethodsStatus: async (): Promise<
+    Array<{ provider_key: string; enabled: boolean; connected: boolean; surcharge_pct: number }>
+  > => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("tenant_payment_methods")
+      .select("provider_key, enabled, config, surcharge_pct")
+      .order("sort");
+    return (data ?? []).map((r) => ({
+      provider_key: r.provider_key as string,
+      enabled: Boolean(r.enabled),
+      connected: Boolean((r.config as { connected?: boolean } | null)?.connected),
+      surcharge_pct: Number(r.surcharge_pct) || 0,
+    }));
+  },
+
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   // Incluye los settings de la pantalla del cliente (H25): mostrar precios
   // unitarios y mensajes de idle/agradecimiento.
@@ -500,6 +519,9 @@ export const posApi = {
     // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
     // comisión; el owner ve todo (H39). Default false (todos ven todo).
     staffSeesOwnOnly: boolean;
+    // Diseño del POS del negocio (pos_settings.pos_layout, sin validar: pasa
+    // por resolveLayout de lib/pos/layout.ts). null = nunca se configuró.
+    posLayout: unknown;
   } | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
@@ -527,6 +549,7 @@ export const posApi = {
       allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
       // Default false: por defecto el staff ve todo (no se restringe).
       staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
+      posLayout: data.pos_layout ?? null,
     };
   },
 

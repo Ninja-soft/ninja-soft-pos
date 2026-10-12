@@ -93,3 +93,19 @@ export async function loadReportPrefs(): Promise<ReportPrefs | null> {
 export async function saveReportPrefs(prefs: ReportPrefs): Promise<void> {
   await patchRemoteSettings({ reports: prefs });
 }
+
+// --- Diseño del POS por usuario (override de pos_settings.pos_layout). ---
+// Sin validar acá: lo sanea resolveLayout (lib/pos/layout.ts). null = usa el
+// diseño del negocio.
+export async function loadPosLayoutPref(): Promise<unknown> {
+  try {
+    const s = await readRemoteSettings();
+    return s.pos_layout ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function savePosLayoutPref(layout: Record<string, unknown> | null): Promise<void> {
+  await patchRemoteSettings({ pos_layout: layout });
+}

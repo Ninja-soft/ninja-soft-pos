@@ -117,6 +117,7 @@ export function QrCheckoutModal({
   provider = "mercadopago",
   providerName = "Mercado Pago",
   onQrState,
+  channel = "qr",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -132,6 +133,9 @@ export function QrCheckoutModal({
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
   // con null cuando ya no hay QR activo (se cerró o cambió de fase).
   onQrState?: (qr: { initPoint: string; amount: number; providerName: string } | null) => void;
+  // Canal elegido en la hoja de cobro: "link" arranca directo con un link
+  // compartible (Mercado Pago: Checkout Pro) y ofrece copiarlo o compartirlo.
+  channel?: "qr" | "link";
 }) {
   // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
@@ -221,6 +225,14 @@ export function QrCheckoutModal({
     // Mercado Pago: primero el QR dinámico de la caja (Orders API). Si el
     // negocio todavía no configuró su caja QR, cae al link de Checkout Pro
     // (comportamiento previo: el cliente lo escanea igual).
+    if (provider === "mercadopago" && channel === "link") {
+      setMpChannel("link");
+      posApi
+        .createMpQr(amt, "Venta NinjaPos")
+        .then(onCreated)
+        .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
+      return;
+    }
     if (provider === "mercadopago") {
       setMpChannel("order");
       posApi
@@ -357,13 +369,13 @@ export function QrCheckoutModal({
     setInitPoint("");
     setQrData("");
     setErrorMsg("");
-    setMpChannel("order");
+    setMpChannel(channel === "link" ? "link" : "order");
     setSwitching(false);
     firedRef.current = false;
     instRef.current = 1;
     startedRef.current = false;
     chosenRef.current = null;
-  }, [open, base]);
+  }, [open, base, channel]);
 
   // Auto-arranque sin selección:
   //  - MODO maneja las cuotas en su app → mandamos el base (las cuotas las
@@ -495,7 +507,7 @@ export function QrCheckoutModal({
     <Modal
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(true) : close())}
-      title={`Cobrar con QR · ${providerName}`}
+      title={`Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`}
     >
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
@@ -618,7 +630,7 @@ export function QrCheckoutModal({
                   >
                     Abrir link de pago
                   </a>
-                  {provider === "mercadopago" && (
+                  {(provider === "mercadopago" || channel === "link") && (
                     <>
                       <Button variant="ghost" size="sm" onClick={copyLink}>
                         <Copy size={14} /> Copiar link

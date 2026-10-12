@@ -61,6 +61,8 @@ type Settings = {
   offer_warranty: boolean;
   require_card_voucher: boolean;
   allow_free_sale: boolean;
+  // Tope de venta libre por rol y por venta (ADR-056). Sin clave = sin tope.
+  max_free_sale?: Record<string, number>;
   staff_sees_own_only: boolean;
   dining_enabled: boolean;
   delivery_enabled: boolean;
@@ -82,6 +84,16 @@ const ROLES: { key: string; label: string }[] = [
   { key: "manager", label: "Encargado" },
   { key: "cashier", label: "Cajero" },
 ];
+
+// Vacío = sin tope; un número = tope en $ por venta (el dueño nunca tiene tope).
+function freeCapPayload(cap: { manager: string; cashier: string }): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const role of ["manager", "cashier"] as const) {
+    const v = cap[role].trim();
+    if (v !== "" && Number.isFinite(Number(v))) out[role] = Math.max(0, Number(v));
+  }
+  return out;
+}
 
 const numCls =
   "h-9 w-24 rounded-md border border-input bg-background px-2 text-right text-sm outline-none focus:border-ninja-flameSoft";
@@ -172,6 +184,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   const [offerWarranty, setOfferWarranty] = useState(true);
   const [requireCardVoucher, setRequireCardVoucher] = useState(false);
   const [allowFreeSale, setAllowFreeSale] = useState(true);
+  const [freeCap, setFreeCap] = useState<{ manager: string; cashier: string }>({ manager: "", cashier: "" });
   const [staffSeesOwnOnly, setStaffSeesOwnOnly] = useState(false);
   const [diningEnabled, setDiningEnabled] = useState(false);
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
@@ -219,6 +232,10 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
     setOfferWarranty(settings.offer_warranty ?? true);
     setRequireCardVoucher(settings.require_card_voucher ?? false);
     setAllowFreeSale(settings.allow_free_sale ?? true);
+    setFreeCap({
+      manager: settings.max_free_sale?.manager != null ? String(settings.max_free_sale.manager) : "",
+      cashier: settings.max_free_sale?.cashier != null ? String(settings.max_free_sale.cashier) : "",
+    });
     setStaffSeesOwnOnly(settings.staff_sees_own_only ?? false);
     setDiningEnabled(settings.dining_enabled ?? false);
     setDeliveryEnabled(settings.delivery_enabled ?? false);
@@ -255,6 +272,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           offer_warranty: offerWarranty,
           require_card_voucher: requireCardVoucher,
           allow_free_sale: allowFreeSale,
+          max_free_sale: freeCapPayload(freeCap),
           staff_sees_own_only: staffSeesOwnOnly,
           dining_enabled: diningEnabled,
           delivery_enabled: deliveryEnabled,
@@ -533,6 +551,41 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
             label="Permitir venta libre (monto manual) en el POS"
           />
         </CardContent>
+        {allowFreeSale && (
+          <CardContent className="border-t border-border p-5 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Tope por venta de montos manuales (también los turnos y las recompras que entran como monto). Vacío,
+              sin tope. El servidor lo controla.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  { key: "manager", label: "Encargado" },
+                  { key: "cashier", label: "Cajero" },
+                ] as const
+              ).map((r) => (
+                <label
+                  key={r.key}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                >
+                  <span className="text-sm">{r.label}</span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="Sin tope"
+                      value={freeCap[r.key]}
+                      onChange={(e) => setFreeCap((p) => ({ ...p, [r.key]: e.target.value }))}
+                      className={numCls}
+                    />
+                  </span>
+                </label>
+              ))}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Staff ve sólo lo suyo (H39): si está activo, un profesional/cajero ve

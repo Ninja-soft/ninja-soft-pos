@@ -59,6 +59,7 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     { key: "offer_warranty", type: "bool", label: "Ofrecer garantía extendida", scopes: GS },
     { key: "auto_email_receipt", type: "bool", label: "Enviar comprobante por mail", scopes: GS },
     { key: "allow_free_sale", type: "bool", label: "Venta libre (monto manual)", scopes: ALL },
+    { key: "max_free_sale", type: "map_num", label: "Tope de venta libre por rol", unit: "$", scopes: GS },
     { key: "blind_close", type: "bool", label: "Cierre de caja ciego", scopes: ALL },
     { key: "close_tolerance", type: "num", label: "Tolerancia de cierre", unit: "$", scopes: ALL },
     { key: "require_close_reason", type: "bool", label: "Motivo obligatorio en diferencias", scopes: ALL },

@@ -166,6 +166,7 @@ const OPERACION_FIELDS = [
   "require_card_voucher",
   "offer_warranty",
   "allow_free_sale",
+  "max_free_sale",
   "blind_close",
   "close_tolerance",
   "require_close_reason",

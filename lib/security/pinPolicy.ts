@@ -7,6 +7,7 @@
 
 export type PinAction =
   | "discount_over"
+  | "cambio_precio"
   | "sale_void"
   | "sale_return"
   | "cash_out"
@@ -32,6 +33,7 @@ export interface SecuritySettings {
 
 export const PIN_ACTIONS: PinAction[] = [
   "discount_over",
+  "cambio_precio",
   "sale_void",
   "sale_return",
   "cash_out",
@@ -41,6 +43,8 @@ export const PIN_ACTIONS: PinAction[] = [
 
 export const DEFAULT_POLICY: PinPolicy = {
   discount_over: { enabled: false, threshold: 20 },
+  // ADR-056: encendida por defecto (cambio manual de precio en el POS).
+  cambio_precio: { enabled: true, threshold: 0 },
   sale_void: { enabled: false, threshold: 0 },
   sale_return: { enabled: false, threshold: 0 },
   cash_out: { enabled: false, threshold: 0 },
@@ -65,6 +69,12 @@ export const ACTION_INFO: Record<
   discount_over: {
     label: "Descuento sobre el tope",
     desc: "Descuento general manual (sin promociones ni cupones) mayor al porcentaje.",
+    unit: "pct",
+    reasonRequired: false,
+  },
+  cambio_precio: {
+    label: "Cambio de precio en el POS",
+    desc: "Precio de una línea distinto al de lista, con más desvío que el porcentaje. El cajero siempre deja el motivo.",
     unit: "pct",
     reasonRequired: false,
   },
@@ -128,7 +138,7 @@ export function pinRequired(policy: PinPolicy, action: PinAction, amount: number
   const r = policy[action];
   if (!r?.enabled) return false;
   const v = amount ?? 0;
-  if (action === "discount_over") return v > r.threshold + 0.001;
+  if (action === "discount_over" || action === "cambio_precio") return v > r.threshold + 0.001;
   return v >= r.threshold;
 }
 

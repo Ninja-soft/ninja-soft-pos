@@ -3,6 +3,7 @@ import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId } from "@/modules/branches/store";
 import { withSupervisor } from "@/modules/security/supervisor";
+import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -50,6 +51,14 @@ export interface SaleItemInput {
   quantity: number;
   unit_price: number;
   discount: number;
+  // F18 · H100 (ADR-056): el servidor recalcula el precio. Regalo de promo y
+  // línea cubierta por pack explican el $0; price_override + override_reason
+  // marcan el cambio manual (list_price es informativo, para el monto del PIN).
+  gift_promo_id?: string;
+  pack_credit_id?: string;
+  price_override?: boolean;
+  override_reason?: string;
+  list_price?: number;
 }
 export interface CreateSaleResult {
   sale_id: string;
@@ -1355,6 +1364,11 @@ export const posApi = {
     // contesta supervisor_required y se reintenta con el PIN (mismo payload).
     const subtotal = items.reduce((a, it) => a + it.unit_price * it.quantity - (it.discount ?? 0), 0);
     const discountPct = subtotal > 0 ? Math.round((discountTotal / subtotal) * 10000) / 100 : 0;
+    // ADR-056: el PIN de 'cambio_precio' cubre el mayor desvío contra la lista.
+    const priceDev = items.reduce(
+      (m, it) => (it.price_override && it.list_price != null ? Math.max(m, priceDeviationPct(it.list_price, it.unit_price)) : m),
+      0,
+    );
     const run = async (): Promise<CreateSaleResult> => {
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
@@ -1386,6 +1400,6 @@ export const posApi = {
     if (error) throw error;
     return data as unknown as CreateSaleResult;
     };
-    return withSupervisor(run, { discount_over: discountPct });
+    return withSupervisor(run, { discount_over: discountPct, cambio_precio: priceDev });
   },
 };

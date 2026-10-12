@@ -1623,6 +1623,42 @@ El dueño pidió traslados "muy flexibles y configurables, programados, muy robu
 
 ---
 
+## ADR-049: Configuración heredable por sucursal y caja, terminales e impresoras (F17 · H92 y H93)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-config-terminales`; migraciones sin aplicar, Edges sin desplegar) · **Hitos:** F17 · H92, H93 (más cierres de H90, H91, H94 y H97) · **Base:** ADR-043, ADR-045, ADR-046 · **Numeración:** ADR-048 queda reservada para "cobros en espera".
+
+### Contexto
+
+El dueño pidió que la multi-sucursal sea "muy flexible y configurable, muy robusta, mucho mejor que Napse", y sumó impresoras por sucursal y caja y logo por sucursal. Hasta acá toda la configuración era del negocio (`tenant_payment_methods`, `pos_settings`, `tenant_branding`, `print_profiles`) y las terminales vivían en lugares sueltos: el lector Point en `localStorage`, una sola caja QR de MP por ambiente en `config.mp_qr`, los Point de Nave y las series de Clover como texto dentro de los secretos.
+
+### Decisión
+
+1. **Tabla genérica `config_overrides` con override por campo** (`patch` parcial) por alcance `store_group` / `store` / `register` y dominio (`payment_method` con `provider_key`, `pos_settings`, `ticket`). La sucursal sólo guarda lo que pisa; un cambio del negocio llega a todas las que no lo pisaron. Grupos (`store_groups`) como nivel intermedio. Orden negocio ← grupo ← sucursal ← caja; los mapas (n° de comercio por marca, descuento por rol, perfiles de impresión, diseño) se mezclan por clave.
+2. **Whitelist por dominio y alcance** en SQL (`config_field_type`) con espejo en `lib/config/inheritance.ts`: la caja sólo puede apagar medios y pisar cierre, venta libre, display, impresión y diseño; numeración, SKU y secretos nunca se pisan.
+3. **Resolución en el servidor**: `_effective_config` (service, triggers) y `effective_config` (JWT, con acceso a la sucursal) devuelven valor y origen por campo. `create_sale` toma redondeo, descuento máximo y venta sin stock de la configuración efectiva del turno; `close_cash_shift`, motivo y tolerancia. El trigger `payments_branch_method` rechaza un medio **apagado por override** en la sucursal o caja de la venta (un medio apagado en el negocio sin overrides se comporta como siempre). Las Edges de cobro presencial también lo chequean (`payment_method_blocked_at`).
+4. **Gating antes de la herencia**: escribir overrides exige `multi_sucursal` (grupo y sucursal) o `multi_caja` (caja); un override nunca prende un medio cuyo `payment_method_plan_key` no está en el plan. Bajar de plan no borra overrides: dejan de aplicarse. Sin features nuevas: es parte de `multi_sucursal` / `multi_caja` (OPTIONAL); el registro de terminales y de impresoras es BASE.
+5. **Escritura sólo por RPC** (`config_override_set`, `config_override_copy`, `config_override_reset_field`) con rol, alcance (un grupo exige alcance central), tipos y auditoría. "Volver a heredar" = sacar el campo; patch vacío = baja lógica.
+6. **"Compartir configuración" sin copiar por defecto**: "Copiar de otra sucursal" (reemplazar o sólo sumar, con vista previa campo por campo), "Diferencias por sucursal" y "Aplicar a todas" (el campo vuelve a heredar en todos los alcances).
+7. **Terminales como entidad (`payment_terminals`)**: sucursal, caja o flotante, proveedor, tipo (`point`, `qr_caja`, `clover`, `posnet_manual`), id externo y ambiente, n° de comercio, adquirente, default por caja y proveedor, activa y `last_seen_at`. El POS elige sola la de su caja (default, única de la caja, flotante única, recordada); con varias muestra el selector. Las Edges aceptan `terminal_id` y lo validan con `terminal_for_user` (negocio, activa, proveedor, sucursal del usuario y, si viene, la sucursal del POS); `device_id` suelto y la caja QR única siguen andando. La migración pasa lo existente al registro sin borrar lo viejo. Caja QR de MP por caja: `mp_qr setup` con `cash_register_id` crea sucursal y caja de MP con ids propios (`mpExternalIdsFor`).
+8. **Impresoras (`printers`) y perfiles con impresora**: cada perfil por documento suma `printer_id` y `fallback_printer_id`, heredados por sucursal y caja. Resolución pura (`lib/print/printers.ts`): asignada → respaldo → compatible de la caja → de la sucursal → la del equipo, siempre informando dónde sale. Se suman los documentos comanda y remito. La salida sigue siendo web print: el registro decide papel y formato; ESC/POS directo queda para un conector local.
+9. **Marca por sucursal**: logo propio opcional (`stores.logo_url`, hereda el del negocio con una sola sucursal o sin logo) en ticket, remito y display; datos del ticket por grupo o sucursal y `use_store_contact` (dirección y teléfono de la ficha de la sucursal).
+10. **Políticas nuevas con `internal_scope()`** (ADR-052) y listas filtradas por el negocio actual además de la RLS.
+
+### Alternativas descartadas
+
+- **Una tabla de override por dominio** o **copiar la fila por sucursal**: más tablas y policies, y un cambio del negocio no llega a las sucursales (ADR-043).
+- **Resolver sólo en el front**: un cajero podría cobrar con un medio apagado en su sucursal; el servidor resuelve con la caja del turno.
+- **Terminal recordada en `localStorage` como fuente de verdad**: queda como respaldo de compatibilidad, no como registro.
+- **Impresión directa ESC/POS ahora**: requiere un conector local por equipo; se modela el registro y la asignación para que el conector lo use cuando exista.
+
+### Consecuencias
+
+- Deploy en orden: migraciones `20261015100000` a `20261015130000` (más `20261015200000` y `20261015300000` de esta rama), después las Edges `mp_point`, `nave_point`, `clover_point`, `mp_qr` (e `invite_user`). Edges nuevas contra base vieja: `payment_method_blocked_at` faltante no bloquea; el POS sólo manda `terminal_id` si leyó terminales (es decir, con la migración aplicada).
+- `create_sale` y `close_cash_shift` se recrean completos desde su última versión: cualquier rama que los toque tiene que partir de `20261015120000`.
+- Pendiente: credenciales de proveedor por sucursal (`payment_secrets.store_id`), planes de cuotas por sucursal (F14/H59), plantilla para sucursales nuevas, editor de `pos_layout` por sucursal (hoy se pisa copiando), "Detectar lectores" desde la sección Terminales, impresión ESC/POS y monitor de terminales (H99).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

@@ -243,7 +243,7 @@ declare
   v_txid uuid;
 begin
   if new.card_voucher is null
-     or not (new.card_voucher ? 'terminal_tx' or new.card_voucher ->> 'origen' = 'terminal') then
+     or not (new.card_voucher ? 'terminal_tx' or coalesce(new.card_voucher ->> 'origen', '') = 'terminal') then
     return new;
   end if;
   if not tenant_has_feature_for(new.tenant_id, 'terminal_integrada') then

@@ -22,6 +22,8 @@ type Ctx = {
   admin: SupabaseClient;
   tenant: string;
   owner: SupabaseClient;
+  /** Encargado: abre la Caja 2 (cada usuario opera sólo su turno, ADR-051). */
+  manager: SupabaseClient;
   userIds: string[];
   product: string;
   store: string;
@@ -56,7 +58,9 @@ const rpc = (c: SupabaseClient, fn: string, args: Record<string, unknown>) =>
   c.rpc(fn as never, args as never) as unknown as Promise<{ data: unknown; error: { message: string } | null }>;
 
 function sale(shift: string, card_voucher?: Record<string, unknown>, method = "credit") {
-  return rpc(ctx.owner, "create_sale", {
+  // La venta la hace quien abrió el turno (caja propia, ADR-051).
+  const client = shift === ctx.shift2 ? ctx.manager : ctx.owner;
+  return rpc(client, "create_sale", {
     p_items: [{ product_id: ctx.product, quantity: 1, unit_price: 100, discount: 0 }],
     p_payments: [{ method, amount: 100, ...(card_voucher ? { card_voucher } : {}) }],
     p_cash_shift_id: shift,
@@ -121,7 +125,10 @@ describe.skipIf(!enabled)("ADR-054 · cupón del posnet offline validado en el s
     const o1 = await rpc(owner.client, "open_cash_shift", { p_register_id: ctx.caja1, p_opening_amount: 0 });
     if (o1.error) throw new Error(o1.error.message);
     ctx.shift1 = o1.data as string;
-    const o2 = await rpc(owner.client, "open_cash_shift", { p_register_id: ctx.caja2, p_opening_amount: 0 });
+    const manager = await makeUser(admin, `manager-${STAMP}@test.local`, ctx.tenant, "manager");
+    ctx.manager = manager.client;
+    ctx.userIds.push(manager.id);
+    const o2 = await rpc(manager.client, "open_cash_shift", { p_register_id: ctx.caja2, p_opening_amount: 0 });
     if (o2.error) throw new Error(o2.error.message);
     ctx.shift2 = o2.data as string;
   }, 120_000);

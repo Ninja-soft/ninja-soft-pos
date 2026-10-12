@@ -105,6 +105,18 @@ describe("disponibilidad", () => {
     );
   });
 
+  it("Clover Point usa la conexión de la fila fiserv y su propia feature", () => {
+    const t = TENDER_BY_ID["fiserv:point"];
+    expect(t?.pointProvider).toBe("fiserv_point");
+    expect(t?.connection).toBe("fiserv");
+    expect(t?.logo).toBe("/images/payments/clover-icon.webp");
+    const providers = [row("cash"), row("fiserv", true, false), row("fiserv_point", false)];
+    expect(ids(ctx({ providers }))).toContain("fiserv:point");
+    // Sin la conexión Fiserv no se ofrece.
+    expect(ids(ctx({ providers: [row("cash"), row("fiserv_point")] }))).not.toContain("fiserv:point");
+    expect(ids(ctx({ providers, features: { fiserv_point: false } }))).not.toContain("fiserv:point");
+  });
+
   it("la tarjeta manual aparece si algún proveedor de tarjeta está habilitado y permitido", () => {
     const providers = [row("cash"), row("fiserv", false)];
     expect(ids(ctx({ providers }))).toContain("card");

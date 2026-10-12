@@ -11,6 +11,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Clover Point (Fiserv).** Cobro con terminales Clover (Flex, Mini) integradas al POS por Cloud Pay Display: el monto viaja a la terminal, el cliente paga con tarjeta, contactless o en cuotas y la venta se registra sola como débito o crédito cuando verificamos el pago contra Clover (resultado, id propio y monto exacto en centavos). Conexión de Fiserv con Merchant ID y token de Clover, terminales por número de serie y Prueba/Producción; Fiserv sin conectar sigue cobrando como Posnet o Clover sin integrar. Edges `clover_point` y `clover_webhook`, logos oficiales de Clover, OPTIONAL desde Business (depende de `fiserv`). Payway Point y Getnet Point muestran por qué siguen en Próximamente. Relevamiento en `docs/payments/research-points-2026-10.md`. Migración `20261013300000_fiserv_clover_point.sql` (no aplicada). ADR-047.
+
 - **Pantalla de cobro rediseñada y con variantes.** Sin degradados ni esquinas grandes: tiles con borde sutil, selección con relleno neutro y check, total en números tabulares, CTA sólido y logos transparentes sobre la superficie. Cuatro distribuciones (Dos columnas, Lista compacta, Teclado primero, Botones grandes), favoritos arriba, grupos ocultos, canales en fila y densidad, en Configuración, Diseño del POS (`pos_layout.checkout`, sin migración). ADR-042.
 - **Tarjeta en posnet.** Reemplaza a la tarjeta manual: un solo acceso con entidad (Visa, Mastercard, Amex...), tipo y cuotas con recargo y datos del cupón (cupón, lote, últimos 4, autorización) con resumen antes de registrar. ADR-042.
 - **Acceso rápido "Vender / Cobrar" (F1).** Botón arriba del menú y en el header mobile; con carrito en curso abre el cobro (`/pos?cobrar=1`). Sólo para roles que venden. ADR-042.

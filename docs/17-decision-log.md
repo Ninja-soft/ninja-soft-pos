@@ -1458,6 +1458,35 @@ El dueño marcó la hoja de cobro como fea: muchos degradados (monto en degradad
 
 ---
 
+## ADR-047: Clover Point (Fiserv) por Cloud Pay Display y estado del resto de los Points
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración, deploy y validación en sandbox de Clover) · **Hito:** F8 · H19
+
+### Contexto
+
+El dueño pidió avanzar con Fiserv y Clover y con los Points que falten. Fiserv estaba en el catálogo como un único canal `fiserv` marcado `point` sin flujo (sólo habilitaba la tarjeta en posnet). El relevamiento ([`docs/payments/research-points-2026-10.md`](payments/research-points-2026-10.md)) encontró que Clover es la única terminal de un adquirente grande con API cloud documentada y sandbox self-service: **Cloud Pay Display** (REST Pay Display API en la nube), listada para Argentina en la guía LATAM en español y en la matriz por región, aunque la página "Argentina merchants" la marca como no soportada. Payway y Getnet no publican una API utilizable hoy; el resto no tiene terminal propia o API.
+
+### Decisión
+
+- **Canal nuevo `fiserv_point`** (marca `fiserv`, canal `point`, nombre "Clover Point"), siguiendo el patrón `<marca>_point`. `fiserv` pasa a canal `manual` ("Posnet o Clover sin integrar": habilita la Tarjeta en posnet) y **guarda la conexión de la marca** (`BrandDef.connection = "fiserv"`, porque Fiserv no tiene canal QR + link). Marca en `MANUAL_FALLBACK`: sin conectar, igual se cobra a mano.
+- **Plan:** OPTIONAL desde **Business** (no Pro como el resto de los Point) porque depende de la feature `fiserv` (`requires: ["fiserv"]` en `featureInfo`), que es Business+: la dependencia tiene que estar activa en el mismo plan. `needs`: "Marca Fiserv conectada (Merchant ID y token de Clover) y la app Cloud Pay Display abierta en cada terminal".
+- **Gating real:** `payment_method_plan_key('fiserv_point') = 'fiserv_point'` (trigger de `tenant_payment_methods`), y la Edge `clover_point` exige `tenant_has_feature_for` de **`fiserv_point` y `fiserv`** antes de crear el cobro; sin conexión Fiserv responde `not_connected`. La terminal pedida tiene que ser del comercio (lista de Clover acotada por las series cargadas).
+- **Conexión** (`set_payment_secret` provider `fiserv`, ya permitido): `merchant_id`, `access_token`, `refresh_token` (opcional) y `device_serials` (opcional, "Caja 1: serie"). Ambiente por `tenant_payment_methods.sandbox` de la fila `fiserv`: sandbox `apisandbox.dev.clover.com`, producción `api.la.clover.com`. El intent guarda `mp_env` y status/cancel/webhook usan ese ambiente. Si Clover responde 401 y hay `refresh_token` + secret de función `CLOVER_APP_ID`, se renueva el par (`/oauth/v2/refresh`) una vez y se persiste.
+- **Edge `clover_point`** (JWT): `devices` (`GET /v3/merchants/{mId}/devices`, id = número de serie), `ping`, `create`, `status`, `cancel`. `create` inserta el intent (`mp_payment_intents`, `provider_key='fiserv_point'`, `point_device_id` = serie) y lanza en segundo plano (`EdgeRuntime.waitUntil`) `POST /connect/v1/payments` con `Idempotency-Key` = id del intent, `externalPaymentId` = id sin guiones (32), `final: true` y el monto **del intent guardado** en centavos; cuotas opcionales por `regionalExtras.argentina.numInstallments`. El POST bloquea hasta que el cliente termina, por eso no se espera en la request: el POS sondea `status`.
+- **Fuente de verdad:** `GET /connect/v1/payments/external/{ext}`. Sólo `SUCCESS` (o `VOID_FAILED`) + `externalPaymentId` del intent + **monto exacto** en centavos (sin propina) acredita; `FAIL` → rejected; `VOIDED` → cancelled; el resto sigue pending. Débito o crédito por el tender del pago (`expand=tender`); sin dato, crédito. Errores del POST: 209 → cancelled, 503 → rejected `device_busy`, 400/415/501 → rejected, 500/504/red → indeterminado (decide la consulta). Transiciones condicionales e idempotentes; un pago verificado sobre un intent cancelado queda `approved` con auditoría `approved_after_*` (nunca se pierde plata cobrada). `cancel` = `PUT /connect/v1/device/reset`, re-consulta y cancela local.
+- **Edge `clover_webhook`** (`--no-verify-jwt`): los webhooks de Clover son por app. `{ verificationCode }` se escribe en el log; el resto exige `X-Clover-Auth` igual al secret `CLOVER_WEBHOOK_AUTH` (comparación de tiempo constante) y, por cada merchant con pagos (`P:`), re-consulta los intents pendientes de las últimas 24 h de los tenants con ese Merchant ID. Nunca usa el cuerpo como verdad. Opcional: el poll alcanza.
+- **UI:** fila "Clover Point · Terminal en el mostrador" en la tarjeta Fiserv, conexión con stepper (Merchant ID, token, refresh, terminales; Prueba/Producción; aviso de Cloud Pay Display), tender "Clover Point" en el POS (`PointCheckoutModal` con terminal recordada por caja y cuotas En la terminal / 1 / 3 / 6 / 12), conciliación en "Cobros QR". Logos oficiales de ar.clover.com (`clover-icon` / `clover-wordmark` + `-on-dark` en blanco) vía `LOGO_OVERRIDE` en `lib/payments/logos.ts`.
+- **Payway Point y Getnet Point** siguen "Próximamente" con la explicación honesta en la fila (`CHANNEL_SOON_REASON`). Mobbex, MODO, Ualá Bis, Viumi, Naranja X, Posnet/LaPos legacy, Cuenta DNI y Personal Pay se descartan como Point.
+- Lógica pura en `supabase/functions/_shared/clover.ts` (Vitest, `tests/unit/clover.test.ts`); helpers server en `_shared/clover_server.ts`.
+
+### Consecuencias
+
+- Deploy: migración `20261013300000_fiserv_clover_point`; Edges `clover_point` y `clover_webhook` (`--no-verify-jwt`). Secrets de función opcionales: `CLOVER_APP_ID` (renovar tokens) y `CLOVER_WEBHOOK_AUTH` (webhook).
+- **Inferido, a confirmar en el primer cobro de sandbox:** que Cloud Pay Display esté habilitado para comercios AR en producción; que el token de API del comercio sirva para Pay Display (los docs piden token OAuth de app); que `regionalExtras` viaje en Cloud Pay Display; que el tender traiga `debit_card` / `credit_card`.
+- Fuera de alcance: anulación y devolución desde el POS (`/void`, `/refunds`), recibos por la terminal, propinas en la terminal y el flujo OAuth completo de alta (redirect desde el App Market): se suman cuando la app de NinjaSoft esté aprobada.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

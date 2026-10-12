@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench, Settings } from "lucide-react";
+import { BadgeDollarSign, Bike, Building2, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench, Settings } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -53,6 +53,9 @@ const HardwareCard = dynamic(() =>
 );
 const WarrantyPlansManager = dynamic(() =>
   import("@/components/products/WarrantyPlansManager").then((m) => m.WarrantyPlansManager),
+);
+const BranchesManager = dynamic(() =>
+  import("@/components/branches/BranchesManager").then((m) => m.BranchesManager),
 );
 const RubroCard = dynamic(() =>
   import("@/components/dashboard-team/RubroCard").then((m) => m.RubroCard),
@@ -105,6 +108,7 @@ const SupervisorPinCard = dynamic(() =>
 
 type Section =
   | "apariencia"
+  | "sucursales"
   | "diseno-pos"
   | "rubro"
   | "marca"
@@ -153,6 +157,9 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
     title: "Negocio",
     sections: [
       { key: "rubro", label: "Rubro del negocio", icon: Tag },
+      // La primera sucursal y caja son BASE: no se gatea la entrada; la segunda
+      // sucursal o caja pide su feature adentro (y el servidor la exige).
+      { key: "sucursales", label: "Sucursales y cajas", icon: Building2 },
       { key: "marca", label: "Marca del negocio", icon: Store, feature: "personalizacion_marca" },
     ],
   },
@@ -533,6 +540,9 @@ function ConfiguracionInner() {
 
           {/* Rubro del negocio (solo owner/manager; se auto-oculta) */}
           {section === "rubro" && <RubroCard />}
+
+          {/* Sucursales y cajas (F17 · H89/H91): ABM, personal y traslados. */}
+          {section === "sucursales" && <BranchesManager />}
 
           {/* Marca del negocio (solo owner/manager; el componente se auto-oculta) */}
           {section === "marca" && <BrandingCard />}

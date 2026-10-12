@@ -44,6 +44,12 @@ describe("dependencias de features", () => {
     expect(featureRequires("pos_quick_keys_pro")).toEqual(["pos"]);
   });
 
+  it("multi-sucursal y multi-caja tienen copy y plan mínimo (F17 · H89)", () => {
+    expect(FEATURE_INFO.multi_sucursal?.minPlan).toBe("Business");
+    expect(FEATURE_INFO.multi_caja?.minPlan).toBe("Pro");
+    expect(FEATURE_INFO.multi_caja?.impact).toMatch(/primera caja/);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

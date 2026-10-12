@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, IdCard, Check, ImagePlus, Users } from "lucide-react";
+import { UserPlus, Pencil, IdCard, Check, ImagePlus, Users, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -16,6 +16,10 @@ import { ChoiceCard, CHOICE_ON } from "@/components/ui/ChoiceCard";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
+import { useFeatureGate } from "@/components/saas/GatedAction";
+import { StaffBranchesModal } from "@/components/branches/StaffBranchesModal";
+import { useBranches, useStaffAssignments, type StaffPerson } from "@/modules/branches/hooks";
+import { allowedStoreIds, assignmentsOf, todayAR, type StaffRole } from "@/modules/branches/logic";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -310,6 +314,33 @@ export function TeamSection({
     qc.invalidateQueries({ queryKey: ["cashier-profiles"] });
   }
 
+  // Personal por sucursal (F17 · H91): sólo con más de una sucursal viva.
+  const { data: branches = [] } = useBranches();
+  const { data: assignments = [] } = useStaffAssignments();
+  const liveBranches = branches.filter((b) => !b.deleted_at);
+  const multiBranch = liveBranches.length > 1;
+  const branchGate = useFeatureGate("multi_sucursal", "Multi-sucursal");
+  const [staffPerson, setStaffPerson] = useState<StaffPerson | null>(null);
+  const today = todayAR();
+  const branchesOf = (role: StaffRole | null, userId: string | null, profileId: string | null) => {
+    if (role === "owner") return "Todas";
+    const ids = allowedStoreIds({
+      role: role ?? "cashier",
+      stores: branches,
+      assignments: assignmentsOf(assignments, { userId, profileId }),
+      today,
+    });
+    const live = ids.filter((id) => liveBranches.some((b) => b.id === id));
+    if (live.length === liveBranches.length) return "Todas";
+    return live
+      .map((id) => {
+        const b = liveBranches.find((x) => x.id === id);
+        return b?.short_name || b?.name || "";
+      })
+      .join(", ");
+  };
+  const openBranches = (p: StaffPerson) => branchGate.run(() => setStaffPerson(p));
+
   // Nombre visible: capitaliza el nombre real; el email se muestra tal cual.
   const memberName = (m: Member) => {
     const human = m.display_name || m.full_name;
@@ -341,6 +372,7 @@ export function TeamSection({
               <tr>
                 <th className="px-4 py-3">Miembro</th>
                 <th className="px-4 py-3">Rol</th>
+                {multiBranch && <th className="px-4 py-3">Sucursales</th>}
                 <th className="px-4 py-3">Estado</th>
                 {canManage && <th className="px-4 py-3" />}
               </tr>
@@ -348,13 +380,13 @@ export function TeamSection({
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="text-center px-4 py-6 text-muted-foreground">
+                  <td colSpan={multiBranch ? 5 : 4} className="text-center px-4 py-6 text-muted-foreground">
                     <Spinner />
                   </td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-muted-foreground">
+                  <td colSpan={multiBranch ? 5 : 4} className="px-4 py-6 text-muted-foreground">
                     Todavía no hay miembros.
                   </td>
                 </tr>
@@ -382,11 +414,35 @@ export function TeamSection({
                       </div>
                     </td>
                     <td className="px-4 py-3">{ROLE_LABELS[m.role] ?? m.role}</td>
+                    {multiBranch && (
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {branchesOf(m.role as StaffRole, m.user_id, null)}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-muted-foreground">
                       {STATUS_LABELS[m.status] ?? m.status}
                     </td>
                     {canManage && (
                       <td className="px-4 py-3 text-right">
+                        {multiBranch && m.role !== "owner" && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openBranches({
+                                key: `u:${m.user_id}`,
+                                userId: m.user_id,
+                                profileId: null,
+                                name: memberName(m),
+                                role: m.role as StaffRole,
+                              })
+                            }
+                            className="mr-1 inline-grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            title="Sucursales y traslados"
+                            aria-label={`Sucursales y traslados de ${memberName(m)}`}
+                          >
+                            <MapPin size={16} />
+                          </button>
+                        )}
                         {(m.user_id === currentUserId || m.role !== "owner") && (
                           <EditMemberDialog
                             member={m}
@@ -432,11 +488,35 @@ export function TeamSection({
                             </span>
                           </div>
                         </td>
+                        {multiBranch && (
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {branchesOf(null, null, p.id)}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-muted-foreground">
                           {STATUS_LABELS[p.status] ?? p.status}
                         </td>
                         {canManage && (
                           <td className="px-4 py-3 text-right">
+                            {multiBranch && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openBranches({
+                                    key: `p:${p.id}`,
+                                    userId: null,
+                                    profileId: p.id,
+                                    name: capitalizeName(p.display_name),
+                                    role: null,
+                                  })
+                                }
+                                className="mr-1 inline-grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                title="Sucursales y traslados"
+                                aria-label={`Sucursales y traslados de ${p.display_name}`}
+                              >
+                                <MapPin size={16} />
+                              </button>
+                            )}
                             <ProfileDialog
                               tenantId={tenantId}
                               profile={p}
@@ -453,6 +533,13 @@ export function TeamSection({
           </Card>
         </div>
       )}
+
+      <StaffBranchesModal
+        open={Boolean(staffPerson)}
+        onOpenChange={(o) => !o && setStaffPerson(null)}
+        person={staffPerson}
+      />
+      {branchGate.modal}
     </section>
   );
 

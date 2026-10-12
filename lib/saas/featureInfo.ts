@@ -33,6 +33,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Si se desactiva, no hay control de caja ni cierres de turno; el efectivo queda sin conciliar.",
     minPlan: "Start",
   },
+  multi_caja: {
+    desc: "Multi-caja: varias cajas en una misma sucursal, cada una con su turno, su arqueo y su cierre Z. Cada dispositivo recuerda su caja.",
+    impact: "Desactivado, cada sucursal opera con una sola caja (la primera caja siempre está incluida).",
+    minPlan: "Pro",
+  },
   devoluciones: {
     desc: "Devoluciones y notas de crédito sobre ventas: permite reintegrar productos y emitir el comprobante de devolución.",
     impact: "Sin esto el cajero no puede procesar devoluciones desde el sistema; habría que hacerlas por fuera.",
@@ -273,8 +278,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Integraciones ──────────────────────────────────────────────────────────
   multi_sucursal: {
-    desc: "Multi-sucursal: opera y consolida varias sucursales bajo el mismo negocio, con stock y ventas por local.",
-    impact: "Desactivado, el negocio se maneja como una sola sucursal.",
+    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal.",
+    impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },
   api_publica: {

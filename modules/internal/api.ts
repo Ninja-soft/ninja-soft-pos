@@ -118,9 +118,10 @@ export interface AuditEntry {
 
 // ── H12b — Planes custom, overrides y descuentos ───────────────────────────
 
-// Las 4 claves numéricas de límite que la UI edita.
+// Claves numéricas de límite que la UI edita.
 export const LIMIT_KEYS = [
   "max_stores",
+  "max_registers_per_store",
   "max_users",
   "max_products",
   "max_sales_per_month",

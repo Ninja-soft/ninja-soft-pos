@@ -35,6 +35,7 @@ const PLAN_ASSETS_BUCKET = "plan-assets";
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
   max_stores: "Sucursales",
+  max_registers_per_store: "Cajas por sucursal",
   max_users: "Usuarios",
   max_products: "Productos",
   max_sales_per_month: "Ventas / mes",
@@ -251,6 +252,7 @@ export function PlanEditorModal({
   const [uploading, setUploading] = useState(false);
   const [limits, setLimits] = useState<Record<LimitKey, string>>({
     max_stores: "",
+    max_registers_per_store: "",
     max_users: "",
     max_products: "",
     max_sales_per_month: "",
@@ -275,6 +277,8 @@ export function PlanEditorModal({
       setRecommended(plan.isRecommended);
       setLimits({
         max_stores: nums.max_stores != null ? String(nums.max_stores) : "",
+        max_registers_per_store:
+          nums.max_registers_per_store != null ? String(nums.max_registers_per_store) : "",
         max_users: nums.max_users != null ? String(nums.max_users) : "",
         max_products: nums.max_products != null ? String(nums.max_products) : "",
         max_sales_per_month:
@@ -296,6 +300,7 @@ export function PlanEditorModal({
       setRecommended(false);
       setLimits({
         max_stores: "",
+        max_registers_per_store: "",
         max_users: "",
         max_products: "",
         max_sales_per_month: "",

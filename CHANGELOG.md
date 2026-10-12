@@ -63,6 +63,8 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Fixed
 
+- **El POS ya no salta del diseño por defecto al elegido al entrar a Vender.** La pantalla se pintaba con Mostrador (también en el HTML del servidor) y cambiaba al preset del negocio o del usuario cuando llegaban las consultas. Ahora espera el diseño efectivo (settings, override del usuario, overrides por sucursal y caja, modo gastronómico) mostrando un esqueleto neutro, y guarda una foto por usuario, negocio y caja en el dispositivo para que las entradas siguientes pinten el diseño correcto desde el primer cuadro (diseño, hoja de cobro, chip Sucursal · Caja, estado de la caja, medios fijados y venta libre) y se reconcilien en silencio. "Vender" y "Punto de venta" precargan esas consultas al pasar el mouse o en idle. La carga de las preferencias de apariencia ya no vuelve a escribir en el servidor (las escrituras concurrentes podían devolver un tema o una fuente vieja).
+
 - **Staff interno veía sucursales de otros negocios** ("4 principales"): listas de sucursales, cajas, personal y perfiles filtradas por el negocio activo (además de `internal_scope()`, ADR-052).
 - **Seguridad de caja (ADR-051):** se podía cerrar o vender en el turno de otra persona, y escribir, editar o borrar movimientos de caja por API; ahora lo impide el servidor.
 - **Equipo:** un encargado podía degradar o suspender al dueño; invitar el email de un miembro pisaba su rol; el usuario invitado no recibía el negocio activo y entraba a una app vacía (se autocura al entrar).

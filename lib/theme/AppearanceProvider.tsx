@@ -62,15 +62,18 @@ const DEFAULTS = {
   priceAccent: "violeta",
 } as const;
 
+// `persist: false`: aplica sin reescribir en el servidor (carga de las prefs remotas).
+type SetOpts = { persist?: boolean };
+
 interface AppearanceValue {
   display: DisplayFont;
   price: PriceFont;
   bg: BgStyle;
   priceAccent: PriceAccent;
-  setDisplay: (v: DisplayFont) => void;
-  setPrice: (v: PriceFont) => void;
-  setBg: (v: BgStyle) => void;
-  setPriceAccent: (v: PriceAccent) => void;
+  setDisplay: (v: DisplayFont, opts?: SetOpts) => void;
+  setPrice: (v: PriceFont, opts?: SetOpts) => void;
+  setBg: (v: BgStyle, opts?: SetOpts) => void;
+  setPriceAccent: (v: PriceAccent, opts?: SetOpts) => void;
 }
 
 const Ctx = createContext<AppearanceValue | null>(null);
@@ -115,29 +118,29 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     if (a && a in PRICE_ACCENTS) setPriceAccentS(a);
   }, []);
 
-  const setDisplay = useCallback((v: DisplayFont) => {
+  const setDisplay = useCallback((v: DisplayFont, opts?: SetOpts) => {
     setDisplayS(v);
     applyDisplay(v);
     try { localStorage.setItem(KEYS.display, v); } catch {}
-    void persistPrefs();
+    if (opts?.persist !== false) void persistPrefs();
   }, []);
-  const setPrice = useCallback((v: PriceFont) => {
+  const setPrice = useCallback((v: PriceFont, opts?: SetOpts) => {
     setPriceS(v);
     applyPrice(v);
     try { localStorage.setItem(KEYS.price, v); } catch {}
-    void persistPrefs();
+    if (opts?.persist !== false) void persistPrefs();
   }, []);
-  const setBg = useCallback((v: BgStyle) => {
+  const setBg = useCallback((v: BgStyle, opts?: SetOpts) => {
     setBgS(v);
     applyBg(v);
     try { localStorage.setItem(KEYS.bg, v); } catch {}
-    void persistPrefs();
+    if (opts?.persist !== false) void persistPrefs();
   }, []);
-  const setPriceAccent = useCallback((v: PriceAccent) => {
+  const setPriceAccent = useCallback((v: PriceAccent, opts?: SetOpts) => {
     setPriceAccentS(v);
     applyPriceAccent(v);
     try { localStorage.setItem(KEYS.priceAccent, v); } catch {}
-    void persistPrefs();
+    if (opts?.persist !== false) void persistPrefs();
   }, []);
 
   return (

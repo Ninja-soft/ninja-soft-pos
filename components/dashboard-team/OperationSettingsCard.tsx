@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Percent,
@@ -503,6 +505,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
               autorización del voucher del POSNET. Se guardan con la venta para
               conciliar contra la terminal. No cambia el total.
             </p>
+            {/* ADR-054: el resto de los datos (últimos 4, formato, largo, por
+                terminal) se configura en Tarjeta en posnet. */}
+            <Link
+              href={"/configuracion?seccion=posnet" as Route}
+              className="mt-1.5 inline-block text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Elegir qué datos se piden y su formato, por terminal
+            </Link>
           </div>
           <Switch
             checked={requireCardVoucher}

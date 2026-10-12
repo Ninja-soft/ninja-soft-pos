@@ -67,6 +67,9 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     { key: "display_thanks_message", type: "text", label: "Pantalla del cliente: agradecimiento", scopes: ALL },
     { key: "print_profiles", type: "map_any", label: "Perfiles de impresión", scopes: ALL },
     { key: "pos_layout", type: "map_any", label: "Diseño del POS", scopes: ALL },
+    // ADR-054: reglas del cupón del posnet (se pisan por clave: acquirers,
+    // fields, by_acquirer). También por caja: el posnet es de la caja.
+    { key: "card_voucher_rules", type: "map_any", label: "Datos del cupón del posnet", scopes: ALL },
   ],
   ticket: [
     {

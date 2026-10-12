@@ -2,22 +2,29 @@ import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId } from "@/modules/branches/store";
+import { parseRules, type CardVoucherRules } from "@/lib/payments/voucherRules";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
 
-// Voucher de tarjeta (H27): lote / cupón / nº de autorización del POSNET. Dato
+// Voucher de tarjeta (H27, ADR-042, ADR-054): datos del cupón del posnet. Dato
 // operativo del cobro; viaja en el payload del pago y create_sale lo persiste en
-// payments.card_voucher. Sólo se completa en débito/crédito cuando el negocio
-// activa pos_settings.require_card_voucher.
+// payments.card_voucher. Lo que se pide (y es obligatorio) lo definen las
+// reglas del cupón (pos_settings.card_voucher_rules) y el trigger
+// payments_card_voucher lo valida en el servidor.
 export interface CardVoucher {
   lote: string;
   cupon: string;
   autorizacion: string;
+  /** Entidad de la tarjeta ("Visa", "Mastercard"). */
+  marca?: string;
+  ultimos4?: string;
   /** N° de comercio de la marca (config del medio), para conciliar. */
   comercio?: string;
   /** Cuotas del plan elegido (conciliación). */
   cuotas?: number;
+  /** Adquirente de la terminal (lib/payments/acquirers): getnet, payway... */
+  adquirente?: string;
 }
 
 export interface SalePaymentInput {
@@ -437,6 +444,8 @@ export interface PosSettingsView {
   posLayout: unknown;
   // Venta con stock negativo permitida (pos_settings.allow_negative_stock).
   allowNegativeStock: boolean;
+  // Reglas del cupón del posnet offline (ADR-054), ya normalizadas.
+  cardVoucherRules: CardVoucherRules;
 }
 
 export function mapPosSettings(raw: Record<string, unknown> | null): PosSettingsView | null {
@@ -464,6 +473,7 @@ export function mapPosSettings(raw: Record<string, unknown> | null): PosSettings
     staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
     posLayout: data.pos_layout ?? null,
     allowNegativeStock: (data.allow_negative_stock as boolean | undefined) ?? true,
+    cardVoucherRules: parseRules(data.card_voucher_rules),
   };
 }
 

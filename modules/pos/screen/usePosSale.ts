@@ -7,6 +7,7 @@ import { buildSaleItemsAndExtras, type SaleArgsLine } from "@/modules/pending-ch
 import { usePosMutations } from "@/modules/pos/hooks";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
+import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
 
 // Registro de la venta (create_sale) del POS. Movido tal cual desde la página:
 // mismos ítems, extras, packs, promo, cupón, mesa/delivery atómicos y el mismo
@@ -21,6 +22,9 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("insufficient_stock_branch")) return "No hay stock suficiente en esta sucursal";
   if (msg.includes("payment_method_disabled_in_store"))
     return "Ese medio de pago está apagado en esta sucursal o caja";
+  // ADR-054: reglas del cupón del posnet (validadas en el servidor).
+  if (msg.includes("card_voucher_required") || msg.includes("card_voucher_invalid"))
+    return cardVoucherErrorTitle(msg);
   return msg.includes("account_inactive")
     ? "Tu suscripción venció. Renovala para volver a cobrar."
     : msg.includes("coupon_usage_exceeded")

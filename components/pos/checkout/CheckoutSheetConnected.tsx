@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
 import { useProfessionalsForPosStore } from "@/modules/branches/staffHooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
-import { resolveMerchantNumber } from "@/lib/payments/merchantNumbers";
+import { acquirerMerchantNumber, availableAcquirers, rememberKey } from "@/lib/payments/acquirers";
+import { useCurrentRegister } from "@/modules/branches/hooks";
 import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
@@ -58,9 +59,38 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
   const { data: posSettings } = usePosSettings();
   const { data: methods } = usePaymentMethodsStatus();
   const merchantNumberFor = useCallback(
-    (brand: string | null, providerKey: string | null) =>
-      resolveMerchantNumber(methods ?? [], brand, providerKey),
+    (brand: string | null, providerKey: string | null, acquirer?: string | null) =>
+      acquirerMerchantNumber(methods ?? [], brand, acquirer ?? null, providerKey),
     [methods],
+  );
+
+  // Tarjeta en posnet (ADR-054): adquirentes del negocio (o los elegidos en la
+  // configuración del cupón) y el último usado en esta caja.
+  const voucherRules = posSettings?.cardVoucherRules ?? null;
+  const posnetAcquirers = useMemo(
+    () => availableAcquirers(methods, voucherRules?.acquirers),
+    [methods, voucherRules?.acquirers],
+  );
+  const register = useCurrentRegister();
+  const storageKey = rememberKey(register.data?.id);
+  const [remembered, setRemembered] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setRemembered(window.localStorage.getItem(storageKey));
+    } catch {
+      setRemembered(null);
+    }
+  }, [storageKey, props.open]);
+  const onAcquirerUsed = useCallback(
+    (key: string) => {
+      setRemembered(key);
+      try {
+        window.localStorage.setItem(storageKey, key);
+      } catch {
+        // Sin almacenamiento (modo privado): se elige cada vez.
+      }
+    },
+    [storageKey],
   );
 
   // Precalentado de las Edge de los medios QR / link al abrir la hoja: el
@@ -151,6 +181,10 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       {...props}
       cardPlans={cardPlans}
       merchantNumberFor={merchantNumberFor}
+      posnetAcquirers={posnetAcquirers}
+      rememberedAcquirer={remembered}
+      onAcquirerUsed={onAcquirerUsed}
+      voucherRules={voucherRules}
       warrantyPlans={(wplans ?? []) as WarrantyPlan[]}
       professionals={professionals ?? []}
       voucherRequired={Boolean(posSettings?.requireCardVoucher)}

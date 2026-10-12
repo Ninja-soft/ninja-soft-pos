@@ -1768,3 +1768,42 @@ Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, m
 
 **Consecuencias.** Toda política nueva de negocio debe usar `internal_scope()`. Las Edge Functions internas no cambian (validan el JWT y usan service_role). Orden de deploy: front primero (el header es inocuo sin la migración), después la migración.
 
+---
+
+## ADR-054: Posnet offline pro: adquirente, reglas del cupón y validación en el servidor
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/posnet-offline-pro`; migración `20261018300000_posnet_offline_cupon.sql` sin aplicar) · **Base:** ADR-042 (Tarjeta en posnet), ADR-044 (conciliación), ADR-049 (configuración heredable).
+
+### Contexto
+
+En Medios de pago, Payway Point y Getnet Point figuraban como "Próximamente" aunque el comercio ya puede cobrar con esas terminales: pasa la tarjeta en el posnet y carga el cupón en "Tarjeta en posnet". El dueño pidió (1) que la fila lo explique y lleve a configurarlo, (2) que el cajero elija primero de qué terminal (adquirente) es el cobro, con pasos que avanzan solos y el último adquirente recordado por caja, y (3) reglas por dato del cupón (pedir, obligatorio, numérico o alfanumérico, largo) con excepciones por adquirente, que no se puedan saltear. Hasta acá `require_card_voucher` sólo lo exigía la UI.
+
+### Decisión
+
+1. **Adquirente como primer paso** (`lib/payments/acquirers.ts`): Getnet, Payway, Mercado Pago Point, Fiserv / Clover, Nave y Otra. Se guarda en `payments.card_voucher.adquirente` (clave), con los mismos nombres de campo que las terminales integradas (`lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `cuotas`, `comercio`, `adquirente`). El POS ofrece los de la lista configurada o, sin lista, los de las marcas con algún canal habilitado; sin ninguno, todos. Otra va siempre (salvo que la lista la excluya). El último usado se recuerda por caja en `localStorage` (`ninja.posnet.acquirer.<caja>`) y se preselecciona; un solo adquirente se elige solo.
+2. **Asistente de 4 pasos con avance automático** (`lib/pos/posnetWizard.ts`): terminal, entidad, tipo y cuotas, cupón. Cada toque pasa al siguiente; se saltean los pasos sin nada que elegir (entidad de un solo tipo sin cuotas, tipo sin cuotas). La terminal elegida queda visible con "Cambiar".
+3. **Usos del adquirente**: n° de comercio (`acquirerMerchantNumber`: sólo medios del adquirente, terminal primero; Otra usa la resolución de siempre), planes de cuotas (`plansForAcquirer`: los suyos y los genéricos; si no tiene propios, todos, para no perder los recargos que el negocio cargó en otro medio) y conciliación (`CardRecRow.adquirente`, filtro `acquirer` y `acquirerOptions`, columna Adquirente del XLSX; la pantalla queda para la rama que rediseña la tabla).
+4. **Reglas del cupón en `pos_settings.card_voucher_rules`** (`{acquirers?, fields?, by_acquirer?}`; regla `{ask, required, type, min, max}`, largo 1 a 20, igual = exacto). Base = lo que pedía el POS (lote, cupón y autorización opcionales y alfanuméricos; últimos 4 opcional, 4 dígitos; comercio y cuotas no se tipean: salen de Medios de pago y del plan). Valores sugeridos por adquirente aplicables con un botón (no se aplican solos). Forma validada en SQL (`card_voucher_rules_error`, CHECK de la columna y `config_field_error`) con espejo en `rulesShapeError`.
+5. **Herencia por sucursal y caja con la capa existente** (ADR-049): `card_voucher_rules` entra a la whitelist de `pos_settings` como `map_any` en todos los alcances (también caja: el posnet es de la caja). Se pisa por clave de primer nivel (`acquirers`, `fields`, `by_acquirer`). `config_field_type` y `config_field_error` se recrean idénticos + el campo.
+6. **Compatibilidad con `require_card_voucher` (H27)**: prendido, cupón, lote y autorización se piden y son obligatorios siempre (piso de las reglas). Ahora también lo exige el servidor.
+7. **Validación en el servidor sin tocar `create_sale`**: trigger `payments_card_voucher` (BEFORE INSERT en `payments`) para débito y crédito con monto positivo. Saltea el ensayo de cobros en espera (`ninja.pc_dry_run`), los cobros integrados (referencia que coincide con un intent de `mp_payment_intents`, como el trigger de sucursal) y la diferencia de un cambio (devolución a crédito creada en la misma transacción, `sale_returns.created_at = now()`, porque la pantalla de cambios no carga cupón). Resuelve las reglas efectivas con la sucursal y caja del turno (`_effective_config`) y rechaza `card_voucher_required: <dato>` o `card_voucher_invalid: <dato>` (formato, largo o adquirente desconocido). Camino barato: sin reglas ni voucher obligatorio en el negocio ni en overrides, no consulta nada más. El POS valida lo mismo antes (espejo puro en `lib/payments/voucherRules.ts`) y traduce el error del servidor.
+8. **Carga rápida**: teclado numérico en los datos numéricos, limpieza al tipear (numérico: sólo dígitos; alfanumérico: letras y números en mayúscula), salto al siguiente al completar el largo exacto o el máximo, Enter pasa al siguiente y en el último registra, validación en línea al salir del campo. La terminal de la marca sin integrar (Payway Point manual) usa las mismas reglas con su adquirente y muestra sólo los datos obligatorios.
+9. **Configuración**: sección nueva "Tarjeta en posnet" (`?seccion=posnet`) con terminales que usa el negocio y la tabla de reglas (General y una pestaña por terminal, "Usar sugeridos", "Usar la general"), con selector de alcance negocio / grupo / sucursal / caja. En Medios de pago, Payway y Getnet "Terminal en el mostrador" pasan de "Próximamente" a "Disponible sin integrar" con el paso a paso, "Configurar datos del cupón" e "Integración directa en desarrollo" como dato secundario.
+
+### Plan y gating
+
+No es una feature de plan nueva: es parte de Tarjeta en posnet (BASE, ADR-042). Sin cambios en `features`, `plans.limits.modules`, `featureInfo` ni la comparación de planes.
+
+### Alternativas descartadas
+
+- **Validar dentro de `create_sale`**: obliga a recrear la función entera (recreada en `20261015120000`) y no cubre otros caminos de escritura; el trigger alcanza a todos.
+- **Aplicar los valores sugeridos por defecto**: rompería cobros de negocios cuyas terminales imprimen otro formato; quedan como botón.
+- **Tabla propia de reglas**: la capa de overrides ya resuelve herencia, auditoría y permisos.
+- **Recordar el adquirente en el servidor**: es una preferencia del equipo de la caja; `localStorage` alcanza y no suma escrituras.
+
+### Consecuencias
+
+- Deploy: aplicar `20261018300000_posnet_offline_cupon.sql` después de `20261015100000` y `20261015120000` (usa `_effective_config`). El front nuevo funciona contra la base vieja (sin columna, `parseRules` devuelve `{}` y el POS pide lo de siempre); guardar reglas requiere la migración.
+- Negocios con `require_card_voucher` prendido: desde la migración el servidor rechaza débito o crédito manual sin cupón, lote y autorización, o con caracteres que no sean letras y números (antes texto libre). El POS ya los exigía y ahora limpia lo tipeado.
+- Límite conocido: un cambio con diferencia en tarjeta no valida el cupón (la pantalla de cambios no lo pide). Un pago con referencia de intent existente se toma como integrado.
+- Coordinación: la rama de terminales integradas (`feat/terminal-integrada-payway`) completa `card_voucher` con los mismos nombres; sus pagos llevan intent y el trigger no los frena.

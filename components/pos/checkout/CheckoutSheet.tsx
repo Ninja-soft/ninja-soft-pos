@@ -57,7 +57,16 @@ import { PosSheet } from "../ui/PosSheet";
 import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
-import { CardWizard, EMPTY_VOUCHER, PlanChip, type CardStep } from "./CardWizard";
+import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
+import { acquirerOfProvider, plansForAcquirer, type AcquirerDef } from "@/lib/payments/acquirers";
+import {
+  askedFields,
+  effectiveRules,
+  voucherErrors,
+  type CardVoucherRules,
+  type VoucherFieldKey,
+} from "@/lib/payments/voucherRules";
+import { choosablePlans, ctaNext, initialStep } from "@/lib/pos/posnetWizard";
 import type {
   AccountPayRequest,
   AccountPayState,
@@ -125,8 +134,19 @@ export interface CheckoutSheetProps {
   prefs?: TenderPrefs;
   initialTenderId?: string | null;
   cardPlans: CheckoutPlan[];
-  /** N° de comercio para la marca y el medio del plan (null = sin cargar). */
-  merchantNumberFor?: (brand: string | null, providerKey: string | null) => string | null;
+  /**
+   * N° de comercio para la marca, el medio del plan y el adquirente de la
+   * terminal (null = sin cargar).
+   */
+  merchantNumberFor?: (brand: string | null, providerKey: string | null, acquirer?: string | null) => string | null;
+  /** Adquirentes que ofrece la Tarjeta en posnet (ADR-054). */
+  posnetAcquirers?: AcquirerDef[];
+  /** Último adquirente usado en esta caja (se preselecciona). */
+  rememberedAcquirer?: string | null;
+  /** Avisa el adquirente elegido para recordarlo en la caja. */
+  onAcquirerUsed?: (key: string) => void;
+  /** Reglas del cupón efectivas de la sucursal y caja (pos_settings.card_voucher_rules). */
+  voucherRules?: CardVoucherRules | null;
   warrantyPlans: CheckoutWarrantyPlan[];
   initialWarrantyId?: string;
   professionals: CheckoutProfessional[];
@@ -171,6 +191,7 @@ const SPLITS = [
   { n: 4, label: "¼" },
 ];
 let keySeq = 0;
+const NO_ACQUIRERS: AcquirerDef[] = [];
 
 export function CheckoutSheet(props: CheckoutSheetProps) {
   const {
@@ -186,6 +207,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     initialTenderId,
     cardPlans,
     merchantNumberFor,
+    posnetAcquirers = NO_ACQUIRERS,
+    rememberedAcquirer = null,
+    onAcquirerUsed,
+    voucherRules = null,
     warrantyPlans,
     initialWarrantyId = "",
     professionals,
@@ -228,8 +253,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Campo que escribe el teclado (monto con este medio o, en efectivo, recibido).
   const [keypadChoice, setKeypadChoice] = useState<KeypadField>("received");
   const [cardKind, setCardKind] = useState<CardKind>("debit");
-  // Tarjeta en posnet: entidad elegida y paso del asistente (1 entidad, 2 tipo
-  // y cuotas, 3 datos del cupón).
+  // Tarjeta en posnet: adquirente de la terminal, entidad elegida y paso del
+  // asistente (1 terminal, 2 entidad, 3 tipo y cuotas, 4 datos del cupón).
+  const [cardAcq, setCardAcq] = useState<string | null>(null);
   const [cardBrand, setCardBrand] = useState<string | null>(null);
   const [cardStep, setCardStep] = useState<CardStep>(1);
   const [planId, setPlanId] = useState("");
@@ -251,6 +277,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const onAccountChange = useCallback((st: AccountPayState) => setAccountPay(st), []);
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // Adquirente a preseleccionar: el último de la caja si sigue disponible; si
+  // hay uno solo, ese (ADR-054).
+  const presetAcquirer = (): string | null => {
+    if (rememberedAcquirer && posnetAcquirers.some((a) => a.key === rememberedAcquirer)) return rememberedAcquirer;
+    return posnetAcquirers.length === 1 ? posnetAcquirers[0]!.key : null;
+  };
+
   // Reset al abrir (la hoja queda montada entre ventas).
   useEffect(() => {
     if (!open) return;
@@ -267,8 +300,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setReceivedStr("");
     setKeypadChoice(defaultKeypadField(initial?.flow));
     setCardKind("debit");
+    setCardAcq(presetAcquirer());
     setCardBrand(null);
-    setCardStep(1);
+    setCardStep(initialStep(presetAcquirer()));
     setPlanId("");
     setVoucher(EMPTY_VOUCHER);
     setItemsOpen(false);
@@ -356,16 +390,22 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const promoExtra = Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0));
 
   // ── Editor del tender activo ───────────────────────────────────────────────
+  // Tarjeta en posnet: planes del adquirente (los suyos y los genéricos) de la
+  // entidad elegida (y los sin entidad), por tipo.
+  const posnetPlansByKind = useMemo(() => {
+    const own = plansForAcquirer(cardPlans, cardAcq);
+    const b = cardBrand === "other" ? null : cardBrand;
+    return { debit: plansForCard(own, b, "debit"), credit: plansForCard(own, b, "credit") };
+  }, [cardPlans, cardAcq, cardBrand]);
   const plansForActive = useMemo(() => {
     if (!isCard) return [];
-    // Tarjeta en posnet: planes de la entidad elegida (y los sin entidad).
-    if (isPosnet) return plansForCard(cardPlans, cardBrand === "other" ? null : cardBrand, cardKind);
+    if (isPosnet) return posnetPlansByKind[cardKind];
     const b = activeMethod ? PLAN_BASE[activeMethod] : undefined;
     if (!b) return [];
     return cardPlans
       .filter((p) => p.base === b)
       .sort((a, z) => (a.installments ?? 1) - (z.installments ?? 1));
-  }, [cardPlans, activeMethod, isCard, isPosnet, cardBrand, cardKind]);
+  }, [cardPlans, activeMethod, isCard, isPosnet, cardKind, posnetPlansByKind]);
   const cardBrands = useMemo(() => availableCardBrands(cardPlans), [cardPlans]);
   const plan = plansForActive.find((p) => p.id === planId) ?? null;
   const surchargePct = !active
@@ -396,14 +436,47 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     active?.flow === "cash" && received != null ? Math.max(0, round2(received - settle.amount)) : 0;
   const receivedShort = active?.flow === "cash" && received != null && received < settle.amount - 0.005;
 
-  const last4Ok = voucher.ultimos4.trim() === "" || /^\d{4}$/.test(voucher.ultimos4.trim());
+  // Cupón (ADR-054): reglas efectivas para el adquirente de la terminal (la
+  // elegida en el posnet o la marca de la terminal sin integrar). El servidor
+  // valida lo mismo (trigger payments_card_voucher).
+  const voucherAcq = isPosnet ? cardAcq : active?.flow === "terminal" ? acquirerOfProvider(active.provider) : null;
+  const rules = useMemo(
+    () => effectiveRules(voucherRules, voucherRequired, voucherAcq),
+    [voucherRules, voucherRequired, voucherAcq],
+  );
+  // Terminal de la marca sin integrar: sólo los datos obligatorios (rápido).
+  const terminalFields: VoucherFieldKey[] = askedFields(rules).filter((f) => rules[f].required);
+  const brandForMerchant = isPosnet && cardBrand && cardBrand !== "other" ? cardBrand : null;
+  const autoComercio = brandForMerchant
+    ? (merchantNumberFor?.(brandForMerchant, plan?.provider_key ?? null, cardAcq) ?? null)
+    : null;
+  // Lo que viaja: lo tipeado, y el n° de comercio y las cuotas resueltos solos
+  // cuando no se piden. En la terminal sin integrar, sólo lo obligatorio.
+  const voucherValues: Partial<Record<VoucherFieldKey, string>> = {
+    ...voucher,
+    comercio: rules.comercio.ask ? voucher.comercio : (autoComercio ?? undefined),
+    cuotas: rules.cuotas.ask ? voucher.cuotas : plan?.installments ? String(plan.installments) : undefined,
+  };
+  const voucherErrs = voucherErrors(rules, voucherValues);
+  // Si el negocio pide tipear el n° de comercio o las cuotas, el cupón arranca
+  // con lo resuelto (Medios de pago y plan elegido): el cajero sólo corrige.
+  const prefillComercio = rules.comercio.ask ? autoComercio : null;
+  const prefillCuotas = rules.cuotas.ask && plan?.installments ? String(plan.installments) : null;
+  useEffect(() => {
+    if (!isPosnet || cardStep !== 4 || (!prefillComercio && !prefillCuotas)) return;
+    setVoucher((v) => ({
+      ...v,
+      ...(prefillComercio && !v.comercio ? { comercio: prefillComercio } : {}),
+      ...(prefillCuotas && !v.cuotas ? { cuotas: prefillCuotas } : {}),
+    }));
+  }, [isPosnet, cardStep, prefillComercio, prefillCuotas]);
   const voucherOk =
     !isCard ||
-    ((!voucherRequired ||
-      (voucher.lote.trim() !== "" && voucher.cupon.trim() !== "" && voucher.autorizacion.trim() !== "")) &&
-      last4Ok);
+    (isPosnet
+      ? Object.keys(voucherErrs).length === 0
+      : terminalFields.every((f) => !voucherErrs[f]));
   // Tarjeta en posnet: se registra recién en el paso del cupón.
-  const posnetReady = !isPosnet || (cardBrand !== null && cardStep === 3);
+  const posnetReady = !isPosnet || (cardBrand !== null && cardAcq !== null && cardStep === 4);
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
   const refOk = !active?.requiresReference || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
@@ -437,8 +510,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setKeypadChoice(defaultKeypadField(t.flow));
     if (t.method === "debit" || t.method === "credit") setCardKind(t.method);
     if (t.flow === "card") {
+      const acq = cardAcq ?? presetAcquirer();
+      setCardAcq(acq);
       setCardBrand(null);
-      setCardStep(1);
+      setCardStep(initialStep(acq));
     }
     // En mobile el editor queda debajo: lo traemos a la vista.
     requestAnimationFrame(() => editorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
@@ -483,7 +558,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setVoucher(EMPTY_VOUCHER);
     setOpRef("");
     setCardBrand(null);
-    setCardStep(1);
+    // El adquirente queda: el resto se suele cobrar en la misma terminal.
+    setCardStep(initialStep(cardAcq));
     const t = tipFor(next, null);
     if (totalsFor(next, promoFor(next, null, t), t).settled) {
       finalize(next);
@@ -504,19 +580,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const surchargeName = plan
       ? `Recargo ${plan.label}`
       : `Recargo ${active.label} (${surchargePct}%)`;
-    const hasVoucher =
-      isCard &&
-      (voucherRequired ||
-        isPosnet ||
-        voucher.lote.trim() !== "" ||
-        voucher.cupon.trim() !== "" ||
-        voucher.autorizacion.trim() !== "" ||
-        voucher.ultimos4.trim() !== "");
+    // En la terminal sin integrar sólo viaja lo que se pidió (lo obligatorio).
+    const typed = (k: VoucherFieldKey) =>
+      isPosnet || terminalFields.includes(k) || k === "comercio" || k === "cuotas" ? (voucherValues[k] ?? "").trim() : "";
+    const hasVoucher = isCard && (voucherRequired || isPosnet || voucherAcq !== null || terminalFields.length > 0);
     const brandInfo = isPosnet ? cardBrandByKey(cardBrand) : null;
-    const comercio =
-      isPosnet && cardBrand && cardBrand !== "other"
-        ? (merchantNumberFor?.(cardBrand, plan?.provider_key ?? null) ?? null)
-        : null;
+    if (isPosnet && cardAcq) onAcquirerUsed?.(cardAcq);
     const kindLabel = cardKind === "debit" ? "Débito" : "Crédito";
     addLine({
       key: `l${++keySeq}`,
@@ -548,15 +617,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         : isAccount && renderAccount
           ? accountPay.reference
           : undefined,
+      // Nombres compatibles con las terminales integradas (lote, cupon,
+      // autorizacion, marca, ultimos4, cuotas, comercio, adquirente).
       card_voucher: hasVoucher
         ? {
-            lote: voucher.lote.trim(),
-            cupon: voucher.cupon.trim(),
-            autorizacion: voucher.autorizacion.trim(),
+            lote: typed("lote"),
+            cupon: typed("cupon"),
+            autorizacion: typed("autorizacion"),
             ...(brandInfo ? { marca: brandInfo.label } : {}),
-            ...(voucher.ultimos4.trim() ? { ultimos4: voucher.ultimos4.trim() } : {}),
-            ...(comercio ? { comercio } : {}),
-            ...(plan?.installments ? { cuotas: plan.installments } : {}),
+            ...(typed("ultimos4") ? { ultimos4: typed("ultimos4") } : {}),
+            ...(typed("comercio") ? { comercio: typed("comercio") } : {}),
+            ...(Number(typed("cuotas")) > 0 ? { cuotas: Number(typed("cuotas")) } : {}),
+            ...(voucherAcq ? { adquirente: voucherAcq } : {}),
           }
         : undefined,
       locked: false,
@@ -625,6 +697,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   }
 
   // ── Botón principal ────────────────────────────────────────────────────────
+  const posnetNextStep = isPosnet
+    ? ctaNext(cardStep, {
+        acquirer: cardAcq,
+        brand: cardBrandByKey(cardBrand),
+        kind: cardKind,
+        choosableByKind: {
+          debit: choosablePlans(posnetPlansByKind.debit).length,
+          credit: choosablePlans(posnetPlansByKind.credit).length,
+        },
+      })
+    : null;
   const readyToConfirm = lines.length > 0 && totals.settled;
   let ctaLabel = "Elegí cómo paga";
   if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
@@ -635,20 +718,21 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const qrAmt = money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)));
     if (active.flow === "qr") ctaLabel = active.channel === "link" ? `Generar link ${qrAmt}` : `Generar QR ${qrAmt}`;
     else if (active.flow === "point") ctaLabel = `Enviar al Point ${amt}`;
-    else if (isPosnet && cardStep < 3) ctaLabel = cardBrand ? "Continuar" : "Elegí la entidad de la tarjeta";
+    else if (isPosnet && cardStep < 4)
+      ctaLabel = posnetNextStep ? "Continuar" : cardStep === 1 ? "Elegí la terminal" : "Elegí la entidad de la tarjeta";
     else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
     else ctaLabel = settle.closes ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
   }
-  const posnetNext = !readyToConfirm && isPosnet && cardStep < 3;
+  const posnetNext = !readyToConfirm && isPosnet && cardStep < 4;
   const ctaDisabled = readyToConfirm
     ? loading
     : posnetNext
-      ? cardBrand === null || portion <= 0
+      ? posnetNextStep === null || portion <= 0
       : !canCommit || loading;
   function onCta() {
     if (readyToConfirm) finalize(lines);
     else if (posnetNext) {
-      if (cardBrand) setCardStep(3);
+      if (posnetNextStep) setCardStep(posnetNextStep);
     } else commit();
   }
 
@@ -672,7 +756,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   };
   const leftover = splitRemainder(remaining, portion);
   // ¿Se puede editar el monto? En el cupón de la tarjeta en posnet ya quedó fijo.
-  const kfEditable = Boolean(active) && !(isPosnet && cardStep === 3);
+  const kfEditable = Boolean(active) && !(isPosnet && cardStep === 4);
 
   const dense = checkout.density === "compact";
   const layoutKind = checkout.layout;
@@ -865,7 +949,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   // Monto de esta línea (input + partir el pago). En el cupón de la tarjeta en
   // posnet el monto ya quedó fijo (se ve en el resumen).
-  const amountField = active && !(isPosnet && cardStep === 3) ? (
+  const amountField = active && !(isPosnet && cardStep === 4) ? (
     <div>
       <label htmlFor="checkout-portion" className={LABEL}>
         Monto con este medio
@@ -927,6 +1011,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Tarjeta en posnet: asistente entidad, tipo y cuotas, cupón.
   const cardBlock = isPosnet ? (
     <CardWizard
+      acquirers={posnetAcquirers}
+      acquirer={cardAcq}
+      onAcquirer={(k) => {
+        setCardAcq(k);
+        setPlanId("");
+      }}
       brands={cardBrands}
       brand={cardBrand}
       onBrand={setCardBrand}
@@ -934,15 +1024,15 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       onStep={setCardStep}
       kind={cardKind}
       onKind={setCardKind}
-      plans={plansForActive}
+      plansByKind={posnetPlansByKind}
       planId={planId}
       onPlan={setPlanId}
       portion={portion}
       amount={settle.amount}
       surcharge={settle.surcharge}
+      rules={rules}
       voucher={voucher}
       onVoucher={setVoucher}
-      voucherRequired={voucherRequired}
       onEnter={onCta}
     />
   ) : // Terminal de la marca sin integración: débito / crédito + cuotas + voucher.
@@ -981,33 +1071,19 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           </div>
         </div>
       )}
-      {isCard && voucherRequired && (
+      {isCard && terminalFields.length > 0 && (
         <div>
-          <p className={LABEL}>Voucher de la tarjeta</p>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-            {(
-              [
-                ["lote", "Lote"],
-                ["cupon", "Cupón"],
-                ["autorizacion", "Autoriz."],
-              ] as const
-            ).map(([k, label]) => (
-              <input
-                key={k}
-                inputMode="numeric"
-                value={voucher[k]}
-                onChange={(e) => setVoucher((v) => ({ ...v, [k]: e.target.value }))}
-                placeholder={label}
-                aria-label={label}
-                className={cn(INPUT, "h-11 min-w-0 px-3 text-sm font-medium")}
-              />
-            ))}
+          <p className={LABEL}>Datos del cupón</p>
+          <div className="mt-1.5">
+            <VoucherFields
+              rules={rules}
+              values={voucher}
+              onChange={setVoucher}
+              onDone={onCta}
+              autoFocus={false}
+              only={terminalFields}
+            />
           </div>
-          {!voucherOk && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Completá lote, cupón y autorización para registrar el pago.
-            </p>
-          )}
         </div>
       )}
     </>

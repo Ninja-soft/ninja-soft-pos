@@ -496,7 +496,7 @@ create index payments_sale_idx on payments(sale_id);
 create index payments_tenant_method_idx on payments(tenant_id, method, created_at desc);
 ```
 
-Columnas agregadas después (ver migraciones): `card_voucher jsonb` (datos del cupón de tarjeta: `lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `comercio`, todos opcionales) y `reconciled_at timestamptz` / `reconciled_by uuid` (conciliación de tarjetas, ADR-044). Las dos de conciliación sólo cambian por la RPC `set_payments_reconciled` (trigger `payments_reconcile_guard` rechaza el UPDATE directo).
+Columnas agregadas después (ver migraciones): `card_voucher jsonb` (datos del cupón de tarjeta: `lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `comercio`, `cuotas`, `adquirente`, opcionales salvo lo que exijan las reglas del cupón de `pos_settings.card_voucher_rules`, validadas por el trigger `payments_card_voucher`, ADR-054) y `reconciled_at timestamptz` / `reconciled_by uuid` (conciliación de tarjetas, ADR-044). Las dos de conciliación sólo cambian por la RPC `set_payments_reconciled` (trigger `payments_reconcile_guard` rechaza el UPDATE directo).
 
 ---
 

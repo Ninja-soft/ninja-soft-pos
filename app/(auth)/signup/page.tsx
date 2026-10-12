@@ -66,8 +66,8 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
               </span>
               <span
                 className={cn(
-                  "text-sm font-medium",
-                  active ? "text-ninja-softWhite" : "text-ninja-lavender",
+                  "whitespace-nowrap text-sm font-medium",
+                  active ? "text-ninja-softWhite" : "hidden text-ninja-lavender sm:inline",
                 )}
               >
                 {it.label}

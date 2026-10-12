@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils/cn";
 // y el borde se vuelve transparente. Nunca borde/ring de color.
 export function choiceClass(selected: boolean, extra?: string) {
   return cn(
-    "rounded-xl border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+    "rounded-xl border text-left transition [&>svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
     selected
       ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
       : "border-border bg-card hover:bg-muted",

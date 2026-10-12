@@ -57,11 +57,11 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-4 md:flex-row md:items-end md:justify-between",
+        "flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between",
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 lg:flex-1">
         {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
         <Display
           className={cn(
@@ -87,7 +87,7 @@ export function PageHeader({
         )}
       </div>
       {actions && (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">{actions}</div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">{actions}</div>
       )}
     </header>
   );

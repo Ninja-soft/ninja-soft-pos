@@ -225,7 +225,7 @@ export function InternalShell({
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover">
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <button
               onClick={() => setDrawer(false)}
               className="absolute right-3 top-3 text-muted-foreground"
@@ -239,7 +239,7 @@ export function InternalShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
@@ -248,7 +248,7 @@ export function InternalShell({
         </header>
 
         <main className="app-bg min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+          <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">{children}</div>
         </main>
       </div>
 

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Inter,
   Sora,
@@ -65,6 +65,14 @@ export const metadata: Metadata = {
     icon: "/brand/favicon.webp",
     apple: "/brand/apple-icon.webp",
   },
+};
+
+// viewport-fit=cover habilita env(safe-area-inset-*) en iPhone (notch y home
+// indicator); el layout ya reserva esos márgenes donde hace falta.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

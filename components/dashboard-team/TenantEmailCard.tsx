@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
+import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
 
 // Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
 type EmailMethod = "smtp" | "resend";
@@ -70,8 +71,8 @@ type SmtpResult =
   | { error: string; detail?: string };
 
 // Diseños del cuerpo del email del comprobante (H9b PR5). Las claves coinciden
-// con buildReceiptEmailHtml (lib/email/receiptTemplates) y EMAIL_BODY_TEMPLATES
-// en send_receipt_email. Las MINI-previews de acá (DesignPreview) son solo
+// con buildReceiptEmailHtml (lib/email/receiptTemplates) y su espejo en
+// send_receipt_email. Las MINI-previews de acá (DesignPreview) son solo
 // orientativas (divs simples); la VISTA PREVIA real usa el builder compartido.
 type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
 const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = [
@@ -83,8 +84,8 @@ const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = 
 ];
 const SAMPLE_BODY = "¡Gracias por tu compra!";
 const FOOTER_LABEL = "Enviado con NinjaPos";
-// Wordmark de NinjaSoft para el fallback (sin logo del tenant). Mismo asset que
-// usa el email real (NINJA_LOGO_URL en send_receipt_email).
+// Wordmark de NinjaSoft para las mini-previews sin logo del tenant (el email
+// real, en ese caso, muestra un monograma con la inicial del negocio).
 const NINJA_WORDMARK = "/brand/ninjasoft-wordmark.webp";
 
 // Logo del preview: el del tenant si tiene; si no, el wordmark de NinjaSoft.
@@ -691,8 +692,8 @@ export function TenantEmailCard() {
 }
 
 // Preview fiel del email: renderiza el HTML real (builder compartido) en un
-// contenedor con fondo claro. El HTML es de strings confiables + inputs
-// escapados por buildReceiptEmailHtml.
+// iframe aislado. El HTML es de strings confiables + inputs escapados por
+// buildReceiptEmailHtml.
 function ReceiptEmailPreview({
   design,
   accent,
@@ -713,8 +714,8 @@ function ReceiptEmailPreview({
     bodyText,
   });
   return (
-    <div className="rounded-lg bg-neutral-100 p-4">
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="overflow-hidden rounded-lg bg-neutral-100">
+      <EmailPreviewFrame html={html} title="Vista previa del comprobante" minHeight={560} />
     </div>
   );
 }

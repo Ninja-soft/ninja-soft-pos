@@ -58,30 +58,21 @@ function renderTemplate(tpl: string, vars: Record<string, string>): string {
   );
 }
 
-// Cuerpo HTML branded mínimo (espeja _dunning_email_html del lado SQL). Solo
-// estilos inline para máxima compatibilidad con clientes de correo. FALLBACK:
-// solo se usa si la plantilla de system_email_templates no estuviera.
+// Cuerpo HTML del aviso con el diseño de los emails de NinjaPos (espeja
+// _dunning_email_html del lado SQL). FALLBACK: solo se usa si la plantilla de
+// system_email_templates no estuviera. El template lo genera
+// scripts/gen-email-templates-sql.ts desde lib/email/layout.ts
+// (fallbackLayoutTemplate): no editarlo a mano.
+// <fallback-layout>
+const FALLBACK_LAYOUT =
+  "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"light only\"><meta name=\"supported-color-schemes\" content=\"light\"><title>NinjaPos</title></head><body style=\"margin:0;padding:0;background:#f3f2f8;-webkit-font-smoothing:antialiased\"><div style=\"display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all\">@@BODY@@</div><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#f3f2f8\" style=\"background:#f3f2f8\"><tr><td align=\"center\" style=\"padding:28px 12px 40px\"><table role=\"presentation\" width=\"560\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"max-width:560px;width:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\"><tr><td align=\"center\" bgcolor=\"#09051C\" style=\"background:#09051C;background-image:radial-gradient(120% 90% at 50% 0%,#3a1708 0%,#09051C 60%);border-radius:20px 20px 0 0;padding:40px 40px 36px;text-align:center\"><a href=\"https://pos.soft.ninja\" target=\"_blank\" style=\"text-decoration:none\"><img src=\"https://tgaromemhaixgdsdlxiq.supabase.co/storage/v1/object/public/brand/ninja-isotipo-flame.png\" alt=\"\" width=\"40\" height=\"52\" style=\"display:block;margin:0 auto 16px;width:40px;height:52px;border:0\" /><img src=\"https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm\" alt=\"NinjaPOS\" height=\"34\" style=\"display:block;margin:0 auto;height:34px;border:0\" /></a></td></tr><tr><td align=\"center\" bgcolor=\"#ffffff\" style=\"background:#ffffff;padding:40px 40px 0;text-align:center\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\" style=\"margin:0 auto 22px\"><tr><td width=\"72\" height=\"72\" align=\"center\" valign=\"middle\" bgcolor=\"#fff1ea\" style=\"width:72px;height:72px;border-radius:50%;background:#fff1ea;font-size:32px;line-height:72px;text-align:center\">🔔</td></tr></table><p style=\"margin:0 0 8px;font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#ff5a1f\">@@EYEBROW@@</p><h1 style=\"margin:0 0 12px;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.4px;color:#09051C\">@@TITLE@@</h1><p style=\"margin:0 auto;max-width:420px;font-size:16px;line-height:1.6;color:#6b7280\">@@BODY@@</p></td></tr><tr><td align=\"center\" bgcolor=\"#ffffff\" style=\"background:#ffffff;padding:32px 40px 44px;text-align:center;border-radius:0 0 20px 20px\"><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\"><tr><td align=\"center\" bgcolor=\"#ff5a1f\" style=\"border-radius:999px;background:#ff5a1f;background-image:linear-gradient(135deg,#ff4b22,#ff8a1f)\"><a href=\"https://pos.soft.ninja/login\" target=\"_blank\" style=\"display:inline-block;padding:16px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;font-weight:700;line-height:20px;color:#ffffff;text-decoration:none;border-radius:999px\">Ir a NinjaPos</a></td></tr></table></td></tr><tr><td style=\"padding:16px 0 0\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" bgcolor=\"#ffffff\" style=\"background:#ffffff;border-radius:20px\"><tr><td align=\"center\" style=\"padding:32px 32px 28px;text-align:center\"><img src=\"https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Dark_majzi0\" alt=\"NinjaPOS\" height=\"26\" style=\"display:block;margin:0 auto 10px;height:26px;border:0\" /><p style=\"margin:0 0 20px;font-size:13px;line-height:1.5;color:#6b7280\">Vendé, cobrá y controlá tu negocio desde una sola pantalla.</p><table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\"><tr><td style=\"padding:0 8px 0 0;font-size:12px;line-height:18px;color:#9ca3af\">Un producto de</td><td><a href=\"https://soft.ninja\" target=\"_blank\" style=\"text-decoration:none\"><img src=\"https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_Soft_Dark_h9aklw\" alt=\"Ninja Soft\" height=\"18\" style=\"display:block;height:18px;border:0\" /></a></td></tr></table><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td style=\"padding:24px 0 18px\"><div style=\"height:1px;line-height:1px;font-size:1px;background:#f0eff5\">&nbsp;</div></td></tr></table><p style=\"margin:0 0 14px;font-size:13px;line-height:1.6\"><a href=\"https://pos.soft.ninja/login\" target=\"_blank\" style=\"color:#09051C;text-decoration:none;font-weight:600\">pos.soft.ninja</a> &nbsp;&middot;&nbsp; <a href=\"https://soft.ninja\" target=\"_blank\" style=\"color:#09051C;text-decoration:none;font-weight:600\">soft.ninja</a> &nbsp;&middot;&nbsp; <a href=\"https://www.instagram.com/ninjasoft.latam/\" target=\"_blank\" style=\"color:#09051C;text-decoration:none;font-weight:600\">Instagram</a></p><p style=\"margin:0 0 6px;font-size:12px;line-height:1.6;color:#9ca3af\">Urquiza 3164 &middot; Rosario, Santa Fe, Argentina</p><p style=\"margin:0;font-size:11px;line-height:1.6;color:#b0b3ba\">Recibiste este email porque tenés una cuenta en NinjaPos.</p></td></tr></table></td></tr></table></td></tr></table></body></html>";
+// </fallback-layout>
 function emailHtml(title: string, body: string): string {
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return (
-    '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;background:#111827;border-radius:14px;overflow:hidden">' +
-    '<div style="padding:28px 24px 20px;text-align:center">' +
-    '<img src="https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm" alt="NinjaPos" style="max-height:24px;display:inline-block" />' +
-    '<div style="color:#ffffff;font-size:17px;font-weight:bold;margin-top:12px">' +
-    esc(title) +
-    "</div>" +
-    '<div style="height:3px;width:48px;background:#f97316;border-radius:99px;margin:16px auto 0"></div>' +
-    "</div>" +
-    '<div style="padding:8px 28px 28px;color:#e5e7eb;line-height:1.6">' +
-    '<p style="margin:0 0 14px;font-size:15px">' +
-    esc(body) +
-    "</p></div>" +
-    '<div style="background:#09051C;padding:18px 12px;text-align:center">' +
-    '<img src="https://res.cloudinary.com/dl6yhrcx0/image/upload/f_png,h_120/Ninja_POS_Light_glckmm" alt="NinjaPos" style="max-height:20px;display:inline-block" />' +
-    '<div style="color:#9ca3af;font-size:11px;margin-top:8px">Enviado con NinjaPos</div>' +
-    "</div></div>"
-  );
+  return FALLBACK_LAYOUT.split("@@EYEBROW@@").join("NinjaPos")
+    .split("@@TITLE@@").join(esc(title))
+    .split("@@BODY@@").join(esc(body));
 }
 
 // Tipos mínimos de los recursos de MP que leemos.

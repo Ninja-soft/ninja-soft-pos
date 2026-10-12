@@ -1258,6 +1258,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 - [ ] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
   - [~] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(en curso: `feat/conciliacion-tarjetas`)*
+  - [x] **Integración con NubCeo** (conciliador externo): envío de cada venta con sus cobros, ritmo y ventana, solo simular, mapeo de campos y medios, monitor de envíos, anulaciones y devoluciones, e importación de los asientos contables de NubCeo (API o CSV). *(2026-10-12, ADR-062, `feat/nubceo`, migraciones `20261025100000` y `20261025100100` sin aplicar, Edge `nubceo_sync` sin desplegar)* · *OPTIONAL `integracion_nubceo` (nueva, Business, también add-on).* Ver [`30-nubceo.md`](./30-nubceo.md).
   - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
   - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
   - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.

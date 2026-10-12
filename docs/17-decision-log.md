@@ -1434,6 +1434,30 @@ ADR-034 asumió que Directo (Crédito Directo S.A.) no tenía API. El dueño con
 
 ---
 
+## ADR-042: Hoja de cobro rediseñada, variantes en pos_layout.checkout y Tarjeta en posnet
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada · **Hito:** POS (diseño)
+
+### Contexto
+
+El dueño marcó la hoja de cobro como fea: muchos degradados (monto en degradado rojo a rosa, botón naranja a amarillo), esquinas muy redondeadas, logos sobre placas blancas, selección con tinte marrón y un rótulo por cada grupo. Pidió más variantes, sacar la burbuja de IA del POS y un acceso rápido a la venta desde cualquier pantalla. La "tarjeta manual" (dos accesos, Débito y Crédito) en realidad es cobrar con un posnet no integrado y cargar el cupón a mano.
+
+### Decisión
+
+- **Lenguaje visual del cobro** igual al resto del POS: superficies neutras con borde sutil, esquinas de 8px (`rounded-lg`) en tiles y botones y `rounded-xl` sólo en la hoja; selección con relleno neutro + insignia de check (`choice-on` / `choice-check`); montos en el color de primer plano con números tabulares; un solo color sólido en el CTA (`--pos-via` del acento con su tinta), sin texto en degradado. Partir el monto, propina, garantía y vendedor usan `Segmented`. Logos con su fondo transparente directo sobre el tile (`TenderLogo` + `lib/pos/tenderLogo.ts`, preparado para la variante oscura de cada logo).
+- **Variantes** en `pos_layout.checkout` (jsonb, sin migración; FLAG-OPERATIVO, sin gating de plan): `layout` (`two_columns`, `compact_list`, `keypad_first`, `big_buttons`), `favorites` (hasta 6 medios arriba), `hiddenGroups` (nunca deja la hoja vacía), `channelChips` (marcas con varios canales en una fila segmentada) y `density`. Caja rápida arranca en "Teclado primero". Validación por sub-campo como `payments`; el usuario pisa al negocio campo por campo. Se editan en Configuración, Diseño del POS, con miniaturas en vivo.
+- **Tarjeta en posnet:** un solo tender `card` (los ids viejos `card:debit` / `card:credit` guardados en el diseño se traducen solos). Asistente de 3 pasos: entidad (logos; según los planes cargados, siempre "Otra"), tipo y cuotas (se salta si la entidad es sólo débito; recargo y total por plan), datos del cupón con resumen tipo cupón y "Registrar cobro con tarjeta". El pago sigue saliendo como `debit`/`credit` con `card_voucher`; se suman `marca` y `ultimos4` (opcionales) al jsonb, sin cambio de esquema.
+- **IA fuera del POS:** la burbuja del asistente no se monta en `/pos` (ni subrutas).
+- **Acceso rápido "Vender / Cobrar":** botón primario arriba del menú lateral y en el header mobile (fuera de `/pos`), atajo global **F1** (el POS ya usa F2 buscar y F12 cobrar). Con carrito en curso lleva a `/pos?cobrar=1`, que abre la hoja (o pide abrir caja) y limpia el parámetro. Sólo para roles que venden (owner, manager, cashier).
+
+### Consecuencias
+
+- Los selectores de diseño (presets del POS y del cobro) usan el mismo sistema: relleno neutro + check, wireframes en tonos del tema y un único acento mínimo. Salón sin modo gastronómico muestra candado y "Activar modo gastronómico" (lleva a Configuración, Operación).
+- Logos integrados con el sistema de logos oficiales (`lib/payments/logos.ts`): `TenderLogo` delega en `ThemedLogo` (variante `-on-dark` según `data-theme`, sin placa), `tenderLogoSrc` deriva la variante oscura con `logoOnDark` y `cardBrandLogo` / `cardLogoKey` usan `cardLogo` (`public/images/cards/*.webp`; Visa débito con su logo). El asistente y los chips de cuotas muestran el logo de la tarjeta con `CardBrandLogo`.
+- En "Billeteras y links", cada marca con más de un canal (GO Cuotas QR + Link, Mobbex, Directo con API) va en una fila con canales como Payway o Nave (`brandRuns`); las de un canal siguen como tile. Los favoritos siguen siendo tiles por canal.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

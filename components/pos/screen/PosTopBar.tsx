@@ -2,8 +2,9 @@
 
 import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
-import { Check, LayoutTemplate, MonitorSmartphone, Settings2, X } from "lucide-react";
+import { LayoutTemplate, Lock, MonitorSmartphone, Settings2, X } from "lucide-react";
 import { InfoHint } from "@/components/ui/InfoHint";
+import { choiceClass } from "@/components/ui/ChoiceCard";
 import { POS_PRESETS, PRESET_INFO, type PosPreset } from "@/lib/pos/layout";
 import { cn } from "@/lib/utils/cn";
 import { PresetThumb } from "./PresetThumb";
@@ -102,18 +103,16 @@ export function PosTopBar({
                         type="button"
                         disabled={blocked}
                         onClick={() => onPickPreset(p)}
-                        className={cn(
-                          "rounded-2xl p-1.5 text-left transition disabled:opacity-45",
-                          on ? "bg-foreground text-background" : "bg-fg-6 hover:bg-muted",
-                        )}
+                        aria-pressed={on}
+                        className={choiceClass(on, "rounded-lg p-1.5")}
                       >
-                        <PresetThumb preset={p} className="h-[68px] w-full" />
-                        <span className="flex items-center justify-between gap-1 px-1 pt-1.5 text-xs font-bold">
+                        <PresetThumb preset={p} className={cn("h-[68px] w-full", blocked && "opacity-50")} />
+                        <span className="flex items-center gap-1 px-1 pt-1.5 text-xs font-semibold">
+                          {blocked && <Lock size={11} aria-hidden />}
                           {info.name}
-                          {on && <Check size={13} />}
                         </span>
                         {blocked && (
-                          <span className="block px-1 text-[10px] opacity-80">Activá el modo gastronómico</span>
+                          <span className="block px-1 text-[10px] text-muted-foreground">Necesita el modo gastronómico</span>
                         )}
                       </button>
                     </Popover.Close>

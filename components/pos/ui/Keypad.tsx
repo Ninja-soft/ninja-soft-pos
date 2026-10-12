@@ -17,16 +17,20 @@ export function Keypad({
   onKey,
   lastKey = "00",
   compact,
+  square,
   className,
 }: {
   onKey: (k: KeypadKey) => void;
   lastKey?: "00" | ",";
   compact?: boolean;
+  /** Esquinas de 8px (hoja de cobro). */
+  square?: boolean;
   className?: string;
 }) {
   const btn = cn(
-    "grid place-items-center rounded-2xl bg-fg-6 font-price font-bold text-foreground transition hover:bg-fg-10 active:scale-95 active:bg-foreground active:text-background",
+    "grid place-items-center bg-fg-6 font-price font-bold text-foreground transition hover:bg-fg-10 active:scale-95 active:bg-foreground active:text-background",
     compact ? "h-11 text-lg" : "h-14 text-xl",
+    square ? "rounded-lg" : "rounded-2xl",
   );
   return (
     <div className={cn("grid grid-cols-3 gap-2", className)} role="group" aria-label="Teclado numérico">

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wallet, Wrench, Settings } from "lucide-react";
@@ -332,6 +332,12 @@ function ConfiguracionInner() {
     return SECTIONS.some((s) => s.key === q) ? (q as Section) : "apariencia";
   })();
   const [section, setSection] = useState<Section>(initialSection);
+  // Links internos (p. ej. "Activar modo gastronómico" desde Diseño del POS)
+  // cambian ?seccion= sin remontar la página.
+  const seccionParam = params.get("seccion");
+  useEffect(() => {
+    if (seccionParam && SECTIONS.some((s) => s.key === seccionParam)) setSection(seccionParam as Section);
+  }, [seccionParam]);
 
   // Grupos visibles: filtra las secciones gated por dining/delivery cuando están
   // apagados (toggles del tenant, no gating de plan → se ocultan, sin candado).

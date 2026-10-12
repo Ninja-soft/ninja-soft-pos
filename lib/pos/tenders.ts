@@ -10,7 +10,7 @@
 
 import { isProviderEnabled } from "@/lib/payments/defaults";
 import { providerFeature } from "@/lib/payments/providerFeature";
-import { cardLogo, paymentIcon } from "@/lib/payments/logos";
+import { paymentIcon } from "@/lib/payments/logos";
 
 export type SaleMethod =
   | "cash"
@@ -116,8 +116,6 @@ const LOGO = {
   pagos360: icon("pagos360"),
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
-  visa: cardLogo("visa") ?? "",
-  visaDebit: cardLogo("visa_debito") ?? "",
 } as const;
 
 // Proveedores que habilitan la tarjeta manual (débito/crédito con posnet
@@ -189,34 +187,23 @@ export const TENDERS: TenderDef[] = [
     flow: "direct",
   },
   {
-    id: "card:debit",
+    // Tarjeta en posnet: terminal NO integrada. Se elige la entidad, el tipo
+    // (débito/crédito, con cuotas) y se cargan los datos del cupón. El pago
+    // se registra como debit/credit según lo elegido (method null = lo decide
+    // el cobro). Reemplaza a "card:debit" / "card:credit" (ver LEGACY_TENDER_IDS).
+    id: "card",
     group: "card",
     brand: "card",
-    brandLabel: "Tarjeta",
+    brandLabel: "Tarjeta en posnet",
     channel: "manual",
-    label: "Débito",
-    method: "debit",
+    label: "Tarjeta en posnet",
+    method: null,
     provider: null,
     connection: null,
     featureKey: null,
-    logo: LOGO.visaDebit,
+    logo: null,
     flow: "card",
-    hint: "Posnet propio",
-  },
-  {
-    id: "card:credit",
-    group: "card",
-    brand: "card",
-    brandLabel: "Tarjeta",
-    channel: "manual",
-    label: "Crédito",
-    method: "credit",
-    provider: null,
-    connection: null,
-    featureKey: null,
-    logo: LOGO.visa,
-    flow: "card",
-    hint: "Con cuotas",
+    hint: "Terminal no integrada: cargás los datos del cupón",
   },
   qr("mercadopago", "Mercado Pago", "mercadopago", "qr", "Billeteras y tarjetas"),
   qr("mercadopago", "Mercado Pago", "mercadopago", "link", "Para mandar por mensaje"),
@@ -337,7 +324,7 @@ export const TENDERS: TenderDef[] = [
 export const TENDER_GROUPS: { key: TenderGroupKey; label: string }[] = [
   { key: "cash", label: "Efectivo" },
   { key: "transfer", label: "Transferencia" },
-  { key: "card", label: "Tarjeta manual" },
+  { key: "card", label: "Tarjeta en posnet" },
   { key: "mercadopago", label: "Mercado Pago" },
   { key: "payway", label: "Payway" },
   { key: "getnet", label: "Getnet" },
@@ -444,6 +431,19 @@ export interface TenderPrefs {
   pinned?: string[];
 }
 
+// Ids viejos guardados en pos_layout.payments / checkout que hoy son otro
+// tender (la tarjeta manual era dos accesos: débito y crédito).
+const LEGACY_TENDER_IDS: Record<string, string> = { "card:debit": "card", "card:credit": "card" };
+
+/** Id vigente de un tender (traduce ids viejos guardados en el diseño). */
+export function normalizeTenderId(id: string): string {
+  return LEGACY_TENDER_IDS[id] ?? id;
+}
+
+function normalizeIds(ids: string[] | undefined): string[] {
+  return Array.from(new Set((ids ?? []).map(normalizeTenderId)));
+}
+
 export interface TenderSection {
   key: TenderGroupKey;
   label: string;
@@ -451,7 +451,7 @@ export interface TenderSection {
 }
 
 export function groupTenders(tenders: ResolvedTender[], prefs: TenderPrefs = {}): TenderSection[] {
-  const hidden = new Set(prefs.hidden ?? []);
+  const hidden = new Set(normalizeIds(prefs.hidden));
   const visible = tenders.filter((t) => !hidden.has(t.id));
   const order = prefs.order ?? [];
   const rank = (k: string) => {
@@ -472,11 +472,11 @@ export function groupTenders(tenders: ResolvedTender[], prefs: TenderPrefs = {})
  * el primer cobro electrónico disponible (máximo 3).
  */
 export function pinnedTenders(tenders: ResolvedTender[], prefs: TenderPrefs = {}): ResolvedTender[] {
-  const hidden = new Set(prefs.hidden ?? []);
+  const hidden = new Set(normalizeIds(prefs.hidden));
   const usable = tenders.filter((t) => !hidden.has(t.id));
   const byId = new Map(usable.map((t) => [t.id, t]));
   if (prefs.pinned && prefs.pinned.length > 0) {
-    return prefs.pinned
+    return normalizeIds(prefs.pinned)
       .map((id) => byId.get(id))
       .filter((t): t is ResolvedTender => Boolean(t))
       .slice(0, 3);
@@ -489,4 +489,64 @@ export function pinnedTenders(tenders: ResolvedTender[], prefs: TenderPrefs = {}
   const card = usable.find((t) => t.flow === "card");
   if (card && out.length < 3) out.push(card);
   return out;
+}
+
+/**
+ * Agrupa una lista de tenders por marca, en el orden de aparición. Las marcas
+ * con más de un canal (p. ej. GO Cuotas QR + Link, Directo con API, Mobbex)
+ * se muestran como una fila con canales; las de un solo canal, como tile.
+ */
+export function brandRuns<T extends Pick<TenderDef, "brand">>(tenders: T[]): T[][] {
+  const runs = new Map<string, T[]>();
+  for (const t of tenders) {
+    const run = runs.get(t.brand);
+    if (run) run.push(t);
+    else runs.set(t.brand, [t]);
+  }
+  return Array.from(runs.values());
+}
+
+// ── Selector de la hoja de cobro (pos_layout.checkout) ───────────────────────
+
+export interface CheckoutPickerPrefs {
+  /** Ids de tenders fijados arriba de todo. */
+  favorites?: string[];
+  /** Grupos que no se muestran en el selector. */
+  hiddenGroups?: string[];
+}
+
+export type CheckoutSectionKey = TenderGroupKey | "favorites";
+
+export interface CheckoutSection {
+  key: CheckoutSectionKey;
+  label: string;
+  tenders: ResolvedTender[];
+}
+
+/**
+ * Secciones del selector de la hoja de cobro: "Favoritos" primero (en el orden
+ * elegido) y después los grupos visibles, sin repetir los favoritos. Ocultar
+ * grupos nunca deja la hoja vacía: si no queda nada, se ignora.
+ */
+export function checkoutSections(
+  tenders: ResolvedTender[],
+  prefs: TenderPrefs = {},
+  picker: CheckoutPickerPrefs = {},
+): CheckoutSection[] {
+  const base = groupTenders(tenders, prefs);
+  const byId = new Map(base.flatMap((s) => s.tenders).map((t) => [t.id, t]));
+  const favs = normalizeIds(picker.favorites)
+    .map((id) => byId.get(id))
+    .filter((t): t is ResolvedTender => Boolean(t));
+  const favIds = new Set(favs.map((t) => t.id));
+  const hidden = new Set(picker.hiddenGroups ?? []);
+  const build = (hide: boolean): CheckoutSection[] => {
+    const rest = base
+      .filter((s) => !hide || !hidden.has(s.key))
+      .map((s) => ({ ...s, tenders: s.tenders.filter((t) => !favIds.has(t.id)) }))
+      .filter((s) => s.tenders.length > 0);
+    return favs.length > 0 ? [{ key: "favorites", label: "Favoritos", tenders: favs }, ...rest] : rest;
+  };
+  const out = build(true);
+  return out.length > 0 ? out : build(false);
 }

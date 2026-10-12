@@ -1,8 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, Lock, Pin, Plus, Search, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, Lock, Pin, Plus, Search, Star, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/Switch";
+import { Segmented } from "@/components/ui/Segmented";
+import { choiceClass } from "@/components/ui/ChoiceCard";
 import {
+  CHECKOUT_FAVORITES_MAX,
+  CHECKOUT_LAYOUTS,
+  CHECKOUT_LAYOUT_INFO,
   POS_ACCENTS,
   POS_PRESETS,
   PRESET_DEFAULTS,
@@ -16,9 +22,14 @@ import {
 } from "@/lib/pos/layout";
 import { TENDER_GROUPS, type ResolvedTender } from "@/lib/pos/tenders";
 import { cn } from "@/lib/utils/cn";
-import { BrandIcon } from "../ui/BrandIcon";
-import { POS_IDLE, POS_SELECTED, QUICK_KEY_FILL, accentVars, money } from "../ui/posStyles";
-import { PresetThumb } from "../screen/PresetThumb";
+import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
+import { QUICK_KEY_FILL, accentVars, money } from "../ui/posStyles";
+import { CheckoutThumb, PresetThumb } from "../screen/PresetThumb";
+
+// Pastillas en reposo / seleccionadas (relleno neutro, sin borde de color).
+const PILL = "flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition disabled:opacity-40";
+const PILL_IDLE = "border border-border bg-card text-muted-foreground hover:text-foreground";
+const PILL_ON = "choice-on border border-transparent";
 
 // Editor del diseño del POS (Configuración, Diseño del POS). Presentacional:
 // recibe el diseño resuelto y emite cambios; quien lo usa decide si se guarda
@@ -58,6 +69,8 @@ export function PosLayoutEditor({
   const set = <K extends keyof PosLayout>(k: K, v: PosLayout[K]) => onChange({ ...value, [k]: v });
   const setPay = (patch: Partial<PosLayout["payments"]>) =>
     onChange({ ...value, payments: { ...value.payments, ...patch } });
+  const setCheckout = (patch: Partial<PosLayout["checkout"]>) =>
+    onChange({ ...value, checkout: { ...value.checkout, ...patch } });
   const maxKeys = quickKeysPro ? QUICK_KEYS_PRO_MAX : QUICK_KEYS_BASE_MAX;
 
   const pickPreset = (p: PosPreset) =>
@@ -68,6 +81,8 @@ export function PosLayoutEditor({
       payments: value.payments,
       quickKeys: value.quickKeys,
       tipPresets: value.tipPresets,
+      // La distribución del cobro sigue al preset; favoritos y grupos se conservan.
+      checkout: { ...value.checkout, layout: PRESET_DEFAULTS[p].checkout.layout, density: PRESET_DEFAULTS[p].checkout.density },
     });
 
   const togglePin = (id: string) => {
@@ -76,6 +91,20 @@ export function PosLayoutEditor({
       : [...value.payments.pinned, id].slice(-3);
     setPay({ pinned });
   };
+  const toggleFavorite = (id: string) => {
+    const favs = value.checkout.favorites;
+    setCheckout({
+      favorites: favs.includes(id)
+        ? favs.filter((x) => x !== id)
+        : [...favs, id].slice(-CHECKOUT_FAVORITES_MAX),
+    });
+  };
+  const toggleGroup = (key: string) => {
+    const hidden = value.checkout.hiddenGroups;
+    setCheckout({ hiddenGroups: hidden.includes(key) ? hidden.filter((x) => x !== key) : [...hidden, key] });
+  };
+  const groupsInUse = TENDER_GROUPS.filter((g) => tenders.some((t) => t.group === g.key));
+
   const toggleHidden = (id: string) =>
     setPay({
       hidden: value.payments.hidden.includes(id)
@@ -99,34 +128,43 @@ export function PosLayoutEditor({
         <p className="mt-0.5 text-xs text-muted-foreground">
           Cada diseño ordena la venta para un tipo de negocio. Después podés ajustar todo.
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" role="radiogroup" aria-label="Pantalla de venta">
           {POS_PRESETS.map((p) => {
             const info = PRESET_INFO[p];
             const blocked = Boolean(info.requiresDining && !diningEnabled);
             const on = value.preset === p;
+            if (blocked) {
+              return (
+                <div key={p} className="rounded-lg border border-dashed border-border bg-card p-2">
+                  <PresetThumb preset={p} className="h-20 w-full opacity-50 sm:h-28" />
+                  <span className="flex items-center gap-1.5 px-1 pt-2.5 text-sm font-semibold text-muted-foreground">
+                    <Lock size={13} aria-hidden /> {info.name}
+                  </span>
+                  <span className="block px-1 pt-0.5 text-xs text-muted-foreground">
+                    Necesita el modo gastronómico (mesas) activo.
+                  </span>
+                  <Link
+                    href={"/configuracion?seccion=operacion" as never}
+                    className="mx-1 mb-1 mt-2 inline-flex h-8 items-center rounded-md bg-muted px-2.5 text-xs font-semibold text-foreground transition hover:bg-fg-10"
+                  >
+                    Activar modo gastronómico
+                  </Link>
+                </div>
+              );
+            }
             return (
               <button
                 key={p}
                 type="button"
-                disabled={blocked}
+                role="radio"
+                aria-checked={on}
                 onClick={() => pickPreset(p)}
-                aria-pressed={on}
-                className={cn(
-                  "rounded-3xl p-2 text-left transition active:scale-[0.99] disabled:opacity-50",
-                  on ? POS_SELECTED : "bg-fg-6 hover:bg-fg-10",
-                )}
+                className={choiceClass(on, "rounded-lg p-2")}
               >
-                <PresetThumb preset={p} className="h-32 w-full" />
-                <span className="flex items-center justify-between gap-2 px-1.5 pt-2.5">
-                  <span className="text-sm font-black">{info.name}</span>
-                  {on && <Check size={16} />}
-                </span>
-                <span className={cn("block px-1.5 text-xs", on ? "opacity-75" : "text-muted-foreground")}>
-                  {info.tagline}
-                </span>
-                <span className={cn("block px-1.5 pb-1.5 pt-1 text-[11px] font-semibold", on ? "opacity-60" : "text-muted-foreground")}>
-                  {blocked ? "Activá el modo gastronómico en Operación" : info.bestFor}
-                </span>
+                <PresetThumb preset={p} className="h-20 w-full sm:h-28" />
+                <span className="block px-1 pt-2.5 text-sm font-semibold">{info.name}</span>
+                <span className="block px-1 text-xs text-muted-foreground">{info.tagline}</span>
+                <span className="block px-1 pb-1 pt-1 text-[11px] font-medium text-muted-foreground">{info.bestFor}</span>
               </button>
             );
           })}
@@ -213,9 +251,9 @@ export function PosLayoutEditor({
                   type="button"
                   onClick={() => set("accent", a)}
                   aria-pressed={on}
-                  className={cn("flex h-10 items-center gap-2 rounded-full pl-1.5 pr-3.5 text-[13px] font-bold transition", on ? POS_SELECTED : POS_IDLE)}
+                  className={cn("flex h-10 items-center gap-2 rounded-lg pl-1.5 pr-3.5 text-[13px] font-semibold transition", on ? PILL_ON : PILL_IDLE)}
                 >
-                  <span className="h-7 w-7 rounded-full" style={{ background: `linear-gradient(135deg, ${g.from}, ${g.via}, ${g.to})` }} />
+                  <span className="h-6 w-6 rounded-md" style={{ background: g.via }} />
                   {ACCENT_LABEL[a]}
                 </button>
               );
@@ -239,15 +277,81 @@ export function PosLayoutEditor({
         <Toggle label="Teclado numérico en pantalla" checked={value.keypad} onChange={(v) => set("keypad", v)} />
       </section>
 
+      {/* Pantalla de cobro */}
+      <section>
+        <h3 className="text-sm font-black">Pantalla de cobro</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Cómo se ordena la hoja de cobro. Es una preferencia de pantalla: no cambia los medios habilitados.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4" role="radiogroup" aria-label="Pantalla de cobro">
+          {CHECKOUT_LAYOUTS.map((l) => {
+            const info = CHECKOUT_LAYOUT_INFO[l];
+            const on = value.checkout.layout === l;
+            return (
+              <button
+                key={l}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setCheckout({ layout: l })}
+                className={choiceClass(on, "rounded-lg p-2")}
+              >
+                <CheckoutThumb layout={l} className="h-20 w-full sm:h-24" />
+                <span className="block px-1 pt-2.5 text-sm font-semibold">{info.name}</span>
+                <span className="block px-1 text-xs text-muted-foreground">{info.tagline}</span>
+                <span className="block px-1 pb-1 pt-1 text-[11px] font-medium text-muted-foreground">{info.bestFor}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-5 grid gap-x-8 gap-y-5 lg:grid-cols-2">
+          <Field label="Densidad del cobro">
+            <Seg
+              value={value.checkout.density}
+              onChange={(v) => setCheckout({ density: v })}
+              options={[
+                ["compact", "Compacta"],
+                ["comfortable", "Cómoda"],
+              ]}
+            />
+          </Field>
+          <Toggle
+            label="Canales de cada marca en una fila (QR, Link, Point)"
+            checked={value.checkout.channelChips}
+            onChange={(v) => setCheckout({ channelChips: v })}
+          />
+        </div>
+        {groupsInUse.length > 1 && (
+          <div className="mt-5">
+            <Field label="Grupos que se muestran al cobrar">
+              <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                {groupsInUse.map((g) => {
+                  const shown = !value.checkout.hiddenGroups.includes(g.key);
+                  return (
+                    <li key={g.key}>
+                      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-sm font-medium">
+                        {g.label}
+                        <Switch checked={shown} onCheckedChange={() => toggleGroup(g.key)} label={`Mostrar ${g.label}`} />
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Field>
+          </div>
+        )}
+      </section>
+
       {/* Medios de cobro */}
       <section>
         <h3 className="text-sm font-black">Medios de cobro en la pantalla</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Fijá hasta 3 para cobrar de un toque desde el carrito y ocultá los que no uses. Sólo ordena:
-          habilitar un medio se hace en Medios de pago.
+          Fijá hasta 3 para cobrar de un toque desde el carrito, marcá hasta {CHECKOUT_FAVORITES_MAX} favoritos
+          para verlos primero al cobrar y ocultá los que no uses. Sólo ordena: habilitar un medio se hace en Medios
+          de pago.
         </p>
         {tenders.length === 0 ? (
-          <p className="mt-3 rounded-2xl bg-fg-4 p-4 text-sm text-muted-foreground">
+          <p className="mt-3 rounded-lg bg-muted p-4 text-sm text-muted-foreground">
             Todavía no hay medios habilitados.
           </p>
         ) : (
@@ -255,10 +359,11 @@ export function PosLayoutEditor({
             {tenders.map((t) => {
               const pinned = value.payments.pinned.includes(t.id);
               const hidden = value.payments.hidden.includes(t.id);
+              const favorite = value.checkout.favorites.includes(t.id);
               const group = TENDER_GROUPS.find((g) => g.key === t.group)?.label;
               return (
-                <li key={t.id} className={cn("flex items-center gap-3 rounded-2xl bg-fg-4 p-2 pr-2.5", hidden && "opacity-50")}>
-                  <BrandIcon logo={t.logo} alt={t.brandLabel} size={34} />
+                <li key={t.id} className={cn("flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2 pr-2.5", hidden && "opacity-50")}>
+                  <TenderLogo source={t} alt={t.brandLabel} size={28} fallback={tenderFallback(t)} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-bold">
                       {t.group === "cash" || t.group === "transfer" ? t.label : `${t.brandLabel} · ${t.label}`}
@@ -269,12 +374,23 @@ export function PosLayoutEditor({
                   </span>
                   <button
                     type="button"
+                    onClick={() => toggleFavorite(t.id)}
+                    aria-pressed={favorite}
+                    disabled={hidden}
+                    title="Mostrarlo primero en la pantalla de cobro"
+                    className={cn(PILL, favorite ? PILL_ON : PILL_IDLE)}
+                  >
+                    <Star size={12} className={favorite ? "fill-current" : undefined} /> Favorito
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => togglePin(t.id)}
                     aria-pressed={pinned}
                     disabled={hidden}
-                    className={cn("flex h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition", pinned ? POS_SELECTED : POS_IDLE)}
+                    title="Botón de cobro rápido en el carrito"
+                    className={cn(PILL, pinned ? PILL_ON : PILL_IDLE)}
                   >
-                    <Pin size={12} /> {pinned ? "Fijado" : "Fijar"}
+                    <Pin size={12} /> {pinned ? "En el carrito" : "Al carrito"}
                   </button>
                   <Switch checked={!hidden} onCheckedChange={() => toggleHidden(t.id)} label={`Mostrar ${t.brandLabel} ${t.label}`} />
                 </li>
@@ -326,11 +442,11 @@ export function PosLayoutEditor({
             onChange={(e) => onProductQuery(e.target.value)}
             placeholder="Buscar un producto para sumar"
             aria-label="Buscar un producto para sumar como tecla rápida"
-            className="h-11 w-full rounded-2xl bg-fg-6 pl-10 pr-3 text-sm outline-none focus:bg-fg-10"
+            className="h-11 w-full rounded-lg bg-fg-6 pl-10 pr-3 text-sm outline-none focus:bg-fg-10"
           />
         </div>
         {productQuery.trim() && (
-          <ul className="mt-1.5 max-h-56 overflow-y-auto rounded-2xl bg-fg-4 p-1">
+          <ul className="mt-1.5 max-h-56 overflow-y-auto rounded-lg bg-fg-4 p-1">
             {productResults.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">Sin resultados.</li>}
             {productResults.slice(0, 12).map((p) => {
               const added = value.quickKeys.some((k) => k.productId === p.id);
@@ -363,7 +479,7 @@ export function PosLayoutEditor({
             {value.quickKeys.map((k, i) => {
               const p = keyProducts.get(k.productId);
               return (
-                <li key={k.productId} className="flex flex-wrap items-center gap-2 rounded-2xl bg-fg-4 p-2">
+                <li key={k.productId} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-2">
                   <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-black", k.color ? QUICK_KEY_FILL[k.color] : "bg-fg-10")}>
                     {i + 1}
                   </span>
@@ -434,28 +550,13 @@ function Seg<T extends string>({
   options: [T, string][];
 }) {
   return (
-    <div className="inline-flex flex-wrap gap-1 rounded-2xl bg-fg-6 p-1">
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          onClick={() => onChange(v)}
-          aria-pressed={value === v}
-          className={cn(
-            "h-9 rounded-xl px-3 text-[13px] font-bold transition",
-            value === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <Segmented value={value} onChange={onChange} options={options.map(([v, label]) => ({ value: v, label }))} />
   );
 }
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl bg-fg-4 px-3.5 py-3 text-sm font-semibold">
+    <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border bg-card px-3.5 py-3 text-sm font-medium">
       {label}
       <Switch checked={checked} onCheckedChange={onChange} label={label} />
     </label>
@@ -485,7 +586,7 @@ function NumberList({
       }
       placeholder={placeholder}
       inputMode="numeric"
-      className="h-11 w-full rounded-2xl bg-fg-6 px-3.5 text-sm font-semibold outline-none focus:bg-fg-10"
+      className="h-11 w-full rounded-lg bg-fg-6 px-3.5 text-sm font-semibold outline-none focus:bg-fg-10"
     />
   );
 }

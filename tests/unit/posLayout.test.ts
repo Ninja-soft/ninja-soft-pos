@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHECKOUT_FAVORITES_MAX,
+  CHECKOUT_LAYOUTS,
   PRESET_DEFAULTS,
   QUICK_KEYS_BASE_MAX,
   layoutNeedsQuickKeysPro,
@@ -77,6 +79,59 @@ describe("resolución negocio + usuario", () => {
       pinned: ["mercadopago:qr"],
       quickCash: [5000],
     });
+  });
+});
+
+describe("pantalla de cobro (pos_layout.checkout)", () => {
+  it("por defecto: dos columnas, cómoda, canales en fila y sin favoritos", () => {
+    expect(resolveLayout(null).checkout).toEqual({
+      layout: "two_columns",
+      favorites: [],
+      hiddenGroups: [],
+      channelChips: true,
+      density: "comfortable",
+    });
+  });
+
+  it("Caja rápida arranca con el teclado primero", () => {
+    expect(PRESET_DEFAULTS.caja_rapida.checkout.layout).toBe("keypad_first");
+    expect(resolveLayout({ preset: "caja_rapida" }).checkout.layout).toBe("keypad_first");
+  });
+
+  it("todas las distribuciones son válidas en el schema", () => {
+    for (const layout of CHECKOUT_LAYOUTS) {
+      const r = posLayoutSchema.safeParse({ ...PRESET_DEFAULTS.mostrador, checkout: { ...PRESET_DEFAULTS.mostrador.checkout, layout } });
+      expect(r.success).toBe(true);
+    }
+  });
+
+  it("descarta por sub-campo lo inválido del cobro", () => {
+    const s = sanitizeLayout({
+      checkout: {
+        layout: "carrusel",
+        favorites: ["cash", "mercadopago:qr"],
+        hiddenGroups: "transfer",
+        channelChips: false,
+        density: "gigante",
+      },
+    });
+    expect(s.checkout).toEqual({ favorites: ["cash", "mercadopago:qr"], channelChips: false });
+    expect(sanitizeLayout({ checkout: ["two_columns"] }).checkout).toBeUndefined();
+  });
+
+  it("limita los favoritos", () => {
+    const favorites = Array.from({ length: CHECKOUT_FAVORITES_MAX + 1 }, (_, i) => `t${i}`);
+    expect(sanitizeLayout({ checkout: { favorites } }).checkout).toEqual({});
+  });
+
+  it("el usuario pisa el cobro del negocio campo por campo", () => {
+    const l = resolveLayout(
+      { checkout: { layout: "big_buttons", favorites: ["cash"] } },
+      { checkout: { layout: "compact_list" } },
+    );
+    expect(l.checkout.layout).toBe("compact_list");
+    expect(l.checkout.favorites).toEqual(["cash"]);
+    expect(l.checkout.density).toBe("comfortable");
   });
 });
 

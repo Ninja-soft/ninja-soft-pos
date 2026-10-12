@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Bike, CalendarDays, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -230,7 +231,7 @@ function PosPageInner() {
     return parts.length ? parts.join(" › ") : null;
   }, [categories, categoryFilter]);
 
-  const { data: shift } = useOpenShift();
+  const { data: shift, isFetched: shiftFetched } = useOpenShift();
   const { data: register } = useDefaultRegister();
   const { open, close } = usePosMutations();
   const { data: myTenant } = useMyTenant();
@@ -661,6 +662,18 @@ function PosPageInner() {
   const startCheckoutRef = useRef(startCheckout);
   startCheckoutRef.current = startCheckout;
 
+  // Acceso rápido "Cobrar" del menú (F1): /pos?cobrar=1 abre la hoja de cobro
+  // si hay un carrito en curso (sin caja abierta, pide abrirla). El parámetro
+  // se limpia para que volver atrás o recargar no reabra el cobro.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const wantsCheckout = searchParams.get("cobrar") === "1";
+  useEffect(() => {
+    if (!wantsCheckout || !shiftFetched) return;
+    router.replace("/pos", { scroll: false });
+    if (useCartStore.getState().lines.length > 0) startCheckoutRef.current();
+  }, [wantsCheckout, shiftFetched, router]);
+
   // Atajos: F2 busca, F12 cobra.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -942,6 +955,7 @@ function PosPageInner() {
           tipPresets={layout.tipPresets}
           quickCash={layout.payments.quickCash}
           keypad={layout.keypad}
+          checkout={layout.checkout}
           style={accentVars(effectiveLayout.accent)}
           loading={saving}
           onConfirm={handleSale}

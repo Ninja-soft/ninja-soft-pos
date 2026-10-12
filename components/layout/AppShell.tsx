@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -62,6 +62,7 @@ import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+import { useCartStore } from "@/modules/pos/store";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -83,6 +84,58 @@ const MembershipProfileModal = dynamic(
     ),
   { ssr: false },
 );
+
+// Roles que pueden vender (el de "Solo lectura" no ve el acceso rápido).
+const SELL_ROLES = new Set(["owner", "manager", "cashier"]);
+// Atajo global para ir a vender (el POS usa F2 para buscar y F12 para cobrar).
+const SELL_SHORTCUT = "F1";
+
+// La pantalla de venta (y sus vistas a pantalla completa) no muestra la
+// burbuja del asistente IA: tapa el carrito y los botones de cobro.
+export function isPosRoute(pathname: string | null): boolean {
+  return pathname === "/pos" || Boolean(pathname?.startsWith("/pos/"));
+}
+
+// Acceso rápido a la venta. Con un carrito en curso lleva directo al cobro
+// (/pos?cobrar=1, lo abre la página del POS).
+function SellQuickAction({
+  compact = false,
+  onNavigate,
+}: {
+  compact?: boolean;
+  onNavigate?: () => void;
+}) {
+  const count = useCartStore((s) => s.lines.length);
+  const href = count > 0 ? "/pos?cobrar=1" : "/pos";
+  const label = count > 0 ? "Cobrar" : "Vender";
+  const hint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
+  return (
+    <Link
+      href={href as never}
+      onClick={onNavigate}
+      title={hint}
+      aria-label={hint}
+      aria-keyshortcuts={SELL_SHORTCUT}
+      className={cn(
+        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white shadow-sm transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        compact ? "h-9 px-3 text-sm" : "h-10 w-full px-3 text-sm",
+      )}
+    >
+      <ShoppingCart size={16} aria-hidden />
+      <span>{label}</span>
+      {count > 0 && (
+        <span className="grid h-5 min-w-5 place-items-center rounded-md bg-white/20 px-1 text-[11px] font-bold tabular-nums">
+          {count}
+        </span>
+      )}
+      {!compact && (
+        <kbd className="ml-auto rounded bg-white/20 px-1.5 py-0.5 font-sans text-[10px] font-semibold">
+          {SELL_SHORTCUT}
+        </kbd>
+      )}
+    </Link>
+  );
+}
 
 // `feature` (opcional): si el plan no la incluye, el ítem de nav se ve
 // deshabilitado (candado) y al click abre el UpgradeModal en vez de navegar.
@@ -346,6 +399,21 @@ export function AppShell({
   });
   const isInternal = shell?.isInternal ?? false;
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
+  const canSell = SELL_ROLES.has(shell?.role ?? "");
+  const onPos = isPosRoute(pathname);
+
+  // Atajo global F1: ir a vender (o al cobro si hay carrito).
+  useEffect(() => {
+    if (!canSell) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== SELL_SHORTCUT || e.ctrlKey || e.altKey || e.metaKey) return;
+      e.preventDefault();
+      const hasCart = useCartStore.getState().lines.length > 0;
+      router.push((hasCart ? "/pos?cobrar=1" : "/pos") as never);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canSell, router]);
 
   // Modo gastronómico (H43) y delivery (H49): oculta los ítems con requiresDining
   // / requiresDelivery si su toggle del tenant está apagado.
@@ -387,6 +455,12 @@ export function AppShell({
           <NotificationBell align="start" />
         </div>
       </div>
+
+      {canSell && (
+        <div className="mb-3 shrink-0 px-1">
+          <SellQuickAction onNavigate={() => setDrawer(false)} />
+        </div>
+      )}
 
       {/* Navegación scrolleable */}
       <div className="slim-scrollbar -mr-1 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
@@ -510,7 +584,8 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {canSell && !onPos && <SellQuickAction compact />}
             <NotificationBell />
           </div>
         </header>
@@ -528,7 +603,7 @@ export function AppShell({
       <MountWhenOpened open={pfOpen}>
         <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
       </MountWhenOpened>
-      <AssistantBubble />
+      {!onPos && <AssistantBubble />}
     </div>
   );
 }

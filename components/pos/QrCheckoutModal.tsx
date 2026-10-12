@@ -14,6 +14,7 @@ import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants"
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
+import { paymentIcon } from "@/lib/payments/logos";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
 // Canal de Mercado Pago (ADR-032): "order" = QR dinámico de la caja (Orders
@@ -479,17 +480,7 @@ export function QrCheckoutModal({
 
   // Logo del proveedor REAL del cobro (antes todo lo no mapeado caía al logo
   // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
-  const PROVIDER_LOGOS: Record<string, string> = {
-    mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
-    mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
-    modo: "/img/medios_de_pago/Modo_cube.webp",
-    pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
-    payway: "/img/medios_de_pago/payway_cube.webp",
-    getnet: "/img/medios_de_pago/getnet_cube.webp",
-    nave: "/img/medios_de_pago/nave_cube.webp",
-  };
-  const providerLogo =
-    PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";
+  const providerLogo = paymentIcon(provider) ?? paymentIcon("mercadopago")!;
 
   return (
     <Modal

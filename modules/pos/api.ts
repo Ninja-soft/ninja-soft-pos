@@ -1085,6 +1085,78 @@ export const posApi = {
     });
   },
 
+  // ── Clover Point (ADR-047): terminal Clover por Cloud Pay Display ──────────
+  // Todas pasan por la Edge clover_point (conexión Fiserv del tenant; gating
+  // de plan server-side en create). El POS sondea el estado hasta approved.
+  cloverDevices: async (): Promise<{ id: string; label: string }[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("clover_point", {
+      body: { action: "devices" },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return (data as { devices: { id: string; label: string }[] }).devices;
+  },
+
+  cloverPing: async (deviceId: string): Promise<boolean> => {
+    const supabase = createClient();
+    const { data } = await supabase.functions.invoke("clover_point", {
+      body: { action: "ping", device_id: deviceId },
+    });
+    return Boolean((data as { connected?: boolean } | null)?.connected);
+  },
+
+  // Sin `installments` la terminal pregunta las cuotas (Argentina).
+  createCloverIntent: async (
+    deviceId: string,
+    amount: number,
+    installments?: number,
+  ): Promise<{ intent_id: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("clover_point", {
+      body: { action: "create", device_id: deviceId, amount, installments: installments ?? null },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string };
+  },
+
+  cloverIntentStatus: async (
+    intentId: string,
+  ): Promise<{
+    status: string;
+    mp_payment_id: string | null;
+    card_type: "debit" | "credit" | null;
+    reason?: string | null;
+  }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("clover_point", {
+      body: { action: "status", intent_id: intentId },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as {
+      status: string;
+      mp_payment_id: string | null;
+      card_type: "debit" | "credit" | null;
+      reason?: string | null;
+    };
+  },
+
+  cancelCloverIntent: async (intentId: string): Promise<{ status: string; cancel_requested: boolean }> => {
+    const supabase = createClient();
+    const { data } = await supabase.functions.invoke("clover_point", {
+      body: { action: "cancel", intent_id: intentId },
+    });
+    return { status: String((data as { status?: string } | null)?.status ?? "cancelled"), cancel_requested: false };
+  },
+
   // Estado del intent MODO sincronizado server-side (Edge modo_create_qr,
   // action status): MODO no tiene webhook por intención, así que el poll del
   // POS consulta la API real en cada tick (patrón pagos360).

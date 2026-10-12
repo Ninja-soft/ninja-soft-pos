@@ -172,9 +172,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point) y cargar el ID de punto de venta de cada terminal.",
   },
   fiserv: {
-    desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",
-    impact: "Desactivado, las terminales Fiserv/Clover no quedan disponibles como medio de cobro.",
+    desc: "Cobros con terminales Fiserv (Posnet o Clover) sin integrar: se cobra en la terminal y el POS registra el cupón como débito o crédito. Es la marca de la que depende el Clover Point integrado.",
+    impact: "Desactivado, las terminales Fiserv no quedan disponibles como medio de cobro ni se puede integrar Clover.",
     minPlan: "Business",
+  },
+  fiserv_point: {
+    desc: "Cobros con Clover Point: el POS manda el monto a la terminal Clover (Flex o Mini) por Cloud Pay Display, el cliente paga con tarjeta, contactless o en cuotas y la venta se registra sola como débito o crédito.",
+    impact: "Desactivado, la terminal Clover no queda integrada al cobro del POS (se puede seguir usando sin integrar).",
+    minPlan: "Business",
+    requires: ["fiserv"],
+    needs: "Marca Fiserv conectada (el Merchant ID y el token de Clover del comercio) y la app Cloud Pay Display abierta en cada terminal.",
   },
   pagos360: {
     desc: "Cobros con Pagos360: links de pago y DEBIN para cobrar a distancia o por débito inmediato.",

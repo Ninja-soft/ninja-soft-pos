@@ -432,6 +432,15 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [ ] Trazabilidad por transacción y auditoría completa sin guardar datos sensibles de tarjeta.
   - [ ] *Criterio:* si un proveedor falla, el POS ofrece fallback autorizado y la operación queda conciliable sin duplicar cobro.
 
+#### F8 · Points (terminales integradas): estado 2026-10 (ADR-047)
+
+> Subsección propia de la rama `feat/fiserv-clover-point` (para mergear sin pisar otras ediciones del roadmap). Relevamiento completo: [`docs/payments/research-points-2026-10.md`](payments/research-points-2026-10.md).
+
+- [~] **H19 · Clover Point (Fiserv).** *Integrado en código (2026-10-12):* canal `fiserv_point` (marca Fiserv, OPTIONAL desde Business, `requires: fiserv`), Edge `clover_point` (devices/ping/create/status/cancel por Cloud Pay Display, centavos, Idempotency-Key, consulta por externalPaymentId) y `clover_webhook` (`--no-verify-jwt`, re-consulta, nunca confía en el cuerpo). Conexión Fiserv (Merchant ID + token, refresh opcional, series de terminales, Prueba/Producción). `fiserv` pasa a canal manual (Posnet o Clover sin integrar). **Bloqueos:** (1) cuenta de desarrollador global + comercio de prueba AR + Dev Kit o emulador (lo hace Lucas); (2) confirmar con Fiserv/Clover que Cloud Pay Display está habilitado en producción AR (los docs se contradicen); (3) app aprobada para tokens de producción (`CLOVER_APP_ID`). **Pasos:** aplicar `20261013300000_fiserv_clover_point`, deploy de las 2 Edges + `set_payment_secret` (sin cambios), primer cobro en sandbox, webhook opcional.
+- [ ] **Payway Point.** Próximamente. **Bloqueo:** Payway no publica una API para mandar cobros a la terminal (sólo reversas y cierres PayStore). **Paso:** pedir al ejecutivo de Payway el kit de integradores (API de terminales, homologación PayStore, SDK Terminal Smart).
+- [ ] **Getnet Point.** Próximamente. **Bloqueo:** Cloud2Cloud de "Integrated POS" es para partners y no está confirmado en Argentina. **Paso:** contactar Partnerships de Getnet AR y pedir disponibilidad y credenciales.
+- [x] **Descartados como Point** (sin terminal propia o sin API): Mobbex, MODO, Ualá Bis, Viumi, Naranja X (cubierto por Nave), Posnet/LaPos legacy (protocolo local), Cuenta DNI, Personal Pay.
+
 ### F10 — Hardware y mostrador PRO
 
 Objetivo: que el POS opere como sistema de mostrador profesional: impresoras configurables, scanners confiables, periféricos por caja/sucursal y segunda pantalla para el cliente. Todo debe ser configurable por tenant, sucursal, caja y perfil de dispositivo.

@@ -27,6 +27,11 @@ import { posApi } from "@/modules/pos/api";
 // H21c: el mismo modal cobra con Nave Point (provider "nave_point", Edge
 // nave_point): las terminales son los ids de punto de venta cargados en la
 // conexión de Nave (no hay modo PDV) y Nave empuja el cobro a esa terminal.
+//
+// ADR-047: también cobra con Clover Point (provider "fiserv_point", Edge
+// clover_point): las terminales Clover del comercio (número de serie) con la
+// app Cloud Pay Display abierta. El cajero puede fijar las cuotas o dejar que
+// la terminal las pregunte; débito o crédito lo informa Clover al aprobar.
 
 const DEVICE_LS_KEY = "ninja-point-device";
 
@@ -52,7 +57,15 @@ function presetOpts(p: PayPreset): PresetOpts | undefined {
   return n > 1 ? { installments: n } : { defaultType: "credit_card" };
 }
 
-type PointProvider = "mercadopago_point" | "nave_point";
+type PointProvider = "mercadopago_point" | "nave_point" | "fiserv_point";
+
+// Clover: sólo cuotas (no hay preselección de débito). "reader" = las
+// pregunta la terminal.
+const CLOVER_PRESETS: PayPreset[] = ["reader", "c1", "c3", "c6", "c12"];
+function cloverInstallments(p: PayPreset): number | undefined {
+  if (p === "reader" || p === "debit") return undefined;
+  return Number(p.slice(1));
+}
 type PointDevice = { id: string; operating_mode: string; label?: string };
 type PointStatus = {
   status: string;
@@ -60,8 +73,11 @@ type PointStatus = {
   reason?: string | null;
 };
 
-// Motivos de baja que informa Nave para una intención en la terminal.
+// Motivos de baja que informan Nave y Clover para un cobro en la terminal.
 const NAVE_REASON_COPY: Record<string, string> = {
+  device_busy: "La terminal Clover está ocupada con otra operación. Terminala y reintentá.",
+  cancelled_on_device: "El cobro se canceló en la terminal.",
+  clover_auth_failed: "Clover rechazó el token. Revisá la conexión de Fiserv en Medios de pago.",
   low_battery: "La terminal tiene poca batería (menos de 5%). Cargala y reintentá.",
   "low battery": "La terminal tiene poca batería (menos de 5%). Cargala y reintentá.",
   manual_disabled_by_user: "El cobro se canceló desde la terminal.",
@@ -93,6 +109,62 @@ const API: Record<
     status: (id) => posApi.navePointIntentStatus(id),
     cancel: (id) => posApi.cancelNavePointIntent(id),
   },
+  fiserv_point: {
+    devices: async () => (await posApi.cloverDevices()).map((d) => ({ ...d, operating_mode: "PDV" })),
+    create: (d, a, o) => posApi.createCloverIntent(d, a, o?.installments),
+    status: (id) => posApi.cloverIntentStatus(id),
+    cancel: (id) => posApi.cancelCloverIntent(id),
+  },
+};
+
+// Textos por proveedor.
+const COPY: Record<
+  PointProvider,
+  {
+    brand: string;
+    account: string;
+    loading: string;
+    empty: string;
+    sending: string;
+    sendError: string;
+    onTerminal: string;
+    cancelHint: string;
+  }
+> = {
+  mercadopago_point: {
+    brand: "Mercado Point",
+    account: "Mercado Pago",
+    loading: "Buscando lectores Point de tu cuenta",
+    empty:
+      "Tu cuenta de Mercado Pago no tiene lectores Point asociados. Vinculá el lector desde la app de Mercado Pago y volvé a intentar.",
+    sending: "Enviando el cobro al lector",
+    sendError: "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
+    onTerminal: "Pedile al cliente que pase o apoye la tarjeta en el Point.",
+    cancelHint: "el lector no responde, cancelalo también desde el Point",
+  },
+  nave_point: {
+    brand: "Nave Point",
+    account: "Nave",
+    loading: "Buscando tus terminales Nave",
+    empty:
+      "No hay terminales Nave Point cargadas. Agregá el ID de punto de venta de cada terminal al conectar Nave en Medios de pago.",
+    sending: "Enviando el cobro a la terminal",
+    sendError: "No se pudo enviar el cobro a la terminal Nave. ¿Está encendida y con el punto de venta correcto?",
+    onTerminal: "Pedile al cliente que pague en la terminal Nave (tarjeta, contactless o QR).",
+    cancelHint: "la terminal no responde, cancelalo también desde la terminal Nave",
+  },
+  fiserv_point: {
+    brand: "Clover Point",
+    account: "Fiserv",
+    loading: "Buscando tus terminales Clover",
+    empty:
+      "No encontramos terminales Clover en tu cuenta. Revisá el Merchant ID y las terminales al conectar Fiserv en Medios de pago.",
+    sending: "Enviando el cobro a la terminal Clover",
+    sendError:
+      "No se pudo enviar el cobro a la terminal Clover. ¿Está encendida, con internet y con la app Cloud Pay Display abierta?",
+    onTerminal: "Pedile al cliente que pague en la terminal Clover (tarjeta, contactless o cuotas).",
+    cancelHint: "la terminal no responde, cancelalo también desde la terminal Clover",
+  },
 };
 
 
@@ -121,9 +193,14 @@ export function PointCheckoutModal({
   const [preset, setPreset] = useState<PayPreset>("reader");
   const firedRef = useRef(false);
   const isNave = provider === "nave_point";
-  const brand = isNave ? "Nave Point" : "Mercado Point";
-  const lsKey = isNave ? `${DEVICE_LS_KEY}-nave` : DEVICE_LS_KEY;
+  const isClover = provider === "fiserv_point";
+  // Terminales sin modo PDV (Nave, Clover): siempre "Listo".
+  const noPdv = isNave || isClover;
+  const copy = COPY[provider];
+  const brand = copy.brand;
+  const lsKey = isNave ? `${DEVICE_LS_KEY}-nave` : isClover ? `${DEVICE_LS_KEY}-clover` : DEVICE_LS_KEY;
   const api = API[provider];
+  const presets = isClover ? PRESETS.filter((p) => CLOVER_PRESETS.includes(p.key)) : PRESETS;
 
   // Lectores Point de la cuenta MP conectada (solo con el modal abierto).
   const {
@@ -180,7 +257,7 @@ export function PointCheckoutModal({
           return;
         }
         if (r.status === "rejected") {
-          setErrorDetail("El pago fue rechazado en el lector.");
+          setErrorDetail((r.reason && NAVE_REASON_COPY[r.reason]) || "El pago fue rechazado en el lector.");
           setPhase("error");
           return;
         }
@@ -219,7 +296,11 @@ export function PointCheckoutModal({
       /* sin persistencia, no bloquea */
     }
     api
-      .create(device, base, isNave ? undefined : presetOpts(preset))
+      .create(
+        device,
+        base,
+        isNave ? undefined : isClover ? { installments: cloverInstallments(preset) } : presetOpts(preset),
+      )
       .then((r) => {
         setIntentId(r.intent_id);
         setPhase("on_terminal");
@@ -230,14 +311,12 @@ export function PointCheckoutModal({
           msg === "payment_method_not_allowed"
             ? `Tu plan no incluye ${brand}.`
             : msg === "not_connected"
-              ? isNave
-                ? "Conectá tu cuenta de Nave en Medios de pago."
-                : "Conectá tu cuenta de Mercado Pago en Medios de pago."
-              : isNave
-                ? "No se pudo enviar el cobro a la terminal Nave. ¿Está encendida y con el punto de venta correcto?"
-                : preset !== "reader"
+              ? `Conectá tu cuenta de ${copy.account} en Medios de pago.`
+              : msg === "invalid_device"
+                ? "Esa terminal no está en tu cuenta. Elegí otra o revisá la conexión."
+                : !noPdv && preset !== "reader"
                   ? "No se pudo enviar el cobro al lector. Si elegiste cuotas, puede que Mercado Pago no las tenga habilitadas en tu cuenta: probá con En el lector."
-                  : "No se pudo enviar el cobro al lector. ¿Está encendido y en modo PDV?",
+                  : copy.sendError,
         );
         setPhase("error");
       });
@@ -286,19 +365,15 @@ export function PointCheckoutModal({
         <div className="space-y-4">
           {devicesLoading ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <Spinner size={18} />{" "}
-              {isNave ? "Buscando tus terminales Nave" : "Buscando lectores Point de tu cuenta"}
+              <Spinner size={18} /> {copy.loading}
             </div>
           ) : devicesError ? (
             <div className="rounded-xl bg-danger/10 p-3 text-sm">
-              No pudimos listar tus lectores. Revisá la conexión con{" "}
-              {isNave ? "Nave" : "Mercado Pago"} en Medios de pago.
+              No pudimos listar tus lectores. Revisá la conexión con {copy.account} en Medios de pago.
             </div>
           ) : (devices?.length ?? 0) === 0 ? (
             <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-              {isNave
-                ? "No hay terminales Nave Point cargadas. Agregá el ID de punto de venta de cada terminal al conectar Nave en Medios de pago."
-                : "Tu cuenta de Mercado Pago no tiene lectores Point asociados. Vinculá el lector desde la app de Mercado Pago y volvé a intentar."}
+              {copy.empty}
             </div>
           ) : (
             <div className="space-y-2">
@@ -325,7 +400,7 @@ export function PointCheckoutModal({
                           : "text-warning",
                       )}
                     >
-                      {isNave
+                      {noPdv
                         ? "Listo"
                         : d.operating_mode === "PDV"
                           ? "Listo (PDV)"
@@ -368,9 +443,9 @@ export function PointCheckoutModal({
 
           {!isNave && (devices?.length ?? 0) > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium">Medio en el lector</p>
+              <p className="text-sm font-medium">{isClover ? "Cuotas" : "Medio en el lector"}</p>
               <div className="grid grid-cols-3 gap-2">
-                {PRESETS.map((p) => (
+                {presets.map((p) => (
                   <button
                     key={p.key}
                     type="button"
@@ -401,7 +476,7 @@ export function PointCheckoutModal({
 
       {phase === "creating" && (
         <div className="flex items-center gap-3 py-8 text-sm text-muted-foreground">
-          <Spinner size={20} /> {isNave ? "Enviando el cobro a la terminal" : "Enviando el cobro al lector"}
+          <Spinner size={20} /> {copy.sending}
         </div>
       )}
 
@@ -415,9 +490,7 @@ export function PointCheckoutModal({
               Cobro de {formatCurrency(base)} en el lector
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {isNave
-                ? "Pedile al cliente que pague en la terminal Nave (tarjeta, contactless o QR)."
-                : "Pedile al cliente que pase o apoye la tarjeta en el Point."}{" "}
+              {copy.onTerminal}{" "}
               La venta se registra sola cuando el pago se apruebe.
             </p>
           </div>
@@ -440,7 +513,7 @@ export function PointCheckoutModal({
             registra igual.
           </p>
           <p className="text-xs">
-            Si {isNave ? "la terminal no responde, cancelalo también desde la terminal Nave" : "el lector no responde, cancelalo también desde el Point"}.
+            Si {copy.cancelHint}.
           </p>
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cerrar igual

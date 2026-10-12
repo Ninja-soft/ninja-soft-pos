@@ -26,7 +26,7 @@ import { money } from "../ui/posStyles";
 
 export type TenderPickerVariant = "tiles" | "list" | "big" | "compact";
 
-const BRAND_GROUPS = new Set(["mercadopago", "payway", "getnet", "nave"]);
+const BRAND_GROUPS = new Set(["mercadopago", "payway", "getnet", "nave", "fiserv"]);
 
 const CHANNEL_ICON = {
   qr: QrCode,

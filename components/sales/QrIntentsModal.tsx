@@ -26,6 +26,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   mercadopago_point: "Mercado Point",
   nave: "Nave",
   nave_point: "Nave Point",
+  fiserv_point: "Clover Point",
   gocuotas: "GO Cuotas",
   directo: "Directo",
 };

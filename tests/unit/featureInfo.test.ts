@@ -19,9 +19,15 @@ describe("dependencias de features", () => {
   });
 
   it("los canales Point de cada marca tienen copy y aclaran su requisito", () => {
-    for (const key of ["mercadopago_point", "payway_point", "getnet_point", "nave_point"]) {
+    for (const key of ["mercadopago_point", "payway_point", "getnet_point", "nave_point", "fiserv_point"]) {
       expect(FEATURE_INFO[key]?.needs, key).toBeTruthy();
     }
+  });
+
+  it("Clover Point depende de la marca Fiserv conectada y va en su mismo plan", () => {
+    expect(featureRequires("fiserv_point")).toEqual(["fiserv"]);
+    expect(FEATURE_INFO.fiserv_point?.minPlan).toBe(FEATURE_INFO.fiserv?.minPlan);
+    expect(FEATURE_INFO.fiserv_point?.needs).toMatch(/Marca Fiserv conectada/);
   });
 
   it("Nave QR + link aclara que hay que conectar la cuenta", () => {

@@ -147,6 +147,44 @@ const FORMS: Record<string, FormSpec> = {
     ],
     envNote: "Elegí QA (prueba) sólo si las credenciales y la URL son de QA.",
   },
+  // Clover Point (ADR-047): conexión de la marca Fiserv. Las terminales salen
+  // de Clover (GET devices); las series cargadas acá acotan y nombran.
+  fiserv: {
+    fields: [
+      {
+        name: "merchant_id",
+        label: "Merchant ID de Clover",
+        min: 8,
+        placeholder: "Ej: ABCD1234EFGH5",
+        hint: "Son 13 letras y números: figura en los datos del comercio del Dashboard de Clover.",
+        validate: (v) => (/^[A-Za-z0-9]{8,20}$/.test(v) ? undefined : "Sólo letras y números, sin espacios."),
+      },
+      {
+        name: "access_token",
+        label: "Token de Clover",
+        secret: true,
+        min: 16,
+        placeholder: "El token de acceso del comercio",
+        hint: "En prueba, el token de API del comercio de prueba. En producción, el que te da NinjaSoft al instalar su app de Clover.",
+      },
+      {
+        name: "refresh_token",
+        label: "Refresh token",
+        secret: true,
+        optional: true,
+        placeholder: "Sólo si te lo dio NinjaSoft",
+        hint: "Con él, el token se renueva solo cuando vence.",
+      },
+      {
+        name: "device_serials",
+        label: "Terminales Clover",
+        optional: true,
+        placeholder: "Caja 1: C043UQ12345678, Caja 2: C043UQ87654321",
+        hint: "Número de serie de cada terminal (Configuración › Acerca de). Vacío: se usan todas las de tu cuenta.",
+      },
+    ],
+    envNote: "Prueba usa el sandbox de Clover con un comercio de prueba; producción cobra de verdad en Clover Argentina.",
+  },
   mobbex: {
     fields: [
       { name: "api_key", label: "API Key", min: 6, placeholder: "Tu API Key" },
@@ -640,6 +678,11 @@ export function ConnectProviderModal({
               {providerKey === "directo" && (
                 <NextStep n={2}>
                   Al cobrar elegís Directo QR o Link: la venta se cierra sola cuando Directo aprueba el crédito.
+                </NextStep>
+              )}
+              {providerKey === "fiserv" && (
+                <NextStep n={2}>
+                  Abrí la app Cloud Pay Display en cada terminal Clover y dejala abierta: ahí llegan los cobros.
                 </NextStep>
               )}
               {(providerKey === "payway" || providerKey === "mobbex") && (

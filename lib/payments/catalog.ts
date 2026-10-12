@@ -28,6 +28,9 @@ export interface BrandDef {
   credentialsLabel?: string;
   // Canales esperados de la marca, en orden de presentación.
   channels: string[];
+  // Fila (provider_key) que guarda la conexión de la marca cuando no es su
+  // canal QR + link (Fiserv: la conexión de Clover vive en `fiserv`).
+  connection?: string;
 }
 
 // Orden de presentación. Efectivo y transferencia van juntos en "Cobros
@@ -107,7 +110,17 @@ export const BRANDS: BrandDef[] = [
     credentialsLabel: "Portal de comercios de Directo",
     channels: ["directo"],
   },
-  { key: "fiserv", name: "Fiserv", tagline: "Terminales Posnet y Clover", channels: ["fiserv"] },
+  {
+    key: "fiserv",
+    name: "Fiserv",
+    tagline: "Terminales Clover integradas y Posnet",
+    credentialsUrl: "https://docs.clover.com/dev/docs/quick-reference-guides-latam-developers",
+    credentialsLabel: "Guía de Clover para Argentina",
+    // Canal manual (Posnet o Clover sin integrar) + Clover Point por API
+    // (ADR-047). La conexión de Clover se guarda en la fila `fiserv`.
+    channels: ["fiserv", "fiserv_point"],
+    connection: "fiserv",
+  },
 ];
 
 // Marcas que se cobran a mano, sin cuenta conectada: van en "Cobros directos".
@@ -115,7 +128,8 @@ export const DIRECT_BRANDS = new Set(["cash", "transfer"]);
 
 // Marcas con API que, sin conectar, igual se cobran a mano (registro del
 // número de operación). Directo (ADR-041): conectada cobra por QR + link.
-export const MANUAL_FALLBACK = new Set(["directo"]);
+// Fiserv (ADR-047): sin conectar, Posnet o Clover sin integrar (cupón manual).
+export const MANUAL_FALLBACK = new Set(["directo", "fiserv"]);
 
 export const BRAND_BY_KEY: Record<string, BrandDef> = Object.fromEntries(
   BRANDS.map((b) => [b.key, b]),
@@ -136,7 +150,8 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   modo: { brand: "modo", channel: "qr_link" },
   mobbex: { brand: "mobbex", channel: "qr_link" },
   pagos360: { brand: "pagos360", channel: "qr_link" },
-  fiserv: { brand: "fiserv", channel: "point" },
+  fiserv: { brand: "fiserv", channel: "manual" },
+  fiserv_point: { brand: "fiserv", channel: "point" },
   gocuotas: { brand: "gocuotas", channel: "qr_link" },
   directo: { brand: "directo", channel: "qr_link" },
 };
@@ -157,11 +172,15 @@ export const IMPLEMENTED = new Set([
   "nave_point",
   "gocuotas",
   "directo",
+  // Fiserv (ADR-047): Posnet/Clover sin integrar (habilita la Tarjeta en
+  // posnet) y Clover Point por Cloud Pay Display.
+  "fiserv",
+  "fiserv_point",
 ]);
 
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point
@@ -185,15 +204,19 @@ export function surchargeModeOf(channelKey: string, channel: PaymentChannel): Su
   if (PLANS_KEY_BY_CHANNEL[channelKey]) return "plans";
   // El QR + link de MP comparte el recargo/planes de 'mercadopago' (Point).
   if (channelKey === "mercadopago") return "shared";
+  // Posnet o Clover sin integrar: las cuotas y el recargo los define la terminal.
+  if (channelKey === "fiserv") return "terminal";
   if (channel === "point") return "terminal";
   return "flat";
 }
 
-// Conexión (credenciales) que usa cada canal: la de su marca. Los canales
-// Point no piden credenciales propias.
+// Conexión (credenciales) que usa cada canal: la de su marca (su canal QR +
+// link, o la fila `connection` de la marca). Los canales Point no piden
+// credenciales propias.
 export function connectionKeyOf(brandKey: string): string | null {
   const b = BRAND_BY_KEY[brandKey];
   if (!b || DIRECT_BRANDS.has(brandKey)) return null;
+  if (b.connection) return b.connection;
   const qr = b.channels.find((c) => PROVIDER_CHANNEL_FALLBACK[c]?.channel === "qr_link");
   return qr ?? null;
 }

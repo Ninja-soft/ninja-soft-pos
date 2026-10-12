@@ -27,6 +27,8 @@ const FILE_PREFIX: Record<string, string> = {
   mobbex: "mobbex",
   pagos360: "pagos360",
   fiserv: "fiserv",
+  // Clover (Fiserv): logo oficial de ar.clover.com (ADR-047).
+  clover: "clover",
   gocuotas: "gocuotas",
   directo: "directo",
 };
@@ -35,13 +37,17 @@ const FILE_PREFIX: Record<string, string> = {
 const NO_WORDMARK = new Set(["cash", "transfer"]);
 
 // Logos con versión para fondo oscuro (los demás se leen bien en ambos).
-const ICON_ON_DARK = new Set(["transfer", "payway"]);
-const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway"]);
+const ICON_ON_DARK = new Set(["transfer", "payway", "clover"]);
+const WORDMARK_ON_DARK = new Set(["mercadopago", "getnet", "nave", "directo", "payway", "clover"]);
+
+// Canales con logo de producto propio (no el de su marca): la terminal
+// integrada de Fiserv es Clover.
+const LOGO_OVERRIDE: Record<string, string> = { fiserv_point: "clover" };
 
 // provider_key (o key de marca) → marca. Los canales Point usan el logo de su
-// marca.
+// marca, salvo los de LOGO_OVERRIDE.
 export function logoBrandOf(key: string): string {
-  return key.replace(/_point$/, "");
+  return LOGO_OVERRIDE[key] ?? key.replace(/_point$/, "");
 }
 
 const withSurface = (path: string, hasDark: boolean, opts?: LogoOpts) =>

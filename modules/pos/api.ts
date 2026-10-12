@@ -15,7 +15,17 @@ export interface CardVoucher {
 }
 
 export interface SalePaymentInput {
-  method: "cash" | "debit" | "credit" | "transfer" | "qr" | "other" | "store_credit" | "account";
+  method:
+    | "cash"
+    | "debit"
+    | "credit"
+    | "transfer"
+    | "qr"
+    | "other"
+    | "store_credit"
+    | "account"
+    // Directo (ADR-034): tender manual; reference = Nº de operación de Directo.
+    | "directo";
   amount: number;
   reference?: string;
   // Voucher de tarjeta (lote/cupón/autorización). Opcional; sólo débito/crédito.
@@ -832,6 +842,47 @@ export const posApi = {
       throw new Error((data as { error: string }).error);
     }
     return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // ── GO Cuotas (ADR-033): checkout Redirect como QR + link (Edge gocuotas) ──
+  // create devuelve el url_init como init_point. El estado se sondea vía la
+  // Edge, que re-consulta la orden en GO Cuotas (la confirmación principal es
+  // el webhook). Mínimo $1.500 (error gocuotas_min_amount).
+  createGoCuotasLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("gocuotas", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  gocuotasIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("gocuotas", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  // Baja local best-effort (si el cliente ya pagó, gana el pago).
+  cancelGoCuotasIntent: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("gocuotas", {
+      body: { action: "cancel", intent_id: id },
+    });
   },
 
   // ── Nave (H21c): QR interoperable + link (Edge nave) ───────────────────────

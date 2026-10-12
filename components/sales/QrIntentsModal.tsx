@@ -24,6 +24,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   mercadopago_point: "Mercado Point",
   nave: "Nave",
   nave_point: "Nave Point",
+  gocuotas: "GO Cuotas",
 };
 const PROVIDER_LOGOS: Record<string, string> = {
   mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
@@ -34,6 +35,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   mercadopago_point: "/img/medios_de_pago/mercado_pago_cube.webp",
   nave: "/img/medios_de_pago/nave_cube.webp",
   nave_point: "/img/medios_de_pago/nave_cube.webp",
+  gocuotas: "/images/payments/gocuotas.webp",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",

@@ -96,6 +96,12 @@ function qrErrorCopy(code: string, providerName: string): string {
     case "getnet_error":
     case "nave_error":
       return `${providerName} devolvió un error al crear el cobro. Probá de nuevo en unos segundos.`;
+    case "gocuotas_min_amount":
+      return "GO Cuotas acepta cobros desde $1.500. Para montos menores usá otro medio de pago.";
+    case "gocuotas_auth_failed":
+      return "GO Cuotas rechazó la API Key de la sucursal. Verificá que sea del mismo ambiente que el switch Sandbox del medio.";
+    case "gocuotas_error":
+      return "GO Cuotas devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -127,7 +133,15 @@ export function QrCheckoutModal({
     amount: number,
     extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
-  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway" | "getnet" | "nave";
+  provider?:
+    | "mercadopago"
+    | "mobbex"
+    | "modo"
+    | "pagos360"
+    | "payway"
+    | "getnet"
+    | "nave"
+    | "gocuotas";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -148,12 +162,15 @@ export function QrCheckoutModal({
   // Getnet: checkout hosted de Getnet (tarjeta y cuotas se eligen ahí).
   // Nave: QR interoperable (cualquier billetera/banco) + checkout hosted de
   // Nave; medio y cuotas se resuelven del lado de Nave.
+  // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
+  // débito ahí).
   const selfManaged =
     provider === "modo" ||
     provider === "pagos360" ||
     provider === "payway" ||
     provider === "getnet" ||
-    provider === "nave";
+    provider === "nave" ||
+    provider === "gocuotas";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -262,7 +279,9 @@ export function QrCheckoutModal({
                 ? posApi.createGetnetLink
                 : provider === "nave"
                   ? posApi.createNaveQr
-                  : posApi.createMpQr;
+                  : provider === "gocuotas"
+                    ? posApi.createGoCuotasLink
+                    : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
@@ -336,12 +355,15 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
+  //  - GO Cuotas: baja local del intent (Redirect no anula checkouts).
   function close() {
     if (intentId && phase === "waiting") {
       if (provider === "mercadopago" && mpChannel === "order") {
         posApi.cancelMpOrder(intentId).catch(() => null);
       } else if (provider === "nave") {
         posApi.cancelNaveIntent(intentId).catch(() => null);
+      } else if (provider === "gocuotas") {
+        posApi.cancelGoCuotasIntent(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -421,7 +443,9 @@ export function QrCheckoutModal({
               ? posApi.getnetIntentStatus(intentId!)
               : provider === "nave"
                 ? posApi.naveIntentStatus(intentId!)
-                : posApi.mpIntentStatus(intentId!),
+                : provider === "gocuotas"
+                  ? posApi.gocuotasIntentStatus(intentId!)
+                  : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching,
@@ -499,6 +523,7 @@ export function QrCheckoutModal({
     payway: "/img/medios_de_pago/payway_cube.webp",
     getnet: "/img/medios_de_pago/getnet_cube.webp",
     nave: "/img/medios_de_pago/nave_cube.webp",
+    gocuotas: "/images/payments/gocuotas.webp",
   };
   const providerLogo =
     PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";

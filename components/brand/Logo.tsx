@@ -76,7 +76,8 @@ export function WordmarkPos({
         width={1071}
         height={253}
         sizes={WORDMARK_SIZES}
-        priority={priority}
+        // Sólo el del tema por defecto (oscuro) se precarga: el otro se baja
+        // únicamente si el tema claro lo muestra.
         className={cn("wordmark-on-light h-8 w-auto", className)}
       />
     </>

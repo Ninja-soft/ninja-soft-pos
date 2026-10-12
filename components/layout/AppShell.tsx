@@ -52,7 +52,6 @@ import {
   BlockingNotificationBanner,
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
-import { AssistantBubble } from "@/components/ai/AssistantBubble";
 import { useFeature } from "@/modules/saas/gating";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -62,6 +61,12 @@ import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+
+// Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
+const AssistantBubble = dynamic(
+  () => import("@/components/ai/AssistantBubble").then((m) => m.AssistantBubble),
+  { ssr: false },
+);
 
 // Modales del menú de usuario: chunks aparte y montados recién al abrirlos
 // (el de perfil arrastra el recortador de avatar; el de contraseña consultaba

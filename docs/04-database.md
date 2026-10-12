@@ -751,6 +751,17 @@ Reglas:
 - [ ] Dead-letter y replay son operaciones auditadas y visibles para soporte.
 - [ ] Riesgo/fraude nunca bloquea silenciosamente: debe explicar regla, score y acción requerida.
 
+## 8.7 Extensión F17: stock por sucursal y traslados (ADR-046)
+
+Migraciones `20261013200000` (features), `20261013200100` (stock por sucursal) y `20261013200200` (traslados).
+
+- [x] `product_stock(tenant_id, store_id, product_id, variant_id, qty, min_qty, max_qty, location)`: stock en mano por sucursal, único por `(store_id, product_id, variant_id)` con `nulls not distinct`. Sólo lectura por RLS; el saldo cambia por triggers sobre `stock_movements` y la configuración por RPC (`set_store_stock_settings`).
+- [x] `stock_movements.store_id` se completa en `BEFORE INSERT` (venta referenciada o sucursal principal) y `AFTER INSERT/DELETE` aplica el delta a `product_stock`. Motivos nuevos: `production`, `count`, `transfer_out`, `transfer_in`, `transfer_return`.
+- [x] Invariante al commit (triggers de restricción diferidos): `products.stock` = Σ `product_stock.qty` (variante null) y `product_variants.stock` = Σ por variante. Una diferencia (edición directa, alta con stock inicial, import) entra como movimiento `adjustment` en la sucursal principal. Diagnóstico: `product_stock_mismatches(tenant)` (service_role).
+- [x] `stock_transfers` (remito correlativo `number` por tenant, estados `draft → pending_approval → scheduled → in_transit → partially_received → received / cancelled`), `stock_transfer_items` (pedido, enviado, recibido, motivo de diferencia), `stock_transfer_events` (timeline) y `stock_transfer_settings` (aprobación por unidades o valor, permisos de cajero, sobrantes, motivo obligatorio, bloqueo sin stock). Sólo lectura por RLS (la configuración la escriben owner/manager); todo cambio por RPC `transfer_*` SECURITY DEFINER con `audit_logs`.
+- [x] Lecturas: `stock_by_store(product_ids)` (saldo, mínimos y en camino) y `stock_low_by_store(limit)` (faltantes por sucursal con el saldo de todas, para sugerir traslados).
+- [ ] RLS por sucursal (`user_can_access_store`) cuando exista H91.
+
 ---
 
 ## 9. Migraciones iniciales sugeridas

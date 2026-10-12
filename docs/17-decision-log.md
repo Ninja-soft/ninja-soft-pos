@@ -1586,6 +1586,43 @@ El dueño pidió "todo muy flexible y configurable, que pueda mover empleados de
 
 ---
 
+## ADR-046: Stock por sucursal derivado de movimientos y traslados entre sucursales (F17 · H94 y H95)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/stock-sucursales`, migraciones no aplicadas) · **Hitos:** F17/H94 (stock por sucursal) y F17/H95 (traslados) · **Numeración:** ADR-043 y ADR-044 ya existen y ADR-045 queda reservada para `feat/multisucursal-base`.
+
+### Contexto
+
+El dueño pidió traslados "muy flexibles y configurables, programados, muy robustos, mucho mejor que Napse". Hoy el stock es uno solo (`products.stock`, `product_variants.stock`) aunque `stock_movements.store_id` ya guarda la sucursal. Las RPC que mueven stock (`create_sale`, `exchange_sale`, `return_sale*`, anulaciones, cuenta corriente, ajuste, merma y producción) escriben el total y luego insertan el movimiento. En paralelo, `feat/multisucursal-base` corrige esas RPC para tomar la sucursal del turno; esta rama no puede tocarlas.
+
+### Decisión
+
+1. **`product_stock` es un saldo derivado del libro `stock_movements`.** Un trigger `AFTER INSERT/DELETE` suma el delta en la sucursal del movimiento; un `BEFORE INSERT` completa la sucursal si falta (la de la venta referenciada o la principal). Así cualquier RPC presente o futura que inserte su movimiento con `store_id` queda por sucursal sin cambiarla: cuando `create_sale` tome la sucursal del turno, el stock por sucursal sale correcto solo.
+2. **`products.stock` sigue siendo el total consolidado** (todas las pantallas y el control de "sin stock" del POS siguen igual). No se recalcula con un trigger que lo escriba (las RPC existentes ya lo escriben y se duplicaría): se **garantiza** con triggers de restricción diferidos que, al commit, comparan el total con la suma por sucursal y, si una escritura cambió el total sin movimiento (alta con stock inicial, edición directa, import), registran la diferencia como `adjustment` en la sucursal principal. Nunca bloquea la operación (un error queda como warning). Diagnóstico: `product_stock_mismatches`.
+3. **En tránsito no suma en ninguna sucursal ni en el total**: el despacho descuenta el origen; la recepción suma en el destino; lo pendiente se ve en `stock_by_store` (llegan / salieron). Un faltante cerrado queda en el ítem con motivo y no vuelve a ninguna sucursal; cancelar en tránsito devuelve lo despachado al origen (`transfer_return`).
+4. **Máquina de estados** `draft → pending_approval → scheduled → in_transit → partially_received → received / cancelled` en RPC SECURITY DEFINER (`transfer_save`, `_submit`, `_approve`, `_reject`, `_reschedule`, `_dispatch`, `_receive`, `_cancel`) con espejo puro en `lib/stock/transfers.ts` para la UI. Edición sólo en borrador; rechazo vuelve a borrador; despacho con cantidades distintas a lo pedido; recepciones parciales sucesivas; cierre con motivo por diferencia.
+5. **Programación perezosa, sin cron:** `scheduled_for` (fecha); la UI muestra "Para despachar hoy" o "Atrasado". Se descartó pg_cron porque no hay nada que ejecutar sin una persona que despache.
+6. **Configuración por negocio** (`stock_transfer_settings`): aprobación (todos o desde N unidades o $ valor a costo; aprueba el dueño o un encargado distinto de quien lo armó; el dueño no se pide aprobación a sí mismo), cajero puede recibir (sí por defecto) o despachar (no por defecto), permitir sobrantes, exigir motivo en diferencias, bloquear despacho sin stock en origen.
+7. **Remito interno** con número correlativo por negocio (`R-000123`, lock por advisory como las ventas), imprimible (aislamiento de impresión igual que la comanda, A4 con firmas) y XLSX; timeline en `stock_transfer_events` y `audit_logs` en cada paso.
+8. **Features (convención CLAUDE.md §6), ambas OPTIONAL desde Business:** `stock_sucursales` (requiere `multi_sucursal`) y `traslados` (requiere `stock_sucursales`). El roadmap y ADR-043 las nombraban `multi_sucursal` (stock) y `transferencias_stock`; se usan estas keys por pedido explícito del PM. Gating server-side: `adjust_store_stock` fuera de la sucursal principal y `set_store_stock_settings` exigen `multi_sucursal` + `stock_sucursales`; toda RPC `transfer_*` exige `multi_sucursal` + `traslados`, y crear o confirmar exige 2+ sucursales activas. Los saldos por sucursal se mantienen siempre (barato y sin huecos si el negocio sube de plan).
+9. **UI sin romper el caso de una sucursal:** con una sola sucursal Productos y la ficha quedan igual; con varias (y la feature) la lista muestra la sucursal actual bajo el total con desglose expandible, la ficha muestra stock, en camino, mínimo, máximo y ubicación por sucursal, y el ajuste pasa a ser por sucursal (ingreso, egreso o conteo). Pantalla nueva **Catálogo, Traslados** (visible con 2+ sucursales) con lista por estado, asistente (ruta, fecha, búsqueda y lector de códigos), despacho, recepción con diferencias, remito y "Sugerir traslados" (faltantes bajo mínimo cubiertos desde sucursales con sobrante sin dejarlas bajo su mínimo, `lib/stock/suggest.ts`). La "sucursal actual" es la principal hasta que exista el contexto de H90 (`useCurrentStoreId`).
+
+### Alternativas descartadas
+
+- **Editar `create_sale` y compañía para escribir `product_stock`:** fuera del alcance de esta rama (lo toca `feat/multisucursal-base`) y frágil: cada RPC nueva tendría que acordarse.
+- **`products.stock` como vista o columna calculada:** rompe las RPC que lo actualizan y el control de stock del POS.
+- **Trigger que reescribe `products.stock` desde `product_stock`:** doble conteo con las RPC actuales.
+- **pg_cron para traslados programados:** no hay acción automática segura; el vencimiento perezoso alcanza.
+- **Policies de escritura en las tablas de traslado:** todo por RPC para que estado, stock y auditoría no se desincronicen.
+
+### Consecuencias
+
+- **Deploy:** la migración `20261013200100` hace backfill del stock actual de cada producto y variante a la sucursal principal de su negocio (idempotente, sólo si no tiene filas). Con 4 negocios y 1 sucursal cada uno es un `insert ... select` chico. Hay que aplicar las tres migraciones en orden y después la de `feat/multisucursal-base` puede ir antes o después (no se pisan).
+- **Desde el deploy, cada movimiento de stock agrega un trigger por fila y una conciliación al commit** (una suma por producto tocado); despreciable a la escala actual, medir con `EXPLAIN` si crece.
+- **Ventas con 2+ sucursales:** mientras `create_sale` use la sucursal default, las ventas descuentan esa sucursal; al mergear el fix de H90 descuentan la del turno sin cambios acá. El control "sin stock" del POS sigue siendo sobre el total (por sucursal queda como pendiente de H94).
+- **Pendiente:** RLS por sucursal (`user_can_access_store`, H91) en `product_stock` y `stock_transfers`; recepción restringida a usuarios de la sucursal destino; seriales por sucursal; solicitud de traslado desde la sucursal que necesita; reporte de artículos en tránsito; stock por sucursal en el buscador del POS; tabla en el asistente IA.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

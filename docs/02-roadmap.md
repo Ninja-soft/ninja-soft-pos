@@ -28,7 +28,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
-| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 en `feat/multisucursal-base` (ADR-043, ADR-045) |
+| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🔴 No iniciado (auditoría fiscal 2026-10-12, ADR-043) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
@@ -1025,20 +1025,21 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Planes de cuotas y recargos por sucursal (se coordina con F14/H59).
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
 
-- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.*
-  - [ ] `stock_levels(store_id, product_id, variant_id, qty, reserved, in_transit)` mantenido por trigger sobre `stock_movements`; `products.stock` pasa a ser la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal default.
-  - [ ] Venta en negativo y stock mínimo por sucursal.
+- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
+  - [x] `product_stock(store_id, product_id, variant_id, qty, min_qty, max_qty, location)` mantenido por trigger sobre `stock_movements`; `products.stock` sigue como total y al commit se garantiza que es la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal principal. En tránsito se calcula desde los traslados (`stock_by_store`). *(ADR-046; reservado queda pendiente)*
+  - [x] Stock mínimo, máximo y ubicación por sucursal; desglose en Productos y en la ficha; ajuste y conteo por sucursal. *(ADR-046)*
+  - [ ] Venta en negativo por sucursal (hoy el control del POS es sobre el total).
   - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
   - [ ] Listas de precios asignables a sucursal o grupo (`price_list_assignments`, ver F18/H100).
   - [ ] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
   - [ ] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34).
   - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
 
-- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `transferencias_stock` (nueva, Business). Requiere H94.*
-  - [ ] Documento con estados `borrador → confirmada → en tránsito → recibida parcial → recibida / cancelada` (la misma máquina de estados para todo documento de inventario, como Napse).
-  - [ ] Movimientos `transfer_out` / `transfer_in`, stock en tránsito visible, diferencias en la recepción con motivo.
-  - [ ] Remito interno imprimible (con el tratamiento fiscal del traslado entre locales propios), solicitud de transferencia desde la sucursal que necesita, transferencia sugerida por stock mínimo (enlaza con F14/H64).
-  - [ ] Auditoría y reporte de artículos en tránsito.
+- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
+  - [x] Documento con estados `borrador → pendiente de aprobación → programado → en tránsito → recibido parcial → recibido / cancelado`, aprobación configurable por unidades o valor (cuatro ojos) y fecha programada con "Para despachar hoy" (sin cron).
+  - [x] Movimientos `transfer_out` / `transfer_in` / `transfer_return`, stock en tránsito visible, diferencias en la recepción con motivo.
+  - [x] Remito interno imprimible y XLSX con número correlativo; transferencia sugerida por stock mínimo. *(Falta: tratamiento fiscal del remito y solicitud de transferencia desde la sucursal que necesita.)*
+  - [x] Auditoría y timeline por traslado. *(Falta: reporte de artículos en tránsito.)*
   - [ ] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran.
 
 - [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*

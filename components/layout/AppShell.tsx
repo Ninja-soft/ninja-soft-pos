@@ -34,8 +34,10 @@ import {
   Utensils,
   Wallet,
   X,
+  ArrowLeftRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useStores } from "@/modules/stock/hooks";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
@@ -153,6 +155,9 @@ type Item = {
   // que requiresDining: toggle del tenant, se oculta sin candado. Independiente
   // de las mesas (delivery puede ir sin modo gastronómico de mesas).
   requiresDelivery?: boolean;
+  // Sólo con 2+ sucursales (traslados · F17/H95): con una sola no tiene sentido
+  // y se oculta sin candado.
+  requiresMultiStore?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -200,6 +205,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package },
+        { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
@@ -423,9 +429,11 @@ export function AppShell({
   // / requiresDelivery si su toggle del tenant está apagado.
   const { data: diningEnabled } = useDiningEnabled();
   const { data: deliveryEnabled } = useDeliveryEnabled();
+  const { data: stores } = useStores();
   const showItem = (it: Item) =>
     (!it.requiresDining || Boolean(diningEnabled)) &&
-    (!it.requiresDelivery || Boolean(deliveryEnabled));
+    (!it.requiresDelivery || Boolean(deliveryEnabled)) &&
+    (!it.requiresMultiStore || (stores?.length ?? 0) > 1);
 
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni

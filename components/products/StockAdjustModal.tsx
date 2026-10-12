@@ -16,6 +16,8 @@ import {
 import type { Product } from "@/modules/products/api";
 import { useProductMutations } from "@/modules/products/hooks";
 import { formatQty } from "@/lib/utils/format";
+import { useMultiStoreStock } from "@/modules/stock/hooks";
+import { StoreStockAdjustForm } from "@/components/stock/StoreStockAdjustForm";
 
 interface Props {
   open: boolean;
@@ -26,6 +28,8 @@ interface Props {
 export function StockAdjustModal({ open, onOpenChange, product }: Props) {
   const { toast } = useToast();
   const { adjust } = useProductMutations();
+  // Varias sucursales con stock por sucursal: el ajuste se hace en una sucursal.
+  const multiStore = useMultiStoreStock();
   const {
     register,
     handleSubmit,
@@ -65,43 +69,52 @@ export function StockAdjustModal({ open, onOpenChange, product }: Props) {
       title="Ajustar stock"
       description={
         product
-          ? `${product.name} · stock actual ${formatQty(product.stock)}`
+          ? `${product.name} · stock ${multiStore.enabled ? "total" : "actual"} ${formatQty(product.stock)}`
           : undefined
       }
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-        <Input
-          label="Cantidad (+ ingreso / − egreso)"
-          type="number"
-          step="0.001"
-          error={errors.delta?.message}
-          {...register("delta")}
+      {multiStore.enabled && product ? (
+        <StoreStockAdjustForm
+          product={product}
+          stores={multiStore.stores}
+          onDone={() => onOpenChange(false)}
+          onCancel={() => onOpenChange(false)}
         />
-        <div>
-          <label className="mb-2 block text-sm font-medium text-muted-foreground">
-            Motivo
-          </label>
-          <select
-            className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
-            {...register("reason")}
-          >
-            {ADJUST_REASONS.map((r) => (
-              <option key={r} value={r} className="bg-popover text-popover-foreground">
-                {ADJUST_REASON_LABELS[r]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Input label="Notas (opcional)" {...register("notes")} />
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button type="submit" loading={adjust.isPending}>
-            Ajustar
-          </Button>
-        </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <Input
+            label="Cantidad (+ ingreso / − egreso)"
+            type="number"
+            step="0.001"
+            error={errors.delta?.message}
+            {...register("delta")}
+          />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Motivo
+            </label>
+            <select
+              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+              {...register("reason")}
+            >
+              {ADJUST_REASONS.map((r) => (
+                <option key={r} value={r} className="bg-popover text-popover-foreground">
+                  {ADJUST_REASON_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Input label="Notas (opcional)" {...register("notes")} />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={adjust.isPending}>
+              Ajustar
+            </Button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

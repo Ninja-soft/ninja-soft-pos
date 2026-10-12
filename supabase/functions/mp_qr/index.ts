@@ -4,8 +4,17 @@
 // billetera interoperable) el qr_data que el POS dibuja localmente.
 //
 // Actions (body.action):
+//   * geocode {street_name?, street_number?, city_name?, state_name?}
+//            (owner/manager) "QR en el mostrador": sin dirección, arma el
+//            borrador con los datos del negocio (tenants.name,
+//            tenant_branding.address o la del local por defecto) y lo ubica en
+//            el mapa (Nominatim, _shared/geocode.ts). Con dirección, ubica esa.
+//            Cachea el último resultado en config.mp_qr_geo. Siempre 200:
+//            {draft?, place|null, geocode_error?}.
 //   * setup  {name, street_name, street_number, city_name, state_name,
-//             coordinates, reference?}  (owner/manager, alta única)
+//             latitude?, longitude? | coordinates?, reference?}
+//            (owner/manager, alta única). Sin coordenadas, geocodifica la
+//            dirección (geocode_not_found / geocode_unavailable si no puede).
 //            → GET /users/me → POST /users/{id}/stores → POST /v2/pos.
 //            Guarda ids en tenant_payment_methods(mercadopago).config.mp_qr[env]
 //            (env = prod | test según el switch Sandbox). Si la sucursal o la
@@ -32,13 +41,21 @@ import {
   ORDER_INTENT_COLUMNS,
   type OrderIntentRow,
 } from "../_shared/mpIntents.ts";
+import { geocodeAr } from "../_shared/geocode.ts";
 import {
+  buildGeocodeQuery,
   buildPosBody,
   buildQrOrderBody,
   buildStoreBody,
+  type GeoPick,
   type MpEnv,
+  mpCityName,
   mpExternalIds,
+  mpStoreErrorField,
+  parseBusinessAddress,
+  parseStoreAddress,
   parseStoreSetup,
+  type StoreAddress,
 } from "../_shared/mpOrders.ts";
 
 const cors = {
@@ -61,6 +78,9 @@ type QrPos = {
   address: string;
   created_at: string;
 };
+
+// Último resultado de geocodificación (por texto de búsqueda).
+type GeoCache = { q: string; place: GeoPick; at: string };
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -90,7 +110,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_json" }, 400);
   }
   const action = String(b.action ?? "");
-  if (!["setup", "reset", "create", "status", "cancel"].includes(action)) {
+  if (!["geocode", "setup", "reset", "create", "status", "cancel"].includes(action)) {
     return json({ error: "invalid_action" }, 400);
   }
 
@@ -133,6 +153,28 @@ Deno.serve(async (req: Request) => {
       { onConflict: "tenant_id,provider_key" },
     );
   };
+  // Geocodifica con cache en config.mp_qr_geo (sólo si la fila ya existe).
+  const locate = async (
+    addr: StoreAddress,
+  ): Promise<{ ok: true; place: GeoPick | null } | { ok: false; error: "geocode_unavailable" }> => {
+    const q = buildGeocodeQuery(addr);
+    if (!q) return { ok: true, place: null };
+    const config = await readConfig();
+    const cached = config.mp_qr_geo as GeoCache | undefined;
+    if (cached?.q === q && cached.place) return { ok: true, place: cached.place };
+    const res = await geocodeAr(q, addr.state_name || undefined);
+    if (res.ok && res.place) {
+      const geo: GeoCache = { q, place: res.place, at: new Date().toISOString() };
+      await admin
+        .from("tenant_payment_methods")
+        .update({ config: { ...config, mp_qr_geo: geo } })
+        .eq("tenant_id", tenantId)
+        .eq("provider_key", "mercadopago");
+    }
+    return res;
+  };
+  const strField = (k: string) => (typeof b[k] === "string" ? (b[k] as string).trim() : "");
+
   const audit = (act: string, entityId: string | null, after: Record<string, unknown>) =>
     admin.from("audit_logs").insert({
       tenant_id: tenantId,
@@ -142,6 +184,58 @@ Deno.serve(async (req: Request) => {
       action: act,
       after_data: after,
     });
+
+  // ── geocode: borrador con los datos del negocio + ubicación en el mapa ────
+  if (action === "geocode") {
+    if (!canManage) return json({ error: "forbidden" }, 403);
+    if (!(await featureOk())) return json({ error: "payment_method_not_allowed" }, 403);
+    let draft: (StoreAddress & { name: string }) | undefined;
+    let addr: StoreAddress;
+    if (strField("street_name")) {
+      addr = {
+        street_name: strField("street_name").slice(0, 100),
+        street_number: strField("street_number").slice(0, 20),
+        city_name: strField("city_name").slice(0, 80),
+        state_name: strField("state_name").slice(0, 60),
+      };
+    } else {
+      const [{ data: t }, { data: br }, { data: st }] = await Promise.all([
+        admin.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+        admin
+          .from("tenant_branding")
+          .select("address, legal_name")
+          .eq("tenant_id", tenantId)
+          .maybeSingle(),
+        admin
+          .from("stores")
+          .select("address")
+          .eq("tenant_id", tenantId)
+          .is("deleted_at", null)
+          .order("is_default", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      addr = parseBusinessAddress(
+        (br?.address as string | null) || (st?.address as string | null) || "",
+      );
+      draft = {
+        name: String(t?.name || br?.legal_name || "").slice(0, 60),
+        ...addr,
+      };
+    }
+    const res = await locate(addr);
+    const place = res.ok ? res.place : null;
+    if (draft && place) {
+      // Completa lo que el texto libre no traía (provincia, localidad o barrio).
+      draft.state_name = draft.state_name || place.state_name;
+      draft.city_name = mpCityName(draft.city_name, draft.state_name, place.city_name);
+    }
+    return json({
+      ...(draft ? { draft } : {}),
+      place,
+      ...(res.ok ? {} : { geocode_error: res.error }),
+    });
+  }
 
   // ── setup: sucursal + caja en MP (una vez por ambiente) ────────────────────
   if (action === "setup" || action === "reset") {
@@ -156,7 +250,28 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    const parsed = parseStoreSetup(b);
+    const addr = parseStoreAddress(b);
+    if (!addr.ok) return json({ error: "invalid_store", field: addr.field }, 400);
+    const input: Record<string, unknown> = { ...addr.value };
+    const hasLatLon = typeof b.latitude === "number" && typeof b.longitude === "number";
+    if (hasLatLon) {
+      input.latitude = b.latitude;
+      input.longitude = b.longitude;
+    } else if (strField("coordinates")) {
+      input.coordinates = strField("coordinates");
+    }
+    // Sin coordenadas (o en Capital sin barrio): las completa el mapa.
+    if ((!hasLatLon && !input.coordinates) || !addr.value.city_name) {
+      const geo = await locate(addr.value);
+      if (!geo.ok) return json({ error: geo.error }, 502);
+      if (!geo.place) return json({ error: "geocode_not_found" }, 400);
+      if (!hasLatLon && !input.coordinates) {
+        input.latitude = geo.place.lat;
+        input.longitude = geo.place.lon;
+      }
+      input.city_name = mpCityName(addr.value.city_name, addr.value.state_name, geo.place.city_name);
+    }
+    const parsed = parseStoreSetup(input);
     if (!parsed.ok) return json({ error: "invalid_store", field: parsed.field }, 400);
     const ids = mpExternalIds(tenantId);
     const h = mpHeaders(cred.token);
@@ -183,8 +298,9 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(buildStoreBody(parsed.value, ids.storeExternalId)),
       });
       if (!st.ok) {
+        const detail = (await st.text()).slice(0, 300);
         return json(
-          { error: "mp_store_error", detail: (await st.text()).slice(0, 300) },
+          { error: "mp_store_error", field: mpStoreErrorField(detail), detail },
           502,
         );
       }

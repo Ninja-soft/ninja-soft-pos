@@ -364,6 +364,44 @@ export const professionalsApi = {
   },
 };
 
+export interface MpQrGeocodeResult {
+  draft?: {
+    name: string;
+    street_name: string;
+    street_number: string;
+    city_name: string;
+    state_name: string;
+  };
+  place: {
+    lat: number;
+    lon: number;
+    precise: boolean;
+    label: string;
+    city_name: string;
+    state_name: string;
+  } | null;
+  geocode_error?: string;
+}
+
+// Edge mp_qr: supabase-js envuelve los no-2xx; leemos el body para devolver
+// el código (y el campo) que entiende mapMpQrError.
+async function invokeMpQr<T>(body: Record<string, unknown>): Promise<T> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("mp_qr", { body });
+  let res = data as { error?: string; field?: string | null } | null;
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    try {
+      res = ctx ? await ctx.json() : null;
+    } catch {
+      res = null;
+    }
+    if (!res?.error) throw new Error("mp_error");
+  }
+  if (res?.error) throw new Error(res.field ? `${res.error}:${res.field}` : res.error);
+  return data as T;
+}
+
 export const posApi = {
   defaultRegister: async (): Promise<CashRegister | null> => {
     const supabase = createClient();
@@ -642,36 +680,36 @@ export const posApi = {
     });
   },
 
-  // Alta única de sucursal + caja en MP (owner/manager). Guarda los ids en
-  // tenant_payment_methods(mercadopago).config.mp_qr[env].
+  // "QR en el mostrador" (alta única del local en MP, owner/manager). Los
+  // errores llegan como Error("codigo" o "codigo:campo"): ver mapMpQrError.
+  // Borrador con los datos del negocio + ubicación en el mapa (sin dirección),
+  // o ubicación de la dirección corregida.
+  mpQrGeocode: async (address?: {
+    street_name: string;
+    street_number: string;
+    city_name: string;
+    state_name: string;
+  }): Promise<MpQrGeocodeResult> =>
+    invokeMpQr<MpQrGeocodeResult>({ action: "geocode", ...(address ?? {}) }),
+
+  // Guarda los ids en tenant_payment_methods(mercadopago).config.mp_qr[env].
   mpQrSetup: async (input: {
     name: string;
     street_name: string;
     street_number: string;
     city_name: string;
     state_name: string;
-    coordinates: string;
+    latitude?: number;
+    longitude?: number;
+    coordinates?: string;
     reference?: string;
   }): Promise<{ env: "prod" | "test" }> => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke("mp_qr", {
-      body: { action: "setup", ...input },
-    });
-    if (error) throw error;
-    const res = data as { error?: string; field?: string; env?: "prod" | "test" };
-    if (res?.error) throw new Error(res.field ? `${res.error}:${res.field}` : res.error);
+    const res = await invokeMpQr<{ env?: "prod" | "test" }>({ action: "setup", ...input });
     return { env: res.env ?? "prod" };
   },
 
   mpQrReset: async (): Promise<void> => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke("mp_qr", {
-      body: { action: "reset" },
-    });
-    if (error) throw error;
-    if ((data as { error?: string })?.error) {
-      throw new Error((data as { error: string }).error);
-    }
+    await invokeMpQr({ action: "reset" });
   },
 
   // ── Mercado Point (H15 resto): cobro presencial en el lector ───────────────

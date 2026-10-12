@@ -44,6 +44,7 @@ import {
 import { integrationProblem, parseIntegration, withIntegration, bridgeUrlOk } from "@/lib/payments/terminal/config";
 import { BridgeTransport, b64decode, b64encode } from "@/lib/payments/terminal/transports";
 import { pickIntegratedTerminal, type PaymentTerminal } from "@/lib/payments/terminals";
+import { INTEGRATED_CARD_TENDER_ID, integratedCardTender, type TenderDef } from "@/lib/pos/tenders";
 import { TerminalError, type TerminalResult } from "@/lib/payments/terminal/types";
 
 const bytes = (...n: number[]) => Uint8Array.from(n);
@@ -91,7 +92,7 @@ describe("framing ISO 1745", () => {
     expect(out[1]).toMatchObject({ type: "frame", valid: true });
     expect(latin1((out[1] as { payload: Uint8Array }).payload)).toBe("HOLA");
     const bad = Uint8Array.from(f);
-    bad[bad.length - 1] ^= 0xff;
+    bad[bad.length - 1] = bad[bad.length - 1]! ^ 0xff;
     expect(new FrameDecoder().push(bad)[0]).toMatchObject({ type: "frame", valid: false });
   });
 
@@ -220,7 +221,7 @@ describe("Payway VPI (fuente pública no oficial)", () => {
     expect(d.push(vpiResponse("TES", "000", "", false))).toHaveLength(0);
     expect(d.flush()[0]).toMatchObject({ command: "TES", lrcOk: null });
     const bad = vpiResponse("TES", "000", "");
-    bad[bad.length - 1] ^= 0x55;
+    bad[bad.length - 1] = bad[bad.length - 1]! ^ 0x55;
     expect(new VpiDecoder().push(bad)[0]).toMatchObject({ lrcOk: false });
   });
 
@@ -576,5 +577,34 @@ describe("configuración", () => {
     expect(pickIntegratedTerminal({ terminals: ts, storeId: "s1", registerId: "r1" }).terminal?.id).toBe("b");
     expect(pickIntegratedTerminal({ terminals: ts, storeId: "s1", registerId: "r3" }).terminal?.id).toBe("a");
     expect(pickIntegratedTerminal({ terminals: ts, storeId: "s2", registerId: null }).reason).toBe("none");
+  });
+});
+
+describe("tender Tarjeta en terminal", () => {
+  it("deriva de Tarjeta en posnet con la terminal de la caja", () => {
+    const card: TenderDef = {
+      id: "card",
+      group: "card",
+      brand: "card",
+      brandLabel: "Tarjeta en posnet",
+      channel: "manual",
+      label: "Tarjeta en posnet",
+      method: null,
+      provider: null,
+      connection: null,
+      featureKey: null,
+      logo: null,
+      flow: "card",
+    };
+    const t = integratedCardTender(card, {
+      terminalId: "t1",
+      label: "Pinpad caja 1",
+      providerKey: "payway",
+      requiresBrand: true,
+      simulated: false,
+    });
+    expect(t).toMatchObject({ id: INTEGRATED_CARD_TENDER_ID, flow: "card", group: "card", integrated: { terminalId: "t1" } });
+    expect(t.hint).toContain("Pinpad caja 1");
+    expect(card.id).toBe("card");
   });
 });

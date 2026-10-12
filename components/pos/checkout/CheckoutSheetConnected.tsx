@@ -11,8 +11,14 @@ import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr } from "@/lib/pos/customerDisplay";
+import { useFeature } from "@/modules/saas/gating";
+import { usePaymentTerminals } from "@/modules/config/hooks";
+import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
+import { pickIntegratedTerminal } from "@/lib/payments/terminals";
+import { parseIntegration } from "@/lib/payments/terminal/config";
+import { INTEGRATED_CARD_TENDER_ID, integratedCardTender, normalizeTenderId } from "@/lib/pos/tenders";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
-import type { AccountPayRequest, ElectronicRequest } from "./types";
+import type { AccountPayRequest, ElectronicRequest, TerminalChargeRequest } from "./types";
 
 // Cobros electrónicos: los modales existentes de cada proveedor, en su chunk.
 const QrCheckoutModal = dynamic(
@@ -22,6 +28,11 @@ const QrCheckoutModal = dynamic(
 // Cuenta corriente v2 (saldo, cuotas, autorización): sólo carga si se elige.
 const AccountPayPanel = dynamic(
   () => import("@/components/pos/AccountPayPanel").then((m) => m.AccountPayPanel),
+  { ssr: false },
+);
+// Terminal integrada (ADR-053): sólo carga si la caja tiene una.
+const TerminalChargeModal = dynamic(
+  () => import("./TerminalChargeModal").then((m) => m.TerminalChargeModal),
   { ssr: false },
 );
 const PointCheckoutModal = dynamic(
@@ -72,6 +83,43 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
   useEffect(() => {
     if (props.open && qrProviders.length > 0) warmEdgeFunctions(qrProviders);
   }, [props.open, qrProviders]);
+
+  // Terminal integrada de la caja (ADR-053): "Tarjeta en terminal" primero y
+  // la Tarjeta en posnet como respaldo. Sin la feature no se ofrece (el
+  // servidor igual rechaza el cupón "de terminal" sin plan).
+  const hasIntegrated = useFeature("terminal_integrada");
+  const { data: terminals } = usePaymentTerminals();
+  const branchCtx = useBranchContext();
+  const currentRegister = useCurrentRegister();
+  const integratedTerminal = useMemo(() => {
+    if (hasIntegrated === false) return null;
+    return pickIntegratedTerminal({
+      terminals: terminals ?? [],
+      storeId: branchCtx.posStoreId,
+      registerId: currentRegister.data?.id ?? null,
+    }).terminal;
+  }, [hasIntegrated, terminals, branchCtx.posStoreId, currentRegister.data?.id]);
+  const tenders = useMemo(() => {
+    const card = props.tenders.find((t) => t.flow === "card");
+    if (!integratedTerminal || !card) return props.tenders;
+    const cfg = parseIntegration(integratedTerminal.external_meta);
+    const integrated = integratedCardTender(card, {
+      terminalId: integratedTerminal.id,
+      label: integratedTerminal.label,
+      providerKey: integratedTerminal.provider_key,
+      requiresBrand: cfg.adapter === "payway_lapos",
+      simulated: cfg.adapter === "simulator",
+    });
+    const i = props.tenders.indexOf(card);
+    return [...props.tenders.slice(0, i), integrated, ...props.tenders.slice(i)];
+  }, [props.tenders, integratedTerminal]);
+  // "Tarjeta" fijada en el carrito abre la terminal integrada si hay una.
+  const initialTenderId =
+    integratedTerminal && props.initialTenderId && normalizeTenderId(props.initialTenderId) === "card"
+      ? INTEGRATED_CARD_TENDER_ID
+      : props.initialTenderId;
+  const renderTerminal = (req: TerminalChargeRequest) =>
+    integratedTerminal ? <TerminalChargeModal terminal={integratedTerminal} req={req} /> : null;
 
   // Sólo los planes VIGENTES hoy (H27).
   const cardPlans = useMemo(
@@ -149,6 +197,9 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
   return (
     <CheckoutSheet
       {...props}
+      tenders={tenders}
+      initialTenderId={initialTenderId}
+      renderTerminal={renderTerminal}
       cardPlans={cardPlans}
       merchantNumberFor={merchantNumberFor}
       warrantyPlans={(wplans ?? []) as WarrantyPlan[]}

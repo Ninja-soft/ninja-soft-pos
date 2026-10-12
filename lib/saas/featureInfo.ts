@@ -194,6 +194,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["fiserv"],
     needs: "Marca Fiserv conectada (el Merchant ID y el token de Clover del comercio) y la app Cloud Pay Display abierta en cada terminal.",
   },
+  terminal_integrada: {
+    desc: "Terminal integrada: el posnet (por cable o red) o el pinpad conectado a la PC cobra el monto que manda el POS y devuelve lote, cupón, autorización, tarjeta, últimos 4 y cuotas, que quedan en el cobro sin cargarlos a mano. Configuración, Terminales, por caja; incluye un simulador para probar sin hardware.",
+    impact: "Desactivado, se cobra con Tarjeta en posnet y el cajero carga el cupón a mano.",
+    minPlan: "Pro",
+    needs: "Chrome o Edge de escritorio (Web Serial / WebUSB) o el puente local NinjaPOS en la PC de la caja, y la terminal en modo integrado. Payway: protocolo sin homologar todavía; Fiserv y Getnet: pendientes de la especificación del adquirente.",
+  },
   pagos360: {
     desc: "Cobros con Pagos360: links de pago y DEBIN para cobrar a distancia o por débito inmediato.",
     impact: "Sin esto no se pueden generar links de pago ni cobros DEBIN con Pagos360.",

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Pencil, Plus, QrCode, Star, Trash2 } from "lucide-react";
+import { CreditCard, Pencil, Plug, Plus, QrCode, Star, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -26,7 +26,18 @@ import { branchLabel } from "@/modules/branches/logic";
 import { terminalErrorMessage, type TerminalInput } from "@/modules/config/api";
 import { usePaymentTerminals, useTerminalMutations } from "@/modules/config/hooks";
 import { posApi } from "@/modules/pos/api";
+import { useFeature } from "@/modules/saas/gating";
+import {
+  DEFAULT_INTEGRATION,
+  INTEGRATED_PROVIDERS,
+  isIntegratedKind,
+  parseIntegration,
+  withIntegration,
+  type IntegrationConfig,
+} from "@/lib/payments/terminal/config";
 import { providerLabel } from "./ScopedConfig";
+import { IntegratedTerminalFields } from "./IntegratedTerminalFields";
+import { TerminalDeviceModal } from "./TerminalDeviceModal";
 
 // =============================================================================
 // Terminales de cobro por sucursal y caja (F17 · H93, ADR-049). BASE.
@@ -43,16 +54,22 @@ const PROVIDERS: { key: string; hint: string }[] = [
   { key: "nave_point", hint: "ID de punto de venta de la terminal en Nave." },
   { key: "fiserv_point", hint: "Número de serie de la terminal Clover." },
   { key: "mercadopago", hint: "Caja QR de Mercado Pago (external_pos_id). Mejor crearla con el botón de la caja." },
-  { key: "payway", hint: "Posnet sin integrar: el n° de terminal es opcional." },
-  { key: "fiserv", hint: "Posnet o Clover sin integrar." },
-  { key: "getnet", hint: "Posnet sin integrar." },
+  { key: "payway", hint: "Posnet o pinpad Payway, sin integrar o integrado a la caja." },
+  { key: "fiserv", hint: "Posnet o Clover sin integrar, o posnet integrado a la caja." },
+  { key: "getnet", hint: "Posnet Getnet, sin integrar o integrado a la caja." },
 ];
+
+const canIntegrate = (provider: string) => (INTEGRATED_PROVIDERS as readonly string[]).includes(provider);
 
 type Draft = {
   id?: string;
   store_id: string;
   cash_register_id: string | null;
   provider_key: string;
+  /** Tipo (sólo se elige en marcas que admiten terminal integrada, ADR-053). */
+  kind: TerminalKind;
+  integration: IntegrationConfig;
+  meta: Record<string, unknown> | null;
   external_id: string;
   environment: "prod" | "test" | null;
   label: string;
@@ -73,6 +90,8 @@ export function TerminalsManager() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [archive, setArchive] = useState<PaymentTerminal | null>(null);
   const [qrFor, setQrFor] = useState<string | null>(null);
+  const [connectFor, setConnectFor] = useState<PaymentTerminal | null>(null);
+  const integratedAllowed = useFeature("terminal_integrada") !== false;
   const canManage = scope.data?.role === "owner" || scope.data?.role === "manager";
 
   const byStore = useMemo(() => {
@@ -85,6 +104,9 @@ export function TerminalsManager() {
     store_id: storeId,
     cash_register_id: registerId,
     provider_key: "mercadopago_point",
+    kind: "point",
+    integration: DEFAULT_INTEGRATION,
+    meta: null,
     external_id: "",
     environment: null,
     label: "",
@@ -97,8 +119,15 @@ export function TerminalsManager() {
 
   const save = () => {
     if (!draft) return;
-    const kind: TerminalKind = kindForProvider(draft.provider_key);
-    const err = terminalExternalIdError(kind, draft.external_id);
+    const kind: TerminalKind = canIntegrate(draft.provider_key) ? draft.kind : kindForProvider(draft.provider_key);
+    const integrated = isIntegratedKind(kind);
+    // El simulador no tiene n° de terminal real: se le pone uno propio.
+    const externalId =
+      integrated && !draft.external_id.trim() && draft.integration.adapter === "simulator"
+        ? `SIM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+        : draft.external_id;
+    if (integrated && !externalId.trim()) return toast({ title: "Cargá el n° de terminal", variant: "error" });
+    const err = terminalExternalIdError(kind, externalId);
     if (err) return toast({ title: err, variant: "error" });
     if (!draft.label.trim()) return toast({ title: "Poné un nombre (ej. Point mostrador)", variant: "error" });
     const input: TerminalInput = {
@@ -106,7 +135,10 @@ export function TerminalsManager() {
       cash_register_id: draft.cash_register_id,
       provider_key: draft.provider_key,
       kind,
-      external_id: draft.external_id.trim() || null,
+      external_id: externalId.trim() || null,
+      ...(integrated
+        ? { external_meta: withIntegration(draft.meta, parseIntegration({ integration: draft.integration })) }
+        : {}),
       environment: kind === "qr_caja" ? (draft.environment ?? "prod") : null,
       label: draft.label.trim(),
       merchant_number: draft.merchant_number.replace(/[^0-9a-z]/gi, "").slice(0, 20) || null,
@@ -233,6 +265,11 @@ export function TerminalsManager() {
                           </div>
                           {canManage && (
                             <span className="flex shrink-0 gap-1">
+                              {isIntegratedKind(t.kind) && (
+                                <Button size="sm" variant="ghost" onClick={() => setConnectFor(t)}>
+                                  <Plug size={13} /> Conectar
+                                </Button>
+                              )}
                               {t.cash_register_id && !t.is_default && (
                                 <Button
                                   size="sm"
@@ -252,6 +289,9 @@ export function TerminalsManager() {
                                     store_id: t.store_id,
                                     cash_register_id: t.cash_register_id,
                                     provider_key: t.provider_key,
+                                    kind: t.kind,
+                                    integration: parseIntegration(t.external_meta),
+                                    meta: t.external_meta ?? null,
                                     external_id: t.external_id ?? "",
                                     environment: t.environment,
                                     label: t.label,
@@ -294,7 +334,14 @@ export function TerminalsManager() {
               <select
                 className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
                 value={draft.provider_key}
-                onChange={(e) => setDraft({ ...draft, provider_key: e.target.value })}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    provider_key: e.target.value,
+                    kind: kindForProvider(e.target.value),
+                    integration: { ...DEFAULT_INTEGRATION },
+                  })
+                }
                 disabled={Boolean(draft.id)}
               >
                 {PROVIDERS.map((p) => (
@@ -307,6 +354,46 @@ export function TerminalsManager() {
                 {PROVIDERS.find((p) => p.key === draft.provider_key)?.hint}
               </span>
             </label>
+            {canIntegrate(draft.provider_key) && (
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium">Tipo</span>
+                <select
+                  className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
+                  value={draft.kind}
+                  onChange={(e) => {
+                    const kind = e.target.value as TerminalKind;
+                    setDraft({
+                      ...draft,
+                      kind,
+                      integration:
+                        isIntegratedKind(kind) && draft.integration.adapter === "simulator" && !draft.id
+                          ? { ...DEFAULT_INTEGRATION, adapter: "simulator" }
+                          : draft.integration,
+                    });
+                  }}
+                >
+                  <option value="posnet_manual">{TERMINAL_KIND_LABEL.posnet_manual}</option>
+                  <option value="posnet_integrado" disabled={!integratedAllowed && draft.kind !== "posnet_integrado"}>
+                    {TERMINAL_KIND_LABEL.posnet_integrado} (cobra y completa el cupón)
+                  </option>
+                  <option value="pinpad" disabled={!integratedAllowed && draft.kind !== "pinpad"}>
+                    {TERMINAL_KIND_LABEL.pinpad} conectado a la PC
+                  </option>
+                </select>
+                {!integratedAllowed && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    La terminal integrada viene desde el plan Pro.
+                  </span>
+                )}
+              </label>
+            )}
+            {canIntegrate(draft.provider_key) && isIntegratedKind(draft.kind) && (
+              <IntegratedTerminalFields
+                provider={draft.provider_key}
+                value={draft.integration}
+                onChange={(integration) => setDraft({ ...draft, integration })}
+              />
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Sucursal</span>
@@ -340,7 +427,15 @@ export function TerminalsManager() {
             </div>
             <Input label="Nombre" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Point mostrador" />
             <Input
-              label={kindForProvider(draft.provider_key) === "posnet_manual" ? "N° de terminal (opcional)" : "Identificador"}
+              label={
+                canIntegrate(draft.provider_key) && isIntegratedKind(draft.kind)
+                  ? draft.integration.adapter === "simulator"
+                    ? "N° de terminal (opcional en el simulador)"
+                    : "N° de terminal"
+                  : kindForProvider(draft.provider_key) === "posnet_manual"
+                    ? "N° de terminal (opcional)"
+                    : "Identificador"
+              }
               value={draft.external_id}
               onChange={(e) => setDraft({ ...draft, external_id: e.target.value })}
             />
@@ -395,6 +490,8 @@ export function TerminalsManager() {
           </div>
         )}
       </Modal>
+
+      {connectFor && <TerminalDeviceModal terminal={connectFor} onClose={() => setConnectFor(null)} />}
 
       <ConfirmDialog
         open={Boolean(archive)}

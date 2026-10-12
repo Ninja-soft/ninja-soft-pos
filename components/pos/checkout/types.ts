@@ -68,6 +68,8 @@ export interface TerminalChargeRequest {
   /** Cuotas pedidas (null = las elige el cliente en la terminal, si se puede). */
   installments: number | null;
   cardKind: "debit" | "credit";
+  /** Marca elegida (clave de lib/pos/cardBrands) si el protocolo la pide. */
+  cardBrand: string | null;
   onApproved: (r: TerminalChargeResult) => void;
   /** Pasar a "Tarjeta en posnet" con carga manual del cupón. */
   onManual: () => void;

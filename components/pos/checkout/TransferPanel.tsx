@@ -84,7 +84,7 @@ export function TransferPanel({
         <div className="flex items-center gap-3 border-b border-border px-3 py-3">
           <BankLogo slug={acc.bank_slug} customUrl={acc.custom_logo_url} name={acc.bank_name} size={40} />
           <div className="min-w-0 flex-1">
-            <BankWordmark slug={acc.bank_slug} name={acc.bank_name} className="h-6 w-auto max-w-[160px]" />
+            <BankWordmark slug={acc.bank_slug} name={acc.bank_name} className="h-6 w-auto max-w-full object-left" />
             <p className={cn("truncate", acc.bank_slug ? "text-xs text-muted-foreground" : "text-sm font-semibold")}>
               {acc.bank_name}
             </p>

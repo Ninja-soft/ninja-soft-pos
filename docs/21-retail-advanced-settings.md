@@ -83,12 +83,18 @@ Cada import debe tener:
 
 ## 7. Cuenta corriente
 
-- [ ] Medio de pago cuenta corriente.
-- [ ] Límite default de deuda.
-- [ ] Límite por cliente.
-- [ ] Plazo default de pago.
-- [ ] Antigüedad de deuda.
-- [ ] Grupos de clientes.
+Cuenta corriente v2 (ADR-030, `docs/specs/cuenta-corriente-v2.md`). Se configura en **Configuración → Cuenta corriente** (negocio) y en la ficha de cuenta de cada cliente (condiciones propias).
+
+- [x] Medio de pago cuenta corriente (gateado por plan también en el trigger de `payments`).
+- [~] Límite default de deuda. *(Hoy por cliente; un default de negocio queda pendiente.)*
+- [x] Límite por cliente (`customers.credit_limit`, sin carrera: lock al cobrar).
+- [x] Plazo default de pago: días o corte mensual + día de vencimiento (`account_config.terms`), override por grupo y cliente.
+- [x] Cuotas (máximo e intervalo configurables).
+- [x] Punitorios: tasa mensual o diaria, simple o compuesto, días de gracia, tope y mínimo (`cc_punitorios`).
+- [x] Bloqueo por mora (días) con autorización de encargado auditada; estado de la cuenta manual (al día / en observación / bloqueada).
+- [x] Antigüedad de deuda por vencimiento (server-side) y tablero de cobranza.
+- [x] Recordatorios por email antes y después del vencimiento (`cc_cobranza`).
+- [~] Grupos de clientes (la config por grupo existe en la base; falta el editor en la UI).
 
 ## 8. Pedidos, despacho y entrega
 

@@ -1016,6 +1016,40 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 ---
 
+## ADR-030 — Cuenta corriente v2: ledger tipado, cobros por RPC y reversas
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F11 · H31 · Spec: [`docs/specs/cuenta-corriente-v2.md`](specs/cuenta-corriente-v2.md)
+
+### Contexto
+
+La cuenta corriente v1 era un ledger plano (`delta` + texto): plazo único por negocio, chequeo de límite sin lock (dos ventas simultáneas lo pasaban), cobro de deuda por **insert directo** desde el cliente (sin medio, sin caja/Z, sin recibo, sin auditoría, sin gating de plan), aging calculado en el navegador por fecha de cargo y un bug de datos: **anular, devolver o cambiar una venta a cuenta no revertía la deuda**. El dueño pidió plazos configurables, punitorios y gestión de cobranza.
+
+### Decisión
+
+1. **Ledger tipado** (`customer_account_movements.kind`: charge / payment / interest / interest_waiver / adjust_debit / adjust_credit / reversal, backfill por signo) con CHECK de signo, cuotas, `parent_id`, medio, turno de caja, recibo correlativo por tenant (advisory lock), clave de idempotencia y baja lógica (`voided_at`).
+2. **Imputación explícita** (`customer_account_allocations`, con `released_at` en vez de DELETE). Orden por defecto: punitorio más viejo, luego cargos por vencimiento (FIFO); la imputación elegida se respeta y el resto sigue el orden por defecto; el excedente queda como saldo a favor y se aplica solo a cargos futuros (`account_reconcile`). Backfill FIFO de lo histórico.
+3. **Escrituras sólo por RPC security definer** (se revoca insert/update/delete del ledger a `authenticated`): `account_collect`, `account_void_payment`, `account_waive_interest`, `account_adjust`, `account_save_settings`, `account_set_customer_terms`, items de cobranza. Todas chequean tenant, rol, plan (`tenant_has_feature_for`) y escriben `audit_logs`.
+4. **Cargo con lock**: `payment_account_charge` toma `FOR UPDATE` el cliente, calcula vencimiento(s) con la config efectiva (negocio ← grupo ← cliente, jsonb validado con CHECK), genera N cuotas y bloquea por mora (`account_overdue_blocked`) o estado manual. Cuotas y override viajan en `payments.reference` como JSON (`{"installments":N,"override_reason":"..."}`) para **no redefinir `create_sale`**; el override sólo vale con rol dueño/encargado y queda auditado.
+5. **Caja**: el cobro en efectivo entra como `income` (el arqueo existente lo cuenta sin cambios en `close_cash_shift`/IA/front); otros medios como `account_payment` (no suman al efectivo esperado). El Z agrega `account_collected` por medio.
+6. **Punitorios** (`account_accrue_interest`, pg_cron diario 06:17 UTC): por período empezado (mes o fracción / día) desde vencimiento + gracia; simple o compuesto; tope sobre el capital original; mínimo por liquidación; único por (cargo, período). Misma lógica en `lib/account/interest.ts` (TDD).
+7. **Reversas**: anulación por trigger AFTER UPDATE en `sales` (sin tocar `void_sale`), reversa total + condonación de punitorios abiertos; `return_sale` / `return_sale_v2` reproducidas completas: la parte pagada con cuenta vuelve a la cuenta en vez de salir en efectivo, y existe el reintegro `account`. **El cambio (`exchange_sale`) no se toca**: devuelve a vale y aplica ese vale a la mercadería nueva, así que la deuda original sigue correspondiendo.
+8. **Cobranza automática**: Edge `account_reminders` (cron pg_net con `X-Cron-Secret`, mismo patrón que `dispatch-system-emails`) usa el email **del negocio** (`tenant_email_smtp`), deduplica por vencimiento y registra `reminder_log`. WhatsApp por link `wa.me` (sin API).
+9. **Plan**: `cc_punitorios` y `cc_cobranza` OPTIONAL, `requires: cuenta_corriente`, marcadas en cada plan con el mismo valor que `cuenta_corriente` (Business+). `payment_method_plan_key('account') → cuenta_corriente`, así el trigger de `payments` también corta la venta a cuenta.
+
+### Consecuencias
+
+- Fin de la carrera del límite y de la deuda fantasma por anulación/devolución; todo cambio crítico auditado.
+- El aging y el estado de cuenta se calculan en el server (`account_aging`, `account_statement`): el navegador ya no baja todo el ledger.
+- `pos_settings.account_due_days` queda como respaldo de lectura (migrado a `account_config.terms.days`).
+- **Deuda / pendientes**: override de mora con PIN de supervisor (hoy exige que quien cobra sea dueño/encargado); interés diario sin mínimo genera un movimiento por día; los punitorios usan el capital pendiente al momento de liquidar (no prorratean pagos parciales dentro del período); plantillas de email sin preview en `/internal/emails`; el cron de recordatorios necesita `pg_net` + `platform_secrets.internal_cron` (ya existentes) y el deploy de la Edge.
+
+### Referencias
+
+- Migraciones `20261011180000_cuenta_corriente_v2.sql`, `20261011180100_cuenta_corriente_v2_rpc.sql`, `20261011180200_cuenta_corriente_v2_reversas.sql`.
+- `lib/account/*`, `modules/customers/account.ts`, `components/account/*`, `components/pos/AccountPayPanel.tsx`, `app/(app)/clientes/cuentas/**`, `supabase/functions/account_reminders/index.ts`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

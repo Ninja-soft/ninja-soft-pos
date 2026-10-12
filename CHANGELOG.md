@@ -9,6 +9,14 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **F11 · H31 — Cuenta corriente v2 (robusta).** Ventas a cuenta con **plazos configurables** (días o corte mensual con día de vencimiento, por negocio, grupo o cliente) y **cuotas**; **bloqueo por mora** con autorización inline de encargado (motivo auditado) y el POS mostrando saldo, disponible, vencido y cronograma de cuotas. **Cobros** con medio, caja abierta (efectivo al arqueo, todo al Z), **recibo correlativo**, imputación FIFO o elegida, idempotencia y anulación auditada. **Punitorios** configurables (simple/compuesto, mensual/diario, gracia, tope, mínimo) calculados a diario, con **condonación** y ajustes con motivo. **Estado de cuenta** con saldo corrido (PDF/XLSX) y **aging por vencimiento** server-side. Tablero **/clientes/cuentas** (KPIs, aging con ECharts, lista priorizada por mora con cobrar / recordar / WhatsApp / promesa) y ficha de cuenta con **cobranza** (promesas de pago, notas, tareas, cobrador asignado). **Recordatorios automáticos** y envío del estado de cuenta por el email del negocio (Edge `account_reminders`). Features de plan nuevas `cc_punitorios` y `cc_cobranza` (Business+). ADR-030.
+
+### Fixed
+
+- **Cuenta corriente — anular o devolver una venta a cuenta ahora revierte la deuda** (antes quedaba la deuda y en la devolución además salía efectivo). Además: el límite de crédito ya no se puede pasar con dos ventas simultáneas (lock del cliente), el cobro de deuda ya no es un insert directo desde el navegador (RPC con caja, recibo y auditoría) y la venta a cuenta queda gateada por plan también en el trigger de pagos.
+
 ### Fixed
 
 - **CI — el job `rls` volvió a verde después de un mes rojo.** Fallaba en todos los merges desde el 2026-06-13. Dos causas apiladas: (1) **breaking change del Supabase CLI v2.106.0** (el workflow usa `setup-cli latest`): el start local ahora revoca los privilegios Data API por defecto → `permission denied for table tenants` en el setup de la suite — fix con `auto_expose_new_tables = true` en `supabase/config.toml` (solo local/CI; follow-up durable: migración de GRANTs explícitos preservando el hardening); (2) los **triggers de gating de escritura** de f13 (9-jun) rompían 4 tests — el setup ahora habilita todas las features gateadas vía addon (patrón `listas_precios`). Bisect por historial de runs + changelog oficial del CLI.

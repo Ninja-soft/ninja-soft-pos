@@ -27,4 +27,12 @@ describe("dependencias de features", () => {
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });
+
+  it("punitorios y cobranza dependen de cuenta corriente (mismo plan)", () => {
+    for (const key of ["cc_punitorios", "cc_cobranza"]) {
+      expect(featureRequires(key), key).toEqual(["cuenta_corriente"]);
+      expect(FEATURE_INFO[key]?.minPlan, key).toBe(FEATURE_INFO.cuenta_corriente?.minPlan);
+    }
+    expect(FEATURE_INFO.cc_cobranza?.needs).toBeTruthy();
+  });
 });

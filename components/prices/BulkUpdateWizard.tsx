@@ -328,7 +328,7 @@ export function BulkUpdateWizard({
             )}
             <div className="max-h-72 overflow-y-auto rounded-md border border-border">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-muted text-left text-xs text-muted-foreground">
+                <thead className="sticky top-0 z-10 bg-popover [&>tr]:bg-muted text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 font-medium">Producto</th>
                     <th className="px-3 py-2 text-right font-medium">Antes</th>

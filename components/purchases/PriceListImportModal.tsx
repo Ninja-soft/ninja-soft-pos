@@ -293,7 +293,7 @@ export function PriceListImportModal({
               </div>
               <div className="max-h-80 overflow-auto rounded-md border border-border">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
+                  <thead className="sticky top-0 z-10 bg-popover [&>tr]:bg-muted text-xs text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left">Fila</th>
                       <th className="px-3 py-2 text-left">Producto</th>

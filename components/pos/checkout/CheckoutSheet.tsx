@@ -23,13 +23,17 @@ import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils/cn";
 import {
   checkoutTotals,
+  defaultKeypadField,
+  keypadFieldFor,
   quickCashAmounts,
   round2,
   settleLine,
+  splitRemainder,
   splitShare,
   tipFromPercent,
   tipMethodFor,
   type CheckoutLine,
+  type KeypadField,
 } from "@/lib/pos/checkoutMath";
 import {
   checkoutSections,
@@ -211,6 +215,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [view, setView] = useState<"tenders" | "editor">("tenders");
   const [portionStr, setPortionStr] = useState("");
   const [receivedStr, setReceivedStr] = useState("");
+  // Campo que escribe el teclado (monto con este medio o, en efectivo, recibido).
+  const [keypadChoice, setKeypadChoice] = useState<KeypadField>("received");
   const [cardKind, setCardKind] = useState<CardKind>("debit");
   // Tarjeta en posnet: entidad elegida y paso del asistente (1 entidad, 2 tipo
   // y cuotas, 3 datos del cupón).
@@ -249,6 +255,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setView(initialTenderId && initial ? "editor" : "tenders");
     setPortionStr("");
     setReceivedStr("");
+    setKeypadChoice(defaultKeypadField(initial?.flow));
     setCardKind("debit");
     setCardBrand(null);
     setCardStep(1);
@@ -417,6 +424,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   function pickTender(t: ResolvedTender) {
     setActiveId(t.id);
     setView("editor");
+    setKeypadChoice(defaultKeypadField(t.flow));
     if (t.method === "debit" || t.method === "credit") setCardKind(t.method);
     if (t.flow === "card") {
       setCardBrand(null);
@@ -605,10 +613,14 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     totals.productsTotal - deliveryFee - (base - promoExtra + warranty + totals.surcharges),
   );
 
+  const keypadTarget = keypadFieldFor(active?.flow, keypadChoice);
   const onKeypad = (k: KeypadKey) => {
-    if (active?.flow === "cash") setReceivedStr((v) => applyKey(v, k));
+    if (keypadTarget === "received") setReceivedStr((v) => applyKey(v, k));
     else setPortionStr((v) => applyKey(v, k));
   };
+  const leftover = splitRemainder(remaining, portion);
+  // ¿Se puede editar el monto? En el cupón de la tarjeta en posnet ya quedó fijo.
+  const kfEditable = Boolean(active) && !(isPosnet && cardStep === 3);
 
   const dense = checkout.density === "compact";
   const layoutKind = checkout.layout;
@@ -740,25 +752,15 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     </div>
   ) : null;
 
-  // Monto de esta línea (input + Todo / ½ / ⅓ / ¼ + por ítem). En el cupón de
-  // la tarjeta en posnet el monto ya quedó fijo (se ve en el resumen).
-  const amountField = active && !(isPosnet && cardStep === 3) ? (
+  // Partir el pago: Todo / ½ / ⅓ / ¼ + por ítem + lo que queda para otro medio.
+  // Lo comparten todas las variantes (con o sin teclado).
+  const splitControls = (fill: boolean) => (
     <div>
-      <label htmlFor="checkout-portion" className={LABEL}>
-        Monto con este medio
-      </label>
-      <input
-        id="checkout-portion"
-        inputMode="decimal"
-        value={portionStr}
-        onChange={(e) => setPortionStr(e.target.value.replace(/[^\d,.]/g, ""))}
-        onKeyDown={(e) => e.key === "Enter" && onCta()}
-        placeholder={money(maxPortion)}
-        className={cn(INPUT, "mt-1.5 h-12 w-full px-3.5 font-price text-xl font-semibold tabular-nums placeholder:text-foreground")}
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className={cn("flex flex-wrap items-center gap-2", fill && "flex-nowrap")}>
         <Segmented
-          size="sm"
+          size={fill ? undefined : "sm"}
+          fill={fill}
+          className={fill ? "min-w-0 flex-1" : undefined}
           aria-label="Dividir el monto"
           value={splitValue}
           onChange={onSplit}
@@ -801,6 +803,36 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           })}
         </div>
       )}
+      {leftover > 0.005 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Quedan {money(leftover)} para cobrar con otro medio.
+        </p>
+      )}
+    </div>
+  );
+
+  // Monto de esta línea (input + partir el pago). En el cupón de la tarjeta en
+  // posnet el monto ya quedó fijo (se ve en el resumen).
+  const amountField = active && !(isPosnet && cardStep === 3) ? (
+    <div>
+      <label htmlFor="checkout-portion" className={LABEL}>
+        Monto con este medio
+      </label>
+      <input
+        id="checkout-portion"
+        inputMode="decimal"
+        value={portionStr}
+        onChange={(e) => setPortionStr(e.target.value.replace(/[^\d,.]/g, ""))}
+        onFocus={() => setKeypadChoice("portion")}
+        onKeyDown={(e) => e.key === "Enter" && onCta()}
+        placeholder={money(maxPortion)}
+        className={cn(
+          INPUT,
+          "mt-1.5 h-12 w-full px-3.5 font-price text-xl font-semibold tabular-nums placeholder:text-foreground",
+          keypad && active.flow === "cash" && keypadTarget === "portion" && "border-ring",
+        )}
+      />
+      <div className="mt-2">{splitControls(false)}</div>
     </div>
   ) : null;
 
@@ -823,10 +855,16 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
               inputMode="decimal"
               value={quick.includes(received ?? -1) ? "" : receivedStr}
               onChange={(e) => setReceivedStr(e.target.value.replace(/[^\d,.]/g, ""))}
+              onFocus={() => setKeypadChoice("received")}
               onKeyDown={(e) => e.key === "Enter" && onCta()}
               placeholder="Otro"
               aria-label="Monto recibido"
-              className={cn(INPUT, "min-w-0 px-3 text-center font-price text-sm font-semibold tabular-nums", big ? "h-14" : "h-11")}
+              className={cn(
+                INPUT,
+                "min-w-0 px-3 text-center font-price text-sm font-semibold tabular-nums",
+                big ? "h-14" : "h-11",
+                keypad && keypadTarget === "received" && "border-ring",
+              )}
             />
           )}
         </div>
@@ -1158,60 +1196,67 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             {breakdown}
             {showEditor && active && (
               <div className="mt-4 space-y-3">
-                <div className="rounded-lg border border-border bg-card px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className={LABEL}>{active.flow === "cash" ? "Recibido" : "Monto con este medio"}</span>
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <TenderLogo source={active} alt={active.brandLabel} size={18} fallback={tenderFallback(active)} />
-                      {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
-                        ? active.label
-                        : `${active.brandLabel} ${active.label}`}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-right font-price text-4xl font-semibold tabular-nums text-foreground">
-                    {active.flow === "cash"
-                      ? receivedStr === ""
-                        ? money(settle.amount)
-                        : receivedStr
-                      : portionStr === ""
-                        ? money(maxPortion)
-                        : portionStr}
-                  </p>
-                  {active.flow === "cash" && (
-                    <p className="text-right text-xs text-muted-foreground">
-                      {receivedStr === "" ? "Exacto" : `Cobro ${money(settle.amount)}`}
-                    </p>
-                  )}
+                <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                  <TenderLogo source={active} alt={active.brandLabel} size={18} fallback={tenderFallback(active)} />
+                  {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
+                    ? active.label
+                    : `${active.brandLabel} ${active.label}`}
                 </div>
-                {active.flow === "cash" ? (
-                  <>
-                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-                      <AmountButton on={receivedStr === ""} onClick={() => setReceivedStr("")}>
-                        Exacto
-                      </AmountButton>
-                      {quick.map((q) => (
-                        <AmountButton key={q} on={received === q} onClick={() => setReceivedStr(String(q))}>
-                          {money(q)}
-                        </AmountButton>
-                      ))}
-                    </div>
-                    <Keypad square lastKey="," onKey={onKeypad} />
-                    <ChangeBox short={receivedShort} amount={receivedShort ? settle.amount - (received ?? 0) : changePreview} />
-                  </>
-                ) : (
-                  <>
-                    <Segmented
-                      fill
-                      aria-label="Dividir el monto"
-                      value={splitValue}
-                      onChange={onSplit}
-                      options={[
-                        { value: "all", label: "Todo" },
-                        ...SPLITS.map((s) => ({ value: String(s.n), label: s.label })),
-                      ]}
+                {/* Campos del teclado: el que está marcado es el que escribe. En
+                    efectivo hay dos (monto con este medio y recibido). */}
+                {kfEditable ? (
+                  <div className={cn("grid gap-2", active.flow === "cash" && "grid-cols-2")}>
+                    <KeypadFieldBox
+                      label="Monto con este medio"
+                      value={portionStr === "" ? money(maxPortion) : `$ ${portionStr}`}
+                      sub={portionStr === "" ? "Todo el saldo" : settle.closes ? "Cierra la cuenta" : "Pago parcial"}
+                      on={keypadTarget === "portion"}
+                      showOn={active.flow === "cash"}
+                      ariaLabel="Escribir con el teclado el monto con este medio"
+                      onClick={() => setKeypadChoice("portion")}
                     />
-                    <Keypad square lastKey="," onKey={onKeypad} />
-                  </>
+                    {active.flow === "cash" && (
+                      <KeypadFieldBox
+                        label="Recibido"
+                        value={receivedStr === "" ? money(settle.amount) : `$ ${receivedStr}`}
+                        sub={receivedStr === "" ? "Exacto" : `Cobro ${money(settle.amount)}`}
+                        on={keypadTarget === "received"}
+                        showOn
+                        ariaLabel="Escribir con el teclado el monto recibido"
+                        onClick={() => setKeypadChoice("received")}
+                      />
+                    )}
+                  </div>
+                ) : null}
+                {kfEditable && splitControls(true)}
+                {active.flow === "cash" && (
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                    <AmountButton
+                      on={receivedStr === ""}
+                      onClick={() => {
+                        setReceivedStr("");
+                        setKeypadChoice("received");
+                      }}
+                    >
+                      Exacto
+                    </AmountButton>
+                    {quick.map((q) => (
+                      <AmountButton
+                        key={q}
+                        on={received === q}
+                        onClick={() => {
+                          setReceivedStr(String(q));
+                          setKeypadChoice("received");
+                        }}
+                      >
+                        {money(q)}
+                      </AmountButton>
+                    ))}
+                  </div>
+                )}
+                {kfEditable && <Keypad square lastKey="," onKey={onKeypad} />}
+                {active.flow === "cash" && (
+                  <ChangeBox short={receivedShort} amount={receivedShort ? settle.amount - (received ?? 0) : changePreview} />
                 )}
               </div>
             )}
@@ -1382,6 +1427,53 @@ function AmountButton({
       )}
     >
       {children}
+    </button>
+  );
+}
+
+// Campo del teclado en "Teclado primero": tocarlo lo vuelve el destino del
+// teclado. `showOn` marca el activo sólo cuando hay más de un campo.
+function KeypadFieldBox({
+  label,
+  value,
+  sub,
+  on,
+  showOn,
+  ariaLabel,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  on: boolean;
+  showOn: boolean;
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  const marked = on && showOn;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={ariaLabel}
+      className={cn(
+        "min-w-0 rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        marked ? "border-ring bg-card ring-1 ring-ring" : "border-border bg-card hover:bg-muted/60",
+      )}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className={cn(LABEL, "truncate")}>{label}</span>
+        {marked && (
+          <span className="shrink-0 rounded bg-fg-10 px-1.5 py-0.5 text-[10px] font-semibold text-foreground">
+            Teclado
+          </span>
+        )}
+      </span>
+      <span className="mt-1 block truncate text-right font-price text-3xl font-semibold tabular-nums text-foreground">
+        {value}
+      </span>
+      <span className="block truncate text-right text-xs text-muted-foreground">{sub}</span>
     </button>
   );
 }

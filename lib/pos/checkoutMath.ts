@@ -157,3 +157,25 @@ export function settleLine(
   });
   return { amount: Math.max(0, after.remaining), surcharge, closes };
 }
+
+// ── Teclado de la hoja de cobro ────────────────────────────────────────────────
+// Toda variante de la hoja permite dividir el pago: el teclado escribe en el
+// monto que se cobra con el medio activo ("portion") o, sólo en efectivo, en lo
+// que entregó el cliente ("received"). Fuera de efectivo no hay recibido.
+
+export type KeypadField = "portion" | "received";
+
+/** Campo que edita el teclado según el medio activo y lo que eligió el cajero. */
+export function keypadFieldFor(flow: string | null | undefined, chosen: KeypadField): KeypadField {
+  return flow === "cash" ? chosen : "portion";
+}
+
+/** Campo por defecto al elegir un medio: en efectivo, el recibido (vuelto rápido). */
+export function defaultKeypadField(flow: string | null | undefined): KeypadField {
+  return flow === "cash" ? "received" : "portion";
+}
+
+/** Lo que queda para otro medio si con éste se cobra `portion` del saldo. */
+export function splitRemainder(remaining: number, portion: number): number {
+  return Math.max(0, round2(remaining - Math.max(0, portion)));
+}

@@ -26,6 +26,7 @@ import {
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
+import { ACCOUNT_EMAIL_PREVIEWS } from "@/lib/email/accountTemplates";
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
 
@@ -67,7 +68,9 @@ export default function InternalEmailsPage() {
     },
   });
 
-  const def = EMAIL_TEMPLATES.find((t) => t.key === selectedKey)!;
+  // Emails de cuenta corriente: sólo vista previa (los envía cada negocio).
+  const accountPreview = ACCOUNT_EMAIL_PREVIEWS.find((t) => t.key === selectedKey) ?? null;
+  const def = EMAIL_TEMPLATES.find((t) => t.key === selectedKey) ?? EMAIL_TEMPLATES[0]!;
   useEffect(() => {
     const ov = saved[selectedKey];
     setSubject(ov?.subject ?? def.defaultSubject);
@@ -180,73 +183,95 @@ export default function InternalEmailsPage() {
                 {t.label}
               </button>
             ))}
+            <span className="shrink-0 self-center px-1 text-xs text-muted-foreground">Cuenta corriente</span>
+            {ACCOUNT_EMAIL_PREVIEWS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setSelectedKey(t.key)}
+                className={cn(
+                  "shrink-0 rounded-lg px-3 py-1.5 text-sm transition",
+                  selectedKey === t.key
+                    ? "bg-ninja-flame/12 font-medium text-ninja-flameSoft"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">{def.description}</p>
-            <Dropdown>
-              <DropdownTrigger asChild>
-                <Button variant="secondary" size="sm">
-                  <Plus size={15} /> Insertar variable
-                </Button>
-              </DropdownTrigger>
-              <DropdownContent align="end" className="w-56">
-                <DropdownLabel>
-                  Insertar en {activeField === "subject" ? "el asunto" : "el contenido"}
-                </DropdownLabel>
-                {def.variables.map((v) => (
-                  <DropdownItem key={v} onSelect={() => insertVar(v)}>
-                    <code className="text-xs">{`{{${v}}}`}</code>
-                  </DropdownItem>
-                ))}
-              </DropdownContent>
-            </Dropdown>
-          </div>
-          <Input
-            ref={subjectRef}
-            label="Asunto"
-            value={subject}
-            onFocus={() => setActiveField("subject")}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-          <div>
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
-              Contenido (HTML)
-            </label>
-            <textarea
-              ref={htmlRef}
-              value={html}
-              onFocus={() => setActiveField("html")}
-              onChange={(e) => setHtml(e.target.value)}
-              rows={7}
-              className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Tocá un campo (asunto o contenido) y luego “Insertar variable”.
-            </p>
-          </div>
-          <div>
-            <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
-            <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
-              <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">
-                Asunto: {renderTemplate(subject, vars)}
+          {accountPreview ? (
+            <AccountEmailPreviewPanel preview={accountPreview} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">{def.description}</p>
+                <Dropdown>
+                  <DropdownTrigger asChild>
+                    <Button variant="secondary" size="sm">
+                      <Plus size={15} /> Insertar variable
+                    </Button>
+                  </DropdownTrigger>
+                  <DropdownContent align="end" className="w-56">
+                    <DropdownLabel>
+                      Insertar en {activeField === "subject" ? "el asunto" : "el contenido"}
+                    </DropdownLabel>
+                    {def.variables.map((v) => (
+                      <DropdownItem key={v} onSelect={() => insertVar(v)}>
+                        <code className="text-xs">{`{{${v}}}`}</code>
+                      </DropdownItem>
+                    ))}
+                  </DropdownContent>
+                </Dropdown>
               </div>
-              <div dangerouslySetInnerHTML={{ __html: renderTemplate(html, vars) }} />
-            </div>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setTestEmail("");
-                setTestOpen(true);
-              }}
-            >
-              <Send size={16} /> Enviar prueba
-            </Button>
-            <Button onClick={() => saveTpl.mutate()} disabled={saveTpl.isPending}>
-              Guardar plantilla
-            </Button>
-          </div>
+              <Input
+                ref={subjectRef}
+                label="Asunto"
+                value={subject}
+                onFocus={() => setActiveField("subject")}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+              <div>
+                <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                  Contenido (HTML)
+                </label>
+                <textarea
+                  ref={htmlRef}
+                  value={html}
+                  onFocus={() => setActiveField("html")}
+                  onChange={(e) => setHtml(e.target.value)}
+                  rows={7}
+                  className="w-full rounded-lg border border-input bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+                />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Tocá un campo (asunto o contenido) y luego “Insertar variable”.
+                </p>
+              </div>
+              <div>
+                <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
+                <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
+                  <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">
+                    Asunto: {renderTemplate(subject, vars)}
+                  </div>
+                  <div dangerouslySetInnerHTML={{ __html: renderTemplate(html, vars) }} />
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setTestEmail("");
+                    setTestOpen(true);
+                  }}
+                >
+                  <Send size={16} /> Enviar prueba
+                </Button>
+                <Button onClick={() => saveTpl.mutate()} disabled={saveTpl.isPending}>
+                  Guardar plantilla
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -289,6 +314,27 @@ export default function InternalEmailsPage() {
         </div>
       </Modal>
     </>
+  );
+}
+
+// ── Vista previa de emails de cuenta corriente (no editables) ───────────────
+
+function AccountEmailPreviewPanel({ preview }: { preview: (typeof ACCOUNT_EMAIL_PREVIEWS)[number] }) {
+  const mail = preview.render();
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">{preview.description}</p>
+      <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        Sólo vista previa con datos de ejemplo: cada negocio lo envía con su propio email, su logo y su color.
+      </p>
+      <div>
+        <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
+        <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
+          <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">Asunto: {mail.subject}</div>
+          <div dangerouslySetInnerHTML={{ __html: mail.html }} />
+        </div>
+      </div>
+    </div>
   );
 }
 

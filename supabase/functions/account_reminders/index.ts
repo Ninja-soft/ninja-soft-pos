@@ -66,6 +66,8 @@ const fmtDate = (iso: string | null) => {
   return `${d}/${m}/${y}`;
 };
 
+// ESPEJO para la vista previa de /internal/emails: lib/email/accountTemplates.ts
+// (si cambia el diseño o el texto acá, cambia allá).
 // --- Diseño (mismo lenguaje visual que los emails del POS: header con el
 // acento del negocio, cuerpo blanco y footer oscuro con NinjaPos) -------------
 const NINJA_LOGO_URL = "https://pos.soft.ninja/brand/ninjasoft-wordmark.webp";

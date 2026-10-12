@@ -194,7 +194,16 @@ describe.skipIf(!enabled)("F17 · sucursales, cajas y personal por sucursal", ()
     const item = [{ product_id: ctx.product, quantity: 1, unit_price: 100, discount: 0 }];
     const pay = [{ method: "cash", amount: 100 }];
 
-    const sNorte = await rpc(ctx.owner, "create_sale", {
+    // ADR-051 (H114): cada uno vende en SU turno. El dueño no puede usar el
+    // turno del encargado.
+    const invade = await rpc(ctx.owner, "create_sale", {
+      p_items: item,
+      p_payments: pay,
+      p_cash_shift_id: ctx.shiftNorte,
+    });
+    expect(invade.error?.message).toMatch(/shift_not_owned/);
+
+    const sNorte = await rpc(ctx.manager, "create_sale", {
       p_items: item,
       p_payments: pay,
       p_cash_shift_id: ctx.shiftNorte,
@@ -221,17 +230,15 @@ describe.skipIf(!enabled)("F17 · sucursales, cajas y personal por sucursal", ()
     if (mov) expect(mov.store_id).toBe(ctx.norte);
   });
 
-  it("H90: con turnos en dos sucursales y ninguno propio, la venta sin turno es ambigua", async () => {
-    // El cajero aún no tiene asignación: en multi-sucursal opera en la
-    // principal; ahí hay un único turno abierto, así que no es ambiguo.
+  it("H114: sin turno propio no se infiere un turno ajeno", async () => {
+    // El cajero no abrió caja: antes vendía en el turno del dueño; ahora no.
     const r = await rpc(ctx.cashierNorte, "create_sale", {
       p_items: [{ product_id: ctx.product, quantity: 1, unit_price: 100, discount: 0 }],
       p_payments: [{ method: "cash", amount: 100 }],
     });
-    expect(r.error).toBeNull();
+    expect(r.error?.message).toMatch(/no_open_shift/);
 
-    // Un encargado sin asignación ve las dos sucursales: con turnos ajenos en
-    // ambas (el suyo se cierra antes) tiene que mandar el turno.
+    // Un encargado cuyo turno pasa a ser de otro tampoco infiere nada.
     const { data: other } = await ctx.admin
       .from("cash_shifts")
       .update({ opened_by: ctx.cashierNorteId } as never)
@@ -242,7 +249,7 @@ describe.skipIf(!enabled)("F17 · sucursales, cajas y personal por sucursal", ()
       p_items: [{ product_id: ctx.product, quantity: 1, unit_price: 100, discount: 0 }],
       p_payments: [{ method: "cash", amount: 100 }],
     });
-    expect(amb.error?.message).toMatch(/shift_ambiguous/);
+    expect(amb.error?.message).toMatch(/no_open_shift/);
   });
 
   it("H91: el cajero asignado a Norte sólo ve ventas y turnos de Norte", async () => {

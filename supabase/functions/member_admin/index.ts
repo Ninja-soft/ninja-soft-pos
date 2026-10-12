@@ -92,9 +92,26 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // ADR-051: jerarquía. Nadie toca al dueño salvo el propio dueño; un
+    // encargado no cambia a otro encargado.
+    async function targetRole(targetId: string): Promise<string | null> {
+      const { data } = await admin
+        .from("tenant_users")
+        .select("role")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", targetId)
+        .maybeSingle();
+      return (data?.role as string | undefined) ?? null;
+    }
+
     if (action === "update_member") {
       const targetId = String(body.user_id ?? "");
       if (!targetId) return json({ error: "missing_user_id" }, 400);
+      const tRole = await targetRole(targetId);
+      if (!tRole) return json({ error: "member_not_found" }, 404);
+      if (targetId !== user.id && !isOwner && (tRole === "owner" || tRole === "manager")) {
+        return json({ error: "forbidden_role" }, 403);
+      }
       const patch: Record<string, unknown> = {};
       if (body.display_name !== undefined)
         patch.display_name = clip(body.display_name, 80) || null;
@@ -102,8 +119,11 @@ Deno.serve(async (req: Request) => {
       if (body.role !== undefined) {
         const role = String(body.role);
         if (!ASSIGNABLE_ROLES.includes(role)) return json({ error: "invalid_role" }, 400);
-        if ((role === "owner" || targetId === user.id) && !isOwner)
+        if ((role === "owner" || role === "manager" || targetId === user.id) && !isOwner)
           return json({ error: "forbidden_role" }, 403);
+        // El dueño no se degrada a sí mismo (el negocio quedaría sin dueño).
+        if (targetId === user.id && tRole === "owner" && role !== "owner")
+          return json({ error: "cannot_demote_owner" }, 400);
         patch.role = role;
       }
       if (Object.keys(patch).length === 0)
@@ -124,6 +144,10 @@ Deno.serve(async (req: Request) => {
       if (!["active", "suspended"].includes(status))
         return json({ error: "invalid_status" }, 400);
       if (targetId === user.id) return json({ error: "cannot_change_self" }, 400);
+      const sRole = await targetRole(targetId);
+      if (!sRole) return json({ error: "member_not_found" }, 404);
+      if (sRole === "owner" || (sRole === "manager" && !isOwner))
+        return json({ error: "forbidden_role" }, 403);
       const { error } = await admin
         .from("tenant_users")
         .update({ status })

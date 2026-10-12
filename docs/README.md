@@ -53,6 +53,8 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [27](./27-commercial-configuration-engine.md) | **Motor comercial enterprise** — planes, cuotas, add-ons, recargos, reglas, inventario PRO, offline y API | Producto, backend, operaciones |
 | [28](./28-school-onboarding.md) | **Escuela y onboarding guiado** — cursos, tours, sugerencias, laboratorio y certificaciones configurables desde internal | Producto, soporte, operaciones |
 | [29](./29-napse-unified-commerce-benchmark.md) | **Benchmark Napse/TOTVS** — comercio unificado, VTOL, Fiscal Flow, Promo, Omni, OMS y cockpit enterprise | Producto, estrategia, backend |
+| [Auditoría Napse vs NinjaPOS](./auditoria-napse-vs-ninjapos.md) | **Multi-sucursal:** sucursal y caja como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal (F17) | Producto, backend, UI |
+| [Auditoría fiscal y contable](./auditoria-fiscal-contable-precios.md) | **Fiscal, contable, precios y compras (Argentina):** listas PRO, importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos (F18) | Producto, backend, contable |
 | [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |
 | [Security reviews](./security-reviews/README.md) | Incidentes, revisiones y hallazgos de seguridad | Seguridad, devs |
 | [Templates](./templates/post-mortem.md) | Plantillas operativas reutilizables | Todos |

@@ -229,6 +229,18 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["stock_sucursales"],
     needs: "Al menos dos sucursales activas.",
   },
+  compras: {
+    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado.",
+    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes ni cuenta corriente de proveedores (el servidor lo rechaza).",
+    minPlan: "Pro",
+  },
+  compras_importacion: {
+    desc: "Costeo de importación (modo profesional de compras): FOB, flete y seguro hasta el CIF, derechos por posición, tasa de estadística, otros tributos y gastos de nacionalización prorrateados por valor, peso, volumen o cantidad hasta el costo puesto en depósito de cada producto, con el n° de despacho guardado en el lote. El crédito fiscal se informa aparte y no se suma al costo.",
+    impact: "Desactivado, las compras al exterior entran al costo del comprobante sin gastos ni tributos de importación prorrateados (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["compras"],
+    needs: "Activá el modo profesional en Configuración de compras.",
+  },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",

@@ -6,6 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { ProfileModalBody } from "@/components/account/ProfileModalBody";
 
+const LEVEL_LABELS: Record<string, string> = {
+  super_admin: "Super admin",
+  admin: "Admin",
+  support: "Soporte",
+};
+
 // Editar mi perfil en Internal = la cuenta global del usuario (tabla `users`:
 // full_name / avatar_url). La UI (recorte de foto, ver/descargar, campos) la
 // aporta ProfileModalBody, compartida con el POS para que la experiencia sea
@@ -23,6 +29,8 @@ export function ProfileEditModal({
   const [userId, setUserId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [level, setLevel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -32,6 +40,10 @@ export function ProfileEditModal({
       } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
+      setEmail(user.email ?? null);
+      setLevel(
+        ((user.app_metadata as { internal_level?: string } | null)?.internal_level) ?? null,
+      );
       const { data } = await supabase
         .from("users")
         .select("full_name, avatar_url")
@@ -75,6 +87,9 @@ export function ProfileEditModal({
       uploadPathPrefix={userId}
       onSave={() => save.mutate()}
       saving={save.isPending}
+      email={email}
+      roleLabel={level ? (LEVEL_LABELS[level] ?? level) : null}
+      contextLabel="Equipo NinjaSoft"
     />
   );
 }

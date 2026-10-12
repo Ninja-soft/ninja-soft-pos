@@ -546,6 +546,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             ...(brandInfo ? { marca: brandInfo.label } : {}),
             ...(voucher.ultimos4.trim() ? { ultimos4: voucher.ultimos4.trim() } : {}),
             ...(comercio ? { comercio } : {}),
+            ...(plan?.installments ? { cuotas: plan.installments } : {}),
           }
         : undefined,
       locked: false,

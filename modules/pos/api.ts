@@ -15,6 +15,8 @@ export interface CardVoucher {
   autorizacion: string;
   /** N° de comercio de la marca (config del medio), para conciliar. */
   comercio?: string;
+  /** Cuotas del plan elegido (conciliación). */
+  cuotas?: number;
 }
 
 export interface SalePaymentInput {

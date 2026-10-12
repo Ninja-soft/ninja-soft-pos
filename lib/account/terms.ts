@@ -1,7 +1,7 @@
 // Plazos y cuotas de cuenta corriente (Cuenta corriente v2).
 //
 // ESPEJO del SQL: account_due_date() y payment_account_charge() en
-// supabase/migrations/20261011180100_cuenta_corriente_v2_rpc.sql. Si cambia una
+// supabase/migrations/20261011200100_cuenta_corriente_v2_rpc.sql. Si cambia una
 // regla acá, cambia allá (y viceversa); los casos de tests/unit/account-terms
 // están documentados en los comentarios del SQL.
 //

@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261011180200_cuenta_corriente_v2_reversas  (H31 · Cuenta corriente v2)
+-- 20261011200200_cuenta_corriente_v2_reversas  (H31 · Cuenta corriente v2)
 --
 -- Parte 3 de 3. Corrige el BUG de datos: anular / devolver una venta hecha en
 -- cuenta corriente NO revertía la deuda.
@@ -18,7 +18,7 @@
 --  D) Cambio (exchange_sale) NO se redefine: fuerza 'store_credit' en la
 --     devolución y aplica ese crédito a la mercadería nueva, así que la deuda
 --     original sigue correspondiendo (el cliente se lleva otra cosa por el mismo
---     valor). Ver ADR-030.
+--     valor). Ver ADR-037.
 --  E) close_cash_shift se reproduce completa (última versión:
 --     20260531220000_pos_settings_pr2) agregando al Z los cobros de cuenta
 --     corriente del turno por medio (cash_z_closures.account_collected).

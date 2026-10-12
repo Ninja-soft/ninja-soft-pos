@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261011180100_cuenta_corriente_v2_rpc  (H31 · Cuenta corriente v2: lógica)
+-- 20261011200100_cuenta_corriente_v2_rpc  (H31 · Cuenta corriente v2: lógica)
 --
 -- Parte 2 de 3. Todas las escrituras del ledger pasan por acá (security
 -- definer + chequeo de tenant, rol, plan y audit_logs).

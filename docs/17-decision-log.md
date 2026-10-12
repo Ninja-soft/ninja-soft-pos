@@ -1016,7 +1016,7 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 ---
 
-## ADR-030 — Cuenta corriente v2: ledger tipado, cobros por RPC y reversas
+## ADR-037 — Cuenta corriente v2: ledger tipado, cobros por RPC y reversas
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F11 · H31 · Spec: [`docs/specs/cuenta-corriente-v2.md`](specs/cuenta-corriente-v2.md)
 
@@ -1045,7 +1045,7 @@ La cuenta corriente v1 era un ledger plano (`delta` + texto): plazo único por n
 
 ### Referencias
 
-- Migraciones `20261011180000_cuenta_corriente_v2.sql`, `20261011180100_cuenta_corriente_v2_rpc.sql`, `20261011180200_cuenta_corriente_v2_reversas.sql`.
+- Migraciones `20261011200000_cuenta_corriente_v2.sql`, `20261011200100_cuenta_corriente_v2_rpc.sql`, `20261011200200_cuenta_corriente_v2_reversas.sql`.
 - `lib/account/*`, `modules/customers/account.ts`, `components/account/*`, `components/pos/AccountPayPanel.tsx`, `app/(app)/clientes/cuentas/**`, `supabase/functions/account_reminders/index.ts`.
 
 ---

@@ -1,7 +1,7 @@
 // Imputación de cobros de cuenta corriente (Cuenta corriente v2).
 //
 // ESPEJO del SQL: account_collect() en
-// supabase/migrations/20261011180100_cuenta_corriente_v2_rpc.sql.
+// supabase/migrations/20261011200100_cuenta_corriente_v2_rpc.sql.
 //
 // Orden por defecto: punitorios (interés) más viejos primero; después cargos por
 // vencimiento (FIFO por due_date, desempate por fecha de alta e id). Si el

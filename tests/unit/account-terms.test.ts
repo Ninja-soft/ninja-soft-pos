@@ -7,7 +7,7 @@ import {
 } from "@/lib/account/terms";
 
 // Casos espejo de payment_account_charge / account_due_date() en SQL
-// (supabase/migrations/20261011180100_cuenta_corriente_v2_rpc.sql).
+// (supabase/migrations/20261011200100_cuenta_corriente_v2_rpc.sql).
 
 describe("helpers de fecha (ISO yyyy-mm-dd, sin zona horaria)", () => {
   it("addDays cruza meses y años", () => {

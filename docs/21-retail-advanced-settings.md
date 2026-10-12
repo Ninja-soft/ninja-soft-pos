@@ -83,7 +83,7 @@ Cada import debe tener:
 
 ## 7. Cuenta corriente
 
-Cuenta corriente v2 (ADR-030, `docs/specs/cuenta-corriente-v2.md`). Se configura en **Configuración → Cuenta corriente** (negocio) y en la ficha de cuenta de cada cliente (condiciones propias).
+Cuenta corriente v2 (ADR-037, `docs/specs/cuenta-corriente-v2.md`). Se configura en **Configuración → Cuenta corriente** (negocio) y en la ficha de cuenta de cada cliente (condiciones propias).
 
 - [x] Medio de pago cuenta corriente (gateado por plan también en el trigger de `payments`).
 - [~] Límite default de deuda. *(Hoy por cliente; un default de negocio queda pendiente.)*

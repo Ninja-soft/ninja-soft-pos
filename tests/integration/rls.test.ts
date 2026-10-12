@@ -530,7 +530,7 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Cuenta corriente v2 (migraciones 20261011180000..180200): cargo con cuotas,
+  // Cuenta corriente v2 (migraciones 20261011200000..180200): cargo con cuotas,
   // ledger sólo por RPC, cobro con caja + recibo + idempotencia, aging y
   // reversa al anular.
   // ---------------------------------------------------------------------------

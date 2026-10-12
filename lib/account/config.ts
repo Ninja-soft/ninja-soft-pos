@@ -6,7 +6,7 @@
 // negocio → grupo → cliente (los arrays se reemplazan, no se concatenan).
 //
 // ESPEJO del SQL: account_effective_config() y el CHECK account_config_valid()
-// en supabase/migrations/20261011180000_cuenta_corriente_v2.sql.
+// en supabase/migrations/20261011200000_cuenta_corriente_v2.sql.
 import { z } from "zod";
 
 const day = z.number().int().min(1).max(31);

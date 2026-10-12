@@ -1,9 +1,9 @@
 -- =============================================================================
--- 20261011180000_cuenta_corriente_v2  (H31 · Cuenta corriente v2: esquema)
+-- 20261011200000_cuenta_corriente_v2  (H31 · Cuenta corriente v2: esquema)
 --
--- Spec: docs/specs/cuenta-corriente-v2.md · ADR-030.
--- Parte 1 de 3 (esquema). La 2 (20261011180100) define las RPC y el trigger de
--- cargo; la 3 (20261011180200) las reversas por anulación/devolución y el Z.
+-- Spec: docs/specs/cuenta-corriente-v2.md · ADR-037.
+-- Parte 1 de 3 (esquema). La 2 (20261011200100) define las RPC y el trigger de
+-- cargo; la 3 (20261011200200) las reversas por anulación/devolución y el Z.
 --
 -- Qué hace:
 --  A) Ledger customer_account_movements: tipo de movimiento (`kind`) con

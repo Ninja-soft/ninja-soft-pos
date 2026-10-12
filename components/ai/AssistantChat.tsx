@@ -66,6 +66,9 @@ export const AssistantLauncher = forwardRef<
       disabled={!ready}
       aria-label={ready ? "Abrir asistente IA" : "Cargando asistente IA"}
       aria-busy={!ready}
+      // Pantallas con acciones abajo (el POS) corren la burbuja con
+      // --fab-lift / --fab-shift para no tapar el botón de cobro.
+      style={{ marginBottom: "var(--fab-lift, 0px)", marginRight: "var(--fab-shift, 0px)" }}
       className="group fixed bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] right-4 z-40 grid h-14 w-14 place-items-center rounded-[30%] outline-none transition-transform duration-200 ease-out hover:scale-[1.06] focus-visible:ring-2 focus-visible:ring-ninja-flame focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-default disabled:hover:scale-100 sm:bottom-6 sm:right-6"
     >
       {/* Halo de fuego que "respira" detrás del ícono. */}

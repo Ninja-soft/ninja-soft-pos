@@ -6,9 +6,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import { lineSubtotal, type CartLine } from "@/modules/pos/store";
 import type { WarrantyPlan } from "@/modules/products/api";
 
-// Prima de un plan, IGUAL que PaymentModal (única fuente de verdad del cobro):
+// Prima de un plan, IGUAL que la hoja de cobro (única fuente de verdad):
 // % del total de la venta (base) si price_pct > 0; si no, la prima fija.
-// Mantener en sincronía con components/pos/PosModals.tsx (PaymentModal).
+// Mantener en sincronía con components/pos/checkout/CheckoutSheet.tsx.
 function planPrima(plan: WarrantyPlan, base: number): number {
   return Number(plan.price_pct) > 0
     ? Math.round(((base * Number(plan.price_pct)) / 100) * 100) / 100

@@ -1,33 +1,8 @@
 "use client";
 
-import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Banknote,
-  Bike,
-  CalendarDays,
-  Gift,
-  Lock,
-  Minus,
-  MonitorSmartphone,
-  Package,
-  Plus,
-  ScanBarcode,
-  Search,
-  Star,
-  Tag,
-  Ticket,
-  User,
-  Utensils,
-  X,
-} from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
-import { Input } from "@/components/ui/Input";
-import { Switch } from "@/components/ui/Switch";
-import { InfoHint } from "@/components/ui/InfoHint";
+import { Bike, CalendarDays, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -43,63 +18,25 @@ import {
   useCustomersForPicker,
   useStoreCreditBalance,
   useCustomerMutations,
-  useCustomerLastSaleItems,
 } from "@/modules/customers/hooks";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
-import {
-  useCartStore,
-  cartSubtotal,
-  lineSubtotal,
-} from "@/modules/pos/store";
-import {
-  useOpenShift,
-  useDefaultRegister,
-  usePosMutations,
-  useMpMethod,
-  useProviderMethod,
-  usePosSettings,
-} from "@/modules/pos/hooks";
-import type { SaleExtraInput } from "@/modules/pos/api";
+import { useCartStore } from "@/modules/pos/store";
+import { useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
+import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { useProductsWithModifiers } from "@/modules/products/modifiers";
-import { productsApi, variantLabel } from "@/modules/products/api";
-import { CategoryNav, subtreeIds } from "@/components/pos/CategoryNav";
-import { FavoritesGrid } from "@/components/pos/FavoritesGrid";
-import type { Product } from "@/modules/products/api";
+import { productsApi, variantLabel, type Product } from "@/modules/products/api";
+import { subtreeIds } from "@/components/pos/CategoryNav";
+import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
 import { useMostradorPricing } from "@/modules/prices/hooks";
 import { resolvePrice } from "@/lib/prices/resolve";
-import { useAppointment } from "@/modules/agenda/hooks";
-import { appointmentsApi } from "@/modules/agenda/api";
-import {
-  useTableOrder,
-  useTableOrderItems,
-  useDiningEnabled,
-} from "@/modules/dining/hooks";
-import {
-  useMenus,
-  useActiveMenuIds,
-  useMenuProductIds,
-} from "@/modules/menus/hooks";
-import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
-import { useActivePromotions } from "@/modules/promotions/hooks";
-import { couponsApi } from "@/modules/coupons/api";
-import {
-  evaluateCart,
-  evaluateGifts,
-  type Promotion,
-  type PromoCartLine,
-  type PromoContext,
-} from "@/lib/promotions/engine";
-import {
-  useDeliveryOrder,
-  useDeliveryOrderItems,
-} from "@/modules/delivery/hooks";
-import type { PaymentExtra } from "@/components/pos/PosModals";
+import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useMenus, useActiveMenuIds, useMenuProductIds } from "@/modules/menus/hooks";
 import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import type { CustomerPackCredit } from "@/modules/packs/api";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
@@ -110,14 +47,38 @@ import {
   type DisplayQr,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
-import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { lineSubtotal } from "@/modules/pos/store";
+import { pinnedTenders } from "@/lib/pos/tenders";
+import type { PosPreset } from "@/lib/pos/layout";
+import { PosShell } from "@/components/pos/screen/PosShell";
+import { PosTopBar } from "@/components/pos/screen/PosTopBar";
+import { ModeBanner } from "@/components/pos/screen/ModeBanner";
+import { ProductPane } from "@/components/pos/screen/ProductPane";
+import { CartLines, CartSummary } from "@/components/pos/screen/CartPane";
+import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickScanPane";
+import { CategoryRail } from "@/components/pos/ui/CategoryBar";
+import { applyKey, type KeypadKey } from "@/components/pos/ui/Keypad";
+import { accentVars } from "@/components/pos/ui/posStyles";
+import {
+  CustomerPickerDialog,
+  FreeSaleDialog,
+  SerialDialog,
+  WeighDialog,
+} from "@/components/pos/screen/PosDialogs";
+import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
+import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
+import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
+import { usePosSale } from "@/modules/pos/screen/usePosSale";
+import { formatCurrency } from "@/lib/utils/format";
 
-// Modales del POS: se cargan en chunks aparte (next/dynamic) para no inflar el
-// JS inicial de la pantalla. Los de cobro/turno quedan siempre montados (el
-// PaymentModal precarga sus datos); el resto se monta recién al abrirlo
-// (MountWhenOpened). Tras el primer render se precargan los chunks en idle para
-// que abrirlos no tenga demora.
+// Pantalla de venta. La página orquesta datos y reglas de negocio (carrito,
+// orígenes, promos, venta); la piel la decide el diseño elegido (PosShell +
+// presets) y el cobro pasa SIEMPRE por la hoja única (CheckoutSheet).
+//
+// Modales en chunks aparte (next/dynamic); se montan al abrirlos y se
+// precargan en idle tras el primer render.
 const loadPosModals = () => import("@/components/pos/PosModals");
+const loadCheckout = () => import("@/components/pos/checkout/CheckoutSheetConnected");
 const loadQrCheckout = () => import("@/components/pos/QrCheckoutModal");
 const loadPointCheckout = () => import("@/components/pos/PointCheckoutModal");
 const loadVariantPicker = () => import("@/components/pos/VariantPickerModal");
@@ -127,12 +88,11 @@ const loadVoucherRedeem = () => import("@/components/pos/VoucherRedeemModal");
 const loadSellPack = () => import("@/components/pos/SellPackModal");
 const loadBarcodeScanner = () => import("@/components/pos/BarcodeScanner");
 const loadDniScan = () => import("@/components/customers/DniScanModal");
+const loadSalon = () => import("@/components/pos/screen/SalonTablesConnected");
 
 const OpenShiftModal = dynamic(() => loadPosModals().then((m) => m.OpenShiftModal), { ssr: false });
 const CloseShiftModal = dynamic(() => loadPosModals().then((m) => m.CloseShiftModal), { ssr: false });
-const PaymentModal = dynamic(() => loadPosModals().then((m) => m.PaymentModal), { ssr: false });
-const QrCheckoutModal = dynamic(() => loadQrCheckout().then((m) => m.QrCheckoutModal), { ssr: false });
-const PointCheckoutModal = dynamic(() => loadPointCheckout().then((m) => m.PointCheckoutModal), { ssr: false });
+const CheckoutSheetConnected = dynamic(() => loadCheckout().then((m) => m.CheckoutSheetConnected), { ssr: false });
 const VariantPickerModal = dynamic(() => loadVariantPicker().then((m) => m.VariantPickerModal), { ssr: false });
 const ModifierPickerModal = dynamic(() => loadModifierPicker().then((m) => m.ModifierPickerModal), { ssr: false });
 const TicketModal = dynamic(() => loadTicketModal().then((m) => m.TicketModal), { ssr: false });
@@ -140,86 +100,12 @@ const VoucherRedeemModal = dynamic(() => loadVoucherRedeem().then((m) => m.Vouch
 const SellPackModal = dynamic(() => loadSellPack().then((m) => m.SellPackModal), { ssr: false });
 const BarcodeScanner = dynamic(() => loadBarcodeScanner().then((m) => m.BarcodeScanner), { ssr: false });
 const DniScanModal = dynamic(() => loadDniScan().then((m) => m.DniScanModal), { ssr: false });
-
-type PickInput = {
-  id: string;
-  name: string;
-  sku: string | null;
-  price: number;
-  unit: string;
-  is_serialized?: boolean;
-  has_variants?: boolean;
-  warranty_months?: number;
-  categoryId?: string | null;
-};
-
-// Grilla de productos memoizada: no se re-renderiza en cada tecla de la
-// búsqueda ni con cambios del carrito, sólo cuando cambia la lista.
-const ProductGrid = memo(function ProductGrid({
-  products,
-  onPick,
-}: {
-  products: Product[] | undefined;
-  onPick: (p: PickInput) => void;
-}) {
-  return (
-    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {products?.map((p) => (
-        <button
-          key={p.id}
-          onClick={() =>
-            onPick({
-              id: p.id,
-              name: p.name,
-              sku: p.sku,
-              price: p.price,
-              unit: p.unit,
-              is_serialized: p.is_serialized,
-              has_variants: p.has_variants,
-              warranty_months: p.warranty_months,
-              categoryId: p.category_id,
-            })
-          }
-          className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
-        >
-          <div className="flex items-start justify-between gap-1.5">
-            <div className="truncate font-medium text-foreground">{p.name}</div>
-            {p.has_variants && (
-              <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
-                Variantes
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {formatQty(p.stock)} {p.unit}
-            </span>
-            {p.plu && (
-              <span className="rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono font-semibold text-ninja-flameSoft">
-                {p.plu}
-              </span>
-            )}
-          </div>
-          <div className="mt-2 font-semibold text-foreground">
-            {formatCurrency(p.price)}
-            {p.unit === "kg" && (
-              <span className="text-xs font-normal text-muted-foreground"> /kg</span>
-            )}
-          </div>
-        </button>
-      ))}
-      {products?.length === 0 && (
-        <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-          Sin resultados.
-        </p>
-      )}
-    </div>
-  );
-});
+const SalonTablesConnected = dynamic(() => loadSalon().then((m) => m.SalonTablesConnected), { ssr: false });
 
 function preloadPosModals() {
   for (const load of [
     loadPosModals,
+    loadCheckout,
     loadQrCheckout,
     loadPointCheckout,
     loadVariantPicker,
@@ -234,67 +120,17 @@ function preloadPosModals() {
   }
 }
 
-// Mensajes legibles para los rechazos de validate_coupon (F9 · H54).
-function couponReasonMsg(reason?: string): string {
-  switch (reason) {
-    case "not_found":
-      return "Cupón inexistente";
-    case "inactive":
-      return "El cupón está inactivo";
-    case "not_yet":
-      return "El cupón todavía no está vigente";
-    case "expired":
-      return "El cupón está vencido";
-    case "usage_exceeded":
-      return "El cupón alcanzó su límite de usos";
-    case "customer_exceeded":
-      return "Este cliente ya usó el cupón el máximo de veces";
-    case "needs_customer":
-      return "Elegí un cliente para usar este cupón";
-    case "min_amount":
-      return "El carrito no llega al monto mínimo del cupón";
-    default:
-      return "No se pudo aplicar el cupón";
-  }
-}
+type PendingProduct = {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: number;
+  warrantyMonths?: number;
+  categoryId?: string | null;
+};
 
 function PosPageInner() {
   const { toast } = useToast();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  // Cobro desde un turno (F12 · H38): /pos?appointment=<id>. Se carga el servicio
-  // del turno en el carrito (+ se permite agregar productos extra) y, al cobrar,
-  // la venta queda enlazada al turno (link_appointment_sale → 'realizado').
-  const appointmentId = searchParams.get("appointment");
-  const { data: pendingAppt } = useAppointment(appointmentId);
-  // Evita recargar el servicio al carrito en cada render: sólo una vez por turno.
-  const loadedApptRef = useRef<string | null>(null);
-  // Recompra rápida (F12 · H40): /pos?repeat=<customerId>. Carga los ítems de la
-  // ÚLTIMA venta completada del cliente al carrito (precio ACTUAL del producto;
-  // omite los dados de baja) y selecciona al cliente, listo para cobrar.
-  const repeatCustomerId = searchParams.get("repeat");
-  const { data: repeatSale } = useCustomerLastSaleItems(repeatCustomerId);
-  // Sólo una carga por cliente (no en cada render).
-  const loadedRepeatRef = useRef<string | null>(null);
-  // Cobro de mesa (F13 · H44): /pos?table=<order_id>. Carga los ítems del pedido
-  // de la mesa en el carrito y, al cobrar, cierra la mesa (close_dining_table:
-  // enlaza la venta, marca el pedido 'cobrada' y libera la mesa). Espeja el flujo
-  // de cobro de turno (H38).
-  const tableOrderId = searchParams.get("table");
-  const { data: tableOrder } = useTableOrder(tableOrderId);
-  const { data: tableItems } = useTableOrderItems(tableOrderId);
-  // Sólo una carga por pedido de mesa (no en cada render).
-  const loadedTableRef = useRef<string | null>(null);
-  // Cobro de delivery (F13 · H49): /pos?delivery=<order_id>. ESPEJA el cobro de
-  // mesa: carga los ítems del pedido + el costo de envío como línea en el carrito
-  // y, al cobrar, create_sale (con p_delivery_order_id) toma el pedido FOR UPDATE,
-  // lo enlaza/marca 'entregado' y libera EN LA MISMA transacción.
-  const deliveryOrderId = searchParams.get("delivery");
-  const { data: deliveryOrder } = useDeliveryOrder(deliveryOrderId);
-  const { data: deliveryItems } = useDeliveryOrderItems(deliveryOrderId);
-  // Sólo una carga por pedido de delivery (no en cada render).
-  const loadedDeliveryRef = useRef<string | null>(null);
-  // Precarga en idle los chunks de los modales (ver loadPosModals arriba).
   useEffect(() => {
     const w = window as Window & {
       requestIdleCallback?: (cb: () => void) => number;
@@ -307,25 +143,30 @@ function PosPageInner() {
     const t = setTimeout(preloadPosModals, 1500);
     return () => clearTimeout(t);
   }, []);
+
+  // ── Diseño ──────────────────────────────────────────────────────────────────
+  const { layout, user: userLayout, hasUserOverride } = usePosLayout();
+  const { saveUser } = usePosLayoutMutations();
+  const { data: diningEnabled } = useDiningEnabled();
+  // Salón requiere el modo gastronómico: sin él cae a Mostrador.
+  const effectiveLayout = useMemo(
+    () => (layout.preset === "salon" && diningEnabled === false ? { ...layout, preset: "mostrador" as const } : layout),
+    [layout, diningEnabled],
+  );
+  const preset = effectiveLayout.preset;
+
+  // ── Estado de la pantalla ───────────────────────────────────────────────────
   const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
-  const [paymentModal, setPaymentModal] = useState(false);
-  // Plan de garantía extendida pre-seleccionado por la oferta contextual (H28).
-  // Se pasa a PaymentModal para que entre como línea (mecanismo existente).
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutTender, setCheckoutTender] = useState<string | null>(null);
+  // Garantía pre-seleccionada por la oferta contextual (H28).
   const [offeredWarrantyId, setOfferedWarrantyId] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrMobbexOpen, setQrMobbexOpen] = useState(false);
-  const [qrModoOpen, setQrModoOpen] = useState(false);
-  // Cobro presencial con lector Mercado Point (H15 resto).
-  const [pointOpen, setPointOpen] = useState(false);
-  // Link de pago Pagos360 (H21).
-  const [qrPagos360Open, setQrPagos360Open] = useState(false);
-  // Formulario de pago Payway (H17).
-  const [qrPaywayOpen, setQrPaywayOpen] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
   useEffect(() => {
@@ -337,78 +178,34 @@ function PosPageInner() {
   const [freeOpen, setFreeOpen] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
   const [freeName, setFreeName] = useState("");
-  const [weighProduct, setWeighProduct] = useState<{
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    categoryId?: string | null;
-  } | null>(null);
+  const [weighProduct, setWeighProduct] = useState<PendingProduct | null>(null);
   const [weighGrams, setWeighGrams] = useState("");
-  const [serialProduct, setSerialProduct] = useState<{
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    warrantyMonths?: number;
-    categoryId?: string | null;
-  } | null>(null);
+  const [serialProduct, setSerialProduct] = useState<PendingProduct | null>(null);
   const [serialChoice, setSerialChoice] = useState("");
   const [serialOther, setSerialOther] = useState("");
-  const [variantProduct, setVariantProduct] = useState<{
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    warrantyMonths?: number;
-    categoryId?: string | null;
-  } | null>(null);
-  // Producto con modificadores (H37) pendiente de elegir opciones en el picker.
-  const [modifierProduct, setModifierProduct] = useState<{
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    warrantyMonths?: number;
-    categoryId?: string | null;
-  } | null>(null);
-  // IDs de productos del tenant que tienen modificadores → rutean al picker.
+  const [variantProduct, setVariantProduct] = useState<PendingProduct | null>(null);
+  const [modifierProduct, setModifierProduct] = useState<PendingProduct | null>(null);
+  // Caja rápida: cantidad para el próximo producto (número + "×").
+  const [pendingQty, setPendingQty] = useState(1);
   const { data: withMods } = useProductsWithModifiers();
-  const { data: serialList } = useProductSerials(
-    serialProduct?.id ?? null,
-    serialProduct !== null,
-  );
+  const { data: serialList } = useProductSerials(serialProduct?.id ?? null, serialProduct !== null);
 
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const { data: categories } = useCategories();
 
-  // Menús por horario (F13 · H47): sólo en modo gastronómico. El cajero puede
-  // filtrar la carta a un menú (Desayuno, Almuerzo…). Default "Todos" (no esconde
-  // nada); seleccionar un menú deja sólo sus productos asignados. Los hooks no
-  // consultan en tenants sin modo gastronómico (enabled).
-  const { data: diningEnabled } = useDiningEnabled();
+  // Menús por horario (F13 · H47): sólo en modo gastronómico.
   const [menuFilter, setMenuFilter] = useState<string | null>(null);
   const { data: menus } = useMenus(Boolean(diningEnabled));
   const { data: activeMenuIds } = useActiveMenuIds(Boolean(diningEnabled));
-  // Promociones activas (F9 · H53): el motor las evalúa contra el carrito.
-  const { data: activePromos } = useActivePromotions();
   const { data: menuProductIds } = useMenuProductIds(menuFilter);
-  const activeMenuSet = useMemo(
-    () => new Set<string>(activeMenuIds ?? []),
-    [activeMenuIds],
-  );
-  // Set de productos del menú seleccionado (para filtrar la grilla). Null cuando
-  // no hay menú elegido ("Todos").
+  const activeMenuSet = useMemo(() => new Set<string>(activeMenuIds ?? []), [activeMenuIds]);
   const menuProductSet = useMemo<Set<string> | null>(
     () => (menuFilter ? new Set<string>(menuProductIds ?? []) : null),
     [menuFilter, menuProductIds],
   );
 
-  // El filtro por categoría es por sub-árbol (la categoría + sus descendientes):
-  // elegir un rubro padre muestra también los productos de sus sub-rubros. Se
-  // resuelve en cliente, así que la query al server va sin categoría. El filtro
-  // por menú se aplica encima (ambos combinan).
-  const { data: allProducts } = useProducts(search);
+  // Filtro por rubro = sub-árbol (en cliente); el de menú combina encima.
+  const { data: allProducts, isFetching: productsLoading } = useProducts(search);
   const products = useMemo(() => {
     if (!categoryFilter && !menuProductSet) return allProducts;
     let list = allProducts ?? [];
@@ -416,13 +213,9 @@ function PosPageInner() {
       const ids = subtreeIds(categories ?? [], categoryFilter);
       list = list.filter((p: Product) => p.category_id && ids.has(p.category_id));
     }
-    if (menuProductSet) {
-      list = list.filter((p: Product) => menuProductSet.has(p.id));
-    }
+    if (menuProductSet) list = list.filter((p: Product) => menuProductSet.has(p.id));
     return list;
   }, [allProducts, categories, categoryFilter, menuProductSet]);
-  // Ruta "Rubro › Sub-rubro › …" de la categoría activa, para el encabezado de
-  // la grilla de productos (da contexto al filtrar profundo).
   const categoryPath = useMemo(() => {
     if (!categoryFilter) return null;
     const byId = new Map((categories ?? []).map((c) => [c.id, c]));
@@ -436,51 +229,19 @@ function PosPageInner() {
     }
     return parts.length ? parts.join(" › ") : null;
   }, [categories, categoryFilter]);
+
   const { data: shift } = useOpenShift();
   const { data: register } = useDefaultRegister();
-  const { open, close, sale } = usePosMutations();
+  const { open, close } = usePosMutations();
   const { data: myTenant } = useMyTenant();
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
-  const { data: mp } = useMpMethod();
-  // El plan debe permitir el medio (gating real, espejo del backend). Sin la
-  // feature, además de ocultar el botón, la Edge de QR rechaza la creación del
-  // cobro. `!== false` = optimista mientras carga el gating.
-  const mpFeature = useFeature("mercado_pago");
-  const mobbexFeature = useFeature("mobbex");
-  const modoFeature = useFeature("modo");
-  // Descuentos manuales en la venta es feature de plan (Pro). Sin ella, el campo
-  // de descuento queda bloqueado y al tocarlo se abre el UpgradeModal.
+  // Descuentos manuales: feature de plan (Pro). Sin ella el campo queda bloqueado.
   const discountGate = useFeatureGate("descuentos", "Descuentos");
-  const mpReady = Boolean(mp?.enabled && mp?.connected && mpFeature !== false);
-  const { data: mobbex } = useProviderMethod("mobbex");
-  const mobbexReady = Boolean(mobbex?.enabled && mobbex?.connected && mobbexFeature !== false);
-  const { data: modo } = useProviderMethod("modo");
-  const modoReady = Boolean(modo?.enabled && modo?.connected && modoFeature !== false);
-  // Mercado Point: usa la CONEXIÓN de Mercado Pago (mp.connected, sin
-  // credenciales propias) + su propio enabled en Medios de pago + la feature
-  // de plan 'mercadopago_point'. El enforcement real corre en la Edge mp_point.
-  const pointFeature = useFeature("mercadopago_point");
-  const { data: point } = useProviderMethod("mercadopago_point");
-  const pointReady = Boolean(point?.enabled && mp?.connected && pointFeature !== false);
-  const pagos360Feature = useFeature("pagos360");
-  const { data: pagos360 } = useProviderMethod("pagos360");
-  const pagos360Ready = Boolean(
-    pagos360?.enabled && pagos360?.connected && pagos360Feature !== false,
-  );
-  const paywayFeature = useFeature("payway");
-  const { data: payway } = useProviderMethod("payway");
-  const paywayReady = Boolean(
-    payway?.enabled && payway?.connected && paywayFeature !== false,
-  );
   const { data: posSettings } = usePosSettings();
-  // Oferta contextual de garantía (H28): planes activos del tenant + flag para
-  // des/activar la oferta automática (Configuración → Operación). Default on.
   const { data: warrantyPlans } = useWarrantyPlans(true);
   const offerWarranty = posSettings?.offerWarranty ?? true;
   const role = myTenant?.role ?? "cashier";
-  // Venta libre (monto manual · H36): habilitada por flag del negocio
-  // (pos_settings.allow_free_sale) Y sólo para owner/manager. Un cashier sin
-  // permiso no ve el botón. Default del flag = true.
+  // Venta libre (H36): flag del negocio Y sólo owner/manager.
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
   const canFreeSale = allowFreeSale && (role === "owner" || role === "manager");
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
@@ -489,37 +250,20 @@ function PosPageInner() {
   const [customer, setCustomer] = useState<{ id: string; name: string } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
   const [dniOpen, setDniOpen] = useState(false);
-  // Cupón (F9 · H54): texto del input + cupón aplicado (validado server-side). El
-  // descuento se recalcula en vivo; create_sale lo revalida y consume al cobrar.
-  const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{
-    coupon_id: string;
-    code: string;
-    discount_type: "percent" | "amount";
-    discount_value: number;
-    min_amount: number;
-  } | null>(null);
   const [voucherOpen, setVoucherOpen] = useState(false);
   const [sellPackOpen, setSellPackOpen] = useState(false);
   const [custSearch, setCustSearch] = useState("");
-  // Selector de cliente (bajo consumo de datos): sin término trae sólo los
-  // recientes; al tipear, busca server-side con límite. Debounce para no pegar
-  // al server por tecla.
   const custSearchDebounced = useDebouncedValue(custSearch, 300);
   const { data: customers } = useCustomersForPicker(custSearchDebounced);
   const { createQuick } = useCustomerMutations();
 
-  // Alta rápida de cliente desde el DNI escaneado (H31): crea un cliente mínimo
-  // con nombre + documento (DNI) y lo selecciona para la venta. El cajero ya
-  // confirmó los datos en la validación visual del DniScanModal.
+  // Alta rápida de cliente desde el DNI escaneado (H31).
   async function quickAddFromDni(d: ParsedDni) {
     try {
       const created = await createQuick.mutateAsync({
         name: d.nombreCompleto,
         document_type: "dni",
         document_number: d.dni,
-        // Fecha de nacimiento parseada del DNI (H31). Antes se mostraba en la
-        // preview pero no viajaba al insert: el cliente quedaba sin cumpleaños.
         birth_date: d.fechaNac,
       });
       setCustomer({ id: created.id, name: created.name });
@@ -535,36 +279,34 @@ function PosPageInner() {
     }
   }
   const { data: scBalance } = useStoreCreditBalance(customer?.id);
-  // Packs / sesiones (H41): la feature gatea "Vender paquete" y la oferta de
-  // "usar sesión" en el carrito. Saldos disponibles del cliente (no vencidos,
-  // con sesiones) para ofrecer cubrir una línea con una sesión del pack.
+  // Packs / sesiones (H41).
   const packsFeature = useFeature("packs");
-  const packsEnabled = packsFeature !== false; // optimista mientras carga el gating
-  const { data: packCredits } = useCustomerPackCredits(
-    packsEnabled ? customer?.id : null,
-    true,
-  );
+  const packsEnabled = packsFeature !== false;
+  const { data: packCredits } = useCustomerPackCredits(packsEnabled ? customer?.id : null, true);
   const showFrequent = quickSale && !search.trim();
   const { data: topProducts } = useTopProducts(showFrequent);
-  // Favoritos (H36): botones rápidos grandes arriba de la grilla. Se muestran
-  // cuando no se está buscando ni filtrando por categoría (pantalla de cobro
-  // rápido sin búsqueda). Independiente del rubro: si hay favoritos, aparecen.
+  // Favoritos (H36) o teclas rápidas del diseño.
   const showFavorites = !search.trim() && !categoryFilter && !menuFilter;
-  const { data: favorites } = useFavoriteProducts(showFavorites);
+  const { data: favorites } = useFavoriteProducts(showFavorites && layout.quickKeys.length === 0);
+  const quickKeyIds = useMemo(() => layout.quickKeys.map((k) => k.productId), [layout.quickKeys]);
+  const { data: quickKeyProducts } = useProductsByIds(quickKeyIds);
+  const quickKeys = useMemo<ResolvedQuickKey[]>(() => {
+    if (layout.quickKeys.length === 0) return (favorites ?? []).map((p) => ({ product: p }));
+    const byId = new Map((quickKeyProducts ?? []).map((p) => [p.id, p]));
+    const out: ResolvedQuickKey[] = [];
+    for (const k of layout.quickKeys) {
+      const product = byId.get(k.productId);
+      if (product) out.push({ product, label: k.label, color: k.color });
+    }
+    return out;
+  }, [layout.quickKeys, quickKeyProducts, favorites]);
 
-  // ----- Pantalla del cliente / doble pantalla (F10 · H25) -----
-  // Branding del negocio (logo + nombre + acento) para la pantalla del cliente.
+  // ── Pantalla del cliente (F10 · H25) ───────────────────────────────────────
   const { data: dispBranding } = useTicketBranding();
-  // QR de cobro activo (lo reporta el QrCheckoutModal abierto). Cuando hay uno, la
-  // pantalla del cliente muestra el QR + monto en vez de los totales.
   const [displayQr, setDisplayQr] = useState<DisplayQr | null>(null);
   const handleQrState = useCallback((qr: DisplayQr | null) => setDisplayQr(qr), []);
-  // Snapshot de la última venta cobrada → pantalla "Pago recibido" + vuelto.
-  // Mientras está seteado, la pantalla del cliente muestra el agradecimiento;
-  // un timeout lo limpia y la pantalla vuelve a idle.
   const [paidView, setPaidView] = useState<{ change: number } | null>(null);
   const paidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const displayBranding = useMemo<DisplayBranding>(
     () => ({
       businessName: dispBranding?.legal_name ?? null,
@@ -578,168 +320,72 @@ function PosPageInner() {
     [dispBranding, register?.name, posSettings],
   );
 
-  const lines = useCartStore((s) => s.lines);
-  const discountTotal = useCartStore((s) => s.discountTotal);
+  // ── Carrito ────────────────────────────────────────────────────────────────
   const addProduct = useCartStore((s) => s.addProduct);
   const addWeighed = useCartStore((s) => s.addWeighed);
   const addSerialized = useCartStore((s) => s.addSerialized);
   const addVariant = useCartStore((s) => s.addVariant);
   const addWithModifiers = useCartStore((s) => s.addWithModifiers);
   const addFreeAmount = useCartStore((s) => s.addFreeAmount);
-  // Packs (H41): vender un pack y cubrir/descubrir una línea con una sesión.
   const addPack = useCartStore((s) => s.addPack);
   const coverLineWithPack = useCartStore((s) => s.coverLineWithPack);
   const uncoverLine = useCartStore((s) => s.uncoverLine);
-  // Regalo por compra (H54): el motor reconcilia las líneas de regalo del carrito.
-  const syncGiftLines = useCartStore((s) => s.syncGiftLines);
+  const setQuantity = useCartStore((s) => s.setQuantity);
+  const removeLine = useCartStore((s) => s.removeLine);
+  const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
+  const clear = useCartStore((s) => s.clear);
 
-  // Lista de precios 'mostrador' activa (si existe): el precio unitario al
-  // agregar al carrito se resuelve contra esta lista. Sin lista → precio base.
+  // Lista de precios 'mostrador' activa: el precio al agregar se resuelve acá.
   const { data: mostrador } = useMostradorPricing();
-  // basePrice = price_override de la variante (si aplica) ya resuelto por el
-  // caller. Devuelve el precio efectivo de mostrador.
-  function priceFor(
-    productId: string,
-    variantId: string | null,
-    basePrice: number,
-  ): number {
-    return resolvePrice(
-      basePrice,
-      productId,
-      variantId,
-      mostrador?.list ?? null,
-      mostrador?.items ?? [],
-    );
+  function priceFor(productId: string, variantId: string | null, basePrice: number): number {
+    return resolvePrice(basePrice, productId, variantId, mostrador?.list ?? null, mostrador?.items ?? []);
   }
 
-  // Click en un producto: serializado abre picker de serial; por peso (kg) abre
-  // modal de peso; si no, lo agrega directo (precio resuelto por la lista mostrador).
-  // `warranty_months` (garantía de fábrica) viaja a la línea para la oferta
-  // contextual de garantía extendida (H28).
-  function pickProduct(p: {
-    id: string;
-    name: string;
-    sku: string | null;
-    price: number;
-    unit: string;
-    is_serialized?: boolean;
-    has_variants?: boolean;
-    warranty_months?: number;
-    // Categoría del producto (F9 · H53 alcance por categoría): viaja a la línea
-    // del carrito para que el motor matchee promos de categoría. Puede faltar en
-    // orígenes que no la traen (pedido/turno) → null.
-    categoryId?: string | null;
-  }) {
+  // Tocar un producto: variante, serial, opciones o peso abren su picker; si no,
+  // va directo al carrito (precio por lista mostrador). `qty` sólo aplica a
+  // productos simples por unidad (Caja rápida).
+  function pickProduct(p: PickInput, qty = 1) {
     if (p.has_variants) {
-      setVariantProduct({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: p.price,
-        warrantyMonths: p.warranty_months ?? 0,
-        categoryId: p.categoryId ?? null,
-      });
+      setVariantProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price, warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null });
     } else if (p.is_serialized) {
-      setSerialProduct({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: p.price,
-        warrantyMonths: p.warranty_months ?? 0,
-        categoryId: p.categoryId ?? null,
-      });
+      setSerialProduct({ id: p.id, name: p.name, sku: p.sku, price: p.price, warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null });
       setSerialChoice("");
       setSerialOther("");
     } else if (withMods?.has(p.id)) {
-      // H37: producto con modificadores (tamaños/sabores/toppings) → picker. El
-      // precio base se resuelve por la lista mostrador; el picker suma los deltas.
-      setModifierProduct({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: priceFor(p.id, null, p.price),
-        warrantyMonths: p.warranty_months ?? 0,
-        categoryId: p.categoryId ?? null,
-      });
+      // H37: producto con modificadores → picker (precio base por lista mostrador).
+      setModifierProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), warrantyMonths: p.warranty_months ?? 0, categoryId: p.categoryId ?? null });
     } else if (p.unit === "kg") {
-      setWeighProduct({
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: priceFor(p.id, null, p.price),
-        categoryId: p.categoryId ?? null,
-      });
+      setWeighProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), categoryId: p.categoryId ?? null });
       setWeighGrams("");
     } else {
-      addProduct({
-        ...p,
-        price: priceFor(p.id, null, p.price),
-        warrantyMonths: p.warranty_months ?? 0,
-      });
+      addProduct({ ...p, price: priceFor(p.id, null, p.price), warrantyMonths: p.warranty_months ?? 0 }, qty);
     }
   }
-  // Callback estable para la grilla memoizada (lee siempre el pickProduct vigente).
-  const pickProductRef = useRef(pickProduct);
-  pickProductRef.current = pickProduct;
-  const onPickProduct = useCallback((p: PickInput) => pickProductRef.current(p), []);
+  // Callback estable para la grilla memoizada.
+  const pickRef = useRef(pickProduct);
+  pickRef.current = pickProduct;
+  const pendingQtyRef = useRef(pendingQty);
+  pendingQtyRef.current = pendingQty;
+  const onPickProduct = useCallback((p: Product) => {
+    pickRef.current(toPick(p), pendingQtyRef.current);
+    if (pendingQtyRef.current !== 1) setPendingQty(1);
+  }, []);
 
-  // ----- Favoritos / cantidades rápidas (H36) -----
-  // Tap del botón favorito: rutea por tipo (serial/variante/peso) o agrega 1.
-  function favTap(p: Product) {
-    pickProduct({
-      id: p.id,
-      name: p.name,
-      sku: p.sku,
-      price: p.price,
-      unit: p.unit,
-      is_serialized: p.is_serialized,
-      has_variants: p.has_variants,
-      warranty_months: p.warranty_months ?? undefined,
-      categoryId: p.category_id,
-    });
-  }
-  // Cantidad rápida (×2/×6/×12) para un favorito por unidad simple: suma qty de
-  // un toque. El precio se resuelve contra la lista mostrador.
   function favQuickUnits(p: Product, qty: number) {
-    addProduct(
-      {
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: priceFor(p.id, null, p.price),
-        unit: p.unit,
-        warrantyMonths: p.warranty_months ?? 0,
-        categoryId: p.category_id,
-      },
-      qty,
-    );
+    addProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.category_id }, qty);
   }
-  // Peso rápido (½ kg / 1 kg) para un favorito por peso.
   function favQuickWeight(p: Product, kg: number) {
-    addWeighed(
-      {
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        price: priceFor(p.id, null, p.price),
-        categoryId: p.category_id,
-      },
-      kg,
-    );
+    addWeighed({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), categoryId: p.category_id }, kg);
   }
 
   function confirmSerial() {
     if (!serialProduct) return;
-    const serial =
-      serialChoice === "__other__" ? serialOther.trim() : serialChoice.trim();
+    const serial = serialChoice === "__other__" ? serialOther.trim() : serialChoice.trim();
     if (!serial) {
       toast({ title: "Elegí o ingresá un N° de serie", variant: "error" });
       return;
     }
-    addSerialized(
-      { ...serialProduct, price: priceFor(serialProduct.id, null, serialProduct.price) },
-      serial,
-    );
+    addSerialized({ ...serialProduct, price: priceFor(serialProduct.id, null, serialProduct.price) }, serial);
     setSerialProduct(null);
     setSerialChoice("");
     setSerialOther("");
@@ -756,10 +402,6 @@ function PosPageInner() {
     setWeighProduct(null);
     setWeighGrams("");
   }
-  const setQuantity = useCartStore((s) => s.setQuantity);
-  const removeLine = useCartStore((s) => s.removeLine);
-  const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
-  const clear = useCartStore((s) => s.clear);
 
   function confirmFreeAmount() {
     const amount = Number(freeAmount);
@@ -773,472 +415,31 @@ function PosPageInner() {
     setFreeOpen(false);
   }
 
-  // Si ya no queda un producto elegible en el carrito (se quitó el ítem con
-  // garantía), descartá la garantía pre-seleccionada para que no se cobre sola.
+  // ── Orígenes (turno, recompra, mesa, delivery) y precios ────────────────────
+  const origins = usePosOrigins({ setCustomer, priceFor });
+  const pricing = usePosPricing({ rounding, customerId: customer?.id ?? null });
+  const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+
+  // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
   const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
   useEffect(() => {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
 
-  // Packs (H41): si cambia el cliente de la venta, quitá la cobertura por pack de
-  // las líneas (el saldo de sesiones es del cliente anterior; el nuevo cliente
-  // puede tener otros packs u ninguno). Las líneas vuelven a su precio normal.
+  // Packs (H41): al cambiar de cliente se quita la cobertura por pack.
   const customerId = customer?.id ?? null;
   useEffect(() => {
     for (const l of useCartStore.getState().lines) {
       if (l.packCreditId) uncoverLine(l.lineId);
     }
-    // Sólo al cambiar de cliente (no en cada cambio de líneas).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
-  // Cobro desde un turno (H38): al llegar el turno (?appointment=<id>), cargá su
-  // servicio en el carrito UNA sola vez y seleccioná el cliente. Si el turno ya
-  // tiene una venta o está cancelado, no se carga (sólo informativo). Usa el
-  // snapshot de precio del turno (estable); si el producto del servicio sigue
-  // existiendo lo agrega como línea de producto, si no, como ítem libre.
-  useEffect(() => {
-    const a = pendingAppt;
-    if (!a) return;
-    if (loadedApptRef.current === a.id) return;
-    loadedApptRef.current = a.id;
-    if (a.sale_id || a.status === "cancelado") return; // ya cobrado / cancelado
-    clear();
-    if (a.service_product_id) {
-      addProduct({
-        id: a.service_product_id,
-        name: a.service_name,
-        sku: null,
-        price: a.service_price,
-        unit: "un",
-      });
-    } else {
-      addFreeAmount({ name: a.service_name, amount: a.service_price });
-    }
-    if (a.customer_id && a.customers?.name) {
-      setCustomer({ id: a.customer_id, name: a.customers.name });
-    }
-  }, [pendingAppt, clear, addProduct, addFreeAmount]);
-
-  // Sale del modo "cobro de turno": limpia el carrito y el query param.
-  function exitAppointmentMode() {
-    loadedApptRef.current = null;
-    clear();
-    setCustomer(null);
-    router.replace("/pos");
-  }
-
-  // Cobro de mesa (H44): al llegar con ?table=<order_id>, cargá los ítems del
-  // pedido en el carrito UNA sola vez. Resuelve cada línea por su unit_price del
-  // pedido (snapshot del precio cargado en la mesa); las líneas con producto se
-  // agregan como producto (descuentan stock al cobrar si corresponde) y las
-  // libres como ítem de monto libre. Si el pedido ya fue cobrado/cancelado, no
-  // carga nada. NO aplica al POS mostrador (sin ?table, todo queda igual).
-  useEffect(() => {
-    const o = tableOrder;
-    if (!o) return;
-    if (loadedTableRef.current === o.id) return;
-    if (tableItems === undefined) return; // ítems aún cargando
-    if (o.status !== "abierta" || o.sale_id) {
-      // Pedido ya cerrado: no recargar; sólo marcar como visto.
-      loadedTableRef.current = o.id;
-      return;
-    }
-    loadedTableRef.current = o.id;
-    clear();
-    for (const it of tableItems ?? []) {
-      const qty = it.qty > 0 ? it.qty : 1;
-      if (it.product_id) {
-        addProduct(
-          {
-            id: it.product_id,
-            name: it.name,
-            sku: null,
-            price: it.unit_price,
-            unit: "un",
-          },
-          qty,
-        );
-      } else {
-        // Ítem libre: una línea por unidad acumulada (monto = precio * cantidad).
-        addFreeAmount({ name: it.name, amount: it.unit_price * qty });
-      }
-    }
-  }, [tableOrder, tableItems, clear, addProduct, addFreeAmount]);
-
-  // Sale del modo "cobro de mesa": limpia el carrito y el query param (la mesa
-  // sigue abierta — el cajero canceló el cobro, no la mesa).
-  function exitTableMode() {
-    loadedTableRef.current = null;
-    clear();
-    setCustomer(null);
-    router.replace("/pos");
-  }
-
-  // Cobro de delivery (H49 · Bug 🟠): al llegar con ?delivery=<order_id>, cargá los
-  // ítems del pedido al carrito UNA sola vez. ESPEJA el cobro de mesa. Las líneas
-  // con producto se agregan como producto (descuentan stock al cobrar si
-  // corresponde); las libres como monto libre. El COSTO DE ENVÍO ya NO se inyecta
-  // como línea del carrito: lo agrega create_sale como línea AUTORITATIVA desde
-  // delivery_orders.delivery_fee (inviolable, no se puede quitar del carrito para
-  // pagar $0). El POS sólo lo suma al total a cobrar (deliveryFee → PaymentModal)
-  // para que el cajero cobre productos + envío y el total coincida con el v_total
-  // del server. Si el pedido ya fue cobrado/cancelado, no carga nada. Pre-selecciona
-  // el cliente del pedido si lo tiene.
-  useEffect(() => {
-    const o = deliveryOrder;
-    if (!o) return;
-    if (loadedDeliveryRef.current === o.id) return;
-    if (deliveryItems === undefined) return; // ítems aún cargando
-    if (o.sale_id || o.status === "entregado" || o.status === "cancelado") {
-      loadedDeliveryRef.current = o.id;
-      return;
-    }
-    loadedDeliveryRef.current = o.id;
-    clear();
-    for (const it of deliveryItems ?? []) {
-      const qty = it.qty > 0 ? it.qty : 1;
-      if (it.product_id) {
-        addProduct(
-          { id: it.product_id, name: it.name, sku: null, price: it.unit_price, unit: "un" },
-          qty,
-        );
-      } else {
-        addFreeAmount({ name: it.name, amount: it.unit_price * qty });
-      }
-    }
-    if (o.customer_id && o.customer_name) {
-      setCustomer({ id: o.customer_id, name: o.customer_name });
-    }
-  }, [deliveryOrder, deliveryItems, clear, addProduct, addFreeAmount]);
-
-  // Costo de envío a cobrar (Bug 🟠): sólo en cobro de delivery activo, tipo
-  // 'delivery', con el pedido aún abierto y fee > 0. Es lo que ve/suma el cajero en
-  // PaymentModal (payTotal) por encima de los ítems del carrito. El monto REAL que
-  // se cobra/asienta lo fija create_sale desde delivery_orders.delivery_fee (este
-  // valor del UI sólo refleja el mismo dato del pedido; el server es inviolable).
-  // 0 = no aplica (mostrador, mesa, takeaway o pedido ya cerrado).
-  const deliveryFee = useMemo(() => {
-    const o = deliveryOrder;
-    if (!deliveryOrderId || !o) return 0;
-    if (o.sale_id || o.status === "entregado" || o.status === "cancelado") return 0;
-    if (o.order_type !== "delivery") return 0;
-    return Math.max(0, Number(o.delivery_fee) || 0);
-  }, [deliveryOrderId, deliveryOrder]);
-
-  // Sale del modo "cobro de delivery": limpia el carrito y el query param (el
-  // pedido sigue abierto — el cajero canceló el cobro, no el pedido).
-  function exitDeliveryMode() {
-    loadedDeliveryRef.current = null;
-    clear();
-    setCustomer(null);
-    router.replace("/pos");
-  }
-
-  // Recompra rápida (H40): al entrar con ?repeat=<customerId>, cargá los ítems de
-  // la última venta del cliente UNA sola vez. Resuelve el precio ACTUAL de cada
-  // producto (lista mostrador) y omite los dados de baja (con aviso). Las líneas
-  // sin producto (venta libre / servicios sueltos) se recrean a su precio
-  // histórico. Selecciona al cliente y limpia el query param. Best-effort.
-  useEffect(() => {
-    if (!repeatCustomerId) return;
-    const r = repeatSale; // null = el cliente no tiene ventas previas
-    if (repeatSale === undefined) return; // aún cargando
-    if (loadedRepeatRef.current === repeatCustomerId) return;
-    loadedRepeatRef.current = repeatCustomerId;
-    let cancelled = false;
-    // Cliente de la venta (nombre del join; sin fetch extra). Si no hay venta
-    // previa igual lo seleccionamos por id para que la próxima venta sea de él.
-    setCustomer({ id: repeatCustomerId, name: r?.customerName ?? "Cliente" });
-    (async () => {
-      if (!r || r.items.length === 0) {
-        if (!cancelled)
-          toast({
-            title: "El cliente no tiene una venta para repetir",
-            variant: "info",
-          });
-        if (!cancelled) router.replace("/pos");
-        return;
-      }
-      // Productos vigentes (precio actual + baja). Las líneas sin producto se
-      // recrean aparte a su precio histórico.
-      const productIds = r.items
-        .map((it) => it.product_id)
-        .filter((id): id is string => Boolean(id));
-      let current: Awaited<ReturnType<typeof productsApi.getByIds>> = [];
-      try {
-        current = await productsApi.getByIds(productIds);
-      } catch {
-        /* si falla, se tratan todos como no disponibles */
-      }
-      if (cancelled) return;
-      const byId = new Map(current.map((p) => [p.id, p]));
-      clear();
-      const omitted: string[] = [];
-      for (const it of r.items) {
-        const qty = it.quantity > 0 ? it.quantity : 1;
-        if (it.product_id) {
-          const p = byId.get(it.product_id);
-          if (!p) {
-            omitted.push(it.product_name);
-            continue;
-          }
-          // Precio actual del producto, resuelto contra la lista mostrador.
-          addProduct(
-            {
-              id: p.id,
-              name: p.name,
-              sku: p.sku,
-              price: priceFor(p.id, null, p.price),
-              unit: p.unit,
-              warrantyMonths: p.warranty_months ?? 0,
-              categoryId: p.category_id,
-            },
-            qty,
-          );
-        } else {
-          // Venta libre / servicio suelto: precio histórico de la línea.
-          addFreeAmount({ name: it.product_name, amount: it.unit_price * qty });
-        }
-      }
-      if (cancelled) return;
-      router.replace("/pos");
-      if (omitted.length > 0) {
-        toast({
-          title:
-            omitted.length === 1
-              ? `Se omitió "${omitted[0]}" (ya no está disponible)`
-              : `Se omitieron ${omitted.length} productos que ya no están disponibles`,
-          variant: "info",
-        });
-      }
-      toast({ title: "Última venta cargada en el carrito", variant: "success" });
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repeatCustomerId, repeatSale]);
-
-  const subtotal = cartSubtotal(lines);
-
-  // Promoción aplicable (F9 · H53): el motor elige la mejor promo ACTIVA para el
-  // carrito según el contexto (día/hora local AR). Alcance carrito/producto/
-  // categoría (la categoría viaja con cada línea desde que se agrega al carrito).
-  // Sólo informa y descuenta; create_sale revalida y persiste el monto.
-  const promoResult = useMemo(() => {
-    if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
-    const promoLines: PromoCartLine[] = lines.map((l) => ({
-      productId: l.productId,
-      categoryId: l.categoryId ?? null,
-      unitPrice: l.unitPrice,
-      quantity: l.quantity,
-      lineTotal: lineSubtotal(l),
-    }));
-    const arNow = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
-    );
-    const ctx: PromoContext = {
-      weekday: arNow.getDay(),
-      minutes: arNow.getHours() * 60 + arNow.getMinutes(),
-      date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
-    };
-    return evaluateCart(promoLines, activePromos, ctx);
-  }, [activePromos, lines]);
-
-  // Descuento de promo acotado a lo que queda tras el descuento manual (el server
-  // reaplica la misma cota en create_sale).
-  const promoDiscount = promoResult
-    ? Math.min(promoResult.discount, Math.max(0, subtotal - discountTotal))
-    : 0;
-
-  // Cupón (F9 · H54): descuento en vivo (misma fórmula que el server), acotado a lo
-  // que queda tras el descuento manual. Es EXCLUYENTE con la promo de descuento: si
-  // hay un cupón con descuento, la promo se suprime (el cajero eligió el cupón). Los
-  // regalos sí conviven. create_sale revalida y calcula el monto de forma autoritativa.
-  const couponDiscount = useMemo(() => {
-    if (!appliedCoupon) return 0;
-    if (subtotal < (appliedCoupon.min_amount ?? 0)) return 0;
-    const raw =
-      appliedCoupon.discount_type === "percent"
-        ? (subtotal * appliedCoupon.discount_value) / 100
-        : appliedCoupon.discount_value;
-    return Math.round(Math.min(Math.max(raw, 0), Math.max(0, subtotal - discountTotal)) * 100) / 100;
-  }, [appliedCoupon, subtotal, discountTotal]);
-  const promoActive = couponDiscount <= 0;
-  const effectivePromoDiscount = promoActive ? promoDiscount : 0;
-
-  async function applyCoupon() {
-    const code = couponInput.trim();
-    if (!code) return;
-    try {
-      const v = await couponsApi.validate(code, subtotal, customer?.id ?? null);
-      if (!v.ok || !v.coupon_id) {
-        toast({ title: couponReasonMsg(v.reason), variant: "error" });
-        return;
-      }
-      setAppliedCoupon({
-        coupon_id: v.coupon_id,
-        code: v.code ?? code,
-        discount_type: v.discount_type ?? "percent",
-        discount_value: v.discount_value ?? 0,
-        min_amount: v.min_amount ?? 0,
-      });
-      setCouponInput("");
-      toast({ title: `Cupón ${v.code ?? code} aplicado`, variant: "success" });
-    } catch (e) {
-      toast({
-        title: "No se pudo validar el cupón",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
-    }
-  }
-
-  // Promo método-AGNÓSTICA del carrito (ya restada en rawTotal/base). El modal de
-  // cobro la recibe como punto de partida; si al elegir el medio aparece una promo
-  // por medio de pago mayor, baja más el total (ver promoForMethod).
-  const cartPromo =
-    promoActive && promoResult && promoDiscount > 0
-      ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
-      : null;
-
-  // Mejor promo CONSIDERANDO el medio de pago (F9 · H54). Reevalúa el motor con el
-  // medio en contexto: las promos por medio (payment_method) recién acá pueden
-  // aplicar, junto a las método-agnósticas. Devuelve el descuento ya acotado (igual
-  // que promoDiscount). El modal lo usa para recalcular el total al elegir el medio.
-  const promoForMethod = useCallback(
-    (method: string): { discount: number; id: string | null; name: string | null } | null => {
-      // Cupón activo ⇒ promo suprimida (excluyentes).
-      if (couponDiscount > 0) return null;
-      if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
-      const promoLines: PromoCartLine[] = lines.map((l) => ({
-        productId: l.productId,
-        categoryId: l.categoryId ?? null,
-        unitPrice: l.unitPrice,
-        quantity: l.quantity,
-        lineTotal: lineSubtotal(l),
-      }));
-      const arNow = new Date(
-        new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
-      );
-      const ctx: PromoContext = {
-        weekday: arNow.getDay(),
-        minutes: arNow.getHours() * 60 + arNow.getMinutes(),
-        date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
-        paymentMethod: method,
-      };
-      const r = evaluateCart(promoLines, activePromos, ctx);
-      if (!r) return null;
-      const capped = Math.min(r.discount, Math.max(0, subtotal - discountTotal));
-      if (capped <= 0) return null;
-      return { discount: capped, id: r.promotionId, name: r.name };
-    },
-    [activePromos, lines, subtotal, discountTotal, couponDiscount],
-  );
-
-  // ── Regalo por compra (F9 · H54) ─────────────────────────────────────────────
-  // Promos de regalo activas → ids de los productos a regalar, para traer su
-  // nombre/sku/stock y poder armar la línea a $0 y chequear stock.
-  const giftProductIds = useMemo(
-    () =>
-      (activePromos ?? [])
-        .filter((p: Promotion) => p.action_type === "gift" && p.gift_product_id)
-        .map((p: Promotion) => p.gift_product_id as string),
-    [activePromos],
-  );
-  const { data: giftProductsData } = useProductsByIds(giftProductIds);
-  const giftProductById = useMemo(() => {
-    const m = new Map<string, Product>();
-    for (const p of giftProductsData ?? []) m.set(p.id, p);
-    return m;
-  }, [giftProductsData]);
-
-  // Regalos a aplicar según el motor: evalúa SOLO con las líneas NO-regalo (para
-  // que un regalo no se dispare a sí mismo) y descarta los que no tienen stock.
-  const desiredGifts = useMemo(() => {
-    if (!activePromos || activePromos.length === 0) return [];
-    const realLines = lines.filter((l) => !l.giftPromoId);
-    if (realLines.length === 0) return [];
-    const promoLines: PromoCartLine[] = realLines.map((l) => ({
-      productId: l.productId,
-      categoryId: l.categoryId ?? null,
-      unitPrice: l.unitPrice,
-      quantity: l.quantity,
-      lineTotal: lineSubtotal(l),
-    }));
-    const arNow = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
-    );
-    const ctx: PromoContext = {
-      weekday: arNow.getDay(),
-      minutes: arNow.getHours() * 60 + arNow.getMinutes(),
-      date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
-    };
-    const out: {
-      promoId: string;
-      productId: string;
-      name: string;
-      sku: string | null;
-      quantity: number;
-    }[] = [];
-    for (const g of evaluateGifts(promoLines, activePromos, ctx)) {
-      const p = giftProductById.get(g.giftProductId);
-      if (!p) continue; // producto no disponible / dado de baja
-      // Guard de stock: si controla stock y no alcanza, no se ofrece el regalo.
-      if (p.track_stock && Number(p.stock ?? 0) < g.giftQty) continue;
-      out.push({ promoId: g.promotionId, productId: p.id, name: p.name, sku: p.sku, quantity: g.giftQty });
-    }
-    return out;
-  }, [activePromos, lines, giftProductById]);
-
-  // Reconcilia las líneas de regalo con lo deseado. Sólo llama al store ante un
-  // cambio real (la evaluación ignora las líneas de regalo, así que agregarlas/
-  // quitarlas no altera `desiredGifts` → no hay loop).
-  useEffect(() => {
-    const current = lines
-      .filter((l) => l.giftPromoId)
-      .map((l) => `${l.giftPromoId}:${l.productId}:${l.quantity}`)
-      .sort()
-      .join("|");
-    const wanted = desiredGifts
-      .map((g) => `${g.promoId}:${g.productId}:${g.quantity}`)
-      .sort()
-      .join("|");
-    if (current !== wanted) syncGiftLines(desiredGifts);
-  }, [desiredGifts, lines, syncGiftLines]);
-
-  const rawTotal = Math.max(0, subtotal - discountTotal - effectivePromoDiscount - couponDiscount);
-  // Redondeo del total al múltiplo configurado (H30). El server reaplica el
-  // mismo redondeo de forma autoritativa en create_sale.
-  const total = rounding > 0 ? Math.round(rawTotal / rounding) * rounding : rawTotal;
   const hasShift = Boolean(shift);
 
-  // Ítems para "Dividir cuenta → por ítem" (F13 · H44): cada línea del carrito con
-  // su subtotal (las cubiertas por pack van en 0). El modal reparte el total; la
-  // suma de ítems cubre la porción de productos y el split ajusta la diferencia
-  // (descuento/redondeo/extras/propina) en la última línea para cuadrar exacto.
-  const splitItems = useMemo(
-    () =>
-      lines.map((l) => ({
-        id: l.lineId,
-        label: l.variantLabel ? `${l.name} (${l.variantLabel})` : l.name,
-        amount: lineSubtotal(l),
-      })),
-    [lines],
-  );
-
-  // Publica el estado a la pantalla del cliente (H25) en cada cambio relevante.
-  // Prioridad de fase: pago recibido (paidView) > cobro QR activo (displayQr) >
-  // carrito con ítems > idle. El payload solo lleva datos de la venta en curso.
+  // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
-    const phase: DisplayState["phase"] = paidView
-      ? "paid"
-      : displayQr
-        ? "paying"
-        : lines.length > 0
-          ? "cart"
-          : "idle";
+    const phase: DisplayState["phase"] = paidView ? "paid" : displayQr ? "paying" : lines.length > 0 ? "cart" : "idle";
     publishDisplayState({
       v: 1,
       phase,
@@ -1261,70 +462,94 @@ function PosPageInner() {
     });
   }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, paidView]);
 
-  // Tope de descuento por rol (H30): no se puede pasar del máximo del rol.
+  // Tope de descuento por rol (H30).
   function handleDiscountChange(value: number) {
     const max = (subtotal * maxDiscPct) / 100;
     if (value > max + 0.001) {
       setDiscountTotal(Math.max(0, Math.floor(max)));
-      toast({
-        title: `Descuento máximo ${maxDiscPct}% para tu rol`,
-        variant: "error",
-      });
+      toast({ title: `Descuento máximo ${maxDiscPct}% para tu rol`, variant: "error" });
     } else {
       setDiscountTotal(Math.max(0, value));
     }
   }
 
-  // Lector USB/Bluetooth (HID): escanea en cualquier parte del POS y agrega.
-  // Se DESACTIVA mientras el modal de escaneo de DNI está abierto: ese modal tiene
-  // su propio useScanner y, si éste sigue activo, intercepta el PDF417 del DNI como
-  // si fuera un código de producto (findByCode → "Sin producto") y pisa la lectura.
-  useScanner(async (code) => {
-    try {
-      const res = await productsApi.findByCode(code);
-      if (res) {
-        const { product: p, variant } = res;
-        if (variant) {
-          // Barcode/SKU de variante: agrega directo, sin abrir el picker. El
-          // precio base de la variante (override o padre) se resuelve por la
-          // lista mostrador.
-          addVariant({
-            id: p.id,
-            name: p.name,
-            sku: variant.sku ?? p.sku,
-            price: priceFor(p.id, variant.id, variant.price_override ?? p.price),
-            variantId: variant.id,
-            variantLabel: variantLabel(variant),
-            warrantyMonths: p.warranty_months ?? 0,
-            categoryId: p.category_id,
-          });
-        } else {
-          pickProduct({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            price: p.price,
-            unit: p.unit,
-            is_serialized: p.is_serialized,
-            has_variants: p.has_variants,
-            warranty_months: p.warranty_months,
-            categoryId: p.category_id,
-          });
+  // Código encontrado (escáner, Enter en Caja rápida): variante directo; el
+  // resto pasa por pickProduct. Devuelve false si no hay producto.
+  async function addByCode(code: string): Promise<boolean> {
+    const res = await productsApi.findByCode(code);
+    if (!res) return false;
+    const { product: p, variant } = res;
+    if (variant) {
+      addVariant({
+        id: p.id,
+        name: p.name,
+        sku: variant.sku ?? p.sku,
+        price: priceFor(p.id, variant.id, variant.price_override ?? p.price),
+        variantId: variant.id,
+        variantLabel: variantLabel(variant),
+        warrantyMonths: p.warranty_months ?? 0,
+        categoryId: p.category_id,
+      });
+    } else {
+      pickProduct(toPick(p), pendingQty);
+    }
+    if (pendingQty !== 1) setPendingQty(1);
+    return true;
+  }
+
+  // Lector USB/Bluetooth (HID). Se desactiva con el escaneo de DNI abierto.
+  useScanner(
+    async (code) => {
+      try {
+        if (!(await addByCode(code))) {
+          setSearch(code);
+          toast({ title: `Sin producto para "${code}"`, variant: "info" });
         }
-      } else {
+      } catch {
         setSearch(code);
-        toast({ title: `Sin producto para "${code}"`, variant: "info" });
+      }
+    },
+    {
+      enabled: !dniOpen,
+      prefix: posSettings?.scannerPrefix ?? "",
+      suffix: posSettings?.scannerSuffix ?? "",
+      beep: posSettings?.scannerBeep ?? true,
+      dupMs: posSettings?.scannerDupMs ?? 1500,
+    },
+  );
+
+  // Caja rápida: Enter busca el código exacto; si no, el único resultado.
+  async function quickEnter() {
+    const code = search.trim();
+    if (!code) return;
+    try {
+      if (await addByCode(code)) {
+        setSearch("");
+        return;
       }
     } catch {
-      setSearch(code);
+      /* cae a la búsqueda por nombre */
     }
-  }, {
-    enabled: !dniOpen,
-    prefix: posSettings?.scannerPrefix ?? "",
-    suffix: posSettings?.scannerSuffix ?? "",
-    beep: posSettings?.scannerBeep ?? true,
-    dupMs: posSettings?.scannerDupMs ?? 1500,
-  });
+    const only = (products ?? []).length === 1 ? products?.[0] : undefined;
+    if (only) {
+      onPickProduct(only);
+      setSearch("");
+    } else {
+      toast({ title: `Sin producto para "${code}"`, variant: "info" });
+    }
+  }
+  function onQuickKey(k: KeypadKey) {
+    setSearch((v) => applyKey(v, k));
+    searchRef.current?.focus();
+  }
+  function onQuickTimes() {
+    const n = Math.floor(Number(search.replace(",", ".")));
+    if (n > 1 && n < 1000) {
+      setPendingQty(n);
+      setSearch("");
+    }
+    searchRef.current?.focus();
+  }
 
   async function handleOpenShift(opening: number) {
     if (!register) {
@@ -1336,11 +561,7 @@ function PosPageInner() {
       setOpenShiftModal(false);
       toast({ title: "Caja abierta", variant: "success" });
     } catch (e) {
-      toast({
-        title: "No se pudo abrir",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "error",
-      });
+      toast({ title: "No se pudo abrir", description: e instanceof Error ? e.message : undefined, variant: "error" });
     }
   }
 
@@ -1349,252 +570,61 @@ function PosPageInner() {
     try {
       const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes });
       setCloseShiftModal(false);
-      toast({
-        title: "Caja cerrada",
-        description: `Diferencia: ${formatCurrency(diff)}`,
-        variant: diff === 0 ? "success" : "info",
-      });
+      toast({ title: "Caja cerrada", description: `Diferencia: ${formatCurrency(diff)}`, variant: diff === 0 ? "success" : "info" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : undefined;
       toast({
-        title:
-          msg && msg.includes("close_needs_reason")
-            ? "Escribí un motivo: la diferencia supera la tolerancia"
-            : "No se pudo cerrar",
-        description:
-          msg && msg.includes("close_needs_reason") ? undefined : msg,
+        title: msg && msg.includes("close_needs_reason") ? "Escribí un motivo: la diferencia supera la tolerancia" : "No se pudo cerrar",
+        description: msg && msg.includes("close_needs_reason") ? undefined : msg,
         variant: "error",
       });
     }
   }
 
-  // Muestra "Pago recibido ✓ / ¡Gracias!" (+ vuelto) en la pantalla del cliente
-  // unos segundos y luego vuelve a idle (H25). Cancela cualquier timer previo.
+  // "Pago recibido" + vuelto en la pantalla del cliente unos segundos (H25).
   function flashPaidScreen(change: number) {
     if (paidTimer.current) clearTimeout(paidTimer.current);
     setPaidView({ change: Math.max(0, change || 0) });
     paidTimer.current = setTimeout(() => setPaidView(null), 6000);
   }
-  useEffect(() => () => {
-    if (paidTimer.current) clearTimeout(paidTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (paidTimer.current) clearTimeout(paidTimer.current);
+    },
+    [],
+  );
 
-  async function handleSale(
-    payments: {
-      method: string;
-      amount: number;
-      reference?: string;
-      // Voucher de tarjeta (H27): lote/cupón/autorización. create_sale lo persiste.
-      card_voucher?: { lote: string; cupon: string; autorizacion: string };
-    }[],
-    extras?: PaymentExtra[],
-    change?: number,
-    // Promo FINAL resuelta por el modal de cobro (F9 · H54): puede diferir de la
-    // promo del carrito si el medio elegido habilita una promo por medio de pago
-    // mayor. Si el caller no la pasa (QR, repetir venta), se usa la del carrito.
-    appliedPromo?: { discount: number; id: string | null; name: string | null } | null,
-  ) {
-    try {
-      const items = lines.map((l) => ({
-        product_id: l.productId,
-        ...(l.productId ? {} : { name: l.name }),
-        ...(l.serial ? { serial: l.serial } : {}),
-        ...(l.variantId ? { variant_id: l.variantId } : {}),
-        // Modificadores (H37): snapshot por línea; el precio ya está en unit_price.
-        ...(l.modifiers && l.modifiers.length > 0 ? { modifiers: l.modifiers } : {}),
-        quantity: l.quantity,
-        // Línea cubierta por una sesión de pack (H41): entra en 0 (no se cobra);
-        // create_sale consume la sesión vía el extra 'pack_session'.
-        unit_price: l.packCreditId ? 0 : l.unitPrice,
-        discount: l.packCreditId ? 0 : l.discount,
-      }));
-      // Extras que entran como ítem de venta para que el total y el ticket los
-      // reflejen: recargo (H27) y garantía extendida (H28). La propina (H39) NO
-      // es ítem (va a sales.tip_amount) y 'professional' es sólo atribución.
-      for (const ex of extras ?? []) {
-        if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {
-          items.push({
-            product_id: null,
-            name: ex.name,
-            quantity: 1,
-            unit_price: ex.amount,
-            discount: 0,
-          } as never);
-        }
-      }
-      // p_extras para create_sale: la prima de garantía (kind='warranty') se
-      // valida contra 'garantias'; los recargos (kind='surcharge') no se gatean;
-      // la propina (kind='tip', amount+method) va a sales.tip_amount; el
-      // profesional (kind='professional', id) atribuye la comisión.
-      const saleExtras: SaleExtraInput[] = (extras ?? [])
-        .filter(
-          (ex) =>
-            (ex.kind === "professional" && ex.id) ||
-            ((ex.kind === "warranty" || ex.kind === "surcharge" || ex.kind === "tip") &&
-              (ex.amount ?? 0) > 0),
-        )
-        .map((ex) => ({
-          kind: ex.kind,
-          ...(ex.amount != null ? { amount: ex.amount } : {}),
-          ...(ex.method ? { method: ex.method } : {}),
-          ...(ex.id ? { id: ex.id } : {}),
-        }));
-      // Packs (H41): por cada línea que vende un pack, una señal 'pack' (acredita
-      // sesiones). Por cada línea cubierta por una sesión, una 'pack_session'
-      // (descuenta una sesión del crédito). Los ítems ya se enviaron arriba (el
-      // pack por su precio; la línea cubierta en 0).
-      for (const l of lines) {
-        if (l.packId) saleExtras.push({ kind: "pack", id: l.packId });
-        if (l.packCreditId) saleExtras.push({ kind: "pack_session", id: l.packCreditId });
-      }
-      const res = await sale.mutateAsync({
-        items: items as never,
-        payments: payments as never,
-        discountTotal,
-        customerId: customer?.id ?? null,
-        extras: saleExtras,
-        // Cobro de mesa (H44): atómico. Cuando se cobra una mesa (/pos?table=),
-        // create_sale cierra el pedido y libera la mesa EN LA MISMA transacción
-        // (toma el pedido FOR UPDATE → sin doble cobro por dos pestañas). Ya NO
-        // se llama tableOrdersApi.close por separado.
-        tableOrderId: tableOrderId ?? null,
-        // Cobro de delivery (H49): ESPEJA mesa. Con /pos?delivery=, create_sale
-        // toma el delivery_order FOR UPDATE, lo enlaza/marca 'entregado' y libera
-        // en la misma transacción (sin cierre aparte → sin doble cobro).
-        deliveryOrderId: deliveryOrderId ?? null,
-        // Promoción aplicada (F9 · H53/H54): canal aparte del descuento manual. Se
-        // prioriza la promo final del modal (puede incluir una promo por medio de
-        // pago); si no llegó, se cae a la promo método-agnóstica del carrito. Si
-        // hay cupón, la promo se suprime (excluyentes).
-        promo: !promoActive
-          ? null
-          : appliedPromo && appliedPromo.discount > 0
-            ? appliedPromo
-            : promoResult && promoDiscount > 0
-              ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
-              : null,
-        // Cupón (F9 · H54): sólo el id; create_sale lo valida, calcula y consume.
-        couponId: couponDiscount > 0 ? appliedCoupon?.coupon_id ?? null : null,
-      });
-      setPaymentModal(false);
+  const { handleSale, saving } = usePosSale({
+    lines,
+    discountTotal,
+    customerId: customer?.id ?? null,
+    tableOrderId: origins.tableOrderId,
+    deliveryOrderId: origins.deliveryOrderId,
+    appointmentId: origins.appointmentId,
+    salePromo: pricing.salePromo,
+    couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
+    onSuccess: ({ saleId, change }) => {
+      setCheckoutOpen(false);
       clear();
       setCustomer(null);
       setOfferedWarrantyId("");
-      setAppliedCoupon(null);
-      setCouponInput("");
-      // Cobro desde turno (H38): enlazá la venta al turno y marcalo 'realizado'.
-      // Best-effort: si el enlace falla, la venta igual quedó registrada.
-      if (appointmentId) {
-        try {
-          await appointmentsApi.linkSale(appointmentId, res.sale_id);
-        } catch (linkErr) {
-          console.warn("No se pudo enlazar el turno con la venta:", linkErr);
-        }
-        loadedApptRef.current = null;
-        router.replace("/pos");
-      }
-      // Cobro de mesa (H44): el cierre de la mesa (enlazar venta, marcar el
-      // pedido 'cobrada' y liberar la mesa) ya ocurrió ATÓMICAMENTE dentro de
-      // create_sale (vía tableOrderId). No hay close_dining_table aparte: eso
-      // permitía un doble cobro si dos pestañas veían la mesa abierta. Acá sólo
-      // limpiamos el modo de cobro de mesa y volvemos al POS.
-      if (tableOrderId) {
-        loadedTableRef.current = null;
-        router.replace("/pos");
-      }
-      // Cobro de delivery (H49): el cierre del pedido (enlazar venta, marcar
-      // 'entregado') ya ocurrió ATÓMICAMENTE dentro de create_sale (vía
-      // deliveryOrderId). Acá sólo limpiamos el modo y volvemos al POS.
-      if (deliveryOrderId) {
-        loadedDeliveryRef.current = null;
-        router.replace("/pos");
-      }
-      // Pantalla del cliente (H25): "Pago recibido" + vuelto (efectivo).
-      flashPaidScreen(change ?? 0);
-      toast({
-        title: `Venta #${res.number} registrada`,
-        description: `Total ${formatCurrency(res.total)}`,
-        variant: "success",
-      });
-      setTicketId(res.sale_id);
+      pricing.clearCoupon();
+      origins.afterSale();
+      flashPaidScreen(change);
+      setTicketId(saleId);
       setTicketOpen(true);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      const title = msg.includes("account_inactive")
-        ? "Tu suscripción venció. Renovala para volver a cobrar."
-        : msg.includes("coupon_usage_exceeded")
-          ? "El cupón alcanzó su límite de usos"
-        : msg.includes("coupon_customer_exceeded")
-          ? "Este cliente ya usó el cupón el máximo de veces"
-        : msg.includes("coupon_needs_customer")
-          ? "Elegí un cliente para usar este cupón"
-        : msg.includes("coupon_min_amount")
-          ? "El carrito no llega al monto mínimo del cupón"
-        : msg.includes("coupon_expired")
-          ? "El cupón está vencido"
-        : msg.includes("coupon_not_yet_valid")
-          ? "El cupón todavía no está vigente"
-        : msg.includes("coupon_inactive")
-          ? "El cupón está inactivo"
-        : msg.includes("coupon_not_found")
-          ? "El cupón ya no existe"
-        : msg.includes("table_order_not_open")
-        ? "La mesa ya fue cobrada o cerrada"
-        : msg.includes("delivery_order_not_open")
-          ? "El pedido ya fue cobrado o cancelado"
-        : msg.includes("qr_already_charged")
-          ? "Este cobro QR ya fue registrado"
-          : msg.includes("qr_not_allowed")
-            ? "El cobro con QR no está incluido en tu plan"
-            : msg.includes("feature_not_in_plan: descuentos")
-        ? "Los descuentos no están incluidos en tu plan"
-        : msg.includes("feature_not_in_plan: garantias")
-          ? "La garantía extendida no está incluida en tu plan"
-          : msg.includes("feature_not_in_plan: cuenta_corriente")
-            ? "La cuenta corriente no está incluida en tu plan"
-            : msg.includes("credit_limit_exceeded")
-              ? "Supera el límite de cuenta corriente del cliente"
-              : msg.includes("account_needs_customer")
-                ? "La cuenta corriente necesita un cliente"
-                : msg.includes("insufficient_store_credit")
-                  ? "El cliente no tiene saldo de vale suficiente"
-                  : msg.includes("pack_needs_customer")
-                    ? "Elegí un cliente para vender o usar un pack"
-                    : msg.includes("pack_no_sessions_left")
-                      ? "El pack ya no tiene sesiones disponibles"
-                      : msg.includes("pack_expired")
-                        ? "El pack del cliente está vencido"
-                        : msg.includes("pack_credit_not_found")
-                          ? "No se encontró el saldo de pack del cliente"
-                          : msg.includes("pack_not_found")
-                            ? "No se encontró el paquete"
-                            : "No se pudo cobrar";
-      toast({
-        title,
-        description: title === "No se pudo cobrar" ? msg || undefined : undefined,
-        variant: "error",
-      });
-    }
-  }
+    },
+  });
 
-  // Packs / sesiones (H41): saldo restante por crédito, descontando las líneas
-  // del carrito que YA lo cubren (una sesión por línea). Evita ofrecer la misma
-  // sesión a más líneas de las que el crédito tiene. El backend revalida igual.
+  // Packs (H41): saldo restante por crédito descontando las líneas que ya lo cubren.
   const packRemaining = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of packCredits ?? []) m.set(c.id, c.sessions_left);
     for (const l of lines) {
-      if (l.packCreditId && m.has(l.packCreditId)) {
-        m.set(l.packCreditId, (m.get(l.packCreditId) ?? 0) - 1);
-      }
+      if (l.packCreditId && m.has(l.packCreditId)) m.set(l.packCreditId, (m.get(l.packCreditId) ?? 0) - 1);
     }
     return m;
   }, [packCredits, lines]);
-
-  // Crédito de pack que puede cubrir esta línea: del producto de la línea (o
-  // genérico), con sesión disponible (saldo restante > 0). Devuelve el de
-  // vencimiento más próximo (packCredits ya viene ordenado por la RPC). Excluye
-  // líneas sin producto, gratis, ya cubiertas o que venden un pack.
   function creditForLine(l: (typeof lines)[number]): CustomerPackCredit | null {
     if (!packsEnabled || l.packId || l.packCreditId) return null;
     if (l.unitPrice <= 0) return null;
@@ -1615,925 +645,314 @@ function PosPageInner() {
     return true;
   }
 
-  // Abre la pantalla del cliente (H25) en una ventana nueva, lista para arrastrar
-  // al 2do monitor. Limitación del navegador: no se puede posicionar la ventana
-  // en otro monitor ni forzar fullscreen sin gesto del usuario; el cajero la
-  // mueve y la pone en pantalla completa (F11). La ventana se sincroniza sola
-  // (BroadcastChannel/localStorage). Se publica el estado actual al abrir.
+  // ── Cobro ──────────────────────────────────────────────────────────────────
+  const tenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
+  const pinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
+  const canCheckout = hasShift && lines.length > 0;
+  function startCheckout(tenderId?: string) {
+    if (!hasShift) {
+      setOpenShiftModal(true);
+      return;
+    }
+    if (lines.length === 0 || !ensureCustomer()) return;
+    setCheckoutTender(tenderId ?? null);
+    setCheckoutOpen(true);
+  }
+  const startCheckoutRef = useRef(startCheckout);
+  startCheckoutRef.current = startCheckout;
+
+  // Atajos: F2 busca, F12 cobra.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      } else if (e.key === "F12") {
+        e.preventDefault();
+        startCheckoutRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   function openCustomerDisplay() {
     window.open("/customer-display", "ninja-customer-display", "noopener");
   }
 
+  function pickPreset(p: PosPreset) {
+    saveUser.mutate({ ...userLayout, preset: p });
+  }
+
+  const itemCount = lines.reduce((a, l) => a + (l.unit === "kg" ? 1 : l.quantity), 0);
+  const cartTitle =
+    origins.tableActive ? "Cuenta de la mesa" : preset === "salon" ? "Pedido" : "Carrito";
+
+  const onSearch = (v: string) => {
+    setSearch(v);
+    setCategoryFilter(null);
+  };
+
+  const menuBar =
+    diningEnabled && (menus ?? []).length > 0 ? (
+      <MenuFilterBar menus={menus ?? []} activeIds={activeMenuSet} selected={menuFilter} onSelect={setMenuFilter} />
+    ) : null;
+
+  const cartLines = (
+    <CartLines
+      lines={lines}
+      dense={preset === "caja_rapida"}
+      onQty={setQuantity}
+      onRemove={removeLine}
+      creditForLine={creditForLine}
+      onCover={coverLineWithPack}
+      onUncover={uncoverLine}
+      emptyHint={preset === "caja_rapida" ? "Escaneá un código o tipeá un PLU." : undefined}
+    />
+  );
+
+  const cartSummary = (
+    <CartSummary
+      customer={customer}
+      requireCustomer={requireCustomer}
+      storeCredit={scBalance ?? 0}
+      onCustomer={() => setCustOpen(true)}
+      onVoucher={() => setVoucherOpen(true)}
+      packsEnabled={packsEnabled}
+      onSellPack={() => {
+        if (!customer) {
+          toast({ title: "Elegí un cliente para venderle un pack", variant: "error" });
+          setCustOpen(true);
+          return;
+        }
+        setSellPackOpen(true);
+      }}
+      subtotal={subtotal}
+      discountTotal={discountTotal}
+      discountLocked={discountGate.locked}
+      onDiscount={handleDiscountChange}
+      onDiscountLocked={() => discountGate.run(() => {})}
+      promo={
+        pricing.promoActive && pricing.promoResult && pricing.promoDiscount > 0
+          ? { name: pricing.promoResult.name ?? "Promoción", amount: pricing.promoDiscount }
+          : null
+      }
+      coupon={pricing.appliedCoupon ? { code: pricing.appliedCoupon.code, amount: pricing.couponDiscount } : null}
+      couponInput={pricing.couponInput}
+      onCouponInput={pricing.setCouponInput}
+      onApplyCoupon={pricing.applyCoupon}
+      onRemoveCoupon={pricing.clearCoupon}
+      deliveryFee={origins.deliveryFee}
+      total={total}
+      itemCount={itemCount}
+      pinned={pinned}
+      hasShift={hasShift}
+      canCheckout={canCheckout}
+      checkingOut={saving}
+      onCheckout={startCheckout}
+      onOpenShift={() => setOpenShiftModal(true)}
+      autoPrint={autoPrint}
+      onAutoPrint={setAutoPrint}
+      compact={preset === "caja_rapida"}
+      warrantySlot={
+        offerWarranty ? (
+          <WarrantyOfferCard
+            lines={lines}
+            plans={warrantyPlans ?? []}
+            base={rawTotal}
+            selectedWarrantyId={offeredWarrantyId}
+            onSelect={setOfferedWarrantyId}
+          />
+        ) : null
+      }
+    />
+  );
+
+  const banners = (
+    <>
+      {origins.apptActive && origins.pendingAppt && (
+        <ModeBanner
+          icon={<CalendarDays size={18} />}
+          title={`Cobrando turno: ${origins.pendingAppt.service_name}`}
+          text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
+          exitLabel="Cancelar cobro del turno"
+          onExit={origins.exitAppointmentMode}
+        />
+      )}
+      {origins.tableActive && (
+        <ModeBanner
+          icon={<Utensils size={18} />}
+          title="Cobrando mesa"
+          text="Pedido cargado desde el Salón. Al confirmar, la mesa queda libre."
+          exitLabel="Cancelar cobro de la mesa"
+          onExit={origins.exitTableMode}
+        />
+      )}
+      {origins.deliveryActive && origins.deliveryOrder && (
+        <ModeBanner
+          tone="info"
+          icon={<Bike size={18} />}
+          title={`Cobrando ${origins.deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}${origins.deliveryOrder.customer_name ? ` · ${origins.deliveryOrder.customer_name}` : ""}`}
+          text="El costo de envío se suma al total. Al confirmar, el pedido queda entregado."
+          exitLabel="Cancelar cobro del pedido"
+          onExit={origins.exitDeliveryMode}
+        />
+      )}
+    </>
+  );
+
+  const center =
+    preset === "caja_rapida" ? (
+      <QuickScanPane
+        ref={searchRef}
+        search={search}
+        onSearch={onSearch}
+        onScan={() => setScanOpen(true)}
+        onEnter={quickEnter}
+        pendingQty={pendingQty}
+        onClearQty={() => setPendingQty(1)}
+        results={products}
+        onPick={(p) => {
+          onPickProduct(p);
+          setSearch("");
+        }}
+        canFreeSale={canFreeSale}
+        onFreeSale={() => setFreeOpen(true)}
+        ticket={cartLines}
+      />
+    ) : (
+      <ProductPane
+        layout={effectiveLayout}
+        search={search}
+        onSearch={onSearch}
+        onScan={() => setScanOpen(true)}
+        searchRef={searchRef}
+        canFreeSale={canFreeSale}
+        onFreeSale={() => setFreeOpen(true)}
+        menuBar={menuBar}
+        categories={categories ?? []}
+        categoryFilter={categoryFilter}
+        onCategory={setCategoryFilter}
+        quickKeys={showFavorites ? quickKeys : []}
+        quickKeysTitle={layout.quickKeys.length > 0 ? "Teclas rápidas" : "Favoritos"}
+        frequent={showFrequent && !categoryFilter && !menuFilter ? topProducts : undefined}
+        categoryPath={categoryPath}
+        products={products}
+        loading={productsLoading}
+        onPickProduct={onPickProduct}
+        onQuickUnits={favQuickUnits}
+        onQuickWeight={favQuickWeight}
+      />
+    );
+
   return (
     <>
-      {/* overflow-x-hidden: red de seguridad para que NINGÚN modo (mostrador /
-          mesa / delivery / turno) genere scroll lateral en mobile aunque un hijo
-          se pase de ancho. El layout real se controla con min-w-0 en las columnas. */}
-      <div className="mx-auto max-w-7xl overflow-x-hidden px-6 py-6">
-        {/* Cobro desde un turno (H38): banner con el servicio cargado. Se puede
-            agregar productos extra antes de cobrar; al cobrar, la venta queda
-            enlazada al turno. */}
-        {pendingAppt && !pendingAppt.sale_id && pendingAppt.status !== "cancelado" && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.08] px-4 py-3">
-            <span className="flex min-w-0 items-center gap-2.5 text-sm">
-              <CalendarDays size={18} className="shrink-0 text-ninja-flameSoft" />
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">
-                  Cobrando turno: {pendingAppt.service_name}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {pendingAppt.customers?.name
-                    ? `Cliente: ${pendingAppt.customers.name} · `
-                    : ""}
-                  Agregá productos extra si hace falta y cobrá normalmente.
-                </span>
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={exitAppointmentMode}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <X size={14} /> Cancelar cobro del turno
-            </button>
-          </div>
-        )}
-        {/* Cobro de mesa (H44): banner con el pedido cargado. Se pueden sumar
-            ítems extra; al cobrar, la venta queda enlazada y la mesa se libera. */}
-        {tableOrder && tableOrder.status === "abierta" && !tableOrder.sale_id && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.08] px-4 py-3">
-            <span className="flex min-w-0 items-center gap-2.5 text-sm">
-              <Utensils size={18} className="shrink-0 text-ninja-flameSoft" />
-              <span className="min-w-0">
-                <span className="block font-semibold text-foreground">
-                  Cobrando mesa
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Pedido cargado desde el Salón. Sumá lo que falte y cobrá
-                  normalmente; al confirmar, la mesa queda libre.
-                </span>
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={exitTableMode}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <X size={14} /> Cancelar cobro de la mesa
-            </button>
-          </div>
-        )}
-        {/* Cobro de delivery (H49): banner con el pedido cargado (ítems + envío).
-            Al confirmar, la venta queda enlazada y el pedido pasa a entregado. */}
-        {deliveryOrder &&
-          !deliveryOrder.sale_id &&
-          deliveryOrder.status !== "entregado" &&
-          deliveryOrder.status !== "cancelado" && (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-400/30 bg-sky-400/[0.08] px-4 py-3">
-              <span className="flex min-w-0 items-center gap-2.5 text-sm">
-                <Bike size={18} className="shrink-0 text-info" />
-                <span className="min-w-0">
-                  <span className="block break-words font-semibold text-foreground">
-                    Cobrando {deliveryOrder.order_type === "takeaway" ? "take away" : "delivery"}
-                    {deliveryOrder.customer_name ? ` · ${deliveryOrder.customer_name}` : ""}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Pedido cargado desde el tablero. El costo de envío se suma al
-                    total a cobrar. Sumá lo que falte y cobrá; al confirmar, el
-                    pedido queda entregado.
-                  </span>
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={exitDeliveryMode}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                <X size={14} /> Cancelar cobro del pedido
-              </button>
-            </div>
-          )}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            Punto de venta
-            <InfoHint section="pos" />
-          </h1>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={openCustomerDisplay}
-              title="Abrir la pantalla del cliente en otra ventana (arrastrala al 2do monitor)"
-            >
-              <MonitorSmartphone size={16} /> Pantalla cliente
-            </Button>
-            <span
-              className={
-                hasShift
-                  ? "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-emerald-400/30 px-3 text-sm font-medium text-success"
-                  : "inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-border px-3 text-sm font-medium text-muted-foreground"
-              }
-            >
-              <span
-                className={
-                  hasShift
-                    ? "h-2 w-2 shrink-0 rounded-full bg-emerald-400"
-                    : "h-2 w-2 shrink-0 rounded-full bg-muted-foreground/50"
-                }
-              />
-              {hasShift ? "Caja abierta" : "Caja cerrada"}
-            </span>
-            {hasShift ? (
-              <Button variant="secondary" size="sm" onClick={() => setCloseShiftModal(true)}>
-                Cerrar caja
-              </Button>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={() => setOpenShiftModal(true)}>
-                Abrir caja
-              </Button>
-            )}
-          </div>
-        </div>
+      <PosShell
+        layout={effectiveLayout}
+        topBar={
+          <PosTopBar
+            hasShift={hasShift}
+            registerName={register?.name ?? null}
+            onOpenShift={() => setOpenShiftModal(true)}
+            onCloseShift={() => setCloseShiftModal(true)}
+            onCustomerDisplay={openCustomerDisplay}
+            preset={preset}
+            usingOwn={hasUserOverride && Boolean(userLayout.preset)}
+            diningEnabled={Boolean(diningEnabled)}
+            onPickPreset={pickPreset}
+            onResetPreset={() => saveUser.mutate(null)}
+          />
+        }
+        banners={banners}
+        center={center}
+        rail={
+          effectiveLayout.categoryBar === "left" && (categories ?? []).length > 0 ? (
+            <CategoryRail categories={categories ?? []} selected={categoryFilter} onSelect={setCategoryFilter} />
+          ) : undefined
+        }
+        tables={preset === "salon" ? <SalonTablesConnected activeOrderId={origins.tableOrderId} /> : undefined}
+        cartTitle={cartTitle}
+        cartLines={cartLines}
+        cartSummary={cartSummary}
+        itemCount={itemCount}
+        total={total + origins.deliveryFee}
+        canCheckout={canCheckout}
+        onCheckout={() => startCheckout()}
+        onClear={() => {
+          clear();
+          pricing.clearCoupon();
+          setOfferedWarrantyId("");
+        }}
+        linesInCenter={preset === "caja_rapida"}
+        aside={
+          preset === "caja_rapida" && effectiveLayout.keypad ? (
+            <QuickKeypadPanel onKey={onQuickKey} onTimes={onQuickTimes} onEnter={quickEnter} />
+          ) : undefined
+        }
+        checkoutOpen={checkoutOpen}
+      />
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        {/* Búsqueda + productos */}
-        {/* min-w-0: un grid item arranca con min-width:auto, así que su contenido
-            (grilla, banners largos) puede ensanchar la columna por encima del
-            viewport y generar scroll lateral en mobile. min-w-0 deja que la
-            columna se achique a la pantalla. */}
-        <section className="min-w-0">
-          <div className="relative">
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setCategoryFilter(null); }}
-              placeholder="Buscar por nombre, PLU, SKU o código…"
-              autoFocus
-              className="h-12 w-full rounded-lg border border-input bg-background pl-9 pr-12 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
-            />
-            <button
-              type="button"
-              onClick={() => setScanOpen(true)}
-              aria-label="Escanear código"
-              title="Escanear código"
-              className="absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
-            >
-              <ScanBarcode size={18} />
-            </button>
-          </div>
-
-          {/* Venta libre (H36): monto manual + concepto. Sólo owner/manager y si
-              el negocio la habilita (pos_settings.allow_free_sale). Un cashier
-              sin permiso no ve el botón. */}
-          {canFreeSale && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="mt-3 w-full"
-              onClick={() => setFreeOpen(true)}
-            >
-              <Banknote size={16} /> Venta libre (monto manual)
-            </Button>
-          )}
-          {/* Filtro por menú (F13 · H47): sólo en modo gastronómico y con menús
-              cargados. Filtra la carta al menú elegido; marca el vigente ahora. */}
-          {!search.trim() && diningEnabled && (menus ?? []).length > 0 && (
-            <div className="mt-3">
-              <MenuFilterBar
-                menus={menus ?? []}
-                activeIds={activeMenuSet}
-                selected={menuFilter}
-                onSelect={setMenuFilter}
-              />
-            </div>
-          )}
-
-          {/* Navegador de categorías: raíces como pestañas + drill-down a
-              sub-categorías (filtra por sub-árbol). Disponible para cualquier
-              rubro que tenga categorías cargadas. */}
-          {!search.trim() && (categories ?? []).length > 0 && (
-            <div className="mt-3">
-              <CategoryNav
-                categories={categories ?? []}
-                selected={categoryFilter}
-                onSelect={setCategoryFilter}
-              />
-            </div>
-          )}
-
-          {/* Grilla táctil de favoritos (H36): botones grandes para cobrar sin
-              buscar. Tap = agrega 1 (o abre serial/variante/peso); chips de
-              cantidad rápida ×2/×6/×12 o ½/1 kg. */}
-          {showFavorites && (
-            <FavoritesGrid
-              products={favorites ?? []}
-              onTap={favTap}
-              onQuickUnits={favQuickUnits}
-              onQuickWeight={favQuickWeight}
-            />
-          )}
-
-          {showFrequent && !categoryFilter && !menuFilter && topProducts && topProducts.length > 0 && (
-            <div className="mt-4">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <Star size={13} className="text-ninja-flameSoft" /> Frecuentes
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {topProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() =>
-                      pickProduct({
-                        id: p.id,
-                        name: p.name,
-                        sku: p.sku,
-                        price: p.price,
-                        unit: p.unit,
-                        is_serialized: p.is_serialized,
-                        has_variants: p.has_variants,
-                        warranty_months: p.warranty_months,
-                        categoryId: p.category_id,
-                      })
-                    }
-                    className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4 text-left transition hover:border-ninja-flameSoft/50 hover:bg-ninja-flame/10"
-                  >
-                    <div className="flex items-start justify-between gap-1.5">
-                      <div className="truncate font-medium text-foreground">{p.name}</div>
-                      {p.has_variants && (
-                        <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
-                          Variantes
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 font-semibold text-foreground">
-                      {formatCurrency(p.price)}
-                      {p.unit === "kg" && (
-                        <span className="text-xs font-normal text-muted-foreground"> /kg</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="mt-5 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {categoryPath ?? "Todos los productos"}
-              </div>
-            </div>
-          )}
-          {!(showFrequent && !categoryFilter) && categoryPath && (
-            <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {categoryPath}
-            </div>
-          )}
-          <ProductGrid products={products} onPick={onPickProduct} />
-        </section>
-
-        {/* Carrito */}
-        {/* min-w-0: ídem section — evita que el carrito empuje el ancho de la
-            columna en mobile (scroll lateral). */}
-        <aside className="flex h-[calc(100vh-7rem)] min-w-0 flex-col rounded-lg border border-border bg-card p-4">
-          <h2 className="font-display text-lg font-bold">Carrito</h2>
-          <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
-            {lines.length === 0 && (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                Agregá productos para vender.
-              </p>
-            )}
-            {lines.map((l) => (
-              <div
-                key={l.lineId}
-                className="rounded-lg border border-border bg-muted/40 p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-foreground">
-                      {l.name}
-                      {l.giftPromoId && (
-                        <span className="ml-1.5 inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-success">
-                          <Gift size={11} /> Regalo
-                        </span>
-                      )}
-                    </span>
-                    {l.variantLabel && (
-                      <span className="block text-xs font-medium text-ninja-flameSoft">
-                        {l.variantLabel}
-                      </span>
-                    )}
-                    {l.serial && (
-                      <span className="block font-mono text-xs text-muted-foreground">
-                        S/N: {l.serial}
-                      </span>
-                    )}
-                    {l.modifiersLabel && (
-                      <span className="block text-xs text-muted-foreground">
-                        {l.modifiersLabel}
-                      </span>
-                    )}
-                  </span>
-                  {!l.giftPromoId && (
-                    <button
-                      onClick={() => removeLine(l.lineId)}
-                      className="text-muted-foreground hover:text-danger"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  {l.giftPromoId ? (
-                    <span className="text-sm text-muted-foreground">×{l.quantity}</span>
-                  ) : l.unit === "kg" ? (
-                    <span className="text-sm text-muted-foreground">
-                      {formatQty(l.quantity)} kg × {formatCurrency(l.unitPrice)}/kg
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setQuantity(l.lineId, l.quantity - 1)}
-                        className="rounded-md border border-border p-1 hover:bg-muted"
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span className="w-8 text-center text-sm">{l.quantity}</span>
-                      <button
-                        onClick={() => setQuantity(l.lineId, l.quantity + 1)}
-                        className="rounded-md border border-border p-1 hover:bg-muted"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  )}
-                  {l.packCreditId || l.giftPromoId ? (
-                    <span className="text-sm font-semibold text-success">Gratis</span>
-                  ) : (
-                    <span className="text-sm font-semibold">
-                      {formatCurrency(lineSubtotal(l))}
-                    </span>
-                  )}
-                </div>
-                {/* Cantidades rápidas en la línea (H36): suma de un toque sin
-                    teclear. Sólo para ítems por unidad (los de peso usan kg). */}
-                {l.unit !== "kg" && !l.packCreditId && !l.giftPromoId && (
-                  <div className="mt-2 flex gap-1.5">
-                    {[2, 6, 12].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setQuantity(l.lineId, l.quantity + q)}
-                        title={`Sumar ${q}`}
-                        className="rounded-md border border-border bg-card px-2 py-1 text-xs font-semibold text-muted-foreground transition active:scale-95 hover:border-ninja-flameSoft/50 hover:text-ninja-flameSoft"
-                      >
-                        +{q}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* Pack / sesiones (H41): cubrir esta línea con una sesión del
-                    pack del cliente, o quitar la cobertura. Sólo si el cliente
-                    tiene un pack que cubre esta línea con sesión disponible. */}
-                {l.packCreditId ? (
-                  <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5">
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-success">
-                      <Package size={13} /> Cubierto por el pack
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => uncoverLine(l.lineId)}
-                      className="text-xs font-medium text-muted-foreground transition hover:text-foreground"
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                ) : (
-                  (() => {
-                    const credit = creditForLine(l);
-                    if (!credit) return null;
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => coverLineWithPack(l.lineId, credit.id)}
-                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-emerald-400/40 px-2.5 py-1.5 text-xs font-medium text-success transition hover:bg-emerald-400/10"
-                      >
-                        <Package size={13} /> Usar sesión del pack ({credit.sessions_left} restantes)
-                      </button>
-                    );
-                  })()
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* pb-20 en mobile: deja aire bajo los controles (Cobrar / QR /
-              toggle de ticket) para que la burbuja flotante del Asistente IA
-              (fixed bottom-4 right-4) no los tape. En lg el carrito es columna
-              lateral con espacio de sobra → sin padding extra. */}
-          <div className="mt-3 space-y-2 border-t border-border pt-3 pb-20 lg:pb-0">
-            {/* Oferta contextual de garantía extendida (H28): aparece cuando hay
-                un producto con garantía de fábrica en el carrito. Descartable. */}
-            {offerWarranty && (
-              <WarrantyOfferCard
-                lines={lines}
-                plans={warrantyPlans ?? []}
-                base={rawTotal}
-                selectedWarrantyId={offeredWarrantyId}
-                onSelect={setOfferedWarrantyId}
-              />
-            )}
-            {/* Cliente de la venta */}
-            <button
-              type="button"
-              onClick={() => setCustOpen(true)}
-              className={
-                requireCustomer && !customer
-                  ? "flex w-full items-center justify-between rounded-lg border border-ninja-flameSoft/50 bg-ninja-flame/5 px-3 py-2 text-sm"
-                  : "flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
-              }
-            >
-              <span className="flex items-center gap-2 truncate">
-                <User size={14} className="shrink-0 text-muted-foreground" />
-                <span className="truncate">{customer ? customer.name : "Consumidor final"}</span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                {customer && (scBalance ?? 0) > 0 && (
-                  <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-success">
-                    vale {formatCurrency(scBalance ?? 0)}
-                  </span>
-                )}
-                <span className="text-xs font-medium text-ninja-flameSoft">
-                  {customer ? "Cambiar" : requireCustomer ? "Elegir (obligatorio)" : "Elegir"}
-                </span>
-              </span>
-            </button>
-            <div className="flex gap-2">
-              {/* Canje de vale por código → acredita saldo a favor del cliente */}
-              <button
-                type="button"
-                onClick={() => setVoucherOpen(true)}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
-              >
-                <Ticket size={13} /> Canjear vale
-              </button>
-              {/* Vender un pack de sesiones (H41) → acredita sesiones al cliente.
-                  Requiere cliente; la oferta de "usar sesión" vive en cada línea. */}
-              {packsEnabled && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!customer) {
-                      toast({ title: "Elegí un cliente para venderle un pack", variant: "error" });
-                      setCustOpen(true);
-                      return;
-                    }
-                    setSellPackOpen(true);
-                  }}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-ninja-flameSoft"
-                >
-                  <Package size={13} /> Vender pack
-                </button>
-              )}
-            </div>
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                Descuento
-                {discountGate.locked && (
-                  <Lock size={12} className="text-ninja-flameSoft" />
-                )}
-              </span>
-              {discountGate.locked ? (
-                <button
-                  type="button"
-                  onClick={() => discountGate.run(() => {})}
-                  title="Descuentos: función no incluida en tu plan"
-                  className="h-8 w-24 rounded-md border border-input bg-muted/40 px-2 text-right text-sm text-muted-foreground/60 outline-none"
-                >
-                  0
-                </button>
-              ) : (
-                <input
-                  type="number"
-                  step="0.01"
-                  value={discountTotal || ""}
-                  onChange={(e) => handleDiscountChange(Number(e.target.value) || 0)}
-                  placeholder="0"
-                  className="h-8 w-24 rounded-md border border-input bg-background px-2 text-right text-sm text-foreground outline-none focus:border-ninja-flameSoft"
-                />
-              )}
-            </div>
-            {/* Promoción aplicada (F9 · H53): el motor elige la mejor promo activa
-                para el carrito y la descuenta. Aparte del descuento manual. Se
-                oculta si hay un cupón (excluyentes). */}
-            {promoActive && promoResult && promoDiscount > 0 && (
-              <div className="flex items-center justify-between gap-2 text-sm text-success">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <Tag size={13} className="shrink-0" />
-                  <span className="truncate">{promoResult.name}</span>
-                </span>
-                <span className="shrink-0 font-medium tabular-nums">
-                  −{formatCurrency(promoDiscount)}
-                </span>
-              </div>
-            )}
-            {/* Cupón (F9 · H54): ingresar un código o ver el aplicado. El descuento
-                lo revalida y consume create_sale al cobrar (atómico). */}
-            {appliedCoupon ? (
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="flex min-w-0 items-center gap-1.5 text-success">
-                  <Ticket size={13} className="shrink-0" />
-                  <span className="truncate">Cupón {appliedCoupon.code}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAppliedCoupon(null);
-                      setCouponInput("");
-                    }}
-                    className="text-muted-foreground transition hover:text-danger"
-                    title="Quitar cupón"
-                  >
-                    <X size={13} />
-                  </button>
-                </span>
-                {couponDiscount > 0 ? (
-                  <span className="shrink-0 font-medium tabular-nums text-success">
-                    −{formatCurrency(couponDiscount)}
-                  </span>
-                ) : (
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    falta el mínimo
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  value={couponInput}
-                  onChange={(e) => setCouponInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") applyCoupon();
-                  }}
-                  placeholder="Código de cupón"
-                  className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm uppercase text-foreground outline-none placeholder:normal-case focus:border-ninja-flameSoft"
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!couponInput.trim()}
-                  onClick={applyCoupon}
-                >
-                  Aplicar
-                </Button>
-              </div>
-            )}
-            <div className="flex items-center justify-between pt-1">
-              <span className="font-display text-lg font-bold">Total</span>
-              <span className="price-hl font-price tabular-nums text-3xl font-black">
-                {formatCurrency(total)}
-              </span>
-            </div>
-            <Button
-              size="lg"
-              className="w-full"
-              disabled={!hasShift || lines.length === 0}
-              onClick={() => ensureCustomer() && setPaymentModal(true)}
-            >
-              {hasShift ? "Cobrar" : "Abrí la caja para vender"}
-            </Button>
-            {mpReady && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setQrOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/mercado_pago_cube.webp"
-                    alt="Mercado Pago"
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-                Cobrar con QR · Mercado Pago
-              </button>
-            )}
-            {mobbexReady && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setQrMobbexOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-ninja-brightViolet/40 bg-ninja-brightViolet/10 px-4 py-3 font-semibold text-ninja-lavender transition hover:bg-ninja-brightViolet/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/Mobbex_cube.webp"
-                    alt="Mobbex"
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-                Cobrar con QR · Mobbex
-              </button>
-            )}
-            {modoReady && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setQrModoOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#00d1c1]/40 bg-[#00d1c1]/10 px-4 py-3 font-semibold text-[#0bb5a8] transition hover:bg-[#00d1c1]/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/Modo_cube.webp"
-                    alt="MODO"
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-                Cobrar con QR · MODO
-              </button>
-            )}
-            {pointReady && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setPointOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-[#009ee3]/40 bg-[#009ee3]/10 px-4 py-3 font-semibold text-[#0b69b4] transition hover:bg-[#009ee3]/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/mercado_pago_cube.webp"
-                    alt="Mercado Point"
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-                Cobrar con Point · tarjeta
-              </button>
-            )}
-            {pagos360Ready && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setQrPagos360Open(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-ninja-brightViolet/40 bg-ninja-brightViolet/10 px-4 py-3 font-semibold text-ninja-lavender transition hover:bg-ninja-brightViolet/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/Pagos360_cube.webp"
-                    alt="Pagos360"
-                    className="h-full w-full object-contain"
-                  />
-                </span>
-                Cobrar con link · Pagos360
-              </button>
-            )}
-            {paywayReady && (
-              <button
-                type="button"
-                disabled={!hasShift || lines.length === 0}
-                onClick={() => ensureCustomer() && setQrPaywayOpen(true)}
-                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#2b4a8f] px-4 py-3 font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-                  {/* Marca payway en blanco (el asset es navy sobre transparente:
-                      se invierte para que viva sobre el botón navy sólido, sin
-                      cajita blanca de fondo). */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/img/medios_de_pago/payway_cube.webp"
-                    alt="Payway"
-                    className="h-full w-full object-contain [filter:brightness(0)_invert(1)]"
-                  />
-                </span>
-                Cobrar con link · Payway
-              </button>
-            )}
-            <label className="flex cursor-pointer items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
-              <span>Imprimir ticket al cobrar</span>
-              <Switch
-                checked={autoPrint}
-                onCheckedChange={setAutoPrint}
-                label="Imprimir ticket al cobrar"
-              />
-            </label>
-          </div>
-        </aside>
-        </div>
-      </div>
-
-      <Modal
+      <CustomerPickerDialog
         open={custOpen}
         onOpenChange={(o) => {
           setCustOpen(o);
-          // Al cerrar, limpiá el término para que la próxima apertura muestre los
-          // recientes (y no pegue al server con la última búsqueda).
           if (!o) setCustSearch("");
         }}
-        title="Cliente de la venta"
-      >
-        <div className="space-y-3">
-          <Input
-            placeholder="Buscar por nombre, documento o teléfono…"
-            value={custSearch}
-            onChange={(e) => setCustSearch(e.target.value)}
-            autoFocus
-          />
-          {/* Alta rápida por DNI (H31): escanea el frente, crea el cliente y lo
-              selecciona para esta venta. */}
-          <Button
-            type="button"
-            variant="secondary"
-            className="w-full"
-            onClick={() => setDniOpen(true)}
-          >
-            <ScanBarcode size={16} /> Escanear DNI y agregar cliente
-          </Button>
-          <div className="max-h-72 space-y-1 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => {
-                setCustomer(null);
-                setCustOpen(false);
-              }}
-              className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
-            >
-              <span>Consumidor final</span>
-              {!customer && <span className="text-xs text-success">Actual</span>}
-            </button>
-            {/* Encabezado contextual: sin término muestra los recientes (no todo
-                el padrón → bajo consumo); al tipear, los resultados de la
-                búsqueda server-side. */}
-            <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {custSearch.trim() ? "Resultados" : "Recientes"}
-            </p>
-            {customers?.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => {
-                  setCustomer({ id: c.id, name: c.name });
-                  setCustOpen(false);
-                }}
-                className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{c.name}</span>
-                  {(c.document_number || c.phone) && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {c.document_number ?? c.phone}
-                    </span>
-                  )}
-                </span>
-                {customer?.id === c.id && (
-                  <span className="shrink-0 text-xs text-success">Actual</span>
-                )}
-              </button>
-            ))}
-            {customers?.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {custSearch.trim()
-                  ? "Sin resultados. Probá con otro nombre, documento o teléfono."
-                  : "Sin clientes recientes. Buscá por nombre, documento o teléfono o cargalos en Clientes."}
-              </p>
-            )}
-          </div>
-        </div>
-      </Modal>
+        search={custSearch}
+        onSearch={setCustSearch}
+        customers={customers}
+        current={customer}
+        onPick={(c) => {
+          setCustomer(c);
+          setCustOpen(false);
+        }}
+        onScanDni={() => setDniOpen(true)}
+      />
 
       <MountWhenOpened open={dniOpen}>
         <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={quickAddFromDni} />
       </MountWhenOpened>
 
       {discountGate.modal}
-      <OpenShiftModal
-        open={openShiftModal}
-        onOpenChange={setOpenShiftModal}
-        onConfirm={handleOpenShift}
-        loading={open.isPending}
-      />
-      <CloseShiftModal
-        open={closeShiftModal}
-        onOpenChange={setCloseShiftModal}
-        onConfirm={handleCloseShift}
-        loading={close.isPending}
-      />
-      <PaymentModal
-        open={paymentModal}
-        onOpenChange={setPaymentModal}
-        base={rawTotal}
-        rounding={rounding}
-        onConfirm={handleSale}
-        loading={sale.isPending}
-        storeCreditBalance={scBalance ?? 0}
-        hasCustomer={customer !== null}
-        initialWarrantyId={offeredWarrantyId}
-        splitItems={splitItems}
-        deliveryFee={deliveryFee}
-        cartPromo={cartPromo}
-        promoForMethod={promoForMethod}
-      />
-      <MountWhenOpened open={qrOpen}>
-        <QrCheckoutModal
-          open={qrOpen}
-          onOpenChange={setQrOpen}
-          base={total}
+      <MountWhenOpened open={openShiftModal}>
+        <OpenShiftModal open={openShiftModal} onOpenChange={setOpenShiftModal} onConfirm={handleOpenShift} loading={open.isPending} />
+      </MountWhenOpened>
+      <MountWhenOpened open={closeShiftModal}>
+        <CloseShiftModal open={closeShiftModal} onOpenChange={setCloseShiftModal} onConfirm={handleCloseShift} loading={close.isPending} />
+      </MountWhenOpened>
+
+      {/* Cobro único: todos los medios, pago dividido, propina y promo por medio. */}
+      <MountWhenOpened open={checkoutOpen}>
+        <CheckoutSheetConnected
+          open={checkoutOpen}
+          onOpenChange={setCheckoutOpen}
+          base={rawTotal}
+          rounding={rounding}
+          deliveryFee={origins.deliveryFee}
+          cartPromo={pricing.cartPromo}
+          promoForMethod={pricing.promoForMethod}
+          tenders={tenders}
+          prefs={layout.payments}
+          initialTenderId={checkoutTender}
+          initialWarrantyId={offeredWarrantyId}
+          storeCreditBalance={scBalance ?? 0}
+          splitItems={pricing.splitItems}
+          tipPresets={layout.tipPresets}
+          quickCash={layout.payments.quickCash}
+          keypad={layout.keypad}
+          style={accentVars(effectiveLayout.accent)}
+          loading={saving}
+          onConfirm={handleSale}
           onQrState={handleQrState}
-          onApproved={(reference, amount, extras) => {
-            setQrOpen(false);
-            handleSale([{ method: "qr", amount, reference }], extras);
-          }}
         />
       </MountWhenOpened>
-      <MountWhenOpened open={qrMobbexOpen}>
-        <QrCheckoutModal
-          open={qrMobbexOpen}
-          onOpenChange={setQrMobbexOpen}
-          base={total}
-          provider="mobbex"
-          providerName="Mobbex"
-          onQrState={handleQrState}
-          onApproved={(reference, amount, extras) => {
-            setQrMobbexOpen(false);
-            handleSale([{ method: "qr", amount, reference }], extras);
-          }}
-        />
-      </MountWhenOpened>
-      <MountWhenOpened open={qrModoOpen}>
-        <QrCheckoutModal
-          open={qrModoOpen}
-          onOpenChange={setQrModoOpen}
-          base={total}
-          provider="modo"
-          providerName="MODO"
-          onQrState={handleQrState}
-          onApproved={(reference, amount, extras) => {
-            setQrModoOpen(false);
-            handleSale([{ method: "qr", amount, reference }], extras);
-          }}
-        />
-      </MountWhenOpened>
-      <MountWhenOpened open={pointOpen}>
-        <PointCheckoutModal
-          open={pointOpen}
-          onOpenChange={setPointOpen}
-          base={total}
-          onApproved={(reference, amount, cardType) => {
-            setPointOpen(false);
-            // La tarjeta real (débito/crédito) la informa la API de MP al
-            // aprobar; las cuotas las eligió el cliente en el lector.
-            handleSale([{ method: cardType, amount, reference }], []);
-          }}
-        />
-      </MountWhenOpened>
-      <MountWhenOpened open={qrPagos360Open}>
-        <QrCheckoutModal
-          open={qrPagos360Open}
-          onOpenChange={setQrPagos360Open}
-          base={total}
-          provider="pagos360"
-          providerName="Pagos360"
-          onQrState={handleQrState}
-          onApproved={(reference, amount, extras) => {
-            setQrPagos360Open(false);
-            handleSale([{ method: "qr", amount, reference }], extras);
-          }}
-        />
-      </MountWhenOpened>
-      <MountWhenOpened open={qrPaywayOpen}>
-        <QrCheckoutModal
-          open={qrPaywayOpen}
-          onOpenChange={setQrPaywayOpen}
-          base={total}
-          provider="payway"
-          providerName="Payway"
-          onQrState={handleQrState}
-          onApproved={(reference, amount, extras) => {
-            setQrPaywayOpen(false);
-            handleSale([{ method: "qr", amount, reference }], extras);
-          }}
-        />
-      </MountWhenOpened>
+
       <MountWhenOpened open={ticketOpen}>
-        <TicketModal
-          open={ticketOpen}
-          onOpenChange={setTicketOpen}
-          saleId={ticketId}
-          autoPrint={autoPrint}
-        />
+        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} autoPrint={autoPrint} />
       </MountWhenOpened>
       <MountWhenOpened open={voucherOpen}>
-        <VoucherRedeemModal
-          open={voucherOpen}
-          onOpenChange={setVoucherOpen}
-          customer={customer}
-          storeId={register?.store_id ?? null}
-        />
+        <VoucherRedeemModal open={voucherOpen} onOpenChange={setVoucherOpen} customer={customer} storeId={register?.store_id ?? null} />
       </MountWhenOpened>
       <MountWhenOpened open={sellPackOpen}>
         <SellPackModal
@@ -2546,11 +965,7 @@ function PosPageInner() {
         />
       </MountWhenOpened>
       <MountWhenOpened open={scanOpen}>
-        <BarcodeScanner
-          open={scanOpen}
-          onOpenChange={setScanOpen}
-          onDetected={(code) => setSearch(code)}
-        />
+        <BarcodeScanner open={scanOpen} onOpenChange={setScanOpen} onDetected={(code) => setSearch(code)} />
       </MountWhenOpened>
       <MountWhenOpened open={variantProduct !== null}>
         <VariantPickerModal
@@ -2582,7 +997,7 @@ function PosPageInner() {
               id: modifierProduct.id,
               name: modifierProduct.name,
               sku: modifierProduct.sku,
-              price, // base (lista mostrador) + suma de deltas
+              price,
               modifiers,
               modifiersLabel,
               warrantyMonths: modifierProduct.warrantyMonths ?? 0,
@@ -2592,141 +1007,37 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
-      <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta libre">
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Cobra un monto manual con un concepto. No descuenta stock (ítem sin
-            SKU). Útil para servicios sueltos, cargos o ítems fuera del catálogo.
-          </p>
-          <Input
-            label="Monto"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            autoFocus
-            value={freeAmount}
-            onChange={(e) => setFreeAmount(e.target.value)}
-            placeholder="0"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmFreeAmount();
-            }}
-          />
-          <Input
-            label="Concepto / motivo (opcional)"
-            value={freeName}
-            onChange={(e) => setFreeName(e.target.value)}
-            placeholder="Venta libre"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setFreeOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmFreeAmount}>Agregar al carrito</Button>
-          </div>
-        </div>
-      </Modal>
-      <Modal
-        open={weighProduct !== null}
-        onOpenChange={(o) => !o && setWeighProduct(null)}
-        title={weighProduct ? `Peso • ${weighProduct.name}` : "Peso"}
-      >
-        <div className="space-y-4">
-          <Input
-            label="Peso en gramos"
-            type="number"
-            inputMode="decimal"
-            step="1"
-            autoFocus
-            value={weighGrams}
-            onChange={(e) => setWeighGrams(e.target.value)}
-            placeholder="Ej. 350"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmWeigh();
-            }}
-          />
-          {weighProduct && Number(weighGrams) > 0 && (
-            <p className="text-sm text-muted-foreground">
-              {formatQty(Number(weighGrams) / 1000)} kg ×{" "}
-              {formatCurrency(weighProduct.price)}/kg ={" "}
-              <span className="font-semibold text-foreground">
-                {formatCurrency((Number(weighGrams) / 1000) * weighProduct.price)}
-              </span>
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setWeighProduct(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmWeigh}>Agregar al carrito</Button>
-          </div>
-        </div>
-      </Modal>
-      <Modal
-        open={serialProduct !== null}
-        onOpenChange={(o) => !o && setSerialProduct(null)}
-        title={serialProduct ? `N° de serie • ${serialProduct.name}` : "N° de serie"}
-      >
-        <div className="space-y-4">
-          <div className="max-h-56 space-y-1.5 overflow-y-auto">
-            {(serialList ?? [])
-              .filter((s) => s.status === "in_stock")
-              .map((s) => (
-                <label
-                  key={s.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted"
-                >
-                  <input
-                    type="radio"
-                    name="serial"
-                    className="accent-ninja-flame"
-                    checked={serialChoice === s.serial}
-                    onChange={() => setSerialChoice(s.serial)}
-                  />
-                  <span className="font-mono">{s.serial}</span>
-                </label>
-              ))}
-            {(serialList ?? []).filter((s) => s.status === "in_stock").length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Sin seriales precargados. Ingresá uno abajo.
-              </p>
-            )}
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted">
-              <input
-                type="radio"
-                name="serial"
-                className="accent-ninja-flame"
-                checked={serialChoice === "__other__"}
-                onChange={() => setSerialChoice("__other__")}
-              />
-              Otro (ingresar / escanear)
-            </label>
-          </div>
-          {serialChoice === "__other__" && (
-            <Input
-              label="N° de serie"
-              autoFocus
-              value={serialOther}
-              onChange={(e) => setSerialOther(e.target.value)}
-              placeholder="IMEI / S/N"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") confirmSerial();
-              }}
-            />
-          )}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setSerialProduct(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmSerial}>Agregar al carrito</Button>
-          </div>
-        </div>
-      </Modal>
+      <FreeSaleDialog
+        open={freeOpen}
+        onOpenChange={setFreeOpen}
+        amount={freeAmount}
+        onAmount={setFreeAmount}
+        name={freeName}
+        onName={setFreeName}
+        onConfirm={confirmFreeAmount}
+      />
+      <WeighDialog
+        product={weighProduct}
+        grams={weighGrams}
+        onGrams={setWeighGrams}
+        onClose={() => setWeighProduct(null)}
+        onConfirm={confirmWeigh}
+      />
+      <SerialDialog
+        product={serialProduct}
+        serials={serialList}
+        choice={serialChoice}
+        onChoice={setSerialChoice}
+        other={serialOther}
+        onOther={setSerialOther}
+        onClose={() => setSerialProduct(null)}
+        onConfirm={confirmSerial}
+      />
     </>
   );
 }
 
-// Wrapper con Suspense: el POS lee ?appointment con useSearchParams (cobro desde
-// turno · H38), que en el App Router debe ir dentro de un límite de Suspense.
+// useSearchParams (cobro desde turno, mesa, delivery) requiere Suspense.
 export default function PosPage() {
   return (
     <Suspense fallback={null}>

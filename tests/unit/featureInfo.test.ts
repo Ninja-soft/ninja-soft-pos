@@ -24,6 +24,27 @@ describe("dependencias de features", () => {
     }
   });
 
+  it("Nave QR + link aclara que hay que conectar la cuenta", () => {
+    expect(FEATURE_INFO.nave?.needs).toMatch(/Conectar la cuenta de Nave/);
+  });
+
+  it("GO Cuotas pide la API Key de la sucursal y es desde Pro", () => {
+    expect(FEATURE_INFO.gocuotas?.needs).toMatch(/API Key de la sucursal/);
+    expect(FEATURE_INFO.gocuotas?.minPlan).toBe("Pro");
+  });
+
+  it("Directo aclara que el cobro se hace en su portal", () => {
+    expect(FEATURE_INFO.directo?.needs).toBe(
+      "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
+    );
+    expect(FEATURE_INFO.directo?.minPlan).toBe("Pro");
+  });
+
+  it("las teclas rápidas pro tienen copy, plan mínimo y dependen del POS", () => {
+    expect(FEATURE_INFO.pos_quick_keys_pro?.minPlan).toBe("Pro");
+    expect(featureRequires("pos_quick_keys_pro")).toEqual(["pos"]);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

@@ -1016,6 +1016,41 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 ---
 
+## ADR-030 — Nave (QR/link + Point) vía Payment Requests de Ranty
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de validar con credenciales sandbox del comercio) · **Hito:** F8 · H21c
+
+### Contexto
+
+Nave (Banco Galicia / Naranja X, plataforma Ranty) expone APIs públicas cloud para cobrar por **QR interoperable + checkout hosted** (`payment_requests/ecommerce` → `qr_data` + `checkout_url`) y por **terminal Nave Point** (`payment_requests/smart_pos` al terminal del `seller.pos_id`). Auth `client_credentials` contra apinaranja (`homoservices` sandbox / `services` prod, audience `https://naranja.com/ranty/merchants/api`, token 86400 s). La URL de notificaciones **se registra en el onboarding** (no viaja por request) y la notificación trae `{payment_id, payment_check_url, external_payment_id}`. Desde ADR-027 Nave estaba en el catálogo con credenciales aceptadas pero sin cobro; desde `20261011150000_payment_channels` existen las features `nave` (QR + link) y `nave_point` (Point, desde Pro), ya mapeadas en `payment_method_plan_key`.
+
+### Decisión
+
+- **Una conexión por marca:** `payment_secrets` provider `nave` guarda `client_id`, `client_secret`, `pos_id` (QR + link), `point_pos_ids` (terminales, "Nombre: id" separados por coma) y `audience` opcional; ambiente por `tenant_payment_methods.sandbox` de la fila `nave`. Nave Point **reutiliza** esa conexión (no hay secretos `nave_point`). Sin migraciones.
+- **Edge `nave`** (create/status/cancel) y **Edge `nave_point`** (devices/create/status/cancel) sobre la tabla compartida `mp_payment_intents` (`provider_key` `nave` | `nave_point`): `external_payment_id` = id del intent (36 chars), `preference_id` = `payment_request_id`, `init_point` = `checkout_url`; el `qr_data` se devuelve al POS y se codifica **tal cual**. El intent se persiste antes de entregar el QR/link. Sin reintento automático del POST (Nave no documenta idempotencia).
+- **Edge `nave_webhook`** (verify_jwt=false): nunca confía en el cuerpo. Correlación por `external_payment_id`; la URL a consultar se valida (https, host Nave **exacto del ambiente**: `api.ranty.io` en prod, `api-sandbox.ranty.io`/`e3-api.ranty.io` en sandbox, sin userinfo/puerto/query, path `/integrations/payments/{payment_id}` con el mismo id) o se construye desde la base confiable (anti-SSRF). Sólo `status.name=APPROVED` + correlación + **monto exacto** (transacción PURCHASE, sin propina) acredita. Transiciones condicionales (idempotente ante los 5 reintentos de Nave); 5xx ante fallas transitorias para que Nave reintente. También procesa la baja de intenciones Point (`DISABLED` por batería, cancelación en terminal, timeout).
+- **Fallback del poll** (`status`): `GET payment_requests/{id}` → pago aprobado en `payment_attempts` → verificación contra `GET payments/{id}` con la MISMA lógica del webhook. `EXPIRED/DISABLED/BLOCKED` → cancelled; `FAILURE_PROCESSED` → rejected en Point, pendiente en QR (el cliente puede reintentar).
+- **Cancelar** = `DELETE payment_requests/{id}` best-effort; si el pago ya estaba aprobado, gana el pago (queda approved para la conciliación "Cobros QR", nunca se pierde plata cobrada). Un pago verificado que llega tarde sobre un intent cancelado/rechazado también queda approved + auditoría `approved_after_*`.
+- **Token:** cache en memoria por isolate (nunca en DB), renovado 60 s antes del vencimiento; 401 en cualquier llamada → descarta, re-autentica y reintenta UNA vez.
+- **Gating server-side** en create: `tenant_has_feature_for(tenant,'nave' | 'nave_point')`; además el trigger de `payments` resuelve el provider del intent QR (`nave` → feature `nave`). El `pos_id` de Point debe ser una terminal configurada del tenant.
+- **Auditoría** (`audit_logs`, entity `mp_payment_intents`): creación de la intención, aprobación, rechazo, mismatch de monto/correlación, cancelación, baja y estados post-pago (CANCELLED/REFUNDED/…, que se preservan sin remapear).
+- Lógica pura (ambientes, payload, mapeo de estados, validación de host, verificación de monto, cliente con 401) en `supabase/functions/_shared/nave.ts`, testeada con Vitest (`tests/unit/nave.test.ts`).
+
+### Consecuencias
+
+- El dueño conecta Nave con Client ID + Client Secret + punto de venta (+ terminales Point) y elige Producción/Prueba al conectar; el form muestra la URL de notificaciones que tiene que pasarle a Nave (una por ambiente).
+- `QrCheckoutModal` gana el provider `nave` (self-managed, QR = `qr_data`, link = `checkout_url`, cancelar da de baja la intención) y `PointCheckoutModal` el provider `nave_point` (terminales configuradas, sin modo PDV, débito/crédito según `payment_method.card_type`; QR pagado en la terminal cuenta como débito). Los botones de cobro del POS quedan para el rediseño del POS (tenders).
+- `payment_link` no se usa: `checkout_url` del tipo ecommerce ya cubre "mandar link" y la guía oficial lo deja fuera de alcance. Devoluciones/anulaciones quedan fuera (sin flujo de negocio definido).
+- **Pendiente:** validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave, `integraciones@navenegocios.com`) y luego producción. Sandbox de Point documentado en `e3-api.ranty.io`, el de QR en `api-sandbox.ranty.io`: confirmar en el primer cobro de prueba.
+
+### Referencias
+
+- `supabase/functions/nave/index.ts`, `supabase/functions/nave_point/index.ts`, `supabase/functions/nave_webhook/index.ts`, `supabase/functions/_shared/nave.ts`, `supabase/functions/_shared/nave_server.ts`.
+- `components/pos/QrCheckoutModal.tsx`, `components/pos/PointCheckoutModal.tsx`, `modules/pos/api.ts`, `components/dashboard-team/PaymentMethodsCard.tsx`, `components/sales/QrIntentsModal.tsx`.
+- Docs oficiales: developer-portal-doc-mfe-website-mfe.ranty.io (guía "Nave Dynamic QR Integration" V1.1 y sección Nave Point).
+
+---
+
 ## ADR-031 — Getnet (QR/link) vía Checkout Geopagos
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de validación con cobro real) · **Hito:** F8 · H18
@@ -1080,6 +1115,124 @@ El dueño pidió ECharts para los gráficos y marcó como mal diseñado el switc
 ### Referencias
 
 - `components/charts/*`, `components/reports/ReportSection.tsx`, `components/reports/KpiCard.tsx`, `components/ui/SegmentedControl.tsx`, `modules/reports/derive.ts`, `app/(app)/reportes/page.tsx`, `tests/unit/reportCharts.test.ts`.
+## ADR-032 — Mercado Pago presencial sobre Orders API (QR dinámico + Point)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de deploy y validación en sandbox) · **Hito:** F8 · H15
+
+### Contexto
+
+Mercado Pago unificó el cobro presencial en la **Orders API** (`/v1/orders`): "todas las nuevas funcionalidades se desarrollarán sobre esta API" (migration hub). NinjaPos cobraba (a) el "QR" de MP renderizando como QR el `init_point` de una preferencia de Checkout Pro (un link web, no un QR de caja interoperable) y (b) Point con la Payment Intents API, que la doc ya marca como legacy (ADR-027). Además el QR se dibujaba con un servicio externo de imágenes (`api.qrserver.com`), filtrando el payload de cobro a un tercero.
+
+### Decisión
+
+1. **QR dinámico en la caja** (Edge nueva `mp_qr`, feature `mercado_pago`): `POST /v1/orders` type `qr`, `config.qr.mode = "dynamic"`, `external_pos_id` de la caja del tenant, `X-Idempotency-Key` = id del intent, `expiration_time` PT15M; status por `GET /v1/orders/{id}` (polling server-side, no depende del webhook) y cancel por `POST /v1/orders/{id}/cancel`. **Alta única de sucursal + caja** desde Medios de pago (`GET /users/me` → `POST /users/{id}/stores` → `POST /v2/pos`, reutilizando los existentes por `external_id` estable del tenant); los ids se guardan por ambiente en `tenant_payment_methods(mercadopago).config.mp_qr.{prod|test}`. El QR se dibuja **local** desde `qr_data` con un encoder propio sin dependencias (`lib/qr/qrcode.ts`, mismo criterio que ADR-021), validado decodificando con zxing en los tests.
+2. **Link de Checkout Pro se mantiene** como "Enviar link" (compartible) y como **fallback automático** cuando el negocio no configuró la caja (`qr_pos_not_configured`): nadie pierde el cobro por MP al deployar. Pasar de QR a link cancela la order y re-consulta su estado antes de generar el link (si el cliente justo pagó, se registra ese cobro; nunca dos).
+3. **Point sobre Orders API** (`mp_point`, feature `mercadopago_point`): terminales `GET /terminals/v1/list`, modo PDV `PATCH /terminals/v1/setup`, `POST /v1/orders` type `point` con `terminal_id`, preselección opcional débito / crédito / cuotas (`default_installments` + `installments_cost: buyer`), cancel con `x-allow-cancelable-status: at_terminal` (202 = cancelación pedida: el modal sigue sondeando y si el cliente ya pagó la venta se registra igual). **Compatibilidad:** los intents sin `mp_order_id` (Payment Intents API) siguen resolviendo status/cancel por el camino legacy.
+4. **Webhook topic `order`** (Edge nueva `mp_orders_webhook`, `--no-verify-jwt`): sólo toma `data.id`, busca el intent por `mp_order_id`, **re-lee la order con el token del tenant** en el ambiente del intent y aplica la misma regla que el polling (`_shared/mpIntents.ts`): acredita sólo order `processed` (detalle processed/accredited) + pago `processed` + **monto exacto en centavos** + `external_reference` = intent; idempotente (transiciones desde pending; `approved` se registra aunque el intent se haya cerrado localmente, para que la conciliación lo vea). Responde 200 enseguida (`EdgeRuntime.waitUntil`). La firma `x-signature` no se valida: el ancla de confianza es la re-lectura con el token del tenant (y con token manual el secreto sería el de la app del comercio, no el nuestro).
+5. **Sandbox de Mercado Pago**: no hay host de prueba; cambia la credencial. `payment_secrets(mercadopago).test_access_token` convive con la conexión de producción (`set_payment_secret` gana `merge`/`remove`; el OAuth y el reemplazo del token de producción lo conservan). Se usa sólo con el switch (`tenant_payment_methods.sandbox`) **y** token de prueba cargado; el intent guarda `mp_env` para que status/cancel/webhooks usen la misma credencial. La migración normaliza `sandbox=false` en las filas MP (nacieron con default true y nunca tuvo efecto). Point comparte conexión y switch.
+6. Lógica pura (payloads, mapeo de estados, monto, credencial, parseo de webhook, validación de sucursal) en `supabase/functions/_shared/mpOrders.ts`, sin imports, testeada con Vitest (`tests/unit/mpOrders.test.ts`). Gating sin cambios: `tenant_has_feature_for` en las Edge + trigger de `payments` (`payment_method_plan_key`: mercadopago → mercado_pago, mercadopago_point → mercadopago_point). Auditoría: alta/reset de caja, modo PDV, cancelaciones, acreditaciones y montos que no cierran.
+
+### Alternativas consideradas
+
+- **Seguir con Checkout Pro como QR:** funciona, pero no es un QR de caja (no interoperable, abre un checkout web) y queda fuera de la evolución de MP.
+- **QR estático por caja:** un sticker sirve para cualquier monto, pero exige asociar la order a la caja en el momento y es más propenso a cobros cruzados entre cajeros; el dinámico (un QR por cobro) es más seguro para un POS.
+- **Agregar una librería de QR (`qrcode`):** tocaba `package.json`/lockfile (archivos sensibles) para ~350 líneas de algoritmo estable; se prefirió el encoder propio testeado.
+
+### Consecuencias
+
+- Deploy: migración `20261011170000_mp_orders_api` **antes** de las Edge (usan `mp_order_id`/`mp_env`). Edges: `mp_qr`, `mp_point`, `mp_orders_webhook` (`--no-verify-jwt`), `mp_create_qr`, `mp_webhook`, `set_payment_secret`, `mp_oauth_callback`.
+- Configurar en la app de MP de NinjaSoft (Webhooks → evento Order) la URL `.../functions/v1/mp_orders_webhook`. Los comercios con token manual usan su propia app: sin esa configuración el polling igual resuelve el cobro con el modal abierto.
+- **Pendiente de validación:** alta de sucursal (MP valida `city_name` contra su catálogo de localidades: puede rechazar nombres que no coincidan), cuotas preseleccionadas en Point (las habilita el equipo comercial de MP), y el primer cobro QR + Point en sandbox y en vivo.
+- La pantalla del cliente (H25) recibe el `qr_data` igual que antes recibía el link; sigue dibujando con el servicio externo hasta el rediseño del POS (fuera de alcance).
+
+### Referencias
+
+- Docs oficiales: developers/es/docs/qr-code/overview · reference/in-person-payments/qr-code/orders/create-order/post · docs/qr-code/notifications · docs/qr-code/create-store-and-pos · docs/qr-code/resources/status-order-transaction · docs/mp-point/payment-processing · docs/mp-point/notifications · docs/qr-code/resources/migration-hub.
+- `supabase/functions/mp_qr/index.ts`, `supabase/functions/mp_point/index.ts`, `supabase/functions/mp_orders_webhook/index.ts`, `supabase/functions/_shared/{mpOrders,mpAuth,mpIntents}.ts`, `supabase/migrations/20261011170000_mp_orders_api.sql`, `lib/qr/qrcode.ts`, `components/pos/QrCheckoutModal.tsx`, `components/pos/PointCheckoutModal.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`, `modules/pos/api.ts`.
+
+---
+
+## ADR-033 — GO Cuotas (QR + link) vía API Redirect V1
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración, deploy y validación en sandbox) · **Hito:** F8 · H21d
+
+### Contexto
+
+El dueño pidió integrar GO Cuotas: el cliente paga en 2 a 4 cuotas sin interés con su **tarjeta de débito**. GO Cuotas publica su API en Stoplight (`gocuotas-api.stoplight.io/docs/gocuotas`, leída 2026-10-11) con varias APIs: **Redirect V1** (checkout web), **QR V1** (venta en local), Light/Full Sale V1 (código por SMS que carga el comercio) y Client V1 (liquidaciones). Hosts: `https://www.gocuotas.com` (producción) y `https://sandbox.gocuotas.com`. Cada sucursal tiene **API Key** propia (una de producción y otra de prueba) que se manda como `Authorization: Bearer <API_KEY>` y no expira.
+
+### Decisión
+
+- **Canal QR + link por Redirect V1** (provider/feature `gocuotas`, marca `gocuotas`, canal `qr_link`, OPTIONAL desde Pro). `POST /api_redirect/v1/checkouts` con los parámetros **por query** (como documenta la API): `amount_in_cents`, `order_reference_id` = id del intent, `webhook_url` = `gocuotas_webhook?intent=<uuid>`, `url_success`/`url_failure` a la pantalla neutra de retorno. La respuesta es `{ url_init }`, que el POS muestra como QR y "Abrir link de pago" (`QrCheckoutModal`, provider self-managed: el cliente elige las cuotas en GO Cuotas).
+- **QR V1 descartado:** `POST /api/qr/v1/checkouts` devuelve sólo `sale_token`/`status`/`expire_at`, sin un payload escaneable (el QR es el del local) y con **una sola venta activa por vendedor**. No sirve para un QR por cobro en pantalla; Redirect sí.
+- **Edge `gocuotas`** (JWT): `create` (gating `tenant_has_feature_for(tenant,'gocuotas')`, valida monto y **mínimo de $1.500** antes de crear el intent → `gocuotas_min_amount` con copy claro; 401/403 → `gocuotas_auth_failed`), `status` (re-consulta) y `cancel` (baja local: Redirect no anula checkouts sin pagar; antes de cancelar re-consulta por si el cliente justo pagó).
+- **Correlación sin id de orden:** el checkout no devuelve id. La orden se ubica por la pista del webhook (`order_id` → `GET /api_redirect/v1/orders/{id}`) y, si no corresponde, por `GET /api_redirect/v1/orders?delivered_start&delivered_end&order_reference_id=<intent>` (ventana en hora AR desde 24 h antes del intent). **Sólo cuenta una orden con `order_reference_id` = intent.** El id de orden aprobado se guarda en `mp_payment_id` y una orden acredita a un único intent.
+- **Edge `gocuotas_webhook`** (verify_jwt **false**): GO Cuotas no documenta firma, así que el cuerpo es sólo una pista. Re-consulta con la API Key del tenant en el ambiente del intent y acredita sólo `approved` + referencia propia + **monto exacto en centavos**; `denied` → rejected. Idempotente (updates condicionales; un approved verificado pasa también desde rejected/cancelled para que la conciliación lo vea). Siempre 200. Su GET sirve la pantalla neutra de retorno.
+- **Ambiente:** switch Sandbox del medio (`tenant_payment_methods.sandbox`). El intent guarda `mp_env` (`test` = sandbox) y status/webhook usan ese host aunque cambie el switch.
+- Credencial `payment_secrets(gocuotas) = { api_key }` vía `set_payment_secret` (ALLOWED += `gocuotas`). Lógica pura en `supabase/functions/_shared/gocuotas.ts` (Vitest, `tests/unit/gocuotas.test.ts`); helpers server en `_shared/gocuotas_server.ts`. Auditoría: `gocuotas_checkout_created`, `gocuotas_checkout_cancelled`, `gocuotas_payment_<estado>`.
+- Gating: la venta entra como `method='qr'` con `reference` = intent; el trigger de `payments` resuelve el provider y `payment_method_plan_key('gocuotas')='gocuotas'` (migración `20261011180000_gocuotas_directo`).
+
+**Verificado (doc oficial):** hosts, Bearer con API Key, endpoint y parámetros del checkout, `url_init`, `GET /orders/{id}` y su esquema (`id`, `amount_in_cents`, `status`, `order_reference_id`), listado con `delivered_start`/`delivered_end` requeridos y filtro `order_reference_id`, cuerpo del webhook, estados `undefined`/`approved`/`denied`, mínimo $1.500.
+
+**Inferido (a confirmar con la API Key de prueba de una sucursal):** forma exacta del listado (array, objeto o envoltorio: se normaliza), zona horaria de `delivered_*` (AR), que `GET /orders/{id}` devuelva el `order_reference_id` que mandamos (el ejemplo de la doc lo muestra `null` en una orden creada sin referencia; si no viniera, el listado por referencia es el respaldo), y que el listado incluya órdenes aprobadas recién creadas.
+
+### Consecuencias
+
+- Deploy: migración `20261011180000_gocuotas_directo` antes de usar el medio; Edges `gocuotas`, `gocuotas_webhook` (`--no-verify-jwt`) y `set_payment_secret`.
+- Pendiente de cablear (fuera de este cambio): botón "Cobrar con GO Cuotas" en el POS (igual que Payway) y `GoCuotasConnectForm` dentro de Medios de pago (rediseño en curso).
+- Credenciales de prueba: la API Key de prueba sale del panel de la sucursal (Sucursales, Editar, Ver ApiKeys) o pidiéndola a integraciones@gocuotas.com. El comprador de prueba del sandbox es público (FAQ oficial).
+
+---
+
+## ADR-034 — Directo como tender manual (sin API pública)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** F8 · H21e
+
+### Contexto
+
+El dueño pidió sumar "Directo, medio de pago de crédito directo": **Crédito Directo S.A.** (directo.com.ar), financiación en cuotas fijas sin tarjeta de crédito. Los comercios cobran "con QR o link de pago a través de nuestro portal" (`minegocio.directo.com.ar`). No se encontró API pública, portal de desarrolladores, sandbox ni webhooks.
+
+### Decisión
+
+- **Tender manual** (provider/feature `directo`, marca `directo`, canal `manual`, OPTIONAL desde Pro): el cajero genera el cobro en el portal de Directo y en el POS elige **"Directo (crédito)"** y carga el **número de operación**, obligatorio para confirmar.
+- **`payments.method = 'directo'`** (se extiende `payments_method_check`) en lugar de `'other'`: queda identificado en caja, reportes, cierres y ticket ("Directo"), y el **gating coarse** del trigger de `payments` lo corta por plan vía `payment_method_plan_key('directo')='directo'`, sin reescribir `create_sale`. Constraint `payments_directo_reference_check`: con `method='directo'` el `reference` (Nº de operación) es obligatorio (1 a 64 caracteres).
+- No se ofrece en "Dividir cuenta" (pediría un número de operación por línea).
+- Sin credenciales: `DirectoInfo` explica el circuito en Medios de pago (portal y alta de comercio). Copy de plan: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación".
+
+### Alternativas consideradas
+
+- `method='other'` + provider en metadata: `create_sale` no persiste metadata y el trigger no podría gatear por plan sin reescribir la RPC.
+- Esperar una API privada: se puede pedir por contacto comercial; si aparece, se suma un canal `qr_link` sin romper el tender manual.
+
+### Consecuencias
+
+- No hay verificación automática del cobro: el número de operación es la evidencia para conciliar con las liquidaciones de Directo.
+- Pendiente: cablear `DirectoInfo` en Medios de pago (rediseño en curso).
+
+---
+
+## ADR-036 — POS por presets y hoja de cobro única
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** rediseño del POS
+
+> Numerada 036 para no chocar con la ADR-035 de la rama del rediseño de Medios de pago.
+
+### Contexto
+
+El dueño pidió poder elegir entre varios diseños del punto de venta y arreglar los botones de cobro. Había dos caminos de cobro que no se hablaban (PaymentModal con redondeo, división y promo por medio, y seis botones por proveedor que abrían el QR directo sin nada de eso), un solo breakpoint con el carrito debajo del catálogo en el celular y una página de 2700 líneas.
+
+### Decisión
+
+- **Presets** Mostrador, Boutique, Salón y Caja rápida sobre los mismos datos y reglas (la lógica de negocio se movió sin cambios a `modules/pos/screen/*`). `pos_settings.pos_layout` es el diseño del negocio y `users.settings.pos_layout` el override del usuario (sin teclas rápidas). Todo pasa por `lib/pos/layout.ts` (Zod, campo por campo).
+- **Clasificación (CLAUDE.md §6):** diseño, presets y orden/ocultar/fijar medios = **FLAG-OPERATIVO**. **`pos_quick_keys_pro`** = OPTIONAL desde Pro (más de 12 teclas o color por tecla), con trigger `pos_settings_assert_layout`.
+- **Hoja de cobro única** (`CheckoutSheet`) con un **registro de tenders** (`lib/pos/tenders.ts`): medio, proveedor, marca, canal, logo y feature (de `providerFeature`). La UI sólo espeja: ordenar u ocultar nunca habilita un medio; el gating real sigue en `payment_method_plan_key`, `create_sale` y cada Edge.
+- **Pago dividido secuencial**: cada línea se cobra con su medio; los QR y Point quedan como líneas aprobadas (varias referencias de intent en un mismo `create_sale`, ya soportado). Si una línea electrónica cierra el saldo, la venta se registra sola; salir con cobros aprobados pide confirmación.
+- **Promo por medio** sólo si se paga todo con un único medio (como antes en la división). Payway Point y Getnet Point sin integración se registran como tarjeta manual (terminal).
+
+### Consecuencias
+
+- Deploy: migración `20261011190000_pos_layout` antes de guardar diseños (sin la columna, el POS cae al preset Mostrador).
+- Directo ahora puede ir en un pago dividido (cada línea pide su número de operación).
+- Se eliminó `PaymentModal` y `FavoritesGrid`.
 
 ---
 

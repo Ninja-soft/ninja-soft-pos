@@ -27,10 +27,13 @@ const ALLOWED = new Set([
   "fiserv",
   "mobbex",
   "pagos360",
-  // H21c — Nave: el backend ya acepta credenciales (paridad con el resto de
-  // proveedores del catálogo); la integración de cobro sigue pendiente y la UI
-  // lo muestra como "Próximamente".
+  // H21c — Nave (ADR-030): client_id, client_secret, pos_id (QR + link),
+  // point_pos_ids y audience opcionales. Nave Point reutiliza ESTA conexión
+  // (no hay provider 'nave_point' de secretos).
   "nave",
+  // GO Cuotas (ADR-033): { api_key } de la sucursal (Bearer). El ambiente lo
+  // define el switch Sandbox del medio (sandbox.gocuotas.com vs www).
+  "gocuotas",
 ]);
 
 Deno.serve(async (req: Request) => {
@@ -107,24 +110,61 @@ Deno.serve(async (req: Request) => {
   for (const [k, v] of Object.entries(secrets)) {
     if (typeof v === "string" && v.trim()) clean[k] = v.trim();
   }
-  if (Object.keys(clean).length === 0) return json({ error: "empty_secrets" }, 400);
+  // merge (ADR-032): agrega/quita claves sin pisar el resto del secreto. Lo
+  // usa Mercado Pago para el token de PRUEBA (test_access_token), que convive
+  // con la conexión de producción (OAuth o token manual).
+  const merge = b.merge === true;
+  const remove = Array.isArray(b.remove)
+    ? (b.remove as unknown[]).filter((k): k is string => typeof k === "string")
+    : [];
+  if (Object.keys(clean).length === 0 && !(merge && remove.length > 0)) {
+    return json({ error: "empty_secrets" }, 400);
+  }
+
+  let next: Record<string, unknown> = clean;
+  if (merge) {
+    const { data: prev } = await admin
+      .from("payment_secrets")
+      .select("secrets")
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", providerKey)
+      .maybeSingle();
+    next = { ...((prev?.secrets as Record<string, unknown>) ?? {}), ...clean };
+    for (const k of remove) delete next[k];
+  } else if (providerKey === "mercadopago") {
+    // Reemplazo del token de producción: conserva el de prueba si había.
+    const { data: prev } = await admin
+      .from("payment_secrets")
+      .select("secrets")
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", providerKey)
+      .maybeSingle();
+    const testToken = (prev?.secrets as { test_access_token?: string } | null)?.test_access_token;
+    if (testToken && !clean.test_access_token) next = { ...clean, test_access_token: testToken };
+  }
 
   const up = await admin
     .from("payment_secrets")
     .upsert(
-      { tenant_id: tenantId, provider_key: providerKey, secrets: clean },
+      { tenant_id: tenantId, provider_key: providerKey, secrets: next },
       { onConflict: "tenant_id,provider_key" },
     );
   if (up.error) return json({ error: "save_failed", detail: up.error.message }, 500);
 
   // Marca conectado (sin exponer el secreto) para la UI, sin pisar otros flags.
+  // test_connected: hay token de prueba (switch Sandbox de Mercado Pago).
   const { data: cur } = await admin
     .from("tenant_payment_methods")
     .select("config")
     .eq("tenant_id", tenantId)
     .eq("provider_key", providerKey)
     .maybeSingle();
-  const config = { ...((cur?.config as Record<string, unknown>) ?? {}), connected: true };
+  const hasSecret = Object.keys(next).some((k) => k !== "test_access_token");
+  const config: Record<string, unknown> = {
+    ...((cur?.config as Record<string, unknown>) ?? {}),
+    connected: hasSecret || Boolean(next.test_access_token),
+  };
+  if (providerKey === "mercadopago") config.test_connected = Boolean(next.test_access_token);
   await admin.from("tenant_payment_methods").upsert(
     { tenant_id: tenantId, provider_key: providerKey, config },
     { onConflict: "tenant_id,provider_key" },
@@ -136,7 +176,11 @@ Deno.serve(async (req: Request) => {
     entity_type: "payment_secrets",
     entity_id: null,
     action: "payment_secret_set",
-    after_data: { provider_key: providerKey, keys: Object.keys(clean) },
+    after_data: {
+      provider_key: providerKey,
+      keys: Object.keys(clean),
+      ...(merge ? { merge: true, removed: remove } : {}),
+    },
   });
 
   return json({ ok: true, connected: true });

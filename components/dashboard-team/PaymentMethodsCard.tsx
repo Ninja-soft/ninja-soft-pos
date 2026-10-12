@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Link2, Check, Clock, ChevronDown, Percent, Lock } from "lucide-react";
+import { CreditCard, Link2, Check, Clock, ChevronDown, Percent, Lock, QrCode } from "lucide-react";
 import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
@@ -14,6 +14,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
+import { posApi } from "@/modules/pos/api";
+import { MP_AR_STATES } from "@/supabase/functions/_shared/mpOrders";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import {
   useGating,
@@ -44,17 +46,36 @@ const IMPLEMENTED = new Set([
   "pagos360",
   "payway",
   "getnet",
+  "nave",
+  "nave_point",
 ]);
 
-// Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
-// del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
-// cuotas/recargos los resuelve el lector (sin grid de planes ni recargo acá).
-const USES_MP_CONNECTION = new Set(["mercadopago_point"]);
+// Canales Point que NO piden credenciales propias: usan la conexión de su
+// marca (Mercado Point → Mercado Pago, Nave Point → Nave). Su "Conectado" se
+// deriva de la fila de la marca, y las cuotas/recargos los resuelve la
+// terminal (sin grid de planes ni recargo acá).
+const USES_CONNECTION_OF: Record<string, { key: string; name: string }> = {
+  mercadopago_point: { key: "mercadopago", name: "Mercado Pago" },
+  nave_point: { key: "nave", name: "Nave" },
+};
 
 // Proveedores cuyo switch Sandbox cambia de verdad el ambiente de la Edge
 // (MODO → merchants.preprod.playdigital.com.ar · Pagos360 → api.sandbox.pagos360.com).
 // Sólo para estos se muestra el toggle; en el resto no haría nada.
-const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway"]);
+// Mercado Pago tiene su propio selector (ADR-032): no cambia de host sino de
+// credencial (token de prueba), y convive con la conexión de producción.
+const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave"]);
+
+// Caja QR de Mercado Pago (Orders API) guardada por ambiente en config.mp_qr.
+type MpQrPos = { store_name?: string; address?: string; external_pos_id?: string };
+type MpConfig = {
+  connected?: boolean;
+  test_connected?: boolean;
+  mp_qr?: { prod?: MpQrPos; test?: MpQrPos };
+};
+// Ambiente efectivo de MP: prueba sólo con el switch + token de prueba cargado.
+const mpEnvOf = (m: Method | undefined): "prod" | "test" =>
+  m?.sandbox && (m.config as MpConfig | null)?.test_connected ? "test" : "prod";
 
 // Proveedores donde el grid de "Planes" (cuotas por tarjeta + recargo) SÍ se
 // aplica en el POS antes de generar el cobro. MODO/Pagos360/Payway resuelven
@@ -75,7 +96,12 @@ const PROVIDER_LOGO: Record<string, string> = {
   mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
   pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
   nave: "/img/medios_de_pago/nave_cube.webp",
+  nave_point: "/img/medios_de_pago/nave_cube.webp",
 };
+
+// URL de notificaciones que el dueño informa a Nave en el onboarding (Nave la
+// registra de su lado; no viaja por request).
+const NAVE_WEBHOOK_URL = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/functions/v1/nave_webhook`;
 
 // Resumen corto bajo el nombre (qué tipo de medio es).
 const PROVIDER_CHIP: Record<string, string> = {
@@ -118,10 +144,10 @@ const PROVIDER_INFO: Record<string, Explain> = {
     activa:
       "Habilita el botón Cobrar con QR en el POS. La plata entra a tu cuenta de Mercado Pago.",
     conexion:
-      "Conectá tu cuenta en un click (Conectar con Mercado Pago) o pegando tu Access Token. Sin conectar, el QR no funciona.",
+      "Conectá tu cuenta en un click (Conectar con Mercado Pago) o pegando tu Access Token. Después configurá la caja QR (una sola vez) para cobrar con QR en el local. Para probar sin plata real, cargá un Access Token de prueba y elegí Prueba.",
     pasos: [
       "En el POS tocás Cobrar con QR.",
-      "El cliente escanea el QR con su app de Mercado Pago y paga.",
+      "El cliente escanea el QR de tu caja con la app de Mercado Pago o su billetera y paga. Si no está en el local, tocás Enviar link y se lo mandás.",
       "Al acreditarse, la venta se cierra sola y queda registrada.",
     ],
     recargo: "Si ponés un %, se suma al total al cobrar con Mercado Pago.",
@@ -145,7 +171,7 @@ const PROVIDER_INFO: Record<string, Explain> = {
       "Usa tu conexión de Mercado Pago (no pide credenciales nuevas). Vinculá el lector a tu cuenta desde la app de MP y ponelo en modo PDV (el POS te lo ofrece).",
     pasos: [
       "En el POS tocás Cobrar con Point y elegís el lector.",
-      "El cliente pasa o apoya la tarjeta en el Point (las cuotas se eligen ahí).",
+      "El cliente pasa o apoya la tarjeta en el Point (las cuotas se eligen ahí, o las preseleccionás desde el POS si Mercado Pago te las habilitó).",
       "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
     ],
     recargo:
@@ -189,6 +215,31 @@ const PROVIDER_INFO: Record<string, Explain> = {
     ],
     recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
   },
+  nave: {
+    activa:
+      "Habilita el cobro con Nave en el POS: se genera un QR interoperable (lo paga cualquier billetera o app bancaria) y un link de pago de Nave. La plata entra a tu cuenta de Nave.",
+    conexion:
+      "Pegá el Client ID, el Client Secret y el ID de punto de venta que te da Nave (Integraciones). Informale a Nave la URL de notificaciones que te mostramos al conectar. Con el switch Sandbox se usa el ambiente de prueba de Nave (sin plata real).",
+    pasos: [
+      "En el POS elegís cobrar con Nave.",
+      "El cliente escanea el QR o abre el link y paga en Nave.",
+      "Nave nos avisa, verificamos el pago contra Nave y la venta se cierra sola.",
+    ],
+    recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
+  },
+  nave_point: {
+    activa:
+      "Habilita el cobro con la terminal Nave Point: el POS manda el monto a la terminal y el cliente paga con tarjeta, contactless o QR.",
+    conexion:
+      "Usa tu conexión de Nave (no pide credenciales nuevas). Cargá el ID de punto de venta de cada terminal al conectar Nave (Nave › Integraciones › Sistema de gestión).",
+    pasos: [
+      "En el POS elegís cobrar con Nave Point y la terminal.",
+      "El cliente paga en la terminal (las cuotas se eligen ahí).",
+      "Al aprobarse, la venta se registra sola como débito o crédito según la tarjeta.",
+    ],
+    recargo:
+      "Los recargos y cuotas los maneja Nave en la terminal; acá no se configura un % aparte.",
+  },
   modo: {
     activa:
       "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
@@ -209,7 +260,7 @@ type Method = {
   enabled: boolean;
   sandbox: boolean;
   surcharge_pct: number;
-  config: { connected?: boolean } | null;
+  config: MpConfig | null;
 };
 
 export function PaymentMethodsCard() {
@@ -236,7 +287,15 @@ export function PaymentMethodsCard() {
   const [modoClientSecret, setModoClientSecret] = useState("");
   const [modoStoreId, setModoStoreId] = useState("");
   const [modoProcessor, setModoProcessor] = useState("");
+  // Nave: client credentials + punto de venta (QR + link) + terminales Point.
+  const [naveClientId, setNaveClientId] = useState("");
+  const [naveClientSecret, setNaveClientSecret] = useState("");
+  const [navePosId, setNavePosId] = useState("");
+  const [navePointIds, setNavePointIds] = useState("");
+  const [naveAudience, setNaveAudience] = useState("");
   const [showManual, setShowManual] = useState(false);
+  // Mercado Pago · token de PRUEBA (switch Sandbox, ADR-032).
+  const [mpTestToken, setMpTestToken] = useState("");
   const [plansProvider, setPlansProvider] = useState<{ key: string; name: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -415,6 +474,46 @@ export function PaymentMethodsCard() {
     },
   });
 
+  // MP: guarda el token de prueba (sin pisar la conexión de producción) y
+  // pasa el medio a Prueba; o vuelve a Producción. Point comparte el switch.
+  const mpEnv = useMutation({
+    mutationFn: async (vars: { env: "prod" | "test"; testToken?: string; clearTest?: boolean }) => {
+      if (vars.testToken || vars.clearTest) {
+        const { data, error } = await supabase.functions.invoke("set_payment_secret", {
+          body: {
+            provider_key: "mercadopago",
+            merge: true,
+            secrets: vars.testToken ? { test_access_token: vars.testToken } : {},
+            remove: vars.clearTest ? ["test_access_token"] : [],
+          },
+        });
+        if (error) throw error;
+        if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      }
+      const cur = byKey.get("mercadopago");
+      const { error } = await supabase.from("tenant_payment_methods").upsert(
+        {
+          tenant_id: tenantId,
+          provider_key: "mercadopago",
+          enabled: cur?.enabled ?? false,
+          sandbox: vars.env === "test",
+          surcharge_pct: cur?.surcharge_pct ?? 0,
+        },
+        { onConflict: "tenant_id,provider_key" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      toast({
+        title: vars.env === "test" ? "Mercado Pago en modo prueba" : "Mercado Pago en producción",
+        variant: "success",
+      });
+      setMpTestToken("");
+      qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
+    },
+    onError: () => toast({ title: "No se pudo cambiar el ambiente", variant: "error" }),
+  });
+
   if (!ctx || !ctx.canManage) return null;
 
   const connectingProvider = providers.find((p) => p.key === connectKey);
@@ -440,7 +539,9 @@ export function PaymentMethodsCard() {
             method={byKey.get(p.key)}
             plans={plans}
             features={features}
-            mpConnected={Boolean(byKey.get("mercadopago")?.config?.connected)}
+            parentConnected={Boolean(
+              byKey.get(USES_CONNECTION_OF[p.key]?.key ?? "")?.config?.connected,
+            )}
             isOpen={expanded.has(p.key)}
             onToggleExpand={() => toggleExpand(p.key)}
             onConnect={() => {
@@ -459,7 +560,13 @@ export function PaymentMethodsCard() {
               setModoClientSecret("");
               setModoStoreId("");
               setModoProcessor("");
+              setNaveClientId("");
+              setNaveClientSecret("");
+              setNavePosId("");
+              setNavePointIds("");
+              setNaveAudience("");
               setShowManual(false);
+              setMpTestToken("");
             }}
             onOpenPlans={() => setPlansProvider({ key: p.key, name: p.name })}
             onSaveEnabled={(v) => save.mutate({ provider_key: p.key, enabled: v })}
@@ -603,6 +710,152 @@ export function PaymentMethodsCard() {
                   : connectingConnected
                     ? "Actualizar credenciales"
                     : "Conectar MODO"}
+              </Button>
+            </>
+          ) : connectKey === "nave" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-success">
+                  <Check size={16} /> Nave está conectado. Para cambiar algo, cargá
+                  todos los datos de nuevo.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá las credenciales que te dio Nave (Integraciones) y el ID de
+                  punto de venta. Sandbox y producción usan credenciales distintas.
+                  Se guardan cifradas del lado del servidor.
+                </p>
+              )}
+              <Input
+                label="Client ID"
+                name="nave_client_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveClientId}
+                onChange={(e) => setNaveClientId(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID de Nave"}
+              />
+              <Input
+                label="Client Secret"
+                type="password"
+                name="nave_client_secret"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveClientSecret}
+                onChange={(e) => setNaveClientSecret(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret de Nave"}
+              />
+              <Input
+                label="ID de punto de venta (QR y link)"
+                name="nave_pos_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={navePosId}
+                onChange={(e) => setNavePosId(e.target.value)}
+                placeholder="pos_id que te dio Nave"
+              />
+              <Input
+                label="Terminales Nave Point (opcional)"
+                name="nave_point_pos_ids"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={navePointIds}
+                onChange={(e) => setNavePointIds(e.target.value)}
+                placeholder="Caja 1: id-de-la-terminal, Caja 2: otro-id"
+                hint="ID de punto de venta de cada terminal (Nave › Integraciones › Sistema de gestión), separados por coma."
+              />
+              <Input
+                label="Audience (opcional)"
+                name="nave_audience"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={naveAudience}
+                onChange={(e) => setNaveAudience(e.target.value)}
+                placeholder="Sólo si Nave te dio uno distinto al estándar"
+              />
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <p className="font-semibold text-foreground">URL de notificaciones para Nave</p>
+                <p className="mt-1">
+                  Pasásela a Nave al pedir las credenciales (una para sandbox y otra
+                  para producción): así nos avisan cada pago al instante.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1 text-[11px]">
+                    {NAVE_WEBHOOK_URL}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      navigator.clipboard
+                        .writeText(NAVE_WEBHOOK_URL)
+                        .then(() => toast({ title: "URL copiada", variant: "success" }))
+                        .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
+                    }
+                  >
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+              <div className="rounded-md border border-border p-3">
+                <p className="text-xs font-semibold">¿De qué ambiente son estas credenciales?</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConnEnv("prod")}
+                    className={
+                      connEnv === "prod"
+                        ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                    }
+                  >
+                    Producción (cobros reales)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConnEnv("test")}
+                    className={
+                      connEnv === "test"
+                        ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+                        : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+                    }
+                  >
+                    Prueba (sandbox)
+                  </button>
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                disabled={
+                  connect.isPending ||
+                  naveClientId.trim().length < 6 ||
+                  naveClientSecret.trim().length < 6 ||
+                  navePosId.trim().length < 4
+                }
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "nave",
+                    secrets: {
+                      client_id: naveClientId.trim(),
+                      client_secret: naveClientSecret.trim(),
+                      pos_id: navePosId.trim(),
+                      ...(navePointIds.trim() ? { point_pos_ids: navePointIds.trim() } : {}),
+                      ...(naveAudience.trim() ? { audience: naveAudience.trim() } : {}),
+                    },
+                  })
+                }
+              >
+                {connect.isPending
+                  ? "Guardando…"
+                  : connectingConnected
+                    ? "Actualizar credenciales"
+                    : "Conectar Nave"}
               </Button>
             </>
           ) : connectKey === "payway" ? (
@@ -954,6 +1207,18 @@ export function PaymentMethodsCard() {
                   o pegá tu Access Token manualmente
                 </button>
               )}
+
+              {/* Ambiente: producción (la conexión de arriba) o prueba (token
+                  de prueba de MP, convive con la de producción). */}
+              {connectKey === "mercadopago" && (
+                <MpEnvPicker
+                  method={byKey.get("mercadopago")}
+                  token={mpTestToken}
+                  onToken={setMpTestToken}
+                  pending={mpEnv.isPending}
+                  onSave={(v) => mpEnv.mutate(v)}
+                />
+              )}
             </>
           )}
 
@@ -1015,13 +1280,13 @@ function PaymentMethodRow({
   onOpenPlans,
   onSaveEnabled,
   onSaveSurcharge,
-  mpConnected = false,
+  parentConnected = false,
 }: {
   provider: Provider;
   method: Method | undefined;
   plans: PlanForUpgrade[];
-  // Conexión de la fila de Mercado Pago (para medios que la reutilizan: Point).
-  mpConnected?: boolean;
+  // Conexión de la fila de la marca (para canales Point que la reutilizan).
+  parentConnected?: boolean;
   // Features activas del tenant. undefined mientras carga (optimista: no bloquea).
   features: Record<string, boolean> | undefined;
   isOpen: boolean;
@@ -1033,9 +1298,8 @@ function PaymentMethodRow({
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  const connected = USES_MP_CONNECTION.has(p.key)
-    ? mpConnected
-    : Boolean(m?.config?.connected);
+  const parent = USES_CONNECTION_OF[p.key];
+  const connected = parent ? parentConnected : Boolean(m?.config?.connected);
   const soon = p.kind !== "manual" && !IMPLEMENTED.has(p.key);
   const info = PROVIDER_INFO[p.key];
   // Medios con grid de planes: el recargo se configura ahí, no en la fila.
@@ -1043,7 +1307,7 @@ function PaymentMethodRow({
   // Point: cuotas/recargo se resuelven en el lector → sin input de recargo.
   // Con grid de planes, el recargo vive en el grid. El resto (modo/pagos360/
   // payway y manuales) usa el % plano del medio, que el POS aplica al cobrar.
-  const hideSurcharge = hasPlans || USES_MP_CONNECTION.has(p.key);
+  const hideSurcharge = hasPlans || Boolean(parent);
 
   // Gating por plan. Optimista mientras `features` es undefined (no parpadea).
   // Sólo gateamos medios IMPLEMENTADOS (no `soon`): ahí el switch se podía
@@ -1096,7 +1360,9 @@ function PaymentMethodRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate font-semibold">{p.name}</span>
-            {SANDBOX_PROVIDERS.has(p.key) && m?.sandbox && !soon && (
+            {((SANDBOX_PROVIDERS.has(p.key) && m?.sandbox) ||
+              (p.key === "mercadopago" && mpEnvOf(m) === "test")) &&
+              !soon && (
               <span
                 title="Este medio apunta al ambiente de PRUEBA del proveedor (sin cobros reales). Lo cambiás al conectar o en el detalle."
                 className="inline-flex shrink-0 items-center rounded-ninjaFull border border-warning/50 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning"
@@ -1135,17 +1401,17 @@ function PaymentMethodRow({
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock size={13} /> Próximamente
             </span>
-          ) : USES_MP_CONNECTION.has(p.key) ? (
+          ) : parent ? (
             connected ? (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
-                <Check size={13} /> Vía Mercado Pago
+                <Check size={13} /> Vía {parent.name}
               </span>
             ) : (
               <span
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                title="Conectá Mercado Pago para usar Point"
+                title={`Conectá ${parent.name} para usar ${p.name}`}
               >
-                <Link2 size={13} /> Requiere conectar MP
+                <Link2 size={13} /> Requiere conectar {parent.name}
               </span>
             )
           ) : (
@@ -1289,7 +1555,7 @@ function PaymentMethodRow({
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock size={13} /> Próximamente
               </span>
-            ) : USES_MP_CONNECTION.has(p.key) ? (
+            ) : parent ? (
               <span
                 className={
                   connected
@@ -1299,11 +1565,11 @@ function PaymentMethodRow({
               >
                 {connected ? (
                   <>
-                    <Check size={13} /> Vía Mercado Pago
+                    <Check size={13} /> Vía {parent.name}
                   </>
                 ) : (
                   <>
-                    <Link2 size={13} /> Requiere conectar MP
+                    <Link2 size={13} /> Requiere conectar {parent.name}
                   </>
                 )}
               </span>
@@ -1336,6 +1602,8 @@ function PaymentMethodRow({
               </button>
             )}
           </div>
+
+          {p.key === "mercadopago" && connected && !locked && <MpQrPosSetup method={m} />}
 
           {info ? (
             <>
@@ -1400,5 +1668,246 @@ function PaymentMethodRow({
         />
       )}
     </Card>
+  );
+}
+
+// =============================================================================
+// MpEnvPicker — ambiente de Mercado Pago (ADR-032). Producción usa la conexión
+// (OAuth o token); Prueba usa un Access Token de prueba de MP (Tus
+// integraciones → Credenciales de prueba) que convive con la de producción.
+// =============================================================================
+function MpEnvPicker({
+  method,
+  token,
+  onToken,
+  pending,
+  onSave,
+}: {
+  method: Method | undefined;
+  token: string;
+  onToken: (v: string) => void;
+  pending: boolean;
+  onSave: (v: { env: "prod" | "test"; testToken?: string; clearTest?: boolean }) => void;
+}) {
+  const env = mpEnvOf(method);
+  const hasTest = Boolean((method?.config as MpConfig | null)?.test_connected);
+  const [want, setWant] = useState<"prod" | "test">(env);
+  useEffect(() => setWant(env), [env]);
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-3">
+      <p className="text-xs font-semibold">Ambiente de cobro</p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setWant("prod");
+            if (env !== "prod") onSave({ env: "prod" });
+          }}
+          className={
+            want === "prod"
+              ? "rounded-md border border-ninja-flame px-3 py-2 text-xs font-semibold ring-2 ring-ninja-flame/30"
+              : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+          }
+        >
+          Producción (cobros reales)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setWant("test");
+            if (hasTest && env !== "test") onSave({ env: "test" });
+          }}
+          className={
+            want === "test"
+              ? "rounded-md border border-warning px-3 py-2 text-xs font-semibold ring-2 ring-warning/30"
+              : "rounded-md border border-border px-3 py-2 text-xs text-muted-foreground hover:border-ninja-flameSoft/40"
+          }
+        >
+          Prueba (sandbox)
+        </button>
+      </div>
+      {want === "test" && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {hasTest
+              ? "Hay un Access Token de prueba cargado. Podés reemplazarlo o quitarlo."
+              : "Pegá el Access Token de prueba (Mercado Pago → Tus integraciones → Credenciales de prueba). Los cobros no mueven plata real."}
+          </p>
+          <Input
+            label="Access Token de prueba"
+            type="password"
+            name="mp_test_access_token"
+            autoComplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            value={token}
+            onChange={(e) => onToken(e.target.value)}
+            placeholder={hasTest ? "•••••• (configurado)" : "APP_USR-... o TEST-..."}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending || token.trim().length < 8}
+              onClick={() => onSave({ env: "test", testToken: token.trim() })}
+            >
+              {pending ? <Spinner size={14} /> : null} Guardar y usar prueba
+            </Button>
+            {hasTest && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive"
+                disabled={pending}
+                onClick={() => onSave({ env: "prod", clearTest: true })}
+              >
+                Quitar token de prueba
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// MpQrPosSetup — caja QR de Mercado Pago (alta única por ambiente). Crea la
+// sucursal y la caja en la cuenta de MP del negocio (Edge mp_qr setup) para
+// cobrar con QR dinámico de la Orders API. Sin caja, el POS cobra con el QR
+// del link de pago (Checkout Pro), como antes.
+// =============================================================================
+const MP_QR_ERRORS: Record<string, string> = {
+  name: "Poné el nombre del local.",
+  street_name: "Falta la calle.",
+  street_number: "Falta la altura.",
+  city_name: "Falta la ciudad o localidad.",
+  state_name: "Elegí la provincia.",
+  coordinates: "Pegá las coordenadas como las copia Google Maps (ej. -34.6037, -58.3816).",
+};
+
+function MpQrPosSetup({ method }: { method: Method | undefined }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const env = mpEnvOf(method);
+  const pos = (method?.config as MpConfig | null)?.mp_qr?.[env];
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    street_name: "",
+    street_number: "",
+    city_name: "",
+    state_name: "",
+    coordinates: "",
+    reference: "",
+  });
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const setup = useMutation({
+    mutationFn: () => posApi.mpQrSetup(form),
+    onSuccess: () => {
+      toast({ title: "Caja QR lista", variant: "success" });
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["tenant-payment-methods"] });
+    },
+    onError: (e: Error) => {
+      const [code, field] = e.message.split(":");
+      toast({
+        title:
+          code === "invalid_store" && field
+            ? (MP_QR_ERRORS[field] ?? "Revisá los datos del local.")
+            : code === "payment_method_not_allowed"
+              ? "Tu plan no incluye Mercado Pago."
+              : "Mercado Pago no aceptó la sucursal o la caja. Revisá la dirección y probá de nuevo.",
+        variant: "error",
+      });
+    },
+  });
+
+  return (
+    <div className="rounded-md border border-border bg-background/40 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <QrCode size={14} className="text-ninja-flameSoft" /> Caja QR en el local
+          {env === "test" && <span className="font-normal text-warning">(prueba)</span>}
+        </div>
+        {pos && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            Reconfigurar
+          </button>
+        )}
+      </div>
+
+      {pos && !editing ? (
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-success">
+          <Check size={13} className="mt-0.5 shrink-0" />
+          <span>
+            Lista: {pos.store_name}
+            {pos.address ? `, ${pos.address}` : ""}. El POS genera un QR único por cobro.
+          </span>
+        </p>
+      ) : (
+        <div className="mt-2 space-y-2.5">
+          <p className="text-xs text-muted-foreground">
+            Una sola vez: damos de alta tu local y una caja en tu cuenta de Mercado Pago
+            para cobrar con QR en el mostrador. Mientras tanto, el POS cobra con el QR del
+            link de pago.
+          </p>
+          <Input label="Nombre del local" value={form.name} onChange={set("name")} />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <Input label="Calle" value={form.street_name} onChange={set("street_name")} />
+            </div>
+            <Input label="Altura" value={form.street_number} onChange={set("street_number")} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input label="Ciudad o localidad" value={form.city_name} onChange={set("city_name")} />
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium">Provincia</span>
+              <select
+                value={form.state_name}
+                onChange={set("state_name")}
+                className="h-10 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ninja-flameSoft"
+              >
+                <option value="">Elegí</option>
+                {MP_AR_STATES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Input
+            label="Coordenadas (de Google Maps)"
+            value={form.coordinates}
+            onChange={set("coordinates")}
+            placeholder="-34.6037, -58.3816"
+          />
+          <Input
+            label="Referencia (opcional)"
+            value={form.reference}
+            onChange={set("reference")}
+            placeholder="Ej: local 2, entre calles"
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={setup.isPending} onClick={() => setup.mutate()}>
+              {setup.isPending ? <Spinner size={14} /> : <QrCode size={14} />} Crear caja QR
+            </Button>
+            {editing && (
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                Cancelar
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -72,6 +72,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     // (ver ADR-026).
     minPlan: "Start",
   },
+  pos_quick_keys_pro: {
+    desc: "Teclas rápidas Pro: hasta 48 botones de un toque en la pantalla de venta, con color por tecla para encontrarlos al instante. El diseño del POS (presets, grilla, carrito, acento) es gratis en todos los planes.",
+    impact: "Sin la función se pueden armar hasta 12 teclas rápidas sin color; el resto del diseño del POS sigue disponible.",
+    minPlan: "Pro",
+    requires: ["pos"],
+  },
 
   // ── Pagos ─────────────────────────────────────────────────────────────────
   efectivo: {
@@ -95,7 +101,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   mercado_pago: {
-    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio y cobra desde el celular del cliente. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio, cobra con un QR único por venta en la caja del local o manda el link por WhatsApp. El Point (terminal) es una función aparte.",
     impact: "Sin esto no se puede cobrar con Mercado Pago ni vincular la cuenta del comercio.",
     minPlan: "Pro",
   },
@@ -120,6 +126,19 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",
     impact: "Sin esto Nave no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
+    needs: "Conectar la cuenta de Nave (Client ID, Client Secret y punto de venta) y pasarle a Nave la URL de notificaciones.",
+  },
+  gocuotas: {
+    desc: "Cobros con GO Cuotas por QR y link de pago: el cliente paga en 2 a 4 cuotas sin interés con su tarjeta de débito y la venta se cierra sola al aprobarse. Monto mínimo por cobro: $1.500.",
+    impact: "Desactivado, GO Cuotas no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de GO Cuotas con la API Key de la sucursal (Sucursales, Editar, Ver ApiKeys de la sucursal).",
+  },
+  directo: {
+    desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. El cobro se hace en el portal de comercios de Directo (QR o link) y el POS registra el número de operación.",
+    impact: "Desactivado, Directo no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
   },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
@@ -137,7 +156,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Cobros con el Point de Nave: el POS manda el monto a la terminal Nave y el cliente paga con tarjeta, contactless o QR.",
     impact: "Desactivado, la terminal de Nave no queda integrada al cobro del POS.",
     minPlan: "Pro",
-    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point).",
+    needs: "Conectar la cuenta de Nave (la misma conexión sirve para QR, link y Point) y cargar el ID de punto de venta de cada terminal.",
   },
   fiserv: {
     desc: "Cobros con Fiserv (Posnet / Clover): pasarela presencial de tarjetas vía terminales Fiserv/Clover.",

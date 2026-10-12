@@ -1,5 +1,5 @@
 // =============================================================================
-// Edge Function: pending_charges_sync — sincroniza con el proveedor los cobros
+// Edge Function: pending_charges_sync: sincroniza con el proveedor los cobros
 // en espera (ADR-048) que no reciben webhook, aunque ningún POS esté abierto.
 //
 // Cron (pg_cron + pg_net, cada 2 min): header X-Cron-Secret ==

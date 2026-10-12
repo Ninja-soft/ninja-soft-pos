@@ -1,5 +1,5 @@
 // =============================================================================
-// _shared/timing.ts — tiempos por etapa de las Edge de cobro (ADR-048, "QR más
+// _shared/timing.ts: tiempos por etapa de las Edge de cobro (ADR-048, "QR más
 // rápido"). Cada Edge marca sus etapas (auth, prechecks, intent, proveedor,
 // guardado) y al responder:
 //   * escribe una línea JSON en el log ({"fn":"mp_qr","total":412,"steps":{...}})

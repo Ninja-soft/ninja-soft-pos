@@ -1,5 +1,5 @@
 // =============================================================================
-// _shared/pagos360_server.ts — conexión y sincronización de Pagos360 del lado
+// _shared/pagos360_server.ts: conexión y sincronización de Pagos360 del lado
 // del servidor. La usan la Edge pagos360 (status del POS) y pending_charges_sync
 // (cron de cobros en espera, ADR-048): Pagos360 no tiene webhook obligatorio,
 // así que un cobro en espera se sincroniza aunque el POS esté cerrado.
@@ -35,7 +35,7 @@ export async function loadPagos360(admin: Admin, tenantId: string): Promise<Pago
   const apiKey = ((secretRow?.secrets ?? {}) as { api_key?: string }).api_key;
   if (!apiKey) return null;
   return {
-    base: methodRow?.sandbox ? "https://api.sandbox.pagos360.com" : "https://api.pagos360.com",
+    base: methodRow?.sandbox ? "https://api.sandbox.pagos360.com": "https://api.pagos360.com",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
   };
 }

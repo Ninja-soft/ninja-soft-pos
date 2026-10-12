@@ -40,7 +40,7 @@ export function plEscape(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/—/g, "-");
+    .replace(/\u2014/g, "-");
 }
 
 function plHex(v: string): string {

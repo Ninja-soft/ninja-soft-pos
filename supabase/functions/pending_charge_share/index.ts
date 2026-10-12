@@ -1,5 +1,5 @@
 // =============================================================================
-// Edge Function: pending_charge_share — manda por email el link de pago de un
+// Edge Function: pending_charge_share: manda por email el link de pago de un
 // cobro en espera (ADR-048) con el diseño del negocio.
 //
 // POST { pending_charge_id, to, note? } con el JWT de un miembro activo que
@@ -86,7 +86,7 @@ function plEscape(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/—/g, "-");
+    .replace(/\u2014/g, "-");
 }
 
 function plHex(v: string): string {

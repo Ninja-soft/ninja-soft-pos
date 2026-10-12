@@ -97,7 +97,7 @@ export function WalkInModal({
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Walk-in (sin reserva)">
       <div className="space-y-4">
-        <p className="flex items-center gap-2 rounded-lg border border-ninja-flame/25 bg-ninja-flame/[0.06] p-3 text-sm text-muted-foreground">
+        <p className="flex items-center gap-2 rounded-lg bg-ninja-flame/[0.08] p-3 text-sm text-muted-foreground">
           <Zap size={16} className="shrink-0 text-ninja-flameSoft" />
           Cliente que llegó sin turno. Se agenda ahora y queda “en curso”, listo
           para cobrar.

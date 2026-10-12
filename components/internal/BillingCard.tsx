@@ -31,6 +31,7 @@ import {
   type TenantDiscount,
 } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 function discountLabel(d: TenantDiscount): string {
   return d.kind === "percent"
@@ -306,7 +307,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
 
           {/* Trial info */}
           {isTrial && (
-            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-red-400/30 bg-red-400/5 text-danger" : "border-yellow-400/30 bg-yellow-400/5 text-warning"}`}>
+            <div className={`rounded-lg border p-3 text-sm ${trialExpired ? "border-transparent bg-red-400/10 text-danger" : "border-transparent bg-yellow-400/5 text-warning"}`}>
               <div className="flex items-center gap-1.5 font-medium">
                 <Clock size={14} />
                 {trialExpired ? "Trial vencido" : "En período de prueba"}
@@ -324,7 +325,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                     key={d}
                     disabled={extendTrial.isPending}
                     onClick={() => handleExtend(d)}
-                    className="rounded border border-yellow-400/40 bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
+                    className="rounded border border-transparent bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
                   >
                     +{d}d
                   </button>
@@ -332,7 +333,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                 <button
                   disabled={setTrialEnd.isPending}
                   onClick={() => openAction("set_end")}
-                  className="rounded border border-yellow-400/40 bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
+                  className="rounded border border-transparent bg-yellow-400/10 px-2 py-0.5 text-xs font-medium transition hover:bg-yellow-400/20 disabled:opacity-50"
                 >
                   Fijar fin…
                 </button>
@@ -342,14 +343,14 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("converted")}
-                  className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-success transition hover:bg-emerald-400/20 disabled:opacity-50"
+                  className="rounded bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-success transition hover:bg-emerald-400/20 disabled:opacity-50"
                 >
                   Convertir a pago
                 </button>
                 <button
                   disabled={trialOutcome.isPending}
                   onClick={() => openAction("lost")}
-                  className="rounded border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-xs font-medium text-danger transition hover:bg-red-400/20 disabled:opacity-50"
+                  className="rounded bg-red-400/10 px-2 py-0.5 text-xs font-medium text-danger transition hover:bg-red-400/20 disabled:opacity-50"
                 >
                   Marcar perdido
                 </button>
@@ -362,8 +363,8 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
             <div
               className={`rounded-lg border p-3 text-sm ${
                 overdueDays > 0
-                  ? "border-red-400/30 bg-red-400/5 text-danger"
-                  : "border-emerald-400/30 bg-emerald-400/5 text-success"
+                  ? "border-transparent bg-red-400/10 text-danger"
+                  : "border-transparent bg-emerald-400/10 text-success"
               }`}
             >
               <div className="flex items-center gap-1.5 font-medium">
@@ -413,7 +414,7 @@ export function BillingCard({ tenantId, trialEndsAt, subStatus, planKey }: Props
 
           {/* Billing records */}
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           ) : (records ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Sin pagos registrados.

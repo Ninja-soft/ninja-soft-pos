@@ -189,9 +189,9 @@ function PlanCardItem({
       className={cn(
         "relative flex flex-col gap-4 rounded-2xl border p-5 text-left transition",
         selected
-          ? "border-transparent bg-ninja-flame/10"
+          ? "border-transparent bg-ninja-flame/[0.12]"
           : recommended
-            ? "border-ninja-flame/45 bg-muted/60 shadow-ninjaGlow"
+            ? "border-border bg-muted/60 shadow-ninjaGlow"
             : "border-border bg-muted/60",
       )}
     >
@@ -225,7 +225,7 @@ function PlanCardItem({
             className={cn(
               "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition",
               selected
-                ? "border-ninja-flame bg-ninja-flame text-white"
+                ? "border-transparent bg-ninja-flame text-white"
                 : "border-muted-foreground/40",
             )}
             aria-hidden

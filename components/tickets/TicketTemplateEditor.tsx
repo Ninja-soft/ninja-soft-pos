@@ -329,7 +329,7 @@ export function TicketTemplateEditor({ open, onOpenChange, template, tenantId }:
         // Canvas legado: solo lectura. Ya no se crea ni edita el canvas (PR7);
         // las plantillas existentes se ven/imprimen, pero no se modifican.
         <>
-          <p className="no-print mb-4 rounded-lg border border-ninja-flameSoft/40 bg-ninja-flame/10 px-3 py-2.5 text-sm text-muted-foreground">
+          <p className="no-print mb-4 rounded-lg bg-ninja-flame/10 px-3 py-2.5 text-sm text-muted-foreground">
             Esta es una plantilla <strong className="text-foreground">Canvas (legado)</strong>. El
             editor de canvas ya no está disponible: podés verla, imprimirla, activarla o duplicarla,
             pero para cambiar el diseño creá un modelo nuevo en Bloques o HTML.
@@ -433,7 +433,7 @@ function ModeChooser({ onChoose }: { onChoose: (m: TemplateMode) => void }) {
             key={c.mode}
             type="button"
             onClick={() => onChoose(c.mode)}
-            className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+            className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left transition hover:bg-muted/40"
           >
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
               {c.icon}
@@ -544,7 +544,7 @@ function StarterChooser({
             key={t.key}
             type="button"
             onClick={() => onPick(t)}
-            className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-3 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+            className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-3 text-left transition hover:bg-muted/40"
           >
             <StarterThumb pick={t} brand={brand} />
             <span className="font-medium text-foreground">{t.name}</span>
@@ -558,7 +558,7 @@ function StarterChooser({
         <button
           type="button"
           onClick={onScratch}
-          className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-card p-3 text-left transition hover:border-ninja-flameSoft hover:bg-muted/40"
+          className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-card p-3 text-left transition hover:bg-muted/40"
         >
           <span className="grid h-40 w-full place-items-center rounded-lg border border-dashed border-border bg-muted/20 text-xs text-muted-foreground">
             Lienzo en blanco

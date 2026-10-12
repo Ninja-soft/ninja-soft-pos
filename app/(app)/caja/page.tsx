@@ -8,12 +8,14 @@ import {
   ArrowUpCircle,
   Download,
   Printer,
+  Receipt,
+  ShoppingCart,
+  Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
@@ -28,6 +30,8 @@ import { formatCurrency } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { format } from "date-fns";
+import { PageHeader, SectionHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function CajaPage() {
   const { toast } = useToast();
@@ -113,22 +117,26 @@ export default function CajaPage() {
 
   return (
     <>
-<div className="mx-auto max-w-5xl px-6 py-8">
-        <Eyebrow>Operación</Eyebrow>
-        <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
-          Caja
-          <InfoHint section="caja" size={18} />
-        </Display>
+      <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+        <PageHeader
+          eyebrow="Operación"
+          title="Caja"
+          icon={Wallet}
+          help={<InfoHint section="caja" size={18} />}
+        />
 
         {!shift ? (
           <Card className="mt-6">
-            <CardContent className="p-6 text-muted-foreground">
-              No hay una caja abierta. Abrila desde el{" "}
-              <Link href="/pos" className="text-ninja-flameSoft hover:underline">
-                punto de venta
-              </Link>
-              .
-            </CardContent>
+            <EmptyState
+              icon={Wallet}
+              title="No hay una caja abierta"
+              description="Abrila desde el punto de venta para registrar ingresos, egresos y el cierre Z."
+              action={
+                <Link href="/pos" className={buttonVariants({ size: "sm" })}>
+                  <ShoppingCart size={16} /> Ir al punto de venta
+                </Link>
+              }
+            />
           </Card>
         ) : (
           <>
@@ -153,7 +161,7 @@ export default function CajaPage() {
             </div>
 
             {/* Reporte Z imprimible */}
-            <div className="ticket-print mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="ticket-print mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
               <SummaryCard label="Apertura" value={summary!.opening} />
               <SummaryCard label="Ventas netas" value={summary!.salesTotal} />
               <SummaryCard label="Ingresos manuales" value={summary!.income} />
@@ -165,13 +173,11 @@ export default function CajaPage() {
               />
             </div>
 
-            <h2 className="mt-8 font-display text-lg font-bold">
-              Ventas por medio de pago
-            </h2>
+            <SectionHeader className="mt-8" title="Ventas por medio de pago" />
             <Card className="mt-3">
               <CardContent className="p-4">
                 {Object.keys(summary!.byMethod).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin ventas aún.</p>
+                  <EmptyState compact icon={Receipt} title="Sin ventas en este turno" />
                 ) : (
                   <ul className="divide-y divide-border">
                     {Object.entries(summary!.byMethod).map(([k, v]) => (
@@ -185,7 +191,7 @@ export default function CajaPage() {
               </CardContent>
             </Card>
 
-            <h2 className="mt-8 font-display text-lg font-bold">Movimientos</h2>
+            <SectionHeader className="mt-8" title="Movimientos" />
             <Card className="mt-3">
               <CardContent className="p-0">
                 <ul className="divide-y divide-border">
@@ -226,8 +232,13 @@ export default function CajaPage() {
                     </li>
                   ))}
                   {(movements ?? []).length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-                      Sin movimientos.
+                    <li>
+                      <EmptyState
+                        compact
+                        icon={ArrowDownCircle}
+                        title="Sin movimientos"
+                        description="Los ingresos y egresos manuales aparecen acá."
+                      />
                     </li>
                   )}
                 </ul>
@@ -285,13 +296,13 @@ function SummaryCard({
 }) {
   return (
     <Card>
-      <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground">{label}</p>
+      <CardContent className="p-4 sm:p-5">
+        <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
         <p
           className={
             highlight
-              ? "price-hl mt-2 font-price tabular-nums text-2xl font-black"
-              : "mt-2 font-price tabular-nums text-2xl font-bold"
+              ? "price-hl mt-1.5 font-price tabular-nums text-xl font-black sm:mt-2 sm:text-2xl"
+              : "mt-1.5 font-price tabular-nums text-xl font-bold sm:mt-2 sm:text-2xl"
           }
         >
           {formatCurrency(value)}

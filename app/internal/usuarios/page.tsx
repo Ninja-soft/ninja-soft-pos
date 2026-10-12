@@ -2,14 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, RotateCcw, Search } from "lucide-react";
+import { Ban, RotateCcw, Search, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { TableStateRow } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",
@@ -95,12 +98,17 @@ export default function InternalUsersPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Usuarios</Display>
-      <p className="mt-2 text-muted-foreground">
-        Todas las cuentas de la plataforma, con sus membresías por negocio.
-        {isAdmin && " Podés suspender/reactivar cuentas (queda auditado)."}
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Usuarios"
+        icon={Users}
+        description={
+          <>
+            Todas las cuentas de la plataforma, con sus membresías por negocio.
+            {isAdmin && " Podés suspender/reactivar cuentas (queda auditado)."}
+          </>
+        }
+      />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -147,16 +155,19 @@ export default function InternalUsersPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Sin resultados.
-                </td>
-              </tr>
+              <TableStateRow colSpan={6}>
+                <EmptyState
+                  compact
+                  icon={Search}
+                  title="Sin resultados"
+                  description="Probá con otro nombre o email."
+                />
+              </TableStateRow>
             )}
             {filtered.map((u) => {
               const canTouch =
@@ -199,13 +210,13 @@ export default function InternalUsersPage() {
                   <td className="px-4 py-3">
                     {u.suspended_at ? (
                       <span
-                        className="inline-flex rounded-full border border-red-400/40 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger"
+                        className="inline-flex rounded-full bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger"
                         title={`Suspendido ${formatRelative(u.suspended_at)}`}
                       >
                         Suspendido
                       </span>
                     ) : (
-                      <span className="inline-flex rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-success">
+                      <span className="inline-flex rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-success">
                         Activo
                       </span>
                     )}

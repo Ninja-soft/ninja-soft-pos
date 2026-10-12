@@ -272,7 +272,7 @@ export function CatalogEditorModal({
                   className={cn(
                     "flex items-center gap-3 rounded-lg border p-3 text-left transition",
                     checked
-                      ? "border-ninja-flameSoft bg-ninja-flame/10"
+                      ? "border-transparent bg-ninja-flame/[0.12]"
                       : "border-border hover:bg-muted",
                   )}
                 >

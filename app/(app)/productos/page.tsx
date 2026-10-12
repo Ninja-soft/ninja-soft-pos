@@ -16,11 +16,11 @@ import {
   Tag,
   Trash2,
   Upload,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { GatedButton } from "@/components/saas/GatedAction";
@@ -56,6 +56,9 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
@@ -220,16 +223,14 @@ export default function ProductosPage() {
 
   return (
     <>
-<div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <Eyebrow>Catálogo</Eyebrow>
-            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
-              Productos
-              <InfoHint section="productos" size={18} />
-            </Display>
-          </div>
-          <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+        <PageHeader
+          eyebrow="Catálogo"
+          title="Productos"
+          icon={Package}
+          help={<InfoHint section="productos" size={18} />}
+          actions={
+          <div className="-mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"
@@ -267,7 +268,8 @@ export default function ProductosPage() {
               <Plus size={16} /> Nuevo producto
             </Button>
           </div>
-        </div>
+          }
+        />
 
         <div className="mt-6 flex flex-wrap gap-2">
           <div className="relative min-w-0 flex-1 sm:max-w-md">
@@ -314,7 +316,7 @@ export default function ProductosPage() {
           <EmptyProductsPromo />
         )}
 
-        <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+        <TableWrap className="mt-6">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
@@ -326,13 +328,7 @@ export default function ProductosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-foreground">
-              {isLoading && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Cargando productos…
-                  </td>
-                </tr>
-              )}
+              {isLoading && <TableStateRow colSpan={5} loading />}
               {isError && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-danger">
@@ -344,13 +340,28 @@ export default function ProductosPage() {
                 </tr>
               )}
               {!isLoading && !isError && products.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    {search || categoryId || brandId
-                      ? "Sin resultados para el filtro."
-                      : "No hay productos todavía. Creá el primero con “Nuevo producto”."}
-                  </td>
-                </tr>
+                <TableStateRow colSpan={5}>
+                  {search || categoryId || brandId ? (
+                    <EmptyState
+                      compact
+                      icon={Search}
+                      title="Sin resultados"
+                      description="Probá con otro nombre, SKU o categoría."
+                    />
+                  ) : (
+                    <EmptyState
+                      compact
+                      icon={Package}
+                      title="Todavía no cargaste productos"
+                      description="Creá el primero y empezá a vender."
+                      action={
+                        <Button size="sm" onClick={openNew}>
+                          <Plus size={16} /> Nuevo producto
+                        </Button>
+                      }
+                    />
+                  )}
+                </TableStateRow>
               )}
               {products.map((p) => {
                 const low =
@@ -461,7 +472,7 @@ export default function ProductosPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
 
         <Pagination
           page={page}

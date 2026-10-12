@@ -134,9 +134,9 @@ export function IndustryPresetWizard({
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-full border tabular-nums",
                     active
-                      ? "border-ninja-flame bg-ninja-flame/15 text-ninja-flameSoft"
+                      ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
                       : done
-                        ? "border-ninja-flame/40 bg-ninja-flame/10 text-ninja-flameSoft"
+                        ? "border-transparent bg-ninja-flame/10 text-ninja-flameSoft"
                         : "border-border text-muted-foreground",
                   )}
                 >
@@ -213,8 +213,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-transparent bg-ninja-flame/15"
-                      : "border-border hover:bg-muted hover:bg-ninja-flame/[0.04]",
+                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      : "border-border hover:bg-ninja-flame/[0.04]",
                   )}
                 >
                   <span className="text-sm font-semibold">{o.label}</span>
@@ -248,8 +248,8 @@ export function IndustryPresetWizard({
                   className={cn(
                     "flex flex-col rounded-lg border p-4 text-left transition",
                     active
-                      ? "border-transparent bg-ninja-flame/15"
-                      : "border-border hover:bg-muted hover:bg-ninja-flame/[0.04]",
+                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      : "border-border hover:bg-ninja-flame/[0.04]",
                   )}
                 >
                   <span className="flex items-center gap-2.5">
@@ -375,7 +375,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     seedCatalog
-                      ? "border-transparent bg-ninja-flame/15"
+                      ? "border-transparent bg-ninja-flame/[0.12]"
                       : "border-border hover:bg-muted",
                   )}
                 >
@@ -391,7 +391,7 @@ export function IndustryPresetWizard({
                   className={cn(
                     "rounded-lg border p-3 text-left transition",
                     !seedCatalog
-                      ? "border-transparent bg-ninja-flame/15"
+                      ? "border-transparent bg-ninja-flame/[0.12]"
                       : "border-border hover:bg-muted",
                   )}
                 >
@@ -405,7 +405,7 @@ export function IndustryPresetWizard({
             </div>
 
             {seedCatalog && (
-              <div className="flex items-start gap-2 rounded-lg border border-ninja-flame/20 bg-ninja-flame/[0.06] p-3 text-xs text-muted-foreground">
+              <div className="flex items-start gap-2 rounded-lg bg-ninja-flame/[0.08] p-3 text-xs text-muted-foreground">
                 <Sparkles size={15} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
                 <p>
                   Se agregan como <span className="font-medium text-foreground">botones rápidos</span> del

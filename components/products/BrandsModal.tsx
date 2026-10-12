@@ -116,7 +116,7 @@ export function BrandsModal({ open, onOpenChange }: Props) {
                         if (e.key === "Enter") handleUpdate();
                         if (e.key === "Escape") cancelEdit();
                       }}
-                      className="h-8 flex-1 rounded-md border border-ninja-flameSoft bg-background px-2 text-sm text-foreground outline-none"
+                      className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:border-ninja-flameSoft"
                     />
                     <button
                       onClick={handleUpdate}

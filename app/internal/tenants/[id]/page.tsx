@@ -318,7 +318,7 @@ export default function InternalTenantDetail({
         <CardContent className="flex flex-wrap items-center gap-4 p-5">
           {hasAiAddon ? (
             <>
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-success">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-400/10 px-2.5 py-1 text-sm font-semibold text-success">
                 <Check size={15} /> Asistente IA activo (regalado)
               </span>
               <Button
@@ -427,7 +427,7 @@ export default function InternalTenantDetail({
                       href={impersonateResult.actionLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-ninja-flameSoft/40 bg-ninja-flame/10 px-3 py-2 text-sm font-medium text-ninja-flameSoft transition hover:bg-ninja-flame/20"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-ninja-flame/10 px-3 py-2 text-sm font-medium text-ninja-flameSoft transition hover:bg-ninja-flame/20"
                     >
                       <ExternalLink size={14} /> Abrir en nueva pestaña
                     </a>

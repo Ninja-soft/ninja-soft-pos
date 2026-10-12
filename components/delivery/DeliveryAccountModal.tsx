@@ -38,6 +38,7 @@ import {
 } from "@/modules/delivery/api";
 import { DeliveryProductPicker } from "./DeliveryProductPicker";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
 
 // Cuenta de un pedido de delivery / take away (F13 · H49). Espeja
 // TableAccountModal (H44): ver/editar ítems, asignar cadete, ver datos del
@@ -165,7 +166,8 @@ export function DeliveryAccountModal({
                 <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
                   {DELIVERY_STATUS_LABELS[order.status]}
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  {order.channel === "whatsapp" && <IntegrationLogo name="whatsapp" size={16} />}
                   {DELIVERY_CHANNEL_LABELS[order.channel]}
                 </span>
               </div>

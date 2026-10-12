@@ -186,7 +186,7 @@ export function ProductImages({
           onClick={() => inputRef.current?.click()}
           disabled={busy}
           className={cn(
-            "grid h-20 w-20 place-items-center rounded-lg border border-dashed border-border text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground",
+            "grid h-20 w-20 place-items-center rounded-lg border border-dashed border-border text-muted-foreground transition hover:bg-muted hover:text-foreground",
             busy && "opacity-50",
           )}
         >

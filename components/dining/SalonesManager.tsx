@@ -13,6 +13,8 @@ import {
   useTableMutations,
 } from "@/modules/dining/hooks";
 import type { DiningArea, DiningTable } from "@/modules/dining/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // ── Modal de salón (alta/edición) ──────────────────────────────────────────────
 function AreaModal({
@@ -272,14 +274,10 @@ export function SalonesManager() {
       </div>
 
       {loading ? (
-        <p className="py-4 text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : blocks.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-5 text-center">
-          <Utensils size={26} className="mx-auto mb-2 text-ninja-flameSoft" />
-          <p className="text-sm text-muted-foreground">
-            Creá tu primer salón (ej. Salón principal, Terraza) y después cargá sus
-            mesas.
-          </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={Utensils} title="Todavía no hay salones" description="Creá tu primer salón (Salón principal, Terraza) y después cargá sus mesas." />
         </div>
       ) : (
         <div className="space-y-5">

@@ -357,7 +357,7 @@ function ItemRow({
     <div
       className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
         held
-          ? "border-amber-400/40 bg-amber-400/[0.06]"
+          ? "border-transparent bg-amber-400/10"
           : "border-border bg-card"
       }`}
     >

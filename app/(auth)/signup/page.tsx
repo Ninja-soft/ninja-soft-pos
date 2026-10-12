@@ -33,6 +33,7 @@ import { SignupStepPlan } from "@/components/auth/SignupStepPlan";
 import type { Vertical } from "@/lib/verticals/config";
 import { callbackUrl } from "@/lib/auth/redirect";
 import { cn } from "@/lib/utils/cn";
+import { Spinner } from "@/components/ui/Spinner";
 
 const ivaSelectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
@@ -65,8 +66,8 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
               </span>
               <span
                 className={cn(
-                  "text-sm font-medium",
-                  active ? "text-ninja-softWhite" : "text-ninja-lavender",
+                  "whitespace-nowrap text-sm font-medium",
+                  active ? "text-ninja-softWhite" : "hidden text-ninja-lavender sm:inline",
                 )}
               >
                 {it.label}
@@ -491,7 +492,7 @@ function SignupWizard() {
   if (mode === "loading") {
     return (
       <div className="grid place-items-center py-24">
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-ninja-flameSoft border-t-transparent" />
+        <Spinner size={24} />
       </div>
     );
   }
@@ -739,7 +740,7 @@ export default function SignupPage() {
     <Suspense
       fallback={
         <div className="grid place-items-center py-24">
-          <span className="h-6 w-6 animate-spin rounded-full border-2 border-ninja-flameSoft border-t-transparent" />
+          <Spinner size={24} />
         </div>
       }
     >

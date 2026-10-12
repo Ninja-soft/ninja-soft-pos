@@ -15,16 +15,17 @@ import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
 import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
+import { IntegrationLogo, isIntegrationKey, type IntegrationKey } from "@/components/ui/IntegrationLogo";
 
 // Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
 type EmailMethod = "smtp" | "resend";
 
 // Proveedores con presets de host/puerto/seguridad. "otro" deja todo editable.
 type ProviderKey = "gmail" | "outlook" | "otro";
-const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean; logo: string | null }[] = [
-  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true, logo: "/images/integrations/gmail.webp" },
-  { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false, logo: "/images/integrations/outlook.webp" },
-  { key: "otro", label: "Otro", host: "", port: "587", secure: false, logo: null },
+const PROVIDERS: { key: ProviderKey; label: string; host: string; port: string; secure: boolean }[] = [
+  { key: "gmail", label: "Gmail", host: "smtp.gmail.com", port: "465", secure: true },
+  { key: "outlook", label: "Outlook", host: "smtp.office365.com", port: "587", secure: false },
+  { key: "otro", label: "Otro", host: "", port: "587", secure: false },
 ];
 
 function inferProvider(host: string): ProviderKey {
@@ -386,14 +387,14 @@ export function TenantEmailCard() {
               onClick={() => setMethod("smtp")}
               title="Mi cuenta de correo"
               desc="Gmail, Outlook u otro (SMTP)"
-              logos={["/images/integrations/gmail.webp", "/images/integrations/outlook.webp"]}
+              logos={["gmail", "outlook"]}
             />
             <MethodCard
               active={method === "resend"}
               onClick={() => setMethod("resend")}
               title="Resend (API)"
               desc="Servicio de envío por API"
-              logos={["/images/integrations/resend.webp"]}
+              logos={["resend"]}
             />
           </div>
 
@@ -408,15 +409,14 @@ export function TenantEmailCard() {
                     className={cn(
                       "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition",
                       provider === p.key
-                        ? "border-transparent bg-ninja-flame/15 text-foreground"
+                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
                         : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
-                    {p.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.logo} alt="" width={20} height={20} className="h-5 w-5 object-contain" />
+                    {isIntegrationKey(p.key) ? (
+                      <IntegrationLogo name={p.key} size={18} />
                     ) : (
-                      <Server size={16} className="text-muted-foreground" />
+                      <Server size={15} />
                     )}
                     {p.label}
                   </button>
@@ -560,7 +560,7 @@ export function TenantEmailCard() {
                       "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
                     ].map((step, i) => (
                       <li key={i} className="flex gap-2.5 text-muted-foreground">
-                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
                           {i + 1}
                         </span>
                         <span>{step}</span>
@@ -620,7 +620,7 @@ export function TenantEmailCard() {
                   className={cn(
                     "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
                     bodyTemplate === t.key
-                      ? "border-transparent bg-ninja-flame/15"
+                      ? "border-transparent bg-ninja-flame/[0.12]"
                       : "border-border hover:bg-muted",
                   )}
                 >
@@ -643,7 +643,7 @@ export function TenantEmailCard() {
               className={cn(
                 "flex items-start gap-2 rounded-lg border p-3 text-sm",
                 result.kind === "ok"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  ? "border-transparent bg-emerald-500/10 text-emerald-400"
                   : "border-destructive/30 bg-destructive/10 text-destructive",
               )}
             >
@@ -762,7 +762,7 @@ function MethodCard({
   onClick: () => void;
   title: string;
   desc: string;
-  logos: string[];
+  logos: IntegrationKey[];
 }) {
   return (
     <button
@@ -772,7 +772,7 @@ function MethodCard({
       className={cn(
         "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 pr-16 text-left transition",
         active
-          ? "border-transparent bg-ninja-flame/15"
+          ? "border-transparent bg-ninja-flame/[0.12]"
           : "border-border hover:bg-muted",
       )}
     >
@@ -785,17 +785,9 @@ function MethodCard({
         {title}
       </span>
       <span className="text-xs text-muted-foreground">{desc}</span>
-      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center -space-x-1.5">
-        {logos.map((src) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={src}
-            src={src}
-            alt=""
-            width={24}
-            height={24}
-            className="h-6 w-6 rounded-md bg-white object-contain p-0.5 shadow-sm"
-          />
+      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 -space-x-1.5">
+        {logos.map((l) => (
+          <IntegrationLogo key={l} name={l} size={24} />
         ))}
       </span>
     </button>
@@ -811,11 +803,9 @@ function ResendGuide() {
     "Copiá la clave (empieza con re_) y pegala abajo. Se muestra una sola vez.",
   ];
   return (
-    <div className="mt-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/5 p-3.5">
+    <div className="mt-3 rounded-lg bg-ninja-flame/[0.08] p-3.5">
       <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
-          <Zap size={15} />
-        </span>
+        <IntegrationLogo name="resend" size={28} className="mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-foreground">
             ¿Qué es Resend?
@@ -831,7 +821,7 @@ function ResendGuide() {
       <ol className="mt-3 space-y-1.5">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-2.5 text-xs text-muted-foreground">
-            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
               {i + 1}
             </span>
             <span>{step}</span>

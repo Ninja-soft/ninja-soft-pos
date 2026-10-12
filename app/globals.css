@@ -45,6 +45,7 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.1);
+  --seg-thumb: rgba(255, 255, 255, 0.13);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.05);
@@ -83,6 +84,7 @@
   --destructive: #ff5a5a;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.09);
+  --seg-thumb: rgba(255, 255, 255, 0.12);
   --input: rgba(255, 255, 255, 0.07);
   --ring: #ff6a1a;
   --pattern: rgba(255, 255, 255, 0.045);
@@ -116,6 +118,7 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e6e1f3;
+  --seg-thumb: #ffffff;
   --input: #e2dcf1;
   --ring: #ff6a1a;
   --pattern: rgba(30, 22, 60, 0.06);
@@ -151,6 +154,7 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #eadfcf;
+  --seg-thumb: #ffffff;
   --input: #e7dcc9;
   --ring: #ff6a1a;
   --pattern: rgba(60, 40, 20, 0.06);

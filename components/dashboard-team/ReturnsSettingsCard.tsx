@@ -15,6 +15,7 @@ import {
   useSaveReturnSettings,
 } from "@/modules/sales/hooks";
 import type { ReturnPolicy } from "@/modules/sales/api";
+import { ChoiceDot } from "@/components/ui/ChoiceCard";
 
 const POLICIES: { value: ReturnPolicy; label: string; hint: string; tag?: string }[] = [
   {
@@ -123,18 +124,11 @@ export function ReturnsSettingsCard() {
                   onClick={() => setPolicy(p.value)}
                   className={
                     active
-                      ? "flex w-full items-start gap-3 rounded-lg border border-ninja-flame bg-ninja-flame/[0.06] px-4 py-3 text-left"
-                      : "flex w-full items-start gap-3 rounded-lg border border-border px-4 py-3 text-left transition hover:border-ninja-flameSoft/40"
+                      ? "flex w-full items-start gap-3 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-4 py-3 text-left"
+                      : "flex w-full items-start gap-3 rounded-lg border border-border px-4 py-3 text-left transition hover:bg-muted"
                   }
                 >
-                  <span
-                    className={
-                      "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border " +
-                      (active ? "border-ninja-flame" : "border-muted-foreground/40")
-                    }
-                  >
-                    {active && <span className="h-2 w-2 rounded-full bg-ninja-flame" />}
-                  </span>
+                  <ChoiceDot selected={active} className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="flex items-center gap-2 text-sm font-medium">
                       {p.label}

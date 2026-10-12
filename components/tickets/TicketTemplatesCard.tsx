@@ -224,7 +224,7 @@ export function TicketTemplatesCard() {
             envía. Lo único detrás del plan es la PERSONALIZACIÓN (modelos
             custom). Aviso claro para que nadie crea que "no tiene tickets". */}
         {proLocked && (
-          <div className="flex items-start gap-2.5 rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-sm">
+          <div className="flex items-start gap-2.5 rounded-lg bg-ninja-flame/[0.08] p-3 text-sm">
             <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
             <p className="text-muted-foreground">
               <span className="font-medium text-foreground">
@@ -353,8 +353,8 @@ function DestChip({
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition",
         active
-          ? "border-ninja-flameSoft/50 bg-ninja-flame/15 text-ninja-flameSoft"
-          : "border-border text-muted-foreground hover:border-ninja-flameSoft/40 hover:text-foreground",
+          ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
+          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       {icon}

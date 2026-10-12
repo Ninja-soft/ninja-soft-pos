@@ -1,9 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, ScrollText, X } from "lucide-react";
 import { format } from "date-fns";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import {
   DateRangePicker,
   type DateRange,
@@ -14,6 +13,8 @@ import {
   useInternalTenants,
 } from "@/modules/internal/hooks";
 import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
   if (value == null) return null;
@@ -58,12 +59,17 @@ export default function InternalAuditPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Auditoría</Display>
-      <p className="mt-2 text-muted-foreground">
-        Bitácora administrativa y operativa de todos los tenants. Solo lectura
-        (append-only). Últimos 200 registros según filtros.
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Auditoría"
+        icon={ScrollText}
+        description={
+          <>
+            Bitácora administrativa y operativa de todos los tenants. Solo lectura
+            (append-only). Últimos 200 registros según filtros.
+          </>
+        }
+      />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <select
@@ -106,10 +112,10 @@ export default function InternalAuditPage() {
         {range?.from && (
           <button
             onClick={() => setRange(undefined)}
-            className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
             title="Quitar filtro de fechas"
           >
-            ✕ Fechas
+            <X size={14} /> Fechas
           </button>
         )}
       </div>
@@ -130,7 +136,7 @@ export default function InternalAuditPage() {
             {isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Cargando…
+                  <Spinner />
                 </td>
               </tr>
             )}

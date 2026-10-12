@@ -27,11 +27,10 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const VARIANT = {
   success: {
     icon: CheckCircle2,
-    ring: "ring-emerald-500/20",
     iconCls: "text-success",
   },
-  error: { icon: XCircle, ring: "ring-red-500/20", iconCls: "text-danger" },
-  info: { icon: Info, ring: "ring-ninja-flameSoft/25", iconCls: "text-ninja-flameSoft" },
+  error: { icon: XCircle, iconCls: "text-danger" },
+  info: { icon: Info, iconCls: "text-ninja-flameSoft" },
 } as const;
 
 let nextId = 0;
@@ -60,9 +59,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               key={item.id}
               onOpenChange={(open) => !open && remove(item.id)}
               className={cn(
-                "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground shadow-ninjaSoft ring-1 backdrop-blur-xl",
+                "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl",
                 "data-[state=open]:animate-slide-up data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform",
-                v.ring,
               )}
             >
               <Icon size={18} className={cn("mt-0.5 shrink-0", v.iconCls)} />

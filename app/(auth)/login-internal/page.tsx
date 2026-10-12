@@ -54,7 +54,7 @@ export default function LoginInternalPage({
   }
 
   return (
-    <Card className="border-ninja-flame/30">
+    <Card>
       <CardHeader>
         <Eyebrow className="mb-2 flex items-center gap-1.5">
           <ShieldCheck size={13} /> Staff NinjaSoft
@@ -69,7 +69,7 @@ export default function LoginInternalPage({
       </CardHeader>
       <CardContent>
         {inactivityLogout && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-warning">
+          <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-amber-500/10 p-3 text-sm text-warning">
             <Clock size={16} className="mt-0.5 shrink-0" />
             <span>Tu sesión se cerró por inactividad. Volvé a iniciar sesión para continuar.</span>
           </div>

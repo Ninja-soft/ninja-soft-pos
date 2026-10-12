@@ -244,3 +244,20 @@ Mínimo obligatorio:
 - [ ] Sin duplicación de patrones existentes.
 
 Si el cambio afecta POS, internal, reportes o configuración, el control es bloqueante para cerrar el hito.
+
+## 17. Primitivos de orden visual (2026-10)
+
+| Necesito… | Uso |
+|---|---|
+| Encabezado de pantalla | `PageHeader` (eyebrow, título, ícono del menú, ayuda, bajada, acciones) dentro de `PageContainer`. |
+| Título de bloque | `SectionHeader`. |
+| Lista o tabla vacía | `EmptyState` (ícono + título + bajada + CTA; `compact` en cards/modales/tablas). |
+| Cargando | `Spinner` / `SpinnerBlock` / `TableStateRow loading`. Nunca texto "Cargando…". |
+| Aviso | `Callout` (relleno tonal). |
+| Estado | `Badge` (relleno tonal). |
+| Opciones excluyentes | `Segmented` (cortas) o `ChoiceCard` / `choiceClass` + `ChoiceDot` (con bajada). |
+| Tabla | `TableWrap` (scroll horizontal dentro de la card) + `TableStateRow`. |
+| App de terceros | `IntegrationLogo` con el logo oficial (`public/images/integrations/<app>.webp`). |
+| Modal | `Modal` con `footer` para las acciones (hoja inferior en mobile). |
+
+Reglas: lo seleccionado o destacado se marca con **relleno** (`border-transparent bg-ninja-flame/[0.12]`), nunca con borde o ring de color; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).

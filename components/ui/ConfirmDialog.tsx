@@ -42,7 +42,27 @@ export function ConfirmDialog({
   const canConfirm = !withReason || reason.trim().length > 0;
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} className="max-w-sm">
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      className="max-w-sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={danger ? "destructive" : "primary"}
+            loading={loading}
+            disabled={!canConfirm}
+            onClick={() => onConfirm(reason.trim())}
+          >
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
       <div className="space-y-4">
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
         {withReason && (
@@ -57,19 +77,6 @@ export function ConfirmDialog({
             }}
           />
         )}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            {cancelLabel}
-          </Button>
-          <Button
-            variant={danger ? "destructive" : "primary"}
-            loading={loading}
-            disabled={!canConfirm}
-            onClick={() => onConfirm(reason.trim())}
-          >
-            {confirmLabel}
-          </Button>
-        </div>
       </div>
     </Modal>
   );

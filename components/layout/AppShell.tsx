@@ -435,7 +435,7 @@ export function AppShell({
           <Link
             href="/internal/tenants"
             onClick={() => setDrawer(false)}
-            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
               <ShieldCheck size={16} />
@@ -488,7 +488,7 @@ export function AppShell({
             className="absolute inset-0 bg-black/50"
             onClick={() => setDrawer(false)}
           />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover">
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <button
               onClick={() => setDrawer(false)}
               className="absolute right-3 top-3 text-muted-foreground"
@@ -502,7 +502,7 @@ export function AppShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 glass-blur lg:hidden">
+        <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>

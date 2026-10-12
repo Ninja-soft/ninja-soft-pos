@@ -454,7 +454,7 @@ export function PlanEditorModal({
                 </span>
               </span>
               {recommended && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-ninja-gold/40 bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold">
+                <span className="inline-flex items-center gap-1 rounded-full bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold">
                   <Star size={11} className="fill-ninja-gold" /> Recomendado
                 </span>
               )}
@@ -572,7 +572,7 @@ export function PlanEditorModal({
                   className={cn(
                     "grid h-10 w-10 place-items-center rounded-lg border transition",
                     icon === key
-                      ? "border-ninja-flameSoft bg-ninja-flame/15 text-ninja-flameSoft"
+                      ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
                       : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >

@@ -16,6 +16,7 @@ import {
   useInviteCodeMutations,
 } from "@/modules/internal/hooks";
 import type { InviteCode, InviteKind } from "@/modules/internal/api";
+import { Spinner } from "@/components/ui/Spinner";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -53,7 +54,7 @@ function codeStatus(c: InviteCode): {
     };
   return {
     label: "Activo",
-    cls: "border-emerald-400/30 bg-emerald-400/10 text-success",
+    cls: "border-transparent bg-emerald-400/10 text-success",
     expired: false,
   };
 }
@@ -189,7 +190,7 @@ export function InviteCodesCard() {
                       colSpan={7}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
-                      Cargando códigos…
+                      <Spinner />
                     </td>
                   </tr>
                 )}

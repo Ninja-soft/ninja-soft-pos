@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Plus, Search, Trash2, Utensils } from "lucide-react";
+import { Clock, Plus, Search, Trash2, Utensils, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
@@ -22,6 +22,8 @@ import {
   timeToMin,
   isValidWindow,
 } from "@/lib/gastro/menuTime";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // F13 · H47 — Administrador de menús por horario (daypart). El dueño define
 // menús (Desayuno, Almuerzo, Cena, Happy hour…), sus ventanas horarias (día +
@@ -80,12 +82,11 @@ export function MenusManager() {
       </div>
 
       {isLoading ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : (menus ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-          Sin menús. Creá uno (ej. “Desayuno”, “Almuerzo”, “Happy hour”) y definí
-          su horario y sus productos.
-        </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={BookOpen} title="Todavía no hay menús" description="Creá uno (Desayuno, Almuerzo, Happy hour) y definí su horario y sus productos." />
+        </div>
       ) : (
         <div className="space-y-3">
           {(menus ?? []).map((m: Menu) => (

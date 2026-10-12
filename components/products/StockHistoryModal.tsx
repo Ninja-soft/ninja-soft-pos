@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useStockMovements } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
 import { formatQty } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const REASON_LABELS: Record<string, string> = {
   purchase: "Compra",
@@ -33,9 +34,7 @@ export function StockHistoryModal({ open, onOpenChange, product }: Props) {
     >
       <div className="max-h-96 overflow-y-auto">
         {isLoading ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Cargando…
-          </p>
+          <SpinnerBlock className="py-6" />
         ) : !data || data.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Sin movimientos registrados.

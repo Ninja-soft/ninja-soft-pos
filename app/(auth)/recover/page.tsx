@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
+import { appOrigin } from "@/lib/site";
 
 export default function RecoverPage() {
   const [sent, setSent] = useState(false);
@@ -28,7 +29,7 @@ export default function RecoverPage() {
     const supabase = createClient();
     // Email con la plantilla propia (Resend/SMTP), no el mailer de Supabase.
     await supabase.functions.invoke("send_password_recovery", {
-      body: { email: values.email, origin: window.location.origin },
+      body: { email: values.email, origin: appOrigin() },
     });
     // No revelamos si el email existe (anti enumeración).
     setSent(true);

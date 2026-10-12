@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Typography";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { appOrigin } from "@/lib/site";
 
 type Status = {
   updated_at: string | null;
@@ -52,7 +53,7 @@ export function PlatformMpCard() {
     setRedirectUri(
       status.redirect_uri ??
         (typeof window !== "undefined"
-          ? `${window.location.origin}/api/mp/oauth/callback`
+          ? `${appOrigin()}/api/mp/oauth/callback`
           : ""),
     );
   }, [status]);

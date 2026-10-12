@@ -34,6 +34,7 @@ import {
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
+import { appOrigin } from "@/lib/site";
 
 const STATUSES = [
   { key: "trial", name: "Trial" },
@@ -110,7 +111,7 @@ export default function InternalTenantDetail({
     mutationFn: async () => {
       const backUrl =
         typeof window !== "undefined"
-          ? `${window.location.origin}/internal/tenants/${params.id}`
+          ? `${appOrigin()}/internal/tenants/${params.id}`
           : undefined;
       const { data, error } = await supabase.functions.invoke(
         "mp_subscription_checkout",

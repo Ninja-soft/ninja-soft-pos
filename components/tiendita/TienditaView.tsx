@@ -31,6 +31,7 @@ import { startCatalogCheckout } from "@/modules/tiendita/storefront";
 import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/storefront";
 import { TienditaIntro } from "./TienditaIntro";
 import { ImportProductModal } from "./ImportProductModal";
+import { appOrigin } from "@/lib/site";
 
 // Mensajes honestos para los códigos de error del checkout.
 const CHECKOUT_ERRORS: Record<string, string> = {
@@ -79,7 +80,7 @@ export function TienditaView() {
 
   const buy = useMutation({
     mutationFn: async (catalog: StorefrontCatalog) => {
-      const backUrl = `${window.location.origin}/tiendita?bought=ok`;
+      const backUrl = `${appOrigin()}/tiendita?bought=ok`;
       return startCatalogCheckout(catalog.id, backUrl);
     },
     onSuccess: (initPoint) => {

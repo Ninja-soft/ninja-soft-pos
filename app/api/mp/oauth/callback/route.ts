@@ -5,6 +5,7 @@
 // panel de Configuración con el resultado. Nunca expone secretos al browser.
 // =============================================================================
 import { NextRequest, NextResponse } from "next/server";
+import { appOrigin } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const state = params.get("state");
   const mpError = params.get("error");
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin;
+  const appUrl = appOrigin(req.nextUrl.origin);
   const back = (status: string) =>
     NextResponse.redirect(`${appUrl}/configuracion?mp=${status}`);
 

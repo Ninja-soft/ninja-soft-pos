@@ -155,10 +155,12 @@ Iconos personalizados de NinjaSoft: solo cuando ningún ícono de Lucide encaja.
 
 ## 8. Sombras y elevación
 
-Sobre fondo dark, las sombras casi no se ven. Usamos:
-- Bordes sutiles (`border-shadow`).
-- Cambio de luminosidad del fondo (`mid-violet` sobre `void-violet`).
-- Glow sutil con `flame` o `gold` en elementos activos (`shadow-flame/20`).
+Sin sombras paralelas, glow ni degradados decorativos (dirección 2026-10). La elevación se resuelve con:
+- Borde de 1px del tema (`border-border`).
+- Cambio de relleno (`bg-card` sobre `bg-background`, `bg-muted` para zonas internas).
+- Acento sólido (`--pos-solid`, texto blanco) para el CTA y los indicadores activos (switch, check, progreso). Nunca `bg-ninja-gradient`, `shadow-ninjaGlow` ni texto en degradado.
+
+`--shadow-soft`, `--choice-shadow` y `--seg-thumb-shadow` quedan en "sin sombra" (en claro el pulgar del segmentado lleva un borde de 1px). Radios: `rounded-md`/`rounded-lg` en cards, campos y botones; `rounded-xl` sólo en hojas y diálogos; nada de `rounded-2xl`/`3xl`. Excepciones: el patrón de fondo y el resalte de precios que elige el usuario en Apariencia, la protección de texto sobre fotos (Tiendita) y la animación de bienvenida de Tiendita.
 
 ## 9. Estados interactivos
 

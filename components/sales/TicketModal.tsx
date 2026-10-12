@@ -16,6 +16,7 @@ import {
 import {
   useActiveTemplate,
   usePrintProfiles,
+  usePrintTarget,
   useTenantSmtpStatus,
   useTicketBranding,
 } from "@/modules/tickets/hooks";
@@ -30,6 +31,7 @@ import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { NoData } from "@/components/ui/NoData";
 import { useBranches } from "@/modules/branches/hooks";
 import { ticketLocation } from "@/lib/tickets/location";
+import { printTargetLabel } from "@/lib/print/printers";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
 interface Props {
@@ -41,7 +43,11 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
-  const { data: brand } = useTicketBranding(open);
+  // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
+  const { data: brand } = useTicketBranding(
+    open,
+    (data?.sale as { store_id?: string | null } | undefined)?.store_id ?? null,
+  );
   // Plantilla activa por DESTINO: impresión vs email pueden diferir.
   const { data: printTpl } = useActiveTemplate("print", open);
   const { data: emailTpl } = useActiveTemplate("email", open);
@@ -54,8 +60,11 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const smtpMissing = Boolean(smtp?.allowed && !smtp.configured);
   // Perfil de impresión del tipo "ticket de venta" (H22): formato, copias y
   // auto/manual configurados por el negocio en Configuración → Impresión.
+  // F17 · ADR-049: perfil efectivo de la caja e impresora registrada (o la
+  // del equipo) donde sale el ticket.
   const { data: printProfiles } = usePrintProfiles(open);
-  const saleProfile = printProfiles?.sale;
+  const printTarget = usePrintTarget("sale", open);
+  const saleProfile = printTarget?.profile ?? printProfiles?.sale;
   const { toast } = useToast();
   const qc = useQueryClient();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -327,7 +336,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
                 <Button
                   onClick={() => webPrintCopies(saleCopies)}
                   className="h-10 w-10 p-0"
-                  title={saleCopies > 1 ? `Imprimir (${saleCopies} copias)` : "Imprimir"}
+                  title={`${saleCopies > 1 ? `Imprimir (${saleCopies} copias)` : "Imprimir"}${printTarget ? ` · ${printTargetLabel(printTarget)}` : ""}`}
                   aria-label="Imprimir"
                 >
                   <Printer size={18} />

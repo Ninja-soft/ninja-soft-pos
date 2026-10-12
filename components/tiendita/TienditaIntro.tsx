@@ -82,10 +82,6 @@ export function TienditaIntro() {
     >
       {/* Aurora giratoria de fondo: da profundidad y movimiento sutil. */}
       <div className="tiendita-aurora pointer-events-none absolute left-1/2 top-1/2 h-[150vmax] w-[150vmax] -translate-x-1/2 -translate-y-1/2" />
-      {/* Glow focal cálido detrás del título. */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_58%_at_50%_46%,rgba(255,75,34,0.20),transparent_70%)]" />
-      {/* Viñeta para enfocar el centro. */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_50%_50%,transparent_55%,rgba(4,2,13,0.55)_100%)]" />
 
       {/* Chispas que suben (detrás de los logos). */}
       {SPARKS.map((s, i) => (
@@ -108,7 +104,7 @@ export function TienditaIntro() {
         return (
           <span
             key={`${logo.alt}-${i}`}
-            className="tiendita-logo absolute grid place-items-center rounded-2xl border border-white/10 bg-white/95 shadow-[0_16px_50px_rgba(4,2,13,0.55)] ring-1 ring-ninja-flame/10 backdrop-blur"
+            className="tiendita-logo absolute grid place-items-center rounded-lg border border-white/10 bg-white"
             style={{
               top: pos.top,
               left: pos.left,
@@ -136,10 +132,10 @@ export function TienditaIntro() {
 
       {/* Título central */}
       <div className="tiendita-intro-title relative z-10 px-6 text-center">
-        <span className="tiendita-badge relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+        <span className="tiendita-badge relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-lg bg-[var(--pos-solid)] text-white">
           <Sparkles size={28} />
           {/* Anillo que pulsa alrededor del ícono. */}
-          <span className="tiendita-ring pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-ninja-flameSoft/50" />
+          <span className="tiendita-ring pointer-events-none absolute inset-0 rounded-lg ring-2 ring-ninja-flameSoft/50" />
         </span>
         <h1 className="tiendita-shine text-4xl font-black tracking-tight text-white sm:text-5xl">
           Tiendita

@@ -82,4 +82,13 @@ describe("dependencias de features", () => {
     }
     expect(FEATURE_INFO.traslados?.needs).toMatch(/dos sucursales/);
   });
+
+  it("compras desde Pro y costeo de importación desde Business, que requiere compras (ADR-050)", () => {
+    expect(FEATURE_INFO.compras?.minPlan).toBe("Pro");
+    expect(featureRequires("compras")).toEqual([]);
+    expect(FEATURE_INFO.compras_importacion?.minPlan).toBe("Business");
+    expect(featureRequires("compras_importacion")).toEqual(["compras"]);
+    expect(FEATURE_INFO.compras_importacion?.desc).toMatch(/no se suma al costo/);
+    expect(FEATURE_INFO.compras_importacion?.needs).toMatch(/modo profesional/);
+  });
 });

@@ -42,6 +42,7 @@ export type SettingsSectionKey =
   | "impresion"
   | "email"
   | "pagos"
+  | "terminales"
   | "operacion"
   | "salones"
   | "menus"
@@ -216,6 +217,15 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Conectá tus cuentas y elegí con qué canales cobrás en el POS.",
         icon: CreditCard,
         keywords: "mercado pago tarjetas cuotas qr posnet transferencia efectivo recargo",
+      },
+      // F17 · H93 (ADR-049): registro de terminales por sucursal y caja (BASE).
+      {
+        key: "terminales",
+        label: "Terminales de cobro",
+        title: "Terminales de cobro",
+        description: "Point, Clover, cajas QR y posnets de cada sucursal y caja. El POS usa la de su caja sola.",
+        icon: CreditCard,
+        keywords: "point clover nave posnet lector terminal caja qr sucursal numero de comercio",
       },
       // Promociones (F9 · H53): por ahora SIN gating de plan, es sólo la
       // DEFINICIÓN. El gating por `promociones` se suma con la aplicación.

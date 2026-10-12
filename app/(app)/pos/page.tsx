@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, Utensils } from "lucide-react";
+import { Bike, CalendarDays, Hourglass, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -78,6 +78,19 @@ import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
 import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
 import { usePosSale } from "@/modules/pos/screen/usePosSale";
 import { formatCurrency } from "@/lib/utils/format";
+import { usePosPark, type EditingCharge } from "@/modules/pos/screen/usePosPark";
+import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
+import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
+import { pendingChargesApi, cancelAtProvider } from "@/modules/pending-charges/api";
+import {
+  closeShiftDecision,
+  PARK_BLOCK_COPY,
+  pendingChargeErrorCopy,
+  restorableCart,
+  type PendingCharge,
+} from "@/modules/pending-charges/logic";
+import type { CartLine } from "@/modules/pos/store";
+import { Modal } from "@/components/ui/Modal";
 
 // Pantalla de venta. La página orquesta datos y reglas de negocio (carrito,
 // orígenes, promos, venta); la piel la decide el diseño elegido (PosShell +
@@ -109,6 +122,11 @@ const SellPackModal = dynamic(() => loadSellPack().then((m) => m.SellPackModal),
 const BarcodeScanner = dynamic(() => loadBarcodeScanner().then((m) => m.BarcodeScanner), { ssr: false });
 const DniScanModal = dynamic(() => loadDniScan().then((m) => m.DniScanModal), { ssr: false });
 const SalonTablesConnected = dynamic(() => loadSalon().then((m) => m.SalonTablesConnected), { ssr: false });
+// Cobros en espera (ADR-048): la pestaña se abre como hoja dentro del POS.
+const PendingChargesPanel = dynamic(
+  () => import("@/components/pending-charges/PendingChargesPanel").then((m) => m.PendingChargesPanel),
+  { ssr: false },
+);
 
 function preloadPosModals() {
   for (const load of [
@@ -174,6 +192,10 @@ function PosPageInner() {
   const [offeredWarrantyId, setOfferedWarrantyId] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
+  // Cobros en espera (ADR-048): hoja de la pestaña y cobro en edición.
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingInitialId, setPendingInitialId] = useState<string | null>(null);
+  const [editingCharge, setEditingCharge] = useState<EditingCharge | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   // Preferencia por dispositivo: auto-imprimir el ticket al cobrar.
   const [autoPrint, setAutoPrint] = useState(false);
@@ -672,17 +694,27 @@ function PosPageInner() {
     }
   }
 
-  async function handleCloseShift(closing: number, notes: string) {
+  async function handleCloseShift(closing: number, notes: string, pendingAction: "cancel" | "carry" | null) {
     if (!shift) return;
+    // Cobros en espera del turno que se cancelan: baja en el proveedor después.
+    const toCancel = pendingAction === "cancel"
+      ? pendingWatch.open.filter((c) => c.cash_shift_id === shift.id && c.status === "waiting")
+      : [];
     try {
-      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes });
+      const diff = await close.mutateAsync({ shiftId: shift.id, closing, notes, pendingAction });
+      for (const c of toCancel) void cancelAtProvider(c.provider_key, c.channel, c.intent_id);
       setCloseShiftModal(false);
       toast({ title: "Caja cerrada", description: `Diferencia: ${formatCurrency(diff)}`, variant: diff === 0 ? "success" : "info" });
     } catch (e) {
       const msg = e instanceof Error ? e.message : undefined;
+      const known = msg && (msg.includes("close_needs_reason") || msg.includes("pending_charges_decision_required"));
       toast({
-        title: msg && msg.includes("close_needs_reason") ? "Escribí un motivo: la diferencia supera la tolerancia" : "No se pudo cerrar",
-        description: msg && msg.includes("close_needs_reason") ? undefined : msg,
+        title: msg && msg.includes("close_needs_reason")
+          ? "Escribí un motivo: la diferencia supera la tolerancia"
+          : msg && msg.includes("pending_charges_decision_required")
+            ? pendingChargeErrorCopy(msg)
+            : "No se pudo cerrar",
+        description: known ? undefined : msg,
         variant: "error",
       });
     }
@@ -701,6 +733,83 @@ function PosPageInner() {
     [],
   );
 
+  // ── Cobros en espera (ADR-048) ─────────────────────────────────────────────
+  const pcMut = usePendingChargeMutations();
+  const parkFeature = useFeature("cobros_en_espera");
+  const pendingWatch = usePendingChargesWatcher({
+    storeId: register?.store_id ?? null,
+    // Siempre: aunque el plan ya no incluya la función, los cobros que quedaron
+    // abiertos se tienen que poder ver, cobrar y decidir al cerrar la caja.
+    enabled: true,
+    onPrint: (saleId) => {
+      setTicketId(saleId);
+      setTicketOpen(true);
+    },
+    // Factura electrónica todavía no disponible: se abre el comprobante (con
+    // email y PDF). Cuando exista AFIP, este es el punto de entrada.
+    onInvoice: (saleId) => {
+      setTicketId(saleId);
+      setTicketOpen(true);
+      toast({ title: "La factura electrónica llega con la integración con ARCA. Por ahora enviá o imprimí el comprobante.", variant: "info" });
+    },
+    onOpen: (id) => {
+      setPendingInitialId(id);
+      setPendingOpen(true);
+    },
+  });
+  const parkBlockedReason =
+    parkFeature === false
+      ? PARK_BLOCK_COPY.feature_off
+      : !hasShift
+        ? PARK_BLOCK_COPY.no_shift
+        : origins.tableOrderId || origins.deliveryOrderId
+          ? PARK_BLOCK_COPY.table_or_delivery
+          : origins.appointmentId
+            ? PARK_BLOCK_COPY.appointment
+            : null;
+  const parker = usePosPark({
+    lines,
+    discountTotal,
+    customer,
+    salePromo: pricing.salePromo,
+    couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
+    couponCode: pricing.appliedCoupon?.code ?? null,
+    editing: editingCharge,
+    onParked: () => {
+      setCheckoutOpen(false);
+      clear();
+      setCustomer(null);
+      setOfferedWarrantyId("");
+      pricing.clearCoupon();
+      setEditingCharge(null);
+    },
+  });
+  const closePending = shift ? closeShiftDecision(pendingWatch.open, shift.id) : null;
+
+  // "Editar en el POS": el carrito del cobro vuelve al POS; al generar el QR
+  // nuevo, "Actualizar cobro en espera" le cambia carrito, monto y link.
+  function editPendingCharge(c: PendingCharge) {
+    if (useCartStore.getState().lines.length > 0) {
+      toast({ title: "Terminá o vaciá la venta en curso para editar un cobro en espera", variant: "error" });
+      return;
+    }
+    const snap = restorableCart(c.cart);
+    if (!snap) {
+      toast({ title: "Este cobro no guardó el carrito: cancelalo y cobrá de nuevo", variant: "error" });
+      return;
+    }
+    useCartStore.setState({ lines: snap.lines as unknown as CartLine[], discountTotal: snap.discountTotal });
+    setCustomer(snap.customer);
+    if (snap.couponCode) {
+      pricing.setCouponInput(snap.couponCode);
+      toast({ title: `Volvé a aplicar el cupón ${snap.couponCode}`, variant: "info" });
+    }
+    setEditingCharge({ id: c.id, version: c.version, provider: c.provider_key, number: c.id.slice(0, 6) });
+    setPendingOpen(false);
+  }
+  const editRef = useRef(editPendingCharge);
+  editRef.current = editPendingCharge;
+
   const { handleSale, saving } = usePosSale({
     lines,
     discountTotal,
@@ -711,6 +820,17 @@ function PosPageInner() {
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
     onSuccess: ({ saleId, change }) => {
+      // Se cobró en el momento lo que estaba en espera: el cobro viejo se cancela.
+      if (editingCharge) {
+        const ed = editingCharge;
+        setEditingCharge(null);
+        void pendingChargesApi
+          .get(ed.id)
+          .then((c) => (c ? pcMut.cancel.mutateAsync({ charge: c, reason: "Cobrado en el momento" }) : null))
+          .catch(() =>
+            toast({ title: "Revisá el cobro en espera que estabas editando: no se pudo cancelar", variant: "error" }),
+          );
+      }
       setCheckoutOpen(false);
       clear();
       setCustomer(null);
@@ -783,6 +903,17 @@ function PosPageInner() {
     router.replace("/pos", { scroll: false });
     if (useCartStore.getState().lines.length > 0) startCheckoutRef.current();
   }, [wantsCheckout, shiftFetched, router]);
+
+  const editParam = searchParams.get("editar");
+  useEffect(() => {
+    if (!editParam) return;
+    router.replace("/pos", { scroll: false });
+    void pendingChargesApi
+      .get(editParam)
+      .then((c) => (c ? editRef.current(c) : null))
+      .catch(() => toast({ title: "No se encontró el cobro en espera", variant: "error" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam]);
 
   // Atajos: F2 busca, F12 cobra.
   useEffect(() => {
@@ -895,6 +1026,21 @@ function PosPageInner() {
   const banners = (
     <>
       <ForeignShiftBanner shift={shift} />
+      {editingCharge && (
+        <ModeBanner
+          tone="info"
+          icon={<Hourglass size={18} />}
+          title="Editando un cobro en espera"
+          text="Cambiá lo que haga falta y generá el QR o link de nuevo: “Actualizar cobro en espera” reemplaza el link anterior. Si lo cobrás ahora con otro medio, el cobro en espera se cancela."
+          exitLabel="Salir sin cambios"
+          onExit={() => {
+            setEditingCharge(null);
+            clear();
+            setCustomer(null);
+            pricing.clearCoupon();
+          }}
+        />
+      )}
       {origins.apptActive && origins.pendingAppt && (
         <ModeBanner
           icon={<CalendarDays size={18} />}
@@ -992,6 +1138,32 @@ function PosPageInner() {
             onOpenShift={() => setOpenShiftModal(true)}
             onCloseShift={() => setCloseShiftModal(true)}
             onCustomerDisplay={openCustomerDisplay}
+            pendingSlot={
+              parkFeature !== false || pendingWatch.open.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingInitialId(null);
+                    setPendingOpen(true);
+                  }}
+                  className="relative grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fg-4 text-muted-foreground transition-colors hover:bg-fg-6 hover:text-foreground"
+                  aria-label={`Cobros en espera${pendingWatch.waiting ? `: ${pendingWatch.waiting}` : ""}`}
+                  title="Cobros en espera"
+                >
+                  <Hourglass size={18} aria-hidden />
+                  {pendingWatch.waiting + pendingWatch.attention > 0 && (
+                    <span
+                      className={
+                        "absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold text-white " +
+                        (pendingWatch.attention > 0 ? "bg-warning" : "bg-ninja-flame")
+                      }
+                    >
+                      {pendingWatch.waiting + pendingWatch.attention}
+                    </span>
+                  )}
+                </button>
+              ) : undefined
+            }
             preset={preset}
             usingOwn={hasUserOverride && Boolean(userLayout.preset)}
             diningEnabled={Boolean(diningEnabled)}
@@ -1066,7 +1238,25 @@ function PosPageInner() {
           onConfirm={handleCloseShift}
           loading={close.isPending}
           locationLabel={locationLabel(registerStore, register)}
+          pending={closePending}
         />
+      </MountWhenOpened>
+
+      {/* Cobros en espera (ADR-048): pestaña dentro del POS. */}
+      <MountWhenOpened open={pendingOpen}>
+        <Modal open={pendingOpen} onOpenChange={setPendingOpen} title="Cobros en espera" className="sm:max-w-2xl">
+          <PendingChargesPanel
+            storeId={register?.store_id ?? null}
+            initialId={pendingInitialId}
+            onEditInPos={editPendingCharge}
+            onPrint={(saleId) => {
+              setTicketId(saleId);
+              setTicketOpen(true);
+            }}
+            canForce={role === "owner" || role === "manager"}
+            compact
+          />
+        </Modal>
       </MountWhenOpened>
 
       {/* Cobro único: todos los medios, pago dividido, propina y promo por medio. */}
@@ -1097,6 +1287,15 @@ function PosPageInner() {
             return handleSale(...args);
           }}
           onQrState={handleQrState}
+          park={{
+            blockedReason: parkBlockedReason,
+            label: editingCharge ? "Actualizar cobro en espera" : "Dejar en espera",
+            customerName: customer?.name ?? null,
+            customerEmail: parker.customerEmail,
+            customerPhone: parker.customerPhone,
+            onPark: parker.onPark,
+            onEmail: parker.onEmail,
+          }}
         />
       </MountWhenOpened>
 

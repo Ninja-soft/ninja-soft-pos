@@ -26,6 +26,11 @@ export const ProductSchema = z.object({
   brand_id: z.string().uuid().nullable().optional(),
   price: z.coerce.number().nonnegative("Debe ser ≥ 0"),
   cost: z.coerce.number().nonnegative("Debe ser ≥ 0").optional(),
+  // Costo de reposición (F18 · H101): vacío = sin cargar (null), no cero.
+  replacement_cost: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.coerce.number().nonnegative("Debe ser ≥ 0").optional(),
+  ),
   stock: z.coerce.number().default(0),
   stock_min: z.coerce.number().nonnegative().default(0),
   unit: z.string().min(1).max(10).default("un"),

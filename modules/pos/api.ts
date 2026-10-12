@@ -468,6 +468,36 @@ export function mapPosSettings(raw: Record<string, unknown> | null): PosSettings
   };
 }
 
+// Lugar del cobro presencial (F17 · H93, ADR-049): terminal del registro
+// (payment_terminals) y sucursal / caja del POS. La Edge valida en el servidor
+// que la terminal sea del negocio y de esa sucursal, y que la sucursal o la
+// caja no hayan apagado el medio. Todo opcional: sin datos, el flujo de antes.
+export interface PaymentLocation {
+  terminalId?: string | null;
+  storeId?: string | null;
+  registerId?: string | null;
+}
+
+function locationBody(loc?: PaymentLocation): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (loc?.terminalId) out.terminal_id = loc.terminalId;
+  if (loc?.storeId) out.store_id = loc.storeId;
+  if (loc?.registerId) out.register_id = loc.registerId;
+  return out;
+}
+
+// supabase-js envuelve los no-2xx: se lee el código del body para mostrarlo.
+async function edgeError(error: unknown): Promise<Error> {
+  const ctx = (error as { context?: Response }).context;
+  try {
+    const body = ctx ? ((await ctx.json()) as { error?: string }) : null;
+    if (body?.error) return new Error(body.error);
+  } catch {
+    // body no JSON: se usa el error original.
+  }
+  return error instanceof Error ? error : new Error("edge_error");
+}
+
 export const posApi = {
   // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
   // criterio histórico: el último turno abierto visible para el usuario.
@@ -497,13 +527,17 @@ export const posApi = {
     shiftId: string,
     closing: number,
     notes?: string,
+    // Cobros en espera del turno (ADR-048): cancelarlos o pasarlos a la
+    // próxima apertura. Sin cobros abiertos no hace falta.
+    pendingAction?: "cancel" | "carry" | null,
   ): Promise<number> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("close_cash_shift", {
       p_shift_id: shiftId,
       p_closing_amount: closing,
       p_notes: notes,
-    });
+      ...(pendingAction ? { p_pending_action: pendingAction } : {}),
+    } as never);
     if (error) throw error;
     return data as number;
   },
@@ -665,12 +699,13 @@ export const posApi = {
   createMpOrderQr: async (
     amount: number,
     title: string,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string; init_point: string; order_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_qr", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...locationBody(loc) },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -724,13 +759,15 @@ export const posApi = {
     longitude?: number;
     coordinates?: string;
     reference?: string;
+    // F17 · ADR-049: caja QR propia de una caja (sin esto, la caja única).
+    cash_register_id?: string;
   }): Promise<{ env: "prod" | "test" }> => {
     const res = await invokeMpQr<{ env?: "prod" | "test" }>({ action: "setup", ...input });
     return { env: res.env ?? "prod" };
   },
 
-  mpQrReset: async (): Promise<void> => {
-    await invokeMpQr({ action: "reset" });
+  mpQrReset: async (cashRegisterId?: string): Promise<void> => {
+    await invokeMpQr({ action: "reset", ...(cashRegisterId ? { cash_register_id: cashRegisterId } : {}) });
   },
 
   // ── Mercado Point (H15 resto): cobro presencial en el lector ───────────────
@@ -765,18 +802,20 @@ export const posApi = {
     deviceId: string,
     amount: number,
     opts?: { installments?: number; defaultType?: "debit_card" | "credit_card" },
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
       body: {
         action: "create",
         device_id: deviceId,
+        ...locationBody(loc),
         amount,
         ...(opts?.installments ? { installments: opts.installments } : {}),
         ...(opts?.defaultType ? { default_type: opts.defaultType } : {}),
       },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -1050,12 +1089,13 @@ export const posApi = {
   createNavePointIntent: async (
     deviceId: string,
     amount: number,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave_point", {
-      body: { action: "create", device_id: deviceId, amount },
+      body: { action: "create", device_id: deviceId, amount, ...locationBody(loc) },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -1121,12 +1161,19 @@ export const posApi = {
     deviceId: string,
     amount: number,
     installments?: number,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("clover_point", {
-      body: { action: "create", device_id: deviceId, amount, installments: installments ?? null },
+      body: {
+        action: "create",
+        device_id: deviceId,
+        amount,
+        installments: installments ?? null,
+        ...locationBody(loc),
+      },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }

@@ -104,12 +104,6 @@ export default function CustomerDisplayPage() {
       className="relative flex h-dvh w-full flex-col overflow-hidden bg-[#09051C] text-white"
       style={{ ["--cd-accent" as string]: accent }}
     >
-      {/* Glow de marca de fondo */}
-      <div
-        className="pointer-events-none absolute -top-1/3 left-1/2 h-[80vh] w-[80vh] -translate-x-1/2 rounded-full opacity-20 blur-3xl"
-        style={{ background: accent }}
-      />
-
       {state.phase === "idle" ? (
         <IdleScreen branding={branding} />
       ) : state.phase === "paid" ? (
@@ -148,7 +142,7 @@ function BrandLogo({
   if (branding.logoUrl) {
     return (
       <span
-        className="grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-white/95 p-1.5"
+        className="grid shrink-0 place-items-center overflow-hidden rounded-xl bg-white/95 p-1.5"
         style={{ height: size, width: size }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,7 +156,7 @@ function BrandLogo({
   }
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-2xl text-[var(--cd-accent)]"
+      className="grid shrink-0 place-items-center rounded-xl text-[var(--cd-accent)]"
       style={{ height: size, width: size, background: "rgba(255,255,255,0.06)" }}
     >
       <ShoppingBag size={size * 0.5} />
@@ -215,7 +209,7 @@ function SaleScreen({ state }: { state: DisplayState }) {
             {state.lines.map((l) => (
               <li
                 key={l.lineId}
-                className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.04] px-5 py-4"
+                className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.04] px-5 py-4"
               >
                 <div className="min-w-0">
                   <div className="truncate text-2xl font-semibold">{l.name}</div>
@@ -319,7 +313,7 @@ function QrPanel({ state }: { state: DisplayState }) {
       <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
         Escaneá para pagar
       </div>
-      <div className="mt-4 rounded-3xl bg-white p-4 shadow-2xl">
+      <div className="mt-4 rounded-xl bg-white p-4">
         {svg && (
           <svg
             role="img"
@@ -359,7 +353,7 @@ function PaidScreen({ state }: { state: DisplayState }) {
       <h1 className="mt-8 text-5xl font-black tracking-tight md:text-6xl">Pago recibido</h1>
       <p className="mt-4 text-2xl font-medium text-white/70">{thanks}</p>
       {(state.change ?? 0) > 0 && (
-        <div className="mt-8 rounded-2xl bg-white/[0.06] px-8 py-5">
+        <div className="mt-8 rounded-xl bg-white/[0.06] px-8 py-5">
           <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
             Tu vuelto
           </div>

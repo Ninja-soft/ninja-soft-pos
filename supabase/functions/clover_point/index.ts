@@ -29,6 +29,12 @@
 // tenant_has_feature_for(tenant,'fiserv') (la terminal integrada depende de la
 // marca Fiserv) en create; sin conexión Fiserv → not_connected. La terminal
 // recibida DEBE ser del comercio (Clover) o estar cargada en la conexión.
+//
+// Terminales (ADR-049): create acepta terminal_id (payment_terminals,
+// validado en el servidor con terminal_for_user: negocio, activa, proveedor
+// y sucursal del usuario; si viene store_id, esa sucursal). device_id sigue
+// funcionando (POS viejos). Si la sucursal o la caja apagaron el medio
+// (config_overrides) → payment_method_disabled_in_store.
 // =============================================================================
 import { buildPayRequest, cloverConnectBase, evaluateCloverPayment, intentEnvOf, isSafeCloverId, payErrorOutcome, toCents } from "../_shared/clover.ts";
 import {
@@ -47,6 +53,7 @@ import {
 } from "../_shared/clover_server.ts";
 import { authMember, cors, json } from "../_shared/nave_server.ts";
 import { runInBackground } from "../_shared/mpAuth.ts";
+import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
 
 // La Edge corta el POST antes de su límite de reloj; la terminal sigue con el
 // cobro y el poll lo resuelve por externalPaymentId.
@@ -148,7 +155,25 @@ Deno.serve(async (req: Request) => {
     return json({ devices, source: apiOk ? "clover" : "manual" });
   }
 
-  const deviceId = String(b.device_id ?? "");
+  const loc = locationOf(b);
+  let deviceId = String(b.device_id ?? "");
+  let terminalId: string | null = null;
+  let storeId = loc.storeId;
+  let registerId = loc.registerId;
+  if (action === "create" && b.terminal_id !== undefined && b.terminal_id !== null) {
+    const t = await resolveTerminal(admin, {
+      tenantId,
+      userId: userId,
+      terminalId: b.terminal_id,
+      providers: [PROVIDER],
+      storeId: loc.storeId,
+    });
+    if (!t.ok) return json({ error: t.error }, 400);
+    deviceId = t.terminal.external_id!;
+    terminalId = t.terminal.id;
+    storeId = t.terminal.store_id;
+    registerId = registerId ?? t.terminal.cash_register_id;
+  }
   if (!isSafeCloverId(deviceId)) return json({ error: "invalid_device" }, 400);
 
   // ── ping: ¿la terminal está conectada a la nube? ─────────────────────────────
@@ -167,8 +192,25 @@ Deno.serve(async (req: Request) => {
       if (allowed !== true) return json({ error: "payment_method_not_allowed", feature: key }, 403);
     }
 
-    const { devices } = await listDevices(conn);
-    if (!devices.some((d) => d.id === deviceId)) return json({ error: "invalid_device" }, 400);
+    if (await methodBlockedAt(admin, tenantId, PROVIDER, storeId, registerId)) {
+      return json({ error: "payment_method_disabled_in_store" }, 403);
+    }
+    if (!terminalId) {
+      const { devices } = await listDevices(conn);
+      if (!devices.some((d) => d.id === deviceId)) {
+        // Compatibilidad: id suelto, válido si está registrado como terminal del negocio.
+        const { data: reg } = await admin
+          .from("payment_terminals")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("provider_key", PROVIDER)
+          .eq("external_id", deviceId)
+          .eq("active", true)
+          .is("deleted_at", null)
+          .limit(1);
+        if (!(reg as unknown[] | null)?.length) return json({ error: "invalid_device" }, 400);
+      }
+    }
 
     const amount = Math.round(Number(b.amount) * 100) / 100;
     if (toCents(amount) === null) return json({ error: "invalid_amount" }, 400);
@@ -185,6 +227,7 @@ Deno.serve(async (req: Request) => {
         provider_key: PROVIDER,
         point_device_id: deviceId,
         mp_env: intentEnvOf(conn.env),
+        ...(terminalId ? { payment_terminal_id: terminalId } : {}),
       })
       .select(INTENT_COLS)
       .single();
@@ -204,6 +247,7 @@ Deno.serve(async (req: Request) => {
       userId,
     );
     runInBackground(runPayment(admin, conn, row, body));
+    await touchTerminal(admin, terminalId);
     return json({ intent_id: row.id });
   }
 

@@ -41,7 +41,7 @@ const BUCKET_COLORS: Record<AgingBucket, string> = {
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "danger" | "warning" }) {
   return (
-    <div className="rounded-xl bg-card p-4 shadow-sm ring-1 ring-border">
+    <div className="rounded-lg bg-card p-4 ring-1 ring-border">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
         className={cn(
@@ -215,7 +215,7 @@ export default function CuentasPage() {
               <Kpi label="Punitorios del mes" value={formatCurrency(totals?.interest_month)} />
             </div>
 
-            <div className="mt-4 rounded-xl bg-card p-4 shadow-sm ring-1 ring-border">
+            <div className="mt-4 rounded-lg bg-card p-4 ring-1 ring-border">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold">Antigüedad de la deuda (por vencimiento)</h2>
                 {bucket && (
@@ -267,7 +267,7 @@ export default function CuentasPage() {
                 </li>
               )}
               {rows.map((r) => (
-                <li key={r.customer_id} className="rounded-xl bg-card p-4 shadow-sm ring-1 ring-border">
+                <li key={r.customer_id} className="rounded-lg bg-card p-4 ring-1 ring-border">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Link

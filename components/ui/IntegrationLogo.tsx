@@ -75,7 +75,7 @@ export function IntegrationLogo({
     <span
       title={title ?? logo.label}
       className={cn(
-        "relative inline-grid shrink-0 place-items-center overflow-hidden bg-white shadow-sm ring-1 ring-black/5",
+        "relative inline-grid shrink-0 place-items-center overflow-hidden bg-white ring-1 ring-black/5",
         className,
       )}
       style={{

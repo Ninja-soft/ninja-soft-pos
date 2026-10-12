@@ -23,6 +23,7 @@ export function PosTopBar({
   onOpenShift,
   onCloseShift,
   onCustomerDisplay,
+  pendingSlot,
   preset,
   usingOwn,
   diningEnabled,
@@ -37,6 +38,8 @@ export function PosTopBar({
   onOpenShift: () => void;
   onCloseShift: () => void;
   onCustomerDisplay: () => void;
+  // Botón "Cobros en espera" con su contador (ADR-048).
+  pendingSlot?: React.ReactNode;
   preset: PosPreset;
   usingOwn: boolean;
   diningEnabled: boolean;
@@ -82,6 +85,7 @@ export function PosTopBar({
             {hasShift ? "Cerrar" : "Abrir"}
           </span>
         </button>
+        {pendingSlot}
         <button
           type="button"
           onClick={onCustomerDisplay}
@@ -106,7 +110,7 @@ export function PosTopBar({
             <Popover.Content
               align="end"
               sideOffset={8}
-              className="z-50 w-[min(92vw,360px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl animate-fade-in"
+              className="z-50 w-[min(92vw,360px)] rounded-xl border border-border bg-popover p-3 text-popover-foreground animate-fade-in"
             >
               <p className="px-1 text-sm font-semibold">Diseño de esta pantalla</p>
               <p className="px-1 pb-3 text-xs text-muted-foreground">

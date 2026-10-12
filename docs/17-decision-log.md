@@ -1623,6 +1623,131 @@ El dueño pidió traslados "muy flexibles y configurables, programados, muy robu
 
 ---
 
+## ADR-048: Cobros en espera con venta del lado del servidor, y QR más rápido (F8 · H21f y H21g)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/cobros-en-espera`, migración no aplicada) · **Hitos:** F8/H21f (cobros en espera) y F8/H21g (QR más rápido).
+
+### Contexto
+
+El dueño pidió: QR más rápidos; poder compartir el QR o link (email, WhatsApp, lo que elija) o marcar "ya lo compartí" y dejar el pago esperando mientras sigue cobrando; que avise al acreditarse para imprimir ticket o factura; decidir al cerrar la caja si cancela los pendientes o los pasa a la próxima apertura; pestaña propia para ver el detalle, cancelar, editar y volver a compartir. "Muy robusto."
+
+Hoy la venta de un cobro QR la crea **el POS** cuando su sondeo ve el intent aprobado (`create_sale` con `payments.reference` = intent). Si el modal se cierra, el pago aprobado queda "sin venta" en Cobros QR para conciliar a mano. Los webhooks de todos los proveedores ya actualizan `mp_payment_intents`, pero nadie crea la venta en el servidor.
+
+### Decisión
+
+1. **`pending_charges` + `pending_charge_events`.** El cobro estacionado guarda los **argumentos de `create_sale`** (mismo mapeo que la venta inmediata: `buildSaleItemsAndExtras`), el carrito para editar, líneas para mostrar, sucursal, caja, turno, cliente y contacto, intent vigente e intents anteriores, link, QR, canales usados, vencimiento, estado y `version` (edición optimista). RLS de lectura por sucursal permitida; **sin policies de escritura**: todo por RPC SECURITY DEFINER con evento y `audit_logs`. Baja lógica con `deleted_at`.
+2. **Estados:** `waiting → paid → completed`, `waiting → cancelled | expired`, `expired → waiting` (regenerar). `paid` = el proveedor acreditó pero la venta todavía no se pudo crear (no hay caja abierta, falta stock, etc.; se reintenta sola). No hay `failed` aparte: es `paid` con `last_error`. `needs_review` marca los casos que sólo se completan a mano (encargado o dueño): pago tardío sobre un cobro cancelado o vencido, pago de un link reemplazado, monto acreditado menor.
+3. **Montos nunca del cliente.** Al estacionar se corre `create_sale` **en seco** (subtransacción revertida con `raise` y captura del resultado) con el mismo carrito y turno: valida todo lo que valida la venta real (stock, cupón, topes de descuento por rol, gating) y devuelve el total autoritativo; se exige total + propina = monto del intent. Al completar se usa el carrito guardado y el monto del intent (escrito sólo por Edges tras verificar con el proveedor); si el proveedor cobró más (Payway con cuotas con recargo elegidas por el cliente) la diferencia entra como ítem "Recargo cuotas"; si cobró menos, revisión.
+4. **La venta la crea el servidor.** `_pc_complete` (lock del cobro y del intent, idempotente: un completado devuelve su venta) llama a `create_sale` fijando los claims de la transacción (`request.jwt.claims` con el usuario que estacionó y su negocio) y los restaura al salir, así reusa sin copiar las 600 líneas de `create_sale` (stock, caja, cuenta corriente, packs, cupones, triggers de gating de `payments`). Disparadores, todos idempotentes:
+   - **Trigger `AFTER UPDATE OF status` en `mp_payment_intents`**: cubre a la vez los webhooks y los sondeos de TODOS los proveedores (sin tocar sus Edges). Nunca hace fallar la actualización del intent (errores a `last_error`).
+   - **El POS** (y la pestaña) sondean los cobros abiertos contra su proveedor y llaman a `complete_pending_charge`.
+   - **Apertura de caja** (trigger `AFTER INSERT` en `cash_shifts`) y **cron** `pending-charges-tick` cada 2 min (vence y reintenta hasta 30 veces).
+   - **Cron `pending-charges-sync`** (Edge `pending_charges_sync`, X-Cron-Secret) para Pagos360, que no tiene webhook, con la misma lógica que su Edge (`_shared/pagos360_server.ts`).
+5. **Regla contable:** la venta entra en la fecha y el **turno abierto al momento de acreditarse** (el suyo si sigue abierto; si no, el abierto de su caja; si no, el más reciente de su sucursal). Sin turno abierto queda `paid` y se registra en el próximo turno que se abra en la sucursal. El método es `qr` (no suma al efectivo esperado del arqueo). El que reintenta a mano registra la venta a su nombre; el resto, a nombre de quien la estacionó.
+6. **Cierre de caja:** `close_cash_shift` suma `p_pending_action` (`cancel` | `carry`); con cobros abiertos en el turno y sin decisión responde `pending_charges_decision_required` (sin estados huérfanos, exigido en el servidor). `cancel` cancela los que esperan (los ya pagados no se cancelan: pasan); `carry` los desengancha (`cash_shift_id = null`, `carry_over`) y se enganchan solos al próximo turno de su caja (o de su sucursal si la caja ya no está). La UI del cierre muestra cuántos y por cuánto y obliga a elegir.
+7. **Cancelar** marca el cobro y deja el intent `cancelled` localmente (`create_sale` exige `approved`); el POS además lo da de baja en el proveedor donde hay API (order QR de MP, Nave, GO Cuotas, Directo). Si igual se paga, el webhook lo pasa a `approved`, el trigger lo marca `paid` + `needs_review` y avisa: nunca se pierde un pago ni se vende dos veces algo que pudo venderse de nuevo.
+8. **Editar** = "Editar en el POS": el carrito vuelve al POS con un banner; al generar el QR nuevo, "Actualizar cobro en espera" llama a `replace_pending_charge_intent` (carrito y monto nuevos, validados en seco, intent anterior cancelado y guardado en `previous_intent_ids`). Si se cobra en el momento con otro medio, el cobro en espera se cancela. **Regenerar** (vencido) = mismo carrito, link nuevo, sin dry-run si el monto no cambia.
+9. **Sólo se estaciona un cobro con un único medio que cubra toda la venta**, fuera de mesas, delivery y turnos de agenda (tienen su cierre atómico propio) y con caja abierta. Un pago parcial en efectivo ya entró a la caja: no se puede postergar.
+10. **QR de la caja de Mercado Pago (Orders API) no se estaciona:** bloquea la caja para la venta siguiente. "Dejar en espera" y "Compartir" lo pasan antes a link de Checkout Pro (cancelando la order y re-consultándola, como el "Enviar link" existente).
+11. **Vencimiento por proveedor** (minutos, espejo en `pending_charge_max_ttl` y `PROVIDER_MAX_TTL_MINUTES`, test que los compara): MP 7 días, Mobbex y Payway 3 días, Pagos360, GO Cuotas y Directo 24 h, Nave 60 min, Getnet y MODO 30 min. Default 24 h acotado al tope. Extender cuenta desde ahora. Vencido = el cron lo marca y cancela el intent; la UI lo muestra vencido aunque el cron no haya corrido (evaluación perezosa).
+12. **Compartir:** Web Share API cuando existe, WhatsApp (`wa.me` con el celular normalizado a 549 y texto armado), email, copiar y SMS. El **email lo manda el servidor** (Edge `pending_charge_share`, cadena de `_shared/mailer.ts`: Resend y SMTP) con un template con la marca del negocio (`lib/email/paymentLinkTemplate.ts`, espejado en la Edge y verificado por test), registro en `system_emails` (`payment_link`) y en la línea de tiempo; límites 5 por cobro y 60 por hora por negocio. Desde el modal, "Enviar y dejar en espera" estaciona y envía. También se ofrece la app de correo (`mailto`).
+13. **Avisos:** el POS sondea (10 s con cobros abiertos, 30 s sin; sin Realtime en el proyecto todavía) y muestra un toast con "Imprimir ticket", "Emitir factura" (por ahora abre el comprobante: la factura electrónica llega con F3) y "Visto" (`ack_pending_charge`, para todos los POS de la sucursal); además `notifications` (`type = 'cobros'`) a cada usuario que opera la sucursal, con link a `/cobros-en-espera?id=`.
+14. **Feature `cobros_en_espera`, OPTIONAL desde Pro** (`is_basic=false`, Pro, Business y Enterprise). Gating real en `park_pending_charge`, `replace_pending_charge_intent` y la Edge de email. La completitud **no** se gatea (si el cliente pagó, la venta se registra), y la pestaña sigue accesible si el plan baja para gestionar lo que quedó abierto.
+15. **QR más rápido.** Antes, crear un QR de MP encadenaba en la Edge `getUser` → body → membresía → plan → secreto → sandbox → config → insert del intent → order de MP → update (7 rondas a la base + auth + proveedor en serie), y el modal esperaba dos consultas (planes y config del medio) antes de llamar a la Edge. Ahora: auth y body en paralelo; membresía, plan, credencial y config en **una** ronda; el id del intent se genera en la Edge y el insert corre **en paralelo** con la order o preferencia del proveedor; MODO cachea su token por instancia (10 min); la hoja pasa al modal los planes y el modo del medio que ya tenía (el QR se pide al montar); al abrir la hoja se precalientan las Edges de los medios QR con un OPTIONS; si MP no tiene caja QR, el link se pide directo durante 10 min. Cada Edge loguea `{"fn","total","steps"}` y devuelve `Server-Timing` para medir antes y después.
+
+### Alternativas descartadas
+
+- **Copiar `create_sale` en una variante "server"**: 600 líneas que se desincronizan con cada cambio (cupones, packs, sucursales). Fijar los claims de la transacción reusa la función viva.
+- **Crear la venta en cada Edge de webhook**: nueve Edges a tocar y a mantener; el trigger sobre el intent cubre todas, también el sondeo.
+- **Venta "pendiente" en `sales` con estado nuevo**: rompe reportes, arqueos, stock y Z, que asumen `completed`/`voided`.
+- **Reservar stock al estacionar**: complejidad alta (liberar al vencer o cancelar); el dry-run valida y la venta real vuelve a validar al acreditarse. Si no hay stock y el negocio no permite negativo, queda `paid` con el error para resolver.
+- **Realtime de Supabase**: no está en uso en el proyecto; el sondeo con TanStack Query alcanza a esta escala. Queda como mejora.
+- **Detectar "visto por el cliente"**: ningún proveedor lo informa.
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261014100000_cobros_en_espera` (feature, tablas, RPC, triggers, crons; redefine `close_cash_shift` y dropea su firma de 3 args: el front nuevo manda `p_pending_action` sólo si hace falta, así que el front viejo sigue cerrando mientras no haya cobros en espera). Edges nuevas: `pending_charge_share` y `pending_charges_sync` (ambas con verify_jwt; el cron usa el patrón `internal_cron`). Re-deploy de `mp_qr`, `mp_create_qr`, `pagos360`, `modo_create_qr` (comparten `_shared/mpAuth.ts`, `_shared/timing.ts`, `_shared/pagos360_server.ts`; también conviene re-deploy de las que importan `mpAuth`: `mp_point`, `mp_webhook`, `mp_orders_webhook`).
+- Cada cambio de estado de un intent dispara un trigger que busca su cobro en espera por índice único: costo despreciable. Completar dentro de la transacción del webhook alarga esa transacción lo que tarda `create_sale` (ms).
+- **Riesgo conocido:** si un usuario quedó sin acceso a la sucursal entre estacionar y acreditarse, la venta automática falla (queda `paid`) y la registra un encargado con "Registrar la venta igual" o "Reintentar".
+- **Pendiente:** Realtime; factura electrónica desde el aviso (F3); el mismo patrón de latencia en `mobbex_create_qr`, `payway`, `getnet`, `nave`, `gocuotas` y `directo`; medir en producción con los logs de tiempos.
+
+---
+
+---
+
+## ADR-050: Compras, proveedores, costos e importaciones v1 (F18 · H101 y H102)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/compras-proveedores`, migraciones no aplicadas) · **Hitos:** F18/H101 (compras, proveedores y costos) y F18/H102 (costeo de importación) · **Numeración:** ADR-048 y ADR-049 reservadas por otras ramas; ADR-052 tomada por el aislamiento del staff interno.
+
+### Contexto
+
+No había proveedores, compras ni costos más allá de `products.cost` (único y manual). El dueño pidió un módulo "muy configurable, con un modo simple y uno muy profesional para quien compra e importa", con contexto argentino. Debe convivir con el stock por sucursal derivado de movimientos (ADR-046) y con el contexto de sucursal (ADR-045).
+
+### Decisión
+
+1. **Modelo.** `suppliers` (razón social, CUIT validado por dígito verificador en TS y en un check SQL, condición IVA, contacto, plazo de pago, moneda, CBU/alias, baja lógica), `supplier_products` (código del proveedor, último costo, costo de lista, plazo de entrega, mínimo y unidad de compra), `purchase_orders` + `purchase_order_items`, `goods_receipts` + `goods_receipt_items`, `product_lots` (lote, vencimiento, n° de despacho), `supplier_invoices`, `supplier_payments`, `purchase_events` (timeline común), `purchase_settings` y `product_cost_history`. Vistas `supplier_account_entries` y `supplier_balances` con `security_invoker`.
+2. **Escrituras.** Proveedores y productos por proveedor por tabla con RLS (rol dueño o encargado y feature `compras` en la policy). Órdenes, recepciones, costeo, comprobantes y pagos sólo por RPC `SECURITY DEFINER` con `search_path` fijo que validan plan, rol, estado y sucursal, y escriben `purchase_events` y `audit_logs`. Las tablas sólo tienen policies de lectura, siempre `tenant_id = current_tenant_id() or internal_scope()` (ADR-052); el front filtra además por el negocio activo.
+3. **Máquina de estados de la OC** `draft → sent → partially_received → received`, `sent → draft` (reabrir sin recepciones), `partially_received → received` (cerrar con faltante y motivo) y `draft | sent → cancelled` sin nada recibido. Espejo puro en `lib/purchases/orders.ts`. Descuentos en cascada por línea (10 + 5) y descuento global; numeración `OC-`, `REC-` y `OP-` por negocio con lock por advisory.
+4. **Recepción** contra OC o libre (configurable), parcial, con diferencias y motivo, por sucursal destino (la de la OC o la elegida; el cajero sólo en las sucursales que tiene asignadas). Cada línea suma `products.stock` / `product_variants.stock` e inserta `stock_movements` con motivo `purchase` (ya estaba en el check) y `store_id`: `product_stock` lo mantiene el trigger de ADR-046. Actualiza el último costo del producto en ese proveedor (lo crea si no existía).
+5. **Costos (BASE, sin key).** `products.last_cost`, `avg_cost` (promedio ponderado móvil: el stock negativo cuenta como cero) y `replacement_cost`, netos de IVA y en pesos, con historia (`product_cost_history`, por trigger, con la fuente: recepción, costeo, lista del proveedor, manual). El negocio elige la base del margen (`purchase_settings.cost_basis`, último por defecto) y, con `sync_product_cost` (activo por defecto), `products.cost` sigue a esa base: márgenes, valor del inventario, traslados y el asistente usan el costo correcto sin cambios. Backfill: último y promedio parten del costo cargado hoy. Costos a nivel producto (las variantes comparten costo en v1).
+6. **Modo simple / profesional** (`purchase_settings.mode`, preferencia de UI). Profesional muestra moneda y tipo de cambio por operación (OC, recepción, comprobante y pago), peso y volumen por línea y la hoja de costeo. El saldo de la cuenta corriente va en pesos al tipo de cambio de cada documento; la diferencia de cambio queda para H109.
+7. **Costeo de importación** (`compras_importacion`): lógica pura en `lib/purchases/landed.ts` (FOB + flete + seguro = CIF; derechos por línea, tasa de estadística con tope, otros tributos que son costo y gastos de nacionalización, cada concepto prorrateado por valor, peso, volumen o cantidad en centavos exactos). El IVA de importación y las percepciones se calculan aparte y **nunca** se suman al costo. Se aplica sobre una recepción ya registrada y es re-aplicable: el servidor guarda la hoja, el costo puesto en depósito por línea y el n° de despacho en el lote, y ajusta el promedio repartiendo la diferencia sobre el stock actual (último costo sólo si es la recepción más reciente).
+8. **Comprobantes y pagos.** Letra A/B/C/M/E, punto de venta y número (único por proveedor y tipo entre los vigentes), neto por alícuota del catálogo (21, 10,5, 27, 5, 2,5, 0), exento, no gravado, percepciones y otros tributos como líneas libres; B y C no discriminan IVA; el total tiene que cerrar (servidor y TS). Vínculo con recepciones (control de dos vías). Pagos con medio, referencia y retenciones practicadas como placeholder hasta H106; anulación con motivo en ambos. Aging FIFO por vencimiento en `lib/purchases/aging.ts`.
+9. **Sugerencia de compra** por sucursal (`purchase_suggestions`): bajo el mínimo contando traslados en camino y OC abiertas; cantidad a máximo o mínimo, redondeada a la unidad de compra y al mínimo del proveedor (`lib/purchases/suggest.ts`).
+10. **Features (CLAUDE.md §6):** `compras` OPTIONAL desde Pro; `compras_importacion` OPTIONAL desde Business, requiere `compras`. El roadmap y la auditoría proponían `importaciones` (Enterprise); se usa `compras_importacion` en Business por pedido explícito del PM. Gating server-side en `purchase_assert` (todas las RPC), en las policies de proveedores y en `purchase_apply_costing`; el modo profesional exige `compras` al guardarse. Copy en `featureInfo.ts`; la comparación de planes deriva de la matriz.
+
+### Alternativas descartadas
+
+- **Escribir `product_stock` desde la recepción:** rompe el invariante de ADR-046 (el saldo sale del libro de movimientos).
+- **FIFO / capas de costo:** más preciso pero caro; el promedio móvil con ajuste por costeo alcanza para v1.
+- **Calcular el costeo de importación en SQL:** duplicaría una lógica larga y parametrizable; el servidor guarda la hoja completa y el resultado por línea (auditable) y valida montos no negativos.
+- **Comprobantes con tablas hijas de alícuotas y tributos:** jsonb validado alcanza para v1 y para exportar el libro de compras; se normaliza con H108.
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261016100000` a `20261016100300` en orden, después de las de ADR-046 y de `20261013900000` (ADR-052; si no está, la migración crea `internal_scope()` con la misma definición sin pisarla). Backfill liviano de `last_cost` y `avg_cost`.
+- **Riesgos:** recepciones inmutables en v1 (una corrección es un ajuste de stock o una recepción nueva); el costeo confía en el costo unitario calculado por el cliente (queda la hoja guardada); sin integración con caja ni tesorería para pagos en efectivo (H111); sin padrones ni retenciones como agente (H104 y H106); sin devoluciones al proveedor con salida de stock.
+- **Pendiente:** devoluciones a proveedor, órdenes de pago con aplicación manual a comprobantes, anticipos, importación de listas de precios del proveedor (H100), libro IVA compras (H108), n° de despacho en la factura de venta y consumo por lote, unidad de compra con conversión en la OC.
+
+---
+
+## ADR-049: Configuración heredable por sucursal y caja, terminales e impresoras (F17 · H92 y H93)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-config-terminales`; migraciones sin aplicar, Edges sin desplegar) · **Hitos:** F17 · H92, H93 (más cierres de H90, H91, H94 y H97) · **Base:** ADR-043, ADR-045, ADR-046 · **Numeración:** ADR-048 queda reservada para "cobros en espera".
+
+### Contexto
+
+El dueño pidió que la multi-sucursal sea "muy flexible y configurable, muy robusta, mucho mejor que Napse", y sumó impresoras por sucursal y caja y logo por sucursal. Hasta acá toda la configuración era del negocio (`tenant_payment_methods`, `pos_settings`, `tenant_branding`, `print_profiles`) y las terminales vivían en lugares sueltos: el lector Point en `localStorage`, una sola caja QR de MP por ambiente en `config.mp_qr`, los Point de Nave y las series de Clover como texto dentro de los secretos.
+
+### Decisión
+
+1. **Tabla genérica `config_overrides` con override por campo** (`patch` parcial) por alcance `store_group` / `store` / `register` y dominio (`payment_method` con `provider_key`, `pos_settings`, `ticket`). La sucursal sólo guarda lo que pisa; un cambio del negocio llega a todas las que no lo pisaron. Grupos (`store_groups`) como nivel intermedio. Orden negocio ← grupo ← sucursal ← caja; los mapas (n° de comercio por marca, descuento por rol, perfiles de impresión, diseño) se mezclan por clave.
+2. **Whitelist por dominio y alcance** en SQL (`config_field_type`) con espejo en `lib/config/inheritance.ts`: la caja sólo puede apagar medios y pisar cierre, venta libre, display, impresión y diseño; numeración, SKU y secretos nunca se pisan.
+3. **Resolución en el servidor**: `_effective_config` (service, triggers) y `effective_config` (JWT, con acceso a la sucursal) devuelven valor y origen por campo. `create_sale` toma redondeo, descuento máximo y venta sin stock de la configuración efectiva del turno; `close_cash_shift`, motivo y tolerancia. El trigger `payments_branch_method` rechaza un medio **apagado por override** en la sucursal o caja de la venta (un medio apagado en el negocio sin overrides se comporta como siempre). Las Edges de cobro presencial también lo chequean (`payment_method_blocked_at`).
+4. **Gating antes de la herencia**: escribir overrides exige `multi_sucursal` (grupo y sucursal) o `multi_caja` (caja); un override nunca prende un medio cuyo `payment_method_plan_key` no está en el plan. Bajar de plan no borra overrides: dejan de aplicarse. Sin features nuevas: es parte de `multi_sucursal` / `multi_caja` (OPTIONAL); el registro de terminales y de impresoras es BASE.
+5. **Escritura sólo por RPC** (`config_override_set`, `config_override_copy`, `config_override_reset_field`) con rol, alcance (un grupo exige alcance central), tipos y auditoría. "Volver a heredar" = sacar el campo; patch vacío = baja lógica.
+6. **"Compartir configuración" sin copiar por defecto**: "Copiar de otra sucursal" (reemplazar o sólo sumar, con vista previa campo por campo), "Diferencias por sucursal" y "Aplicar a todas" (el campo vuelve a heredar en todos los alcances).
+7. **Terminales como entidad (`payment_terminals`)**: sucursal, caja o flotante, proveedor, tipo (`point`, `qr_caja`, `clover`, `posnet_manual`), id externo y ambiente, n° de comercio, adquirente, default por caja y proveedor, activa y `last_seen_at`. El POS elige sola la de su caja (default, única de la caja, flotante única, recordada); con varias muestra el selector. Las Edges aceptan `terminal_id` y lo validan con `terminal_for_user` (negocio, activa, proveedor, sucursal del usuario y, si viene, la sucursal del POS); `device_id` suelto y la caja QR única siguen andando. La migración pasa lo existente al registro sin borrar lo viejo. Caja QR de MP por caja: `mp_qr setup` con `cash_register_id` crea sucursal y caja de MP con ids propios (`mpExternalIdsFor`).
+8. **Impresoras (`printers`) y perfiles con impresora**: cada perfil por documento suma `printer_id` y `fallback_printer_id`, heredados por sucursal y caja. Resolución pura (`lib/print/printers.ts`): asignada → respaldo → compatible de la caja → de la sucursal → la del equipo, siempre informando dónde sale. Se suman los documentos comanda y remito. La salida sigue siendo web print: el registro decide papel y formato; ESC/POS directo queda para un conector local.
+9. **Marca por sucursal**: logo propio opcional (`stores.logo_url`, hereda el del negocio con una sola sucursal o sin logo) en ticket, remito y display; datos del ticket por grupo o sucursal y `use_store_contact` (dirección y teléfono de la ficha de la sucursal).
+10. **Políticas nuevas con `internal_scope()`** (ADR-052) y listas filtradas por el negocio actual además de la RLS.
+
+### Alternativas descartadas
+
+- **Una tabla de override por dominio** o **copiar la fila por sucursal**: más tablas y policies, y un cambio del negocio no llega a las sucursales (ADR-043).
+- **Resolver sólo en el front**: un cajero podría cobrar con un medio apagado en su sucursal; el servidor resuelve con la caja del turno.
+- **Terminal recordada en `localStorage` como fuente de verdad**: queda como respaldo de compatibilidad, no como registro.
+- **Impresión directa ESC/POS ahora**: requiere un conector local por equipo; se modela el registro y la asignación para que el conector lo use cuando exista.
+
+### Consecuencias
+
+- Deploy en orden: migraciones `20261015100000` a `20261015130000` (más `20261015200000` y `20261015300000` de esta rama), después las Edges `mp_point`, `nave_point`, `clover_point`, `mp_qr` (e `invite_user`). Edges nuevas contra base vieja: `payment_method_blocked_at` faltante no bloquea; el POS sólo manda `terminal_id` si leyó terminales (es decir, con la migración aplicada).
+- `create_sale` (desde `20261013120000`) y `close_cash_shift` (desde `20261014100000_cobros_en_espera`, firma de 4 args con `p_pending_action` y todo el manejo de cobros en espera) se recrean completos: cualquier rama que los toque tiene que partir de `20261015120000`.
+- **Cobros en espera (ADR-048):** `_pc_dry_run` se recrea con el flag local `ninja.pc_dry_run` para que el pago ficticio en efectivo del ensayo no choque con "efectivo apagado en la caja". La venta del lado del servidor (`_pc_complete`) de un cobro en espera **ya pagado** no se bloquea por un medio que la sucursal apagó después de estacionar: la plata entró con un medio habilitado en ese momento y nunca se pierde un cobro hecho. Sí siguen valiendo, igual que en el ensayo, el stock por sucursal (`insufficient_stock_branch`) y el redondeo y descuento efectivos de la caja del turno: si cambian entre estacionar y cobrar y la venta falla, queda como "Cobro pagado sin venta" con aviso, como cualquier otro rechazo de `create_sale`.
+- Pendiente: credenciales de proveedor por sucursal (`payment_secrets.store_id`), planes de cuotas por sucursal (F14/H59), plantilla para sucursales nuevas, editor de `pos_layout` por sucursal (hoy se pisa copiando), "Detectar lectores" desde la sección Terminales, impresión ESC/POS y monitor de terminales (H99).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

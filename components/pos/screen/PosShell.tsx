@@ -210,7 +210,7 @@ export function PosShell(p: PosShellProps) {
       {/* Barra fija del carrito (celular) */}
       {!tabs && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-border bg-popover p-1.5 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.5)]">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-border bg-popover p-1.5">
             <button
               type="button"
               onClick={() => setCartOpen(true)}

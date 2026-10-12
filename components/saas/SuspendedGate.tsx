@@ -73,7 +73,7 @@ export function SuspendedGate({
 
   return (
     <div className="app-bg flex min-h-dvh items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-ninjaXl border border-border bg-card/80 p-6 shadow-ninjaSoft backdrop-blur-xl sm:p-8">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-card/80 p-6 backdrop-blur-xl sm:p-8">
         <div className="mb-5 flex items-center gap-3">
           <Isotype className="h-9 w-auto" />
           <span className="grid h-10 w-10 place-items-center rounded-full bg-red-500/10 text-danger">

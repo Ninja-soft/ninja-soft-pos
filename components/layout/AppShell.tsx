@@ -34,8 +34,13 @@ import {
   Users,
   Utensils,
   Wallet,
+  Hourglass,
   X,
   ArrowLeftRight,
+  ClipboardList,
+  FileText,
+  PackageCheck,
+  Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -124,7 +129,7 @@ function SellQuickAction({
       aria-label={hint}
       aria-keyshortcuts={SELL_SHORTCUT}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white shadow-sm transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         compact ? "h-9 px-3 text-sm" : "h-10 w-full px-3 text-sm",
       )}
     >
@@ -196,6 +201,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
         // defecto; un plan puede apagarla y el ítem queda con candado.
         { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
+        // Cobros en espera (ADR-048): QR y links compartidos que esperan el
+        // pago. Con candado si el plan no la incluye.
+        { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
@@ -215,6 +223,17 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
+      ],
+    },
+    {
+      // Compras y proveedores (F18 · H101, ADR-050). Con candado si el plan no
+      // incluye la feature compras.
+      label: "Compras",
+      items: [
+        { href: "/compras/ordenes", label: "Órdenes de compra", icon: ClipboardList, feature: "compras" },
+        { href: "/compras/recepciones", label: "Recepciones", icon: PackageCheck, feature: "compras" },
+        { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
+        { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
       ],
     },
     {
@@ -392,6 +411,7 @@ export function AppShell({
   const [open, setOpen] = useState<Record<string, boolean>>({
     Operación: true,
     Catálogo: true,
+    Compras: true,
     Gestión: true,
   });
 
@@ -537,7 +557,7 @@ export function AppShell({
             onClick={() => setDrawer(false)}
             className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--pos-solid)] text-white">
               <ShieldCheck size={16} />
             </span>
             <span className="min-w-0 flex-1 leading-tight">

@@ -291,7 +291,7 @@ function Tile({
       )}
       {list &&
         (on ? (
-          <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-ninja-gradient text-white">
+          <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-[var(--pos-solid)] text-white">
             <Check size={11} strokeWidth={3.5} />
           </span>
         ) : (
@@ -370,7 +370,7 @@ function BrandRow({
               )}
             >
               {on ? (
-                <span className="grid h-4 w-4 place-items-center rounded-full bg-ninja-gradient text-white">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-[var(--pos-solid)] text-white">
                   <Check size={10} strokeWidth={3.5} />
                 </span>
               ) : (

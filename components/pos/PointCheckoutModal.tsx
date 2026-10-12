@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard, RefreshCw, XCircle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -10,7 +10,11 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
-import { posApi } from "@/modules/pos/api";
+import { posApi, type PaymentLocation } from "@/modules/pos/api";
+import { kindForProvider, pickTerminal } from "@/lib/payments/terminals";
+import { useBranchContext, useBranchScope, useCurrentRegister } from "@/modules/branches/hooks";
+import { registerShort } from "@/modules/branches/logic";
+import { usePaymentTerminals, useTerminalMutations } from "@/modules/config/hooks";
 
 // F8 · H15 (resto) — Cobro presencial con lectores Mercado Point.
 // Flujo: elegir lector → la Edge mp_point empuja una order "point" (Orders
@@ -23,6 +27,13 @@ import { posApi } from "@/modules/pos/api";
 //
 // El último lector usado se recuerda por caja (localStorage) para que el cobro
 // habitual sea de un toque.
+//
+// F17 · H93 (ADR-049): si hay terminales registradas (payment_terminals) para
+// la sucursal del POS, el modal ofrece ESAS (la default de la caja queda
+// elegida sola) y manda terminal_id: la Edge valida en el servidor que sea del
+// negocio y de esta sucursal. Sin registro, el flujo de antes (lista del
+// proveedor + recordado en localStorage); un encargado puede registrar el
+// lector elegido en esta caja con un tilde.
 //
 // H21c: el mismo modal cobra con Nave Point (provider "nave_point", Edge
 // nave_point): las terminales son los ids de punto de venta cargados en la
@@ -89,7 +100,12 @@ const API: Record<
   PointProvider,
   {
     devices: () => Promise<PointDevice[]>;
-    create: (deviceId: string, amount: number, opts?: PresetOpts) => Promise<{ intent_id: string }>;
+    create: (
+      deviceId: string,
+      amount: number,
+      opts?: PresetOpts,
+      loc?: PaymentLocation,
+    ) => Promise<{ intent_id: string }>;
     status: (intentId: string) => Promise<PointStatus>;
     // MP (Orders API) devuelve si la cancelación quedó pedida en la terminal
     // (asíncrona); Nave da de baja al toque (void).
@@ -98,20 +114,20 @@ const API: Record<
 > = {
   mercadopago_point: {
     devices: () => posApi.pointDevices(),
-    create: (d, a, o) => posApi.createPointIntent(d, a, o),
+    create: (d, a, o, l) => posApi.createPointIntent(d, a, o, l),
     status: (id) => posApi.pointIntentStatus(id),
     cancel: (id) => posApi.cancelPointIntent(id),
   },
   nave_point: {
     devices: async () =>
       (await posApi.navePointDevices()).map((d) => ({ ...d, operating_mode: "PDV" })),
-    create: (d, a) => posApi.createNavePointIntent(d, a),
+    create: (d, a, _o, l) => posApi.createNavePointIntent(d, a, l),
     status: (id) => posApi.navePointIntentStatus(id),
     cancel: (id) => posApi.cancelNavePointIntent(id),
   },
   fiserv_point: {
     devices: async () => (await posApi.cloverDevices()).map((d) => ({ ...d, operating_mode: "PDV" })),
-    create: (d, a, o) => posApi.createCloverIntent(d, a, o?.installments),
+    create: (d, a, o, l) => posApi.createCloverIntent(d, a, o?.installments, l),
     status: (id) => posApi.cloverIntentStatus(id),
     cancel: (id) => posApi.cancelCloverIntent(id),
   },
@@ -202,7 +218,33 @@ export function PointCheckoutModal({
   const api = API[provider];
   const presets = isClover ? PRESETS.filter((p) => CLOVER_PRESETS.includes(p.key)) : PRESETS;
 
-  // Lectores Point de la cuenta MP conectada (solo con el modal abierto).
+  // Terminales registradas de esta sucursal y caja (F17 · H93).
+  const branchCtx = useBranchContext();
+  const scope = useBranchScope();
+  const currentRegister = useCurrentRegister();
+  const storeId = branchCtx.posStoreId;
+  const registerId = currentRegister.data?.id ?? null;
+  const canManage = scope.data?.role === "owner" || scope.data?.role === "manager";
+  const { data: terminals } = usePaymentTerminals();
+  const terminalMut = useTerminalMutations();
+  const [remembered, setRemembered] = useState<string | null>(null);
+  const [registerIt, setRegisterIt] = useState(false);
+  const picked = useMemo(
+    () =>
+      pickTerminal({
+        terminals: terminals ?? [],
+        providerKey: provider,
+        storeId,
+        registerId,
+        rememberedExternalId: remembered,
+      }),
+    [terminals, provider, storeId, registerId, remembered],
+  );
+  const registryMode = picked.candidates.length > 0;
+
+  // Lectores de la cuenta del proveedor (solo con el modal abierto). Con
+  // terminales registradas sólo hace falta para ver el modo PDV de Mercado
+  // Point (y esa consulta es de encargado).
   const {
     data: devices,
     isLoading: devicesLoading,
@@ -210,11 +252,24 @@ export function PointCheckoutModal({
     refetch: refetchDevices,
   } = useQuery({
     queryKey: ["point-devices", provider],
-    enabled: open,
+    enabled: open && (!registryMode || (provider === "mercadopago_point" && canManage)),
     staleTime: 60_000,
     retry: 1,
     queryFn: () => api.devices(),
   });
+
+  // Opciones del selector: terminales registradas o lectores del proveedor.
+  const options: PointDevice[] = registryMode
+    ? picked.candidates.map((t) => {
+        const reg = t.cash_register_id
+          ? currentRegister.registers.find((x) => x.id === t.cash_register_id)
+          : null;
+        const mode = devices?.find((d) => d.id === t.external_id)?.operating_mode ?? "PDV";
+        return { id: t.id, operating_mode: mode, label: reg ? `${t.label} · ${registerShort(reg)}` : t.label };
+      })
+    : (devices ?? []);
+  const optionsLoading = registryMode ? false : devicesLoading;
+  const optionsError = registryMode ? false : devicesError;
 
   // Al abrir: reset + preseleccionar el último lector usado.
   useEffect(() => {
@@ -224,23 +279,35 @@ export function PointCheckoutModal({
     setErrorDetail("");
     setPreset("reader");
     firedRef.current = false;
+    setRegisterIt(false);
+    let saved: string | null = null;
     try {
-      setDevice(window.localStorage.getItem(lsKey));
+      saved = window.localStorage.getItem(lsKey);
     } catch {
-      setDevice(null);
+      saved = null;
     }
+    setRemembered(saved);
+    setDevice(saved);
   }, [open, lsKey]);
 
-  // Un solo lector → seleccionarlo directo.
+  // Con registro: la terminal que corresponde a la caja queda elegida sola.
   useEffect(() => {
-    if (!open || !devices) return;
+    if (!open || !registryMode) return;
+    if (device && options.some((o) => o.id === device)) return;
+    setDevice(picked.terminal?.id ?? (options.length === 1 ? options[0]!.id : null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, registryMode, picked.terminal?.id, options.length]);
+
+  // Sin registro: un solo lector → seleccionarlo directo.
+  useEffect(() => {
+    if (!open || registryMode || !devices) return;
     if (!device && devices.length === 1 && devices[0]) setDevice(devices[0].id);
     // Si el recordado ya no existe en la cuenta, lo limpiamos.
     if (device && devices.length > 0 && !devices.some((d) => d.id === device)) {
       setDevice(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, devices]);
+  }, [open, devices, registryMode]);
 
   // Sondeo del estado mientras el cobro está en el lector (o mientras se
   // cancela desde el POS: si el cliente ya pagó, la venta se registra igual).
@@ -287,19 +354,38 @@ export function PointCheckoutModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, phase, intentId]);
 
-  function start() {
+  async function start() {
     if (!device) return;
     setPhase("creating");
+    const terminal = registryMode ? picked.candidates.find((t) => t.id === device) : null;
+    const externalId = terminal?.external_id ?? device;
     try {
-      window.localStorage.setItem(lsKey, device);
+      window.localStorage.setItem(lsKey, externalId);
     } catch {
       /* sin persistencia, no bloquea */
     }
+    let terminalId = terminal?.id ?? null;
+    // Encargado sin registro: deja el lector registrado en esta caja.
+    if (!terminal && registerIt && canManage && storeId) {
+      const label = options.find((o) => o.id === device)?.label ?? device;
+      terminalId = await terminalMut.create
+        .mutateAsync({
+          store_id: storeId,
+          cash_register_id: registerId,
+          provider_key: provider,
+          kind: kindForProvider(provider),
+          external_id: device,
+          label: label.slice(0, 60),
+          is_default: Boolean(registerId),
+        })
+        .catch(() => null);
+    }
     api
       .create(
-        device,
+        externalId,
         base,
         isNave ? undefined : isClover ? { installments: cloverInstallments(preset) } : presetOpts(preset),
+        { terminalId, storeId, registerId },
       )
       .then((r) => {
         setIntentId(r.intent_id);
@@ -314,6 +400,10 @@ export function PointCheckoutModal({
               ? `Conectá tu cuenta de ${copy.account} en Medios de pago.`
               : msg === "invalid_device"
                 ? "Esa terminal no está en tu cuenta. Elegí otra o revisá la conexión."
+                : msg === "payment_method_disabled_in_store"
+                  ? `${brand} está apagado en esta sucursal o caja (Configuración → Medios de pago).`
+                  : msg.startsWith("terminal_")
+                    ? "Esa terminal no está disponible para esta sucursal. Revisala en Configuración → Terminales."
                 : !noPdv && preset !== "reader"
                   ? "No se pudo enviar el cobro al lector. Si elegiste cuotas, puede que Mercado Pago no las tenga habilitadas en tu cuenta: probá con En el lector."
                   : copy.sendError,
@@ -343,7 +433,7 @@ export function PointCheckoutModal({
       .catch(() => onOpenChange(false));
   }
 
-  const selected = devices?.find((d) => d.id === device) ?? null;
+  const selected = options.find((d) => d.id === device) ?? null;
   const needsPdv = selected != null && selected.operating_mode !== "PDV";
 
   return (
@@ -363,23 +453,25 @@ export function PointCheckoutModal({
     >
       {phase === "device" && (
         <div className="space-y-4">
-          {devicesLoading ? (
+          {optionsLoading ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
               <Spinner size={18} /> {copy.loading}
             </div>
-          ) : devicesError ? (
+          ) : optionsError ? (
             <div className="rounded-xl bg-danger/10 p-3 text-sm">
               No pudimos listar tus lectores. Revisá la conexión con {copy.account} en Medios de pago.
             </div>
-          ) : (devices?.length ?? 0) === 0 ? (
+          ) : options.length === 0 ? (
             <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
               {copy.empty}
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm font-medium">Elegí el lector</p>
+              <p className="text-sm font-medium">
+                {registryMode ? "Terminal de esta sucursal" : "Elegí el lector"}
+              </p>
               <div className="grid gap-2">
-                {(devices ?? []).map((d) => (
+                {options.map((d) => (
                   <button
                     key={d.id}
                     type="button"
@@ -420,7 +512,11 @@ export function PointCheckoutModal({
                     variant="secondary"
                     onClick={() =>
                       posApi
-                        .pointSetPdv(device!)
+                        .pointSetPdv(
+                          registryMode
+                            ? (picked.candidates.find((t) => t.id === device)?.external_id ?? device!)
+                            : device!,
+                        )
                         .then(() => refetchDevices())
                         .then(() =>
                           toast({ title: "Lector en modo PDV", variant: "success" }),
@@ -441,7 +537,18 @@ export function PointCheckoutModal({
             </div>
           )}
 
-          {!isNave && (devices?.length ?? 0) > 0 && (
+          {!registryMode && canManage && storeId && device && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={registerIt}
+                onChange={(e) => setRegisterIt(e.target.checked)}
+              />
+              Registrar este lector en {registerId ? "esta caja" : "esta sucursal"} (la próxima vez queda elegido)
+            </label>
+          )}
+
+          {!isNave && options.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">{isClover ? "Cuotas" : "Medio en el lector"}</p>
               <div className="grid grid-cols-3 gap-2">

@@ -270,6 +270,22 @@ export function mpExternalIds(tenantId: string): { storeExternalId: string; posE
   return { storeExternalId: `NSPOS${hex}`, posExternalId: `NS${hex}C1` };
 }
 
+// Caja QR por caja (ADR-049): una sucursal de MP por sucursal de NinjaPos y
+// una caja de MP por caja. Alfanuméricos y cortos (la caja de MP admite hasta
+// 40): 16 hex del negocio + 16 hex de la sucursal o de la caja, sin choque
+// con los ids de la caja única (NSPOS{32} / NS{32}C1).
+export function mpExternalIdsFor(
+  tenantId: string,
+  storeId: string,
+  registerId: string,
+): { storeExternalId: string; posExternalId: string } {
+  const hex = (v: string) => v.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 16);
+  return {
+    storeExternalId: `NSPOS${hex(tenantId)}S${hex(storeId)}`,
+    posExternalId: `NS${hex(tenantId)}R${hex(registerId)}`,
+  };
+}
+
 // Provincias tal como las nombra Mercado Pago en `location.state_name` (AR).
 export const MP_AR_STATES = [
   "Buenos Aires",
@@ -713,9 +729,10 @@ export function buildStoreBody(s: StoreSetup, storeExternalId: string) {
 export function buildPosBody(
   storeId: string,
   ids: { storeExternalId: string; posExternalId: string },
+  name = "Caja NinjaPos",
 ) {
   return {
-    name: "Caja NinjaPos",
+    name: name.slice(0, 60),
     store_id: storeId,
     external_store_id: ids.storeExternalId,
     external_id: ids.posExternalId,

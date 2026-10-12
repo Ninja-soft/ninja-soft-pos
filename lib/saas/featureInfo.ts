@@ -34,7 +34,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   multi_caja: {
-    desc: "Multi-caja: varias cajas en una misma sucursal, cada una con su turno, su arqueo y su cierre Z. Cada dispositivo recuerda su caja.",
+    desc: "Multi-caja: varias cajas en una misma sucursal, cada una con su turno, su arqueo y su cierre Z. Cada dispositivo recuerda su caja, y cada caja puede tener su configuración propia (medios habilitados, cierre, pantalla del cliente e impresoras).",
     impact: "Desactivado, cada sucursal opera con una sola caja (la primera caja siempre está incluida).",
     minPlan: "Pro",
   },
@@ -57,6 +57,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Devoluciones y notas de crédito sobre ventas: permite reintegrar productos y emitir el comprobante de devolución.",
     impact: "Sin esto el cajero no puede procesar devoluciones desde el sistema; habría que hacerlas por fuera.",
     minPlan: "Pro",
+  },
+  cobros_en_espera: {
+    desc: "Cobros en espera: compartís el QR o link de pago (WhatsApp, email, SMS o copiar) y seguís vendiendo. Cuando el cliente paga, la venta se registra sola (aunque el POS esté cerrado) y te avisa para imprimir el ticket. Pestaña propia para ver, editar, reenviar, extender o cancelar, y decisión al cerrar la caja.",
+    impact: "Desactivado, el QR o link se cobra sólo con la hoja abierta: no se puede dejar esperando ni mandar el link por email desde el sistema (el servidor lo rechaza).",
+    minPlan: "Pro",
+    needs: "Un medio de cobro por QR o link conectado (Mercado Pago, MODO, Payway, Getnet, Nave, Pagos360, GO Cuotas, Directo o Mobbex).",
   },
   garantias: {
     desc: "Gestión de garantías de productos: registro de cobertura, plazos y reclamos de garantía por venta.",
@@ -244,6 +250,18 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["stock_sucursales"],
     needs: "Al menos dos sucursales activas.",
   },
+  compras: {
+    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado.",
+    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes ni cuenta corriente de proveedores (el servidor lo rechaza).",
+    minPlan: "Pro",
+  },
+  compras_importacion: {
+    desc: "Costeo de importación (modo profesional de compras): FOB, flete y seguro hasta el CIF, derechos por posición, tasa de estadística, otros tributos y gastos de nacionalización prorrateados por valor, peso, volumen o cantidad hasta el costo puesto en depósito de cada producto, con el n° de despacho guardado en el lote. El crédito fiscal se informa aparte y no se suma al costo.",
+    impact: "Desactivado, las compras al exterior entran al costo del comprobante sin gastos ni tributos de importación prorrateados (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["compras"],
+    needs: "Activá el modo profesional en Configuración de compras.",
+  },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",
@@ -319,7 +337,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Integraciones ──────────────────────────────────────────────────────────
   multi_sucursal: {
-    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal.",
+    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales.",
     impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },

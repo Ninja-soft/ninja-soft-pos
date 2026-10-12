@@ -80,24 +80,25 @@ export async function tenantMpCredential(
   tenantId: string,
   forceEnv?: MpEnv | null,
 ): Promise<{ token: string; env: MpEnv } | null> {
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mercadopago")
-    .maybeSingle();
-  let sec = (secretRow?.secrets ?? {}) as Secrets;
-
-  let sandbox = false;
-  if (!forceEnv) {
-    const { data: method } = await admin
-      .from("tenant_payment_methods")
-      .select("sandbox")
+  // Secreto y switch Sandbox en paralelo (antes eran dos rondas seguidas).
+  const [{ data: secretRow }, methodRes] = await Promise.all([
+    admin
+      .from("payment_secrets")
+      .select("secrets")
       .eq("tenant_id", tenantId)
       .eq("provider_key", "mercadopago")
-      .maybeSingle();
-    sandbox = method?.sandbox === true;
-  }
+      .maybeSingle(),
+    forceEnv
+      ? Promise.resolve({ data: null })
+      : admin
+          .from("tenant_payment_methods")
+          .select("sandbox")
+          .eq("tenant_id", tenantId)
+          .eq("provider_key", "mercadopago")
+          .maybeSingle(),
+  ]);
+  let sec = (secretRow?.secrets ?? {}) as Secrets;
+  const sandbox = !forceEnv && (methodRes.data as { sandbox?: boolean } | null)?.sandbox === true;
 
   const pick = pickMpCredential(sec, sandbox, forceEnv ?? null);
   if (pick?.env === "prod") {

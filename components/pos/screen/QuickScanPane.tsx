@@ -70,7 +70,7 @@ export const QuickScanPane = forwardRef<
         </div>
       )}
       {typing && (
-        <div className="rounded-lg border border-border bg-popover p-1 shadow-sm">
+        <div className="rounded-lg border border-border bg-popover p-1">
           {(p.results ?? []).length === 0 ? (
             <p className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
               <SearchX size={16} aria-hidden /> Sin coincidencias. Enter busca el código exacto.

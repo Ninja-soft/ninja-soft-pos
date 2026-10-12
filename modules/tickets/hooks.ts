@@ -1,12 +1,25 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { SampleBrand } from "@/lib/tickets/sample";
 import {
   normalizePrintProfiles,
+  type PrintDocType,
   type PrintProfiles,
 } from "@/lib/print/profiles";
+import { resolvePrintTarget, type PrintTarget } from "@/lib/print/printers";
+import { resolveEffective } from "@/lib/config/inheritance";
+import { effectiveTicketBrand } from "@/lib/tickets/branchBrand";
+import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
+import {
+  useConfigOverrides,
+  usePosResolveTarget,
+  usePrinters,
+  useResolveTarget,
+  useStoreLogo,
+} from "@/modules/config/hooks";
 import {
   ticketTemplatesApi,
   type TemplateDestination,
@@ -22,23 +35,49 @@ const KEY = ["ticket-templates"];
 // respetar impresión auto/manual. queryKey propia para invalidarla al guardar.
 export function usePrintProfiles(enabled = true) {
   const supabase = createClient();
-  return useQuery({
+  const raw = useQuery({
     queryKey: ["print-profiles"],
     enabled,
-    queryFn: async (): Promise<PrintProfiles> => {
+    queryFn: async (): Promise<unknown> => {
       const { data } = await supabase
         .from("pos_settings")
         .select("print_profiles")
         .maybeSingle();
-      const raw = (data as { print_profiles?: unknown } | null)?.print_profiles;
-      return normalizePrintProfiles(raw);
+      return (data as { print_profiles?: unknown } | null)?.print_profiles ?? null;
     },
   });
+  // F17 · ADR-049: perfiles efectivos de la sucursal y la caja de este
+  // dispositivo (negocio ← grupo ← sucursal ← caja, mezcla por documento).
+  const { data: overrides } = useConfigOverrides();
+  const target = usePosResolveTarget();
+  const data = useMemo(() => {
+    if (raw.data === undefined) return undefined;
+    const base = { print_profiles: normalizePrintProfiles(raw.data) as unknown as Record<string, unknown> };
+    const eff = resolveEffective("pos_settings", "", base, overrides ?? [], target).value;
+    return normalizePrintProfiles(eff.print_profiles);
+  }, [raw.data, overrides, target]);
+  return { data: data as PrintProfiles | undefined, isFetched: raw.isFetched, isLoading: raw.isLoading };
+}
+
+// Dónde sale un documento en este dispositivo: perfil efectivo + impresora
+// registrada (asignada, de respaldo o automática por tipo) o la del equipo.
+export function usePrintTarget(doc: PrintDocType, enabled = true): PrintTarget | null {
+  const { data: profiles } = usePrintProfiles(enabled);
+  const { data: printers } = usePrinters();
+  const ctx = useBranchContext();
+  const register = useCurrentRegister();
+  return useMemo(() => {
+    if (!profiles) return null;
+    return resolvePrintTarget(doc, profiles[doc], printers ?? [], {
+      storeId: ctx.posStoreId,
+      registerId: register.data?.id ?? null,
+    });
+  }, [doc, profiles, printers, ctx.posStoreId, register.data?.id]);
 }
 
 // Branding del negocio para el preview/render de tickets. Movido desde
 // TicketModal (H9b) para compartirlo con el editor de plantillas.
-export function useTicketBranding(enabled = true) {
+export function useTenantTicketBranding(enabled = true) {
   const supabase = createClient();
   return useQuery({
     queryKey: ["ticket-branding"],
@@ -53,6 +92,27 @@ export function useTicketBranding(enabled = true) {
       return (data as SampleBrand | null) ?? null;
     },
   });
+}
+
+// Branding efectivo de una sucursal (F17 · ADR-049): datos del ticket pisados
+// por grupo o sucursal, dirección y teléfono de la sucursal si así se eligió y
+// logo propio (si no, el del negocio). Sin storeId: la sucursal del POS.
+export function useTicketBranding(enabled = true, storeId?: string | null) {
+  const q = useTenantTicketBranding(enabled);
+  const ctx = useBranchContext();
+  const sid = storeId ?? ctx.posStoreId;
+  const { data: overrides } = useConfigOverrides();
+  const target = useResolveTarget(sid, null);
+  const logo = useStoreLogo(sid);
+  const store = useMemo(() => {
+    const b = ctx.all.find((x) => x.id === sid);
+    return b ? { address: b.address, city: b.city, province: b.province, phone: b.phone, logo_url: logo } : null;
+  }, [ctx.all, sid, logo]);
+  const data = useMemo(
+    () => (q.data === undefined ? undefined : effectiveTicketBrand(q.data, overrides ?? [], target, store)),
+    [q.data, overrides, target, store],
+  );
+  return { data, isFetched: q.isFetched, isLoading: q.isLoading };
 }
 
 export function useTicketTemplates() {

@@ -38,8 +38,8 @@ export default async function PublicCatalogPage({
   return (
     <main className="min-h-dvh bg-neutral-50 text-neutral-900">
       <header
-        className="px-6 py-10 text-white"
-        style={{ background: `linear-gradient(135deg, ${accent}, #15111f)` }}
+        className="border-b-4 bg-[#15111f] px-6 py-10 text-white"
+        style={{ borderColor: accent }}
       >
         <div className="mx-auto flex max-w-5xl items-center gap-4">
           {catalog.branding?.logo_url && (
@@ -71,7 +71,7 @@ export default async function PublicCatalogPage({
             {catalog.products.map((p) => (
               <div
                 key={p.id}
-                className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm"
+                className="overflow-hidden rounded-xl border border-neutral-200 bg-white"
               >
                 <div className="aspect-square w-full bg-neutral-100">
                   {p.image_url ? (

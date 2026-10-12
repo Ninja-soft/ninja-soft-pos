@@ -15,8 +15,11 @@
 //   * ESC/POS por conector local (app/servicio para térmicas USB/LAN/Bluetooth),
 //     y la COLA DE IMPRESIÓN con reintentos (pendiente/impreso/fallido/reimprimir)
 //     quedan para una etapa futura (F4). No se simulan acá.
-//   * Perfiles POR SUCURSAL / CAJA quedan para F4 (multi-caja). Hoy el perfil es
-//     único por tenant.
+//   * Perfiles POR SUCURSAL / CAJA (F17 · ADR-049): print_profiles se hereda
+//     negocio ← grupo ← sucursal ← caja (config_overrides, mezcla por tipo de
+//     documento) y cada perfil puede apuntar a una impresora registrada
+//     (printer_id) con una de respaldo (fallback_printer_id). Ver
+//     lib/print/printers.ts.
 // =============================================================================
 
 // Tipos de documento configurables. Las claves coinciden con el jsonb de la DB.
@@ -25,7 +28,9 @@ export type PrintDocType =
   | "z_close" // cierre Z de caja
   | "cash_movement" // movimiento de caja (ingreso/egreso)
   | "product_label" // etiqueta de producto
-  | "return"; // devolución / nota de crédito
+  | "return" // devolución / nota de crédito
+  | "kitchen" // comanda de cocina (F17 · ADR-049)
+  | "transfer"; // remito de traslado entre sucursales (F17 · ADR-049)
 
 export type PrintPaper = "58" | "80" | "a4";
 export type PrintFont = "sm" | "md" | "lg";
@@ -37,6 +42,10 @@ export interface PrintProfile {
   auto: boolean;
   font: PrintFont;
   margin: PrintMargin;
+  /** Impresora registrada (printers.id). Sin valor: la elige el POS por tipo. */
+  printer_id?: string;
+  /** Impresora de respaldo si la principal no está disponible. */
+  fallback_printer_id?: string;
 }
 
 export type PrintProfiles = Record<PrintDocType, PrintProfile>;
@@ -48,6 +57,8 @@ export const PRINT_DOC_TYPES: PrintDocType[] = [
   "cash_movement",
   "product_label",
   "return",
+  "kitchen",
+  "transfer",
 ];
 
 // Metadata de presentación por tipo: etiqueta, descripción y papeles válidos.
@@ -82,6 +93,16 @@ export const PRINT_DOC_META: Record<
     description: "Comprobante de una devolución o el vale emitido.",
     papers: ["58", "80", "a4"],
   },
+  kitchen: {
+    label: "Comanda de cocina",
+    description: "Pedido que sale a cocina o barra desde Mesas.",
+    papers: ["58", "80"],
+  },
+  transfer: {
+    label: "Remito de traslado",
+    description: "Remito interno de un traslado entre sucursales.",
+    papers: ["58", "80", "a4"],
+  },
 };
 
 export const PAPER_LABELS: Record<PrintPaper, string> = {
@@ -108,6 +129,9 @@ export function defaultProfile(type: PrintDocType): PrintProfile {
   if (type === "product_label") {
     return { paper: "58", copies: 1, auto: false, font: "sm", margin: "narrow" };
   }
+  if (type === "transfer") {
+    return { paper: "a4", copies: 1, auto: false, font: "md", margin: "normal" };
+  }
   return { paper: "80", copies: 1, auto: false, font: "md", margin: "normal" };
 }
 
@@ -118,6 +142,8 @@ export function defaultPrintProfiles(): PrintProfiles {
     cash_movement: defaultProfile("cash_movement"),
     product_label: defaultProfile("product_label"),
     return: defaultProfile("return"),
+    kitchen: defaultProfile("kitchen"),
+    transfer: defaultProfile("transfer"),
   };
 }
 
@@ -156,12 +182,17 @@ function coerceMargin(margin: unknown): PrintMargin {
 export function normalizeProfile(type: PrintDocType, raw: unknown): PrintProfile {
   const o = (raw ?? {}) as Partial<Record<keyof PrintProfile, unknown>>;
   const base = defaultProfile(type);
+  const id = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v : undefined);
+  const printer = id(o.printer_id);
+  const fallback = id(o.fallback_printer_id);
   return {
     paper: coercePaper(type, o.paper ?? base.paper),
     copies: o.copies == null ? base.copies : clampPrintCopies(o.copies),
     auto: typeof o.auto === "boolean" ? o.auto : base.auto,
     font: coerceFont(o.font ?? base.font),
     margin: coerceMargin(o.margin ?? base.margin),
+    ...(printer ? { printer_id: printer } : {}),
+    ...(fallback && fallback !== printer ? { fallback_printer_id: fallback } : {}),
   };
 }
 
@@ -175,6 +206,8 @@ export function normalizePrintProfiles(raw: unknown): PrintProfiles {
     cash_movement: normalizeProfile("cash_movement", o.cash_movement),
     product_label: normalizeProfile("product_label", o.product_label),
     return: normalizeProfile("return", o.return),
+    kitchen: normalizeProfile("kitchen", o.kitchen),
+    transfer: normalizeProfile("transfer", o.transfer),
   };
 }
 

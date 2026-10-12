@@ -187,16 +187,16 @@ function PlanCardItem({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-4 rounded-2xl border p-5 text-left transition",
+        "relative flex flex-col gap-4 rounded-lg border p-5 text-left transition",
         selected
           ? "choice-on choice-check"
           : recommended
-            ? "border-border bg-muted/60 shadow-ninjaGlow"
+            ? "border-ninja-flame/40 bg-muted/60"
             : "border-border bg-muted/60",
       )}
     >
       {recommended && (
-        <span className="absolute -top-2.5 left-5 inline-flex items-center gap-1 rounded-full bg-ninja-gradient px-2.5 py-0.5 text-[11px] font-bold text-white shadow-ninjaGlow">
+        <span className="absolute -top-2.5 left-5 inline-flex items-center gap-1 rounded-md bg-[var(--pos-solid)] px-2 py-0.5 text-[11px] font-bold text-white">
           <Sparkles size={11} /> Recomendado
         </span>
       )}
@@ -215,7 +215,9 @@ function PlanCardItem({
           plan={{
             name: plan.name,
             secondaryName: plan.secondaryName,
-            imageUrl: plan.imageUrl,
+            // Insignia tipográfica plana: la imagen del plan trae degradado
+            // y brillo horneados (dirección visual sin degradados).
+            imageUrl: null,
             icon: plan.icon,
           }}
           size="sm"

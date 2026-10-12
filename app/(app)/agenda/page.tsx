@@ -191,7 +191,7 @@ export default function AgendaPage() {
 
       {/* Aviso si no hay profesionales todavía */}
       {!hasProfessionals && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/[0.06] p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-ninja-flame/[0.08] p-4">
           <p className="text-sm text-muted-foreground">
             Agregá a tus profesionales (quienes prestan los servicios) para
             organizar la agenda por columnas y calcular comisiones.

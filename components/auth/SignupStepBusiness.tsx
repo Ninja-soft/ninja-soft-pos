@@ -67,8 +67,8 @@ export function SignupStepBusiness({
               className={cn(
                 "flex items-start gap-3 rounded-xl border bg-white/[0.03] p-3.5 text-left transition",
                 active
-                  ? "border-ninja-flame ring-2 ring-ninja-flame/40"
-                  : "border-white/10 hover:border-ninja-flameSoft/50 hover:bg-white/[0.06]",
+                  ? "border-transparent bg-ninja-flame/[0.12]"
+                  : "border-white/10 hover:bg-white/[0.06]",
               )}
             >
               <span

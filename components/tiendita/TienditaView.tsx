@@ -195,7 +195,7 @@ function CatalogCard({
   onAccess: () => void;
 }) {
   return (
-    <Card className="group flex flex-col overflow-hidden transition hover:border-ninja-flameSoft/50">
+    <Card className="group flex flex-col overflow-hidden transition hover:bg-muted">
       {/* Carátula */}
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-ninja-dark">
         {catalog.coverUrl ? (
@@ -211,7 +211,7 @@ function CatalogCard({
           </div>
         )}
         {catalog.owned && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-success backdrop-blur">
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-success backdrop-blur">
             <Check size={12} />
             {catalog.source === "granted" ? "Acceso de regalo" : "Comprado"}
           </span>
@@ -331,7 +331,7 @@ function CatalogAccess({
       </div>
 
       {/* Aclaración: el producto pasa a ser 100% del cliente; no hay export masivo. */}
-      <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-ninja-flame/25 bg-ninja-flame/[0.06] p-4 text-sm text-muted-foreground">
+      <div className="mt-5 flex items-start gap-2.5 rounded-xl bg-ninja-flame/[0.08] p-4 text-sm text-muted-foreground">
         <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
         <p>
           Buscá un producto y agregalo: pasa a ser{" "}
@@ -437,7 +437,7 @@ function CatalogAccess({
 
                     <div className="flex shrink-0 items-center">
                       {isAdded ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-success">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-success">
                           <Check size={14} /> Agregado
                         </span>
                       ) : (

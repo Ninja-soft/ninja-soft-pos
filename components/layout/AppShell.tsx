@@ -418,7 +418,7 @@ export function AppShell({
           <Link
             href="/internal/tenants"
             onClick={() => setDrawer(false)}
-            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
               <ShieldCheck size={16} />

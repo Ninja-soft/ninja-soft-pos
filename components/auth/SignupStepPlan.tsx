@@ -114,8 +114,8 @@ export function SignupStepPlan({
         className={cn(
           "mt-4 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition",
           addonAi
-            ? "border-ninja-flame bg-ninja-flame/[0.06] ring-2 ring-ninja-flame/30"
-            : "border-white/10 bg-white/[0.03] hover:border-ninja-flameSoft/50",
+            ? "border-transparent bg-ninja-flame/[0.12]"
+            : "border-white/10 bg-white/[0.03] hover:bg-muted",
         )}
       >
         <div className="flex items-start justify-between gap-3">

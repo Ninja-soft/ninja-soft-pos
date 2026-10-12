@@ -167,8 +167,8 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("delivery")}
               className={
                 orderType === "delivery"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-ninja-flame bg-ninja-flame/[0.08] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
-                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:border-ninja-flameSoft/40"
+                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >
               <Bike size={16} /> Delivery
@@ -178,8 +178,8 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("takeaway")}
               className={
                 orderType === "takeaway"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-ninja-flame bg-ninja-flame/[0.08] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
-                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:border-ninja-flameSoft/40"
+                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >
               <ShoppingBag size={16} /> Take away
@@ -189,8 +189,8 @@ export function DeliveryOrderModal({
               onClick={() => setOrderType("mostrador")}
               className={
                 orderType === "mostrador"
-                  ? "flex items-center justify-center gap-2 rounded-lg border border-ninja-flame bg-ninja-flame/[0.08] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
-                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:border-ninja-flameSoft/40"
+                  ? "flex items-center justify-center gap-2 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-sm font-semibold text-ninja-flameSoft"
+                  : "flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2.5 text-sm text-muted-foreground transition hover:bg-muted"
               }
             >
               <Coffee size={16} /> Mostrador
@@ -222,7 +222,7 @@ export function DeliveryOrderModal({
             Cliente
           </span>
           {customerId ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-ninja-flame/40 bg-ninja-flame/[0.06] px-3 py-2">
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-ninja-flame/[0.08] px-3 py-2">
               <span className="min-w-0 text-sm">
                 <span className="block truncate font-medium text-foreground">
                   {customerName}

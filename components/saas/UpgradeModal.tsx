@@ -97,7 +97,7 @@ export function UpgradeModal({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[3px] data-[state=open]:animate-overlay-in data-[state=closed]:animate-overlay-out" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-popover/80 p-7 text-popover-foreground shadow-ninjaSoft backdrop-blur-2xl outline-none data-[state=open]:animate-modal-in data-[state=closed]:animate-modal-out">
           {/* Ícono Lock + flame */}
-          <div className="mx-auto relative mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-ninja-flame/12 ring-1 ring-ninja-flame/25">
+          <div className="mx-auto relative mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-ninja-flame/[0.12]">
             <Lock size={26} className="text-ninja-flameSoft" />
             <Flame
               size={16}
@@ -118,7 +118,7 @@ export function UpgradeModal({
 
           {/* Tarjeta del plan destino: logo + nombre + nombre ninja + precio. */}
           {target ? (
-            <div className="mt-5 rounded-xl border border-ninja-flameSoft/30 bg-ninja-flame/5 p-4">
+            <div className="mt-5 rounded-xl bg-ninja-flame/[0.08] p-4">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   {target.image_url ? (

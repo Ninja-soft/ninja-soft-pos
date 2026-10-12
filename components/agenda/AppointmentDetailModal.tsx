@@ -165,7 +165,7 @@ export function AppointmentDetailModal({
 
         {/* Cancelación con motivo (paso intermedio) */}
         {cancelling ? (
-          <div className="space-y-3 rounded-lg border border-red-400/30 bg-red-400/5 p-3">
+          <div className="space-y-3 rounded-lg bg-red-400/10 p-3">
             <Input
               label="Motivo de la cancelación (opcional)"
               value={cancelReason}

@@ -41,9 +41,9 @@ const STATUS_LABELS: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   const cls =
     status === "approved"
-      ? "border-emerald-500/40 bg-emerald-500/10 text-success"
+      ? "border-transparent bg-emerald-500/10 text-success"
       : status === "rejected"
-        ? "border-red-400/40 bg-red-400/10 text-danger"
+        ? "border-transparent bg-red-400/10 text-danger"
         : "border-border bg-muted text-muted-foreground";
   return (
     <span
@@ -174,7 +174,7 @@ export function QrIntentsModal({
           Aprobado: <strong>{formatCurrency(approvedTotal)}</strong>
         </span>
         {orphans.length > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-medium text-danger">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-400/10 px-3 py-1.5 font-medium text-danger">
             <AlertTriangle size={14} /> {orphans.length} aprobado
             {orphans.length > 1 ? "s" : ""} sin venta • revisar
           </span>
@@ -212,7 +212,7 @@ export function QrIntentsModal({
               return (
                 <tr
                   key={i.id}
-                  className={orphan ? "bg-red-400/5" : "transition hover:bg-muted/40"}
+                  className={orphan ? "bg-red-400/10" : "transition hover:bg-muted/40"}
                 >
                   <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
                     {new Date(i.created_at).toLocaleString("es-AR", {

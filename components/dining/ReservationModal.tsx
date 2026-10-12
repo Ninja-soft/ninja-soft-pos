@@ -161,7 +161,7 @@ export function ReservationModal({
             Cliente
           </span>
           {customerId ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-ninja-flame/40 bg-ninja-flame/[0.06] px-3 py-2">
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-ninja-flame/[0.08] px-3 py-2">
               <span className="min-w-0 text-sm">
                 <span className="block truncate font-medium text-foreground">
                   {customerName}

@@ -248,7 +248,7 @@ export function OnboardingChecklist() {
     if (!celebrate) return null;
     return (
       <div className="mt-6 animate-slide-up">
-        <div className="relative overflow-hidden rounded-ninjaLg border border-ninja-flame/25 bg-card/80 p-5 shadow-ninjaSoft backdrop-blur-xl sm:p-6">
+        <div className="relative overflow-hidden rounded-ninjaLg border border-border bg-card/80 p-5 shadow-ninjaSoft backdrop-blur-xl sm:p-6">
           <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-ninja-flame/15 blur-3xl" />
           <div className="relative flex items-center gap-4">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-ninjaMd bg-ninja-gradient text-white shadow-ninjaGlow">
@@ -280,7 +280,7 @@ export function OnboardingChecklist() {
     return (
       <button
         onClick={() => setCollapsedPersist(false)}
-        className="group mt-6 inline-flex items-center gap-2.5 rounded-ninjaFull border border-ninja-flame/25 bg-ninja-flame/[0.07] py-2 pl-2 pr-4 text-sm font-medium text-foreground shadow-sm transition hover:border-ninja-flame/40 hover:bg-ninja-flame/10"
+        className="group mt-6 inline-flex items-center gap-2.5 rounded-ninjaFull bg-ninja-flame/[0.08] py-2 pl-2 pr-4 text-sm font-medium text-foreground shadow-sm transition hover:bg-ninja-flame/10"
       >
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ninja-gradient text-white">
           <Flame size={13} />
@@ -360,22 +360,21 @@ export function OnboardingChecklist() {
                     "group flex items-center gap-3.5 rounded-ninjaMd border px-3 py-3 transition-colors sm:gap-4",
                     ok
                       ? "border-transparent bg-transparent"
-                      : "border-border/70 bg-background/40 hover:border-ninja-flame/30 hover:bg-ninja-flame/[0.04]",
+                      : "border-border/70 bg-background/40 hover:bg-ninja-flame/[0.04]",
                   )}
                 >
                   {/* Indicador de estado */}
                   {ok ? (
                     <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
                       <span className="absolute inset-0 rounded-full bg-ninja-flame/10" />
-                      <span className="absolute inset-[3px] rounded-full ring-1 ring-inset ring-ninja-flame/30" />
-                      <Check
+                                            <Check
                         size={17}
                         strokeWidth={3}
                         className="relative animate-scale-in text-ninja-flameSoft"
                       />
                     </span>
                   ) : (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 font-display text-sm font-bold tabular-nums text-muted-foreground transition group-hover:border-ninja-flame/40 group-hover:text-ninja-flameSoft">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 font-display text-sm font-bold tabular-nums text-muted-foreground transition group-hover:bg-muted group-hover:text-ninja-flameSoft">
                       {i + 1}
                     </span>
                   )}
@@ -419,7 +418,7 @@ export function OnboardingChecklist() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="gap-1.5 border-ninja-flame/30 text-ninja-flameSoft hover:bg-ninja-flame/10"
+                        className="gap-1.5 border-transparent bg-ninja-flame/10 text-ninja-flameSoft hover:bg-ninja-flame/15"
                       >
                         {step.cta}
                         <ArrowRight size={14} />
@@ -435,7 +434,7 @@ export function OnboardingChecklist() {
               catálogo de muestra cuando todavía no se cargaron productos. Deja
               el negocio listo para cobrar sin Excel ni SQL. */}
           {!status.producto && (
-            <div className="mt-4 flex flex-col gap-3 rounded-ninjaMd border border-ninja-flame/20 bg-ninja-flame/[0.05] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-4 flex flex-col gap-3 rounded-ninjaMd bg-ninja-flame/[0.08] p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">
                   ¿Heladería, peluquería, cafetería?
@@ -444,7 +443,7 @@ export function OnboardingChecklist() {
               </p>
               <IndustryPresetButton
                 size="sm"
-                className="shrink-0 border-ninja-flame/30 text-ninja-flameSoft hover:bg-ninja-flame/10"
+                className="shrink-0 border-transparent bg-ninja-flame/10 text-ninja-flameSoft hover:bg-ninja-flame/15"
               />
             </div>
           )}

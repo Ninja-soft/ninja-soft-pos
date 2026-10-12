@@ -75,7 +75,7 @@ export function DateRangePicker({
         <button
           type="button"
           className={cn(
-            "inline-flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition hover:border-ninja-flameSoft/50 focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15",
+            "inline-flex h-11 items-center gap-2 rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition hover:bg-muted focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15",
             className,
           )}
         >

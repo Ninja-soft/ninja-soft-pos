@@ -103,7 +103,7 @@ export default function DevolucionesPage() {
             <button
               key={s.id}
               onClick={() => openReturn(s.id)}
-              className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:border-ninja-flameSoft/40 hover:bg-muted"
+              className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:bg-muted"
             >
               <span className="flex min-w-0 items-center gap-3">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition group-hover:bg-ninja-flame/10 group-hover:text-ninja-flameSoft">

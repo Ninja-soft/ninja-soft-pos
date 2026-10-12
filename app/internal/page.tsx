@@ -248,7 +248,7 @@ export default async function InternalHomePage() {
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:bg-muted"
           >
             {icon} {label}
           </Link>

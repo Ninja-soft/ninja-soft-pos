@@ -67,8 +67,8 @@ function AvatarPicker({
           type="button"
           onClick={() => onChange(null)}
           className={cn(
-            "grid h-9 w-9 place-items-center rounded-full ring-2 transition",
-            value === null ? "ring-ninja-flame" : "ring-transparent",
+            "grid h-10 w-10 place-items-center rounded-full transition",
+            value === null ? "bg-ninja-flame/20" : "hover:bg-muted",
           )}
           title="Iniciales"
         >
@@ -82,8 +82,8 @@ function AvatarPicker({
               type="button"
               onClick={() => onChange(key)}
               className={cn(
-                "grid h-9 w-9 place-items-center rounded-full ring-2 transition hover:bg-muted",
-                value === key ? "ring-ninja-flame" : "ring-transparent",
+                "grid h-10 w-10 place-items-center rounded-full transition",
+                value === key ? "bg-ninja-flame/20 text-ninja-flameSoft" : "hover:bg-muted",
               )}
               title={key}
             >

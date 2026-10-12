@@ -253,11 +253,11 @@ export default function VentasPage() {
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5">
                       {s.status === "voided" ? (
-                        <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger">
+                        <span className="inline-flex rounded-full bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger">
                           Anulada
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success">
+                        <span className="inline-flex rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success">
                           Completada
                         </span>
                       )}

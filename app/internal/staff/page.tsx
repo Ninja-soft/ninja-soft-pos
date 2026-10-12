@@ -91,7 +91,7 @@ export default function InternalStaffPage() {
       </p>
 
       {canBootstrap && (
-        <Card className="mt-6 border-ninja-flame/40">
+        <Card className="mt-6">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
             <div>
               <div className="font-semibold">Todavía no hay un super admin</div>

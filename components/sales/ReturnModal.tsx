@@ -323,7 +323,7 @@ export function ReturnModal({
             {stepKey === "voucher" && (
               <div className="space-y-4">
                 {saleCustomerId ? (
-                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-sm">
+                  <div className="rounded-xl bg-emerald-400/10 px-4 py-3 text-sm">
                     <span className="flex items-center gap-2">
                       <UserPlus size={15} className="text-success" />
                       Vale para el cliente de la venta:{" "}
@@ -449,7 +449,7 @@ function ExchangeResultView({
   const surplus = result.surplus > 0.001;
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
+      <div className="flex items-center gap-2.5 rounded-xl bg-emerald-400/10 px-4 py-3">
         <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-success">
           <Check size={18} />
         </span>
@@ -538,9 +538,9 @@ function Stepper({
                 className={cn(
                   "grid h-8 w-8 place-items-center rounded-full border text-xs font-bold transition-colors",
                   active
-                    ? "border-ninja-flame bg-ninja-flame/15 text-ninja-flameSoft"
+                    ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
                     : done
-                      ? "border-emerald-400/40 bg-emerald-400/15 text-success"
+                      ? "border-transparent bg-emerald-400/15 text-success"
                       : "border-border bg-muted/40 text-muted-foreground",
                 )}
               >
@@ -601,14 +601,14 @@ function ItemsStep({
           <button
             type="button"
             onClick={onAll}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-foreground"
+            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Todo
           </button>
           <button
             type="button"
             onClick={onNone}
-            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:border-ninja-flameSoft/40 hover:text-foreground"
+            className="rounded-full border border-border px-2.5 py-1 font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             Ninguno
           </button>
@@ -626,7 +626,7 @@ function ItemsStep({
               className={cn(
                 "rounded-xl border p-3 transition-colors",
                 selected
-                  ? "border-ninja-flame/40 bg-ninja-flame/[0.04]"
+                  ? "border-transparent bg-ninja-flame/[0.08]"
                   : "border-border",
                 available <= 0 && "opacity-60",
               )}
@@ -762,7 +762,7 @@ function RefundStep({
         <span className="block text-sm font-medium text-muted-foreground">
           ¿Cómo se reintegra?
         </span>
-        <div className="flex items-center gap-3 rounded-xl border border-ninja-flame/40 bg-ninja-flame/[0.05] px-4 py-3.5">
+        <div className="flex items-center gap-3 rounded-xl bg-ninja-flame/[0.08] px-4 py-3.5">
           <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
             {credit ? <Ticket size={18} /> : <Banknote size={18} />}
           </span>
@@ -824,8 +824,8 @@ function RefundCard({
       className={cn(
         "flex flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors",
         active
-          ? "border-ninja-flame bg-ninja-flame/10"
-          : "border-border hover:border-ninja-flameSoft/40 hover:bg-muted/40",
+          ? "border-transparent bg-ninja-flame/[0.12]"
+          : "border-border hover:bg-muted/40",
       )}
     >
       <span
@@ -874,8 +874,8 @@ function BranchScope({
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
                 on
-                  ? "border-ninja-flame bg-ninja-flame/10 font-medium"
-                  : "border-border hover:border-ninja-flameSoft/40",
+                  ? "border-transparent bg-ninja-flame/[0.12] font-medium"
+                  : "border-border hover:bg-muted",
               )}
             >
               {on && <Check size={13} />}
@@ -928,7 +928,7 @@ function VoucherCustomerPicker({
 
   if (selected) {
     return (
-      <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
+      <div className="rounded-xl bg-emerald-400/10 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-2 text-sm">
             <UserPlus size={15} className="text-success" />
@@ -998,7 +998,7 @@ function VoucherCustomerPicker({
   }
 
   return (
-    <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.05] p-3.5">
+    <div className="rounded-xl bg-amber-400/10 p-3.5">
       <div className="mb-2.5 flex items-center gap-2 text-sm font-medium">
         <Ticket size={15} className="text-warning" />
         El vale necesita un cliente
@@ -1091,7 +1091,7 @@ function VoucherCustomerPicker({
                 <button
                   key={c.id}
                   onClick={() => onSelect({ id: c.id, name: c.name })}
-                  className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm transition hover:border-ninja-flameSoft/40 hover:bg-muted"
+                  className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm transition hover:bg-muted"
                 >
                   <span className="truncate">{c.name}</span>
                   <ChevronRight size={14} className="text-muted-foreground" />
@@ -1188,7 +1188,7 @@ function ReturnResult({
 
   return (
     <div className="space-y-4">
-      <div className="no-print flex items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3">
+      <div className="no-print flex items-center gap-2.5 rounded-xl bg-emerald-400/10 px-4 py-3">
         <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/15 text-success">
           <Check size={18} />
         </span>

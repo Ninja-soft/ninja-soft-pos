@@ -280,7 +280,7 @@ export default function ReservasPage() {
                   type="button"
                   disabled={seat.isPending}
                   onClick={() => seating && doSeat(seating, t.id)}
-                  className="flex flex-col items-center gap-1 rounded-xl border border-ninja-flame/40 bg-ninja-flame/[0.06] p-3 text-center transition hover:border-ninja-flame disabled:opacity-50"
+                  className="flex flex-col items-center gap-1 rounded-xl bg-ninja-flame/[0.08] p-3 text-center transition hover:bg-ninja-flame/[0.14] disabled:opacity-50"
                 >
                   <span className="text-base font-bold text-foreground">
                     {t.label}

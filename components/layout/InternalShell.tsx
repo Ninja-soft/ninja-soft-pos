@@ -160,7 +160,7 @@ export function InternalShell({
         <Link
           href="/dashboard"
           onClick={() => setDrawer(false)}
-          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
         >
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
             <Store size={16} />

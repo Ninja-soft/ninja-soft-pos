@@ -331,8 +331,8 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 text-left transition",
                         active
-                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                          : "border-border hover:border-ninja-flameSoft/40",
+                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          : "border-border hover:bg-muted",
                       )}
                     >
                       <div
@@ -412,8 +412,8 @@ function ConfiguracionInner() {
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                         active
-                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                          : "border-border hover:border-ninja-flameSoft/40",
+                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          : "border-border hover:bg-muted",
                       )}
                     >
                       <span
@@ -443,8 +443,8 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 transition",
                         active
-                          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                          : "border-border hover:border-ninja-flameSoft/40",
+                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          : "border-border hover:bg-muted",
                       )}
                     >
                       <div

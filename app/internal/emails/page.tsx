@@ -489,8 +489,8 @@ function SlotEditor({
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition",
               state.kind === opt.key
-                ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
-                : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                : "border-border text-muted-foreground hover:bg-muted",
             )}
           >
             <opt.icon size={14} /> {opt.label}
@@ -538,8 +538,8 @@ function SlotEditor({
                     className={cn(
                       "rounded-lg border px-2 py-2 text-xs font-medium transition",
                       smtpPreset === p.key
-                        ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
                     {p.label}

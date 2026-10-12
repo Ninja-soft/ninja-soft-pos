@@ -405,8 +405,8 @@ export function TenantEmailCard() {
                     className={cn(
                       "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
                       provider === p.key
-                        ? "border-ninja-flame ring-2 ring-ninja-flame/30 text-foreground"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
                     {p.label}
@@ -551,7 +551,7 @@ export function TenantEmailCard() {
                       "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
                     ].map((step, i) => (
                       <li key={i} className="flex gap-2.5 text-muted-foreground">
-                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
                           {i + 1}
                         </span>
                         <span>{step}</span>
@@ -611,8 +611,8 @@ export function TenantEmailCard() {
                   className={cn(
                     "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
                     bodyTemplate === t.key
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      : "border-border hover:bg-muted",
                   )}
                 >
                   <DesignPreview k={t.key} accent={accent} logoUrl={logoUrl} />
@@ -634,7 +634,7 @@ export function TenantEmailCard() {
               className={cn(
                 "flex items-start gap-2 rounded-lg border p-3 text-sm",
                 result.kind === "ok"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  ? "border-transparent bg-emerald-500/10 text-emerald-400"
                   : "border-destructive/30 bg-destructive/10 text-destructive",
               )}
             >
@@ -760,8 +760,8 @@ function MethodCard({
       className={cn(
         "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
         active
-          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-          : "border-border hover:border-ninja-flameSoft/40",
+          ? "border-transparent bg-ninja-flame/[0.12]"
+          : "border-border hover:bg-muted",
       )}
     >
       <span
@@ -786,7 +786,7 @@ function ResendGuide() {
     "Copiá la clave (empieza con re_) y pegala abajo. Se muestra una sola vez.",
   ];
   return (
-    <div className="mt-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/5 p-3.5">
+    <div className="mt-3 rounded-lg bg-ninja-flame/[0.08] p-3.5">
       <div className="flex items-start gap-2.5">
         <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
           <Zap size={15} />
@@ -806,7 +806,7 @@ function ResendGuide() {
       <ol className="mt-3 space-y-1.5">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-2.5 text-xs text-muted-foreground">
-            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
               {i + 1}
             </span>
             <span>{step}</span>

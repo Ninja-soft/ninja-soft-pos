@@ -54,7 +54,7 @@ function codeStatus(c: InviteCode): {
     };
   return {
     label: "Activo",
-    cls: "border-emerald-400/30 bg-emerald-400/10 text-success",
+    cls: "border-transparent bg-emerald-400/10 text-success",
     expired: false,
   };
 }

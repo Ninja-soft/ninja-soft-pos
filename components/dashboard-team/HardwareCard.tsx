@@ -386,7 +386,7 @@ export function HardwareCard() {
       </div>
 
       {/* Export - bloque destacado arriba para acceso rapido de soporte. */}
-      <Card className="border-ninja-flame/30">
+      <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
           <div>
             <div className="flex items-center gap-2 font-semibold">

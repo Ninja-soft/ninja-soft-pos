@@ -108,10 +108,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const STATUS_TONE: Record<string, string> = {
   trial: "border-ninja-brightViolet/40 bg-ninja-brightViolet/10 text-ninja-brightViolet",
-  active: "border-emerald-500/40 bg-emerald-500/10 text-success",
-  past_due: "border-amber-500/40 bg-amber-500/10 text-warning",
-  suspended: "border-red-500/40 bg-red-500/10 text-danger",
-  cancelled: "border-red-500/40 bg-red-500/10 text-danger",
+  active: "border-transparent bg-emerald-500/10 text-success",
+  past_due: "border-transparent bg-amber-500/10 text-warning",
+  suspended: "border-transparent bg-red-500/10 text-danger",
+  cancelled: "border-transparent bg-red-500/10 text-danger",
 };
 const AI_ADDON_KEYS = ["ai_assistant", "asistente_ia"];
 
@@ -584,7 +584,7 @@ export function SubscriptionCard() {
                       {STATUS_LABELS[sub.status] ?? sub.status}
                     </span>
                     {sub.is_lifetime && (
-                      <span className="inline-flex items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-flameSoft">
+                      <span className="inline-flex items-center gap-1 rounded-ninjaFull bg-ninja-flame/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-flameSoft">
                         <Star size={11} /> Vitalicio
                       </span>
                     )}
@@ -636,7 +636,7 @@ export function SubscriptionCard() {
             </div>
 
             {sub.cancel_at_period_end && !closureRequested && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-warning">
+              <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-warning">
                 <AlertTriangle size={14} className="shrink-0" />
                 Tu suscripción se cancela el {fmtDate(sub.current_period_end)}. Vas
                 a mantener el acceso hasta esa fecha.
@@ -758,7 +758,7 @@ export function SubscriptionCard() {
                           <Check size={12} /> Activo
                         </span>
                         {aiComped ? (
-                          <span className="inline-flex items-center gap-1 rounded-ninjaFull border border-ninja-flameSoft/40 bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
+                          <span className="inline-flex items-center gap-1 rounded-ninjaFull bg-ninja-flame/10 px-1.5 py-0.5 text-[10px] font-semibold text-ninja-flameSoft">
                             <Gift size={10} /> Bonificado por NinjaSoft
                           </span>
                         ) : aiPrice ? (
@@ -798,7 +798,7 @@ export function SubscriptionCard() {
             </div>
           ) : (
             // No contratado: venta corta + CTA.
-            <div className="mt-3 rounded-xl border border-ninja-flame/30 bg-ninja-flame/[0.05] p-4">
+            <div className="mt-3 rounded-xl bg-ninja-flame/[0.08] p-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
                   <AiAvatar src={aiCfg?.image_url} />
@@ -937,7 +937,7 @@ export function SubscriptionCard() {
           columnsClassName="sm:grid-cols-2 lg:grid-cols-4"
           renderCta={(p, isCompared) =>
             isCompared ? (
-              <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 py-2 text-xs font-semibold text-success">
+              <span className="inline-flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-500/10 py-2 text-xs font-semibold text-success">
                 <Check size={14} /> Tu plan actual
               </span>
             ) : (
@@ -1030,7 +1030,7 @@ export function SubscriptionCard() {
         className="max-w-md"
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-danger">
+          <div className="flex items-start gap-2.5 rounded-lg bg-red-500/10 p-3 text-xs text-danger">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <div>
               Esto solicita el cierre de tu cuenta. Mantenés el acceso hasta el fin

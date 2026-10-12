@@ -1,6 +1,7 @@
 import {
   BadgeDollarSign,
   Bike,
+  Building2,
   CalendarDays,
   Clock,
   CreditCard,
@@ -34,6 +35,7 @@ export type SettingsSectionKey =
   | "apariencia"
   | "diseno-pos"
   | "rubro"
+  | "sucursales"
   | "marca"
   | "tickets"
   | "impresion"
@@ -111,6 +113,14 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Store,
         feature: "personalizacion_marca",
         keywords: "logo color razon social cuit direccion telefono",
+      },
+      {
+        key: "sucursales",
+        label: "Sucursales y cajas",
+        title: "Sucursales y cajas",
+        description: "Tus locales, sus cajas y qué personal trabaja en cada uno, con traslados programados.",
+        icon: Building2,
+        keywords: "sucursal local caja punto de venta personal empleados traslado cobertura multi",
       },
     ],
   },

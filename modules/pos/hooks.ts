@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   useMutation,
   useQuery,
@@ -14,19 +15,37 @@ import {
   type SalePaymentInput,
   type SaleExtraInput,
 } from "./api";
+import { useCurrentRegister } from "@/modules/branches/hooks";
+import { useBranchStore } from "@/modules/branches/store";
 
+// Turno abierto de la caja de ESTE dispositivo (F17 · H90). Antes era "el
+// último turno abierto del negocio": con varias cajas o sucursales mezclaba
+// turnos. El id queda en el contexto para que create_sale, return_sale_v2 y
+// exchange_sale manden el turno en uso (p_cash_shift_id).
 export function useOpenShift() {
-  return useQuery({
-    queryKey: ["pos", "open-shift"],
-    queryFn: () => posApi.openShift(),
+  const register = useCurrentRegister();
+  const registerId = register.data?.id ?? null;
+  const setActiveShiftId = useBranchStore((s) => s.setActiveShiftId);
+  const q = useQuery({
+    queryKey: ["pos", "open-shift", "register", registerId],
+    queryFn: () => posApi.openShift(registerId),
+    enabled: register.isFetched,
   });
+  // Sólo con el contexto de sucursales cargado (migraciones de F17 aplicadas):
+  // con el respaldo de caja no se manda p_cash_shift_id, que una base vieja
+  // no reconoce.
+  const shiftId = register.store ? (q.data?.id ?? null) : null;
+  useEffect(() => {
+    if (q.isFetched) setActiveShiftId(shiftId);
+  }, [q.isFetched, shiftId, setActiveShiftId]);
+  return q;
 }
 
+// Caja del dispositivo dentro de la sucursal del POS (F17 · H90). Mantiene la
+// forma de useQuery ({ data }) para los callers que ya la usaban.
 export function useDefaultRegister() {
-  return useQuery({
-    queryKey: ["pos", "register"],
-    queryFn: () => posApi.defaultRegister(),
-  });
+  const r = useCurrentRegister();
+  return { data: r.data, store: r.store, isFetched: r.isFetched };
 }
 
 export function useMpMethod() {

@@ -15,15 +15,16 @@ export function useShiftMovements(shiftId: string | null) {
   });
 }
 
-export function useZClosures(range?: { from?: Date; to?: Date }) {
+export function useZClosures(range?: { from?: Date; to?: Date }, storeId?: string | null) {
   return useQuery({
     queryKey: [
       "cash",
       "z-closures",
       range?.from?.toISOString() ?? null,
       range?.to?.toISOString() ?? null,
+      storeId ?? null,
     ],
-    queryFn: () => cashApi.zClosures(range),
+    queryFn: () => cashApi.zClosures(range, storeId),
   });
 }
 

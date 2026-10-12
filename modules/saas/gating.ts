@@ -8,6 +8,7 @@ import type { Json } from "@/types/database";
 
 export type GatingLimitKey =
   | "max_stores"
+  | "max_registers_per_store"
   | "max_users"
   | "max_products"
   | "max_sales_per_month";
@@ -22,6 +23,7 @@ const EMPTY_SUMMARY: GatingSummary = {
   features: {},
   limits: {
     max_stores: null,
+    max_registers_per_store: null,
     max_users: null,
     max_products: null,
     max_sales_per_month: null,
@@ -54,6 +56,7 @@ function parseSummary(raw: Json | null): GatingSummary {
     features,
     limits: {
       max_stores: num(limitsRaw.max_stores),
+      max_registers_per_store: num(limitsRaw.max_registers_per_store),
       max_users: num(limitsRaw.max_users),
       max_products: num(limitsRaw.max_products),
       max_sales_per_month: num(limitsRaw.max_sales_per_month),

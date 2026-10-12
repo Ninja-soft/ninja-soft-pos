@@ -26,6 +26,8 @@ import {
   Store,
   Users,
   Wallet,
+  Copy,
+  BookmarkPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -40,6 +42,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/Dropdown";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { StoreFormModal } from "@/components/branches/StoreFormModal";
+import { CopySetupModal, SaveTemplateModal, StoreTemplatesModal } from "@/components/branches/StoreSetup";
 import { RegisterFormModal } from "@/components/branches/RegisterFormModal";
 import { CashMonitor } from "@/components/cash/CashMonitor";
 import { StaffBoard } from "@/components/staff/StaffBoard";
@@ -144,6 +147,10 @@ export function BranchesManager() {
   });
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [detail, setDetail] = useState<{ id: string; tab: Tab } | null>(null);
+  // Plantillas y "Copiar de" (F17 · ADR-057).
+  const [copyTo, setCopyTo] = useState<Branch | null>(null);
+  const [saveTpl, setSaveTpl] = useState<Branch | null>(null);
+  const [tplList, setTplList] = useState(false);
 
   const list = useMemo(
     () =>
@@ -204,6 +211,8 @@ export function BranchesManager() {
       run(m.updateStore.mutateAsync({ id: b.id, patch: { is_active: !b.is_active } }), b.is_active ? "Sucursal pausada" : "Sucursal activa"),
     archive: (b: Branch) => setConfirm({ kind: "archive-store", branch: b }),
     restore: (b: Branch) => storeGate.run(() => run(m.restoreStore.mutateAsync(b.id), "Sucursal restaurada")),
+    copyFrom: (b: Branch) => storeGate.run(() => setCopyTo(b)),
+    saveTemplate: (b: Branch) => storeGate.run(() => setSaveTpl(b)),
   };
   const registerActions = {
     add: newRegister,
@@ -233,9 +242,16 @@ export function BranchesManager() {
           )}
         </div>
         {canManage && (
-          <Button size="sm" className={SOLID_CTA} onClick={newStore}>
-            <Plus size={16} /> Nueva sucursal
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {live.length > 1 && (
+              <Button size="sm" variant="secondary" onClick={() => storeGate.run(() => setTplList(true))}>
+                Plantillas
+              </Button>
+            )}
+            <Button size="sm" className={SOLID_CTA} onClick={newStore}>
+              <Plus size={16} /> Nueva sucursal
+            </Button>
+          </div>
         )}
       </div>
 
@@ -343,6 +359,9 @@ export function BranchesManager() {
       />
 
       <StoreFormModal open={storeModal.open} onOpenChange={(o) => setStoreModal((s) => ({ ...s, open: o }))} branch={storeModal.branch} />
+      <CopySetupModal open={copyTo !== null} onOpenChange={(o) => !o && setCopyTo(null)} target={copyTo} branches={live} />
+      <SaveTemplateModal open={saveTpl !== null} onOpenChange={(o) => !o && setSaveTpl(null)} from={saveTpl} />
+      <StoreTemplatesModal open={tplList} onOpenChange={setTplList} />
       <RegisterFormModal
         open={regModal.open}
         onOpenChange={(o) => setRegModal((s) => ({ ...s, open: o }))}
@@ -387,6 +406,8 @@ type StoreActions = {
   togglePause: (b: Branch) => void;
   archive: (b: Branch) => void;
   restore: (b: Branch) => void;
+  copyFrom: (b: Branch) => void;
+  saveTemplate: (b: Branch) => void;
 };
 type RegisterActions = {
   add: (b: Branch) => void;
@@ -426,6 +447,13 @@ function StoreMenu({ branch: b, actions }: { branch: Branch; actions: StoreActio
             <DropdownItem onSelect={() => actions.togglePause(b)}>
               {b.is_active ? <Pause size={15} /> : <Play size={15} />}
               {b.is_active ? "Pausar" : "Reactivar"}
+            </DropdownItem>
+            <DropdownSeparator />
+            <DropdownItem onSelect={() => actions.copyFrom(b)}>
+              <Copy size={15} /> Copiar configuración de...
+            </DropdownItem>
+            <DropdownItem onSelect={() => actions.saveTemplate(b)}>
+              <BookmarkPlus size={15} /> Guardar como plantilla
             </DropdownItem>
             {!b.is_default && (
               <>

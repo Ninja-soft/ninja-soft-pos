@@ -4,34 +4,33 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Check,
+  ChevronLeft,
+  Gift,
   Layers,
   Package,
-  PackagePlus,
-  Search,
+  PackageSearch,
+  Plus,
+  SearchX,
   ShoppingBag,
   Sparkles,
-  Store,
 } from "lucide-react";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
-import { Spinner, SpinnerBlock } from "@/components/ui/Spinner";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchField } from "@/components/ui/SearchField";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatCurrency, formatInt } from "@/lib/utils/format";
-import {
-  useStorefrontCatalogs,
-  useCatalogSearch,
-  useAddCatalogProduct,
-} from "@/modules/tiendita/hooks";
+import { cn } from "@/lib/utils/cn";
+import { splitCategoryPath } from "@/lib/products/categoryPath";
+import { useStorefrontCatalogs, useCatalogSearch } from "@/modules/tiendita/hooks";
 import { startCatalogCheckout } from "@/modules/tiendita/storefront";
-import type {
-  StorefrontCatalog,
-  CatalogSearchResult,
-} from "@/modules/tiendita/storefront";
+import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/storefront";
 import { TienditaIntro } from "./TienditaIntro";
+import { ImportProductModal } from "./ImportProductModal";
 
 // Mensajes honestos para los códigos de error del checkout.
 const CHECKOUT_ERRORS: Record<string, string> = {
@@ -43,22 +42,6 @@ const CHECKOUT_ERRORS: Record<string, string> = {
   forbidden: "Solo el dueño de la cuenta puede comprar catálogos.",
 };
 
-// Mensajes honestos para los códigos de error del alta de producto
-// (add_catalog_product_to_tenant). Antes se colapsaba todo a un toast genérico
-// y un "catalog_not_owned" (catálogo no comprado/bonificado para ESTE negocio)
-// era indistinguible de un error real de red.
-const ADD_ERRORS: Record<string, string> = {
-  catalog_not_owned:
-    "Este negocio no tiene el catálogo habilitado (ni comprado ni bonificado). Revisá en Tiendita que figure como tuyo.",
-  catalog_product_not_found: "Ese producto ya no está en el catálogo.",
-  no_tenant: "Tu sesión no tiene un negocio activo. Cerrá sesión y volvé a entrar.",
-};
-
-function addErrorDetail(e: unknown): string | undefined {
-  const raw = (e as { message?: string })?.message ?? "";
-  return ADD_ERRORS[raw] ?? (raw || undefined);
-}
-
 export function TienditaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,7 +49,6 @@ export function TienditaView() {
   const { toast } = useToast();
 
   const { data: catalogs, isLoading } = useStorefrontCatalogs();
-  // Catálogo abierto (vista de acceso/buscador). null = grilla de catálogos.
   const [openCatalog, setOpenCatalog] = useState<StorefrontCatalog | null>(null);
 
   // Vuelta desde Mercado Pago (?bought=ok): feedback + refresco del acceso (el
@@ -80,15 +62,8 @@ export function TienditaView() {
       variant: "success",
     });
     qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] });
-    // Reintento suave: el webhook puede tardar; refrescamos un par de veces.
-    const t1 = setTimeout(
-      () => qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] }),
-      4000,
-    );
-    const t2 = setTimeout(
-      () => qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] }),
-      9000,
-    );
+    const t1 = setTimeout(() => qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] }), 4000);
+    const t2 = setTimeout(() => qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] }), 9000);
     router.replace("/tiendita");
     return () => {
       clearTimeout(t1);
@@ -97,7 +72,6 @@ export function TienditaView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Si el catálogo abierto se actualiza (p. ej. pasó a owned), reflejarlo.
   const openCatalogFresh = useMemo(
     () => catalogs?.find((c) => c.id === openCatalog?.id) ?? openCatalog,
     [catalogs, openCatalog],
@@ -112,77 +86,100 @@ export function TienditaView() {
       window.location.href = initPoint;
     },
     onError: (e: Error) => {
-      // already_owned: refrescamos para mostrar "Acceder".
       if (e.message === "already_owned") {
         qc.invalidateQueries({ queryKey: ["tiendita", "catalogs"] });
       }
-      toast({
-        title: CHECKOUT_ERRORS[e.message] ?? "No se pudo iniciar la compra",
-        variant: "error",
-      });
+      toast({ title: CHECKOUT_ERRORS[e.message] ?? "No se pudo iniciar la compra", variant: "error" });
     },
   });
+
+  const owned = (catalogs ?? []).filter((c) => c.owned);
+  const available = (catalogs ?? []).filter((c) => !c.owned);
 
   return (
     <>
       <TienditaIntro />
-
-      <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageContainer>
         {openCatalogFresh && openCatalogFresh.owned ? (
-          <CatalogAccess
-            catalog={openCatalogFresh}
-            onBack={() => setOpenCatalog(null)}
-          />
+          <CatalogAccess catalog={openCatalogFresh} onBack={() => setOpenCatalog(null)} />
         ) : (
           <>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <Eyebrow>NinjaSoft</Eyebrow>
-                <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
-                  <ShoppingBag size={30} className="text-ninja-flameSoft" />
-                  Tiendita
-                </Display>
-                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Catálogos precargados de las marcas más grandes. Comprá uno
-                  (pago único) y sumá sus productos a tu tienda en un clic, con
-                  foto, marca y categoría ya armadas.
-                </p>
-              </div>
-            </div>
+            <PageHeader
+              eyebrow="NinjaSoft"
+              title="Tiendita"
+              icon={ShoppingBag}
+              description="Catálogos de las marcas más grandes, con foto, marca y categoría. Comprá uno (pago único) y sumá productos a tu tienda."
+            />
 
-            {/* Grilla de catálogos */}
-            <div className="mt-8">
-              {isLoading ? (
-                <SpinnerBlock />
-              ) : (catalogs?.length ?? 0) === 0 ? (
-                <Card>
-                  <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                    Todavía no hay catálogos disponibles. Volvé pronto: estamos
-                    sumando marcas.
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {(catalogs ?? []).map((c) => (
-                    <CatalogCard
-                      key={c.id}
-                      catalog={c}
-                      buying={buy.isPending && buy.variables?.id === c.id}
-                      onBuy={() => buy.mutate(c)}
-                      onAccess={() => setOpenCatalog(c)}
+            {isLoading ? (
+              <SpinnerBlock className="py-20" />
+            ) : (catalogs?.length ?? 0) === 0 ? (
+              <div className="mt-8 rounded-3xl bg-card shadow-ninjaSoft">
+                <EmptyState
+                  icon={ShoppingBag}
+                  title="Todavía no hay catálogos"
+                  description="Estamos sumando marcas. Volvé pronto."
+                />
+              </div>
+            ) : (
+              <div className="mt-8 space-y-10">
+                {owned.length > 0 && (
+                  <section>
+                    <SectionHeader title="Tus catálogos" description="Entrá, buscá y sumá productos." />
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {owned.map((c) => (
+                        <CatalogCard key={c.id} catalog={c} onAccess={() => setOpenCatalog(c)} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {available.length > 0 && (
+                  <section>
+                    <SectionHeader
+                      title={owned.length > 0 ? "Más catálogos" : "Catálogos disponibles"}
+                      description="Pago único: el catálogo queda tuyo para siempre."
                     />
-                  ))}
-                </div>
-              )}
-            </div>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {available.map((c) => (
+                        <CatalogCard
+                          key={c.id}
+                          catalog={c}
+                          buying={buy.isPending && buy.variables?.id === c.id}
+                          onBuy={() => buy.mutate(c)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
           </>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }
 
-// ── Tarjeta de catálogo en la grilla ────────────────────────────────────────
+// ── Carátula del catálogo ───────────────────────────────────────────────────
+function Cover({ catalog, className }: { catalog: StorefrontCatalog; className?: string }) {
+  return (
+    <div className={cn("relative overflow-hidden bg-ninja-dark", className)}>
+      {catalog.coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={catalog.coverUrl}
+          alt=""
+          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+        />
+      ) : (
+        <div className="grid h-full w-full place-items-center bg-[radial-gradient(80%_80%_at_30%_20%,rgba(255,106,26,0.35),transparent_60%),radial-gradient(70%_70%_at_80%_90%,rgba(109,74,255,0.35),transparent_60%)]">
+          <Package size={34} className="text-white/50" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CatalogCard({
   catalog,
   buying,
@@ -190,123 +187,100 @@ function CatalogCard({
   onAccess,
 }: {
   catalog: StorefrontCatalog;
-  buying: boolean;
-  onBuy: () => void;
-  onAccess: () => void;
+  buying?: boolean;
+  onBuy?: () => void;
+  onAccess?: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = (catalog.description?.length ?? 0) > 140;
   return (
-    <Card className="group flex flex-col overflow-hidden transition hover:bg-muted">
-      {/* Carátula */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-ninja-dark">
-        {catalog.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={catalog.coverUrl}
-            alt={catalog.name}
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(70%_70%_at_50%_30%,rgba(236,63,23,0.22),transparent_70%)]">
-            <Package size={40} className="text-white/40" />
+    <article className="group flex flex-col overflow-hidden rounded-3xl bg-card shadow-ninjaSoft">
+      <button
+        type="button"
+        onClick={catalog.owned ? onAccess : undefined}
+        className={cn("relative block text-left", !catalog.owned && "cursor-default")}
+        tabIndex={catalog.owned ? 0 : -1}
+        aria-label={catalog.owned ? `Entrar a ${catalog.name}` : undefined}
+      >
+        <Cover catalog={catalog} className="aspect-[16/10] w-full" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <div className="flex flex-wrap gap-1.5">
+            {catalog.productCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
+                <Layers size={12} /> {formatInt(catalog.productCount)} productos
+              </span>
+            )}
+            {catalog.owned && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#15111f]">
+                {catalog.source === "granted" ? <Gift size={12} /> : <Check size={12} />}
+                {catalog.source === "granted" ? "De regalo" : "Comprado"}
+              </span>
+            )}
+          </div>
+          <h3 className="mt-2 text-xl font-bold tracking-tight text-white">{catalog.name}</h3>
+        </div>
+      </button>
+
+      <div className="flex flex-1 flex-col p-4 pt-3.5">
+        {catalog.description && (
+          <div>
+            <p
+              className={cn(
+                "whitespace-pre-line text-sm leading-relaxed text-muted-foreground",
+                !expanded && "line-clamp-3",
+              )}
+            >
+              {catalog.description}
+            </p>
+            {long && (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                {expanded ? "Ver menos" : "Ver más"}
+              </button>
+            )}
           </div>
         )}
-        {catalog.owned && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-success backdrop-blur">
-            <Check size={12} />
-            {catalog.source === "granted" ? "Acceso de regalo" : "Comprado"}
-          </span>
-        )}
-        {/* Tamaño del catálogo: info comercial (visible antes de comprar). */}
-        {catalog.productCount > 0 && (
-          <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
-            <Layers size={12} className="text-ninja-flameSoft" />
-            Incluye {formatInt(catalog.productCount)} productos
-          </span>
-        )}
-      </div>
-
-      <CardContent className="flex flex-1 flex-col p-5">
-        <h3 className="text-base font-bold text-foreground">{catalog.name}</h3>
-        {catalog.description && (
-          // Descripción completa: scroll interno cuando es larga (no se trunca).
-          <p className="slim-scrollbar mt-1 max-h-24 overflow-y-auto whitespace-pre-line pr-1 text-sm leading-relaxed text-muted-foreground">
-            {catalog.description}
-          </p>
-        )}
-
-        <div className="mt-4 flex items-end justify-between gap-3 pt-1">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           {catalog.owned ? (
             <>
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
-                <Check size={15} /> Ya tenés acceso
-              </span>
-              <Button size="sm" onClick={onAccess}>
-                <Search size={15} /> Acceder
+              <span className="text-sm text-muted-foreground">Listo para usar</span>
+              <Button size="sm" className="rounded-full px-4" onClick={onAccess}>
+                Entrar
               </Button>
             </>
           ) : (
             <>
               <div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   Pago único
-                </div>
-                <div className="font-price text-xl font-black text-foreground">
+                </p>
+                <p className="font-price text-xl font-black tabular-nums text-foreground">
                   {formatCurrency(catalog.priceArs)}
-                </div>
+                </p>
               </div>
-              <Button size="sm" loading={buying} onClick={onBuy}>
+              <Button size="sm" className="rounded-full px-4" loading={buying} onClick={onBuy}>
                 <ShoppingBag size={15} /> Comprar
               </Button>
             </>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 }
 
-// ── Vista de acceso a un catálogo comprado: buscar + agregar ────────────────
-function CatalogAccess({
-  catalog,
-  onBack,
-}: {
-  catalog: StorefrontCatalog;
-  onBack: () => void;
-}) {
-  const { toast } = useToast();
+// ── Catálogo abierto: buscar + revisar + importar ──────────────────────────
+function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack: () => void }) {
   const [query, setQuery] = useState("");
   const debounced = useDebouncedValue(query.trim(), 350);
-  // Productos ya agregados en esta sesión (para mostrar el check sin re-fetch).
   const [added, setAdded] = useState<Set<number>>(new Set());
+  const [editing, setEditing] = useState<CatalogSearchResult | null>(null);
 
-  const { data: results, isFetching, isError } = useCatalogSearch(
-    catalog.id,
-    debounced,
-    true,
-  );
-
-  const add = useAddCatalogProduct(catalog.id);
-
-  function onAdd(p: CatalogSearchResult) {
-    if (added.has(p.catalogProductId)) return;
-    add.mutate(p.catalogProductId, {
-      onSuccess: () => {
-        setAdded((prev) => new Set(prev).add(p.catalogProductId));
-        toast({
-          title: "Producto agregado",
-          description: `"${p.titulo}" ya está en tus productos.`,
-          variant: "success",
-        });
-      },
-      onError: (e) =>
-        toast({
-          title: "No se pudo agregar el producto",
-          description: addErrorDetail(e),
-          variant: "error",
-        }),
-    });
-  }
-
+  const { data: results, isFetching, isError, isLoading } = useCatalogSearch(catalog.id, debounced, true);
   const hasQuery = debounced.length > 0;
   const empty = !isFetching && (results?.length ?? 0) === 0;
 
@@ -315,149 +289,178 @@ function CatalogAccess({
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="-ml-1 mb-5 inline-flex items-center gap-0.5 rounded-full py-1 pl-1 pr-3 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
-        <ArrowLeft size={16} /> Volver a Tiendita
+        <ChevronLeft size={18} /> Tiendita
       </button>
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <Eyebrow>Catálogo</Eyebrow>
-          <Display className="mt-3 flex items-center gap-2 text-2xl md:text-3xl">
-            <Store size={26} className="text-ninja-flameSoft" />
+      {/* Encabezado del catálogo */}
+      <div className="flex items-center gap-4">
+        <Cover catalog={catalog} className="h-16 w-16 shrink-0 rounded-2xl sm:h-20 sm:w-20" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Catálogo
+          </p>
+          <h1 className="mt-0.5 truncate font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {catalog.name}
-          </Display>
+          </h1>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {catalog.productCount > 0 && (
+              <Badge tone="neutral">
+                <Layers size={11} /> {formatInt(catalog.productCount)} productos
+              </Badge>
+            )}
+            <Badge tone="success">
+              {catalog.source === "granted" ? <Gift size={11} /> : <Check size={11} />}
+              {catalog.source === "granted" ? "De regalo" : "Comprado"}
+            </Badge>
+          </div>
         </div>
       </div>
 
-      {/* Aclaración: el producto pasa a ser 100% del cliente; no hay export masivo. */}
-      <div className="mt-5 flex items-start gap-2.5 rounded-xl bg-ninja-flame/[0.08] p-4 text-sm text-muted-foreground">
-        <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
-        <p>
-          Buscá un producto y agregalo: pasa a ser{" "}
-          <strong className="text-foreground">100% tuyo</strong> (lo editás,
-          ponés tu precio y tu stock). Podés volver a este maestro cuando
-          quieras. Se agrega <strong className="text-foreground">de a uno</strong>{" "}
-          o por código/escaneo; no se exporta todo el catálogo a Excel.
-        </p>
-      </div>
-
-      {/* Buscador */}
-      <div className="relative mt-5 max-w-xl">
-        <Search
-          size={18}
-          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <input
+      {/* Buscador (sticky en mobile para no perderlo al scrollear) */}
+      <div className="sticky top-0 z-10 -mx-4 mt-6 bg-background px-4 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
+        <SearchField
+          size="lg"
           autoFocus
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por nombre o código de barras (EAN)…"
-          className="h-12 w-full rounded-xl border border-input bg-background pl-11 pr-11 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+          onValueChange={setQuery}
+          loading={isFetching}
+          placeholder="Buscar por nombre o código de barras"
+          className="max-w-2xl"
         />
-        {isFetching && (
-          <span className="absolute right-3.5 top-1/2 -translate-y-1/2">
-            <Spinner size={18} />
-          </span>
-        )}
       </div>
+      <p className="mt-2.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+        <Sparkles size={13} className="mt-px shrink-0 text-ninja-flameSoft" />
+        Revisás y editás cada producto antes de importarlo. Después es 100% tuyo: precio, stock y foto.
+      </p>
 
       {/* Resultados */}
       <div className="mt-6">
-        {isError ? (
-          <Card>
-            <CardContent className="p-8 text-center text-sm text-danger">
-              No se pudo buscar en el catálogo. Reintentá en un momento.
-            </CardContent>
-          </Card>
-        ) : empty ? (
-          <Card>
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              {hasQuery ? (
-                <>
-                  Lamentablemente ese producto no existe en el catálogo. Probá
-                  con otro nombre o código.
-                </>
-              ) : (
-                "Empezá a escribir para buscar productos en el catálogo."
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(results ?? []).map((p) => {
-              const isAdded = added.has(p.catalogProductId);
-              const adding = add.isPending && add.variables === p.catalogProductId;
-              return (
-                <Card key={p.catalogProductId} className="overflow-hidden">
-                  <CardContent className="flex gap-3 p-3.5">
-                    <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-border bg-background">
-                      {p.fotoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={p.fotoUrl}
-                          alt={p.titulo}
-                          className="h-full w-full object-contain p-1"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <Package size={20} className="text-muted-foreground" />
-                      )}
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      {/* Nombre del producto completo: scroll interno si es muy largo. */}
-                      <div className="slim-scrollbar max-h-16 overflow-y-auto break-words pr-1 text-sm font-medium leading-relaxed text-foreground">
-                        {p.titulo}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                        {p.marca && (
-                          <span className="font-medium text-ninja-flameSoft">
-                            {p.marca}
-                          </span>
-                        )}
-                        {p.categoriaPath && (
-                          <span className="break-words">{p.categoriaPath}</span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        {p.precio != null && (
-                          <span className="font-price text-sm font-bold text-foreground">
-                            {formatCurrency(p.precio)}
-                          </span>
-                        )}
-                        {p.precioLista != null &&
-                          p.precioLista !== p.precio && (
-                            <span className="text-xs text-muted-foreground line-through">
-                              {formatCurrency(p.precioLista)}
-                            </span>
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center">
-                      {isAdded ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-success">
-                          <Check size={14} /> Agregado
-                        </span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          loading={adding}
-                          onClick={() => onAdd(p)}
-                        >
-                          <PackagePlus size={15} /> Agregar
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
+        {isLoading ? (
+          <SpinnerBlock className="py-16" />
+        ) : isError ? (
+          <div className="rounded-3xl bg-card shadow-ninjaSoft">
+            <EmptyState
+              icon={SearchX}
+              title="No se pudo buscar en el catálogo"
+              description="Reintentá en un momento."
+            />
           </div>
+        ) : empty ? (
+          <div className="rounded-3xl bg-card shadow-ninjaSoft">
+            <EmptyState
+              icon={hasQuery ? SearchX : PackageSearch}
+              title={hasQuery ? "No encontramos ese producto" : "Buscá en el catálogo"}
+              description={
+                hasQuery
+                  ? "Probá con otro nombre o con el código de barras."
+                  : "Escribí un nombre o escaneá un código para empezar."
+              }
+            />
+          </div>
+        ) : (
+          <>
+            {!hasQuery && (
+              <p className="mb-3 text-sm font-semibold text-foreground">Destacados del catálogo</p>
+            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              {(results ?? []).map((p) => (
+                <ProductTile
+                  key={p.catalogProductId}
+                  product={p}
+                  added={added.has(p.catalogProductId)}
+                  onAdd={() => setEditing(p)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
+
+      <ImportProductModal
+        open={editing != null}
+        onOpenChange={(v) => !v && setEditing(null)}
+        catalogId={catalog.id}
+        product={editing}
+        onImported={(id) => setAdded((prev) => new Set(prev).add(id))}
+      />
     </div>
+  );
+}
+
+function ProductTile({
+  product: p,
+  added,
+  onAdd,
+}: {
+  product: CatalogSearchResult;
+  added: boolean;
+  onAdd: () => void;
+}) {
+  const path = splitCategoryPath(p.categoriaPath);
+  const leaf = path[path.length - 1];
+  const onSale = p.precioLista != null && p.precio != null && p.precioLista > p.precio;
+  return (
+    <article className="flex flex-col overflow-hidden rounded-3xl bg-card shadow-ninjaSoft">
+      <div className="relative aspect-square bg-white">
+        {p.fotoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={p.fotoUrl} alt={p.titulo} loading="lazy" className="h-full w-full object-contain p-4" />
+        ) : (
+          <div className="grid h-full w-full place-items-center bg-muted text-muted-foreground">
+            <Package size={28} />
+          </div>
+        )}
+        {onSale && (
+          <span className="absolute left-2.5 top-2.5 rounded-full bg-ninja-flame px-2 py-0.5 text-[10px] font-bold text-white">
+            Oferta
+          </span>
+        )}
+        {!p.disponible && (
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+            Sin stock en origen
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col p-3 sm:p-3.5">
+        {p.marca && (
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
+            {p.marca}
+          </p>
+        )}
+        <h3 className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-snug text-foreground sm:text-sm">
+          {p.titulo}
+        </h3>
+        {leaf && <p className="mt-1 truncate text-xs text-muted-foreground">{leaf}</p>}
+        <div className="mt-auto pt-2.5">
+          <div className="flex items-baseline gap-1.5">
+            {p.precio != null && (
+              <span className="font-price text-base font-bold tabular-nums text-foreground">
+                {formatCurrency(p.precio)}
+              </span>
+            )}
+            {onSale && (
+              <span className="truncate text-[11px] text-muted-foreground line-through">
+                {formatCurrency(p.precioLista)}
+              </span>
+            )}
+          </div>
+          {added ? (
+            <span className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-success/15 text-xs font-semibold text-success">
+              <Check size={14} /> Importado
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-ninja-flame/[0.12] text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/20 active:scale-[0.98]"
+            >
+              <Plus size={14} /> Agregar
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }

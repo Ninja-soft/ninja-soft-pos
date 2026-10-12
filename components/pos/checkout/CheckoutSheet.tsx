@@ -58,6 +58,9 @@ import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, type CardStep } from "./CardWizard";
+import { TransferPanel } from "./TransferPanel";
+import { displayDataOf, type TransferAccount } from "@/lib/payments/transfer";
+import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
 import type {
   AccountPayRequest,
   AccountPayState,
@@ -105,11 +108,23 @@ interface PaidLine extends CheckoutLine {
   method: SaleMethod;
   reference?: string;
   card_voucher?: CheckoutPayment["card_voucher"];
+  transfer?: CheckoutPayment["transfer"];
   surchargeItems: { name: string; amount: number }[];
   /** Cobro electrónico ya aprobado: no se puede quitar. */
   locked: boolean;
   /** ¿Puede llevar promo por medio? (Point no: el medio real se sabe al final). */
   promoEligible: boolean;
+}
+
+/** Transferencia (ADR-055): cuentas de la caja y si se muestra la pantalla. */
+export interface TransferCheckout {
+  showScreen: boolean;
+  requireReference: boolean;
+  /** Cuentas visibles en la caja; la primera es la por defecto. */
+  accounts: TransferAccount[];
+  defaultAccountId: string | null;
+  /** Publica los datos en la pantalla del cliente (null = nada que mostrar). */
+  onDisplay?: (t: DisplayTransfer | null) => void;
 }
 
 export interface CheckoutSheetProps {
@@ -155,6 +170,8 @@ export interface CheckoutSheetProps {
   renderAccount?: (req: AccountPayRequest) => React.ReactNode;
   /** Cobros en espera (ADR-048): dejar el QR / link esperando el pago. */
   park?: SheetParkOptions | null;
+  /** Transferencia con cuentas y pantalla (ADR-055). Sin esto, se registra directo. */
+  transfer?: TransferCheckout | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -202,6 +219,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     renderElectronic,
     renderAccount,
     park,
+    transfer = null,
   } = props;
 
   const [lines, setLines] = useState<PaidLine[]>([]);
@@ -234,8 +252,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [cardStep, setCardStep] = useState<CardStep>(1);
   const [planId, setPlanId] = useState("");
   const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
-  // Número de operación (Directo): obligatorio, viaja como reference del pago.
+  // Número de operación (Directo, transferencia): viaja como reference del pago.
   const [opRef, setOpRef] = useState("");
+  // Cuenta donde transfiere el cliente (ADR-055).
+  const [transferAccId, setTransferAccId] = useState<string | null>(null);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [pickedItems, setPickedItems] = useState<string[]>([]);
   const [tipPct, setTipPct] = useState<number | null>(null);
@@ -280,6 +300,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setExtrasOpen(Boolean(initialWarrantyId));
     setElectronic(null);
     setConfirmLeave(false);
+    setTransferAccId(transfer?.defaultAccountId ?? null);
     // Sólo al abrir: no re-resetear si cambian los tenders mientras se cobra.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -405,7 +426,15 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // Tarjeta en posnet: se registra recién en el paso del cupón.
   const posnetReady = !isPosnet || (cardBrand !== null && cardStep === 3);
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
-  const refOk = !active?.requiresReference || opRef.trim() !== "";
+  // Transferencia (ADR-055): pantalla con la cuenta y n° de operación.
+  const isTransfer = active?.flow === "direct" && active.method === "transfer";
+  const transferAccounts = transfer?.accounts ?? [];
+  const transferScreen = Boolean(isTransfer && transfer?.showScreen && transferAccounts.length > 0);
+  const transferAcc = transferScreen
+    ? (transferAccounts.find((a) => a.id === transferAccId) ?? transferAccounts[0] ?? null)
+    : null;
+  const needsRef = Boolean(active?.requiresReference) || Boolean(isTransfer && transfer?.requireReference);
+  const refOk = !needsRef || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
   const isAccount = active?.flow === "account";
   const accountOk = !isAccount || !renderAccount || !accountPay.blocked;
@@ -430,6 +459,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     // El estado de cuenta corriente NO se resetea acá: el panel lo reporta al
     // montarse (y su efecto corre antes que éste, lo pisaría).
   }, [activeId, cardKind]);
+
+  // Pantalla del cliente: datos de la cuenta mientras se cobra por
+  // transferencia (se compara por contenido para no publicar de más).
+  const onTransferDisplay = transfer?.onDisplay;
+  const transferDisplayKey =
+    open && transferAcc && settle.amount > 0
+      ? JSON.stringify({ ...displayDataOf(transferAcc), amount: settle.amount })
+      : "";
+  useEffect(() => {
+    onTransferDisplay?.(transferDisplayKey ? (JSON.parse(transferDisplayKey) as DisplayTransfer) : null);
+  }, [transferDisplayKey, onTransferDisplay]);
+  useEffect(() => () => onTransferDisplay?.(null), [onTransferDisplay]);
 
   function pickTender(t: ResolvedTender) {
     setActiveId(t.id);
@@ -463,6 +504,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       amount: l.amount,
       ...(l.reference ? { reference: l.reference } : {}),
       ...(l.card_voucher ? { card_voucher: l.card_voucher } : {}),
+      ...(l.transfer ? { transfer: l.transfer } : {}),
     }));
     return { payments, extras, change: tt.change, promo: finalPromo, settled: tt.settled };
   }
@@ -532,22 +574,29 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           ? `Recibido ${money(received)}, vuelto ${money(received - settle.amount)}`
           : plan
             ? plan.label
-            : active.requiresReference
-              ? `Operación ${opRef.trim()}`
-              : isAccount
-                ? accountDetail(accountPay.reference)
-                : undefined,
+            : isTransfer
+              ? [transferAcc?.bank_name, opRef.trim() ? `Operación ${opRef.trim()}` : null].filter(Boolean).join(" · ") ||
+                undefined
+              : active.requiresReference
+                ? `Operación ${opRef.trim()}`
+                : isAccount
+                  ? accountDetail(accountPay.reference)
+                  : undefined,
       logo: isPosnet && cardBrand ? cardBrandLogo(cardBrand, cardKind) : active.logo,
       method: activeMethod,
       amount: settle.amount,
       surcharge: settle.surcharge,
       surchargeItems: settle.surcharge > 0 ? [{ name: surchargeName, amount: settle.surcharge }] : [],
       received: active.flow === "cash" ? (received ?? settle.amount) : undefined,
-      reference: active.requiresReference
-        ? opRef.trim()
-        : isAccount && renderAccount
-          ? accountPay.reference
-          : undefined,
+      reference:
+        active.requiresReference || (isTransfer && opRef.trim())
+          ? opRef.trim()
+          : isAccount && renderAccount
+            ? accountPay.reference
+            : undefined,
+      // Con la config de transferencia cargada, la cuenta viaja al servidor
+      // (la elegida en pantalla o la por defecto de la caja).
+      transfer: isTransfer && transfer ? { accountId: transferAcc?.id ?? transfer.defaultAccountId } : undefined,
       card_voucher: hasVoucher
         ? {
             lote: voucher.lote.trim(),
@@ -637,6 +686,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     else if (active.flow === "point") ctaLabel = `Enviar al Point ${amt}`;
     else if (isPosnet && cardStep < 3) ctaLabel = cardBrand ? "Continuar" : "Elegí la entidad de la tarjeta";
     else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
+    else if (transferScreen) ctaLabel = settle.closes ? `Ya transfirió · Cobrar ${amt}` : `Ya transfirió · Agregar ${amt}`;
     else ctaLabel = settle.closes ? `Cobrar ${amt}` : `Agregar pago ${amt}`;
   }
   const posnetNext = !readyToConfirm && isPosnet && cardStep < 3;
@@ -1015,7 +1065,35 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const otherBlock = active ? (
     <>
-      {active.requiresReference && (
+      {transferScreen && transferAcc && (
+        <TransferPanel
+          accounts={transferAccounts}
+          selectedId={transferAcc.id}
+          onSelect={setTransferAccId}
+          amount={settle.amount}
+        />
+      )}
+      {isTransfer && (needsRef || transferScreen) && (
+        <div>
+          <label htmlFor="checkout-opref" className={LABEL}>
+            Número de operación{needsRef ? "" : " (opcional)"}
+          </label>
+          <input
+            id="checkout-opref"
+            value={opRef}
+            maxLength={64}
+            autoComplete="off"
+            onChange={(e) => setOpRef(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onCta()}
+            placeholder="Ej. 123456789"
+            className={cn(INPUT, "mt-1.5 h-11 w-full px-3 text-sm font-medium")}
+          />
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            El número del comprobante de la transferencia, para conciliar.
+          </p>
+        </div>
+      )}
+      {active.requiresReference && !isTransfer && (
         <div>
           <label htmlFor="checkout-opref" className={LABEL}>
             Número de operación

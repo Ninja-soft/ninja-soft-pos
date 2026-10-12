@@ -43,6 +43,10 @@ const PaymentMethodsCard = dynamic(
   () => import("@/components/dashboard-team/PaymentMethodsCard").then((m) => m.PaymentMethodsCard),
   { loading },
 );
+const TransferScopedAccounts = dynamic(
+  () => import("@/components/dashboard-team/payments/TransferScopedAccounts").then((m) => m.TransferScopedAccounts),
+  { loading },
+);
 const OperationSettingsCard = dynamic(
   () => import("@/components/dashboard-team/OperationSettingsCard").then((m) => m.OperationSettingsCard),
   { loading },
@@ -214,7 +218,7 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "pagos":
       return (
         <Suspense fallback={null}>
-          <ScopedSection domain="payment_method">
+          <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
             <PaymentMethodsCard />
           </ScopedSection>
         </Suspense>

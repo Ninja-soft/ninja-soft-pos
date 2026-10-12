@@ -28,6 +28,10 @@ export interface FieldDef {
   unit?: string;
   /** Opciones para text con valores cerrados. */
   options?: { value: string; label: string }[];
+  /** Sólo para estas claves de dominio (p. ej. el medio 'transfer'). */
+  keys?: string[];
+  /** Tiene editor propio (no se muestra en el panel genérico de campos). */
+  customEditor?: boolean;
 }
 
 const GS: ConfigScope[] = ["store_group", "store"];
@@ -49,6 +53,38 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     },
     { key: "merchant_numbers", type: "map_text", label: "N° de comercio por marca", scopes: GS },
     { key: "sort", type: "num", label: "Orden", scopes: GS },
+    // Transferencia (ADR-055).
+    {
+      key: "transfer_show_screen",
+      type: "bool",
+      label: "Mostrar pantalla de transferencia al cobrar",
+      scopes: ALL,
+      keys: ["transfer"],
+      hint: "Apagada, la transferencia cierra el ticket directo.",
+    },
+    {
+      key: "transfer_require_reference",
+      type: "bool",
+      label: "Pedir número de operación",
+      scopes: GS,
+      keys: ["transfer"],
+    },
+    {
+      key: "transfer_accounts",
+      type: "map_any",
+      label: "Cuentas que se muestran",
+      scopes: GS,
+      keys: ["transfer"],
+      customEditor: true,
+    },
+    {
+      key: "transfer_default_account",
+      type: "text",
+      label: "Cuenta por defecto",
+      scopes: GS,
+      keys: ["transfer"],
+      customEditor: true,
+    },
   ],
   pos_settings: [
     { key: "rounding_multiple", type: "num", label: "Redondeo del total", unit: "$", scopes: GS },
@@ -90,6 +126,11 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
 export function fieldType(domain: ConfigDomain, scope: ConfigScope, field: string): FieldType | null {
   const def = CONFIG_FIELDS[domain].find((f) => f.key === field);
   return def && def.scopes.includes(scope) ? def.type : null;
+}
+
+/** ¿El campo aplica a esta clave de dominio? (los de transferencia, sólo a 'transfer'). */
+export function fieldAppliesTo(def: FieldDef, domainKey: string): boolean {
+  return !def.keys || def.keys.includes(domainKey);
 }
 
 export function fieldsFor(domain: ConfigDomain, scope: ConfigScope): FieldDef[] {
@@ -234,6 +275,9 @@ export interface ProviderRow {
   surcharge_pct: number;
   merchant_numbers: Partial<Record<string, string>>;
   plan_mode: string | null;
+  /** Sólo 'transfer' (ADR-055): base del negocio, no se resuelve acá. */
+  transfer_show_screen?: boolean;
+  transfer_require_reference?: boolean;
 }
 
 /**
@@ -347,6 +391,9 @@ export function copyPreview(
 /** Mensaje amable para los errores de las RPC de configuración. */
 export function configErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (msg.includes("feature_not_in_plan: transferencia_multicuenta")) {
+    return "Elegir cuentas de transferencia por sucursal requiere un plan con varias cuentas.";
+  }
   if (msg.includes("feature_not_in_plan: multi_caja")) return "Configurar por caja requiere un plan con varias cajas.";
   if (msg.includes("feature_not_in_plan")) return "Configurar por sucursal requiere un plan con varias sucursales.";
   if (msg.includes("payment_method_not_allowed")) return "Ese medio no está incluido en tu plan.";

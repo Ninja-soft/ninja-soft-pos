@@ -27,6 +27,7 @@ import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { cn } from "@/lib/utils/cn";
 import {
   CONFIG_FIELDS,
+  fieldAppliesTo,
   configErrorMessage,
   copyPreview,
   fieldsFor,
@@ -304,6 +305,8 @@ export function providerLabel(key: string): string {
   return PROVIDER_LABEL[key] ?? key;
 }
 
+type TransferBase = { transfer_show_screen?: boolean; transfer_require_reference?: boolean };
+
 function useDomainBases(domain: ConfigDomain) {
   const methods = useQuery({
     queryKey: ["pos", "payment-methods-status"],
@@ -335,6 +338,15 @@ function useDomainBases(domain: ConfigDomain) {
           surcharge_pct: r.surcharge_pct,
           plan_mode: r.plan_mode,
           merchant_numbers: r.merchant_numbers ?? {},
+          // Transferencia (ADR-055): base del negocio en config del medio.
+          ...(r.provider_key === "transfer"
+            ? {
+                transfer_show_screen: (r as TransferBase).transfer_show_screen !== false,
+                transfer_require_reference: (r as TransferBase).transfer_require_reference === true,
+                transfer_accounts: {},
+                transfer_default_account: null,
+              }
+            : {}),
         },
       }));
     }
@@ -515,14 +527,16 @@ export function ScopedFieldsPanel({
       {bases.map(({ key, label, base }) => {
         const eff = resolveEffective(domain, key, base, ovs, target);
         const inherited = resolveEffective(domain, key, base, ovs, parent);
-        const customCount = defs.filter((d) => inheritState(ovs, scope.scope, scope.id, domain, key, d.key) === "custom").length;
+        const keyDefs = defs.filter((d) => fieldAppliesTo(d, key) && !d.customEditor);
+        if (keyDefs.length === 0) return null;
+        const customCount = keyDefs.filter((d) => inheritState(ovs, scope.scope, scope.id, domain, key, d.key) === "custom").length;
         return (
           <SettingsCard
             key={key || "_"}
             title={label || title || name(scope.scope, scope.id)}
             description={customCount > 0 ? `${customCount} dato${customCount > 1 ? "s" : ""} propio${customCount > 1 ? "s" : ""}` : "Todo heredado"}
           >
-            {defs.map((def) => {
+            {keyDefs.map((def) => {
               const custom = inheritState(ovs, scope.scope, scope.id, domain, key, def.key) === "custom";
               const src = inherited.sources[def.key];
               const srcName = !src || src === "tenant" ? "Todo el negocio" : name(src.split(":")[0] as ConfigScope, src.split(":")[1]);

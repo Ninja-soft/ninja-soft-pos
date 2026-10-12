@@ -52,6 +52,7 @@ import {
   publishDisplayState,
   type DisplayBranding,
   type DisplayQr,
+  type DisplayTransfer,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
@@ -336,6 +337,9 @@ function PosPageInner() {
   const { data: dispBranding } = useTicketBranding();
   const [displayQr, setDisplayQr] = useState<DisplayQr | null>(null);
   const handleQrState = useCallback((qr: DisplayQr | null) => setDisplayQr(qr), []);
+  // Cobro por transferencia en curso: datos de la cuenta (ADR-055).
+  const [displayTransfer, setDisplayTransfer] = useState<DisplayTransfer | null>(null);
+  const handleTransferState = useCallback((t: DisplayTransfer | null) => setDisplayTransfer(t), []);
   const [paidView, setPaidView] = useState<{ change: number } | null>(null);
   const paidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayBranding = useMemo<DisplayBranding>(
@@ -560,7 +564,13 @@ function PosPageInner() {
 
   // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
-    const phase: DisplayState["phase"] = paidView ? "paid" : displayQr ? "paying" : lines.length > 0 ? "cart" : "idle";
+    const phase: DisplayState["phase"] = paidView
+      ? "paid"
+      : displayQr || displayTransfer
+        ? "paying"
+        : lines.length > 0
+          ? "cart"
+          : "idle";
     publishDisplayState({
       v: 1,
       phase,
@@ -579,9 +589,10 @@ function PosPageInner() {
       total,
       change: paidView?.change ?? 0,
       qr: displayQr,
+      transfer: displayTransfer,
       at: Date.now(),
     });
-  }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, paidView]);
+  }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, displayTransfer, paidView]);
 
   // Tope de descuento por rol (H30).
   function handleDiscountChange(value: number) {
@@ -1279,6 +1290,7 @@ function PosPageInner() {
             return handleSale(...args);
           }}
           onQrState={handleQrState}
+          onTransferState={handleTransferState}
           park={{
             blockedReason: parkBlockedReason,
             label: editingCharge ? "Actualizar cobro en espera" : "Dejar en espera",

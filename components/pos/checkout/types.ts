@@ -38,6 +38,12 @@ export interface CheckoutPayment {
    * posnet (opcionales; el ticket sigue leyendo lote/cupón/autorización).
    */
   card_voucher?: { lote: string; cupon: string; autorizacion: string; marca?: string; ultimos4?: string; comercio?: string; cuotas?: number };
+  /**
+   * Transferencia cobrada desde el POS (ADR-055): cuenta donde transfirió el
+   * cliente (null = la por defecto de la caja). El servidor guarda la cuenta y
+   * un snapshot en payments.metadata.transfer.
+   */
+  transfer?: { accountId: string | null };
 }
 
 /** Resultado aprobado de un cobro electrónico (QR / link / Point). */

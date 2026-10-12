@@ -1262,30 +1262,6 @@ El dueño pidió poder elegir entre varios diseños del punto de venta y arregla
 
 ---
 
-## ADR-038 — Configuración de medios de pago por marca y canal (rediseño)
-
-**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
-
-### Contexto
-
-El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
-
-### Decisión
-
-- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
-- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
-- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
-- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
-- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
-- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
-
-### Consecuencias
-
-- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
-- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
-
----
-
 ## ADR-037 — Cuenta corriente v2: ledger tipado, cobros por RPC y reversas
 
 **Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F11 · H31 · Spec: [`docs/specs/cuenta-corriente-v2.md`](specs/cuenta-corriente-v2.md)
@@ -1322,10 +1298,41 @@ Decisiones del dueño sobre los pendientes:
 3. **Condiciones por grupo**: tarjeta "Condiciones por grupo" en Configuración → Cuenta corriente (badge de herencia y vista previa de la config efectiva). Escritura por `account_set_group_config` (dueño/encargado, validada) y guard + auditoría (`account_group_terms_changed`) en `customer_groups` para que un UPDATE directo tampoco pase sin rastro. La ficha del cliente indica si hereda del grupo o del negocio.
 4. **Vista previa de emails** `account_reminder` (antes y después del vencimiento) y `account_statement` en `/internal/emails`, con datos de ejemplo y el mismo HTML que la Edge (`lib/email/accountTemplates.ts`, espejo de `account_reminders`). Son de sólo lectura: los envía cada negocio con su email y su marca.
 
+### Addendum (2026-10-11): integración con la hoja de cobro única (ADR-036)
+
+- El `PaymentModal` ya no existe: la cuenta corriente es el tender `account` del registro `lib/pos/tenders.ts` (grupo "Cuenta del cliente", método `account`, feature `cuenta_corriente`, sólo con cliente elegido). Al elegirlo, `CheckoutSheet` muestra `AccountPayPanel` (vía `renderAccount` de `CheckoutSheetConnected`, carga diferida) para el monto de esa línea: saldo, disponible, vencido, cuotas y bloqueo con autorización (motivo de dueño/encargado o PIN de supervisor). El botón queda deshabilitado mientras el panel reporte bloqueo, y su JSON (`installments`, `override_reason` u `override_token`) viaja en `payments.reference` de ese pago.
+- **Pago dividido**: la cuenta corriente puede ser una parte del cobro (el límite, las cuotas y la autorización se calculan sobre el monto de esa parte, que es lo que valida `payment_account_charge` por fila), pero **una sola línea de cuenta por venta**: el token de autorización es de un solo uso y las cuotas se arman por pago. Con una línea de cuenta cargada, el tender desaparece de la grilla hasta quitarla.
+- Los errores del cargo (`account_overdue_blocked`, `account_blocked`, `installments_not_allowed`, `override_token_invalid`, `override_reason_required`) tienen mensaje propio en `saleErrorTitle` (`modules/pos/screen/usePosSale.ts`).
+- `payment_method_plan_key` (redefinida en `20261011200000`) conserva `gocuotas` y `directo` de `20261011180000_gocuotas_directo`, y `system_emails_kind_check` conserva `password_recovery` de `20261011120000`.
+
 ### Referencias
 
 - Migraciones `20261011200000_cuenta_corriente_v2.sql`, `20261011200100_cuenta_corriente_v2_rpc.sql`, `20261011200200_cuenta_corriente_v2_reversas.sql`, `20261011200300_cuenta_corriente_v2_pin_supervisor.sql`.
 - `lib/account/*`, `modules/customers/account.ts`, `components/account/*`, `components/pos/AccountPayPanel.tsx`, `app/(app)/clientes/cuentas/**`, `supabase/functions/account_reminders/index.ts`.
+
+---
+
+## ADR-038 — Configuración de medios de pago por marca y canal (rediseño)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
+
+### Contexto
+
+El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
+
+### Decisión
+
+- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
+- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
+- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
+- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
+- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
+- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
+
+### Consecuencias
+
+- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
+- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
 
 ---
 

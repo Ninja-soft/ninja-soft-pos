@@ -243,6 +243,31 @@
   --shadow-soft: 0 1px 2px rgba(60, 40, 20, 0.05);
 }
 
+/* Control segmentado estilo iOS (components/ui/SegmentedControl): riel neutro
+   y "pulgar" relleno que se desliza. En oscuro el pulgar es más claro que el
+   riel; en claro es blanco con sombra mínima. Sin bordes de color. */
+:root,
+[data-theme="ninja-dark"] {
+  --seg-track: rgba(255, 255, 255, 0.06);
+  --seg-thumb: rgba(255, 255, 255, 0.14);
+  --seg-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+[data-theme="ninja-noir"] {
+  --seg-track: rgba(255, 255, 255, 0.06);
+  --seg-thumb: rgba(255, 255, 255, 0.13);
+  --seg-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+[data-theme="ninja-light"] {
+  --seg-track: #ece8f8;
+  --seg-thumb: #ffffff;
+  --seg-thumb-shadow: 0 1px 3px rgba(30, 22, 60, 0.12), 0 1px 1px rgba(30, 22, 60, 0.06);
+}
+[data-theme="ninja-sand"] {
+  --seg-track: #efe6d7;
+  --seg-thumb: #ffffff;
+  --seg-thumb-shadow: 0 1px 3px rgba(60, 40, 20, 0.12), 0 1px 1px rgba(60, 40, 20, 0.06);
+}
+
 /* Fondo de las pantallas. Color base por token (theme-aware) + patrón
    seleccionable vía [data-bg]. Ver brand book §26. Default: dots. */
 /* Sin `background-attachment: fixed`: en Chrome obliga a repintar TODO el fondo

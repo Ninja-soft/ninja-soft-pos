@@ -498,6 +498,8 @@ create index payments_tenant_method_idx on payments(tenant_id, method, created_a
 
 Columnas agregadas después (ver migraciones): `card_voucher jsonb` (datos del cupón de tarjeta: `lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `comercio`, todos opcionales) y `reconciled_at timestamptz` / `reconciled_by uuid` (conciliación de tarjetas, ADR-044). Las dos de conciliación sólo cambian por la RPC `set_payments_reconciled` (trigger `payments_reconcile_guard` rechaza el UPDATE directo).
 
+La numeración del cupón (`lote`, `cupon`, `autorizacion`, `ultimos4`, `comercio`, `cuotas`) se corrige sólo por la RPC `update_payment_voucher` (dueño o encargado cualquiera; cajero los de sus turnos y pendientes), que deja el historial en `payment_voucher_edits` (`payment_id`, `edited_by` / `edited_by_name`, `edited_at`, `changed_keys`, `before_data`, `after_data`, `was_reconciled`, `as_supervisor`, `reason`; lectura por tenant con `internal_scope()`, sin escritura por PostgREST) y en `audit_logs` (`payment_voucher_updated`). Migración `20261018200000_edicion_cupon_tarjeta`, ADR-044 (adenda).
+
 ---
 
 ## 5. Diagrama ER simplificado

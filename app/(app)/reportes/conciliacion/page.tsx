@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { ArrowLeft, CreditCard, Download, Info, Lock } from "lucide-react";
+import { ArrowLeft, CreditCard, Download, Info, Lock, Pencil, PencilLine } from "lucide-react";
 import { startOfDay, startOfMonth, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
@@ -12,10 +12,15 @@ import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Callout } from "@/components/ui/Callout";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { NoData } from "@/components/ui/NoData";
+import { Spinner } from "@/components/ui/Spinner";
 import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { useToast } from "@/components/ui/Toast";
 import { GatedButton } from "@/components/saas/GatedAction";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
+import { VoucherEditModal, formatEditStamp } from "@/components/reports/VoucherEditModal";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
@@ -24,11 +29,13 @@ import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { useBranchContext } from "@/modules/branches/hooks";
+import { useCurrentUserId } from "@/modules/stock/hooks";
 import { branchFileTag, reportScopeLabel } from "@/lib/reports/branchScope";
 import {
   reconcileErrorMessage,
   useCardPayments,
   useSetReconciled,
+  useVoucherEdits,
 } from "@/modules/reports/cardReconciliation";
 import {
   DEFAULT_FILTERS,
@@ -37,6 +44,7 @@ import {
   batchLabel,
   brandOptions,
   dayLabel,
+  dayLongLabel,
   filterCardRows,
   groupCardRows,
   groupCheckState,
@@ -48,25 +56,57 @@ import {
   summarizeCardRows,
   xlsxBatchRows,
   xlsxDetailRows,
+  type BatchGroup,
   type CardRecFilters,
   type CardRecRow,
+  type DayGroup,
   type ReconcileStatus,
 } from "@/lib/reports/cardReconciliation";
+import {
+  VOUCHER_ACCESS_REASON,
+  groupVoucherEdits,
+  voucherEditAccess,
+  type VoucherEdit,
+  type VoucherEditAccess,
+} from "@/lib/reports/voucherEdit";
 
 const FEATURE = "conciliacion_tarjetas";
 const PAYMENTS_SETTINGS = "/configuracion?seccion=pagos" as Route;
-const COLS = 12;
 
 const SELECT =
   "h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:border-ninja-flameSoft sm:w-44";
 
+// Columnas de la tabla (desktop). Etiquetas cortas que nunca se parten; el
+// nombre completo va en el tooltip. Índices fijos: los renglones de grupo
+// (día, comercio, lote) usan colSpan para alinear el monto con su columna.
+const COLUMNS: Array<{ key: string; label: string; tip?: string; className?: string }> = [
+  { key: "check", label: "", className: "w-10" },
+  { key: "fecha", label: "Fecha", tip: "Fecha y hora del cobro" },
+  { key: "ticket", label: "Ticket", tip: "Número de venta" },
+  { key: "marca", label: "Marca", tip: "Marca de la tarjeta" },
+  { key: "tipo", label: "Tipo", tip: "Débito o crédito" },
+  { key: "cuotas", label: "Cuotas", tip: "Cantidad de cuotas", className: "text-right" },
+  { key: "lote", label: "Lote", tip: "Número de lote del posnet" },
+  { key: "cupon", label: "Cupón", tip: "Número de cupón" },
+  { key: "aut", label: "Aut.", tip: "Código de autorización" },
+  { key: "ult4", label: "Últ. 4", tip: "Últimos 4 números de la tarjeta" },
+  { key: "comercio", label: "Comercio", tip: "Número de comercio" },
+  { key: "monto", label: "Monto", tip: "Monto cobrado", className: "text-right" },
+  { key: "estado", label: "Estado", tip: "Conciliado o pendiente" },
+  { key: "edit", label: "", className: "w-10" },
+];
+const COLS = COLUMNS.length; // 14
+const MONTO_IDX = 11;
+
+const CELL = "whitespace-nowrap px-2.5 py-2.5";
+
 function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "success" | "warning" }) {
   return (
-    <div className="min-w-0 rounded-lg bg-card p-4 ring-1 ring-border">
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="min-w-0 rounded-lg border border-border bg-card px-4 py-3.5">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div
         className={cn(
-          "mt-1 truncate font-price text-xl font-black tabular-nums",
+          "mt-1 truncate font-price text-xl font-bold tabular-nums",
           tone === "success" && "text-success",
           tone === "warning" && "text-warning",
         )}
@@ -75,35 +115,6 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: s
       </div>
       <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>
     </div>
-  );
-}
-
-/** Checkbox con estado intermedio (lote con algunos cobros conciliados). */
-function Check({
-  state,
-  disabled,
-  onChange,
-  label,
-}: {
-  state: "all" | "some" | "none";
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = state === "some";
-  }, [state]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={state === "all"}
-      disabled={disabled}
-      onChange={() => onChange(state !== "all")}
-      aria-label={label}
-      className="h-4 w-4 cursor-pointer accent-ninja-flame disabled:cursor-not-allowed disabled:opacity-50"
-    />
   );
 }
 
@@ -125,10 +136,13 @@ function Locked() {
   );
 }
 
+const plural = (n: number) => `${n} ${n === 1 ? "cobro" : "cobros"}`;
+
 export default function ConciliacionTarjetasPage() {
   const { toast } = useToast();
   const enabled = useFeature(FEATURE);
   const { data: me } = useMyTenant();
+  const { data: userId } = useCurrentUserId();
   const canManage = Boolean(me?.canManage);
   const { data: numFmt } = useSaleNumberFormat();
 
@@ -156,8 +170,10 @@ export default function ConciliacionTarjetasPage() {
     enabled !== false,
     branch.filterStoreId,
   );
+  const { data: rawEdits } = useVoucherEdits(fromISO, toISO, enabled !== false);
   const mutation = useSetReconciled();
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CardRecRow | null>(null);
 
   const all = useMemo(() => normalizeCardPayments(data ?? []), [data]);
   const brands = useMemo(() => brandOptions(all), [all]);
@@ -166,6 +182,11 @@ export default function ConciliacionTarjetasPage() {
   const groups = useMemo(() => groupCardRows(rows), [rows]);
   const summary = useMemo(() => summarizeCardRows(rows), [rows]);
   const withoutMerchant = useMemo(() => all.filter((r) => !r.comercio).length, [all]);
+  const edits = useMemo(() => groupVoucherEdits(rawEdits ?? []), [rawEdits]);
+
+  const access = (r: CardRecRow): VoucherEditAccess =>
+    voucherEditAccess({ role: me?.role, userId, shiftOpenedBy: r.shiftOpenedBy, reconciled: Boolean(r.reconciledAt) });
+  const ticket = (n: number | null) => (n == null ? null : formatSaleNumber(n, numFmt));
 
   async function toggle(key: string, list: CardRecRow[], target: boolean) {
     const ids = idsToToggle(list, target);
@@ -217,6 +238,17 @@ export default function ConciliacionTarjetasPage() {
 
   const hasFilters =
     filters.kind !== "all" || filters.brand !== "all" || filters.comercio !== "all" || filters.status !== "all";
+
+  const view: GroupViewProps = {
+    groups,
+    canManage,
+    busy,
+    onToggle: toggle,
+    onEdit: setEditing,
+    access,
+    edits,
+    ticket,
+  };
 
   return (
     <PageContainer>
@@ -282,7 +314,7 @@ export default function ConciliacionTarjetasPage() {
                       else if ("single" in p) setRange({ from: subDays(today, 1), to: subDays(today, 1) });
                       else setRange({ from: subDays(today, p.days), to: today });
                     }}
-                    className="rounded-md border border-input bg-background px-2.5 py-2 text-xs text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground"
+                    className="rounded-md border border-input bg-background px-2.5 py-2 text-xs text-muted-foreground transition hover:border-foreground/30 hover:text-foreground"
                   >
                     {p.label}
                   </button>
@@ -348,28 +380,25 @@ export default function ConciliacionTarjetasPage() {
 
           {/* Resumen */}
           <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Kpi
-              label="Total tarjetas"
-              value={formatCurrency(summary.total.amount)}
-              sub={`${summary.total.count} ${summary.total.count === 1 ? "cobro" : "cobros"}`}
-            />
+            <Kpi label="Total tarjetas" value={formatCurrency(summary.total.amount)} sub={plural(summary.total.count)} />
             <Kpi
               label="Conciliado"
               tone="success"
               value={formatCurrency(summary.reconciled.amount)}
-              sub={`${summary.reconciled.count} ${summary.reconciled.count === 1 ? "cobro" : "cobros"}`}
+              sub={plural(summary.reconciled.count)}
             />
             <Kpi
               label="Pendiente"
               tone={summary.pending.count > 0 ? "warning" : undefined}
               value={formatCurrency(summary.pending.amount)}
-              sub={`${summary.pending.count} ${summary.pending.count === 1 ? "cobro" : "cobros"}`}
+              sub={plural(summary.pending.count)}
             />
           </div>
 
           {!canManage && me && (
             <Callout tone="neutral" icon={Info} className="mt-4">
               Sólo el dueño o un encargado pueden marcar cobros como conciliados.
+              {me.role === "cashier" ? " Podés corregir el cupón de los cobros de tus turnos de caja mientras estén pendientes." : ""}
             </Callout>
           )}
           {all.length > 0 && withoutMerchant > 0 && (
@@ -383,7 +412,6 @@ export default function ConciliacionTarjetasPage() {
             </Callout>
           )}
 
-          {/* Tabla agrupada */}
           {!isLoading && !isError && all.length === 0 ? (
             <div className="mt-6 rounded-xl border border-border bg-card">
               <EmptyState
@@ -398,7 +426,7 @@ export default function ConciliacionTarjetasPage() {
                 action={
                   <Link
                     href={PAYMENTS_SETTINGS}
-                    className="inline-flex h-9 items-center rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:border-ninja-flameSoft"
+                    className="inline-flex h-9 items-center rounded-lg border border-input bg-background px-3 text-sm font-medium transition hover:border-foreground/30"
                   >
                     Ir a Medios de pago
                   </Link>
@@ -406,76 +434,91 @@ export default function ConciliacionTarjetasPage() {
               />
             </div>
           ) : (
-            <TableWrap className="mt-6">
-              <table className="w-full min-w-[1040px] text-sm">
-                <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                  <tr>
-                    <th className="w-10 px-3 py-3">
-                      <span className="sr-only">Conciliado</span>
-                    </th>
-                    <th className="px-3 py-3">Fecha y hora</th>
-                    <th className="px-3 py-3">Ticket</th>
-                    <th className="px-3 py-3">Marca</th>
-                    <th className="px-3 py-3">Tipo</th>
-                    <th className="px-3 py-3">Cuotas</th>
-                    <th className="px-3 py-3">Lote</th>
-                    <th className="px-3 py-3">Cupón</th>
-                    <th className="px-3 py-3">Autorización</th>
-                    <th className="px-3 py-3">Últ. 4</th>
-                    <th className="px-3 py-3">Comercio</th>
-                    <th className="px-3 py-3 text-right">Monto</th>
-                  </tr>
-                </thead>
-                {isLoading ? (
-                  <tbody>
-                    <TableStateRow colSpan={COLS} loading />
-                  </tbody>
-                ) : isError ? (
-                  <tbody>
-                    <TableStateRow colSpan={COLS}>
-                      <p className="text-sm text-muted-foreground">No se pudieron cargar los cobros.</p>
-                      <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
-                        Reintentar
-                      </Button>
-                    </TableStateRow>
-                  </tbody>
-                ) : groups.length === 0 ? (
-                  <tbody>
-                    <TableStateRow colSpan={COLS}>
-                      <p className="text-sm text-muted-foreground">Ningún cobro coincide con los filtros.</p>
-                    </TableStateRow>
-                  </tbody>
-                ) : (
-                  groups.map((d) => (
-                    <tbody key={d.day} className="border-t border-border first:border-t-0">
-                      <tr className="bg-muted/60">
-                        <td colSpan={COLS - 1} className="px-3 py-2.5 font-semibold">
-                          {dayLabel(d.day)}
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            {d.count} {d.count === 1 ? "cobro" : "cobros"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{formatCurrency(d.amount)}</td>
-                      </tr>
-                      {d.merchants.map((m) => (
-                        <MerchantBlock
-                          key={m.key}
-                          comercio={m.comercio}
-                          count={m.count}
-                          amount={m.amount}
-                          batches={m.batches}
-                          canManage={canManage}
-                          busy={busy}
-                          onToggle={toggle}
-                          ticket={(n) => (n == null ? "-" : formatSaleNumber(n, numFmt))}
-                        />
+            <>
+              {/* Desktop: tabla agrupada con encabezado fijo y scroll propio. */}
+              <TableWrap className="mt-6 hidden max-h-[calc(100dvh-10rem)] md:block">
+                <table className="w-full min-w-[1060px] border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr>
+                      {COLUMNS.map((c) => (
+                        <th
+                          key={c.key}
+                          scope="col"
+                          title={c.tip}
+                          className={cn(
+                            "sticky top-0 z-10 whitespace-nowrap border-b border-border bg-card px-2.5 py-2.5 text-left text-xs font-medium text-muted-foreground",
+                            c.className,
+                          )}
+                        >
+                          {c.key === "check" ? (
+                            <span className="sr-only">Conciliado</span>
+                          ) : c.key === "edit" ? (
+                            <span className="sr-only">Editar</span>
+                          ) : (
+                            c.label
+                          )}
+                        </th>
                       ))}
+                    </tr>
+                  </thead>
+                  {isLoading ? (
+                    <tbody>
+                      <TableStateRow colSpan={COLS} loading />
                     </tbody>
-                  ))
+                  ) : isError ? (
+                    <tbody>
+                      <TableStateRow colSpan={COLS}>
+                        <p className="text-sm text-muted-foreground">No se pudieron cargar los cobros.</p>
+                        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
+                          Reintentar
+                        </Button>
+                      </TableStateRow>
+                    </tbody>
+                  ) : groups.length === 0 ? (
+                    <tbody>
+                      <TableStateRow colSpan={COLS}>
+                        <p className="text-sm text-muted-foreground">Ningún cobro coincide con los filtros.</p>
+                      </TableStateRow>
+                    </tbody>
+                  ) : (
+                    <DesktopGroups {...view} />
+                  )}
+                </table>
+              </TableWrap>
+
+              {/* Mobile: tarjetas por lote. */}
+              <div className="mt-6 md:hidden">
+                {isLoading ? (
+                  <div className="flex justify-center rounded-xl border border-border bg-card py-10">
+                    <Spinner size={22} />
+                  </div>
+                ) : isError ? (
+                  <div className="rounded-xl border border-border bg-card px-4 py-8 text-center">
+                    <p className="text-sm text-muted-foreground">No se pudieron cargar los cobros.</p>
+                    <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
+                      Reintentar
+                    </Button>
+                  </div>
+                ) : groups.length === 0 ? (
+                  <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+                    Ningún cobro coincide con los filtros.
+                  </div>
+                ) : (
+                  <MobileGroups {...view} />
                 )}
-              </table>
-            </TableWrap>
+              </div>
+            </>
           )}
+
+          <VoucherEditModal
+            row={editing}
+            ticket={editing ? ticket(editing.ticket) : null}
+            edits={editing ? (edits.get(editing.id) ?? []) : []}
+            asSupervisor={canManage}
+            onOpenChange={(open) => {
+              if (!open) setEditing(null);
+            }}
+          />
         </>
       )}
     </PageContainer>
@@ -487,152 +530,374 @@ function localISODate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-function MerchantBlock({
-  comercio,
-  count,
-  amount,
-  batches,
-  canManage,
-  busy,
-  onToggle,
-  ticket,
-}: {
-  comercio: string;
-  count: number;
-  amount: number;
-  batches: ReturnType<typeof groupCardRows>[number]["merchants"][number]["batches"];
+// ── Piezas compartidas ───────────────────────────────────────────────────────
+
+interface GroupViewProps {
+  groups: DayGroup[];
   canManage: boolean;
   busy: string | null;
   onToggle: (key: string, rows: CardRecRow[], target: boolean) => void;
-  ticket: (n: number | null) => string;
+  onEdit: (row: CardRecRow) => void;
+  access: (row: CardRecRow) => VoucherEditAccess;
+  edits: Map<string, VoucherEdit[]>;
+  ticket: (n: number | null) => string | null;
+}
+
+/** Código del cupón (lote, cupón, etc.) o el marcador de vacío. */
+function Code({ value }: { value: string | number | null | undefined }) {
+  if (value == null || value === "") return <NoData />;
+  return <span className="tabular-nums">{value}</span>;
+}
+
+function StatusBadge({ reconciled }: { reconciled: boolean }) {
+  return reconciled ? (
+    <Badge tone="success" className="rounded-md px-2">
+      Conciliado
+    </Badge>
+  ) : (
+    <Badge tone="neutral" className="rounded-md px-2">
+      Pendiente
+    </Badge>
+  );
+}
+
+function BatchBadge({ batch }: { batch: BatchGroup }) {
+  if (batch.reconciledCount === 0) return <StatusBadge reconciled={false} />;
+  if (batch.reconciledCount === batch.count) return <StatusBadge reconciled />;
+  return (
+    <Badge tone="warning" className="rounded-md px-2 tabular-nums">
+      {batch.reconciledCount} de {batch.count}
+    </Badge>
+  );
+}
+
+/** Ícono de "editado" con quién y cuándo; en ámbar si se editó ya conciliado. */
+function EditedMark({ edits }: { edits: VoucherEdit[] | undefined }) {
+  const last = edits?.[0];
+  if (!last) return null;
+  const flagged = edits!.some((e) => e.wasReconciled);
+  const text = `${flagged ? "Editado después de conciliar. " : "Editado. "}Último cambio: ${last.editedBy}, ${formatEditStamp(last.editedAt)}`;
+  return (
+    <span title={text} className={cn("inline-flex", flagged ? "text-warning" : "text-muted-foreground")}>
+      <PencilLine size={14} aria-hidden />
+      <span className="sr-only">{text}</span>
+    </span>
+  );
+}
+
+function EditButton({
+  row,
+  access,
+  onEdit,
+  className,
+}: {
+  row: CardRecRow;
+  access: VoucherEditAccess;
+  onEdit: (row: CardRecRow) => void;
+  className?: string;
 }) {
+  if (!access.canEdit) {
+    if (access.reason !== "reconciled") return null;
+    return (
+      <span
+        title={VOUCHER_ACCESS_REASON.reconciled}
+        className={cn("inline-flex h-8 w-8 items-center justify-center text-muted-foreground/60", className)}
+      >
+        <Lock size={14} aria-hidden />
+        <span className="sr-only">{VOUCHER_ACCESS_REASON.reconciled}</span>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onEdit(row)}
+      title="Editar cupón"
+      aria-label={`Editar cupón del cobro de ${formatCurrency(row.amount)}`}
+      className={cn(
+        "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+    >
+      <Pencil size={14} aria-hidden />
+    </button>
+  );
+}
+
+// ── Desktop ──────────────────────────────────────────────────────────────────
+
+function DesktopGroups(props: GroupViewProps) {
+  const { groups } = props;
   return (
     <>
-      <tr className="border-t border-border">
-        <td />
-        <td colSpan={COLS - 2} className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {merchantLabel(comercio)}
-          <span className="ml-2 font-normal normal-case tracking-normal">
-            {count} {count === 1 ? "cobro" : "cobros"}
-          </span>
-        </td>
-        <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums text-muted-foreground">
-          {formatCurrency(amount)}
-        </td>
-      </tr>
-      {batches.map((b) => {
-        const state = groupCheckState(b.rows);
-        const groupBusy = busy === b.key;
+      {groups.map((d) => {
+        const rec = d.merchants.reduce((a, m) => a + m.batches.reduce((x, b) => x + b.reconciledCount, 0), 0);
         return (
-          <BatchRows
-            key={b.key}
-            label={batchLabel(b.lote)}
-            state={state}
-            count={b.count}
-            reconciledCount={b.reconciledCount}
-            amount={b.amount}
-            rows={b.rows}
-            disabled={!canManage || busy !== null}
-            loading={groupBusy}
-            onToggleGroup={(target) => onToggle(b.key, b.rows, target)}
-            onToggleRow={(r, target) => onToggle(r.id, [r], target)}
-            busy={busy}
-            ticket={ticket}
-          />
+          <tbody key={d.day}>
+            <tr className="bg-muted/60">
+              <td colSpan={MONTO_IDX} className="border-b border-border px-2.5 py-2.5">
+                <span className="font-semibold">{dayLongLabel(d.day)}</span>
+                <span className="ml-2 text-xs tabular-nums text-muted-foreground">
+                  {plural(d.count)} · {rec} {rec === 1 ? "conciliado" : "conciliados"}
+                </span>
+              </td>
+              <td className="whitespace-nowrap border-b border-border px-2.5 py-2.5 text-right font-semibold tabular-nums">
+                {formatCurrency(d.amount)}
+              </td>
+              <td colSpan={2} className="border-b border-border" />
+            </tr>
+            {d.merchants.map((m) => (
+              <DesktopMerchant key={m.key} merchant={m} {...props} />
+            ))}
+          </tbody>
         );
       })}
     </>
   );
 }
 
-function BatchRows({
-  label,
-  state,
-  count,
-  reconciledCount,
-  amount,
-  rows,
-  disabled,
-  loading,
-  onToggleGroup,
-  onToggleRow,
-  busy,
-  ticket,
-}: {
-  label: string;
-  state: "all" | "some" | "none";
-  count: number;
-  reconciledCount: number;
-  amount: number;
-  rows: CardRecRow[];
-  disabled: boolean;
-  loading: boolean;
-  onToggleGroup: (target: boolean) => void;
-  onToggleRow: (r: CardRecRow, target: boolean) => void;
-  busy: string | null;
-  ticket: (n: number | null) => string;
-}) {
+function DesktopMerchant({
+  merchant: m,
+  ...props
+}: GroupViewProps & { merchant: DayGroup["merchants"][number] }) {
+  const { canManage, busy, onToggle } = props;
   return (
     <>
-      <tr className={cn("border-t border-border/60 bg-muted/25", loading && "opacity-60")}>
-        <td className="px-3 py-2">
-          <Check
-            state={state}
-            disabled={disabled}
-            onChange={onToggleGroup}
-            label={`${label}: marcar ${state === "all" ? "como pendiente" : "como conciliado"}`}
-          />
+      <tr>
+        <td className="border-b border-border" />
+        <td colSpan={MONTO_IDX - 1} className="border-b border-border px-2.5 pb-2 pt-4 text-xs font-medium text-muted-foreground">
+          <span className="text-foreground">{merchantLabel(m.comercio)}</span>
+          <span className="ml-2">{plural(m.count)}</span>
         </td>
-        <td colSpan={COLS - 2} className="px-3 py-2 font-medium">
-          {label}
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {count} {count === 1 ? "cobro" : "cobros"}
-            {reconciledCount > 0 && reconciledCount < count ? `, ${reconciledCount} conciliados` : ""}
-            {state === "all" ? ", conciliado" : ""}
-          </span>
+        <td className="whitespace-nowrap border-b border-border px-2.5 pb-2 pt-4 text-right text-xs font-medium tabular-nums text-muted-foreground">
+          {formatCurrency(m.amount)}
         </td>
-        <td className="px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(amount)}</td>
+        <td colSpan={2} className="border-b border-border" />
       </tr>
-      {rows.map((r) => (
-        <tr
-          key={r.id}
-          className={cn(
-            "border-t border-border/40 transition-colors hover:bg-muted/30",
-            (loading || busy === r.id) && "opacity-60",
-          )}
-        >
-          <td className="px-3 py-2">
-            <Check
-              state={r.reconciledAt ? "all" : "none"}
-              disabled={disabled}
-              onChange={(target) => onToggleRow(r, target)}
-              label={`Cobro de ${formatCurrency(r.amount)}: marcar ${r.reconciledAt ? "como pendiente" : "como conciliado"}`}
-            />
-          </td>
-          <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
-            {dayLabel(r.day).slice(0, 5)} {localTime(r.createdAt)}
-          </td>
-          <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{ticket(r.ticket)}</td>
-          <td className="px-3 py-2">
-            <span className="inline-flex items-center gap-2">
-              {r.brandKey ? (
-                <CardBrandLogo brand={r.brandKey} label={r.brandLabel} height={16} />
-              ) : null}
-              <span className="whitespace-nowrap">{r.brandLabel || "Sin marca"}</span>
-            </span>
-          </td>
-          <td className="px-3 py-2">{KIND_LABEL[r.kind]}</td>
-          <td className="px-3 py-2 tabular-nums">{r.installments ?? "-"}</td>
-          <td className="px-3 py-2 font-mono text-xs">{r.lote || "-"}</td>
-          <td className="px-3 py-2 font-mono text-xs">{r.cupon || "-"}</td>
-          <td className="px-3 py-2 font-mono text-xs" title={r.reference ? `Referencia ${r.reference}` : undefined}>
-            {r.autorizacion || "-"}
-          </td>
-          <td className="px-3 py-2 font-mono text-xs">{r.ultimos4 || "-"}</td>
-          <td className="px-3 py-2 font-mono text-xs">{r.comercio || "-"}</td>
-          <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums">{formatCurrency(r.amount)}</td>
-        </tr>
-      ))}
+      {m.batches.map((b) => {
+        const state = groupCheckState(b.rows);
+        const label = batchLabel(b.lote);
+        const groupBusy = busy === b.key;
+        return (
+          <Fragment key={b.key}>
+            <tr className={cn("bg-muted/25", groupBusy && "opacity-60")}>
+              <td className="border-b border-border/70 px-2.5 py-2">
+                <Checkbox
+                  checked={state === "all" ? true : state === "some" ? "indeterminate" : false}
+                  disabled={!canManage || busy !== null}
+                  busy={groupBusy}
+                  onCheckedChange={() => onToggle(b.key, b.rows, state !== "all")}
+                  aria-label={`${label}: marcar ${state === "all" ? "como pendiente" : "como conciliado"}`}
+                />
+              </td>
+              <td colSpan={MONTO_IDX - 1} className="border-b border-border/70 px-2.5 py-2">
+                <span className="font-medium">{label}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{plural(b.count)}</span>
+              </td>
+              <td className="whitespace-nowrap border-b border-border/70 px-2.5 py-2 text-right font-semibold tabular-nums">
+                {formatCurrency(b.amount)}
+              </td>
+              <td className="border-b border-border/70 px-2.5 py-2">
+                <BatchBadge batch={b} />
+              </td>
+              <td className="border-b border-border/70" />
+            </tr>
+            {b.rows.map((r) => (
+              <DesktopRow key={r.id} row={r} groupBusy={groupBusy} {...props} />
+            ))}
+          </Fragment>
+        );
+      })}
     </>
+  );
+}
+
+function DesktopRow({ row: r, groupBusy, ...props }: GroupViewProps & { row: CardRecRow; groupBusy: boolean }) {
+  const { canManage, busy, onToggle, onEdit, access, edits, ticket } = props;
+  const reconciled = Boolean(r.reconciledAt);
+  const rowBusy = busy === r.id;
+  const t = ticket(r.ticket);
+  const td = cn(CELL, "border-b border-border/50");
+  return (
+    <tr className={cn("transition-colors hover:bg-muted/30", (groupBusy || rowBusy) && "opacity-60")}>
+      <td className={cn(td, "py-2")}>
+        <Checkbox
+          checked={reconciled}
+          disabled={!canManage || busy !== null}
+          busy={rowBusy}
+          onCheckedChange={(next) => onToggle(r.id, [r], next)}
+          aria-label={`Cobro de ${formatCurrency(r.amount)}: marcar ${reconciled ? "como pendiente" : "como conciliado"}`}
+        />
+      </td>
+      <td className={cn(td, "tabular-nums")} title={`${dayLabel(r.day)} ${localTime(r.createdAt)}`}>
+        {dayLabel(r.day).slice(0, 5)} {localTime(r.createdAt)}
+      </td>
+      <td className={td}>
+        <Code value={t} />
+      </td>
+      <td className={td}>
+        <span className="inline-flex items-center gap-2">
+          {r.brandKey ? <CardBrandLogo brand={r.brandKey} label={r.brandLabel} height={16} /> : null}
+          <span>{r.brandLabel || "Sin marca"}</span>
+        </span>
+      </td>
+      <td className={td}>{KIND_LABEL[r.kind]}</td>
+      <td className={cn(td, "text-right")}>
+        {/* Débito sin cuotas: no aplica, celda vacía. */}
+        {r.kind === "debit" && !r.installments ? null : <Code value={r.installments} />}
+      </td>
+      <td className={td}>
+        <Code value={r.lote} />
+      </td>
+      <td className={td}>
+        <Code value={r.cupon} />
+      </td>
+      <td className={td} title={r.reference ? `Referencia ${r.reference}` : undefined}>
+        <Code value={r.autorizacion} />
+      </td>
+      <td className={td}>
+        <Code value={r.ultimos4} />
+      </td>
+      <td className={td}>
+        <Code value={r.comercio} />
+      </td>
+      <td className={cn(td, "text-right font-medium tabular-nums")}>{formatCurrency(r.amount)}</td>
+      <td className={td}>
+        <span className="inline-flex items-center gap-2">
+          <StatusBadge reconciled={reconciled} />
+          <EditedMark edits={edits.get(r.id)} />
+        </span>
+      </td>
+      <td className={cn(td, "px-1.5 py-1 text-right")}>
+        <EditButton row={r} access={access(r)} onEdit={onEdit} />
+      </td>
+    </tr>
+  );
+}
+
+// ── Mobile ───────────────────────────────────────────────────────────────────
+
+function MobileGroups(props: GroupViewProps) {
+  const { groups, canManage, busy, onToggle } = props;
+  return (
+    <div className="space-y-6">
+      {groups.map((d) => (
+        <section key={d.day} aria-label={dayLongLabel(d.day)}>
+          <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-semibold">{dayLongLabel(d.day)}</h3>
+              <p className="text-xs text-muted-foreground">{plural(d.count)}</p>
+            </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(d.amount)}</span>
+          </div>
+          {d.merchants.map((m) => (
+            <div key={m.key} className="mt-3">
+              <div className="flex items-baseline justify-between gap-3 px-0.5 text-xs font-medium text-muted-foreground">
+                <span className="min-w-0 truncate">
+                  <span className="text-foreground">{merchantLabel(m.comercio)}</span> · {plural(m.count)}
+                </span>
+                <span className="shrink-0 tabular-nums">{formatCurrency(m.amount)}</span>
+              </div>
+              <div className="mt-2 space-y-2">
+                {m.batches.map((b) => {
+                  const state = groupCheckState(b.rows);
+                  const label = batchLabel(b.lote);
+                  const groupBusy = busy === b.key;
+                  return (
+                    <div
+                      key={b.key}
+                      className={cn("overflow-hidden rounded-lg border border-border bg-card", groupBusy && "opacity-60")}
+                    >
+                      <div className="flex items-center gap-3 bg-muted/40 px-3 py-2.5">
+                        <Checkbox
+                          checked={state === "all" ? true : state === "some" ? "indeterminate" : false}
+                          disabled={!canManage || busy !== null}
+                          busy={groupBusy}
+                          onCheckedChange={() => onToggle(b.key, b.rows, state !== "all")}
+                          aria-label={`${label}: marcar ${state === "all" ? "como pendiente" : "como conciliado"}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{label}</p>
+                          <p className="text-xs text-muted-foreground">{plural(b.count)}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="text-sm font-semibold tabular-nums">{formatCurrency(b.amount)}</span>
+                          <BatchBadge batch={b} />
+                        </div>
+                      </div>
+                      <ul>
+                        {b.rows.map((r) => (
+                          <MobileRow key={r.id} row={r} groupBusy={groupBusy} {...props} />
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function MobileField({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm">
+        <Code value={value} />
+      </dd>
+    </div>
+  );
+}
+
+function MobileRow({ row: r, groupBusy, ...props }: GroupViewProps & { row: CardRecRow; groupBusy: boolean }) {
+  const { canManage, busy, onToggle, onEdit, access, edits, ticket } = props;
+  const reconciled = Boolean(r.reconciledAt);
+  const rowBusy = busy === r.id;
+  const t = ticket(r.ticket);
+  return (
+    <li className={cn("border-t border-border/60 px-3 py-3", (groupBusy || rowBusy) && "opacity-60")}>
+      <div className="flex items-start gap-3">
+        <Checkbox
+          className="mt-0.5"
+          checked={reconciled}
+          disabled={!canManage || busy !== null}
+          busy={rowBusy}
+          onCheckedChange={(next) => onToggle(r.id, [r], next)}
+          aria-label={`Cobro de ${formatCurrency(r.amount)}: marcar ${reconciled ? "como pendiente" : "como conciliado"}`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                {r.brandKey ? <CardBrandLogo brand={r.brandKey} label={r.brandLabel} height={14} /> : null}
+                <span className="truncate">{r.brandLabel || "Sin marca"}</span>
+              </p>
+              <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                {KIND_LABEL[r.kind]}
+                {r.installments ? ` · ${r.installments} ${r.installments === 1 ? "cuota" : "cuotas"}` : ""} · {localTime(r.createdAt)}
+                {t ? ` · Ticket ${t}` : ""}
+              </p>
+            </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(r.amount)}</span>
+          </div>
+          <dl className="mt-2.5 grid grid-cols-3 gap-x-3 gap-y-2">
+            <MobileField label="Cupón" value={r.cupon} />
+            <MobileField label="Aut." value={r.autorizacion} />
+            <MobileField label="Últ. 4" value={r.ultimos4} />
+          </dl>
+          <div className="mt-2.5 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2">
+              <StatusBadge reconciled={reconciled} />
+              <EditedMark edits={edits.get(r.id)} />
+            </span>
+            <EditButton row={r} access={access(r)} onEdit={onEdit} className="-my-1 -mr-1.5" />
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }

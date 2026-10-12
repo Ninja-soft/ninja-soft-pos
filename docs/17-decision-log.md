@@ -1519,6 +1519,19 @@ Los comercios cobran con tarjeta en posnets propios (Tarjeta en posnet, ADR-042)
 - Cobros sin `comercio` (anteriores a los números de comercio o de marcas sin número) se agrupan como "Sin n° de comercio"; los integrados sin cupón quedan como "Sin lote" y muestran la referencia del proveedor como ayuda.
 - Pendiente (v2): importar la liquidación del adquirente (CSV / Excel) y conciliar automático por lote y cupón; fecha de acreditación y aranceles / retenciones por cobro; conciliación de QR y billeteras.
 
+### Adenda (2026-10-12): edición de la numeración y tabla nueva
+
+**Contexto.** El dueño pidió "mejorame la tabla, que no se rompa; además permitime editar la numeración si es mi caja, o todas las cajas si soy supervisor". La tabla partía encabezados, mezclaba fuentes, llenaba de guiones y se rompía en anchos chicos.
+
+**Decisión.**
+- **Tabla:** encabezados cortos que no se parten (nombre completo en el tooltip) y fijos arriba con scroll propio dentro de la card; jerarquía día (fila con día de la semana, total y "x de y conciliados") → comercio (subencabezado liviano) → lote (checkbox, subtotal alineado con la columna Monto y estado: Conciliado, Pendiente o "x de y"); una sola familia tipográfica con `tabular-nums`; vacíos con `NoData`; estado por cobro; checkbox nuevo del sistema `components/ui/Checkbox.tsx` (selección neutra, estado mixto). Debajo de `md`, tarjetas por lote en lugar de la tabla.
+- **Edición:** lápiz por cobro que abre `VoucherEditModal` (hoja en mobile) con lote, cupón, autorización, últimos 4, n° de comercio y cuotas, motivo opcional e historial (quién, cuándo, qué cambió). Validación en `lib/reports/voucherEdit.ts`, espejo de la del servidor.
+- **Servidor:** RPC `update_payment_voucher(p_payment_id, p_patch, p_reason)` SECURITY DEFINER con `search_path`: cobro de tarjeta del tenant, plan con `conciliacion_tarjetas`; dueño o encargado editan cualquiera; cajero sólo cobros de ventas de un turno que abrió él; solo lectura nunca. Cobro ya conciliado: el cajero queda bloqueado; dueño o encargado lo editan, **sigue conciliado** y la edición queda con `was_reconciled = true` (la tabla lo marca en ámbar para revisarlo). Claves en lista blanca, valores validados (lote hasta 10 dígitos, cupón hasta 12, comercio hasta 20, autorización alfanumérica hasta 20 en mayúsculas, últimos 4 exactos, cuotas 1 a 99), vacío borra la clave, y se mezcla en `card_voucher` sin tocar `marca` ni otras claves. Historial en la tabla nueva `payment_voucher_edits` (lectura `tenant_id = current_tenant_id() or internal_scope()`, ADR-052; sin escritura por PostgREST) y `audit_logs` (`payment_voucher_updated`, antes y después). No toca `reconciled_*`: el guard `payments_reconcile_guard` sigue igual.
+
+**Alternativas descartadas.** Guardar el historial dentro de `card_voucher._edits` (ensucia un dato que se imprime y viaja a otros lados); desconciliar solo al editar (el supervisor ya verificó el lote; se prefiere marcarlo y que lo revise).
+
+**Consecuencias.** Migración `20261018200000_edicion_cupon_tarjeta` (no aplicada). Orden de deploy: migración primero; sin ella la pantalla funciona igual pero el historial pide una tabla que no existe (404 en consola) y el lápiz falla al guardar. Tests: `tests/unit/voucherEdit.test.ts` y `tests/integration/rls-voucher-edit.test.ts`.
+
 ---
 
 ## ADR-047: Clover Point (Fiserv) por Cloud Pay Display y estado del resto de los Points

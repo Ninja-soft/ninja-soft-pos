@@ -51,6 +51,15 @@ export function useBranches() {
   });
 }
 
+export function useBranchLogos() {
+  return useQuery({
+    queryKey: ["branches", "logos"],
+    queryFn: () => branchesAdminApi.logos(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
 export function useAllowedStoreIds() {
   return useQuery({
     queryKey: ["branches", "allowed"],

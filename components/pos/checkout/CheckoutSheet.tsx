@@ -51,7 +51,7 @@ import {
 import { Keypad, applyKey, keypadNumber, type KeypadKey } from "../ui/Keypad";
 import { PosSheet } from "../ui/PosSheet";
 import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
-import { money } from "../ui/posStyles";
+import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, type CardStep } from "./CardWizard";
 import type {
@@ -1090,10 +1090,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         onClick={onCta}
         disabled={ctaDisabled}
         className={cn(
-          "flex w-full items-center justify-center gap-2 rounded-lg font-semibold tracking-tight transition",
-          "bg-[var(--pos-via)] text-[color:var(--pos-ink)] hover:brightness-105 active:brightness-95",
+          "flex w-full items-center justify-center gap-2 rounded-lg font-semibold tracking-tight",
+          // Mismo CTA sólido que "Cobrar" en el POS (posStyles, --pos-solid).
+          POS_CTA,
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
-          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:hover:brightness-100",
           big ? "h-16 text-lg" : "h-14 text-base",
         )}
       >

@@ -17,20 +17,18 @@ export function Keypad({
   onKey,
   lastKey = "00",
   compact,
-  square,
   className,
 }: {
   onKey: (k: KeypadKey) => void;
   lastKey?: "00" | ",";
   compact?: boolean;
-  /** Esquinas de 8px (hoja de cobro). */
+  /** Obsoleto: las teclas ya tienen esquinas de 8px en todo el POS. */
   square?: boolean;
   className?: string;
 }) {
   const btn = cn(
-    "grid place-items-center bg-fg-6 font-price font-bold text-foreground transition hover:bg-fg-10 active:scale-95 active:bg-foreground active:text-background",
+    "grid select-none place-items-center rounded-lg bg-fg-6 font-price font-semibold tabular-nums text-foreground transition-colors hover:bg-fg-10 active:bg-[color-mix(in_srgb,var(--foreground)_18%,transparent)]",
     compact ? "h-11 text-lg" : "h-14 text-xl",
-    square ? "rounded-lg" : "rounded-2xl",
   );
   return (
     <div className={cn("grid grid-cols-3 gap-2", className)} role="group" aria-label="Teclado numérico">
@@ -46,7 +44,7 @@ export function Keypad({
         0
       </button>
       <button type="button" className={btn} onClick={() => onKey("back")} aria-label="Borrar">
-        <Delete size={20} />
+        <Delete size={20} aria-hidden />
       </button>
     </div>
   );

@@ -1,11 +1,11 @@
 "use client";
 
 import { forwardRef } from "react";
-import { Banknote, CornerDownLeft, X } from "lucide-react";
+import { Banknote, CornerDownLeft, SearchX, X } from "lucide-react";
 import type { Product } from "@/modules/products/api";
 import { cn } from "@/lib/utils/cn";
 import { Keypad, type KeypadKey } from "../ui/Keypad";
-import { money } from "../ui/posStyles";
+import { POS_EYEBROW, POS_PANEL, money } from "../ui/posStyles";
 import { PosSearch } from "./ProductPane";
 
 // Caja rápida: el escáner / PLU arriba, resultados de búsqueda en lista y el
@@ -47,27 +47,33 @@ export const QuickScanPane = forwardRef<
           <button
             type="button"
             onClick={p.onFreeSale}
-            className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-card shadow-[inset_0_0_0_1px_var(--border)] transition hover:bg-muted"
+            className="grid h-14 w-14 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-fg-4 hover:text-foreground"
             aria-label="Venta libre (monto manual)"
             title="Monto libre"
           >
-            <Banknote size={20} />
+            <Banknote size={20} aria-hidden />
           </button>
         )}
       </div>
       {p.pendingQty > 1 && (
-        <div className="flex items-center gap-2 self-start rounded-full bg-[color-mix(in_srgb,var(--pos-from)_16%,transparent)] py-1 pl-3 pr-1 text-sm font-bold">
-          Próximo producto × {p.pendingQty}
-          <button type="button" onClick={p.onClearQty} className="grid h-6 w-6 place-items-center rounded-full hover:bg-black/10" aria-label="Quitar cantidad">
-            <X size={13} />
+        <div className="flex h-9 items-center gap-2 self-start rounded-md bg-fg-6 pl-3 pr-1 text-sm">
+          <span className="text-muted-foreground">Próximo producto</span>
+          <span className="font-price font-semibold tabular-nums">× {p.pendingQty}</span>
+          <button
+            type="button"
+            onClick={p.onClearQty}
+            className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-fg-10 hover:text-foreground"
+            aria-label="Quitar cantidad"
+          >
+            <X size={14} aria-hidden />
           </button>
         </div>
       )}
       {typing && (
-        <div className="rounded-2xl bg-card p-1.5 shadow-sm">
+        <div className="rounded-lg border border-border bg-popover p-1 shadow-sm">
           {(p.results ?? []).length === 0 ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">
-              Sin coincidencias. Enter busca el código exacto.
+            <p className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+              <SearchX size={16} aria-hidden /> Sin coincidencias. Enter busca el código exacto.
             </p>
           ) : (
             <ul className="slim-scrollbar max-h-64 overflow-y-auto">
@@ -76,15 +82,13 @@ export const QuickScanPane = forwardRef<
                   <button
                     type="button"
                     onClick={() => p.onPick(r)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                    className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-fg-6"
                   >
-                    {r.plu && (
-                      <span className="w-14 shrink-0 font-mono text-xs font-bold text-muted-foreground">{r.plu}</span>
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">{r.name}</span>
-                    <span className="font-price text-sm font-black tabular-nums">
+                    <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">{r.plu ?? ""}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.name}</span>
+                    <span className="font-price text-sm font-semibold tabular-nums">
                       {money(r.price)}
-                      {r.unit === "kg" && <span className="text-[11px] text-muted-foreground">/kg</span>}
+                      {r.unit === "kg" && <span className="text-xs font-medium text-muted-foreground">/kg</span>}
                     </span>
                   </button>
                 </li>
@@ -93,8 +97,8 @@ export const QuickScanPane = forwardRef<
           )}
         </div>
       )}
-      <div className="slim-scrollbar min-h-[220px] flex-1 overflow-y-auto rounded-[24px] bg-card p-1.5">
-        <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <div className={cn("slim-scrollbar min-h-[220px] flex-1 overflow-y-auto p-1.5", POS_PANEL)}>
+        <div className={cn("flex items-center justify-between px-2.5 pb-1.5 pt-2", POS_EYEBROW)}>
           <span>Ticket</span>
           <span className="hidden sm:inline">Cant. · Importe</span>
         </div>
@@ -113,26 +117,17 @@ export function QuickKeypadPanel({
   onTimes: () => void;
   onEnter: () => void;
 }) {
+  const action =
+    "flex h-12 items-center justify-center gap-2 rounded-lg bg-fg-6 text-sm font-semibold text-foreground transition-colors hover:bg-fg-10 active:bg-[color-mix(in_srgb,var(--foreground)_18%,transparent)]";
   return (
     <div className="space-y-2">
       <Keypad onKey={onKey} lastKey="00" />
       <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={onTimes}
-          className="h-12 rounded-2xl bg-fg-6 font-price text-lg font-black transition hover:bg-fg-10 active:scale-95"
-          title="Cantidad para el próximo producto"
-        >
-          × Cant.
+        <button type="button" onClick={onTimes} className={action} title="Cantidad para el próximo producto">
+          <span className="font-price text-base">×</span> Cantidad
         </button>
-        <button
-          type="button"
-          onClick={onEnter}
-          className={cn(
-            "flex h-12 items-center justify-center gap-2 rounded-2xl bg-foreground text-sm font-black text-background transition active:scale-95",
-          )}
-        >
-          <CornerDownLeft size={16} /> Buscar
+        <button type="button" onClick={onEnter} className={action}>
+          <CornerDownLeft size={16} aria-hidden /> Buscar
         </button>
       </div>
     </div>

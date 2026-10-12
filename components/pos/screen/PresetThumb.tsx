@@ -11,7 +11,8 @@ const PANEL = "rounded-[3px] bg-foreground/[0.06]";
 const BLOCK = "rounded-[2px] bg-foreground/[0.12]";
 const LINE = "rounded-full bg-foreground/[0.16]";
 const STRONG = "rounded-full bg-foreground/[0.32]";
-const CTA = "rounded-[2px] bg-ninja-flame";
+// Mismo color sólido que el CTA real del POS (--pos-solid, flame #DB3A14).
+const CTA = "rounded-[2px] bg-[var(--pos-solid,#DB3A14)]";
 
 export function PresetThumb({ preset, className }: { preset: PosPreset; className?: string }) {
   return (

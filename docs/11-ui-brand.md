@@ -262,4 +262,20 @@ Si el cambio afecta POS, internal, reportes o configuración, el control es bloq
 
 Reglas: lo seleccionado se marca con **relleno neutro elevado** (`choiceClass` o las clases `choice-on` + `choice-check`: relleno tonal del tema, texto de primer plano e insignia de check con el fuego Ninja en la esquina; `choice-on` solo para pastillas compactas o cuando ya hay `ChoiceDot`), nunca con borde o ring de color ni tinte marrón de flame; sin `—` en la UI (`<NoData />`); sin `alert`/`confirm` del navegador (`ConfirmDialog` o confirmación inline).
 
-Hoja de cobro (ADR-042): tiles y botones `rounded-lg`, la hoja `rounded-xl`; un único color sólido en el CTA, montos en `text-foreground` (nada de `price-hl` ni texto en degradado); logos de medios con su fondo transparente vía `TenderLogo` → `ThemedLogo` y de tarjetas vía `CardBrandLogo` (fuente única `lib/payments/logos.ts`, variante `-on-dark` en temas oscuros, sin placa blanca); las marcas con varios canales, también en "Billeteras y links", van en una fila con canales segmentados. Miniaturas de diseño: wireframes en tonos del tema (`bg-foreground/[x]`) con un solo acento mínimo para el botón de cobro.
+Hoja de cobro (ADR-042): tiles y botones `rounded-lg`, la hoja `rounded-xl`; el CTA es el mismo `POS_CTA` sólido de §18 (`--pos-solid`, texto blanco), montos en `text-foreground` (nada de `price-hl` ni texto en degradado); logos de medios con su fondo transparente vía `TenderLogo` → `ThemedLogo` y de tarjetas vía `CardBrandLogo` (fuente única `lib/payments/logos.ts`, variante `-on-dark` en temas oscuros, sin placa blanca); las marcas con varios canales, también en "Billeteras y links", van en una fila con canales segmentados. Miniaturas de diseño: wireframes en tonos del tema (`bg-foreground/[x]`) con un solo acento mínimo para el botón de cobro.
+
+## 18. Pantallas del POS (2026-10)
+
+Tokens en `components/pos/ui/posStyles.ts`; mismo lenguaje que el resto de la app.
+
+| Pieza | Regla |
+|---|---|
+| Radios | `rounded-md` chips, pastillas y steppers; `rounded-lg` botones, campos, tiles y líneas; `rounded-xl` paneles y hojas. Nada de `rounded-2xl`/`3xl`. |
+| Superficies | `POS_PANEL` (paneles) y `POS_TILE` (tiles): `bg-card` + borde sutil del tema. Sin degradados decorativos ni sombras pesadas. |
+| CTA | `POS_CTA` sólo para Cobrar: relleno sólido del acento con texto blanco AA (`--pos-solid` / `--pos-on`). Acciones secundarias con `POS_QUIET`. |
+| Selección | Rubros y áreas en riel segmentado (`POS_SEG_*`, como `Segmented`); filas y mesas con `choice-on`. Nunca relleno invertido ni tinte de flame. |
+| Productos | Precios `font-price` + `tabular-nums`, peso `semibold`. Boutique: foto 4:5 `object-cover`, diferida y con tamaño; sin foto, iniciales sobre relleno neutro. Stock bajo / sin stock como pastilla tonal. |
+| Teclas rápidas | Tile neutro; el color elegido es una barrita de acento (`QUICK_KEY_DOT`). |
+| Mesas | Tile neutro, estado como punto + texto. |
+| Logos | Fuente única `lib/payments/logos.ts`: isotipos y logos de tarjeta de fondo transparente, sin placa blanca, con variante `-on-dark` en temas oscuros (`BrandIcon` / `TenderLogo` → `ThemedLogo`, `CardBrandLogo`). |
+| Táctil | Controles de 44px en la barra superior; steppers y acciones de línea crecen a 44px con `pointer: coarse`. Foco visible de 2px en todo el POS. |

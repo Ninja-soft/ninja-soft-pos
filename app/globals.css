@@ -752,6 +752,17 @@ html {
   --pos-via: #ff8a1f;
   --pos-to: #ffd21f;
   --pos-ink: #0b0720;
+  /* CTA sólido (Cobrar): llama profunda con texto blanco AA. */
+  --pos-solid: #db3a14;
+  --pos-solid-hover: #e8431b;
+  --pos-on: #ffffff;
+}
+/* Foco visible en todo el POS (pantalla y hojas): anillo de 2px con el ring
+   del tema, sólo con teclado. */
+.pos-root :is(button, a, input, [tabindex]):focus-visible,
+.pos-sheet :is(button, a, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 /* Hojas del POS (cobro y carrito): suben desde abajo en el celular y aparecen
    escaladas desde md. Solo transform y opacity. */

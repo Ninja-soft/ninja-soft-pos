@@ -12,7 +12,7 @@ import { money } from "../ui/posStyles";
 // lógica que antes; sólo cambia la piel (filas con relleno, sin bordes).
 
 const row =
-  "flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-left text-sm transition hover:bg-muted";
+  "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-fg-6";
 
 export function CustomerPickerDialog({
   open,
@@ -49,7 +49,7 @@ export function CustomerPickerDialog({
           <ScanBarcode size={16} /> Escanear DNI y agregar cliente
         </Button>
         <div className="max-h-72 space-y-0.5 overflow-y-auto">
-          <button type="button" onClick={() => onPick(null)} className={cn(row, !current && "bg-muted")}>
+          <button type="button" onClick={() => onPick(null)} className={cn(row, !current && "choice-on")}>
             <span>Consumidor final</span>
             {!current && <span className="text-xs font-bold text-success">Actual</span>}
           </button>
@@ -61,7 +61,7 @@ export function CustomerPickerDialog({
               key={c.id}
               type="button"
               onClick={() => onPick({ id: c.id, name: c.name })}
-              className={cn(row, current?.id === c.id && "bg-muted")}
+              className={cn(row, current?.id === c.id && "choice-on")}
             >
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{c.name}</span>
@@ -177,7 +177,7 @@ export function WeighDialog({
               key={q}
               type="button"
               onClick={() => onGrams(String(q))}
-              className="h-9 rounded-full bg-muted px-3.5 text-[13px] font-bold transition hover:bg-fg-10"
+              className="h-10 rounded-md bg-fg-6 px-3.5 text-[13px] font-semibold tabular-nums transition-colors hover:bg-fg-10"
             >
               {q >= 1000 ? `${q / 1000} kg` : `${q} g`}
             </button>
@@ -229,7 +229,7 @@ export function SerialDialog({
       <div className="space-y-4">
         <div className="max-h-56 space-y-1 overflow-y-auto">
           {inStock.map((s) => (
-            <label key={s.id} className={cn(row, "cursor-pointer justify-start", choice === s.serial && "bg-muted")}>
+            <label key={s.id} className={cn(row, "cursor-pointer justify-start", choice === s.serial && "choice-on")}>
               <input
                 type="radio"
                 name="serial"
@@ -243,7 +243,7 @@ export function SerialDialog({
           {inStock.length === 0 && (
             <p className="text-sm text-muted-foreground">Sin seriales precargados. Ingresá uno abajo.</p>
           )}
-          <label className={cn(row, "cursor-pointer justify-start", choice === "__other__" && "bg-muted")}>
+          <label className={cn(row, "cursor-pointer justify-start", choice === "__other__" && "choice-on")}>
             <input
               type="radio"
               name="serial"

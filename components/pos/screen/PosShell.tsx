@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronUp, Trash2, Utensils, LayoutGrid } from "lucide-react";
+import { ChevronUp, LayoutGrid, ShoppingBag, Trash2, Utensils } from "lucide-react";
 import type { PosLayout } from "@/lib/pos/layout";
+import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { PosSheet } from "../ui/PosSheet";
-import { POS_CTA, POS_IDLE, POS_SELECTED, accentVars, money } from "../ui/posStyles";
+import { POS_CTA, POS_PANEL, accentVars, money } from "../ui/posStyles";
 
 // Esqueleto de la pantalla de venta. Ubica las piezas según el preset:
 //  - Mostrador:   [productos | carrito]
@@ -53,12 +54,17 @@ export function PosShell(p: PosShellProps) {
     if (p.checkoutOpen) setCartOpen(false);
   }, [p.checkoutOpen]);
 
+  // Vaciar con confirmación en línea (sin confirm del navegador).
   const clearBlock = p.itemCount > 0 && (
     <div className="relative">
       {confirmClear ? (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-muted-foreground">¿Vaciar?</span>
-          <button type="button" onClick={() => setConfirmClear(false)} className="h-7 rounded-full bg-muted px-2.5 text-[11px] font-bold">
+        <div className="flex items-center gap-1">
+          <span className="pr-1 text-xs font-medium text-muted-foreground">¿Vaciar?</span>
+          <button
+            type="button"
+            onClick={() => setConfirmClear(false)}
+            className="h-8 rounded-md bg-fg-6 px-2.5 text-xs font-semibold transition-colors hover:bg-fg-10"
+          >
             No
           </button>
           <button
@@ -67,7 +73,7 @@ export function PosShell(p: PosShellProps) {
               setConfirmClear(false);
               p.onClear();
             }}
-            className="h-7 rounded-full bg-danger/15 px-2.5 text-[11px] font-bold text-danger"
+            className="h-8 rounded-md bg-danger/15 px-2.5 text-xs font-semibold text-danger transition-colors hover:bg-danger/20"
           >
             Vaciar
           </button>
@@ -76,22 +82,22 @@ export function PosShell(p: PosShellProps) {
         <button
           type="button"
           onClick={() => setConfirmClear(true)}
-          className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition hover:bg-danger/15 hover:text-danger"
+          className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-danger/15 hover:text-danger"
           aria-label="Vaciar carrito"
           title="Vaciar carrito"
         >
-          <Trash2 size={15} />
+          <Trash2 size={16} aria-hidden />
         </button>
       )}
     </div>
   );
 
   const cartHeader = (
-    <div className="flex h-12 shrink-0 items-center justify-between gap-2 px-4">
-      <p className="flex items-center gap-2 font-display text-base font-black">
+    <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
+      <p className="flex items-center gap-2 font-display text-base font-semibold tracking-tight">
         {p.cartTitle}
         {p.itemCount > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted-foreground">
+          <span className="rounded-md bg-fg-6 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
             {p.itemCount}
           </span>
         )}
@@ -103,21 +109,18 @@ export function PosShell(p: PosShellProps) {
   const salon = layout.preset === "salon" && p.tables;
   const centerContent = salon ? (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-fg-6 p-1 xl:hidden">
-        {(["carta", "mesas"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setSalonTab(t)}
-            className={cn(
-              "flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-bold transition",
-              salonTab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-            )}
-          >
-            {t === "carta" ? <Utensils size={15} /> : <LayoutGrid size={15} />}
-            {t === "carta" ? "Carta" : "Mesas"}
-          </button>
-        ))}
+      <div className="mb-3 xl:hidden">
+        <Segmented
+          fill
+          aria-label="Vista del salón"
+          value={salonTab}
+          onChange={setSalonTab}
+          options={[
+            { value: "carta", label: "Carta", icon: <Utensils size={16} /> },
+            { value: "mesas", label: "Mesas", icon: <LayoutGrid size={16} /> },
+          ]}
+          className="w-full"
+        />
       </div>
       <div className={cn(salonTab === "mesas" && "max-xl:hidden")}>{p.center}</div>
       <div className={cn("h-[60dvh] xl:hidden", salonTab === "carta" && "hidden")}>{p.tables}</div>
@@ -134,43 +137,36 @@ export function PosShell(p: PosShellProps) {
       {/* Lleva la burbuja del asistente fuera del cobro: arriba de la barra en
           el celular y a la izquierda del carrito desde md. */}
       <style>{`
-        @media (max-width: 767px) { html { --fab-lift: ${tabs ? 0 : 84}px; } }
+        @media (max-width: 767px) { html { --fab-lift: ${tabs ? 0 : 80}px; } }
         @media (min-width: 768px) { html { --fab-shift: ${left ? 0 : 396}px; } }
       `}</style>
       {p.topBar}
       {p.banners}
 
       {tabs && (
-        <div className="mx-3 mb-2 grid shrink-0 grid-cols-2 gap-1 rounded-2xl bg-fg-6 p-1 md:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileTab("products")}
-            className={cn("h-10 rounded-xl text-sm font-bold", mobileTab === "products" ? "bg-card shadow-sm" : "text-muted-foreground")}
-          >
-            Productos
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab("cart")}
-            className={cn("h-10 rounded-xl text-sm font-bold", mobileTab === "cart" ? "bg-card shadow-sm" : "text-muted-foreground")}
-          >
-            Carrito {p.itemCount > 0 ? `· ${money(p.total)}` : ""}
-          </button>
+        <div className="mx-3 mb-2 shrink-0 md:hidden">
+          <Segmented
+            fill
+            aria-label="Vista"
+            value={mobileTab}
+            onChange={setMobileTab}
+            options={[
+              { value: "products", label: "Productos" },
+              { value: "cart", label: p.itemCount > 0 ? `${p.cartTitle} · ${money(p.total)}` : p.cartTitle },
+            ]}
+            className="w-full"
+          />
         </div>
       )}
 
       <div className={cn("flex min-h-0 flex-1 gap-3 px-3 pb-3 md:px-4 md:pb-4", left && "md:flex-row-reverse")}>
-        {p.rail && (
-          <aside className="hidden w-44 shrink-0 rounded-[24px] bg-card p-2 lg:block xl:w-52 xl:p-2.5">{p.rail}</aside>
-        )}
-        {salon && (
-          <aside className="hidden w-[300px] shrink-0 rounded-[24px] bg-card p-3 xl:block">{p.tables}</aside>
-        )}
+        {p.rail && <aside className={cn("hidden w-48 shrink-0 p-2 xl:block 2xl:w-52", POS_PANEL)}>{p.rail}</aside>}
+        {salon && <aside className={cn("hidden w-[300px] shrink-0 p-3 xl:block", POS_PANEL)}>{p.tables}</aside>}
 
         <main
           className={cn(
             "slim-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-hidden md:pb-2",
-            tabs ? "pb-4" : "pb-28",
+            tabs ? "pb-4" : "pb-24",
             tabs && mobileTab === "cart" && "max-md:hidden",
           )}
         >
@@ -180,9 +176,7 @@ export function PosShell(p: PosShellProps) {
         {/* Carrito en el celular con pestañas */}
         {tabs && mobileTab === "cart" && (
           <section className="flex min-h-0 flex-1 flex-col md:hidden">
-            {!p.linesInCenter && (
-              <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto">{p.cartLines}</div>
-            )}
+            {!p.linesInCenter && <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto">{p.cartLines}</div>}
             <div className="shrink-0 pt-2">{p.cartSummary}</div>
           </section>
         )}
@@ -190,9 +184,11 @@ export function PosShell(p: PosShellProps) {
         {/* Carrito lateral desde md */}
         <aside
           className={cn(
-            "hidden min-h-0 shrink-0 flex-col overflow-hidden rounded-[26px] bg-card shadow-[0_20px_60px_-30px_rgba(0,0,0,0.6)] md:flex",
+            "hidden min-h-0 shrink-0 flex-col overflow-hidden md:flex",
+            POS_PANEL,
             p.linesInCenter ? "w-[330px] lg:w-[360px]" : "w-[330px] lg:w-[380px]",
           )}
+          aria-label={p.cartTitle}
         >
           {p.linesInCenter ? (
             <div className="slim-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
@@ -214,27 +210,29 @@ export function PosShell(p: PosShellProps) {
       {/* Barra fija del carrito (celular) */}
       {!tabs && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-[22px] bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.65)] ring-1 ring-border backdrop-blur-xl">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-border bg-popover p-1.5 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.5)]">
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-2xl px-2 py-1.5 text-left"
+              className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-fg-4"
               aria-label="Ver carrito"
             >
-              <span
-                key={p.itemCount}
-                className={cn(
-                  "pos-pop grid h-10 min-w-10 shrink-0 place-items-center rounded-2xl px-2 font-price text-sm font-black tabular-nums",
-                  p.itemCount > 0 ? POS_SELECTED : POS_IDLE,
+              <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-md bg-fg-6 text-muted-foreground">
+                <ShoppingBag size={18} aria-hidden />
+                {p.itemCount > 0 && (
+                  <span
+                    key={p.itemCount}
+                    className="pos-pop absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-[var(--pos-solid)] px-1 text-[11px] font-semibold tabular-nums text-[color:var(--pos-on)]"
+                  >
+                    {p.itemCount}
+                  </span>
                 )}
-              >
-                {p.itemCount}
               </span>
               <span className="min-w-0">
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
-                  {p.cartTitle} <ChevronUp size={12} />
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {p.cartTitle} <ChevronUp size={14} aria-hidden />
                 </span>
-                <span className="block truncate font-price text-lg font-black leading-tight tabular-nums">
+                <span className="block truncate font-price text-base font-semibold leading-tight tabular-nums">
                   {money(p.total)}
                 </span>
               </span>
@@ -243,7 +241,7 @@ export function PosShell(p: PosShellProps) {
               type="button"
               disabled={!p.canCheckout}
               onClick={p.onCheckout}
-              className={cn("h-12 shrink-0 rounded-2xl px-6 text-[15px] font-black", POS_CTA)}
+              className={cn("h-12 shrink-0 rounded-lg px-6 text-base font-semibold", POS_CTA)}
             >
               Cobrar
             </button>
@@ -259,9 +257,7 @@ export function PosShell(p: PosShellProps) {
         className="md:hidden"
       >
         <div className="pr-12">{cartHeader}</div>
-        {!p.linesInCenter && (
-          <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5">{p.cartLines}</div>
-        )}
+        {!p.linesInCenter && <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5">{p.cartLines}</div>}
         <div className="shrink-0 border-t border-border p-3">{p.cartSummary}</div>
       </PosSheet>
     </div>

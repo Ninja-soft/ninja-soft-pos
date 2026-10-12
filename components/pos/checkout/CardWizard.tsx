@@ -383,13 +383,12 @@ export function PlanChip({
       role="radio"
       aria-checked={on}
       onClick={onClick}
-      className={choiceClass(on, "flex items-center gap-2.5 rounded-lg px-3 py-2 pr-8 text-left")}
+      className={choiceClass(on, "flex min-w-0 flex-col items-start gap-1 rounded-lg px-3 py-2 pr-8 text-left")}
     >
-      {brand && <CardBrandLogo brand={brand} height={18} natural className="max-w-[48px]" />}
-      <span className="flex min-w-0 flex-col items-start">
-        <span className="text-[13px] font-semibold">{title}</span>
-        <span className="text-[11px] tabular-nums text-muted-foreground">{sub}</span>
-      </span>
+      {/* Logo arriba: los chips van de a 3 por fila y no hay ancho para ponerlo al costado. */}
+      {brand && <CardBrandLogo brand={brand} height={16} natural className="max-w-[56px] justify-start" />}
+      <span className="text-[13px] font-semibold">{title}</span>
+      <span className="text-[11px] tabular-nums text-muted-foreground">{sub}</span>
     </button>
   );
 }

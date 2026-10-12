@@ -1093,6 +1093,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           "flex w-full items-center justify-center gap-2 rounded-lg font-semibold tracking-tight",
           // Mismo CTA sólido que "Cobrar" en el POS (posStyles, --pos-solid).
           POS_CTA,
+          // Deshabilitado ("Elegí la entidad…"): relleno neutro legible, no el acento al 40%.
+          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
           big ? "h-16 text-lg" : "h-14 text-base",
         )}

@@ -461,7 +461,8 @@ export function CartSummary(p: CartSummaryProps) {
                   ) : (
                     <BrandIcon logo={t.logo} alt="" size={20} />
                   )}
-                  <span className="truncate">{t.label}</span>
+                  {/* "Tarjeta en posnet" no entra en un botón de un tercio. */}
+                  <span className="truncate">{t.group === "card" ? "Tarjeta" : t.label}</span>
                 </button>
               ))}
             </div>

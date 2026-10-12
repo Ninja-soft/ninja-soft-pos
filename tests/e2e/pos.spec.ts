@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { test, expect, requireSession, settle } from "./support/fixtures";
+import { test, expect, requireSession } from "./support/fixtures";
 import { AUTH_STATE_PATH, RUN_PREFIX } from "./support/env";
 import {
   QA_CUSTOMER,
@@ -11,6 +11,7 @@ import {
   dialog,
   ensureShiftOpen,
   escapeRe,
+  gotoClean,
   openCheckout,
   voidSale,
 } from "./support/app";
@@ -24,8 +25,7 @@ const PRICE = 1250; // redondeos rápidos: $1.300 / $1.500 / $2.000 → vuelto v
 const VOID_REASON = `${RUN_PREFIX} limpieza e2e`;
 
 async function cartWithProduct(page: Page) {
-  await page.goto("/pos");
-  await settle(page);
+  await gotoClean(page, "/pos");
   await ensureShiftOpen(page);
   await addToCart(page, PRODUCT);
 }
@@ -56,15 +56,13 @@ test.describe("pos", () => {
   });
 
   test("abre la caja si está cerrada", async ({ page }) => {
-    await page.goto("/pos");
-    await settle(page);
+    await gotoClean(page, "/pos");
     await ensureShiftOpen(page);
     await expect(page.getByText("Caja cerrada")).toHaveCount(0);
   });
 
   test("cada preset de diseño renderiza", async ({ page }) => {
-    await page.goto("/pos");
-    await settle(page);
+    await gotoClean(page, "/pos");
     const presets = ["Mostrador", "Boutique", "Caja rápida", "Salón"];
     for (const preset of presets) {
       await page.getByRole("button", { name: "Cambiar el diseño del POS" }).click();

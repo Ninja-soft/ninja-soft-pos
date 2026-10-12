@@ -8,6 +8,7 @@
 // Sumar un proveedor nuevo = sumar una entrada acá (y su feature en
 // lib/payments/providerFeature.ts), sin tocar la pantalla.
 
+import { isProviderEnabled } from "@/lib/payments/defaults";
 import { providerFeature } from "@/lib/payments/providerFeature";
 import { paymentIcon } from "@/lib/payments/logos";
 
@@ -381,10 +382,12 @@ function featureAllowed(key: string | null, features: Record<string, boolean> | 
 /** ¿El tender se puede usar con la config del negocio? (sin preferencias). */
 export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
   const rows = ctx.providers ?? [];
-  const enabled = new Map(rows.filter((r) => r.enabled).map((r) => [r.provider_key, r]));
+  const byKey = new Map(rows.map((r) => [r.provider_key, r]));
+  // Efectivo y transferencia sin fila cuentan como habilitados (lib/payments/defaults).
+  const enabled = { has: (key: string) => isProviderEnabled(key, byKey.get(key)) };
   const connected = (key: string) => rows.some((r) => r.provider_key === key && r.connected);
   // Sin ninguna configuración: sólo los medios manuales básicos (como antes).
-  const noConfig = enabled.size === 0;
+  const noConfig = !rows.some((r) => r.enabled);
 
   if (!featureAllowed(t.featureKey, ctx.features)) return false;
 

@@ -1,6 +1,14 @@
 import { test, expect, requireSession } from "./support/fixtures";
 import { RUN_PREFIX } from "./support/env";
-import { appears, deleteProduct, dialog, openNewProduct, productRow, productTab } from "./support/app";
+import {
+  appears,
+  closeDialogs,
+  deleteProduct,
+  dialog,
+  openNewProduct,
+  productRow,
+  productTab,
+} from "./support/app";
 
 // Flujo 2 · Productos: alta con árbol de categorías, atributos y 2 bultos con
 // medidas; volumen calculado; edición; baja lógica.
@@ -19,13 +27,11 @@ test.describe("productos", () => {
 
     // General: nombre + árbol de jerarquía (rubro › categoría, nuevos).
     await form.getByLabel("Nombre", { exact: true }).fill(name);
+    // Un nivel recién agregado ya viene en "Crear nueva" (con su input de
+    // nombre); no se re-elige en el select: re-normaliza y descarta el nivel vacío.
     await form.getByRole("button", { name: "Agregar rubro" }).click();
-    const rubroSelect = form.getByLabel("Rubro existente");
-    if (await appears(rubroSelect, 1_000)) await rubroSelect.selectOption({ label: "Crear nueva" });
     await form.getByLabel("Nombre de rubro").fill(rubro);
     await form.getByRole("button", { name: "Agregar categoría" }).click();
-    const catSelect = form.getByLabel("Categoría existente");
-    if (await appears(catSelect, 1_000)) await catSelect.selectOption({ label: "Crear nueva" });
     await form.getByLabel("Nombre de categoría").fill(categoria);
     await expect(form.getByText(`${rubro} › ${categoria}`)).toBeVisible();
 
@@ -35,12 +41,15 @@ test.describe("productos", () => {
 
     // Atributos: una sugerencia + uno libre.
     await productTab(page, "Atributos");
-    await form.getByRole("button", { name: "+ Color" }).click();
-    const values = form.getByLabel("Valor");
-    await values.last().fill("Rojo");
-    await form.getByRole("button", { name: "Otro" }).click();
-    await form.getByLabel("Atributo").last().fill("Origen");
-    await form.getByLabel("Valor").last().fill("E2E");
+    // Los chips son "<icono +> Color": el nombre accesible es sólo el texto.
+    await form.getByRole("button", { name: "Color", exact: true }).click();
+    await expect(form.getByLabel("Atributo", { exact: true })).toHaveCount(1);
+    await expect(form.getByLabel("Atributo", { exact: true }).first()).toHaveValue("Color");
+    await form.getByLabel("Valor", { exact: true }).last().fill("Rojo");
+    await form.getByRole("button", { name: "Otro", exact: true }).click();
+    await expect(form.getByLabel("Atributo", { exact: true })).toHaveCount(2);
+    await form.getByLabel("Atributo", { exact: true }).last().fill("Procedencia");
+    await form.getByLabel("Valor", { exact: true }).last().fill("E2E");
 
     // Medidas: 2 bultos. Plan-gated (medidas_bultos).
     await productTab(page, "Medidas");
@@ -61,7 +70,7 @@ test.describe("productos", () => {
 
     await form.getByRole("button", { name: "Crear producto" }).click();
     await expect(page.getByText("Producto creado").first()).toBeVisible();
-    await page.keyboard.press("Escape");
+    await closeDialogs(page);
   });
 
   test("aparece en el listado con su categoría", async ({ page }) => {

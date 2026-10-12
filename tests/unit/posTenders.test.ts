@@ -68,6 +68,15 @@ describe("disponibilidad", () => {
     expect(ids(ctx())).toEqual(["cash", "transfer", "card:debit", "card:credit"]);
   });
 
+  it("efectivo y transferencia sin fila siguen disponibles aunque haya otros medios", () => {
+    const providers = [row("mercadopago")];
+    expect(ids(ctx({ providers }))).toEqual(expect.arrayContaining(["cash", "transfer"]));
+    // Con fila explícita apagada, no.
+    const off = [row("mercadopago"), row("cash", false, false)];
+    expect(ids(ctx({ providers: off }))).not.toContain("cash");
+    expect(ids(ctx({ providers: off }))).toContain("transfer");
+  });
+
   it("un proveedor QR necesita estar habilitado, conectado y en el plan", () => {
     expect(ids(ctx({ providers: [row("cash"), row("mercadopago", false)] }))).not.toContain(
       "mercadopago:qr",

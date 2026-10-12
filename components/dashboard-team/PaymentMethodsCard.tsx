@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansGridModal";
 import { createClient } from "@/lib/supabase/client";
+import { withDefaultMethods } from "@/lib/payments/defaults";
 import { useToast } from "@/components/ui/Toast";
 import { useGating, useGlobalPlansForUpgrade } from "@/modules/saas/gating";
 import {
@@ -105,7 +106,15 @@ export function PaymentMethodsCard() {
         .from("tenant_payment_methods")
         .select("provider_key, enabled, sandbox, surcharge_pct, config")
         .eq("tenant_id", tenantId);
-      return (data ?? []) as Method[];
+      // Efectivo y transferencia sin fila cuentan como prendidos, igual que
+      // en el POS (lib/payments/defaults).
+      return withDefaultMethods((data ?? []) as Method[], (provider_key) => ({
+        provider_key,
+        enabled: true,
+        sandbox: false,
+        surcharge_pct: 0,
+        config: null,
+      }));
     },
   });
 

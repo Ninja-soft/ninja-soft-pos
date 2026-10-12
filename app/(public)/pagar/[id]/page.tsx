@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { brandLogo } from "@/modules/pos/planConstants";
+import { paywayPayMessage, paywayTokenMessage } from "@/lib/payments/paywayMessages";
 
 type Plan = {
   brand: string | null;
@@ -28,12 +29,14 @@ type Info = {
   accent: string | null;
   plans: Plan[];
   brands: string[];
+  debit_brands?: string[];
   public_apikey: string;
   tokens_url: string;
 };
 
 const BRAND_LABELS: Record<string, string> = {
   visa: "Visa",
+  visa_debito: "Visa Débito",
   master: "Mastercard",
   maestro: "Maestro",
   cabal: "Cabal",
@@ -53,7 +56,8 @@ export default function PagarPage() {
 
   const [info, setInfo] = useState<Info | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [phase, setPhase] = useState<"form" | "paying" | "done">("form");
+  // review: Payway dejó el pago en revisión; no se ofrece reintentar.
+  const [phase, setPhase] = useState<"form" | "paying" | "done" | "review">("form");
   const [payError, setPayError] = useState("");
 
   const [brand, setBrand] = useState<string>("visa");
@@ -81,10 +85,14 @@ export default function PagarPage() {
 
   const accent = info?.accent || "#EC3F17";
 
+  const isDebit = (info?.debit_brands ?? []).includes(brand);
+
   // Cuotas disponibles para la marca elegida (plan de la marca o genérico).
+  // Débito: siempre 1 pago.
   const cuotas = useMemo(() => {
     const list = new Map<number, Plan>();
     for (const p of info?.plans ?? []) {
+      if (isDebit && p.installments > 1) continue;
       if (p.brand && p.brand !== brand) continue;
       const prev = list.get(p.installments);
       // El plan específico de la marca pisa al genérico.
@@ -94,7 +102,7 @@ export default function PagarPage() {
       list.set(1, { brand: null, installments: 1, label: "1 pago", surcharge_pct: 0 });
     }
     return [...list.values()].sort((a, b) => a.installments - b.installments);
-  }, [info, brand]);
+  }, [info, brand, isDebit]);
 
   const chosen = cuotas.find((c) => c.installments === installments) ?? cuotas[0];
   const total = round2((info?.amount ?? 0) * (1 + (chosen?.surcharge_pct ?? 0) / 100));
@@ -136,7 +144,7 @@ export default function PagarPage() {
         bin?: string;
       };
       if (!tokRes.ok || !tok.id) {
-        setPayError("No pudimos validar la tarjeta. Revisá los datos.");
+        setPayError(paywayTokenMessage(tok));
         setPhase("form");
         return;
       }
@@ -151,29 +159,26 @@ export default function PagarPage() {
           installments: chosen.installments,
         },
       });
-      const res = (data ?? {}) as { ok?: boolean; status?: string };
+      type PayRes = { ok?: boolean; status?: string; error?: string; reason?: string };
+      const res = (data ?? {}) as PayRes;
       if (!error && res.ok) {
         setPhase("done");
         return;
       }
-      // FunctionsHttpError: leer el cuerpo real (402 = rechazo del emisor).
-      let code = res.status ?? "";
+      // FunctionsHttpError: leer el cuerpo real (402 = rechazo del emisor,
+      // 502 payway_error = falla del procesador, 202 = en revisión).
+      let result: PayRes = res;
       const ctx = (error as { context?: Response } | null)?.context;
       if (ctx) {
-        const body = (await ctx.json().catch(() => null)) as {
-          status?: string;
-          error?: string;
-        } | null;
-        code = body?.status ?? body?.error ?? code;
+        const body = (await ctx.json().catch(() => null)) as PayRes | null;
+        if (body) result = body;
       }
-      setPayError(
-        code === "rejected_attempt"
-          ? "El pago fue rechazado por el emisor de la tarjeta. Probá con otra tarjeta."
-          : code === "intent_not_pending"
-            ? "Este cobro ya no está disponible. Pedile al cajero que lo genere de nuevo."
-            : "No se pudo procesar el pago. Probá de nuevo.",
+      setPayError(paywayPayMessage(result));
+      setPhase(
+        result.status === "pending_review" || result.error === "payment_in_review"
+          ? "review"
+          : "form",
       );
-      setPhase("form");
     } catch {
       setPayError("No se pudo procesar el pago. Revisá tu conexión.");
       setPhase("form");
@@ -232,6 +237,11 @@ export default function PagarPage() {
               venta automáticamente.
             </p>
           </div>
+        ) : phase === "review" ? (
+          <div className="mt-10 rounded-2xl bg-white p-8 text-center shadow-sm">
+            <h2 className="text-xl font-bold">Pago en revisión</h2>
+            <p className="mt-1 text-sm text-neutral-500">{payError}</p>
+          </div>
         ) : !info ? (
           <div className="mt-10 rounded-2xl bg-white p-8 text-center text-sm text-neutral-500 shadow-sm">
             Cargando…
@@ -258,7 +268,9 @@ export default function PagarPage() {
               <p className="text-sm font-semibold">Tarjeta</p>
               <div className="mt-2 grid grid-cols-4 gap-2">
                 {(info.brands ?? []).map((br) => {
-                  const logo = brandLogo(br);
+                  // Visa Débito usa el logo de Visa con la leyenda "Débito".
+                  const debit = (info.debit_brands ?? []).includes(br);
+                  const logo = brandLogo(br === "visa_debito" ? "visa" : br);
                   const active = brand === br;
                   return (
                     <button
@@ -269,7 +281,7 @@ export default function PagarPage() {
                         setInstallments(1);
                       }}
                       title={BRAND_LABELS[br] ?? br}
-                      className="flex h-14 items-center justify-center rounded-xl border bg-white p-2 transition"
+                      className="flex h-14 flex-col items-center justify-center gap-0.5 rounded-xl border bg-white p-2 transition"
                       style={
                         active
                           ? { borderColor: accent, boxShadow: `0 0 0 2px ${accent}55` }
@@ -281,11 +293,16 @@ export default function PagarPage() {
                         <img
                           src={logo}
                           alt={BRAND_LABELS[br] ?? br}
-                          className="max-h-full max-w-full object-contain"
+                          className="min-h-0 max-w-full flex-1 object-contain"
                         />
                       ) : (
                         <span className="text-xs font-semibold text-neutral-600">
                           {BRAND_LABELS[br] ?? br}
+                        </span>
+                      )}
+                      {logo && debit && (
+                        <span className="text-[10px] font-semibold leading-none text-neutral-500">
+                          Débito
                         </span>
                       )}
                     </button>

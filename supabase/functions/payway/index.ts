@@ -1,39 +1,29 @@
 // =============================================================================
-// Edge Function: payway — Formulario de pago hosted de Payway/Prisma
-// (F8 · H17). Dialecto del SDK oficial payway-ar/sdk-node-ventaonline
-// ("checkout payment button"):
-//
-//   * Crear link:  POST {checkout}/link
-//       headers { apikey: <PRIVATE apikey>, Content-Type, X-Source }
-//       body { origin_platform, payment_description, currency:'ARS',
-//              total_price, site, success_url, cancel_url, notifications_url,
-//              template_id:1, installments:[1], plan_gobierno:false,
-//              public_apikey, auth_3ds:false }
-//       → { payment_id … } y el formulario vive en {web}/checkout/{payment_id}
-//   * Estado:      GET {v2}/payments/{payment_id}  headers { apikey: private }
-//       → { status: approved | rejected | annulled | … , amount (CENTAVOS) }
-//
-// Bases (elige tenant_payment_methods.sandbox):
-//   sandbox  checkout https://developers.decidir.com/api/v1/checkout-payment-button
-//            v2       https://developers.decidir.com/api/v2
-//            web      https://developers.decidir.com/web/checkout/{id}
-//   prod     checkout https://ventasonline.payway.com.ar/api/v1/checkout-payment-button
-//            v2       https://ventasonline.payway.com.ar/api/v2
-//            web      https://live.decidir.com/web/checkout/{id}
+// Edge Function: payway (F8 · H17 / H17b). Cobro con Payway por el CHECKOUT
+// PROPIO de NinjaPos: el formulario hosted (checkout-payment-button) ya no se
+// usa (su link no se pudo validar en sandbox: 412 con las keys públicas).
 //
 // Actions (body.action):
-//   * create {amount, title?} → intent local (mp_payment_intents,
-//     provider_key='payway') + link; init_point = URL del formulario hosted.
-//   * status {intent_id}      → sincroniza contra la API v2: approved + monto
-//     exacto (centavos) → approved · rejected/annulled → rejected. Sólo se
-//     acredita con confirmación de la API (conservador).
+//   * create {amount, origin} → intent local (mp_payment_intents,
+//     provider_key='payway') y init_point = {origin}/pagar/{intent}. Ahí el
+//     cliente tokeniza la tarjeta contra Payway y la Edge payway_checkout
+//     (action pay) cobra con la API Key privada. No se manda notifications_url.
+//   * status {intent_id} → si el intent sigue pendiente y payway_checkout dejó
+//     un id de pago (mp_payment_id numérico, caso "en revisión"), re-verifica
+//     contra GET {v2}/payments/{id}: approved + monto EXACTO en centavos +
+//     site_transaction_id del intent → approved; rejected/annulled o monto
+//     distinto → rejected. Sin id → pending (el cobro sincrónico de
+//     payway_checkout es el que aprueba en el caso normal).
 //
-// El webhook (notifications_url → Edge payway_webhook) NO acredita a ciegas:
-// re-verifica contra GET /payments. Gating real: tenant_has_feature_for
-// (tenant,'payway') en create. Credenciales: public_apikey + private_apikey +
-// site (nº de comercio), en payment_secrets provider_key='payway'.
+// Bases v2 (elige tenant_payment_methods.sandbox): sandbox
+// https://developers.decidir.com/api/v2 · prod
+// https://ventasonline.payway.com.ar/api/v2. Lógica pura en _shared/payway.ts.
+// Gating real: tenant_has_feature_for(tenant,'payway') en create.
+// Credenciales: public_apikey + private_apikey + site en payment_secrets
+// provider_key='payway'.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -46,22 +36,6 @@ const json = (b: unknown, s = 200) =>
     status: s,
     headers: { ...cors, "Content-Type": "application/json" },
   });
-
-const BASES = {
-  sandbox: {
-    checkout: "https://developers.decidir.com/api/v1/checkout-payment-button",
-    v2: "https://developers.decidir.com/api/v2",
-    web: "https://developers.decidir.com/web/checkout",
-  },
-  prod: {
-    checkout: "https://ventasonline.payway.com.ar/api/v1/checkout-payment-button",
-    v2: "https://ventasonline.payway.com.ar/api/v2",
-    web: "https://live.decidir.com/web/checkout",
-  },
-};
-
-// X-Source que manda el SDK oficial (metadata del integrador, base64 JSON).
-const X_SOURCE = btoa(JSON.stringify({ service: "NinjaPos", version: "1.0" }));
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -124,12 +98,7 @@ Deno.serve(async (req: Request) => {
     .eq("tenant_id", tenantId)
     .eq("provider_key", "payway")
     .maybeSingle();
-  const base = methodRow?.sandbox ? BASES.sandbox : BASES.prod;
-  const pwHeaders = {
-    apikey: sec.private_apikey,
-    "Content-Type": "application/json",
-    "X-Source": X_SOURCE,
-  };
+  const v2 = paywayV2Base(methodRow?.sandbox);
 
   // ── create ─────────────────────────────────────────────────────────────────
   // Checkout PROPIO (H17b): ya no se usa el formulario hosted de Payway. El
@@ -180,7 +149,7 @@ Deno.serve(async (req: Request) => {
     if (!intentId) return json({ error: "invalid_intent" }, 400);
     const { data: row } = await admin
       .from("mp_payment_intents")
-      .select("id, status, amount, preference_id, mp_payment_id")
+      .select("id, status, amount, mp_payment_id")
       .eq("id", intentId)
       .eq("tenant_id", tenantId)
       .eq("provider_key", "payway")
@@ -192,24 +161,24 @@ Deno.serve(async (req: Request) => {
       // POS registra la venta por el TOTAL final.
       return json({
         status: row.status,
-        mp_payment_id: row.mp_payment_id,
+        mp_payment_id: paywayPaymentId(row.mp_payment_id),
         amount: Number(row.amount),
       });
     }
 
-    // El hash del checkout NO es consultable en /payments: la confirmación la
-    // trae el webhook (notifications_url) con el payment_id real. Si el webhook
-    // dejó un id numérico sin resolver el estado, re-verificamos acá; si no,
-    // seguimos pendientes (el POS sondea y el webhook resuelve).
-    const numericId = /^[0-9]+$/.test(String(row.mp_payment_id ?? ""))
-      ? String(row.mp_payment_id)
-      : null;
-    if (!numericId) {
+    // Sólo hay algo que verificar si payway_checkout guardó un id de pago.
+    const paymentId = paywayPaymentId(row.mp_payment_id);
+    if (!paymentId) {
       return json({ status: "pending", mp_payment_id: null });
     }
-    const r = await fetch(`${base.v2}/payments/${numericId}`, {
-      headers: { apikey: sec.private_apikey },
-    });
+    let r: Response;
+    try {
+      r = await fetch(`${v2}/payments/${paymentId}`, {
+        headers: { apikey: sec.private_apikey },
+      });
+    } catch {
+      return json({ status: "pending", mp_payment_id: null });
+    }
     if (r.status === 404) {
       return json({ status: "pending", mp_payment_id: null });
     }
@@ -219,35 +188,24 @@ Deno.serve(async (req: Request) => {
         502,
       );
     }
-    const pay = (await r.json()) as { status?: string; amount?: number };
-    const state = String(pay.status ?? "").toLowerCase();
-
-    if (state === "approved" || state === "accredited") {
-      // v2 informa el monto en CENTAVOS.
-      const amountOk =
-        pay.amount == null ||
-        Math.abs(Number(pay.amount) - Math.round(Number(row.amount) * 100)) < 1;
-      if (amountOk) {
-        await admin
-          .from("mp_payment_intents")
-          .update({ status: "approved", mp_payment_id: String(row.preference_id) })
-          .eq("id", row.id);
-        return json({ status: "approved", mp_payment_id: String(row.preference_id) });
-      }
+    const decision = decidePaymentStatus(
+      await r.json().catch(() => null),
+      Number(row.amount),
+      row.id,
+    );
+    if (decision.status === "approved" || decision.status === "rejected") {
       await admin
         .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", row.id);
-      return json({ status: "rejected", mp_payment_id: null });
+        .update({ status: decision.status })
+        .eq("id", row.id)
+        .eq("status", "pending");
+      return json({
+        status: decision.status,
+        mp_payment_id: decision.status === "approved" ? paymentId : null,
+        amount: Number(row.amount),
+      });
     }
-    if (["rejected", "annulled", "voided"].includes(state)) {
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", row.id);
-      return json({ status: "rejected", mp_payment_id: null });
-    }
-    return json({ status: "pending", mp_payment_id: null, state });
+    return json({ status: "pending", mp_payment_id: null });
   }
 
   return json({ error: "invalid_action" }, 400);

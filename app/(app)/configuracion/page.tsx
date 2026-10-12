@@ -140,6 +140,12 @@ const SupervisorPinCard = dynamic(
   { loading },
 );
 
+// Integraciones (ADR-062).
+const NubceoSettings = dynamic(
+  () => import("@/components/integrations/nubceo/NubceoSettings").then((m) => m.NubceoSettings),
+  { loading },
+);
+
 // Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
 const PosnetVoucherCard = dynamic(
   () => import("@/components/config/PosnetVoucherCard").then((m) => m.PosnetVoucherCard),
@@ -338,6 +344,9 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <WarrantyPlansManager />
         </SettingsCard>
       );
+    // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.
+    case "nubceo":
+      return <NubceoSettings />;
   }
 }
 

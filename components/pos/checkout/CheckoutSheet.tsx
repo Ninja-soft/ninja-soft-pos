@@ -754,7 +754,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     <div
                       className={cn(
                         "mt-3 flex items-center justify-between rounded-2xl px-4 py-3",
-                        receivedShort ? "bg-danger/12" : "bg-success/12",
+                        receivedShort ? "bg-danger/15" : "bg-success/15",
                       )}
                     >
                       <span className={cn("text-sm font-bold", receivedShort ? "text-danger" : "text-success")}>
@@ -867,7 +867,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                   </div>
                 )}
                 {belowMin && active.minAmount && (
-                  <p className="mt-3 rounded-xl bg-warning/12 px-3 py-2 text-xs font-semibold text-warning">
+                  <p className="mt-3 rounded-xl bg-warning/15 px-3 py-2 text-xs font-semibold text-warning">
                     {active.brandLabel} acepta cobros desde {money(active.minAmount)}. Usá otro medio para
                     montos menores.
                   </p>

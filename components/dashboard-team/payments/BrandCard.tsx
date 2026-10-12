@@ -328,20 +328,22 @@ function ChannelRow({
   // Canal "Próximamente": una línea compacta, sin controles.
   if (soon) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+      <div className="flex items-start gap-3 px-4 py-3 sm:px-5">
         <ChannelIcon channel={c.channel} muted />
         <div className="min-w-0 flex-1">
+          {/* El chip va en la fila del título: al costado se comía el ancho del
+              texto en mobile. */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-semibold text-muted-foreground">{title}</span>
             {caps.map((cap) => (
               <CapBadge key={cap} cap={cap} muted />
             ))}
+            <StatusChip tone="soon">Próximamente</StatusChip>
           </div>
           {CHANNEL_SOON_REASON[c.key] && (
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{CHANNEL_SOON_REASON[c.key]}</p>
           )}
         </div>
-        <StatusChip tone="soon">Próximamente</StatusChip>
       </div>
     );
   }

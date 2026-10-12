@@ -162,7 +162,9 @@ export function AgendaBoard({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <div className="min-w-[640px]">
+      {/* Ancho mínimo según columnas: con una sola ("Sin asignar") no fuerza
+          scroll horizontal en mobile ni deja el encabezado fuera de vista. */}
+      <div style={{ minWidth: Math.min(640, 52 + columns.length * 140) }}>
         {/* Encabezado de columnas */}
         <div
           className="grid border-b border-border"
@@ -180,7 +182,7 @@ export function AgendaBoard({
                   style={{ backgroundColor: c.color }}
                 />
               )}
-              <span className="truncate text-sm font-semibold capitalize">{c.label}</span>
+              <span className="truncate text-sm font-semibold first-letter:uppercase">{c.label}</span>
             </div>
           ))}
         </div>

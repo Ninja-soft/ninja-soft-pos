@@ -119,7 +119,7 @@ export function AppointmentDetailModal({
         <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <CalendarClock size={15} className="shrink-0" />
-            <span className="capitalize text-foreground">{formatDayLong(start)}</span>
+            <span className="inline-block text-foreground first-letter:uppercase">{formatDayLong(start)}</span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock size={15} className="shrink-0" />

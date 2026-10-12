@@ -157,7 +157,7 @@ export default function AgendaPage() {
           >
             <ChevronRight size={18} />
           </button>
-          <span className="ml-1 text-sm font-semibold capitalize text-foreground">
+          <span className="ml-1 inline-block text-sm font-semibold text-foreground first-letter:uppercase">
             {periodLabel}
           </span>
         </div>

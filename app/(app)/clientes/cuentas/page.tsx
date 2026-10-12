@@ -96,7 +96,9 @@ export default function CuentasPage() {
       xAxis: {
         type: "category",
         data: AGING_BUCKETS.map((b) => b.label),
-        axisLabel: { color: c.muted, fontSize: 11 },
+        // Todas las etiquetas visibles y partidas en dos líneas si no entran
+        // (a 390 px "Más de 90 días" se cortaba contra el borde).
+        axisLabel: { color: c.muted, fontSize: 11, interval: 0, width: 56, overflow: "break", lineHeight: 13 },
         axisLine: { lineStyle: { color: c.border } },
       },
       yAxis: {
@@ -238,7 +240,7 @@ export default function CuentasPage() {
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2">
-              <div className="relative min-w-0 flex-1 sm:max-w-xs">
+              <div className="relative min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
                 <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   value={search}

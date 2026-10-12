@@ -33,7 +33,12 @@ export const ProductSchema = z.object({
   season: optionalText(60),
   tags: optionalText(300), // coma-separado en el form; el api lo pasa a array
   image_url: optionalText(600),
-  description: optionalText(500),
+  description: optionalText(4000),
+  model: optionalText(80),
+  // Atributos libres ordenados (Color, Talle, Contenido...). Se normalizan en el api.
+  attributes: z
+    .array(z.object({ key: z.string().max(60), value: z.string().max(200) }))
+    .default([]),
   is_active: z.boolean().default(true),
   is_kit: z.boolean().default(false),
   is_serialized: z.boolean().default(false),

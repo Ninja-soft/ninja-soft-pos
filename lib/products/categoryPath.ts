@@ -63,7 +63,7 @@ export function suggestCategoryNodes(segments: string[], all: CategoryLike[]): C
       out.push({ id: null, name });
       continue;
     }
-    const match = childrenOf(parent, all).find((c) => sameName(c.name, name));
+    const match: CategoryLike | undefined = childrenOf(parent, all).find((c) => sameName(c.name, name));
     if (match) {
       out.push({ id: match.id, name: match.name });
       parent = match.id;
@@ -109,7 +109,7 @@ export function normalizeNodes(nodes: CategoryNode[], all: CategoryLike[]): Cate
       parent = existing.id;
     } else {
       // Nodo nuevo: ¿hay una hermana con ese nombre? reusarla.
-      const twin = broken ? undefined : childrenOf(parent, all).find((c) => sameName(c.name, name));
+      const twin: CategoryLike | undefined = broken ? undefined : childrenOf(parent, all).find((c) => sameName(c.name, name));
       if (twin) {
         out.push({ id: twin.id, name: twin.name });
         parent = twin.id;

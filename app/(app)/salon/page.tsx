@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChefHat, LayoutGrid, Settings, Users, Utensils } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import {
   useDiningEnabled,
@@ -22,6 +21,9 @@ import {
 } from "@/modules/dining/api";
 import { TableAccountModal } from "@/components/dining/TableAccountModal";
 import { formatCurrency } from "@/lib/utils/format";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Card } from "@/components/ui/Card";
 
 // Vista de Salón (F13 · H44): grid de mesas por salón, color por estado, total
 // vivo. Tap mesa libre → abrir + cargar; tap ocupada → ver/editar cuenta y cobrar.
@@ -138,18 +140,19 @@ export default function SalonPage() {
   // Modo gastronómico apagado → aviso para activarlo.
   if (!loadingFlag && !diningEnabled) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <Utensils size={36} className="mx-auto text-ninja-flameSoft" />
-        <Display className="mt-4">Modo gastronómico desactivado</Display>
-        <p className="mt-2 text-muted-foreground">
-          Activá el modo gastronómico para usar salones y mesas. El POS de
-          mostrador sigue funcionando igual mientras tanto.
-        </p>
-        <Link href="/configuracion?seccion=operacion" className="mt-6 inline-block">
-          <Button>
-            <Settings size={16} /> Ir a Configuración
-          </Button>
-        </Link>
+      <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:py-16">
+        <Card>
+          <EmptyState
+            icon={Utensils}
+            title="Modo gastronómico desactivado"
+            description="Activá el modo gastronómico para usar salones y mesas. El POS de mostrador sigue funcionando igual mientras tanto."
+            action={
+              <Link href="/configuracion?seccion=operacion" className={buttonVariants({ size: "sm" })}>
+                <Settings size={16} /> Ir a Configuración
+              </Link>
+            }
+          />
+        </Card>
       </div>
     );
   }
@@ -157,15 +160,14 @@ export default function SalonPage() {
   const hasTables = (tables ?? []).length > 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Eyebrow>Gastronomía</Eyebrow>
-          <Display className="mt-2 flex items-center gap-2">
-            <Utensils size={26} className="text-ninja-flameSoft" /> Salón
-          </Display>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="mx-auto w-full max-w-7xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        className="mb-6"
+        eyebrow="Gastronomía"
+        title="Salón"
+        icon={Utensils}
+        actions={
+          <>
           {/* KDS (F13 · H46): se abre en una pantalla aparte (monitor de cocina/
               barra). Está en una página ya gateada por modo gastronómico. */}
           <Button
@@ -175,23 +177,25 @@ export default function SalonPage() {
           >
             <ChefHat size={16} /> Cocina (KDS)
           </Button>
-          <Link href="/configuracion?seccion=salones">
-            <Button variant="secondary" size="sm">
-              <LayoutGrid size={16} /> Salones y mesas
-            </Button>
+          <Link
+            href="/configuracion?seccion=salones"
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            <LayoutGrid size={16} /> Salones y mesas
           </Link>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filtro por salón (pills). Sólo si hay más de un salón. */}
       {(areas ?? []).length > 1 && (
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-muted p-1 sm:inline-flex">
           <button
             type="button"
             onClick={() => setAreaFilter(null)}
             className={
               areaFilter === null
-                ? "rounded-lg bg-ninja-flame/15 px-3 py-1.5 text-sm font-medium text-ninja-flameSoft"
+                ? "rounded-lg bg-[var(--seg-thumb)] px-3 py-1.5 text-sm font-medium text-foreground shadow-ninjaSoft"
                 : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
             }
           >
@@ -204,7 +208,7 @@ export default function SalonPage() {
               onClick={() => setAreaFilter(a.id)}
               className={
                 areaFilter === a.id
-                  ? "rounded-lg bg-ninja-flame/15 px-3 py-1.5 text-sm font-medium text-ninja-flameSoft"
+                  ? "rounded-lg bg-[var(--seg-thumb)] px-3 py-1.5 text-sm font-medium text-foreground shadow-ninjaSoft"
                   : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
               }
             >
@@ -226,18 +230,21 @@ export default function SalonPage() {
 
       {/* Aviso si todavía no hay mesas cargadas */}
       {!isLoading && !hasTables && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
-          <LayoutGrid size={30} className="text-ninja-flameSoft" />
-          <p className="text-sm text-muted-foreground">
-            Todavía no cargaste mesas. Definí tus salones y mesas para empezar a
-            atender en el salón.
-          </p>
-          <Link href="/configuracion?seccion=salones">
-            <Button size="sm">
-              <LayoutGrid size={15} /> Configurar salones y mesas
-            </Button>
-          </Link>
-        </div>
+        <Card>
+          <EmptyState
+            icon={LayoutGrid}
+            title="Todavía no cargaste mesas"
+            description="Definí tus salones y mesas para empezar a atender en el salón."
+            action={
+              <Link
+                href="/configuracion?seccion=salones"
+                className={buttonVariants({ size: "sm" })}
+              >
+                <LayoutGrid size={15} /> Configurar salones y mesas
+              </Link>
+            }
+          />
+        </Card>
       )}
 
       {/* Grid de mesas por salón */}

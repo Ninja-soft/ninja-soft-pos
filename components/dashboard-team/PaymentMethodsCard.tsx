@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import {
   useGating,
@@ -35,7 +36,15 @@ const KIND_LABELS: Record<string, string> = {
 
 // Proveedores con flujo de cobro real implementado. El resto se muestra como
 // "Próximamente" para no ofrecer botones de conexión que aún no hacen nada.
-const IMPLEMENTED = new Set(["mercadopago", "mobbex", "modo", "mercadopago_point", "pagos360", "payway"]);
+const IMPLEMENTED = new Set([
+  "mercadopago",
+  "mobbex",
+  "modo",
+  "mercadopago_point",
+  "pagos360",
+  "payway",
+  "getnet",
+]);
 
 // Mercado Point NO pide credenciales propias: usa la conexión de Mercado Pago
 // del negocio. Su "Conectado" se deriva de la fila de mercadopago, y las
@@ -168,6 +177,18 @@ const PROVIDER_INFO: Record<string, Explain> = {
     recargo:
       "Si ponés un %, se suma al total al cobrar por este medio.",
   },
+  getnet: {
+    activa:
+      "Habilita el cobro con Getnet por QR y link: se genera una orden en el checkout de Getnet y el cliente paga desde su celular con tarjeta de crédito o débito.",
+    conexion:
+      "Pegá tu Client ID y Client Secret de Getnet (Portal Getnet → Credenciales). Getnet no ofrece ambiente de prueba: las credenciales son de producción y los cobros son reales.",
+    pasos: [
+      "En el POS elegís cobrar con Getnet.",
+      "El cliente escanea el QR o abre el link y paga en el checkout de Getnet.",
+      "Al aprobarse, la venta se cierra sola y queda registrada.",
+    ],
+    recargo: "Si ponés un %, se suma al total al cobrar por este medio.",
+  },
   modo: {
     activa:
       "Habilita el botón Cobrar con QR · MODO en el POS. El cliente paga con la app MODO (banco o tarjeta) y la plata entra a tu cuenta de comercio MODO.",
@@ -202,6 +223,9 @@ export function PaymentMethodsCard() {
   const [pwPublic, setPwPublic] = useState("");
   const [pwPrivate, setPwPrivate] = useState("");
   const [pwSite, setPwSite] = useState("");
+  // Getnet: credenciales OAuth del Portal Getnet (sin sandbox en AR).
+  const [gnClientId, setGnClientId] = useState("");
+  const [gnClientSecret, setGnClientSecret] = useState("");
   // Ambiente elegido al conectar (solo proveedores con sandbox real). Se
   // precarga con el valor actual del medio y se guarda junto a las credenciales:
   // es el momento natural para decidirlo (antes vivía escondido en el detalle).
@@ -427,6 +451,8 @@ export function PaymentMethodsCard() {
               setPwPublic("");
               setPwPrivate("");
               setPwSite("");
+              setGnClientId("");
+              setGnClientSecret("");
               setConnEnv(byKey.get(p.key)?.sandbox ? "test" : "prod");
               setMbToken("");
               setModoClientId("");
@@ -676,6 +702,68 @@ export function PaymentMethodsCard() {
                   : connectingConnected
                     ? "Actualizar credenciales"
                     : "Conectar Payway"}
+              </Button>
+            </>
+          ) : connectKey === "getnet" ? (
+            <>
+              {connectingConnected ? (
+                <p className="flex items-center gap-2 text-sm text-success">
+                  <Check size={16} /> Getnet está conectado.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pegá tu Client ID y Client Secret de Getnet (Portal Getnet →
+                  Credenciales). Se guardan cifrados del lado del servidor.
+                  Getnet no tiene ambiente de prueba: los cobros son reales.
+                </p>
+              )}
+              <Input
+                label="Client ID"
+                name="getnet_client_id"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                value={gnClientId}
+                onChange={(e) => setGnClientId(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client ID"}
+              />
+              <Input
+                label="Client Secret"
+                type="password"
+                name="getnet_client_secret"
+                autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
+                value={gnClientSecret}
+                onChange={(e) => setGnClientSecret(e.target.value)}
+                placeholder={connectingConnected ? "•••••• (configurado)" : "Tu Client Secret"}
+              />
+              <Button
+                className="w-full"
+                disabled={
+                  connect.isPending ||
+                  gnClientId.trim().length < 4 ||
+                  gnClientSecret.trim().length < 8
+                }
+                onClick={() =>
+                  connect.mutate({
+                    provider_key: "getnet",
+                    secrets: {
+                      client_id: gnClientId.trim(),
+                      client_secret: gnClientSecret.trim(),
+                    },
+                  })
+                }
+              >
+                {connect.isPending ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Spinner size={14} /> Guardando
+                  </span>
+                ) : connectingConnected ? (
+                  "Actualizar credenciales"
+                ) : (
+                  "Conectar Getnet"
+                )}
               </Button>
             </>
           ) : connectKey === "pagos360" ? (

@@ -177,8 +177,8 @@ export function RubroCard() {
                 className={cn(
                   "rounded-lg border p-3 text-left transition disabled:opacity-60",
                   active
-                    ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                    : "border-border hover:border-ninja-flameSoft/40",
+                    ? "border-transparent bg-ninja-flame/[0.12]"
+                    : "border-border hover:bg-muted",
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export function RubroCard() {
 
         {/* Configuración rápida por rubro (F12 · H35): siembra un catálogo de
             muestra y deja el negocio listo para cobrar sin Excel ni SQL. */}
-        <div className="rounded-lg border border-ninja-flame/20 bg-ninja-flame/[0.05] p-4">
+        <div className="rounded-lg bg-ninja-flame/[0.08] p-4">
           <div className="flex items-start gap-2.5">
             <Sparkles size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
             <div className="min-w-0">

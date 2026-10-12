@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Printer, Search } from "lucide-react";
+import { Printer, Search, Tag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Barcode } from "@/components/products/Barcode";
@@ -12,6 +11,7 @@ import { usePrintProfiles } from "@/modules/tickets/hooks";
 import { buildLabels, clampCopies, type LabelSource } from "@/lib/labels";
 import { formatCurrency } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type Sel = Record<string, LabelSource & { copies: number }>;
 
@@ -45,22 +45,20 @@ export default function EtiquetasPage() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
+    <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
       <div className="no-print">
-        <Eyebrow>Catálogo</Eyebrow>
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <Display className="flex items-center gap-2 text-3xl md:text-4xl">
-            Etiquetas
-            <InfoHint section="etiquetas" size={18} />
-          </Display>
-          <Button onClick={() => window.print()} disabled={labels.length === 0}>
-            <Printer size={16} /> Imprimir ({labels.length})
-          </Button>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Elegí productos y la cantidad de etiquetas. Cada etiqueta lleva nombre,
-          precio, PLU (si lo usás) y código de barras (barcode o SKU).
-        </p>
+        <PageHeader
+          eyebrow="Catálogo"
+          title="Etiquetas"
+          icon={Tag}
+          help={<InfoHint section="etiquetas" size={18} />}
+          description="Elegí productos y la cantidad de etiquetas. Cada etiqueta lleva nombre, precio, PLU (si lo usás) y código de barras (barcode o SKU)."
+          actions={
+            <Button onClick={() => window.print()} disabled={labels.length === 0}>
+              <Printer size={16} /> Imprimir ({labels.length})
+            </Button>
+          }
+        />
 
         <div className="relative mt-5 max-w-md">
           <Search

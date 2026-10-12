@@ -347,9 +347,9 @@ function Stepper({
                 className={cn(
                   "grid h-8 w-8 place-items-center rounded-full border text-xs font-bold transition-colors",
                   active
-                    ? "border-ninja-flame bg-ninja-flame/15 text-ninja-flameSoft"
+                    ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
                     : done
-                      ? "border-emerald-400/40 bg-emerald-400/15 text-success"
+                      ? "border-transparent bg-emerald-400/15 text-success"
                       : "border-border bg-muted/40 text-muted-foreground",
                 )}
               >
@@ -402,7 +402,7 @@ function ReturnItemsStep({
             key={it.id}
             className={cn(
               "rounded-xl border p-3 transition-colors",
-              selected ? "border-ninja-flame/40 bg-ninja-flame/[0.04]" : "border-border",
+              selected ? "border-transparent bg-ninja-flame/[0.08]" : "border-border",
               available <= 0 && "opacity-60",
             )}
           >
@@ -615,7 +615,7 @@ function TakeProductsStep({
           lines.map((l) => (
             <div
               key={l.productId}
-              className="flex items-center justify-between gap-2 rounded-xl border border-ninja-flame/30 bg-ninja-flame/[0.04] p-2.5"
+              className="flex items-center justify-between gap-2 rounded-xl bg-ninja-flame/[0.08] p-2.5"
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{l.name}</div>
@@ -735,8 +735,8 @@ function DifferenceStep({
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-colors",
                     active
-                      ? "border-ninja-flame bg-ninja-flame/10 text-foreground"
-                      : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted",
                   )}
                 >
                   <Icon size={16} className={active ? "text-ninja-flameSoft" : ""} />
@@ -755,7 +755,7 @@ function DifferenceStep({
             El cliente se lleva algo más barato. ¿Qué hacés con el sobrante?
           </span>
           {policy !== "cashier_choice" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-ninja-flame/40 bg-ninja-flame/[0.05] px-4 py-3 text-sm">
+            <div className="flex items-center gap-3 rounded-xl bg-ninja-flame/[0.08] px-4 py-3 text-sm">
               <span className="grid h-9 w-9 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
                 {effectiveSurplusTo === "store_credit" ? <Ticket size={17} /> : <Banknote size={17} />}
               </span>
@@ -793,7 +793,7 @@ function DifferenceStep({
           Cliente del cambio
         </span>
         {customer ? (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm">
             <span className="flex items-center gap-2">
               <UserPlus size={15} className="text-success" />
               <strong>{customer.name}</strong>
@@ -835,8 +835,8 @@ function SurplusCard({
       className={cn(
         "flex flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors",
         active
-          ? "border-ninja-flame bg-ninja-flame/10"
-          : "border-border hover:border-ninja-flameSoft/40 hover:bg-muted/40",
+          ? "border-transparent bg-ninja-flame/[0.12]"
+          : "border-border hover:bg-muted/40",
       )}
     >
       <span
@@ -869,7 +869,7 @@ function CustomerPicker({
     <div
       className={cn(
         "rounded-xl border p-3.5",
-        highlight ? "border-amber-400/40 bg-amber-400/[0.05]" : "border-border",
+        highlight ? "border-transparent bg-amber-400/10" : "border-border",
       )}
     >
       <div className="relative">
@@ -890,7 +890,7 @@ function CustomerPicker({
             <button
               key={c.id}
               onClick={() => onSelect({ id: c.id, name: c.name })}
-              className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm transition hover:border-ninja-flameSoft/40 hover:bg-muted"
+              className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-left text-sm transition hover:bg-muted"
             >
               <span className="truncate">{c.name}</span>
               <ChevronRight size={14} className="text-muted-foreground" />

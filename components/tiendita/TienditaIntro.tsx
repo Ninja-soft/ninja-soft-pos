@@ -153,7 +153,7 @@ export function TienditaIntro() {
             e.stopPropagation();
             close();
           }}
-          className="group mt-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-2.5 text-xs font-semibold text-white/85 transition hover:border-ninja-flameSoft/60 hover:bg-white/10 hover:text-white"
+          className="group mt-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-2.5 text-xs font-semibold text-white/85 transition hover:bg-white/10 hover:text-white"
         >
           Entrar
           <span className="transition-transform group-hover:translate-x-0.5">→</span>

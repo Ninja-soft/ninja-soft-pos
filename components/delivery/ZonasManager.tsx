@@ -13,6 +13,8 @@ import {
 } from "@/modules/delivery/hooks";
 import type { DeliveryZone } from "@/modules/delivery/api";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // ── Modal de zona (alta/edición) ──────────────────────────────────────────────
 function ZoneModal({
@@ -180,15 +182,10 @@ export function ZonasManager() {
       </div>
 
       {isLoading ? (
-        <p className="py-4 text-sm text-muted-foreground">Cargando…</p>
+        <SpinnerBlock className="py-6" />
       ) : list.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-5 text-center">
-          <Bike size={26} className="mx-auto mb-2 text-ninja-flameSoft" />
-          <p className="text-sm text-muted-foreground">
-            Creá tus zonas de envío (ej. Centro, Zona Norte) con su tarifa. Al
-            tomar un pedido de delivery vas a elegir la zona y el costo de envío se
-            completa solo.
-          </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={Bike} title="Todavía no hay zonas de envío" description="Creá tus zonas (Centro, Zona Norte) con su tarifa: al tomar un pedido el costo de envío se completa solo." />
         </div>
       ) : (
         <div className="space-y-2">

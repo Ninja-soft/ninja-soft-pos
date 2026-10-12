@@ -3,10 +3,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { reportsApi } from "./api";
 
-export function useSalesReport(fromISO: string, toISO: string) {
+export function useSalesReport(
+  fromISO: string,
+  toISO: string,
+  opts: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: ["reports", "sales", fromISO, toISO],
     queryFn: () => reportsApi.sales(fromISO, toISO),
+    enabled: opts.enabled ?? true,
+  });
+}
+
+// Consultas diferidas de gráficos: `enabled` se prende cuando la sección entra
+// en pantalla, nunca en el primer paint de Reportes.
+export function useSaleTimes(fromISO: string, toISO: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["reports", "sale-times", fromISO, toISO],
+    queryFn: () => reportsApi.saleTimes(fromISO, toISO),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useCashFlow(fromISO: string, toISO: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["reports", "cash-flow", fromISO, toISO],
+    queryFn: () => reportsApi.cashMovements(fromISO, toISO),
+    enabled,
+    staleTime: 60_000,
   });
 }
 

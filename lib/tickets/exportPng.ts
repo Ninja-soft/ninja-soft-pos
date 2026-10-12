@@ -1,8 +1,14 @@
 // H9b — Nodo DOM → PNG dataURL y A4/PDF desde un nodo renderizado.
 // Inlinea <img> remotas a dataURL antes de html2canvas para evitar canvas
 // tainted (QR de qrserver, logo de Storage).
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
+// html2canvas y jspdf se cargan bajo demanda (import dinámico): pesan ~500 kB
+// y sólo hacen falta al exportar, no al abrir la pantalla.
+async function loadHtml2canvas() {
+  return (await import("html2canvas")).default;
+}
+async function loadJsPdf() {
+  return (await import("jspdf")).jsPDF;
+}
 
 async function inlineImages(node: HTMLElement): Promise<() => void> {
   const imgs = Array.from(node.querySelectorAll("img"));
@@ -37,6 +43,7 @@ async function inlineImages(node: HTMLElement): Promise<() => void> {
 }
 
 export async function exportNodePng(node: HTMLElement): Promise<string> {
+  const html2canvas = await loadHtml2canvas();
   const restore = await inlineImages(node);
   try {
     const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff" });
@@ -52,6 +59,7 @@ export async function exportNodePng(node: HTMLElement): Promise<string> {
 // prefijo `data:` — el caller lo manda así a la Edge Function para adjuntarlo).
 // Usado por el envío del comprobante por email (PDF adjunto, reemplaza al PNG).
 export async function exportNodePdfBase64(node: HTMLElement): Promise<string> {
+  const [html2canvas, jsPDF] = await Promise.all([loadHtml2canvas(), loadJsPdf()]);
   const restore = await inlineImages(node);
   try {
     const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff" });
@@ -78,6 +86,7 @@ export async function exportNodePdfBase64(node: HTMLElement): Promise<string> {
 // A4/PDF a partir del nodo ya renderizado por TicketRenderer.
 export async function downloadA4FromNode(node: HTMLElement, saleNumber: number): Promise<void> {
   const png = await exportNodePng(node);
+  const jsPDF = await loadJsPdf();
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const img = new Image();
   await new Promise<void>((ok, err) => {

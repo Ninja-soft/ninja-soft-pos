@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { useDecidePlu } from "@/modules/products/hooks";
+import { ChoiceDot } from "@/components/ui/ChoiceCard";
 
 type PluMode = "random" | "incremental";
 
@@ -62,7 +63,7 @@ export function FirstProductPluPrompt({ open, onOpenChange, onResolved }: Props)
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="¿Usar PLU en tus productos?">
       <div className="space-y-4">
-        <div className="flex items-start gap-3 rounded-lg border border-ninja-flame/30 bg-ninja-flame/[0.06] p-3">
+        <div className="flex items-start gap-3 rounded-lg bg-ninja-flame/[0.08] p-3">
           <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
             <ScanLine size={18} />
           </span>
@@ -89,18 +90,11 @@ export function FirstProductPluPrompt({ open, onOpenChange, onResolved }: Props)
                   onClick={() => setMode(m.value)}
                   className={
                     active
-                      ? "flex items-start gap-2.5 rounded-lg border border-ninja-flame bg-ninja-flame/[0.06] px-3 py-2.5 text-left"
-                      : "flex items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 text-left transition hover:border-ninja-flameSoft/40"
+                      ? "flex items-start gap-2.5 rounded-lg border border-transparent bg-ninja-flame/[0.12] px-3 py-2.5 text-left"
+                      : "flex items-start gap-2.5 rounded-lg border border-border px-3 py-2.5 text-left transition hover:bg-muted"
                   }
                 >
-                  <span
-                    className={
-                      "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border " +
-                      (active ? "border-ninja-flame" : "border-muted-foreground/40")
-                    }
-                  >
-                    {active && <span className="h-2 w-2 rounded-full bg-ninja-flame" />}
-                  </span>
+                  <ChoiceDot selected={active} className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{m.label}</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">

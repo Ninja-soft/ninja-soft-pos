@@ -11,12 +11,13 @@ import {
   TrendingUp,
   UserCog,
   Users,
+  LayoutDashboard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { TenantSearchTable } from "@/components/internal/TenantSearchTable";
 import { formatCurrency } from "@/lib/utils/format";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const STATUS_COLOR: Record<string, string> = {
   trial: "text-warning",
@@ -139,11 +140,16 @@ export default async function InternalHomePage() {
 
   return (
     <>
-      <Eyebrow>Panel interno</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">NinjaSoft</Display>
-      <p className="mt-2 text-muted-foreground">
-        Operá el SaaS: negocios, suscripciones, staff y comunicaciones.
-      </p>
+      <PageHeader
+        eyebrow="Panel interno"
+        title="NinjaSoft"
+        icon={LayoutDashboard}
+        description={
+          <>
+            Operá el SaaS: negocios, suscripciones, staff y comunicaciones.
+          </>
+        }
+      />
 
       {/* ── KPIs principales ── */}
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -248,7 +254,7 @@ export default async function InternalHomePage() {
           <Link
             key={href}
             href={href}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:bg-muted"
           >
             {icon} {label}
           </Link>

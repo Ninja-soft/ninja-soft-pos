@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 
 export type AuthProvider = "google" | "email";
 
@@ -13,9 +14,7 @@ export function useAuthProvider() {
     queryKey: ["auth-provider"],
     queryFn: async (): Promise<AuthProvider | null> => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
 
       // Fuente primaria: app_metadata.provider.

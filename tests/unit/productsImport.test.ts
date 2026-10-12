@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildWorkbook, type XlsxColumn } from "@/lib/utils/xlsx";
+import { buildWorkbook } from "@/lib/utils/xlsxWorkbook";
+import type { XlsxColumn } from "@/lib/utils/xlsx";
 import {
   parseProductsXlsx,
   PRODUCT_IMPORT_COLUMNS,

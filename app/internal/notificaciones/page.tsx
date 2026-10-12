@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Bell, Send } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -26,6 +25,10 @@ import type {
   NotificationSeverity,
   NotificationType,
 } from "@/modules/notifications/api";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type Audience = "all" | "tenant";
 
@@ -210,12 +213,17 @@ export default function InternalNotificacionesPage() {
 
   return (
     <>
-      <Eyebrow>Comunicaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Notificaciones</Display>
-      <p className="mt-2 max-w-2xl text-muted-foreground">
-        Enviá avisos in-app a los negocios. Llegan a la campana del POS de los
-        usuarios alcanzados.
-      </p>
+      <PageHeader
+        eyebrow="Comunicaciones"
+        title="Notificaciones"
+        icon={Bell}
+        description={
+          <>
+            Enviá avisos in-app a los negocios. Llegan a la campana del POS de los
+            usuarios alcanzados.
+          </>
+        }
+      />
 
       {/* Nueva notificación */}
       <Card className="mt-6">
@@ -462,9 +470,9 @@ export default function InternalNotificacionesPage() {
             <Bell size={16} /> Enviadas
           </div>
           {sentLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           ) : sent.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin notificaciones aún.</p>
+            <EmptyState compact icon={Bell} title="Todavía no enviaste notificaciones" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
@@ -502,7 +510,10 @@ export default function InternalNotificacionesPage() {
                         </span>
                       </td>
                       <td className="py-2.5 pr-4 text-muted-foreground">
-                        {TYPE_LABELS[n.type] ?? n.type}
+                        <span className="inline-flex items-center gap-1.5">
+                          {n.type === "afip" && <IntegrationLogo name="arca" size={16} />}
+                          {TYPE_LABELS[n.type] ?? n.type}
+                        </span>
                       </td>
                       <td className="py-2.5 pr-4 font-medium text-foreground">
                         {n.title}

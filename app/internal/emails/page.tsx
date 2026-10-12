@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Mail, Plus, RefreshCw, Send, Server, Zap } from "lucide-react";
+import { Download, Mail, Plus, RefreshCw, Send, Server, Zap, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -26,8 +25,13 @@ import {
   DropdownTrigger,
 } from "@/components/ui/Dropdown";
 import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templates";
+import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IntegrationLogo, isIntegrationKey } from "@/components/ui/IntegrationLogo";
 
 type Saved = Record<string, { subject: string; html: string }>;
 
@@ -149,11 +153,16 @@ export default function InternalEmailsPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Emails del sistema</Display>
-      <p className="mt-2 text-muted-foreground">
-        Editá los emails que NinjaPos envía a los usuarios y configurá los proveedores de envío.
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Emails del sistema"
+        icon={Mail}
+        description={
+          <>
+            Editá los emails que NinjaPos envía a los usuarios y configurá los proveedores de envío.
+          </>
+        }
+      />
 
       {/* Proveedores de email (Resend + failover SMTP). Camino de envío principal. */}
       <EmailProvidersCard />
@@ -226,11 +235,11 @@ export default function InternalEmailsPage() {
           </div>
           <div>
             <div className="mb-2 text-sm font-medium text-muted-foreground">Vista previa</div>
-            <div className="rounded-lg border border-border bg-white p-4 text-sm text-neutral-900">
-              <div className="mb-2 border-b border-neutral-200 pb-2 text-xs text-neutral-500">
+            <div className="overflow-hidden rounded-lg border border-border bg-white text-sm text-neutral-900">
+              <div className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">
                 Asunto: {renderTemplate(subject, vars)}
               </div>
-              <div dangerouslySetInnerHTML={{ __html: renderTemplate(html, vars) }} />
+              <EmailPreviewFrame html={renderTemplate(html, vars)} minHeight={640} />
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
@@ -488,11 +497,16 @@ function SlotEditor({
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition",
               state.kind === opt.key
-                ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
-                : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                : "border-border text-muted-foreground hover:bg-muted",
             )}
           >
-            <opt.icon size={14} /> {opt.label}
+            {opt.key === "resend" ? (
+              <IntegrationLogo name="resend" size={18} />
+            ) : (
+              <opt.icon size={14} />
+            )}{" "}
+            {opt.label}
           </button>
         ))}
       </div>
@@ -535,12 +549,17 @@ function SlotEditor({
                     type="button"
                     onClick={() => pickPreset(p.key)}
                     className={cn(
-                      "rounded-lg border px-2 py-2 text-xs font-medium transition",
+                      "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition",
                       smtpPreset === p.key
-                        ? "border-ninja-flame text-foreground ring-2 ring-ninja-flame/30"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
+                    {isIntegrationKey(p.key) ? (
+                      <IntegrationLogo name={p.key} size={16} />
+                    ) : (
+                      <Server size={13} />
+                    )}
                     {p.label}
                   </button>
                 ))}
@@ -790,13 +809,17 @@ function SystemEmailsLog() {
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <SpinnerBlock className="py-6" />
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {emails.length === 0
-              ? "Todavía no hay envíos registrados."
-              : "No hay envíos que coincidan con los filtros."}
-          </p>
+          <EmptyState
+            compact
+            icon={emails.length === 0 ? Mail : Search}
+            title={
+              emails.length === 0
+                ? "Todavía no hay envíos registrados"
+                : "No hay envíos que coincidan con los filtros"
+            }
+          />
         ) : (
           <div className="-mx-1 overflow-x-auto px-1">
             <table className="w-full min-w-[760px] text-sm">

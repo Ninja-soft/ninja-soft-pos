@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
@@ -33,12 +34,11 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype, WordmarkPos } from "@/components/brand/Logo";
-import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
-import { MembershipProfileModal } from "@/components/account/MembershipProfileModal";
 import { Avatar } from "@/components/ui/Avatar";
 import {
   Dropdown,
@@ -52,7 +52,6 @@ import {
   BlockingNotificationBanner,
   NotificationBell,
 } from "@/components/notifications/NotificationBell";
-import { AssistantBubble } from "@/components/ai/AssistantBubble";
 import { useFeature } from "@/modules/saas/gating";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -61,6 +60,28 @@ import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+
+// Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
+const AssistantBubble = dynamic(
+  () => import("@/components/ai/AssistantBubble").then((m) => m.AssistantBubble),
+  { ssr: false },
+);
+
+// Modales del menú de usuario: chunks aparte y montados recién al abrirlos
+// (el de perfil arrastra el recortador de avatar; el de contraseña consultaba
+// el proveedor de auth en cada carga del panel aunque nunca se abriera).
+const ChangePasswordModal = dynamic(
+  () => import("@/components/ui/ChangePasswordModal").then((m) => m.ChangePasswordModal),
+  { ssr: false },
+);
+const MembershipProfileModal = dynamic(
+  () =>
+    import("@/components/account/MembershipProfileModal").then(
+      (m) => m.MembershipProfileModal,
+    ),
+  { ssr: false },
+);
 
 // `feature` (opcional): si el plan no la incluye, el ítem de nav se ve
 // deshabilitado (candado) y al click abre el UpgradeModal en vez de navegar.
@@ -216,9 +237,7 @@ function UserMenu({
     queryKey: ["my-membership-profile"],
     queryFn: async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       const { data } = await supabase
         .from("tenant_users")
@@ -308,9 +327,7 @@ export function AppShell({
     queryKey: ["shell-ctx"],
     queryFn: async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return { isInternal: false, role: null as string | null };
       const isInternal = !!(user.app_metadata as { is_internal?: boolean } | null)
         ?.is_internal;
@@ -418,7 +435,7 @@ export function AppShell({
           <Link
             href="/internal/tenants"
             onClick={() => setDrawer(false)}
-            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+            className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
               <ShieldCheck size={16} />
@@ -461,7 +478,7 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       <InactivityGuard />
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>
 
@@ -471,7 +488,7 @@ export function AppShell({
             className="absolute inset-0 bg-black/50"
             onClick={() => setDrawer(false)}
           />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover">
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <button
               onClick={() => setDrawer(false)}
               className="absolute right-3 top-3 text-muted-foreground"
@@ -485,7 +502,7 @@ export function AppShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
@@ -502,8 +519,12 @@ export function AppShell({
         </main>
       </div>
 
-      <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
-      <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
+      <MountWhenOpened open={pwOpen}>
+        <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      </MountWhenOpened>
+      <MountWhenOpened open={pfOpen}>
+        <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
+      </MountWhenOpened>
       <AssistantBubble />
     </div>
   );

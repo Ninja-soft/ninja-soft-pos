@@ -15,6 +15,7 @@ import { Avatar, AVATAR_ICONS, AVATAR_PRESETS } from "@/components/ui/Avatar";
 import { AvatarUploader } from "@/components/account/AvatarUploader";
 import { capitalizeName } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
+import { Spinner } from "@/components/ui/Spinner";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dueño",
@@ -66,8 +67,8 @@ function AvatarPicker({
           type="button"
           onClick={() => onChange(null)}
           className={cn(
-            "grid h-9 w-9 place-items-center rounded-full ring-2 transition",
-            value === null ? "ring-ninja-flame" : "ring-transparent",
+            "grid h-10 w-10 place-items-center rounded-full transition",
+            value === null ? "bg-ninja-flame/20" : "hover:bg-muted",
           )}
           title="Iniciales"
         >
@@ -81,8 +82,8 @@ function AvatarPicker({
               type="button"
               onClick={() => onChange(key)}
               className={cn(
-                "grid h-9 w-9 place-items-center rounded-full ring-2 transition hover:bg-muted",
-                value === key ? "ring-ninja-flame" : "ring-transparent",
+                "grid h-10 w-10 place-items-center rounded-full transition",
+                value === key ? "bg-ninja-flame/20 text-ninja-flameSoft" : "hover:bg-muted",
               )}
               title={key}
             >
@@ -192,8 +193,8 @@ export function TeamSection({
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-muted-foreground">
-                    Cargando…
+                  <td colSpan={4} className="text-center px-4 py-6 text-muted-foreground">
+                    <Spinner />
                   </td>
                 </tr>
               ) : members.length === 0 ? (

@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ban, Download, Lock, Mail, QrCode, Receipt, RotateCcw, Search } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Ban, Download, Lock, Mail, QrCode, Receipt, RotateCcw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
-import { TicketModal } from "@/components/sales/TicketModal";
-import { ReturnModal } from "@/components/sales/ReturnModal";
-import { QrIntentsModal } from "@/components/sales/QrIntentsModal";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { GatedButton, useFeatureGate } from "@/components/saas/GatedAction";
@@ -21,6 +19,25 @@ import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { NoData } from "@/components/ui/NoData";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Badge } from "@/components/ui/Badge";
+import { TableStateRow, TableWrap } from "@/components/ui/Table";
+
+// Modales en chunks aparte, montados recién al abrirlos (ticket, devolución /
+// cambio y cobros QR son pesados y no hacen falta para listar ventas).
+const TicketModal = dynamic(
+  () => import("@/components/sales/TicketModal").then((m) => m.TicketModal),
+  { ssr: false },
+);
+const ReturnModal = dynamic(
+  () => import("@/components/sales/ReturnModal").then((m) => m.ReturnModal),
+  { ssr: false },
+);
+const QrIntentsModal = dynamic(
+  () => import("@/components/sales/QrIntentsModal").then((m) => m.QrIntentsModal),
+  { ssr: false },
+);
 
 const SALE_STATUS: Record<string, string> = {
   completed: "Completada",
@@ -135,16 +152,14 @@ export default function VentasPage() {
 
   return (
     <>
-<div className="mx-auto max-w-6xl px-6 py-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <Eyebrow>Operación</Eyebrow>
-            <Display className="mt-3 flex items-center gap-2 text-3xl md:text-4xl">
-              Ventas
-              <InfoHint section="ventas" size={18} />
-            </Display>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+        <PageHeader
+          eyebrow="Operación"
+          title="Ventas"
+          icon={Receipt}
+          help={<InfoHint section="ventas" size={18} />}
+          actions={
+            <>
             <GatedButton
               feature="mercado_pago"
               featureLabel="Cobros con QR · Mercado Pago"
@@ -163,8 +178,9 @@ export default function VentasPage() {
             >
               <Download size={16} /> Exportar XLSX
             </GatedButton>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         <div className="mt-5 flex flex-wrap gap-2">
           <div className="relative min-w-0 flex-1 sm:max-w-sm">
@@ -183,10 +199,10 @@ export default function VentasPage() {
           {range?.from && (
             <button
               onClick={() => setRange(undefined)}
-              className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
               title="Quitar filtro de fechas"
             >
-              ✕ Fechas
+              <X size={14} /> Fechas
             </button>
           )}
           <select
@@ -200,7 +216,7 @@ export default function VentasPage() {
           </select>
         </div>
 
-        <div className="mt-6 overflow-x-auto rounded-lg border border-border bg-card">
+        <TableWrap className="mt-6">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
@@ -213,13 +229,7 @@ export default function VentasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-foreground">
-              {isLoading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                    Cargando…
-                  </td>
-                </tr>
-              )}
+              {isLoading && <TableStateRow colSpan={6} loading />}
               {isError && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-danger">
@@ -231,11 +241,23 @@ export default function VentasPage() {
                 </tr>
               )}
               {!isLoading && !isError && visible.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                    {search ? "Sin resultados para la búsqueda." : "No hay ventas registradas."}
-                  </td>
-                </tr>
+                <TableStateRow colSpan={6}>
+                  {search ? (
+                    <EmptyState
+                      compact
+                      icon={Search}
+                      title="Sin resultados"
+                      description="Probá con otro número de venta, ticket o cliente."
+                    />
+                  ) : (
+                    <EmptyState
+                      compact
+                      icon={Receipt}
+                      title="Todavía no hay ventas"
+                      description="Cuando cobres desde el punto de venta, las vas a ver acá."
+                    />
+                  )}
+                </TableStateRow>
               )}
               {visible.map((s) => (
                 <tr key={s.id} className="transition hover:bg-muted/40">
@@ -252,13 +274,9 @@ export default function VentasPage() {
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5">
                       {s.status === "voided" ? (
-                        <span className="inline-flex rounded-full border border-red-400/25 bg-red-400/10 px-2.5 py-0.5 text-xs font-semibold text-danger">
-                          Anulada
-                        </span>
+                        <Badge tone="danger">Anulada</Badge>
                       ) : (
-                        <span className="inline-flex rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success">
-                          Completada
-                        </span>
+                        <Badge tone="success">Completada</Badge>
                       )}
                       {s.receipt_emailed_at && (
                         <span title="Email enviado" className="inline-flex text-muted-foreground">
@@ -319,7 +337,7 @@ export default function VentasPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </TableWrap>
 
         <Pagination
           page={page}
@@ -331,9 +349,15 @@ export default function VentasPage() {
       </div>
 
       {returnGate.modal}
-      <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
-      <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
-      <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />
+      <MountWhenOpened open={ticketOpen}>
+        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+      </MountWhenOpened>
+      <MountWhenOpened open={returnOpen}>
+        <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrOpen}>
+        <QrIntentsModal open={qrOpen} onOpenChange={setQrOpen} numFmt={numFmt} />
+      </MountWhenOpened>
       <ConfirmDialog
         open={voidTarget !== null}
         onOpenChange={(o) => !o && setVoidTarget(null)}

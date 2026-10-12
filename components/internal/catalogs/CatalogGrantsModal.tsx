@@ -14,6 +14,7 @@ import {
   useRevokeCatalog,
 } from "@/modules/internal/catalogsHooks";
 import type { Catalog } from "@/modules/internal/catalogs";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 export function CatalogGrantsModal({
   open,
@@ -149,7 +150,7 @@ export function CatalogGrantsModal({
             Con acceso ({grants?.length ?? 0})
           </div>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <SpinnerBlock className="py-6" />
           ) : (grants?.length ?? 0) === 0 ? (
             <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
               Todavía nadie compró ni recibió este catálogo.

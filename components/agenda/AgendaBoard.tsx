@@ -55,7 +55,7 @@ function AppointmentBlock({
         cancelled
           ? "border-border bg-muted/50 text-muted-foreground line-through opacity-70"
           : done
-            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+            ? "border-transparent bg-emerald-400/10 text-emerald-100"
             : "border-border bg-card text-foreground"
       }`}
       title={`${hhmm(a.starts_at)} · ${a.service_name} · ${STATUS_LABELS[a.status]}`}

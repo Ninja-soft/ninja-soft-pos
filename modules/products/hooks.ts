@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   brandsApi,
   categoriesApi,
@@ -111,14 +112,19 @@ export function useWarrantyPlanMutations() {
   };
 }
 
+// La búsqueda se debouncea acá (no una request por tecla) y se mantiene el
+// resultado anterior mientras llega el nuevo: sin esto la grilla del POS y los
+// pickers quedaban vacíos y re-pintaban en cada tecla.
 export function useProducts(
   search: string,
   categoryId?: string | null,
   brandId?: string | null,
 ) {
+  const q = useDebouncedValue(search, 250);
   return useQuery({
-    queryKey: ["products", "list", search, categoryId ?? null, brandId ?? null],
-    queryFn: () => productsApi.list(search, categoryId, brandId),
+    queryKey: ["products", "list", q, categoryId ?? null, brandId ?? null],
+    queryFn: () => productsApi.list(q, categoryId, brandId),
+    placeholderData: keepPreviousData,
   });
 }
 

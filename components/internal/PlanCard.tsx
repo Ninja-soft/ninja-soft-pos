@@ -32,6 +32,7 @@ import {
 } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
   max_stores: "Sucursales",
@@ -91,7 +92,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
     return (
       <Card>
         <CardContent className="p-5">
-          <p className="text-sm text-muted-foreground">Cargando plan…</p>
+          <SpinnerBlock className="py-6" />
         </CardContent>
       </Card>
     );
@@ -336,7 +337,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
                   </span>
                 )}
                 {detail.isLifetime && (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-warning">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-400/10 px-2 py-0.5 text-xs font-semibold text-warning">
                     <InfinityIcon size={12} /> Vitalicio
                   </span>
                 )}

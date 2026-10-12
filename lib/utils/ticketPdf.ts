@@ -1,4 +1,5 @@
-import { jsPDF } from "jspdf";
+// jspdf se carga bajo demanda (import dinámico) para no sumarlo al bundle
+// inicial de las pantallas que muestran el ticket.
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 
 // Comprobante A4 (no fiscal) descargable. Ver roadmap H9.
@@ -34,7 +35,8 @@ export interface TicketPdfData {
   } | null;
 }
 
-export function downloadTicketPdf(data: TicketPdfData): void {
+export async function downloadTicketPdf(data: TicketPdfData): Promise<void> {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const left = 20;
   let y = 20;

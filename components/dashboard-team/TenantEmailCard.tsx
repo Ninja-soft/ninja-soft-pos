@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Eye, Mail, Zap } from "lucide-react";
+import { AlertCircle, Check, Eye, Mail, Server, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -14,6 +14,8 @@ import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
+import { EmailPreviewFrame } from "@/components/email/EmailPreviewFrame";
+import { IntegrationLogo, isIntegrationKey, type IntegrationKey } from "@/components/ui/IntegrationLogo";
 
 // Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
 type EmailMethod = "smtp" | "resend";
@@ -70,8 +72,8 @@ type SmtpResult =
   | { error: string; detail?: string };
 
 // Diseños del cuerpo del email del comprobante (H9b PR5). Las claves coinciden
-// con buildReceiptEmailHtml (lib/email/receiptTemplates) y EMAIL_BODY_TEMPLATES
-// en send_receipt_email. Las MINI-previews de acá (DesignPreview) son solo
+// con buildReceiptEmailHtml (lib/email/receiptTemplates) y su espejo en
+// send_receipt_email. Las MINI-previews de acá (DesignPreview) son solo
 // orientativas (divs simples); la VISTA PREVIA real usa el builder compartido.
 type BodyTemplateKey = "brand" | "clean" | "dark" | "warm" | "minimal";
 const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = [
@@ -83,8 +85,8 @@ const BODY_TEMPLATES: { key: BodyTemplateKey; label: string; desc: string }[] = 
 ];
 const SAMPLE_BODY = "¡Gracias por tu compra!";
 const FOOTER_LABEL = "Enviado con NinjaPos";
-// Wordmark de NinjaSoft para el fallback (sin logo del tenant). Mismo asset que
-// usa el email real (NINJA_LOGO_URL en send_receipt_email).
+// Wordmark de NinjaSoft para las mini-previews sin logo del tenant (el email
+// real, en ese caso, muestra un monograma con la inicial del negocio).
 const NINJA_WORDMARK = "/brand/ninjasoft-wordmark.webp";
 
 // Logo del preview: el del tenant si tiene; si no, el wordmark de NinjaSoft.
@@ -385,12 +387,14 @@ export function TenantEmailCard() {
               onClick={() => setMethod("smtp")}
               title="Mi cuenta de correo"
               desc="Gmail, Outlook u otro (SMTP)"
+              logos={["gmail", "outlook"]}
             />
             <MethodCard
               active={method === "resend"}
               onClick={() => setMethod("resend")}
               title="Resend (API)"
               desc="Servicio de envío por API"
+              logos={["resend"]}
             />
           </div>
 
@@ -403,12 +407,17 @@ export function TenantEmailCard() {
                     type="button"
                     onClick={() => pickProvider(p.key)}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                      "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition",
                       provider === p.key
-                        ? "border-ninja-flame ring-2 ring-ninja-flame/30 text-foreground"
-                        : "border-border text-muted-foreground hover:border-ninja-flameSoft/40",
+                        ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
+                    {isIntegrationKey(p.key) ? (
+                      <IntegrationLogo name={p.key} size={18} />
+                    ) : (
+                      <Server size={15} />
+                    )}
                     {p.label}
                   </button>
                 ))}
@@ -551,7 +560,7 @@ export function TenantEmailCard() {
                       "Copiá la contraseña de 16 letras y pegala arriba (no es la de tu correo).",
                     ].map((step, i) => (
                       <li key={i} className="flex gap-2.5 text-muted-foreground">
-                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+                        <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
                           {i + 1}
                         </span>
                         <span>{step}</span>
@@ -611,8 +620,8 @@ export function TenantEmailCard() {
                   className={cn(
                     "flex flex-col gap-1.5 rounded-lg border p-2 text-left transition",
                     bodyTemplate === t.key
-                      ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-                      : "border-border hover:border-ninja-flameSoft/40",
+                      ? "border-transparent bg-ninja-flame/[0.12]"
+                      : "border-border hover:bg-muted",
                   )}
                 >
                   <DesignPreview k={t.key} accent={accent} logoUrl={logoUrl} />
@@ -634,7 +643,7 @@ export function TenantEmailCard() {
               className={cn(
                 "flex items-start gap-2 rounded-lg border p-3 text-sm",
                 result.kind === "ok"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  ? "border-transparent bg-emerald-500/10 text-emerald-400"
                   : "border-destructive/30 bg-destructive/10 text-destructive",
               )}
             >
@@ -691,8 +700,8 @@ export function TenantEmailCard() {
 }
 
 // Preview fiel del email: renderiza el HTML real (builder compartido) en un
-// contenedor con fondo claro. El HTML es de strings confiables + inputs
-// escapados por buildReceiptEmailHtml.
+// iframe aislado. El HTML es de strings confiables + inputs escapados por
+// buildReceiptEmailHtml.
 function ReceiptEmailPreview({
   design,
   accent,
@@ -713,8 +722,8 @@ function ReceiptEmailPreview({
     bodyText,
   });
   return (
-    <div className="rounded-lg bg-neutral-100 p-4">
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="overflow-hidden rounded-lg bg-neutral-100">
+      <EmailPreviewFrame html={html} title="Vista previa del comprobante" minHeight={560} />
     </div>
   );
 }
@@ -747,21 +756,24 @@ function MethodCard({
   onClick,
   title,
   desc,
+  logos,
 }: {
   active: boolean;
   onClick: () => void;
   title: string;
   desc: string;
+  logos: IntegrationKey[];
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
+        "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 pr-16 text-left transition",
         active
-          ? "border-ninja-flame ring-2 ring-ninja-flame/30"
-          : "border-border hover:border-ninja-flameSoft/40",
+          ? "border-transparent bg-ninja-flame/[0.12]"
+          : "border-border hover:bg-muted",
       )}
     >
       <span
@@ -773,6 +785,11 @@ function MethodCard({
         {title}
       </span>
       <span className="text-xs text-muted-foreground">{desc}</span>
+      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 -space-x-1.5">
+        {logos.map((l) => (
+          <IntegrationLogo key={l} name={l} size={24} />
+        ))}
+      </span>
     </button>
   );
 }
@@ -786,11 +803,9 @@ function ResendGuide() {
     "Copiá la clave (empieza con re_) y pegala abajo. Se muestra una sola vez.",
   ];
   return (
-    <div className="mt-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/5 p-3.5">
+    <div className="mt-3 rounded-lg bg-ninja-flame/[0.08] p-3.5">
       <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
-          <Zap size={15} />
-        </span>
+        <IntegrationLogo name="resend" size={28} className="mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-foreground">
             ¿Qué es Resend?
@@ -806,7 +821,7 @@ function ResendGuide() {
       <ol className="mt-3 space-y-1.5">
         {steps.map((step, i) => (
           <li key={i} className="flex gap-2.5 text-xs text-muted-foreground">
-            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-ninja-flameSoft/50 bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
+            <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-transparent bg-ninja-flame/15 text-[10px] font-bold text-ninja-flameSoft">
               {i + 1}
             </span>
             <span>{step}</span>

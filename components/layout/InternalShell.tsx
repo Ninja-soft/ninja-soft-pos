@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
@@ -27,13 +28,23 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
-import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
-import { ProfileEditModal } from "@/components/account/ProfileEditModal";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+
+// Modales del menú de usuario: chunks aparte y montados recién al abrirlos.
+const ChangePasswordModal = dynamic(
+  () => import("@/components/ui/ChangePasswordModal").then((m) => m.ChangePasswordModal),
+  { ssr: false },
+);
+const ProfileEditModal = dynamic(
+  () => import("@/components/account/ProfileEditModal").then((m) => m.ProfileEditModal),
+  { ssr: false },
+);
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import {
   Dropdown,
@@ -84,9 +95,7 @@ export function InternalShell({
     queryKey: ["internal-shell-profile"],
     queryFn: async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
       const [acc, mem] = await Promise.all([
@@ -160,7 +169,7 @@ export function InternalShell({
         <Link
           href="/dashboard"
           onClick={() => setDrawer(false)}
-          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:border-ninja-flameSoft/50 hover:bg-muted"
+          className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
         >
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted text-ninja-flameSoft">
             <Store size={16} />
@@ -218,14 +227,14 @@ export function InternalShell({
     <div className="flex min-h-dvh">
       {/* Auto-logout por inactividad: aplica también al staff. */}
       <InactivityGuard />
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>
 
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover">
+          <aside className="absolute left-0 top-0 h-full w-64 border-r border-border bg-popover pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <button
               onClick={() => setDrawer(false)}
               className="absolute right-3 top-3 text-muted-foreground"
@@ -239,7 +248,7 @@ export function InternalShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
@@ -248,12 +257,16 @@ export function InternalShell({
         </header>
 
         <main className="app-bg min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+          <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">{children}</div>
         </main>
       </div>
 
-      <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
-      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      <MountWhenOpened open={pwOpen}>
+        <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      </MountWhenOpened>
+      <MountWhenOpened open={pfOpen}>
+        <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      </MountWhenOpened>
     </div>
   );
 }

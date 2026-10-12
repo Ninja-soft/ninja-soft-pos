@@ -10,13 +10,14 @@ import type { PlanWithCount } from "@/modules/internal/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { PlanEditorModal } from "./PlanEditorModal";
 import { PlanBadge } from "./PlanBadge";
+import { Spinner } from "@/components/ui/Spinner";
 
 function StatusChip({ active }: { active: boolean }) {
   return (
     <span
       className={
         active
-          ? "inline-flex items-center whitespace-nowrap rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success"
+          ? "inline-flex items-center whitespace-nowrap rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-success"
           : "inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground"
       }
     >
@@ -63,7 +64,7 @@ export function PlansManager() {
                       colSpan={6}
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
-                      Cargando planes…
+                      <Spinner />
                     </td>
                   </tr>
                 )}
@@ -93,7 +94,7 @@ export function PlansManager() {
                         {p.isRecommended && (
                           <span
                             title="Plan recomendado"
-                            className="inline-flex items-center gap-1 rounded-full border border-ninja-gold/40 bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold"
+                            className="inline-flex items-center gap-1 rounded-full bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold"
                           >
                             <Star size={11} className="fill-ninja-gold" />
                             Recomendado

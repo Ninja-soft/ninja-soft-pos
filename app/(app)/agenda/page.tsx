@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
 import { useProfessionals, useAppointments } from "@/modules/agenda/hooks";
@@ -29,6 +28,7 @@ import { AppointmentModal } from "@/components/agenda/AppointmentModal";
 import { AppointmentDetailModal } from "@/components/agenda/AppointmentDetailModal";
 import { ProfessionalsManager } from "@/components/agenda/ProfessionalsManager";
 import { WalkInModal } from "@/components/agenda/WalkInModal";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 type ViewMode = "day" | "week";
 
@@ -101,15 +101,14 @@ export default function AgendaPage() {
   const hasProfessionals = (professionals ?? []).length > 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Eyebrow>Servicios y turnos</Eyebrow>
-          <Display className="mt-2 flex items-center gap-2">
-            <CalendarDays size={26} className="text-ninja-flameSoft" /> Agenda
-          </Display>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="mx-auto w-full max-w-7xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
+      <PageHeader
+        className="mb-6"
+        eyebrow="Servicios y turnos"
+        title="Agenda"
+        icon={CalendarDays}
+        actions={
+          <>
           <Button variant="secondary" size="sm" onClick={() => setShowProfessionals((s) => !s)}>
             <UserCog size={16} /> Profesionales
           </Button>
@@ -119,8 +118,9 @@ export default function AgendaPage() {
           <Button size="sm" onClick={openNewBlank}>
             <Plus size={16} /> Nuevo turno
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Gestión de profesionales (panel plegable) */}
       {showProfessionals && (
@@ -191,7 +191,7 @@ export default function AgendaPage() {
 
       {/* Aviso si no hay profesionales todavía */}
       {!hasProfessionals && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ninja-flame/25 bg-ninja-flame/[0.06] p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-ninja-flame/[0.08] p-4">
           <p className="text-sm text-muted-foreground">
             Agregá a tus profesionales (quienes prestan los servicios) para
             organizar la agenda por columnas y calcular comisiones.

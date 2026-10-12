@@ -168,7 +168,7 @@ export function ImportProductsModal({
           <Download size={15} /> Descargar plantilla XLSX
         </button>
 
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-background px-4 py-6 text-sm text-muted-foreground transition hover:border-ninja-flameSoft">
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-background px-4 py-6 text-sm text-muted-foreground transition hover:bg-muted">
           <Upload size={16} />
           {parsing ? "Leyendo archivo…" : fileName || "Elegí un archivo .xlsx"}
           <input
@@ -180,7 +180,7 @@ export function ImportProductsModal({
         </label>
 
         {fatal && (
-          <div className="rounded-lg border border-red-400/20 bg-red-400/10 p-3 text-sm text-danger">
+          <div className="rounded-lg bg-red-400/10 p-3 text-sm text-danger">
             {fatal}
           </div>
         )}

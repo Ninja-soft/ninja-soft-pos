@@ -55,6 +55,8 @@ import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency } from "@/lib/utils/format";
+import { marginCost, markupPct, productCosts } from "@/lib/purchases/costs";
+import { usePurchaseSettings } from "@/modules/purchases/hooks";
 import { NoData } from "@/components/ui/NoData";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -75,6 +77,9 @@ import {
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
+  // Base de costo del negocio para el margen de la lista (F18 · H101, ADR-050).
+  const { data: purchaseSettings } = usePurchaseSettings();
+  const costBasis = purchaseSettings?.cost_basis ?? "last";
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -429,6 +434,20 @@ export default function ProductosPage() {
                             />
                           )}
                         </span>
+                        {(() => {
+                          const m = markupPct(Number(p.price), marginCost(costBasis, productCosts(p)));
+                          return m == null ? null : (
+                            <span
+                              className={cn(
+                                "block text-[11px] tabular-nums",
+                                m < 0 ? "text-danger" : "text-muted-foreground",
+                              )}
+                              title="Margen sobre el costo elegido en Configuración de compras"
+                            >
+                              Margen {String(m).replace(".", ",")} %
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span

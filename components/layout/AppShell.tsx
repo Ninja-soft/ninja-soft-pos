@@ -36,6 +36,10 @@ import {
   Hourglass,
   X,
   ArrowLeftRight,
+  ClipboardList,
+  FileText,
+  PackageCheck,
+  Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -215,6 +219,17 @@ const NAV: { top: Item[]; groups: Group[] } = {
       ],
     },
     {
+      // Compras y proveedores (F18 · H101, ADR-050). Con candado si el plan no
+      // incluye la feature compras.
+      label: "Compras",
+      items: [
+        { href: "/compras/ordenes", label: "Órdenes de compra", icon: ClipboardList, feature: "compras" },
+        { href: "/compras/recepciones", label: "Recepciones", icon: PackageCheck, feature: "compras" },
+        { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
+        { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
+      ],
+    },
+    {
       label: "Gestión",
       items: [
         { href: "/clientes", label: "Clientes", icon: Users },
@@ -389,6 +404,7 @@ export function AppShell({
   const [open, setOpen] = useState<Record<string, boolean>>({
     Operación: true,
     Catálogo: true,
+    Compras: true,
     Gestión: true,
   });
 

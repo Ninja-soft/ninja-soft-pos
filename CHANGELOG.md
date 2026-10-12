@@ -21,6 +21,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **F8 · H18 — Getnet: cobro por QR y link (Checkout Geopagos).** Edge `getnet` (create/status) crea una orden en el Checkout de Getnet Argentina (`api.globalgetnet.com.ar/api/v2/orders`, token OAuth2 de Geopagos) y devuelve el checkout hosted, que `QrCheckoutModal` muestra como QR y link. `getnet_webhook` (verify_jwt false) **nunca confía en la notificación**: re-consulta la orden con las credenciales del tenant y acredita sólo aprobados con **monto exacto en centavos**, de forma idempotente. Conexión por Client ID + Client Secret en Medios de pago (sin sandbox: Getnet AR no ofrece ambiente de prueba). Gating server-side `getnet` + auditoría. Lógica pura testeada con Vitest. Getnet Point sigue "Próximamente". ADR-031.
+
+### Added
+
 - **F8 · H17b — Checkout propio de la tienda para Payway.** Al cobrar con Payway, el QR ya no manda al formulario del proveedor: abre **`/pagar/{intent}` de tu propia tienda** — página pública con **tu logo y tu color** (`tenant_branding`), donde el cliente elige **tarjeta y cuotas de TUS Planes** (recargo en vivo, "N cuotas de $X") y carga la tarjeta en un form pensado para el celular. **PCI-friendly**: el número de tarjeta viaja del navegador **directo a Payway** (tokens con la API Key pública) — NinjaPos nunca ve ni guarda datos de tarjeta; el cobro corre server-side (Edge `payway_checkout`) con el **monto recalculado en el backend** (jamás se confía en el cliente), `payment_method_id` por marca y montos en centavos. La venta se registra sola por el **total final** (el recargo de cuotas entra como extra); los rechazos del emisor dejan reintentar con otra tarjeta sin regenerar el QR. El switch Sandbox se eliminó del detalle (queda sólo al cargar credenciales + chip PRUEBA). Verificado contra producción real: create → página propia; info público con marca y planes; guard `plan_not_available` server-side; rechazo controlado 402.
 
 ### Added

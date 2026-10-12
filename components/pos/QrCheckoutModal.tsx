@@ -54,11 +54,14 @@ function qrErrorCopy(code: string, providerName: string): string {
       return `Tu plan no incluye ${providerName}. Mejorá tu plan para cobrar con este medio.`;
     case "modo_no_token":
       return "MODO rechazó las credenciales del comercio (Username/Password). Verificá que el ambiente coincida con el switch Sandbox o consultá a MODO si falta activarlas.";
+    case "getnet_no_token":
+      return "Getnet rechazó las credenciales (Client ID / Client Secret). Revisalas en Configuración → Medios de pago.";
     case "mp_error":
     case "mobbex_error":
     case "modo_error":
     case "pagos360_error":
     case "payway_error":
+    case "getnet_error":
       return `${providerName} devolvió un error al crear el cobro. Probá de nuevo en unos segundos.`;
     case "modo_unreachable":
       return "No pudimos comunicarnos con MODO. Revisá tu conexión y probá de nuevo.";
@@ -84,7 +87,7 @@ export function QrCheckoutModal({
     amount: number,
     extras: { name: string; amount: number; kind: "warranty" | "surcharge" }[],
   ) => void;
-  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway";
+  provider?: "mercadopago" | "mobbex" | "modo" | "pagos360" | "payway" | "getnet";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -99,8 +102,12 @@ export function QrCheckoutModal({
   // Payway abre el checkout PROPIO de la tienda (/pagar/{intent}): el CLIENTE
   // elige tarjeta y cuotas ahí (Planes del negocio, recargo en vivo) → acá se
   // auto-arranca con el monto base y el total final viene en el poll.
+  // Getnet: checkout hosted de Getnet (tarjeta y cuotas se eligen ahí).
   const selfManaged =
-    provider === "modo" || provider === "pagos360" || provider === "payway";
+    provider === "modo" ||
+    provider === "pagos360" ||
+    provider === "payway" ||
+    provider === "getnet";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -160,7 +167,9 @@ export function QrCheckoutModal({
             ? posApi.createPagos360Link
             : provider === "payway"
               ? posApi.createPaywayLink
-              : posApi.createMpQr;
+              : provider === "getnet"
+                ? posApi.createGetnetLink
+                : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then((r) => {
         setIntentId(r.intent_id);
@@ -240,7 +249,9 @@ export function QrCheckoutModal({
           ? posApi.modoIntentStatus(intentId!)
           : provider === "payway"
             ? posApi.paywayIntentStatus(intentId!)
-            : posApi.mpIntentStatus(intentId!),
+            : provider === "getnet"
+              ? posApi.getnetIntentStatus(intentId!)
+              : posApi.mpIntentStatus(intentId!),
     enabled: open && phase === "waiting" && Boolean(intentId),
     refetchInterval: 3000,
   });
@@ -310,6 +321,7 @@ export function QrCheckoutModal({
     modo: "/img/medios_de_pago/Modo_cube.webp",
     pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
     payway: "/img/medios_de_pago/payway_cube.webp",
+    getnet: "/img/medios_de_pago/getnet_cube.webp",
   };
   const providerLogo =
     PROVIDER_LOGOS[provider] ?? "/img/medios_de_pago/mercado_pago_cube.webp";

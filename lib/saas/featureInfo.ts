@@ -111,9 +111,10 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
   getnet: {
-    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente: el cliente paga con tarjeta en el checkout de Getnet y la venta se cierra sola al aprobarse. El Point (terminal) es una función aparte.",
     impact: "Desactivado, no se puede cobrar con Getnet desde el POS.",
     minPlan: "Pro",
+    needs: "Conectar la cuenta de Getnet con el Client ID y Client Secret del Portal Getnet (no hay ambiente de prueba: los cobros son reales).",
   },
   nave: {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",

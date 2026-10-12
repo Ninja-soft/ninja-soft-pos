@@ -613,7 +613,7 @@ function StaffDetailModal({
   const { toast } = useToast();
   const m = useStaffStatusMutations();
   const today = todayAR();
-  const byId = new Map(branches.map((b) => [b.id, b]));
+  const byId = useMemo(() => new Map(branches.map((b) => [b.id, b])), [branches]);
 
   const items = useMemo<TimelineItem[]>(() => {
     if (!person) return [];

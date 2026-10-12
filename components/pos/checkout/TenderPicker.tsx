@@ -63,6 +63,7 @@ export function TenderPicker({
                       logo={t.logo}
                       alt={t.brandLabel}
                       size={38}
+                      inverse={on}
                       fallback={t.flow === "account" ? "account" : "wallet"}
                     />
                     <span className="min-w-0">

@@ -1,5 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { brandLogo, planLabel, BRAND_LABEL } from "@/modules/pos/planConstants";
+import { planLabel, BRAND_LABEL, summarizePlans } from "@/modules/pos/planConstants";
+import { cardLogo, logoOnDark, paymentIcon, paymentWordmark } from "@/lib/payments/logos";
+
+describe("summarizePlans", () => {
+  it("cuenta planes por medio y ordena las marcas", () => {
+    const s = summarizePlans([
+      { provider_key: "payway", brand: "master" },
+      { provider_key: "payway", brand: "visa" },
+      { provider_key: "payway", brand: "visa" },
+      { provider_key: "mobbex", brand: null },
+    ]);
+    expect(s.payway).toEqual({ count: 3, brands: ["visa", "master"] });
+    expect(s.mobbex).toEqual({ count: 1, brands: [] });
+    expect(s.mercadopago).toBeUndefined();
+  });
+});
 
 describe("planLabel", () => {
   it("débito con marca", () => {
@@ -16,13 +31,32 @@ describe("planLabel", () => {
   });
 });
 
-describe("brandLogo", () => {
-  it("devuelve ruta svg para marca conocida", () => {
-    expect(brandLogo("visa")).toBe("/img/medios_de_pago/cards/visa_credito.svg");
+describe("cardLogo", () => {
+  it("devuelve el webp de la red para marca conocida", () => {
+    expect(cardLogo("visa")).toBe("/images/cards/visa.webp");
+    expect(cardLogo("master")).toBe("/images/cards/mastercard.webp");
+    expect(cardLogo("naranja")).toBe("/images/cards/naranja-x.webp");
+  });
+  it("usa la variante para fondo oscuro sólo si la marca la tiene", () => {
+    expect(cardLogo("visa", { on: "dark" })).toBe("/images/cards/visa-on-dark.webp");
+    expect(cardLogo("amex", { on: "dark" })).toBe("/images/cards/amex.webp");
+    expect(cardLogo("master", { on: "dark" })).toBe("/images/cards/mastercard.webp");
   });
   it("null si no hay marca", () => {
-    expect(brandLogo(null)).toBeNull();
-    expect(brandLogo("inexistente")).toBeNull();
+    expect(cardLogo(null)).toBeNull();
+    expect(cardLogo("inexistente")).toBeNull();
+  });
+});
+
+describe("logoOnDark", () => {
+  it("resuelve la variante oscura de un src ya armado", () => {
+    expect(logoOnDark("/images/cards/visa-debito.webp")).toBe("/images/cards/visa-debito-on-dark.webp");
+    expect(logoOnDark(paymentWordmark("mercadopago")!)).toBe("/images/payments/mercado-pago-wordmark-on-dark.webp");
+    expect(logoOnDark(paymentIcon("payway_point")!)).toBe("/images/payments/payway-icon-on-dark.webp");
+  });
+  it("deja igual los logos sin variante", () => {
+    expect(logoOnDark(paymentIcon("modo")!)).toBe("/images/payments/modo-icon.webp");
+    expect(logoOnDark(cardLogo("amex")!)).toBe("/images/cards/amex.webp");
   });
 });
 

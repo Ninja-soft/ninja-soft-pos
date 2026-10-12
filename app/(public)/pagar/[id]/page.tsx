@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { brandLogo } from "@/modules/pos/planConstants";
+import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { Spinner } from "@/components/ui/Spinner";
 import { paywayPayMessage, paywayTokenMessage } from "@/lib/payments/paywayMessages";
 
@@ -269,9 +269,9 @@ export default function PagarPage() {
               <p className="text-sm font-semibold">Tarjeta</p>
               <div className="mt-2 grid grid-cols-4 gap-2">
                 {(info.brands ?? []).map((br) => {
-                  // Visa Débito usa el logo de Visa con la leyenda "Débito".
-                  const debit = (info.debit_brands ?? []).includes(br);
-                  const logo = brandLogo(br === "visa_debito" ? "visa" : br);
+                  // Visa Débito tiene su logo con la leyenda; las demás de
+                  // débito suman "Débito" debajo.
+                  const debit = br !== "visa_debito" && (info.debit_brands ?? []).includes(br);
                   const active = brand === br;
                   return (
                     <button
@@ -282,26 +282,16 @@ export default function PagarPage() {
                         setInstallments(1);
                       }}
                       title={BRAND_LABELS[br] ?? br}
-                      className="flex h-14 flex-col items-center justify-center gap-0.5 rounded-xl border bg-white p-2 transition"
+                      aria-pressed={active}
+                      className="flex h-16 flex-col items-center justify-center gap-1 rounded-xl p-2 transition"
                       style={
                         active
-                          ? { borderColor: accent, boxShadow: `0 0 0 2px ${accent}55` }
-                          : { borderColor: "#e5e5e5" }
+                          ? { background: `${accent}2e` }
+                          : { background: "#f4f4f5" }
                       }
                     >
-                      {logo ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={logo}
-                          alt={BRAND_LABELS[br] ?? br}
-                          className="min-h-0 max-w-full flex-1 object-contain"
-                        />
-                      ) : (
-                        <span className="text-xs font-semibold text-neutral-600">
-                          {BRAND_LABELS[br] ?? br}
-                        </span>
-                      )}
-                      {logo && debit && (
+                      <CardBrandLogo brand={br} label={BRAND_LABELS[br] ?? br} height={debit ? 22 : 30} on="light" />
+                      {debit && (
                         <span className="text-[10px] font-semibold leading-none text-neutral-500">
                           Débito
                         </span>

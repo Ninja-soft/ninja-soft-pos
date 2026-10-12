@@ -8,6 +8,7 @@ import type { PlanForUpgrade } from "@/modules/saas/gating";
 import { BrandCard, ManualCard, SoonList, brandBucket, type BrandBucket, type ChannelHandlers } from "./BrandCard";
 import { ChannelLegend, Eyebrow } from "./ui";
 import type { Method } from "./types";
+import type { PlanSummary } from "@/modules/pos/planConstants";
 
 // Secciones de cuentas, en orden: conectadas, disponibles, de otro plan y
 // próximamente.
@@ -26,12 +27,15 @@ export function PaymentMethodsView({
   features,
   plans,
   handlers,
+  planSummary,
 }: {
   providers: ProviderRow[];
   methods: Method[];
   features: Record<string, boolean> | undefined;
   plans: PlanForUpgrade[];
   handlers: ChannelHandlers;
+  /** Planes de cuotas activos por provider_key (botón "Planes de cuotas"). */
+  planSummary?: Record<string, PlanSummary>;
 }) {
   const byKey = useMemo(() => {
     const m = new Map<string, Method>();
@@ -103,6 +107,7 @@ export function PaymentMethodsView({
                     features={features}
                     plans={plans}
                     handlers={handlers}
+                    planSummary={planSummary}
                   />
                 ))}
               </div>

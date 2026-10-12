@@ -7,6 +7,8 @@ import { PaymentPlansGridModal } from "@/components/dashboard-team/PaymentPlansG
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { useGating, useGlobalPlansForUpgrade } from "@/modules/saas/gating";
+import { usePaymentPlans } from "@/modules/pos/hooks";
+import { summarizePlans } from "@/modules/pos/planConstants";
 import {
   BRAND_BY_KEY,
   SANDBOX_PROVIDERS,
@@ -116,6 +118,9 @@ export function PaymentMethodsCard() {
   }, [methods]);
 
   const { data: gating } = useGating();
+  // Planes de cuotas activos por medio: cantidad + tarjetas en cada canal.
+  const { data: activePlans } = usePaymentPlans();
+  const planSummary = useMemo(() => summarizePlans(activePlans ?? []), [activePlans]);
   const { data: plans = [] } = useGlobalPlansForUpgrade();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
 
@@ -207,6 +212,7 @@ export function PaymentMethodsCard() {
         methods={methods}
         features={gating?.features}
         plans={plans}
+        planSummary={planSummary}
         handlers={{
           onToggle: (key, enabled) => save.mutate({ key, enabled }),
           onSurcharge: (key, pct) => save.mutate({ key, surcharge_pct: pct }),

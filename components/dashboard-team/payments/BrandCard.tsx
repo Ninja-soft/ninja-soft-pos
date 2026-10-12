@@ -3,10 +3,10 @@
 import { useState } from "react";
 import {
   ChevronDown,
+  ChevronRight,
   CreditCard,
   Globe,
   Lock,
-  Percent,
   Plug,
   Settings2,
   Smartphone,
@@ -30,6 +30,8 @@ import {
 import { CHANNEL_CAPS, CHANNEL_INFO, CHANNEL_SUMMARY, CHANNEL_TITLE, type ChannelCap } from "./copy";
 import { BrandLogo, CapBadge, StatusChip, type StatusTone } from "./ui";
 import { mpEnvOf, type Method } from "./types";
+import { CardBrandLogo } from "@/components/ui/ThemedLogo";
+import { BRAND_LABEL, type PlanSummary } from "@/modules/pos/planConstants";
 
 export type ChannelHandlers = {
   onToggle: (key: string, enabled: boolean) => void;
@@ -96,12 +98,14 @@ export function BrandCard({
   features,
   plans,
   handlers,
+  planSummary,
 }: {
   group: BrandGroup;
   byKey: Map<string, Method>;
   features: Record<string, boolean> | undefined;
   plans: PlanForUpgrade[];
   handlers: ChannelHandlers;
+  planSummary?: Record<string, PlanSummary>;
 }) {
   const { brand, channels } = group;
   const [upgradeKey, setUpgradeKey] = useState<string | null>(null);
@@ -174,6 +178,7 @@ export function BrandCard({
               planName={planName}
               onUpgrade={() => setUpgradeKey(featureKey ?? null)}
               handlers={handlers}
+              planSummary={planSummary}
             />
           ))}
         </div>
@@ -284,6 +289,7 @@ function ChannelRow({
   planName,
   onUpgrade,
   handlers,
+  planSummary,
   manual = false,
 }: {
   channel: ChannelEntry;
@@ -295,12 +301,14 @@ function ChannelRow({
   planName: string;
   onUpgrade: () => void;
   handlers: ChannelHandlers;
+  planSummary?: Record<string, PlanSummary>;
   manual?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const soon = !c.implemented;
   const mode = surchargeModeOf(c.key, c.channel);
-  const planKey = PLANS_KEY_BY_CHANNEL[c.key];
+  // El QR + link de MP usa los planes de 'mercadopago' (los mismos del Point).
+  const planKey = PLANS_KEY_BY_CHANNEL[c.key] ?? (mode === "shared" ? "mercadopago" : undefined);
   const info = CHANNEL_INFO[c.key];
   const needs = featureInfo(PROVIDER_FEATURE[c.key] ?? "")?.needs;
   const extra = !soon && !locked ? handlers.renderChannelExtra?.(c.key, m) : null;
@@ -346,6 +354,14 @@ function ChannelRow({
           )}
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{CHANNEL_SUMMARY[c.key] ?? c.name}</p>
 
+          {!locked && (mode === "plans" || mode === "shared") && planKey && (
+            <PlansButton
+              summary={planSummary?.[planKey]}
+              shared={mode === "shared"}
+              onClick={() => handlers.onOpenPlans(planKey, brandName)}
+            />
+          )}
+
           {!locked && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               {mode === "flat" && (
@@ -368,16 +384,6 @@ function ChannelRow({
                   <span className="font-semibold text-foreground">%</span>
                 </label>
               )}
-              {mode === "plans" && planKey && (
-                <button
-                  type="button"
-                  onClick={() => handlers.onOpenPlans(planKey, brandName)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-fg-6 px-2.5 text-xs font-semibold text-foreground transition hover:bg-fg-10"
-                >
-                  <Percent size={13} /> Cuotas y recargos
-                </button>
-              )}
-              {mode === "shared" && <Pill>Recargo en los planes de Point</Pill>}
               {mode === "terminal" && <Pill>Cuotas en la terminal</Pill>}
               {isPoint && hasConnection && !brandConnected && (
                   <button
@@ -470,5 +476,58 @@ function ChannelRow({
         </div>
       </div>
     </div>
+  );
+}
+
+// Acción secundaria clara de los canales con planes: "Planes de cuotas", la
+// cantidad de planes activos y un adelanto de hasta 4 tarjetas configuradas.
+function PlansButton({
+  summary,
+  shared,
+  onClick,
+}: {
+  summary: PlanSummary | undefined;
+  shared: boolean;
+  onClick: () => void;
+}) {
+  const count = summary?.count ?? 0;
+  const brands = summary?.brands ?? [];
+  const extra = brands.length - 4;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2.5 flex w-full items-center gap-3 rounded-xl bg-fg-6 p-2.5 pr-3 text-left transition hover:bg-fg-10 sm:max-w-md"
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-[var(--seg-thumb)] text-foreground shadow-[var(--seg-thumb-shadow)]">
+        <CreditCard size={17} strokeWidth={1.9} aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-[13px] font-semibold text-foreground">Planes de cuotas</span>
+          <span
+            className={cn(
+              "inline-flex h-5 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-semibold",
+              count > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {count > 0 ? `${count} ${count === 1 ? "plan" : "planes"}` : "Sin planes"}
+          </span>
+        </span>
+        {brands.length > 0 ? (
+          <span className="mt-1.5 flex items-center gap-2.5" aria-label={brands.map((b) => BRAND_LABEL[b] ?? b).join(", ")}>
+            {brands.slice(0, 4).map((b) => (
+              <CardBrandLogo key={b} brand={b} label={BRAND_LABEL[b] ?? b} height={18} natural />
+            ))}
+            {extra > 0 && <span className="text-[11px] font-semibold text-muted-foreground">+{extra}</span>}
+          </span>
+        ) : (
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {shared ? "Compartidos con el Point de Mercado Pago" : "Cargá recargos por tarjeta y cuotas"}
+          </span>
+        )}
+      </span>
+      <ChevronRight size={16} className="shrink-0 text-muted-foreground" aria-hidden />
+    </button>
   );
 }

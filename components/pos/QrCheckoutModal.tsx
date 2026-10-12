@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, Copy, Link2, Share2 } from "lucide-react";
@@ -10,7 +9,8 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { posApi, type PaymentPlan } from "@/modules/pos/api";
 import { useProviderPlans } from "@/modules/pos/hooks";
-import { BASE_LABEL, BRAND_LABEL, brandLogo } from "@/modules/pos/planConstants";
+import { BASE_LABEL, BRAND_LABEL } from "@/modules/pos/planConstants";
+import { CardBrandLogo, ThemedLogo } from "@/components/ui/ThemedLogo";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
@@ -544,8 +544,7 @@ export function QrCheckoutModal({
     >
       <div className="space-y-4 text-center">
         <div className="flex items-center justify-center py-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={providerLogo} alt={providerName} className="h-12 w-auto object-contain" />
+          <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
         </div>
 
         {selecting && (
@@ -558,27 +557,20 @@ export function QrCheckoutModal({
               <>
                 <div className="text-sm font-medium">Elegí la tarjeta</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {brands.map((b) => {
-                    const logo = brandLogo(b);
-                    return (
-                      <button
-                        key={b}
-                        onClick={() => setBrand(b)}
-                        className="flex flex-col items-center gap-1 rounded-lg border border-border p-3 transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
-                      >
-                        {logo ? (
-                          <Image src={logo} alt={b} width={48} height={30} className="h-7 w-auto object-contain" />
-                        ) : (
-                          <span className="h-7" />
-                        )}
-                        <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
-                      </button>
-                    );
-                  })}
+                  {brands.map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => setBrand(b)}
+                      className="flex flex-col items-center gap-1.5 rounded-xl bg-fg-6 p-3 transition hover:bg-fg-10"
+                    >
+                      <CardBrandLogo brand={b} label={BRAND_LABEL[b] ?? b} height={28} />
+                      <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
+                    </button>
+                  ))}
                 </div>
                 <button
                   onClick={payNoPlan}
-                  className="w-full rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground transition hover:border-ninja-flameSoft hover:text-foreground"
+                  className="w-full rounded-xl bg-fg-4 py-2.5 text-sm text-muted-foreground transition hover:bg-fg-6 hover:text-foreground"
                 >
                   Sin plan · contado ({formatCurrency(base)})
                 </button>

@@ -223,7 +223,11 @@ export function PaymentMethodsCard() {
           onConnect: (b) => setConnectBrand(b),
           renderChannelExtra: (key, m) =>
             key === "mercadopago" && m?.config?.connected ? (
-              <MpQrPosSetup method={m} />
+              <MpQrPosSetup
+                method={m}
+                onReconnect={() => setConnectBrand("mercadopago")}
+                onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
+              />
             ) : key === "directo" ? (
               <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
             ) : null,

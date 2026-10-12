@@ -298,6 +298,8 @@ export const MP_AR_STATES = [
   "Tucumán",
 ] as const;
 
+export type MpArState = (typeof MP_AR_STATES)[number];
+
 export interface StoreSetup {
   name: string;
   location: {
@@ -311,14 +313,214 @@ export interface StoreSetup {
   };
 }
 
+// ── "QR en el mostrador": dirección del negocio → local en MP ────────────────
+// El dueño no carga nada técnico: se parte de la dirección del negocio
+// (tenant_branding.address, texto libre), se geocodifica con Nominatim en la
+// Edge y se arma la sucursal que pide MP. Todo puro (sin imports) y testeado.
+
+/** Minúsculas, sin acentos ni puntos, espacios simples. */
+function fold(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const CAPITAL_ALIASES = new Set([
+  "caba",
+  "capital",
+  "capital federal",
+  "ciudad autonoma de buenos aires",
+  "cdad autonoma de buenos aires",
+  "ciudad de buenos aires",
+  "autonomous city of buenos aires",
+]);
+const BSAS_ALIASES = new Set(["bs as", "bsas", "pba", "pcia buenos aires", "buenos aires province"]);
+
+/** Provincia como la nombra MP (`location.state_name`) o null. */
+export function normalizeArState(input: string | null | undefined): MpArState | null {
+  let k = fold(input ?? "");
+  if (!k) return null;
+  if (CAPITAL_ALIASES.has(k)) return "Capital Federal";
+  k = k.replace(/^(provincia|pcia) (de |del )?/, "");
+  if (BSAS_ALIASES.has(k)) return "Buenos Aires";
+  if (k.startsWith("tierra del fuego")) return "Tierra del Fuego";
+  return MP_AR_STATES.find((st) => fold(st) === k) ?? null;
+}
+
+const NUMBER_TOKEN = /^\d{1,6}[a-z]{0,3}$/i;
+
+/** "Av. Corrientes 1234 piso 3" → calle "Av. Corrientes", altura "1234". */
+export function splitStreet(input: string): { street_name: string; street_number: string } {
+  const s = input.replace(/\s+/g, " ").trim();
+  // Marcador explícito de altura: "Calle 50 N° 123", "nro. 123", "# 123".
+  const marked = /^(.*?)\s*(?:\bn[°º]|\bnro\.?|\bnum(?:ero)?\.?|\bnúmero|#)\s*(\d{1,6}[a-z]{0,3})\b/i.exec(s);
+  if (marked && marked[1]) {
+    return { street_name: marked[1].trim(), street_number: marked[2]! };
+  }
+  const tokens = s.split(" ");
+  // La primera palabra puede ser número ("9 de Julio"): la altura es el primer
+  // número que aparece después.
+  for (let i = 1; i < tokens.length; i++) {
+    if (NUMBER_TOKEN.test(tokens[i]!)) {
+      return { street_name: tokens.slice(0, i).join(" "), street_number: tokens[i]! };
+    }
+  }
+  return { street_name: s, street_number: "" };
+}
+
+export interface StoreAddress {
+  street_name: string;
+  street_number: string;
+  city_name: string;
+  state_name: string;
+}
+
+/** Código postal suelto ("1414", "B1642", "C1043AAZ") o "CP". */
+const POSTAL_TOKEN = /^(?:[a-z]?\d{4}[a-z]{0,3}|cp|c\.p\.?)$/i;
+
+/** Dirección del negocio (texto libre) → campos que pide MP. */
+export function parseBusinessAddress(text: string | null | undefined): StoreAddress {
+  const out: StoreAddress = { street_name: "", street_number: "", city_name: "", state_name: "" };
+  const parts = (text ?? "")
+    .split(",")
+    // El código postal se limpia fuera de la calle (la altura también son 4 dígitos).
+    .map((p, i) =>
+      i === 0
+        ? p.trim()
+        : p
+            .trim()
+            .split(/\s+/)
+            .filter((t) => !POSTAL_TOKEN.test(t))
+            .join(" "),
+    )
+    .filter((p) => p && fold(p) !== "argentina");
+  if (!parts.length) return out;
+  Object.assign(out, splitStreet(parts[0]!));
+  const rest = parts.slice(1);
+  const last = rest.length ? normalizeArState(rest[rest.length - 1]) : null;
+  if (last) {
+    out.state_name = last;
+    rest.pop();
+  }
+  for (const p of rest) {
+    if (normalizeArState(p) === "Capital Federal" && (!out.state_name || out.state_name === "Capital Federal")) {
+      out.state_name = "Capital Federal";
+      continue;
+    }
+    if (!out.city_name) out.city_name = p;
+  }
+  return out;
+}
+
+/** Texto de búsqueda para el geocodificador (Nominatim, countrycodes=ar). */
+export function buildGeocodeQuery(a: StoreAddress): string {
+  if (!a.street_name.trim()) return "";
+  const street = `${a.street_name.trim()} ${a.street_number.trim()}`.trim();
+  const state = normalizeArState(a.state_name);
+  const city = normalizeArState(a.city_name) === "Capital Federal" ? "" : a.city_name.trim();
+  const stateQ = state === "Capital Federal" ? "Ciudad Autónoma de Buenos Aires" : (state ?? "");
+  return [street, city, stateQ, "Argentina"].filter(Boolean).join(", ");
+}
+
+export interface GeoPick {
+  lat: number;
+  lon: number;
+  /** true si el mapa encontró la altura exacta (no sólo la calle). */
+  precise: boolean;
+  /** "Avenida Corrientes 1234, San Nicolás": lo que ve el dueño para confirmar. */
+  label: string;
+  /** Localidad sugerida para MP (en Capital, el barrio). */
+  city_name: string;
+  state_name: string;
+}
+
+type NominatimAddress = Record<string, string | undefined>;
+
+function cleanLocality(s: string | undefined): string {
+  return (s ?? "").replace(/^(partido|municipio|departamento|comuna)\s+(de\s+|del\s+)?/i, "").trim();
+}
+
+function cityFromAddress(a: NominatimAddress, state: MpArState | null): string {
+  if (state === "Capital Federal") {
+    return cleanLocality(a.suburb ?? a.city_district ?? a.neighbourhood ?? a.quarter);
+  }
+  return cleanLocality(
+    a.city ?? a.town ?? a.village ?? a.suburb ?? a.municipality ?? a.county ?? a.state_district,
+  );
+}
+
+/** Bounding box amplio de Argentina continental + Tierra del Fuego. */
+function inArgentina(lat: number, lon: number): boolean {
+  return lat <= -21 && lat >= -56 && lon <= -53 && lon >= -74;
+}
+
 /**
- * Valida los datos de la sucursal que carga el dueño (alta única de sucursal +
- * caja en MP). `coordinates` es el texto que copia de Google Maps
- * ("-34.6037, -58.3816"). Devuelve el primer campo inválido.
+ * Elige el mejor resultado de Nominatim (format=json, addressdetails=1):
+ * dentro de Argentina, de la provincia esperada (si se sabe) y, de ser posible,
+ * con la altura exacta.
  */
-export function parseStoreSetup(
+export function pickGeocodeResult(results: unknown, expectedState?: string): GeoPick | null {
+  if (!Array.isArray(results)) return null;
+  const expected = expectedState ? normalizeArState(expectedState) : null;
+  const picks: GeoPick[] = [];
+  for (const raw of results) {
+    const r = (raw ?? {}) as {
+      lat?: unknown;
+      lon?: unknown;
+      display_name?: string;
+      address?: NominatimAddress;
+    };
+    const lat = Number(r.lat);
+    const lon = Number(r.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !inArgentina(lat, lon)) continue;
+    const a = r.address ?? {};
+    const state = normalizeArState(a.state);
+    if (expected && state && state !== expected) continue;
+    const city = cityFromAddress(a, state ?? expected);
+    const road = a.road ?? a.pedestrian ?? a.footway ?? "";
+    const street = [road, a.house_number].filter(Boolean).join(" ");
+    const label =
+      [street, city].filter(Boolean).join(", ") ||
+      (r.display_name ?? "").split(",").slice(0, 2).map((s) => s.trim()).join(", ");
+    picks.push({
+      lat,
+      lon,
+      precise: Boolean(a.house_number),
+      label,
+      city_name: city,
+      state_name: state ?? expected ?? "",
+    });
+  }
+  return picks.find((p) => p.precise) ?? picks[0] ?? null;
+}
+
+/**
+ * Localidad que se manda a MP. Manda la del dueño; en Capital, "CABA" no es
+ * una localidad para MP (espera el barrio), así que se usa la del mapa.
+ */
+export function mpCityName(ownerCity: string, state: string, geoCity: string): string {
+  const own = ownerCity.trim();
+  const isCapitalAlias = normalizeArState(own) === "Capital Federal";
+  if (own && !(isCapitalAlias && normalizeArState(state) === "Capital Federal")) return own;
+  return geoCity.trim();
+}
+
+export interface StoreAddressInput extends StoreAddress {
+  name: string;
+  reference: string;
+}
+
+/**
+ * Valida nombre + dirección (sin coordenadas). En Capital la localidad puede
+ * venir vacía: la completa el mapa con el barrio.
+ */
+export function parseStoreAddress(
   input: Record<string, unknown>,
-): { ok: true; value: StoreSetup } | { ok: false; field: string } {
+): { ok: true; value: StoreAddressInput } | { ok: false; field: string } {
   const str = (k: string, max: number) =>
     typeof input[k] === "string" ? (input[k] as string).trim().slice(0, max) : "";
   const name = str("name", 60);
@@ -327,15 +529,48 @@ export function parseStoreSetup(
   if (!street_name) return { ok: false, field: "street_name" };
   const street_number = str("street_number", 20);
   if (!street_number) return { ok: false, field: "street_number" };
+  const state = normalizeArState(str("state_name", 60));
   const city_name = str("city_name", 80);
-  if (!city_name) return { ok: false, field: "city_name" };
-  const state_name = str("state_name", 40);
-  if (!(MP_AR_STATES as readonly string[]).includes(state_name)) {
-    return { ok: false, field: "state_name" };
+  if (!city_name && state !== "Capital Federal") return { ok: false, field: "city_name" };
+  if (!state) return { ok: false, field: "state_name" };
+  return {
+    ok: true,
+    value: {
+      name,
+      street_name,
+      street_number,
+      city_name,
+      state_name: state,
+      reference: str("reference", 120),
+    },
+  };
+}
+
+/**
+ * Valida los datos completos de la sucursal (alta única de sucursal + caja en
+ * MP). Las coordenadas llegan como `latitude`/`longitude` (geocodificadas) o
+ * como el texto que copia Google Maps en `coordinates` ("-34.6037, -58.3816",
+ * respaldo manual). Devuelve el primer campo inválido.
+ */
+export function parseStoreSetup(
+  input: Record<string, unknown>,
+): { ok: true; value: StoreSetup } | { ok: false; field: string } {
+  const addr = parseStoreAddress(input);
+  if (!addr.ok) return addr;
+  if (!addr.value.city_name) return { ok: false, field: "city_name" };
+  let latitude = Number.NaN;
+  let longitude = Number.NaN;
+  if (typeof input.latitude === "number" && typeof input.longitude === "number") {
+    latitude = input.latitude;
+    longitude = input.longitude;
+  } else {
+    const txt = typeof input.coordinates === "string" ? input.coordinates.slice(0, 60) : "";
+    const m = /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(txt);
+    if (m) {
+      latitude = Number(m[1]);
+      longitude = Number(m[2]);
+    }
   }
-  const m = /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(str("coordinates", 60));
-  const latitude = m ? Number(m[1]) : Number.NaN;
-  const longitude = m ? Number(m[2]) : Number.NaN;
   if (
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
@@ -344,21 +579,129 @@ export function parseStoreSetup(
   ) {
     return { ok: false, field: "coordinates" };
   }
+  const v = addr.value;
   return {
     ok: true,
     value: {
-      name,
+      name: v.name,
       location: {
-        street_name,
-        street_number,
-        city_name,
-        state_name,
+        street_name: v.street_name,
+        street_number: v.street_number,
+        city_name: v.city_name,
+        state_name: v.state_name,
         latitude,
         longitude,
-        reference: str("reference", 120),
+        reference: v.reference,
       },
     },
   };
+}
+
+/** Qué campo señala el rechazo de MP al crear la sucursal (texto de su error). */
+export function mpStoreErrorField(detail: string): "city_name" | "state_name" | "address" | null {
+  const d = detail.toLowerCase();
+  if (/city/.test(d)) return "city_name";
+  if (/state/.test(d)) return "state_name";
+  if (/latitude|longitude|location|street|address/.test(d)) return "address";
+  return null;
+}
+
+export type MpQrFix = "address" | "retry" | "reconnect" | "plan" | "none";
+export interface MpQrError {
+  title: string;
+  message: string;
+  fix: MpQrFix;
+  field?: string;
+}
+
+const FIELD_MSG: Record<string, string> = {
+  name: "Poné el nombre de tu local, como lo ven tus clientes.",
+  street_name: "Falta la calle de tu local.",
+  street_number: "Falta la altura de la calle.",
+  city_name: "Falta la localidad o el barrio.",
+  state_name: "Elegí la provincia.",
+  coordinates: "La ubicación a mano tiene que verse como -34.6037, -58.3816.",
+};
+
+/** Error de la Edge mp_qr → mensaje en criollo + qué puede hacer el dueño. */
+export function mapMpQrError(code: string, field?: string | null): MpQrError {
+  switch (code) {
+    case "geocode_not_found":
+      return {
+        title: "No encontramos la dirección en el mapa",
+        message:
+          "Revisá la calle, la altura y la localidad. Si está todo bien, podés marcar la ubicación a mano.",
+        fix: "address",
+      };
+    case "geocode_unavailable":
+      return {
+        title: "No pudimos buscar la dirección ahora",
+        message: "El buscador de mapas no respondió. Probá de nuevo en un rato.",
+        fix: "retry",
+      };
+    case "invalid_store":
+      return {
+        title: "Revisá los datos del local",
+        message: (field && FIELD_MSG[field]) || "Revisá el nombre y la dirección del local.",
+        fix: "address",
+        ...(field ? { field } : {}),
+      };
+    case "mp_store_error":
+      if (field === "city_name") {
+        return {
+          title: "Mercado Pago no reconoce la localidad",
+          message:
+            "Probá con el nombre oficial de tu localidad o barrio (por ejemplo, Palermo en lugar de CABA).",
+          fix: "address",
+          field,
+        };
+      }
+      if (field === "state_name") {
+        return {
+          title: "Mercado Pago no reconoce la provincia",
+          message: "Elegí la provincia de la lista y probá de nuevo.",
+          fix: "address",
+          field,
+        };
+      }
+      return {
+        title: "Mercado Pago no aceptó la dirección",
+        message: "Revisá la dirección del local y probá de nuevo.",
+        fix: "address",
+        ...(field && field !== "address" ? { field } : {}),
+      };
+    case "not_connected":
+      return {
+        title: "Tu cuenta de Mercado Pago no está conectada",
+        message: "Volvé a conectarla y después activá el QR.",
+        fix: "reconnect",
+      };
+    case "payment_method_not_allowed":
+      return {
+        title: "Tu plan no incluye Mercado Pago",
+        message: "Mirá los planes para sumarlo.",
+        fix: "plan",
+      };
+    case "forbidden":
+      return {
+        title: "Solo el dueño o el encargado puede hacerlo",
+        message: "Pedile a quien administra el negocio que lo active.",
+        fix: "none",
+      };
+    case "mp_pos_error":
+    case "mp_error":
+      return {
+        title: "Mercado Pago no respondió",
+        message: "Probá de nuevo en unos minutos.",
+        fix: "retry",
+      };
+    default:
+      return {
+        title: "Algo salió mal",
+        message: "Probá de nuevo en unos minutos.",
+        fix: "retry",
+      };
+  }
 }
 
 /** Body de POST /users/{user_id}/stores. */

@@ -285,9 +285,9 @@ export function BranchesManager() {
 
                   {!b.deleted_at && (
                     <div className="mt-4 grid grid-cols-3 gap-2 px-4">
-                      <Metric label="Cajas abiertas" value={canManage ? `${open.length}/${regs.length}` : String(regs.length)} />
-                      <Metric label="Personal hoy" value={canManage ? String(staffCount(b.id)) : "·"} />
-                      <Metric label="Ventas hoy" value={sales ? formatCurrency(sales.today_total) : "·"} />
+                      <Metric label={canManage ? "Abiertas" : "Cajas"} value={canManage ? `${open.length}/${regs.length}` : String(regs.length)} />
+                      <Metric label="Personal" value={canManage ? String(staffCount(b.id)) : "Sin datos"} />
+                      <Metric label="Hoy" value={sales ? formatCurrency(sales.today_total) : "Sin datos"} />
                     </div>
                   )}
 
@@ -534,9 +534,9 @@ function BranchDetailModal({
         {tab === "resumen" && (
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-2">
-              <Metric label="Ventas hoy" value={salesToday ? formatCurrency(salesToday.today_total) : "·"} />
-              <Metric label="Tickets hoy" value={salesToday ? String(salesToday.today_count) : "·"} />
-              <Metric label="Ayer" value={salesToday ? formatCurrency(salesToday.yesterday_total) : "·"} />
+              <Metric label="Ventas hoy" value={salesToday ? formatCurrency(salesToday.today_total) : "Sin datos"} />
+              <Metric label="Tickets hoy" value={salesToday ? String(salesToday.today_count) : "Sin datos"} />
+              <Metric label="Ayer" value={salesToday ? formatCurrency(salesToday.yesterday_total) : "Sin datos"} />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 text-sm">

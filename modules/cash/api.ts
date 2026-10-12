@@ -47,7 +47,11 @@ export const cashApi = {
   monitor: async (storeId?: string | null): Promise<MonitorShift[]> => {
     const sb = createClient() as unknown as LooseRpc;
     const { data, error } = await sb.rpc<MonitorShift[]>("cash_monitor", { p_store_id: storeId ?? null });
-    if (error) throw new Error(error.message);
+    if (error) {
+      // Base sin la migración de ADR-051 (deploy: front primero): sin datos.
+      if (/Could not find the function|PGRST202|does not exist/i.test(error.message)) return [];
+      throw new Error(error.message);
+    }
     return (data ?? []).map((r) => ({
       ...r,
       opening_amount: Number(r.opening_amount),

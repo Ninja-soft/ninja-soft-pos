@@ -34,6 +34,7 @@ export function useCashMonitor(storeId: string | null, enabled = true) {
     queryFn: () => cashApi.monitor(storeId),
     enabled,
     refetchInterval: 30_000,
+    retry: false,
   });
 }
 

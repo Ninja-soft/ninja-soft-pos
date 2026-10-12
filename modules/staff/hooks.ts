@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { staffApi, type SetStatusInput } from "./api";
 
 export function useStaffPeople(enabled = true) {
-  return useQuery({ queryKey: ["staff", "people"], queryFn: () => staffApi.people(), enabled, staleTime: 30_000 });
+  return useQuery({ queryKey: ["staff", "people"], queryFn: () => staffApi.people(), enabled, staleTime: 30_000, retry: 1 });
 }
 
 export function useStaffEvents(enabled = true) {

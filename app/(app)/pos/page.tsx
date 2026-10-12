@@ -31,6 +31,7 @@ import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, othe
 import { formatQty } from "@/lib/utils/format";
 import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
+import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
 import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
@@ -534,7 +535,9 @@ function PosPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
-  const hasShift = Boolean(shift);
+  // ADR-051 (H114): el turno de otra persona no cuenta como caja abierta propia.
+  const shiftOwnership = useShiftOwnership(shift);
+  const hasShift = Boolean(shift) && shiftOwnership.usable;
 
   // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
@@ -754,6 +757,10 @@ function PosPageInner() {
   const pinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
   const canCheckout = hasShift && lines.length > 0;
   function startCheckout(tenderId?: string) {
+    if (shiftOwnership.foreign) {
+      toast({ title: "Esta caja la tiene abierta otra persona", description: "Elegí otra caja arriba y abrila a tu nombre.", variant: "error" });
+      return;
+    }
     if (!hasShift) {
       setOpenShiftModal(true);
       return;
@@ -887,6 +894,7 @@ function PosPageInner() {
 
   const banners = (
     <>
+      <ForeignShiftBanner shift={shift} />
       {origins.apptActive && origins.pendingAppt && (
         <ModeBanner
           icon={<CalendarDays size={18} />}

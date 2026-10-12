@@ -47,6 +47,18 @@ export function useResolveTarget(storeId: string | null, registerId: string | nu
   );
 }
 
+/**
+ * ¿Ya se conoce el destino del POS (sucursal, caja, grupo y niveles de
+ * herencia)? Hasta entonces la config efectiva por sucursal/caja puede cambiar.
+ */
+export function usePosTargetReady(): boolean {
+  const ctx = useBranchContext();
+  const register = useCurrentRegister();
+  const { isFetched: gatingFetched } = useGating();
+  const { isFetched: groupsFetched } = useStoreGroupMap();
+  return ctx.ready && register.isFetched && gatingFetched && groupsFetched;
+}
+
 /** Destino del POS: sucursal del POS y caja de este dispositivo. */
 export function usePosResolveTarget(): ResolveTarget {
   const ctx = useBranchContext();

@@ -195,6 +195,19 @@ export function applicableLayers(
     .sort((a, b) => ORDER[a.scope] - ORDER[b.scope]);
 }
 
+/**
+ * ¿Algún override vigente toca este dominio (y campo, si se pasa)? Sin
+ * ninguno, el valor efectivo no depende de la sucursal ni de la caja.
+ */
+export function overridesTouch(overrides: ConfigOverride[], domain: ConfigDomain, field?: string): boolean {
+  return overrides.some(
+    (o) =>
+      !o.deleted_at &&
+      o.domain === domain &&
+      (field === undefined || Object.prototype.hasOwnProperty.call(o.patch ?? {}, field)),
+  );
+}
+
 /** Valor efectivo y origen de cada campo. */
 export function resolveEffective<T extends Record<string, unknown>>(
   domain: ConfigDomain,

@@ -18,6 +18,7 @@ const iconBtn =
 
 export function PosTopBar({
   hasShift,
+  shiftPending = false,
   registerName,
   location,
   onOpenShift,
@@ -31,6 +32,8 @@ export function PosTopBar({
   onResetPreset,
 }: {
   hasShift: boolean;
+  // El turno todavía no llegó: se muestra el último estado conocido, sin acción.
+  shiftPending?: boolean;
   registerName: string | null;
   // Sucursal y caja del dispositivo ("Centro · Caja 1", F17 · H90). Con
   // ubicación el botón de estado sólo dice abierta o cerrada.
@@ -59,9 +62,10 @@ export function PosTopBar({
         {/* Estado de la caja: punto de estado + texto, relleno neutro. */}
         <button
           type="button"
-          onClick={hasShift ? onCloseShift : onOpenShift}
+          onClick={shiftPending ? undefined : hasShift ? onCloseShift : onOpenShift}
+          aria-busy={shiftPending || undefined}
           className="mr-auto flex h-11 min-w-0 items-center gap-2.5 rounded-lg bg-fg-4 pl-3 pr-3.5 text-[13px] transition-colors hover:bg-fg-6 sm:mr-0"
-          title={hasShift ? "Cerrar caja (arqueo)" : "Abrir caja"}
+          title={shiftPending ? "Cargando el estado de la caja" : hasShift ? "Cerrar caja (arqueo)" : "Abrir caja"}
         >
           <span
             aria-hidden

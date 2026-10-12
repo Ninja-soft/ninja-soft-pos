@@ -141,6 +141,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["transferencia"],
   },
+  transferencia_auto_mp: {
+    desc: "Transferencias automáticas con Mercado Pago: mientras la hoja de cobro espera, el POS consulta tu cuenta de Mercado Pago y detecta la transferencia que entra a tu CVU por el monto de la venta (con tolerancia ± en pesos y tiempo de espera configurables). Muestra quién transfirió y cierra la venta sola o le avisa al cajero; si hay dos transferencias iguales o dos cajas esperando el mismo monto, pregunta. Una transferencia nunca se usa dos veces y todo queda auditado.",
+    impact: "Desactivado, el cajero confirma cada transferencia a mano mirando la cuenta y cargando el n° de operación.",
+    minPlan: "Pro",
+    requires: ["transferencia"],
+    needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
+  },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
     impact: "Sin esto MODO no aparece como medio de pago disponible al cobrar.",

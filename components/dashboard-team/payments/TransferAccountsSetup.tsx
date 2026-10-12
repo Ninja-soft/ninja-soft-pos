@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, Star, Trash2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -9,9 +9,10 @@ import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { BankLogo } from "@/components/payments/BankLogo";
 import { cn } from "@/lib/utils/cn";
-import { cbuLabel, formatCbu, transferErrorMessage, type TransferAccount } from "@/lib/payments/transfer";
+import { cbuLabel, formatCbu, isMpCvuAccount, transferErrorMessage, type TransferAccount } from "@/lib/payments/transfer";
 import { useTransferAccounts, useTransferMultiAccount, useTransferMutations } from "@/modules/payments/transfer";
 import { TransferAccountModal } from "./TransferAccountModal";
+import { TransferAutoDetectModal } from "./TransferAutoDetectModal";
 
 // Configuración de la transferencia (ADR-055): cuentas donde se recibe, si el
 // POS muestra la pantalla con los datos al cobrar y si pide el n° de
@@ -30,6 +31,7 @@ export function TransferAccountsSetup({
   const mut = useTransferMutations();
   const [editing, setEditing] = useState<TransferAccount | null | "new">(null);
   const [removing, setRemoving] = useState<TransferAccount | null>(null);
+  const [auto, setAuto] = useState<TransferAccount | null>(null);
   const [upgrade, setUpgrade] = useState(false);
 
   const live = accounts.filter((a) => a.is_active);
@@ -88,6 +90,12 @@ export function TransferAccountsSetup({
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           Cuentas para recibir
         </p>
+        {isFetched && accounts.length > 0 && (
+          <p className="mb-2 text-xs text-muted-foreground">
+            Las cuentas de Mercado Pago (CVU) pueden detectar solas las transferencias que entran: tocá el rayo de la
+            cuenta. Sólo para cuentas de Mercado Pago (CVU).
+          </p>
+        )}
         {isFetched && accounts.length === 0 && (
           <p className="mb-2 text-xs text-muted-foreground">
             Cargá tu cuenta para que el POS muestre tus datos al cobrar. Sin cuentas, la transferencia se registra igual.
@@ -103,6 +111,11 @@ export function TransferAccountsSetup({
                   {a.is_default && (
                     <span className="inline-flex h-5 items-center rounded-md bg-success/10 px-1.5 text-[11px] font-semibold text-success">
                       Por defecto
+                    </span>
+                  )}
+                  {a.auto_detect && isMpCvuAccount(a) && (
+                    <span className="inline-flex h-5 items-center gap-1 rounded-md bg-info/10 px-1.5 text-[11px] font-semibold text-info">
+                      <Zap size={11} aria-hidden /> Automática
                     </span>
                   )}
                   {a.currency === "USD" && (
@@ -132,6 +145,18 @@ export function TransferAccountsSetup({
                     onClick={() => mut.patch.mutate({ id: a.id, patch: { is_default: true } }, { onError: onErr })}
                   >
                     <Star size={15} aria-hidden />
+                  </Button>
+                )}
+                {isMpCvuAccount(a) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    aria-label={`Detección automática de ${a.bank_name}`}
+                    title="Detectar transferencias automáticamente"
+                    onClick={() => setAuto(a)}
+                  >
+                    <Zap size={15} aria-hidden />
                   </Button>
                 )}
                 <Button
@@ -184,6 +209,7 @@ export function TransferAccountsSetup({
         account={editing === "new" ? null : editing}
         isFirst={live.length === 0}
       />
+      <TransferAutoDetectModal account={auto} onOpenChange={(o) => !o && setAuto(null)} />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(o) => !o && setRemoving(null)}

@@ -21,6 +21,15 @@ import type {
 } from "@/lib/purchases/invoices";
 import type { OrderStatus, ReceiptDifferenceReason } from "@/lib/purchases/orders";
 import type { SupplierIvaCondition } from "@/lib/purchases/suppliers";
+import { formatInvoiceNumber } from "@/lib/purchases/invoices";
+import type { ReturnReason } from "@/lib/purchases/returns";
+import type {
+  AllocationDraft,
+  OpenInvoice,
+  PaymentLineDraft,
+  PaymentLineMethod,
+} from "@/lib/purchases/paymentOrders";
+import type { PriceListMapping, rowsToApply } from "@/lib/purchases/priceList";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -190,6 +199,9 @@ export interface ReceiptRow {
   costing_applied_at: string | null;
   dispatch_number: string | null;
   invoice_id: string | null;
+  status: "posted" | "voided";
+  void_reason: string | null;
+  voided_at: string | null;
   created_at: string;
 }
 
@@ -216,6 +228,7 @@ export interface ReceiptItem {
   expires_on: string | null;
   notes: string | null;
   sort: number;
+  qty_returned: number;
 }
 
 export interface OrderDetail extends OrderRow {
@@ -328,7 +341,7 @@ export interface PaymentRow {
   number: number;
   supplier_id: string;
   paid_date: string;
-  method: PaymentMethod;
+  method: PaymentMethod | "mixto";
   reference: string | null;
   currency: string;
   fx_rate: number;
@@ -339,6 +352,7 @@ export interface PaymentRow {
   notes: string | null;
   status: "posted" | "voided";
   void_reason: string | null;
+  kind: "simple" | "order";
   created_at: string;
 }
 
@@ -477,7 +491,7 @@ const ORDER_NUM: (keyof OrderRow)[] = [
 ];
 
 const RECEIPT_COLS =
-  "id, number, order_id, supplier_id, store_id, received_date, remito_number, currency, fx_rate, notes, total_units, total_cost, landed_total, costing, costing_applied_at, dispatch_number, invoice_id, created_at";
+  "id, number, order_id, supplier_id, store_id, received_date, remito_number, currency, fx_rate, notes, total_units, total_cost, landed_total, costing, costing_applied_at, dispatch_number, invoice_id, status, void_reason, voided_at, created_at";
 const RECEIPT_NUM: (keyof ReceiptRow)[] = ["fx_rate", "total_units", "total_cost", "landed_total"];
 
 const INVOICE_COLS =
@@ -494,7 +508,7 @@ const INVOICE_NUM: (keyof InvoiceRow)[] = [
 ];
 
 const PAYMENT_COLS =
-  "id, number, supplier_id, paid_date, method, reference, currency, fx_rate, amount, withholdings, withholdings_total, net_paid, notes, status, void_reason, created_at";
+  "id, number, supplier_id, paid_date, method, reference, currency, fx_rate, amount, withholdings, withholdings_total, net_paid, notes, status, void_reason, kind, created_at";
 const PAYMENT_NUM: (keyof PaymentRow)[] = ["fx_rate", "amount", "withholdings_total", "net_paid"];
 
 const blankToNull = <T extends Record<string, unknown>>(o: T): T => {
@@ -725,7 +739,7 @@ export const purchasesApi = {
       from("goods_receipts").select(RECEIPT_COLS).eq("id", id).single(),
       from("goods_receipt_items")
         .select(
-          "id, order_item_id, product_id, variant_id, product_name, variant_label, sku, unit, qty_expected, qty, difference_reason, unit_cost, unit_cost_ars, landed_unit_cost, valued_unit_cost, tax_rate, weight_kg, volume_m3, lot_code, expires_on, notes, sort",
+          "id, order_item_id, product_id, variant_id, product_name, variant_label, sku, unit, qty_expected, qty, difference_reason, unit_cost, unit_cost_ars, landed_unit_cost, valued_unit_cost, tax_rate, weight_kg, volume_m3, lot_code, expires_on, notes, sort, qty_returned",
         )
         .eq("receipt_id", id)
         .order("sort"),
@@ -746,6 +760,7 @@ export const purchasesApi = {
           "tax_rate",
           "weight_kg",
           "volume_m3",
+          "qty_returned",
         ]),
       ),
       events: evs,
@@ -847,5 +862,348 @@ export const purchasesApi = {
       ...r,
       amount_ars: Number(r.amount_ars),
     }));
+  },
+};
+
+// ── Compras v2 (ADR-059) ──────────────────────────────────────────────────
+// Devoluciones a proveedor, anulación de recepciones, órdenes de pago con
+// imputación, lotes con trazabilidad y listas de precios del proveedor.
+
+export interface ReturnRow {
+  id: string;
+  number: number;
+  supplier_id: string;
+  store_id: string;
+  receipt_id: string | null;
+  return_date: string;
+  reason: ReturnReason;
+  notes: string | null;
+  total_units: number;
+  total_cost: number;
+  credit_invoice_id: string | null;
+  created_at: string;
+}
+
+export interface ReturnItem {
+  id: string;
+  receipt_item_id: string | null;
+  lot_id: string | null;
+  product_id: string;
+  variant_id: string | null;
+  product_name: string;
+  variant_label: string | null;
+  sku: string | null;
+  unit: string;
+  qty: number;
+  unit_cost_ars: number;
+  avg_before: number | null;
+  avg_after: number | null;
+  notes: string | null;
+}
+
+export interface ReturnDetail extends ReturnRow {
+  items: ReturnItem[];
+  events: PurchaseEvent[];
+}
+
+export interface ReturnInput {
+  receipt_id?: string | null;
+  supplier_id?: string | null;
+  store_id?: string | null;
+  return_date?: string | null;
+  reason: ReturnReason;
+  notes?: string | null;
+  items: Array<{
+    receipt_item_id?: string | null;
+    product_id?: string | null;
+    variant_id?: string | null;
+    lot_id?: string | null;
+    qty: number;
+    unit_cost?: number | null;
+    notes?: string | null;
+  }>;
+  credit_note?: Omit<InvoiceSaveInput, "supplier_id" | "kind"> | null;
+}
+
+export interface PaymentLineRow {
+  id: string;
+  method: PaymentLineMethod;
+  amount: number;
+  reference: string | null;
+  cash_shift_id: string | null;
+  treasury_account_id: string | null;
+  cheque_id: string | null;
+  sort: number;
+}
+
+export interface PaymentAllocationRow {
+  id: string;
+  invoice_id: string;
+  amount: number;
+  released_at: string | null;
+}
+
+export interface PaymentOrderDetail extends PaymentRow {
+  lines: PaymentLineRow[];
+  allocations: PaymentAllocationRow[];
+  events: PurchaseEvent[];
+}
+
+export interface PaymentOrderInput {
+  supplier_id: string;
+  paid_date: string;
+  notes?: string | null;
+  lines: PaymentLineDraft[];
+  withholdings: WithholdingLine[];
+  allocations: AllocationDraft[];
+}
+
+export interface InvoiceOpenRow extends OpenInvoice {
+  supplier_id: string;
+  kind: InvoiceKind;
+  letter: InvoiceLetter;
+  point_of_sale: number;
+  number: number;
+  currency: string;
+  allocated_ars: number;
+}
+
+export interface LotRow {
+  id: string;
+  product_id: string;
+  variant_id: string | null;
+  store_id: string | null;
+  receipt_item_id: string | null;
+  lot_code: string | null;
+  dispatch_number: string | null;
+  expires_on: string | null;
+  qty_received: number;
+  qty_available: number;
+  unit_cost: number | null;
+  voided_at: string | null;
+  created_at: string;
+  product_name: string;
+  product_sku: string | null;
+}
+
+export interface LotSaleRow {
+  lot_id: string;
+  sale_id: string;
+  sale_number: number | null;
+  sold_at: string;
+  customer_id: string | null;
+  sale_status: string;
+  store_id: string | null;
+  qty: number;
+}
+
+export interface PriceListApplyInput {
+  supplierId: string;
+  rows: ReturnType<typeof rowsToApply>;
+  options: {
+    file_name?: string | null;
+    currency: string;
+    fx_rate: number;
+    update_replacement: boolean;
+    link_new: boolean;
+    mapping?: PriceListMapping | null;
+  };
+}
+
+export interface CatalogLookupRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+}
+
+const RETURN_COLS =
+  "id, number, supplier_id, store_id, receipt_id, return_date, reason, notes, total_units, total_cost, credit_invoice_id, created_at";
+
+/** Texto seguro para un filtro .or() de PostgREST. */
+const orSafe = (s: string) => s.replace(/[%,()*]/g, "");
+
+export const purchasesV2Api = {
+  // Devoluciones
+  returns: async (
+    f: DocFilters & { storeId?: string | null; receiptId?: string | null } = {},
+  ): Promise<ReturnRow[]> => {
+    let q = from("purchase_returns")
+      .select(RETURN_COLS)
+      .eq("tenant_id", await tenantId())
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (f.supplierId) q = q.eq("supplier_id", f.supplierId);
+    if (f.storeId) q = q.eq("store_id", f.storeId);
+    if (f.receiptId) q = q.eq("receipt_id", f.receiptId);
+    if (f.from) q = q.gte("return_date", f.from);
+    if (f.to) q = q.lte("return_date", f.to);
+    const { data, error } = await q;
+    if (error) throw error;
+    return ((data ?? []) as unknown as ReturnRow[]).map((r) => num(r, ["total_units", "total_cost"]));
+  },
+
+  returnDetail: async (id: string): Promise<ReturnDetail> => {
+    const [r, items, evs] = await Promise.all([
+      from("purchase_returns").select(RETURN_COLS).eq("tenant_id", await tenantId()).eq("id", id).single(),
+      from("purchase_return_items")
+        .select(
+          "id, receipt_item_id, lot_id, product_id, variant_id, product_name, variant_label, sku, unit, qty, unit_cost_ars, avg_before, avg_after, notes",
+        )
+        .eq("return_id", id)
+        .order("sort"),
+      events(id),
+    ]);
+    if (r.error) throw r.error;
+    if (items.error) throw items.error;
+    return {
+      ...num(r.data as unknown as ReturnRow, ["total_units", "total_cost"]),
+      items: ((items.data ?? []) as unknown as ReturnItem[]).map((i) =>
+        num(i, ["qty", "unit_cost_ars", "avg_before", "avg_after"]),
+      ),
+      events: evs,
+    };
+  },
+
+  createReturn: (v: ReturnInput): Promise<string> => rpc<string>("purchase_return_create", { p: v }),
+
+  linkReturnCredit: (returnId: string, invoiceId: string | null) =>
+    rpc<void>("purchase_return_link_credit_note", { p_return_id: returnId, p_invoice_id: invoiceId }),
+
+  voidReceipt: (id: string, reason: string) => rpc<void>("purchase_receipt_void", { p_id: id, p_reason: reason }),
+
+  /** Stock por sucursal de varios productos (clave producto:variante). */
+  storeStock: async (storeId: string, productIds: string[]): Promise<Map<string, number>> => {
+    const out = new Map<string, number>();
+    if (productIds.length === 0) return out;
+    const { data, error } = await from("product_stock")
+      .select("product_id, variant_id, qty")
+      .eq("tenant_id", await tenantId())
+      .eq("store_id", storeId)
+      .in("product_id", productIds);
+    if (error) throw error;
+    for (const r of (data ?? []) as unknown as Array<{ product_id: string; variant_id: string | null; qty: number }>) {
+      out.set(`${r.product_id}:${r.variant_id ?? ""}`, Number(r.qty));
+    }
+    return out;
+  },
+
+  // Órdenes de pago
+  invoiceOpen: async (supplierId: string): Promise<InvoiceOpenRow[]> => {
+    const { data, error } = await from("supplier_invoice_open")
+      .select(
+        "invoice_id, supplier_id, kind, letter, point_of_sale, number, issue_date, due_date, currency, amount_ars, allocated_ars, open_ars",
+      )
+      .eq("tenant_id", await tenantId())
+      .eq("supplier_id", supplierId)
+      .order("due_date")
+      .limit(1000);
+    if (error) throw error;
+    return ((data ?? []) as unknown as Array<Omit<InvoiceOpenRow, "label">>).map((r) => ({
+      ...num(r, ["amount_ars", "allocated_ars", "open_ars", "point_of_sale", "number"]),
+      label: `${r.kind === "debit_note" ? "ND" : "FC"} ${formatInvoiceNumber(r.letter, Number(r.point_of_sale), Number(r.number))}`,
+    }));
+  },
+
+  /** Imputaciones vigentes (para el aging). */
+  allocations: async (): Promise<Array<{ invoice_id: string; amount: number }>> => {
+    const { data, error } = await from("supplier_payment_allocations")
+      .select("invoice_id, amount")
+      .eq("tenant_id", await tenantId())
+      .is("released_at", null)
+      .limit(10000);
+    if (error) throw error;
+    return ((data ?? []) as unknown as Array<{ invoice_id: string; amount: number }>).map((a) => ({
+      invoice_id: a.invoice_id,
+      amount: Number(a.amount),
+    }));
+  },
+
+  createPaymentOrder: (v: PaymentOrderInput): Promise<string> =>
+    rpc<string>("supplier_payment_order_create", { p: v }),
+
+  paymentOrder: async (id: string): Promise<PaymentOrderDetail> => {
+    const [p, lines, allocs, evs] = await Promise.all([
+      from("supplier_payments").select(PAYMENT_COLS).eq("tenant_id", await tenantId()).eq("id", id).single(),
+      from("supplier_payment_lines")
+        .select("id, method, amount, reference, cash_shift_id, treasury_account_id, cheque_id, sort")
+        .eq("payment_id", id)
+        .order("sort"),
+      from("supplier_payment_allocations").select("id, invoice_id, amount, released_at").eq("payment_id", id),
+      events(id),
+    ]);
+    if (p.error) throw p.error;
+    if (lines.error) throw lines.error;
+    if (allocs.error) throw allocs.error;
+    return {
+      ...num(p.data as unknown as PaymentRow, PAYMENT_NUM),
+      lines: ((lines.data ?? []) as unknown as PaymentLineRow[]).map((l) => num(l, ["amount"])),
+      allocations: ((allocs.data ?? []) as unknown as PaymentAllocationRow[]).map((a) => num(a, ["amount"])),
+      events: evs,
+    };
+  },
+
+  // Lotes
+  lots: async (
+    f: { storeId?: string | null; productId?: string | null; search?: string | null; onlyAvailable?: boolean } = {},
+  ): Promise<LotRow[]> => {
+    let q = from("product_lots")
+      .select(
+        "id, product_id, variant_id, store_id, receipt_item_id, lot_code, dispatch_number, expires_on, qty_received, qty_available, unit_cost, voided_at, created_at, products(name, sku)",
+      )
+      .eq("tenant_id", await tenantId())
+      .order("expires_on", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (f.storeId) q = q.eq("store_id", f.storeId);
+    if (f.productId) q = q.eq("product_id", f.productId);
+    if (f.onlyAvailable) q = q.gt("qty_available", 0).is("voided_at", null);
+    const term = orSafe((f.search ?? "").trim());
+    if (term) q = q.or(`lot_code.ilike.%${term}%,dispatch_number.ilike.%${term.toUpperCase()}%`);
+    const { data, error } = await q;
+    if (error) throw error;
+    type Raw = Omit<LotRow, "product_name" | "product_sku"> & {
+      products: { name: string; sku: string | null } | null;
+    };
+    return ((data ?? []) as unknown as Raw[]).map(({ products: p, ...r }) => ({
+      ...num(r, ["qty_received", "qty_available", "unit_cost"]),
+      product_name: p?.name ?? "",
+      product_sku: p?.sku ?? null,
+    }));
+  },
+
+  lotSales: async (lotId: string): Promise<LotSaleRow[]> => {
+    const { data, error } = await from("lot_sales")
+      .select("lot_id, sale_id, sale_number, sold_at, customer_id, sale_status, store_id, qty")
+      .eq("tenant_id", await tenantId())
+      .eq("lot_id", lotId)
+      .order("sold_at", { ascending: false })
+      .limit(1000);
+    if (error) throw error;
+    return ((data ?? []) as unknown as LotSaleRow[]).map((r) => num(r, ["qty", "sale_number"]));
+  },
+
+  // Listas de precios del proveedor
+  catalogLookup: async (): Promise<CatalogLookupRow[]> => {
+    const { data, error } = await from("products")
+      .select("id, name, sku, barcode")
+      .eq("tenant_id", await tenantId())
+      .is("deleted_at", null)
+      .limit(20000);
+    if (error) throw error;
+    return (data ?? []) as unknown as CatalogLookupRow[];
+  },
+
+  applyPriceList: (v: PriceListApplyInput): Promise<string> =>
+    rpc<string>("supplier_price_list_apply", { p_supplier_id: v.supplierId, p_rows: v.rows, p_options: v.options }),
+
+  supplierMapping: async (supplierId: string): Promise<PriceListMapping | null> => {
+    const { data, error } = await from("suppliers")
+      .select("price_list_mapping")
+      .eq("tenant_id", await tenantId())
+      .eq("id", supplierId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as { price_list_mapping?: PriceListMapping | null } | null)?.price_list_mapping ?? null;
   },
 };

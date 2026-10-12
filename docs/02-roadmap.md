@@ -29,7 +29,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -409,6 +409,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [x] Habilitación y **configuración por tenant** (`tenant_payment_methods`: enabled, recargo %, sandbox; RLS owner/manager). **Secretos** en `payment_secrets` (RLS deny: solo service_role/Edge Functions). UI `PaymentMethodsCard` en `/dashboard-team`.
   - [x] **UI de cobro abstracta** en el POS: `PaymentModal` lee `tenant_payment_methods.enabled` y muestra solo los medios del tenant (fallback a todos si no hay config). Selector de planes activos para débito/crédito con recargo. Recargo global del medio si `surcharge_pct > 0`. Hook `useEnabledPaymentMethods()`.
   - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
+  - [~] **Detección automática de transferencias en un CVU de Mercado Pago** (feature `transferencia_auto_mp`, Pro): mientras la pantalla de transferencia espera, el servidor busca la transferencia recibida en Mercado Pago y la empareja por monto (± tolerancia) y ventana de tiempo, sin reusar un movimiento y preguntando al cajero si hay más de una opción; avisa o cierra la venta sola. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, adenda). Pendiente: validar con una cuenta real que `payments/search` informa las transferencias entrantes a CVU ("Probar detección"), vincular la venta al watch al confirmar, override por sucursal y caja, y barrido de watches vencidos.*
   - [x] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado. ✓
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
@@ -456,6 +457,18 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 
 - [~] **H21f · Cobros en espera.** *Integrado en código (2026-10-12, rama `feat/cobros-en-espera`):* compartir el QR o link (sistema, WhatsApp, email del servidor con el diseño del negocio, copiar, SMS) y "Dejar en espera": la venta queda en `pending_charges` y se registra sola del lado del servidor al acreditarse (trigger sobre `mp_payment_intents`, idempotente), con aviso en el POS (imprimir ticket o factura) y en la campana. Pestaña propia en el POS y en Operación (filtros, sucursal, detalle con línea de tiempo, cancelar, editar en el POS, reenviar, extender, regenerar, reintentar). Cierre de caja con decisión obligatoria (cancelar o pasar a la próxima apertura). Feature `cobros_en_espera` (Pro+). **Pasos:** aplicar `20261014100000_cobros_en_espera`, deploy de `pending_charge_share` y `pending_charges_sync` (y de las Edges de cobro tocadas), probar en sandbox con Mercado Pago (link) y Pagos360 (sin webhook). **Pendiente:** Realtime en vez de sondeo, factura electrónica desde el aviso (F3), "visto por el cliente" (los proveedores no lo informan).
 - [~] **H21g · QR más rápido.** Prechecks en una ronda y intent en paralelo con el proveedor en `mp_qr`, `mp_create_qr`, `pagos360` y `modo_create_qr` (token de MODO cacheado), planes y modo del medio pasados por la hoja (sin dos consultas antes de pedir el QR), precalentado de Edges al abrir la hoja y link directo cuando MP no tiene caja QR. Tiempos por etapa en el log y `Server-Timing`. **Pendiente:** medir antes y después en producción con esos logs; mismo patrón en `mobbex_create_qr`, `payway`, `getnet`, `nave`, `gocuotas` y `directo`.
+
+#### F8 · Devolución de dinero por el medio original
+
+- [ ] **H21h · Reintegro por Mercado Pago al hacer una devolución.** *(pedido de Lucas, 2026-10-12)* Si la venta se cobró con Mercado Pago (QR, link o Point), al devolver se puede reintegrar el dinero **al mismo medio que usó el cliente** (tarjeta o dinero en cuenta) por la API de reembolsos de Mercado Pago, además de efectivo o vale como hoy.
+  - [ ] **Activable por el dueño** en Configuración → Medios de pago → Mercado Pago ("Permitir devolver el dinero por Mercado Pago"), apagado por defecto. Feature de plan con gating server-side (checklist de features de CLAUDE.md).
+  - [ ] En el wizard de devolución (`ReturnModal`) aparece "Devolver a la tarjeta / cuenta de Mercado Pago" sólo si el pago original fue por MP, está aprobado y dentro del plazo que permite MP. Reintegro **total o parcial** (por el importe de los ítems devueltos), nunca mayor a lo cobrado por ese pago menos lo ya reintegrado.
+  - [ ] Ejecución en una Edge Function (token del negocio, nunca en el front): llamada idempotente al reembolso, guarda el id y estado del refund, y queda en `audit_logs`. La devolución en el sistema (`return_sale_v2`) se registra con medio "Mercado Pago" y referencia al refund.
+  - [ ] Permiso por rol (el cajero puede necesitar autorización del encargado o PIN de supervisor), motivo obligatorio y comprobante de devolución con el dato del reintegro.
+  - [ ] Errores honestos: saldo insuficiente en la cuenta MP, plazo vencido, pago en disputa o ya reintegrado. En esos casos se ofrece efectivo o vale.
+  - [ ] Conciliación: el reintegro aparece en el detalle del pago, en el historial del cliente (H31b) y en la conciliación de Mercado Pago.
+  - [ ] Después: mismo patrón para Payway y otros medios con API de devolución.
+  - [ ] *Criterio:* una venta cobrada con QR de MP se devuelve parcialmente desde el wizard, el cliente ve el reintegro en su tarjeta o cuenta, y la devolución queda con el id del refund, auditada y conciliada.
 
 ### F10 — Hardware y mostrador PRO
 
@@ -579,6 +592,17 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [x] Reglas de datos obligatorios del cliente: documento, IVA, teléfono, email, domicilio, nacimiento. Configurable por el dueño en Operación del POS (`pos_settings.customer_required`); se exige en la ficha del cliente (alta/edición) con marca " *" y bloqueo de guardado. Se agregó `customers.birth_date` (fecha de nacimiento). Default: nada obligatorio salvo el nombre.
   - [x] **Escaneo de DNI argentino para alta rápida de cliente** *(agregado 2026-06-06; hecho 2026-06-08, PR #263)*: lee el código **PDF417** del frente del DNI (scanner 2D USB tipo teclado vía `useScanner`, cámara con `BarcodeDetector` cuando soporta `pdf417`, o pegado manual) y parsea **offline** los campos separados por `@` (apellido, nombre, sexo, N° de DNI, fecha de nacimiento) con `parseDni` (`lib/customers/dniParse.ts`, +16 tests) para autocompletar la ficha del cliente en alta/edición (`CustomerFormModal`) y el alta rápida del selector del POS (`createQuick`). Sin servicios ni registros gubernamentales — el dato vive en el propio código del documento. Componente `DniScanModal` con **validación visual** de los datos parseados antes de guardar (no autocompleta sin confirmación); degrada honestamente si el navegador no lee `pdf417` por cámara.
   - [x] *Criterio:* una venta fiada genera deuda con vencimiento y aparece en cuentas por cobrar. ✓
+
+- [ ] **H31b · Historial del cliente 360 PRO.** *(pedido de Lucas, 2026-10-12)* Una ficha de cliente robusta y profesional para ver **todo** lo que pasó con ese cliente en un solo lugar. Hoy el historial (`CustomerHistoryModal`) muestra vale, compras y devoluciones; esto lo lleva a una vista completa, en página propia (no modal), accesible desde /clientes, desde el selector del POS y desde cada venta.
+  - [ ] **Línea de tiempo unificada** de todos los movimientos, con filtros por tipo, fecha, sucursal y medio: ventas, devoluciones y cambios, notas de crédito, cobros de cuenta corriente, cargos y punitorios, ajustes, vales y saldo a favor, garantías, cobros en espera, turnos y reservas, señas, gift cards y puntos (cuando existan), y cambios de datos de la ficha (auditados).
+  - [ ] **Cuenta corriente contable (Debe / Haber / Saldo)**: libro mayor del cliente con saldo acumulado por fila, saldo inicial del período, totales del período, aging y próximos vencimientos. Imputación visible de cada cobro contra sus cargos.
+  - [ ] **Comprobantes**: listado de todos los comprobantes del cliente (tickets, facturas A/B/C cuando haya AFIP, notas de crédito y débito, recibos de cobro, remitos) con ver, reimprimir, descargar PDF y reenviar por email o WhatsApp.
+  - [ ] **Detalle de cada pago**: medio, procesadora, tarjeta, cuotas, autorización y cupón, y datos de la pasarela cuando el medio está conectado.
+  - [ ] **Datos y perfil**: ficha completa (documento, condición IVA, contactos, domicilios, grupo, lista de precios, límite y condiciones de crédito), notas internas, etiquetas y adjuntos.
+  - [ ] **Indicadores**: total comprado, ticket promedio, frecuencia, última compra, productos y categorías favoritos, medios de pago preferidos, deuda actual y vencida, devoluciones y comportamiento de pago.
+  - [ ] **Exportar** el estado de cuenta y la línea de tiempo en XLSX (TX-2) y PDF con la marca del negocio; enviar el estado de cuenta al cliente.
+  - [ ] **Gating y seguridad**: todo server-side con RLS por tenant y permisos por rol (el cajero ve lo justo; deuda y datos sensibles según permiso). Clasificar la feature (BASE para el historial básico; OPTIONAL por plan para la vista contable completa, indicadores y exportes) y cumplir el checklist de features de CLAUDE.md.
+  - [ ] *Criterio:* desde la ficha de un cliente se ve en una sola pantalla su línea de tiempo completa, su cuenta Debe / Haber con saldo correcto contra cuentas por cobrar, y se puede reimprimir o reenviar cualquier comprobante; exportar el estado de cuenta da un XLSX/PDF que cuadra con el saldo.
 
 - [ ] **H32 — Pedidos de salón, reservas y despacho.**
   - [ ] Pedidos pendientes de facturar: vendedor arma pedido y cajera lo cobra.
@@ -1119,6 +1143,13 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
   - [x] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
 
+- [x] **H116b: PIN autenticador (rotativo, de un uso y app).** *(2026-10-12, ADR-060, `feat/pin-autenticador`, migración `20261023100000` sin aplicar)* · *OPTIONAL `pin_autenticador` (nueva, Pro). Requiere H116.*
+  - [x] Modos por supervisor: fijo, rotativo (HMAC-SHA256 con pasos de N horas alineados a la hora argentina, anterior válido 5 minutos), de un uso (aleatorio, 1 a 30 minutos, hasheado, opcionalmente por acción y monto) y app TOTP estándar (QR `otpauth://`, ±1 paso, sin repetir).
+  - [x] Mis PINes: código con cuenta regresiva, Copiar y WhatsApp, generar y revocar PIN de un uso, vincular la app, historial de usos.
+  - [x] `supervisor_authorize` acepta todos los modos según la política de la acción; bloqueo por supervisor y por quien pide, tope por minuto, auditoría con el modo.
+  - [x] Política del dueño: modos del negocio, modo por defecto, período del rotativo, duración máxima y modos por acción.
+  - [ ] Pendiente: notificar al supervisor cuando se usa su PIN (push o WhatsApp) y cifrado en reposo de los secretos con Vault.
+
 - [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
   - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
   - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
@@ -1157,8 +1188,20 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente.
   - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización.
   - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock.
-  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador).
+  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(ADR-059: import XLSX de la lista del proveedor con mapeo guardado, vista previa de la variación y costo de reposición; falta la versión de lista de venta en borrador)*
   - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente).
+
+  - [x] Modo simple: asistente de actualización masiva en 3 pasos (qué: todos, categoría, marca, proveedor, tag; cuánto: % o monto con redondeo; cuándo: ahora o fecha) con vista previa y deshacer. *(ADR-058, `price_bulk_*`)*
+  - [ ] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes. *(Desde y hasta hecho, al vencer se usa la lista que sigue, ADR-058; faltan franja, días y alerta.)*
+  - [ ] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante. *(Precios programados por fila y lotes masivos con aprobación del dueño, antes y después y deshacer, ADR-058; faltan versiones completas.)*
+  - [x] Asignación y precedencia explicable: cliente → grupo de clientes → condición de pago → sucursal → canal → base (`price_list_assignments`; `customers.group_id` ya existe). *(ADR-058: elegida en el POS → cliente → grupo → sucursal → grupo de sucursales → mostrador; la condición es un recargo sobre la lista.)*
+  - [ ] Listas derivadas: de otra lista o de **costo** (reposición, promedio ponderado o último) con **markup** o **margen objetivo** (mostrando ambos), piso, techo y margen mínimo con alerta; reglas por categoría, marca, proveedor y tag (`products.tags` ya existe). *(Derivadas, sobre costo, piso y margen mínimo hechos, ADR-058; faltan techo y reglas por alcance dentro de la lista: hoy el alcance está en la actualización masiva.)*
+  - [ ] Redondeo por múltiplo, terminación psicológica (,99 / 9 / 90) y por tramo de precio. *(Múltiplo y terminación hechos, ADR-058; falta por tramo.)*
+  - [x] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente. *(ADR-058, tasa mensual; TNA se carga como % fijo.)*
+  - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización. *(Lista en moneda con cotización hecha, ADR-058; factura en moneda con F3.)*
+  - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock. *(Escalas por cantidad hechas, ADR-058.)*
+  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(Índice y dólar con tope hechos, ADR-058; falta el import del proveedor con mapeo.)*
+  - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente). *(Cola por sucursal hecha, ADR-058; faltan los flejes.)*
   - [ ] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió.
 
 - [ ] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.* · *v1 en `feat/compras-proveedores` (ADR-050, migraciones `20261016100000` a `20261016100300` sin aplicar).*
@@ -1167,7 +1210,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [x] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo. *(borrador → enviada → recibida en parte → recibida / cancelada; sugerencia por sucursal; impresión y envío por WhatsApp o mail)*
   - [x] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
   - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías). *(v1: todo como líneas libres y vínculo con recepciones; falta control de tres vías automático)*
-  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder; faltan órdenes de pago con aplicación y anticipos)*
+  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder. v2 (ADR-059): órdenes de pago con imputación, pago parcial y a cuenta, efectivo de la caja propia, banco y cheques, retenciones con certificado e impresión; falta el cálculo como agente, H106)*
+  - [x] Devoluciones al proveedor con salida de stock por sucursal, lote, recálculo del promedio y NC vinculada; anulación de recepciones con reversa de stock, costos y OC. *(ADR-059, `feat/compras-v2`)*
   - [x] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
   - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109). *(v1: moneda y TC por operación en modo profesional; falta diferencia de cambio)*
   - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente. *(cubierto por `tests/integration/rls-compras.test.ts`; falta validar en producción)*
@@ -1178,7 +1222,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios.
   - [ ] Prorrateo configurable por concepto (valor, peso, volumen o cantidad) y costo unitario puesto en depósito por producto y lote; crédito fiscal separado del costo.
   - [ ] Tipo de cambio por operación (oficializado del despacho y del pago) y diferencia de cambio.
-  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias.
+  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias. *(ADR-059: consumo por lote FEFO/FIFO en la venta y trazabilidad lote y despacho → ventas; falta imprimirlo en la factura, F3/H107)*
   - [ ] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote.
 
 - [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.*
@@ -1238,6 +1282,12 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 - [ ] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
   - [~] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(en curso: `feat/conciliacion-tarjetas`)*
+  - [~] Import de liquidaciones: **Mercado Pago por API, automático todos los días** (`payments/search`, cada credencial del negocio y de las sucursales); **Payway, Getnet, Fiserv/Posnet, Nave u otro por XLSX o CSV** con mapeo de columnas. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, feature `conciliacion_procesadores`, Business). Pendiente: MODO, Mobbex, Pagos360 y Directo con preset; presets de columnas guardados; Payway por API si la publican.*
+  - [~] Matching automático por id del procesador o intent, **n° de comercio + lote + cupón**, autorización + últimos 4, y monto + día con pareja única; estados Conciliado, Cobro sin venta, Venta sin cobro, Diferencia de monto, Revisado, y Acreditado / Pendiente de acreditación. *Hecho (ADR-061). Pendiente: contracargos como estado propio.*
+  - [~] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas separadas del bruto por cobro (Mercado Pago por `charges_details`; archivos por columna). *Hecho el detalle por cobro (ADR-061). Pendiente: asiento (H109) y registro para H106.*
+  - [x] Detalle de la venta con los cobros y los datos del procesador (comisiones, neto, acreditación, tarjeta, pagador) traídos por API con la credencial del cobro. *(ADR-061)*
+
+  - [x] **Integración con NubCeo** (conciliador externo): envío de cada venta con sus cobros, ritmo y ventana, solo simular, mapeo de campos y medios, monitor de envíos, anulaciones y devoluciones, e importación de los asientos contables de NubCeo (API o CSV). *(2026-10-12, ADR-062, `feat/nubceo`, migraciones `20261025100000` y `20261025100100` sin aplicar, Edge `nubceo_sync` sin desplegar)* · *OPTIONAL `integracion_nubceo` (nueva, Business, también add-on).* Ver [`30-nubceo.md`](./30-nubceo.md).
   - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
   - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
   - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.
@@ -1246,7 +1296,7 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] BIN de tarjeta → banco y medio (opcional).
   - [ ] *Criterio:* el dueño sube la liquidación de Prisma de Norte y ve qué cupones se acreditaron, cuáles faltan y cuánto se llevó de comisión y retenciones.
 
-- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.*
+- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.* · *Básica en `feat/compras-v2` (ADR-059, requiere `compras`): cuentas de caja general y bancos, movimientos, transferencias, conciliación manual, cheques propios y de terceros y flujo de fondos proyectado.*
   - [ ] Caja fuerte por sucursal, retiros del cajón (por límite con motivo), depósitos al banco y transferencias entre sucursales, con comprobante adjunto.
   - [ ] Rendiciones por medio de pago con estados (pendiente de aprobación → entregado) y fondo fijo de cambio.
   - [ ] Saldo teórico vs. contado por cuenta (cajero, caja fuerte, banco) y asiento (H109).

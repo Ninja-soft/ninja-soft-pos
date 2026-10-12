@@ -784,7 +784,7 @@ Migraciones `20261016100000` (features `compras` y `compras_importacion`), `2026
 - [x] `suppliers` (CUIT único por negocio entre los vigentes, check `cuit_is_valid`, CBU 22 dígitos, alias, baja lógica) y `supplier_products` (único por proveedor, producto y variante vigentes). Escritura por tabla: owner/manager y feature `compras` (`purchase_can_write()`); auditoría con `write_audit_log`.
 - [x] `purchase_orders` (`number` correlativo, estados `draft → sent → partially_received → received / cancelled`, moneda y TC, descuento global, totales) y `purchase_order_items` (`discounts numeric[]` en cascada, `line_net`). RPC `purchase_order_save | _send | _reopen | _cancel | _close`.
 - [x] `goods_receipts` (`number`, OC opcional, sucursal, remito, moneda y TC, `costing` jsonb, `landed_total`, `dispatch_number`, `invoice_id`) y `goods_receipt_items` (esperado, recibido, motivo de diferencia, costo en moneda, en pesos, puesto en depósito y `valued_unit_cost`, peso, volumen, lote, vencimiento). RPC `purchase_receive` (stock + `stock_movements` `purchase` con `store_id`, último costo, promedio ponderado, `supplier_products`) y `purchase_apply_costing` (`compras_importacion`).
-- [x] `product_lots` (lote de ingreso con n° de despacho, vencimiento y costo). Sin consumo por lote todavía.
+- [x] `product_lots` (lote de ingreso con n° de despacho, vencimiento y costo). Consumo por lote desde ADR-059 (§8.13).
 - [x] `purchase_events` (timeline de órdenes, recepciones, comprobantes y pagos) + `audit_logs` en cada RPC.
 - [x] `supplier_invoices` (factura, ND, NC; letra, PV y número únicos entre vigentes; `vat_lines` y `other_taxes` jsonb; anulación con motivo) y `supplier_payments` (`number`, medio, referencia, retenciones jsonb, `amount = net_paid + withholdings_total`). RPC `supplier_invoice_save | _void`, `supplier_payment_create | _void`.
 - [x] Vistas `supplier_account_entries` y `supplier_balances` (`security_invoker`): saldo en pesos al TC de cada documento.
@@ -819,7 +819,7 @@ Migración `20261018400000_transferencias_cuentas`.
 
 ---
 
-## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
+## 8.12 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
 
 Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja` y `20261017130000_monitor_cajas_auditoria`.
 
@@ -829,7 +829,7 @@ Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_po
 - [x] Guardas por trigger: `cash_shifts_guard`, `cash_movements_guard`, `sales_supervisor`, `sale_returns_supervisor`. Policy RESTRICTIVE `audit_logs_role_scope`.
 - [x] Lecturas por RPC: `cash_monitor`, `owner_dashboard_stats`, `audit_log_search`, `audit_log_facets`, `staff_people`, `my_staff_status`, `supervisor_list`, `supervisor_pin_status`.
 
-## 8.11 Extensión F8: terminal integrada (ADR-053)
+## 8.13 Extensión F8: terminal integrada (ADR-053)
 
 Migración `20261018100000_terminal_integrada` (no aplicada).
 
@@ -838,7 +838,7 @@ Migración `20261018100000_terminal_integrada` (no aplicada).
 - [x] `terminal_transactions(tenant_id, terminal_id, store_id, cash_register_id, op sale|void|refund|close_batch|test, status approved|declined|timeout|cancelled|error, amount, installments, adapter, simulated, result jsonb, raw, client_ref, payment_id unique, created_by, created_at)`. RLS sólo lectura (`internal_scope()` o negocio actual y sucursales del usuario). Escritura sólo por `terminal_tx_record(...)` (SECURITY DEFINER: rol, terminal del usuario, feature, `audit_logs`, `last_seen_at`).
 - [x] Triggers `payments_terminal_tx` (BEFORE INSERT: un `card_voucher` con `origen = 'terminal'` exige `terminal_tx` de una venta aprobada, mismo negocio y monto, menos de 24 h y sin usar; pisa lote, cupón, autorización y últimos 4 con la bitácora; `simulado` si vino del simulador) y `payments_terminal_tx_link` (AFTER INSERT: vincula `payment_id`).
 
-## 8.12 Extensión F17: credenciales, planes, plantilla, clientes, comparativo y monitor por sucursal (ADR-057)
+## 8.14 Extensión F17: credenciales, planes, plantilla, clientes, comparativo y monitor por sucursal (ADR-057)
 
 Migraciones `20261020100000_credenciales_por_sucursal`, `20261020110000_planes_por_sucursal`, `20261020120000_plantilla_sucursal`, `20261020130000_clientes_sucursal_alta`, `20261020140000_reportes_comparativos` y `20261020150000_monitor_sucursales`.
 
@@ -849,6 +849,31 @@ Migraciones `20261020100000_credenciales_por_sucursal`, `20261020110000_planes_p
 - [x] `customers.store_id_alta` (FK a `stores`, set null): trigger `customers_fill_store_alta` (respeta la enviada si es del negocio y el usuario tiene acceso; si no, `user_current_store_id()`: turno abierto → asignación vigente → única permitida → principal), guarda al editar, backfill por la primera venta. RLS sin cambios. `customer_branch_stats(cliente)` por sucursal, acotado por `report_store_filter`.
 - [x] `branch_compare_report(desde, hasta, sucursales[])`: KPIs por sucursal (ventas, tickets, ticket promedio, unidades, anulaciones, devoluciones por la sucursal de la venta, margen estimado con el costo actual y su cobertura, diferencias de Z, clientes nuevos, compradores y recurrentes, medios de pago y ventas por día) y totales. Acceso por sucursal; comparar más de una exige `multi_sucursal`.
 - [x] `branch_monitor_overview()`: por sucursal permitida, cajas abiertas y totales, turnos, ventas de hoy, personal en turno y asignado, faltantes, cobros en espera (esperando y pagados sin venta), terminales con última señal y último Z con la tolerancia efectiva. `monitor_cajas` y dueño o encargado. Las alertas se calculan en `lib/branches/monitorAlerts.ts`.
+
+## 8.15 Extensión F18: compras v2 y tesorería (ADR-059)
+
+Migraciones `20261022100000_features_compras_v2`, `20261022100100_lotes_consumo`, `20261022100200_compras_devoluciones_anulacion`, `20261022100300_tesoreria`, `20261022100400_compras_ordenes_pago` y `20261022100500_listas_proveedor`. Lectura: `tenant_id = current_tenant_id() or internal_scope()` (ADR-052); escrituras por RPC `SECURITY DEFINER` con auditoría, salvo `treasury_accounts` (tabla con RLS de escritura para dueño o encargado con la feature).
+
+- [x] Feature `tesoreria` (OPTIONAL Business+, requiere `compras`). `stock_movements.reason` suma `purchase_return` y `purchase_void` (check NOT VALID).
+- [x] `product_lots.qty_available` y `voided_at` (backfill: el stock de la sucursal se reparte del lote más nuevo al más viejo). `lot_allocations` (lote o "sin lote", tipo `sale | sale_void | return | purchase_return | receipt_void`, venta, línea, cantidad con signo). Trigger `stock_movement_lots` AFTER INSERT en `stock_movements` (`sale` consume FEFO/FIFO en la sucursal; `sale_void` y `return` devuelven), sin tocar `create_sale`. Vista `lot_sales` (`security_invoker`): ventas por lote neto de anulaciones.
+- [x] `goods_receipts.status` (`posted | voided`), `void_reason`, `voided_at`, `voided_by` y guard `goods_receipts_voided_guard` (una recepción anulada no cambia más); `goods_receipt_items.qty_returned`. RPC `purchase_receipt_void` (dueño o encargado; sin factura, devoluciones ni lotes consumidos y con stock en la sucursal) y helpers `purchase_avg_after_outflow`, `purchase_total_stock`, `purchase_store_qty`.
+- [x] `purchase_returns` (`number` DEV-, proveedor, sucursal, recepción opcional, motivo, totales, `credit_invoice_id` único) y `purchase_return_items` (línea de recepción, lote, costo, promedio antes y después). RPC `purchase_return_create` (stock, lote, promedio, NC opcional vía `supplier_invoice_save`) y `purchase_return_link_credit_note`; anular la NC desvincula la devolución (trigger). `purchase_events.entity` suma `return`; `purchase_log` recreada.
+- [x] `treasury_accounts` (caja general o banco, saldo inicial, sucursal, `transfer_account_id` sin FK para unificar con `transfer_accounts` de ADR-055), `treasury_movements` (importe con signo, tipo, referencia, conciliación `reconciled_at` + `statement_ref`, anulación lógica) y vista `treasury_balances` (saldo y saldo conciliado). RPC `treasury_movement_create`, `treasury_transfer`, `treasury_movement_void`, `treasury_reconcile` con `treasury_assert()`.
+- [x] `cheques` (propio o de terceros, e-cheq, número, banco, fechas, librador, estado `en_cartera | entregado | depositado | rechazado | anulado`, cuenta, cliente, proveedor y orden de pago). RPC `cheque_register` y `cheque_transition` (depositar, debitar, rechazar con reversa); `cheque_transition_ok` espejo de `lib/treasury/cheques.ts`.
+- [x] `supplier_payments.kind` (`simple | order`) y método `mixto` (check NOT VALID). `supplier_payment_lines` (medio, importe, turno y `cash_movements` del efectivo, cuenta y movimiento de tesorería, cheque) y `supplier_payment_allocations` (imputación en pesos con `released_at`). Vista `supplier_invoice_open`. RPC `supplier_payment_order_create` y `supplier_payment_void` recreada con reversas. `treasury_receivables(p_to)` para el flujo de fondos.
+- [x] `suppliers.price_list_mapping` y `supplier_price_list_imports` (archivo, moneda, TC, contadores y resumen). RPC `supplier_price_list_apply`.
+
+## 8.16 Extensión F18: listas de precios PRO (ADR-058)
+
+Migraciones `20261021100000_features_listas_precios_pro`, `20261021100100_listas_precios_pro`, `20261021100200_resolver_listas_pro` y `20261021100300_precios_masivos_etiquetas`.
+
+- [x] `price_lists` suma `kind` (`fixed`, `derived`, `cost`, `currency`), `base_list_id`, `adjustment_amount`, `cost_basis`, `markup_mode`, `markup_value`, `currency`, `fx_source`, `rounding` jsonb, `min_margin_pct`, `valid_from`, `valid_to`, `pos_selectable`, `notes` (check `price_lists_pro_check`; trigger `price_lists_pro`: forma del redondeo, madre del negocio, sin ciclos y `listas_precios_pro` cuando cambia algo PRO). `products.min_price` (trigger `products_min_price`).
+- [x] `price_list_breaks(price_list_id, product_id?, variant_id?, min_qty, kind price|pct, value)`, `payment_terms(name, days, surcharge_pct, rate_mode, monthly_rate, is_active, sort, deleted_at)` + `customers.payment_term_id`, `price_list_assignments(price_list_id, scope customer|customer_group|store|store_group, scope_id)` único por destino, `fx_rates(currency, source, rate_date, rate)` y `price_index_values(index_key, period, value)`. RLS de lectura `tenant_id = current_tenant_id() or internal_scope()`; escritura dueño o encargado con `price_pro_can_write()` (`listas_precios` + `listas_precios_pro`) o `price_can_write()` (asignaciones; por sucursal además `multi_sucursal`). Auditoría por `write_audit_log`.
+- [x] `price_schedules(list_id?, product_id, variant_id?, price, effective_at, status pending|scheduled|applied|cancelled, batch_id, source)`: sólo lectura; los escriben RPC. Triggers `*_consume_due` dan por aplicados los vencidos cuando alguien cambia el precio a mano.
+- [x] `price_settings(mode simple|pro, require_approval, label_queue)` con `price_settings_get` / `price_settings_save` (pro y aprobación exigen PRO; la aprobación la cambia el dueño).
+- [x] `_resolve_unit_price(tenant, producto, variante, cantidad, cliente, sucursal, lista, fecha, p_term, p_pos_list)` y `resolve_unit_price` (misma firma, negocio actual o `internal_scope()`); helpers `_price_round`, `_price_list_price`, `_price_assigned_lists`, `_price_sched`, `_price_fx`, `_price_cost`. Headers `x-ninja-price-list` y `x-ninja-payment-term`. `price_context_snapshot(sucursal, cliente)` (foto para el POS) y `product_prices_overview(producto)`.
+- [x] `price_bulk_batches` + `price_bulk_lines` (sólo lectura). RPC `price_bulk_preview`, `price_bulk_create`, `price_bulk_decide`, `price_bulk_revert`, `price_schedules_apply_due`, `price_schedule_set`, `price_schedule_cancel`, `price_list_import`; escriben `audit_logs` y el historial con origen `bulk` o `import`.
+- [x] `price_label_queue(store_id, product_id, variant_id?, list_id?, old_price, new_price, source, printed_at, printed_by)`, una pendiente por sucursal y producto; triggers en `products.price`, `product_variants.price_override` y `price_list_items` (listas de mostrador o asignadas a la sucursal). `price_labels_mark_printed(ids)` con acceso a la sucursal.
 
 ## 9. Migraciones iniciales sugeridas
 

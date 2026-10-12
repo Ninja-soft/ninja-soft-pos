@@ -271,6 +271,8 @@ export interface CartSummaryProps {
   autoPrint: boolean;
   onAutoPrint: (v: boolean) => void;
   warrantySlot?: React.ReactNode;
+  /** Lista y condición de pago (ADR-058). */
+  priceSlot?: React.ReactNode;
   compact?: boolean;
 }
 
@@ -283,6 +285,7 @@ export function CartSummary(p: CartSummaryProps) {
   return (
     <div className="space-y-3">
       {p.warrantySlot}
+      {p.priceSlot}
 
       {/* Cliente + acciones de cuenta */}
       <div className="flex items-center gap-1.5">

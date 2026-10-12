@@ -67,6 +67,10 @@ type Connected = Omit<
 export function CheckoutSheetConnected({ onQrState, onTransferState, customerId = null, ...props }: Connected) {
   // Cuentas de transferencia de la caja (herencia por sucursal y caja).
   const transferCfg = usePosTransferConfig();
+  // Detección automática de transferencias de Mercado Pago (ADR-061).
+  const transferAuto = useFeature("transferencia_auto_mp");
+  const posBranch = useBranchContext();
+  const posRegister = useCurrentRegister();
   const transfer = useMemo(
     () =>
       transferCfg.available
@@ -76,9 +80,14 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
             accounts: transferCfg.accounts,
             defaultAccountId: transferCfg.defaultAccountId,
             onDisplay: onTransferState,
+            autoDetect: {
+              enabled: transferAuto === true,
+              storeId: posBranch.posStoreId ?? null,
+              registerId: posRegister.data?.id ?? null,
+            },
           }
         : null,
-    [transferCfg, onTransferState],
+    [transferCfg, onTransferState, transferAuto, posBranch.posStoreId, posRegister.data?.id],
   );
   const { data: allPlans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);

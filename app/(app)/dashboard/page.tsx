@@ -183,8 +183,8 @@ export default async function DashboardPage() {
                 return (
                   <Card
                     key={i}
-                    className="overflow-hidden border-l-4"
-                    style={{ borderLeftColor: accent }}
+                    className="overflow-hidden rounded-t-none border-t-2"
+                    style={{ borderTopColor: accent }}
                   >
                     <CardContent className="p-6">
                       {logoUrl ? (

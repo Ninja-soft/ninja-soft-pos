@@ -49,7 +49,7 @@ export function ImportPreview<R>({
 
       <div className="max-h-[42dvh] overflow-auto rounded-lg border border-border">
         <table className="w-full min-w-[560px] text-left text-xs">
-          <thead className="sticky top-0 z-10 bg-muted text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          <thead className="sticky top-0 z-10 bg-popover [&>tr]:bg-muted text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
             <tr>
               <th className="px-2 py-2 font-semibold">#</th>
               {columns.map((c) => (

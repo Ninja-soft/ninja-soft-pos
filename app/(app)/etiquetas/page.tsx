@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Printer, Search, Tag } from "lucide-react";
+import { Check, Printer, RefreshCw, Search, Tag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Barcode } from "@/components/products/Barcode";
-import { useProducts } from "@/modules/products/hooks";
+import { useProducts, useProductsByIds } from "@/modules/products/hooks";
+import { useCurrentStoreId } from "@/modules/stock/hooks";
+import { useApplyDuePrices, useLabelQueue, usePriceProMutations, usePriceResolver } from "@/modules/prices/proHooks";
+import { useToast } from "@/components/ui/Toast";
 import { usePrintProfiles } from "@/modules/tickets/hooks";
 import { buildLabels, clampCopies, type LabelSource } from "@/lib/labels";
 import { formatCurrency } from "@/lib/utils/format";
@@ -23,6 +26,47 @@ export default function EtiquetasPage() {
   // producto se siembra con esta cantidad (editable por producto).
   const { data: printProfiles } = usePrintProfiles();
   const defaultCopies = clampCopies(printProfiles?.product_label.copies ?? 1);
+
+  // Precio de góndola de esta sucursal (ADR-058): lista de la sucursal o
+  // mostrador, de contado y por unidad. Y la cola de "a reimprimir".
+  const { toast } = useToast();
+  useApplyDuePrices();
+  const storeId = useCurrentStoreId();
+  const prices = usePriceResolver({ storeId, customerId: null });
+  const shelf = (id: string, base: number) => prices.priceFor({ productId: id, basePrice: base, termId: "none" });
+  const { data: queue } = useLabelQueue(storeId);
+  const queueIds = useMemo(() => [...new Set((queue ?? []).map((q) => q.product_id))], [queue]);
+  const { data: queued } = useProductsByIds(queueIds);
+  const { markPrinted } = usePriceProMutations();
+
+  function addQueued() {
+    setSel((s) => {
+      const next = { ...s };
+      for (const p of queued ?? []) {
+        if (!next[p.id]) {
+          next[p.id] = {
+            id: p.id,
+            name: p.name,
+            price: shelf(p.id, p.price),
+            barcode: p.barcode,
+            sku: p.sku,
+            plu: p.plu,
+            copies: defaultCopies,
+          };
+        }
+      }
+      return next;
+    });
+  }
+
+  function markQueued() {
+    const ids = (queue ?? []).map((q) => q.id);
+    if (ids.length === 0) return;
+    markPrinted.mutate(ids, {
+      onSuccess: (n) => toast({ title: `${n} etiquetas marcadas como impresas`, variant: "success" }),
+      onError: () => toast({ title: "No se pudo marcar", variant: "error" }),
+    });
+  }
 
   function toggle(p: LabelSource) {
     setSel((s) => {
@@ -59,6 +103,45 @@ export default function EtiquetasPage() {
             </Button>
           }
         />
+
+        {(queue ?? []).length > 0 && (
+          <Card className="mt-5">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <RefreshCw size={16} /> Etiquetas a reimprimir ({queueIds.length})
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={addQueued}>
+                    Agregar a la impresión
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={markQueued} loading={markPrinted.isPending}>
+                    <Check size={15} /> Marcar impresas
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Productos que cambiaron de precio en esta sucursal desde la última impresión.
+              </p>
+              <div className="max-h-48 divide-y divide-border overflow-y-auto rounded-md border border-border">
+                {(queue ?? []).map((q) => {
+                  const p = (queued ?? []).find((x) => x.id === q.product_id);
+                  return (
+                    <div key={q.id} className="flex items-center justify-between gap-3 px-3 py-1.5 text-sm">
+                      <span className="min-w-0 truncate">{p?.name ?? "Producto"}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {q.old_price != null ? `${formatCurrency(q.old_price)} → ` : ""}
+                        <span className="font-medium text-foreground">
+                          {p ? formatCurrency(shelf(p.id, p.price)) : formatCurrency(q.new_price ?? 0)}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="relative mt-5 max-w-md">
           <Search
@@ -100,7 +183,7 @@ export default function EtiquetasPage() {
                             toggle({
                               id: p.id,
                               name: p.name,
-                              price: p.price,
+                              price: shelf(p.id, p.price),
                               barcode: p.barcode,
                               sku: p.sku,
                               plu: p.plu,
@@ -121,7 +204,7 @@ export default function EtiquetasPage() {
                       <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
                         {p.barcode || p.sku || <NoData />}
                       </td>
-                      <td className="px-4 py-2 text-right">{formatCurrency(p.price)}</td>
+                      <td className="px-4 py-2 text-right">{formatCurrency(shelf(p.id, p.price))}</td>
                       <td className="px-4 py-2 text-right">
                         <input
                           type="number"

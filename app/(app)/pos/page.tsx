@@ -50,8 +50,11 @@ import { useProductsWithModifiers } from "@/modules/products/modifiers";
 import { productsApi, variantLabel, type Product } from "@/modules/products/api";
 import { subtreeIds } from "@/components/pos/CategoryNav";
 import { MenuFilterBar } from "@/components/pos/MenuFilterBar";
-import { useMostradorPricing } from "@/modules/prices/hooks";
-import { resolvePrice } from "@/lib/prices/resolve";
+import { useApplyDuePrices, usePriceResolver } from "@/modules/prices/proHooks";
+import { usePricingContext } from "@/lib/prices/pricingContext";
+import { useCartReprice } from "@/modules/pos/screen/useCartReprice";
+import { PosPriceContextBar } from "@/components/pos/PosPriceContextBar";
+import { selectList } from "@/lib/prices/resolve";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useMenus, useActiveMenuIds, useMenuProductIds } from "@/modules/menus/hooks";
 import { useCustomerPackCredits } from "@/modules/packs/hooks";
@@ -418,10 +421,21 @@ function PosPageInner() {
   }
   const clear = useCartStore((s) => s.clear);
 
-  // Lista de precios 'mostrador' activa: el precio al agregar se resuelve acá.
-  const { data: mostrador } = useMostradorPricing();
-  function priceFor(productId: string, variantId: string | null, basePrice: number): number {
-    return resolvePrice(basePrice, productId, variantId, mostrador?.list ?? null, mostrador?.items ?? []);
+  // Precio de lista (ADR-058): el mismo resolver que el servidor, con la foto de
+  // precios de la sucursal y el cliente y la lista o condición elegidas acá.
+  // Contra una base sin la migración, la lista 'mostrador' de siempre.
+  useApplyDuePrices();
+  const priceResolver = usePriceResolver({ storeId: register?.store_id ?? null, customerId: customer?.id ?? null });
+  const resetPricingContext = usePricingContext((s) => s.reset);
+  useEffect(() => () => resetPricingContext(), [resetPricingContext]);
+  function priceFor(productId: string, variantId: string | null, basePrice: number, qty = 1): number {
+    return priceResolver.priceFor({
+      productId,
+      variantId,
+      basePrice,
+      variantPrice: variantId ? basePrice : null,
+      qty,
+    });
   }
 
   // Tocar un producto: variante, serial, opciones o peso abren su picker; si no,
@@ -442,7 +456,7 @@ function PosPageInner() {
       setWeighGrams("");
     } else {
       if (!branchStockGate(p.id, null, qty)) return;
-      addProduct({ ...p, price: priceFor(p.id, null, p.price), warrantyMonths: p.warranty_months ?? 0 }, qty);
+      addProduct({ ...p, price: priceFor(p.id, null, p.price, qty), warrantyMonths: p.warranty_months ?? 0 }, qty);
     }
   }
   // Callback estable para la grilla memoizada.
@@ -457,7 +471,7 @@ function PosPageInner() {
 
   function favQuickUnits(p: Product, qty: number) {
     if (!branchStockGate(p.id, null, qty)) return;
-    addProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price), unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.category_id }, qty);
+    addProduct({ id: p.id, name: p.name, sku: p.sku, price: priceFor(p.id, null, p.price, qty), unit: p.unit, warrantyMonths: p.warranty_months ?? 0, categoryId: p.category_id }, qty);
   }
   function favQuickWeight(p: Product, kg: number) {
     if (!branchStockGate(p.id, null, kg)) return;
@@ -505,6 +519,16 @@ function PosPageInner() {
   // ── Orígenes (turno, recompra, mesa, delivery) y precios ────────────────────
   const origins = usePosOrigins({ setCustomer, priceFor });
   const pricing = usePosPricing({ rounding, customerId: customer?.id ?? null });
+  // Repreciado al cambiar lista, condición, cliente o cantidad (no en mesa ni delivery).
+  const cartReprice = useCartReprice({
+    enabled: Boolean(priceResolver.world) && !origins.tableActive && !origins.deliveryActive,
+    resolve: priceResolver.resolve,
+  });
+  const appliedListName = useMemo(() => {
+    const w = priceResolver.world;
+    if (!w) return null;
+    return selectList(w, Date.now(), null, priceResolver.listId)?.name ?? null;
+  }, [priceResolver.world, priceResolver.listId]);
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
 
   // ── Stock de la sucursal del POS (F17 · H94) ───────────────────────────────
@@ -1111,6 +1135,17 @@ function PosPageInner() {
       autoPrint={autoPrint}
       onAutoPrint={setAutoPrint}
       compact={preset === "caja_rapida"}
+      priceSlot={
+        priceResolver.world && !origins.tableActive && !origins.deliveryActive ? (
+          <PosPriceContextBar
+            lists={priceResolver.selectable}
+            appliedListName={appliedListName}
+            terms={priceResolver.terms}
+            customerTermId={priceResolver.world.customerTermId}
+            totalWithTerm={cartReprice.totalWithTerm}
+          />
+        ) : null
+      }
       warrantySlot={
         offerWarranty ? (
           <WarrantyOfferCard

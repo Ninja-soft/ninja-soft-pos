@@ -195,10 +195,11 @@ export function CardWizard({
                 role="radio"
                 aria-checked={on}
                 onClick={() => pickAcquirer(a)}
-                className={choiceClass(on, "flex min-h-[64px] items-center gap-2.5 rounded-md px-3 py-2 pr-8")}
+                className={choiceClass(on, "flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-md px-2 py-2.5")}
               >
+                {/* Logo arriba y nombre centrado: los nombres quedan alineados entre sí. */}
                 <TenderLogo source={{ logo: acquirerLogo(a.key) }} alt={a.label} size={28} fallback="card" />
-                <span className="min-w-0 text-[13px] font-semibold leading-tight" title={a.label}>{a.short}</span>
+                <span className="w-full truncate text-center text-xs font-semibold" title={a.label}>{a.short}</span>
               </button>
             );
           })}

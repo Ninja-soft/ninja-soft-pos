@@ -58,8 +58,9 @@ function loadThresholds(): MonitorThresholds {
 }
 
 const EDGE: Record<AlertSeverity, string> = {
-  danger: "border-l-4 border-l-danger",
-  warning: "border-l-4 border-l-warning",
+  // Franja de color arriba (nunca al costado) y esquinas de arriba rectas.
+  danger: "rounded-t-none border-t-2 border-t-danger",
+  warning: "rounded-t-none border-t-2 border-t-warning",
   info: "",
 };
 const ALERT_TONE: Record<AlertSeverity, string> = {

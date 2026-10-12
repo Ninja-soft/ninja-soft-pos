@@ -36,6 +36,52 @@ export function usePinMutations() {
   };
 }
 
+// ── Mis PINes (ADR-060) ──────────────────────────────────────────────────────
+export function useMyPins(enabled = true) {
+  return useQuery({ queryKey: ["security", "my-pins"], queryFn: () => securityApi.myPins(), enabled });
+}
+
+/** Código rotativo vigente: se vuelve a pedir justo cuando cambia. */
+export function useRotatingCode(enabled: boolean) {
+  return useQuery({
+    queryKey: ["security", "rotating-code"],
+    queryFn: () => securityApi.rotatingCode(),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: (q) => {
+      const until = q.state.data?.valid_until;
+      if (!until) return false;
+      return Math.max(1_000, Math.min(new Date(until).getTime() - Date.now() + 1_500, 60 * 60_000));
+    },
+  });
+}
+
+export function useOneTimeList(enabled = true) {
+  return useQuery({ queryKey: ["security", "one-time"], queryFn: () => securityApi.oneTimeList(), enabled });
+}
+
+export function useMyAuthHistory(enabled = true) {
+  return useQuery({ queryKey: ["security", "my-history"], queryFn: () => securityApi.myHistory(), enabled });
+}
+
+export function useMyPinsMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["security"] });
+  return {
+    rotatingEnable: useMutation({ mutationFn: (regenerate: boolean) => securityApi.rotatingEnable(regenerate), onSuccess: inv }),
+    rotatingDisable: useMutation({ mutationFn: () => securityApi.rotatingDisable(), onSuccess: inv }),
+    totpBegin: useMutation({ mutationFn: (step: 30 | 60) => securityApi.totpBegin(step) }),
+    totpConfirm: useMutation({ mutationFn: (code: string) => securityApi.totpConfirm(code), onSuccess: inv }),
+    totpDisable: useMutation({ mutationFn: () => securityApi.totpDisable(), onSuccess: inv }),
+    oneTimeCreate: useMutation({ mutationFn: securityApi.oneTimeCreate, onSuccess: inv }),
+    oneTimeRevoke: useMutation({ mutationFn: (id: string) => securityApi.oneTimeRevoke(id), onSuccess: inv }),
+    unlock: useMutation({ mutationFn: (userId: string) => securityApi.unlock(userId), onSuccess: inv }),
+    resetMethods: useMutation({ mutationFn: (userId?: string | null) => securityApi.resetMethods(userId), onSuccess: inv }),
+  };
+}
+
 export function useAuditSearch(f: AuditFilters, enabled = true) {
   return useQuery({
     queryKey: ["security", "audit", f],

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import {
   BarChart3,
   Building2,
-  CalendarClock,
   CreditCard,
   Gauge,
   LayoutTemplate,
@@ -381,8 +380,8 @@ export default async function DashboardTeamPage() {
               </Badge>
             )}
           </div>
-          <div className="mt-auto flex items-start gap-2.5 pt-4">
-            <CalendarClock size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+          {/* Sin ícono al costado: el texto queda alineado con el nombre del plan. */}
+          <div className="mt-auto pt-4">
             <div className="min-w-0 text-sm">
               <p className="text-muted-foreground">{period?.label ?? "Vencimiento"}</p>
               <p className="font-semibold text-foreground">{period ? period.value : <NoData />}</p>

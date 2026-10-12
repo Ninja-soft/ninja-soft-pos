@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useProducts } from "@/modules/products/hooks";
-import { useMostradorPricing } from "@/modules/prices/hooks";
+import { usePriceResolver } from "@/modules/prices/proHooks";
 import { useQueryClient } from "@tanstack/react-query";
-import { resolvePrice } from "@/lib/prices/resolve";
 import { orderItemError } from "@/lib/pos/priceMismatch";
 import { useTableOrderMutations } from "@/modules/dining/hooks";
 import { COURSE_LABELS, MAX_COURSE } from "@/modules/dining/api";
@@ -34,7 +33,8 @@ export function TableProductPicker({
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const { data: products } = useProducts(search);
-  const { data: pricing } = useMostradorPricing();
+  // Mismo resolver que el servidor (ADR-058): sin sucursal ni cliente, como el trigger.
+  const prices = usePriceResolver({ storeId: null, customerId: null });
   const { addItem } = useTableOrderMutations();
 
   // Ítem libre (monto manual) para algo fuera del catálogo.
@@ -60,8 +60,7 @@ export function TableProductPicker({
   );
 
   function priceFor(productId: string, basePrice: number): number {
-    if (!pricing) return basePrice;
-    return resolvePrice(basePrice, productId, null, pricing.list, pricing.items);
+    return prices.priceFor({ productId, basePrice });
   }
 
   async function add(productId: string, name: string, price: number) {

@@ -17,6 +17,7 @@ import {
   toAccountRow,
   type TransferAccount,
   type TransferAccountInput,
+  type TransferAutoSettings,
   type TransferConfig,
 } from "@/lib/payments/transfer";
 
@@ -47,19 +48,25 @@ export const LOGO_MAX_BYTES = 512 * 1024;
 
 const COLS =
   "id, bank_slug, bank_name, custom_logo_path, custom_logo_url, holder_name, cuit, cbu, alias, account_type, currency, note, is_default, is_active, sort, deleted_at";
+// Detección automática de transferencias de Mercado Pago (ADR-061).
+const AUTO_COLS = `${COLS}, auto_detect, auto_tolerance, auto_mode, auto_window_min`;
 
 export const transferApi = {
   /** Cuentas vivas del negocio actual (filtro por negocio además de la RLS, ADR-052). */
   list: async (): Promise<TransferAccount[]> => {
     const t = await getCurrentTenantId();
     if (!t) return [];
-    const r = await loose()
-      .from<TransferAccount[]>("transfer_accounts")
-      .select(COLS)
-      .eq("tenant_id", t)
-      .is("deleted_at", null)
-      .order("sort")
-      .order("created_at");
+    const q = (cols: string) =>
+      loose()
+        .from<TransferAccount[]>("transfer_accounts")
+        .select(cols)
+        .eq("tenant_id", t)
+        .is("deleted_at", null)
+        .order("sort")
+        .order("created_at");
+    // Sin la migración de la detección automática: columnas de siempre.
+    let r = await q(AUTO_COLS);
+    if (r.error) r = await q(COLS);
     // Base sin la migración: error (la hoja de cobro registra la
     // transferencia como siempre, sin cuenta).
     if (r.error) throw new Error(r.error.message);
@@ -88,6 +95,21 @@ export const transferApi = {
 
   patch: async (id: string, patch: Partial<Pick<TransferAccount, "is_default" | "is_active" | "sort">>) => {
     check(await loose().from("transfer_accounts").update(patch).eq("id", id));
+  },
+
+  /** Detección automática de una cuenta de Mercado Pago (el trigger valida cuenta y plan). */
+  saveAuto: async (id: string, v: TransferAutoSettings) => {
+    check(
+      await loose()
+        .from("transfer_accounts")
+        .update({
+          auto_detect: v.auto_detect,
+          auto_tolerance: Math.max(0, Math.round(v.auto_tolerance * 100) / 100),
+          auto_mode: v.auto_mode,
+          auto_window_min: Math.min(240, Math.max(5, Math.round(v.auto_window_min))),
+        })
+        .eq("id", id),
+    );
   },
 
   /** Baja lógica (deleted_at). */
@@ -145,6 +167,10 @@ export function useTransferMutations() {
       onSuccess: inv,
     }),
     remove: useMutation({ mutationFn: transferApi.remove, onSuccess: inv }),
+    auto: useMutation({
+      mutationFn: (v: { id: string; settings: TransferAutoSettings }) => transferApi.saveAuto(v.id, v.settings),
+      onSuccess: inv,
+    }),
     settings: useMutation({ mutationFn: transferApi.saveSettings, onSuccess: inv }),
   };
 }
@@ -179,4 +205,88 @@ function useTransferConfigFor(target: ResolveTarget): TransferConfig & { availab
 /** Configuración de transferencia del POS (sucursal del POS y caja del equipo). */
 export function usePosTransferConfig() {
   return useTransferConfigFor(usePosResolveTarget());
+}
+
+// ── Detección automática de transferencias (ADR-061, Edge transfer_watch) ────
+
+export interface TransferWatchCandidate {
+  id: string;
+  amount: number;
+  at: string;
+  payer_name: string | null;
+  payer_doc: string | null;
+}
+
+export interface TransferWatchView {
+  id: string;
+  status: "waiting" | "matched" | "ambiguous" | "expired" | "cancelled" | "closed";
+  amount: number;
+  tolerance: number;
+  mode: "notify" | "auto_close";
+  expires_at: string;
+  match: { id: string; amount: number; payer_name: string | null; payer_doc: string | null } | null;
+  candidates: TransferWatchCandidate[];
+  error?: string;
+}
+
+export interface TransferProbe {
+  checked: number;
+  incoming: number;
+  sample: { amount: number; at: string; payer_name: string | null }[];
+  env: string;
+}
+
+async function watchInvoke<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await createClient().functions.invoke("transfer_watch", { body });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    let code: string | null = null;
+    try {
+      code = ctx ? (((await ctx.json()) as { error?: string }).error ?? null) : null;
+    } catch {
+      // body no JSON
+    }
+    throw code ? new Error(code) : error;
+  }
+  return data as T;
+}
+
+export const transferWatchApi = {
+  start: (v: { accountId: string; amount: number; storeId?: string | null; registerId?: string | null }) =>
+    watchInvoke<TransferWatchView>({
+      action: "start",
+      account_id: v.accountId,
+      amount: v.amount,
+      ...(v.storeId ? { store_id: v.storeId } : {}),
+      ...(v.registerId ? { register_id: v.registerId } : {}),
+    }),
+  poll: (watchId: string) => watchInvoke<TransferWatchView>({ action: "poll", watch_id: watchId }),
+  pick: (watchId: string, mpPaymentId: string) =>
+    watchInvoke<TransferWatchView>({ action: "pick", watch_id: watchId, mp_payment_id: mpPaymentId }),
+  reject: (watchId: string) => watchInvoke<TransferWatchView>({ action: "reject", watch_id: watchId }),
+  cancel: (watchId: string) => watchInvoke<TransferWatchView>({ action: "cancel", watch_id: watchId }),
+  close: (watchId: string, saleId: string) =>
+    watchInvoke<TransferWatchView>({ action: "close", watch_id: watchId, sale_id: saleId }),
+  probe: (accountId: string) => watchInvoke<TransferProbe>({ action: "probe", account_id: accountId }),
+};
+
+/** ¿El plan trae la detección automática de transferencias de Mercado Pago? */
+export function useTransferAutoFeature(): boolean {
+  const { data: gating } = useGating();
+  return gating?.features?.transferencia_auto_mp === true;
+}
+
+const WATCH_ERRORS: [string, string][] = [
+  ["feature_not_in_plan", "Tu plan no incluye la detección automática de transferencias."],
+  ["auto_detect_requires_mp_cvu", "La detección automática es sólo para cuentas de Mercado Pago (CVU)."],
+  ["not_connected", "Mercado Pago no está conectado. Conectalo en Medios de pago."],
+  ["mp_search_401", "Mercado Pago rechazó la credencial. Volvé a conectar la cuenta."],
+  ["already_used", "Esa transferencia ya se usó en otra venta."],
+  ["not_a_candidate", "Esa transferencia no coincide con el monto esperado."],
+];
+
+export function transferWatchErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  for (const [k, v] of WATCH_ERRORS) if (msg.includes(k)) return v;
+  return "No se pudo consultar Mercado Pago. Podés confirmar la transferencia a mano.";
 }

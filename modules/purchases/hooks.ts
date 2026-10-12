@@ -10,10 +10,14 @@ import {
   type OrderFilters,
   type OrderSaveInput,
   type PaymentInput,
+  type PaymentOrderInput,
+  type PriceListApplyInput,
   type PurchaseSettings,
   type ReceiveInput,
+  type ReturnInput,
   type SupplierInput,
   type SupplierProductInput,
+  purchasesV2Api,
 } from "./api";
 
 /** Estado de las features de compras para la UI (la barrera real es el servidor). */
@@ -231,6 +235,149 @@ export function usePurchaseMutations() {
     }),
     voidPayment: useMutation({
       mutationFn: (v: { id: string; reason: string }) => purchasesApi.voidPayment(v.id, v.reason),
+      onSuccess: inv,
+    }),
+  };
+}
+
+// ── Compras v2 (ADR-059) ──────────────────────────────────────────────────
+
+/** Tesorería en el plan (cuentas bancarias y cheques en las órdenes de pago). */
+export function useTreasuryEnabled() {
+  const compras = useFeature("compras");
+  const tesoreria = useFeature("tesoreria");
+  return compras === true && tesoreria === true;
+}
+
+export function usePurchaseReturns(
+  f: DocFilters & { storeId?: string | null; receiptId?: string | null },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["purchase-returns", f],
+    queryFn: () => purchasesV2Api.returns(f),
+    enabled,
+  });
+}
+
+export function usePurchaseReturn(id: string | null) {
+  return useQuery({
+    queryKey: ["purchase-return", id],
+    queryFn: () => purchasesV2Api.returnDetail(id!),
+    enabled: Boolean(id),
+  });
+}
+
+export function useStoreStock(storeId: string | null, productIds: string[]) {
+  return useQuery({
+    queryKey: ["products", "store-stock", storeId, [...productIds].sort().join(",")],
+    queryFn: () => purchasesV2Api.storeStock(storeId!, productIds),
+    enabled: Boolean(storeId) && productIds.length > 0,
+  });
+}
+
+export function useInvoiceOpen(supplierId: string | null) {
+  return useQuery({
+    queryKey: ["supplier-invoice-open", supplierId],
+    queryFn: () => purchasesV2Api.invoiceOpen(supplierId!),
+    enabled: Boolean(supplierId),
+  });
+}
+
+export function usePaymentAllocations(enabled = true) {
+  return useQuery({
+    queryKey: ["supplier-payment-allocations"],
+    queryFn: () => purchasesV2Api.allocations(),
+    enabled,
+  });
+}
+
+export function usePaymentOrder(id: string | null) {
+  return useQuery({
+    queryKey: ["supplier-payment-order", id],
+    queryFn: () => purchasesV2Api.paymentOrder(id!),
+    enabled: Boolean(id),
+  });
+}
+
+export function useLots(
+  f: { storeId?: string | null; productId?: string | null; search?: string | null; onlyAvailable?: boolean },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["product-lots", f],
+    queryFn: () => purchasesV2Api.lots(f),
+    enabled,
+  });
+}
+
+export function useLotSales(lotId: string | null) {
+  return useQuery({
+    queryKey: ["lot-sales", lotId],
+    queryFn: () => purchasesV2Api.lotSales(lotId!),
+    enabled: Boolean(lotId),
+  });
+}
+
+export function useCatalogLookup(enabled: boolean) {
+  return useQuery({
+    queryKey: ["products", "catalog-lookup"],
+    queryFn: () => purchasesV2Api.catalogLookup(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useSupplierMapping(supplierId: string | null) {
+  return useQuery({
+    queryKey: ["supplier-price-list-mapping", supplierId],
+    queryFn: () => purchasesV2Api.supplierMapping(supplierId!),
+    enabled: Boolean(supplierId),
+  });
+}
+
+function useInvalidateV2() {
+  const qc = useQueryClient();
+  const base = useInvalidate();
+  return () => {
+    base();
+    for (const key of [
+      "purchase-returns",
+      "purchase-return",
+      "supplier-invoice-open",
+      "supplier-payment-allocations",
+      "supplier-payment-order",
+      "product-lots",
+      "lot-sales",
+      "supplier-price-list-mapping",
+      // Tesorería y caja (órdenes de pago con efectivo, banco o cheques).
+      "treasury",
+      "cash",
+    ]) {
+      void qc.invalidateQueries({ queryKey: [key] });
+    }
+  };
+}
+
+export function usePurchaseV2Mutations() {
+  const inv = useInvalidateV2();
+  return {
+    createReturn: useMutation({ mutationFn: (v: ReturnInput) => purchasesV2Api.createReturn(v), onSuccess: inv }),
+    linkReturnCredit: useMutation({
+      mutationFn: (v: { returnId: string; invoiceId: string | null }) =>
+        purchasesV2Api.linkReturnCredit(v.returnId, v.invoiceId),
+      onSuccess: inv,
+    }),
+    voidReceipt: useMutation({
+      mutationFn: (v: { id: string; reason: string }) => purchasesV2Api.voidReceipt(v.id, v.reason),
+      onSuccess: inv,
+    }),
+    createPaymentOrder: useMutation({
+      mutationFn: (v: PaymentOrderInput) => purchasesV2Api.createPaymentOrder(v),
+      onSuccess: inv,
+    }),
+    applyPriceList: useMutation({
+      mutationFn: (v: PriceListApplyInput) => purchasesV2Api.applyPriceList(v),
       onSuccess: inv,
     }),
   };

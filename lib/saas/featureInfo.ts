@@ -48,6 +48,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, nadie puede autorizar con PIN desde la caja de otro.",
     minPlan: "Start",
   },
+  pin_autenticador: {
+    desc: "PIN autenticador: además del PIN fijo, cada supervisor autoriza con un PIN rotativo que cambia solo (12 h, 24 h o a medida), con PIN de un uso generados en el momento (vencen en minutos, opcionalmente atados a una acción y un monto) o con Google o Microsoft Authenticator. El dueño elige qué modos acepta cada acción. Secretos sólo en el servidor, todo auditado.",
+    impact: "Desactivado, sólo vale el PIN fijo de cada supervisor.",
+    minPlan: "Pro",
+    requires: ["pin_supervisor"],
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",
@@ -134,6 +140,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, se usa una sola cuenta (la por defecto) en todas las cajas; el servidor rechaza activar una segunda o elegir cuentas por sucursal.",
     minPlan: "Pro",
     requires: ["transferencia"],
+  },
+  transferencia_auto_mp: {
+    desc: "Transferencias automáticas con Mercado Pago: mientras la hoja de cobro espera, el POS consulta tu cuenta de Mercado Pago y detecta la transferencia que entra a tu CVU por el monto de la venta (con tolerancia ± en pesos y tiempo de espera configurables). Muestra quién transfirió y cierra la venta sola o le avisa al cajero; si hay dos transferencias iguales o dos cajas esperando el mismo monto, pregunta. Una transferencia nunca se usa dos veces y todo queda auditado.",
+    impact: "Desactivado, el cajero confirma cada transferencia a mano mirando la cuenta y cargando el n° de operación.",
+    minPlan: "Pro",
+    requires: ["transferencia"],
+    needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
   },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
@@ -263,8 +276,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Al menos dos sucursales activas.",
   },
   compras: {
-    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado.",
-    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes ni cuenta corriente de proveedores (el servidor lo rechaza).",
+    desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",
+    impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes, devoluciones, órdenes de pago ni cuenta corriente de proveedores (el servidor lo rechaza).",
     minPlan: "Pro",
   },
   compras_importacion: {
@@ -273,6 +286,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
     requires: ["compras"],
     needs: "Activá el modo profesional en Configuración de compras.",
+  },
+  tesoreria: {
+    desc: "Tesorería: caja general y cuentas bancarias con saldo, movimientos, transferencias entre cuentas y conciliación manual contra el extracto; cheques y e-cheqs propios y de terceros (en cartera, entregados, depositados o rechazados) y flujo de fondos proyectado con lo que vence de proveedores y lo que entra de clientes y cheques. Las órdenes de pago pueden pagar desde un banco o con cheques.",
+    impact: "Desactivado, las órdenes de pago sólo registran efectivo de la caja y transferencias con su referencia; no hay cuentas, cheques ni flujo de fondos (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["compras"],
   },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
@@ -285,9 +304,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   listas_precios: {
-    desc: "Múltiples listas de precios: precios distintos por lista (mayorista, minorista, etc.) aplicables según el cliente.",
-    impact: "Sin esto sólo existe un precio por producto; no se pueden manejar listas diferenciadas.",
+    desc: "Múltiples listas de precios (mayorista, catálogo, tarjeta): % sobre el precio de venta y precios fijos por producto, con vigencia, precios programados por fecha, lista por cliente, grupo o sucursal, elegibles en el POS e import y export en Excel.",
+    impact: "Sin esto sólo existe un precio por producto; no se pueden manejar listas diferenciadas. El asistente para actualizar el precio de venta en masa y las etiquetas a reimprimir siguen disponibles.",
     minPlan: "Business",
+  },
+  listas_precios_pro: {
+    desc: "Listas de precios profesionales para quien compra e importa: listas derivadas de otra, sobre costo con markup o margen, en dólares con cotización (oficial, BNA, MEP o manual), escalas por cantidad, plazos de pago con recargo financiero, redondeo psicológico, margen y precio mínimo, actualización por índice o dólar y aprobación del dueño para cambios masivos.",
+    impact: "Desactivado, toda lista funciona como fija (% y precios fijos); lo profesional que ya estaba cargado deja de aplicarse (no se borra) y el servidor rechaza crear lo nuevo.",
+    minPlan: "Business",
+    requires: ["listas_precios"],
+    needs: "Activá el modo profesional en Configuración > Precios.",
   },
   catalogo_publico: {
     desc: "Catálogo web público: una vitrina online del comercio con sus productos y precios, compartible por link.",
@@ -346,6 +372,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Más útil con los números de comercio cargados en Medios de pago, Planes de cuotas, y con los datos del cupón (lote y cupón) de Tarjeta en posnet.",
   },
+  conciliacion_procesadores: {
+    desc: "Conciliación de procesadores: los cobros de Mercado Pago llegan solos todos los días por API (y con \"Actualizar ahora\"), la liquidación de Payway, Getnet, Fiserv u otro adquirente se importa desde el Excel o CSV, y se cruzan solos con tus ventas. Muestra en palabras simples cuánto vendiste, cuánto te cobraron de comisiones e impuestos, cuánto te acreditaron y cuánto falta (con fecha), y te deja resolver los cobros sin venta, las ventas sin cobro y las diferencias de monto. Exporta a Excel.",
+    impact: "Desactivado, la liquidación de cada procesador se controla a mano o con un sistema aparte; los cobros con tarjeta se siguen conciliando por lote si el plan trae la conciliación de tarjetas.",
+    minPlan: "Pro",
+    needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
+  },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
     impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",
@@ -362,6 +394,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "API pública: acceso programático a los datos del negocio para integraciones externas a medida.",
     impact: "Sin esto no se puede integrar el sistema con software de terceros vía API.",
     minPlan: "Enterprise",
+  },
+  integracion_nubceo: {
+    desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
+    impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",
+    minPlan: "Business",
+    needs: "Credenciales de la API de NubCeo (API key, API secret y tenant) y el código de sucursal cabecera de cada sucursal.",
   },
   facturacion_afip: {
     desc: "Facturación electrónica AFIP/ARCA: emite comprobantes fiscales (factura A/B/C) integrados con AFIP.",

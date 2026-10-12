@@ -195,7 +195,13 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   otro: "Otro",
 };
 
-export type WithholdingKind = "ganancias" | "iva" | "iibb" | "suss" | "otro";
+/** Etiqueta del medio de un pago (las órdenes de pago con varios medios son "mixto"). */
+export function paymentMethodLabel(method: string): string {
+  if (method === "mixto") return "Varios medios";
+  return PAYMENT_METHOD_LABEL[method as PaymentMethod] ?? method;
+}
+
+export type WithholdingKind ="ganancias" | "iva" | "iibb" | "suss" | "otro";
 
 export const WITHHOLDING_LABEL: Record<WithholdingKind, string> = {
   ganancias: "Retención de Ganancias",

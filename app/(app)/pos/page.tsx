@@ -58,6 +58,7 @@ import { CartLines, CartSummary } from "@/components/pos/screen/CartPane";
 import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickScanPane";
 import { CategoryRail } from "@/components/pos/ui/CategoryBar";
 import { applyKey, type KeypadKey } from "@/components/pos/ui/Keypad";
+import { accentVars } from "@/components/pos/ui/posStyles";
 import {
   CustomerPickerDialog,
   FreeSaleDialog,
@@ -830,7 +831,7 @@ function PosPageInner() {
         canFreeSale={canFreeSale}
         onFreeSale={() => setFreeOpen(true)}
         menuBar={menuBar}
-        categories={effectiveLayout.categoryBar === "left" ? [] : categories ?? []}
+        categories={categories ?? []}
         categoryFilter={categoryFilter}
         onCategory={setCategoryFilter}
         quickKeys={showFavorites ? quickKeys : []}
@@ -940,6 +941,7 @@ function PosPageInner() {
           tipPresets={layout.tipPresets}
           quickCash={layout.payments.quickCash}
           keypad={layout.keypad}
+          style={accentVars(effectiveLayout.accent)}
           loading={saving}
           onConfirm={handleSale}
           onQrState={handleQrState}

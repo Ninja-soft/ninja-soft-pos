@@ -51,7 +51,7 @@ export function PosTopBar({
           )}
           title={hasShift ? "Cerrar caja (arqueo)" : "Abrir caja"}
         >
-          <span className={cn("h-2 w-2 shrink-0 rounded-full", hasShift ? "bg-emerald-400" : "bg-muted-foreground/60")} />
+          <span className={cn("h-2 w-2 shrink-0 rounded-full", hasShift ? "bg-emerald-400" : "bg-muted-foreground opacity-60")} />
           <span className="truncate">
             {hasShift ? (registerName ? `${registerName} abierta` : "Caja abierta") : "Caja cerrada"}
           </span>
@@ -102,7 +102,7 @@ export function PosTopBar({
                         onClick={() => onPickPreset(p)}
                         className={cn(
                           "rounded-2xl p-1.5 text-left transition disabled:opacity-45",
-                          on ? "bg-foreground text-background" : "bg-muted/60 hover:bg-muted",
+                          on ? "bg-foreground text-background" : "bg-fg-6 hover:bg-muted",
                         )}
                       >
                         <PresetThumb preset={p} className="h-[68px] w-full" />

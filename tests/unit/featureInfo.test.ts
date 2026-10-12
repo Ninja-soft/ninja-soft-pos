@@ -40,6 +40,11 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.directo?.minPlan).toBe("Pro");
   });
 
+  it("las teclas rápidas pro tienen copy, plan mínimo y dependen del POS", () => {
+    expect(FEATURE_INFO.pos_quick_keys_pro?.minPlan).toBe("Pro");
+    expect(featureRequires("pos_quick_keys_pro")).toEqual(["pos"]);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

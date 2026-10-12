@@ -129,7 +129,7 @@ function BrandRow({
               aria-label={`${t.brandLabel} ${t.label}`}
               className={cn(
                 "relative flex h-11 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-[13px] font-bold transition active:scale-95 disabled:opacity-50 sm:flex-none",
-                on ? POS_SELECTED : "bg-muted/80 text-foreground hover:bg-muted",
+                on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
               )}
             >
               <Icon size={15} />

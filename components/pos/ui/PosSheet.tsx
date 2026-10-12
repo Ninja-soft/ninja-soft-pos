@@ -55,7 +55,7 @@ export function PosSheet({
             className,
           )}
         >
-          <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" aria-hidden />
+          <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground opacity-40 md:hidden" aria-hidden />
           <Dialog.Title className="sr-only">{title}</Dialog.Title>
           <Dialog.Description className="sr-only">{description ?? title}</Dialog.Description>
           {children}
@@ -63,7 +63,7 @@ export function PosSheet({
             <button
               type="button"
               onClick={() => (onRequestClose ? onRequestClose() : onOpenChange(false))}
-              className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-muted text-muted-foreground transition hover:bg-muted/80 hover:text-foreground"
+              className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-muted text-muted-foreground transition hover:bg-fg-10 hover:text-foreground"
               aria-label="Cerrar"
             >
               <X size={18} />

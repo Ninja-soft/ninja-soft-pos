@@ -78,7 +78,7 @@ export function CartLines({
         return (
           <li
             key={l.lineId}
-            className={cn("rounded-2xl transition", open ? "bg-muted" : "hover:bg-muted/60")}
+            className={cn("rounded-2xl transition", open ? "bg-muted" : "hover:bg-fg-10")}
           >
             <div className={cn("flex items-center gap-2.5 px-2.5", dense ? "py-1.5" : "py-2")}>
               {dense && (
@@ -117,11 +117,11 @@ export function CartLines({
                 </span>
               </button>
               {editable && l.unit !== "kg" && (
-                <div className="flex shrink-0 items-center rounded-full bg-muted/80">
+                <div className="flex shrink-0 items-center rounded-full bg-fg-6">
                   <button
                     type="button"
                     onClick={() => onQty(l.lineId, l.quantity - 1)}
-                    className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-foreground/10 active:scale-90"
+                    className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-fg-10 active:scale-90"
                     aria-label={`Restar ${l.name}`}
                   >
                     <Minus size={14} />
@@ -130,7 +130,7 @@ export function CartLines({
                   <button
                     type="button"
                     onClick={() => onQty(l.lineId, l.quantity + 1)}
-                    className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-foreground/10 active:scale-90"
+                    className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-fg-10 active:scale-90"
                     aria-label={`Sumar ${l.name}`}
                   >
                     <Plus size={14} />
@@ -263,7 +263,7 @@ export function CartSummary(p: CartSummaryProps) {
             "flex h-11 min-w-0 flex-1 items-center gap-2 rounded-2xl px-3 text-left text-[13px] transition",
             p.requireCustomer && !p.customer
               ? "bg-[color-mix(in_srgb,var(--pos-from)_16%,transparent)]"
-              : "bg-muted/70 hover:bg-muted",
+              : "bg-fg-6 hover:bg-muted",
           )}
         >
           <User size={15} className="shrink-0 text-muted-foreground" />
@@ -282,7 +282,7 @@ export function CartSummary(p: CartSummaryProps) {
         <button
           type="button"
           onClick={p.onVoucher}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-muted/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fg-6 text-muted-foreground transition hover:bg-muted hover:text-foreground"
           aria-label="Canjear vale"
           title="Canjear vale"
         >
@@ -292,7 +292,7 @@ export function CartSummary(p: CartSummaryProps) {
           <button
             type="button"
             onClick={p.onSellPack}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-muted/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-fg-6 text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label="Vender pack"
             title="Vender pack"
           >
@@ -302,7 +302,7 @@ export function CartSummary(p: CartSummaryProps) {
       </div>
 
       {/* Totales */}
-      <div className="rounded-2xl bg-muted/40 px-3 py-2.5">
+      <div className="rounded-2xl bg-fg-4 px-3 py-2.5">
         <button
           type="button"
           onClick={() => setAdjustOpen((o) => !o)}
@@ -332,7 +332,7 @@ export function CartSummary(p: CartSummaryProps) {
                   type="button"
                   onClick={p.onDiscountLocked}
                   title="Descuentos: función no incluida en tu plan"
-                  className="h-8 w-28 rounded-xl bg-muted/60 px-2 text-right text-muted-foreground/60"
+                  className="h-8 w-28 rounded-xl bg-fg-6 px-2 text-right text-muted-foreground opacity-60"
                 >
                   0
                 </button>
@@ -392,7 +392,7 @@ export function CartSummary(p: CartSummaryProps) {
                   type="button"
                   disabled={!p.couponInput.trim()}
                   onClick={p.onApplyCoupon}
-                  className="h-8 rounded-xl bg-muted px-3 text-xs font-bold transition hover:bg-foreground/10 disabled:opacity-40"
+                  className="h-8 rounded-xl bg-muted px-3 text-xs font-bold transition hover:bg-fg-10 disabled:opacity-40"
                 >
                   Aplicar
                 </button>
@@ -407,7 +407,7 @@ export function CartSummary(p: CartSummaryProps) {
           </div>
         )}
 
-        <div className="mt-2 flex items-end justify-between gap-2 border-t border-border/60 pt-2">
+        <div className="mt-2 flex items-end justify-between gap-2 border-t border-border pt-2">
           <span className="font-display text-base font-black">Total</span>
           <span className="price-hl font-price text-[2rem] font-black leading-none tabular-nums">
             {money(grand)}
@@ -426,7 +426,7 @@ export function CartSummary(p: CartSummaryProps) {
                   type="button"
                   disabled={!p.canCheckout}
                   onClick={() => p.onCheckout(t.id)}
-                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl bg-muted/80 px-2 text-[13px] font-bold transition hover:bg-muted active:scale-[0.98] disabled:opacity-40"
+                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl bg-fg-6 px-2 text-[13px] font-bold transition hover:bg-muted active:scale-[0.98] disabled:opacity-40"
                 >
                   <BrandIcon logo={t.logo} alt={t.brandLabel} size={24} />
                   <span className="truncate">

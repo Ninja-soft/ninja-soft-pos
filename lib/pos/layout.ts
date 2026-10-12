@@ -203,7 +203,7 @@ export function layoutNeedsQuickKeysPro(layout: Pick<PosLayout, "quickKeys">): b
 
 /** Columnas de la grilla para `columns` + tamaño de tile (CSS min px). */
 export function tileMinWidth(tileSize: PosLayout["tileSize"], preset: PosPreset): number {
-  if (preset === "boutique") return tileSize === "s" ? 150 : tileSize === "m" ? 180 : 210;
+  if (preset === "boutique") return tileSize === "s" ? 128 : tileSize === "m" ? 146 : 160;
   return tileSize === "s" ? 118 : tileSize === "m" ? 148 : 182;
 }
 

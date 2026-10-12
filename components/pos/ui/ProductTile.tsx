@@ -9,6 +9,11 @@ import { POS_SURFACE, monogramGradient, money } from "./posStyles";
 
 export type TileVariant = "text" | "photo";
 
+function initials(name: string): string {
+  const w = name.trim().split(/\s+/).filter(Boolean);
+  return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? "")).toUpperCase();
+}
+
 // Tile de producto del POS. "text" (Mostrador / Salón / Caja rápida): nombre en
 // dos líneas, precio grande y stock. "photo" (Boutique): foto 4:5 con el
 // precio abajo; sin foto, monograma de color estable.
@@ -51,13 +56,13 @@ export const ProductTile = memo(function ProductTile({
             />
           ) : (
             <span
-              className={cn(
-                "grid h-full w-full place-items-center bg-gradient-to-br text-4xl font-black text-white/90",
-                monogramGradient(p.name),
-              )}
+              className={cn("relative grid h-full w-full place-items-center bg-gradient-to-br", monogramGradient(p.name))}
               aria-hidden
             >
-              {p.name.trim().slice(0, 1).toUpperCase()}
+              <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_55%)]" />
+              <span className="relative grid h-16 w-16 place-items-center rounded-full bg-white/20 font-display text-2xl font-black text-white backdrop-blur-sm">
+                {initials(p.name)}
+              </span>
             </span>
           )}
           {p.has_variants && (
@@ -104,9 +109,16 @@ export const ProductTile = memo(function ProductTile({
         <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">
           {p.name}
         </span>
-        {p.has_variants && (
-          <Layers size={14} className="mt-0.5 shrink-0 text-muted-foreground" aria-label="Con variantes" />
-        )}
+        <span className="flex shrink-0 items-center gap-1">
+          {p.plu && (
+            <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+              {p.plu}
+            </span>
+          )}
+          {p.has_variants && (
+            <Layers size={14} className="mt-0.5 text-muted-foreground" aria-label="Con variantes" />
+          )}
+        </span>
       </span>
       <span className="flex items-end justify-between gap-2">
         <span className="font-price text-[15px] font-black leading-none tabular-nums text-foreground">
@@ -114,11 +126,6 @@ export const ProductTile = memo(function ProductTile({
           {byWeight && <span className="ml-0.5 text-[11px] font-semibold text-muted-foreground">/kg</span>}
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          {p.plu && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
-              {p.plu}
-            </span>
-          )}
           {showStock && p.track_stock && (
             <span
               className={cn(

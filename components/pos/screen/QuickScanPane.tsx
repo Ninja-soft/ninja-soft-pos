@@ -93,7 +93,7 @@ export const QuickScanPane = forwardRef<
           )}
         </div>
       )}
-      <div className="slim-scrollbar min-h-[220px] flex-1 overflow-y-auto rounded-[24px] bg-card/70 p-1.5">
+      <div className="slim-scrollbar min-h-[220px] flex-1 overflow-y-auto rounded-[24px] bg-card p-1.5">
         <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           <span>Ticket</span>
           <span className="hidden sm:inline">Cant. · Importe</span>
@@ -120,7 +120,7 @@ export function QuickKeypadPanel({
         <button
           type="button"
           onClick={onTimes}
-          className="h-12 rounded-2xl bg-muted/80 font-price text-lg font-black transition hover:bg-muted active:scale-95"
+          className="h-12 rounded-2xl bg-fg-6 font-price text-lg font-black transition hover:bg-fg-10 active:scale-95"
           title="Cantidad para el próximo producto"
         >
           × Cant.

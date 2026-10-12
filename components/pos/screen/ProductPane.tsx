@@ -41,11 +41,11 @@ export const PosSearch = forwardRef<
         autoFocus
         aria-label="Buscar producto"
         className={cn(
-          "w-full rounded-2xl bg-card pl-11 pr-14 text-foreground shadow-[inset_0_0_0_1px_var(--border)] outline-none transition placeholder:text-muted-foreground focus:shadow-[inset_0_0_0_2px_var(--pos-from)]",
-          big ? "h-16 text-lg font-semibold" : "h-12 text-[15px]",
+          "w-full rounded-2xl bg-card pl-11 pr-14 text-foreground shadow-[inset_0_0_0_1px_var(--border)] outline-none transition placeholder:text-muted-foreground focus:bg-muted 2xl:pr-24",
+          big ? "h-16 text-base font-semibold sm:text-lg" : "h-12 text-[15px]",
         )}
       />
-      <kbd className="pointer-events-none absolute right-14 top-1/2 hidden -translate-y-1/2 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground xl:block">
+      <kbd className="pointer-events-none absolute right-14 top-1/2 hidden -translate-y-1/2 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground 2xl:block">
         F2
       </kbd>
       <button
@@ -88,7 +88,8 @@ export const ProductGrid = memo(function ProductGrid({
   const tileH = layout.tileSize === "s" ? 84 : layout.tileSize === "m" ? 96 : 118;
   const template =
     layout.columns === "auto"
-      ? `repeat(auto-fill, minmax(${min}px, 1fr))`
+      ? // min(): en el celular siempre entran al menos dos columnas.
+        `repeat(auto-fill, minmax(min(${min}px, calc(50% - ${gap / 2}px)), 1fr))`
       : `repeat(${layout.columns}, minmax(0, 1fr))`;
   return (
     <div
@@ -179,8 +180,12 @@ export function ProductPane({
         </div>
       )}
       {browsing && menuBar}
-      {browsing && layout.categoryBar === "top" && categories.length > 0 && (
-        <CategoryChips categories={categories} selected={categoryFilter} onSelect={onCategory} />
+      {browsing && layout.categoryBar !== "hidden" && categories.length > 0 && (
+        // Con el riel lateral (Boutique) las pestañas sólo aparecen donde el
+        // riel no entra.
+        <div className={cn(layout.categoryBar === "left" && "lg:hidden")}>
+          <CategoryChips categories={categories} selected={categoryFilter} onSelect={onCategory} />
+        </div>
       )}
       {showQuick && (
         <QuickKeysGrid

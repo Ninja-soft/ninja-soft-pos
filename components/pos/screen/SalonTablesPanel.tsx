@@ -16,7 +16,7 @@ const TILE: Record<string, string> = {
   ocupada: "bg-amber-400/15 hover:bg-amber-400/25",
   cuenta_pedida: "bg-sky-400/15 hover:bg-sky-400/25",
   reservada: "bg-purple-400/15 hover:bg-purple-400/20",
-  bloqueada: "bg-muted/40 opacity-60",
+  bloqueada: "bg-fg-4 opacity-60",
 };
 
 export function SalonTablesPanel({
@@ -67,7 +67,7 @@ export function SalonTablesPanel({
         </div>
       )}
       {!loading && tables.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl bg-muted/40 p-6 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-2xl bg-fg-4 p-6 text-center">
           <LayoutGrid size={24} className="text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
             Todavía no cargaste mesas. Definilas en Configuración, Salones y mesas.
@@ -84,7 +84,7 @@ export function SalonTablesPanel({
                 type="button"
                 onClick={() => onTap(t)}
                 className={cn(
-                  "flex aspect-square flex-col justify-between rounded-2xl p-2.5 text-left transition active:scale-95",
+                  "flex aspect-[5/4] flex-col justify-between rounded-2xl p-2.5 text-left transition active:scale-95",
                   active ? POS_SELECTED : TILE[t.status] ?? TILE.libre,
                 )}
                 aria-label={`Mesa ${t.label}, ${TABLE_STATUS_LABELS[t.status]}`}

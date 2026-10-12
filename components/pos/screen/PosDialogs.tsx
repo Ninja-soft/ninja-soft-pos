@@ -177,7 +177,7 @@ export function WeighDialog({
               key={q}
               type="button"
               onClick={() => onGrams(String(q))}
-              className="h-9 rounded-full bg-muted px-3.5 text-[13px] font-bold transition hover:bg-muted/70"
+              className="h-9 rounded-full bg-muted px-3.5 text-[13px] font-bold transition hover:bg-fg-10"
             >
               {q >= 1000 ? `${q / 1000} kg` : `${q} g`}
             </button>

@@ -662,7 +662,22 @@ html {
 }
 
 /* ── POS rediseñado ─────────────────────────────────────────────────────────
-   Hojas del POS (cobro y carrito): suben desde abajo en el celular y aparecen
+   Acento por defecto (fuego Ninja). El POS lo pisa con pos_layout.accent en su
+   contenedor y en sus hojas (que viven en un portal). */
+@layer utilities {
+  /* Rellenos neutros del POS: tinte del color de texto del tema (funciona en
+     claro y oscuro; Tailwind no puede aplicar alpha a var(--foreground)). */
+  .bg-fg-4 { background-color: color-mix(in srgb, var(--foreground) 4%, transparent); }
+  .bg-fg-6 { background-color: color-mix(in srgb, var(--foreground) 7%, transparent); }
+  .bg-fg-10 { background-color: color-mix(in srgb, var(--foreground) 11%, transparent); }
+}
+:root {
+  --pos-from: #ff4b22;
+  --pos-via: #ff8a1f;
+  --pos-to: #ffd21f;
+  --pos-ink: #0b0720;
+}
+/* Hojas del POS (cobro y carrito): suben desde abajo en el celular y aparecen
    escaladas desde md. Solo transform y opacity. */
 @keyframes pos-sheet-up {
   from { transform: translateY(100%); }

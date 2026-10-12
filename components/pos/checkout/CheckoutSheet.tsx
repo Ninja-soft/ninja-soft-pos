@@ -244,8 +244,15 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   );
 
   const promoFor = useCallback(
-    (ls: PaidLine[], method: SaleMethod | null, tip: number): Promo | null => {
-      if (ls.length === 0) return method && active?.flow !== "point" ? pfm(method) : cartPromo;
+    (ls: PaidLine[], method: SaleMethod | null, tip: number, typed?: number | null): Promo | null => {
+      if (ls.length === 0) {
+        if (!method || active?.flow === "point") return cartPromo;
+        const p = pfm(method);
+        // Un primer pago parcial no lleva la promo por medio (sólo aplica si
+        // se paga TODO con ese medio).
+        if (typed != null && typed < totalsFor(ls, p, tip).grandTotal - 0.005) return cartPromo;
+        return p;
+      }
       const only = ls[0];
       if (ls.length === 1 && only && only.promoEligible) {
         const p = pfm(only.method);
@@ -266,8 +273,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     [tipPct, tipCustom, totalsFor, promoFor],
   );
 
+  const typedPortion = portionStr.trim() === "" ? null : keypadNumber(portionStr);
   const tip = tipFor(lines, activeMethod);
-  const promo = promoFor(lines, activeMethod, tip);
+  const promo = promoFor(lines, activeMethod, tip, typedPortion);
   const totals = totalsFor(lines, promo, tip);
   const remaining = Math.max(0, totals.remaining);
   const promoExtra = Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0));
@@ -289,8 +297,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const maxPortion =
     active?.flow === "store_credit" ? Math.min(remaining, storeCreditBalance) : remaining;
-  const portionTyped = portionStr.trim() === "" ? null : keypadNumber(portionStr);
-  const portion = round2(Math.min(Math.max(0, portionTyped ?? maxPortion), maxPortion));
+  const portion = round2(Math.min(Math.max(0, typedPortion ?? maxPortion), maxPortion));
 
   const settleInput = useMemo(
     () => ({
@@ -380,6 +387,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     if (totalsFor(next, promoFor(next, null, t), t).settled) {
       finalize(next);
     } else {
+      // Lo que resta se cobra con otro medio: se vuelve a elegir.
+      setActiveId(null);
       setView("tenders");
     }
   }
@@ -531,7 +540,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           </div>
           <h2 className="mb-4 hidden font-display text-xl font-black tracking-tight md:block">¿Cómo paga?</h2>
           {sections.length === 0 ? (
-            <p className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">
+            <p className="rounded-2xl bg-fg-6 p-4 text-sm text-muted-foreground">
               No hay medios de cobro habilitados. Activalos en Configuración, Medios de pago.
             </p>
           ) : (
@@ -548,7 +557,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         {/* ── Ticket del cobro ───────────────────────────────────────────── */}
         <aside
           className={cn(
-            "flex min-h-0 flex-col bg-muted/30 md:border-l md:border-border",
+            "flex min-h-0 flex-col bg-fg-4 md:border-l md:border-border",
             view === "tenders" && "max-md:hidden",
           )}
         >
@@ -674,7 +683,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     onKeyDown={(e) => e.key === "Enter" && onCta()}
                     placeholder={money(maxPortion)}
                     aria-label="Monto a cobrar con este medio"
-                    className="h-12 min-w-0 flex-1 rounded-2xl bg-muted/70 px-4 font-price text-xl font-black tabular-nums text-foreground outline-none placeholder:text-foreground/80 focus:bg-muted"
+                    className="h-12 min-w-0 flex-1 rounded-2xl bg-fg-6 px-4 font-price text-xl font-black tabular-nums text-foreground outline-none placeholder:text-foreground focus:bg-muted"
                   />
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -748,7 +757,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                         onKeyDown={(e) => e.key === "Enter" && onCta()}
                         placeholder="Otro"
                         aria-label="Monto recibido"
-                        className="h-11 min-w-0 rounded-xl bg-muted/70 px-3 text-center font-price text-sm font-bold tabular-nums outline-none focus:bg-muted"
+                        className="h-11 min-w-0 rounded-xl bg-fg-6 px-3 text-center font-price text-sm font-bold tabular-nums outline-none focus:bg-muted"
                       />
                     </div>
                     <div
@@ -775,7 +784,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
                 {/* Tarjeta: débito / crédito + cuotas */}
                 {active.flow === "terminal" && (
-                  <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-2xl bg-muted/70 p-1">
+                  <div className="mt-4 grid grid-cols-2 gap-1.5 rounded-2xl bg-fg-6 p-1">
                     {(["debit", "credit"] as const).map((k) => (
                       <button
                         key={k}
@@ -833,7 +842,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                           onChange={(e) => setVoucher((v) => ({ ...v, [k]: e.target.value }))}
                           placeholder={label}
                           aria-label={label}
-                          className="h-11 min-w-0 rounded-xl bg-muted/70 px-3 text-sm font-semibold outline-none focus:bg-muted"
+                          className="h-11 min-w-0 rounded-xl bg-fg-6 px-3 text-sm font-semibold outline-none focus:bg-muted"
                         />
                       ))}
                     </div>
@@ -858,7 +867,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                       onKeyDown={(e) => e.key === "Enter" && onCta()}
                       placeholder="Ej. 123456"
                       aria-label="Número de operación"
-                      className="mt-1.5 h-11 w-full rounded-xl bg-muted/70 px-3 text-sm font-semibold outline-none focus:bg-muted"
+                      className="mt-1.5 h-11 w-full rounded-xl bg-fg-6 px-3 text-sm font-semibold outline-none focus:bg-muted"
                     />
                     <p className="mt-1.5 text-[11px] text-muted-foreground">
                       Cobrá {money(settle.amount)} en el portal de {active.brandLabel} y cargá el número que
@@ -892,7 +901,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
             {/* Extras: propina, garantía, vendedor */}
             {(tipPresets.length > 0 || warrantyPlans.length > 0 || professionals.length > 0) && (
-              <div className="mt-4 rounded-3xl bg-card/60">
+              <div className="mt-4 rounded-3xl bg-card">
                 <button
                   type="button"
                   onClick={() => setExtrasOpen((o) => !o)}
@@ -929,7 +938,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                           }}
                           placeholder="Otro $"
                           aria-label="Propina en pesos"
-                          className="h-9 w-24 rounded-full bg-muted/70 px-3 text-center text-[13px] font-semibold outline-none focus:bg-muted"
+                          className="h-9 w-24 rounded-full bg-fg-6 px-3 text-center text-[13px] font-semibold outline-none focus:bg-muted"
                         />
                       </div>
                     </div>
@@ -975,7 +984,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           </div>
 
           {/* CTA */}
-          <div className="shrink-0 border-t border-border bg-popover/90 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pb-5">
+          <div className="shrink-0 border-t border-border bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pb-5">
             <button
               type="button"
               onClick={onCta}
@@ -1001,7 +1010,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
       {/* Confirmación inline: salir con cobros electrónicos aprobados */}
       {confirmLeave && (
-        <div className="absolute inset-0 z-10 flex items-end bg-popover/80 backdrop-blur-sm md:items-center md:justify-center">
+        <div className="absolute inset-0 z-10 flex items-end bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] backdrop-blur-sm md:items-center md:justify-center">
           <div className="w-full rounded-t-[28px] bg-popover p-5 shadow-2xl md:max-w-md md:rounded-[28px]">
             <p className="font-display text-lg font-black">Hay cobros aprobados</p>
             <p className="mt-1.5 text-sm text-muted-foreground">
@@ -1012,7 +1021,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
               <button
                 type="button"
                 onClick={() => setConfirmLeave(false)}
-                className="h-12 rounded-2xl bg-muted text-sm font-bold transition hover:bg-muted/80"
+                className="h-12 rounded-2xl bg-muted text-sm font-bold transition hover:bg-fg-10"
               >
                 Volver al cobro
               </button>
@@ -1072,7 +1081,7 @@ function QuickCash({ on, onClick, children }: { on: boolean; onClick: () => void
       aria-pressed={on}
       className={cn(
         "h-11 rounded-xl font-price text-sm font-black tabular-nums transition active:scale-95",
-        on ? POS_SELECTED : "bg-muted/70 text-foreground hover:bg-muted",
+        on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
       )}
     >
       {children}
@@ -1088,7 +1097,7 @@ function PlanChip({ on, onClick, title, sub }: { on: boolean; onClick: () => voi
       aria-pressed={on}
       className={cn(
         "flex flex-col items-start rounded-xl px-3 py-2 text-left transition active:scale-95",
-        on ? POS_SELECTED : "bg-muted/70 text-foreground hover:bg-muted",
+        on ? POS_SELECTED : "bg-fg-6 text-foreground hover:bg-muted",
       )}
     >
       <span className="text-[13px] font-bold">{title}</span>

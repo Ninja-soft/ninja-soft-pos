@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
+import { BadgeDollarSign, Bike, CalendarDays, Clock, CreditCard, LayoutTemplate, Lock, Mail, MonitorSmartphone, Package, Palette, Percent, Printer, ReceiptText, RotateCcw, ScanLine, ShieldCheck, SlidersHorizontal, Store, Tag, Users, Utensils, Wrench } from "lucide-react";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -86,12 +86,16 @@ const TicketTemplatesCard = dynamic(() =>
 const PrintSettingsCard = dynamic(() =>
   import("@/components/dashboard-team/PrintSettingsCard").then((m) => m.PrintSettingsCard),
 );
+const PosLayoutCard = dynamic(() =>
+  import("@/components/pos/settings/PosLayoutCard").then((m) => m.PosLayoutCard),
+);
 const PriceListsCard = dynamic(() =>
   import("@/components/prices/PriceListsCard").then((m) => m.PriceListsCard),
 );
 
 type Section =
   | "apariencia"
+  | "diseno-pos"
   | "rubro"
   | "marca"
   | "tickets"
@@ -144,6 +148,7 @@ const SECTION_GROUPS: { title: string; sections: SectionDef[] }[] = [
   {
     title: "Operación del POS",
     sections: [
+      { key: "diseno-pos", label: "Diseño del POS", icon: LayoutTemplate },
       { key: "operacion", label: "Operación y productos", icon: SlidersHorizontal },
       { key: "salones", label: "Salones y mesas", icon: Utensils, requiresDining: true },
       { key: "menus", label: "Menús por horario", icon: Clock, requiresDining: true },
@@ -532,6 +537,9 @@ function ConfiguracionInner() {
 
           {/* Operación del POS + productos (solo owner; se auto-oculta) */}
           {section === "operacion" && <OperationSettingsCard view="operacion" />}
+
+          {/* Diseño del POS: preset, grilla, carrito, medios fijados y teclas rápidas */}
+          {section === "diseno-pos" && <PosLayoutCard />}
 
           {/* Salones y mesas (F13 · H44): CRUD de salones/sectores y sus mesas. La
               atención por mesas vive en la sección Salón del menú. Sólo visible

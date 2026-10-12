@@ -14,7 +14,7 @@ export const POS_CTA =
 export const POS_SELECTED = "bg-foreground text-background";
 
 /** Chip / segmento en reposo. */
-export const POS_IDLE = "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground";
+export const POS_IDLE = "bg-fg-6 text-muted-foreground hover:bg-fg-10 hover:text-foreground";
 
 /** Tinte suave del acento (fondos de estado, banners). */
 export const POS_TINT = "bg-[color-mix(in_srgb,var(--pos-from)_13%,transparent)]";

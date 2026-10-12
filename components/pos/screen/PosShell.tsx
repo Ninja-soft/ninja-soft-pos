@@ -103,7 +103,7 @@ export function PosShell(p: PosShellProps) {
   const salon = layout.preset === "salon" && p.tables;
   const centerContent = salon ? (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-muted/60 p-1 xl:hidden">
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-fg-6 p-1 xl:hidden">
         {(["carta", "mesas"] as const).map((t) => (
           <button
             key={t}
@@ -141,7 +141,7 @@ export function PosShell(p: PosShellProps) {
       {p.banners}
 
       {tabs && (
-        <div className="mx-3 mb-2 grid shrink-0 grid-cols-2 gap-1 rounded-2xl bg-muted/60 p-1 md:hidden">
+        <div className="mx-3 mb-2 grid shrink-0 grid-cols-2 gap-1 rounded-2xl bg-fg-6 p-1 md:hidden">
           <button
             type="button"
             onClick={() => setMobileTab("products")}
@@ -161,10 +161,10 @@ export function PosShell(p: PosShellProps) {
 
       <div className={cn("flex min-h-0 flex-1 gap-3 px-3 pb-3 md:px-4 md:pb-4", left && "md:flex-row-reverse")}>
         {p.rail && (
-          <aside className="hidden w-52 shrink-0 rounded-[24px] bg-card/60 p-2.5 lg:block">{p.rail}</aside>
+          <aside className="hidden w-44 shrink-0 rounded-[24px] bg-card p-2 lg:block xl:w-52 xl:p-2.5">{p.rail}</aside>
         )}
         {salon && (
-          <aside className="hidden w-[300px] shrink-0 rounded-[24px] bg-card/60 p-3 xl:block">{p.tables}</aside>
+          <aside className="hidden w-[300px] shrink-0 rounded-[24px] bg-card p-3 xl:block">{p.tables}</aside>
         )}
 
         <main
@@ -203,7 +203,7 @@ export function PosShell(p: PosShellProps) {
             <>
               {cartHeader}
               <div className="slim-scrollbar min-h-[96px] flex-1 overflow-y-auto px-1.5">{p.cartLines}</div>
-              <div className="slim-scrollbar max-h-[64%] shrink-0 overflow-y-auto border-t border-border/60 p-3">
+              <div className="slim-scrollbar max-h-[64%] shrink-0 overflow-y-auto border-t border-border p-3">
                 {p.cartSummary}
               </div>
             </>
@@ -214,7 +214,7 @@ export function PosShell(p: PosShellProps) {
       {/* Barra fija del carrito (celular) */}
       {!tabs && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-[22px] bg-popover/95 p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.65)] ring-1 ring-border backdrop-blur-xl">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-[22px] bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] p-2 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.65)] ring-1 ring-border backdrop-blur-xl">
             <button
               type="button"
               onClick={() => setCartOpen(true)}
@@ -262,7 +262,7 @@ export function PosShell(p: PosShellProps) {
         {!p.linesInCenter && (
           <div className="slim-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5">{p.cartLines}</div>
         )}
-        <div className="shrink-0 border-t border-border/60 p-3">{p.cartSummary}</div>
+        <div className="shrink-0 border-t border-border p-3">{p.cartSummary}</div>
       </PosSheet>
     </div>
   );

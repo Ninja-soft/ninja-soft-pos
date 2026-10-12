@@ -72,6 +72,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     // (ver ADR-026).
     minPlan: "Start",
   },
+  pos_quick_keys_pro: {
+    desc: "Teclas rápidas Pro: hasta 48 botones de un toque en la pantalla de venta, con color por tecla para encontrarlos al instante. El diseño del POS (presets, grilla, carrito, acento) es gratis en todos los planes.",
+    impact: "Sin la función se pueden armar hasta 12 teclas rápidas sin color; el resto del diseño del POS sigue disponible.",
+    minPlan: "Pro",
+    requires: ["pos"],
+  },
 
   // ── Pagos ─────────────────────────────────────────────────────────────────
   efectivo: {

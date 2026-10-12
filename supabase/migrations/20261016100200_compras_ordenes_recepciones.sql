@@ -247,22 +247,22 @@ alter table product_lots enable row level security;
 
 drop policy if exists purchase_orders_select on purchase_orders;
 create policy purchase_orders_select on purchase_orders
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists purchase_order_items_select on purchase_order_items;
 create policy purchase_order_items_select on purchase_order_items
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists purchase_events_select on purchase_events;
 create policy purchase_events_select on purchase_events
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists goods_receipts_select on goods_receipts;
 create policy goods_receipts_select on goods_receipts
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists goods_receipt_items_select on goods_receipt_items;
 create policy goods_receipt_items_select on goods_receipt_items
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists product_lots_select on product_lots;
 create policy product_lots_select on product_lots
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 -- -----------------------------------------------------------------------------
 -- C) Helpers puros (espejo de lib/purchases).

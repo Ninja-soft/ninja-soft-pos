@@ -123,10 +123,10 @@ alter table supplier_payments enable row level security;
 
 drop policy if exists supplier_invoices_select on supplier_invoices;
 create policy supplier_invoices_select on supplier_invoices
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 drop policy if exists supplier_payments_select on supplier_payments;
 create policy supplier_payments_select on supplier_payments
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 -- -----------------------------------------------------------------------------
 -- C) RPC: comprobante (alta y edición).

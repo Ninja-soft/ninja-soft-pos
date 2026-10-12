@@ -18,6 +18,36 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
+-- 0) internal_scope() (ADR-052): las policies de tablas de negocio nunca usan
+--    "OR is_internal()". La función la crea 20261013900000 (fix/sucursales-
+--    tenant); si esta rama se aplica sin ella, se crea con la MISMA definición
+--    y sin pisar una existente.
+-- -----------------------------------------------------------------------------
+do $$
+begin
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'internal_scope' and p.pronargs = 0
+  ) then
+    execute $f$
+      create function public.internal_scope()
+      returns boolean
+      language sql
+      stable
+      set search_path = ''
+      as $body$
+        select public.is_internal()
+           and coalesce(
+             (nullif(current_setting('request.headers', true), '')::json ->> 'x-ninja-scope') = 'internal',
+             false
+           );
+      $body$
+    $f$;
+    execute 'grant execute on function public.internal_scope() to anon, authenticated, service_role';
+  end if;
+end $$;
+
+-- -----------------------------------------------------------------------------
 -- A) Costos por producto.
 -- -----------------------------------------------------------------------------
 alter table products add column if not exists last_cost        numeric(14,4);
@@ -68,7 +98,7 @@ create index if not exists product_cost_history_tenant_idx on product_cost_histo
 alter table product_cost_history enable row level security;
 drop policy if exists product_cost_history_select on product_cost_history;
 create policy product_cost_history_select on product_cost_history
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 -- -----------------------------------------------------------------------------
 -- B) Configuración de compras por negocio.
@@ -103,7 +133,7 @@ alter table purchase_settings enable row level security;
 -- Sólo lectura por tabla: se escribe por RPC (purchase_settings_save).
 drop policy if exists purchase_settings_select on purchase_settings;
 create policy purchase_settings_select on purchase_settings
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 -- Configuración efectiva (defaults si el negocio no guardó nada).
 create or replace function purchase_settings_for(p_tenant uuid)
@@ -415,7 +445,7 @@ alter table suppliers enable row level security;
 
 drop policy if exists suppliers_select on suppliers;
 create policy suppliers_select on suppliers
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 drop policy if exists suppliers_insert on suppliers;
 create policy suppliers_insert on suppliers
@@ -477,7 +507,7 @@ alter table supplier_products enable row level security;
 
 drop policy if exists supplier_products_select on supplier_products;
 create policy supplier_products_select on supplier_products
-  for select using (tenant_id = (select current_tenant_id()) or (select is_internal()));
+  for select using (tenant_id = (select current_tenant_id()) or (select internal_scope()));
 
 drop policy if exists supplier_products_insert on supplier_products;
 create policy supplier_products_insert on supplier_products

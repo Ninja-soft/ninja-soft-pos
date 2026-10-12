@@ -285,6 +285,22 @@ El rol sigue siendo por negocio (`tenant_users.role`); la sucursal define **dón
 - `user_store_role(store)` devuelve el rol efectivo (el pisado por la asignación vigente o el del negocio); `create_sale` lo usa para el tope de descuento.
 - Programar, cancelar o finalizar movimientos: owner o manager, con `multi_sucursal` en el plan, auditado (`staff_branch_scheduled`, `staff_branch_cancelled`, `staff_branch_ended`).
 
+## 9.1c Estados del personal, caja propia y PIN de supervisor (F17 · H113 a H117, ADR-051)
+
+**Estados** (`staff_status_events`, evaluados por fecha): activo, suspendido (motivo, vuelve solo si tiene fecha), de licencia (tipo y fechas) y de baja (despido, renuncia, fin de contrato, otro). Prioridad: baja > suspensión > licencia.
+
+| Estado | Opera caja y vende | Ve datos del negocio | Membresía |
+|---|---|---|---|
+| Activo | Sí | Sí | `active` |
+| Suspendido o de licencia | No (`user_allowed_store_ids()` vacío, `assert_staff_operational()`) | Sólo lo que no depende de sucursal, hasta que vence la sesión (residual, H118) | `active` |
+| De baja | No | No desde el próximo refresh: se borran sus sesiones y se saca el negocio de `app_metadata` | `inactive` (no ocupa cupo) |
+
+- Quién cambia estados: dueño a encargados, cajeros y perfiles; encargado sólo a cajeros y perfiles; nadie a sí mismo; nadie al dueño. Mismo criterio en `member_admin` (editar rol o suspender) e `invite_user` (no pisa miembros; sólo el dueño suma encargados).
+- **Caja propia:** sólo quien abrió el turno vende, retira, ingresa y cierra (`assert_shift_owner`). Un turno abierto por usuario. El dueño vende en cualquier sucursal abriendo su caja ahí. Con "Caja compartida" (`security_settings.shared_shift`) otros venden en el turno abierto, pero retiros, ingresos y cierre siguen siendo del que lo abrió.
+- **Cierre forzado** (`cash_force_close`): supervisor por rol o con PIN, motivo obligatorio, genera el Z y queda auditado con el dueño del turno.
+- **PIN de supervisor:** supervisores = dueño + roles elegidos + personas elegidas (`security_settings`). Cada acción (descuento sobre %, anulación, devolución, retiro, ingreso desde $) pide PIN si quien la hace no es supervisor. El token de un solo uso viaja en el header `x-ninja-supervisor-token` y lo consumen triggers; intentos, bloqueo y rotación configurables.
+- **Auditoría:** la leen dueño y encargado (o cada uno lo propio). Visor con filtros y export: feature `auditoria`.
+
 ## 9.2 Roles de servicios y agenda
 
 F12 agrega presets para comercios de servicios donde importa la agenda, el profesional y la comisión:

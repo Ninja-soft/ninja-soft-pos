@@ -441,6 +441,17 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 - [ ] **Getnet Point.** Próximamente. **Bloqueo:** Cloud2Cloud de "Integrated POS" es para partners y no está confirmado en Argentina. **Paso:** contactar Partnerships de Getnet AR y pedir disponibilidad y credenciales.
 - [x] **Descartados como Point** (sin terminal propia o sin API): Mobbex, MODO, Ualá Bis, Viumi, Naranja X (cubierto por Nave), Posnet/LaPos legacy (protocolo local), Cuenta DNI, Personal Pay.
 
+#### F8 · Terminal integrada: posnet y pinpad por cable o red (ADR-053)
+
+> Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md).
+
+- [~] **H19b · Base de terminal integrada.** *En código (2026-10-12, `feat/terminal-integrada-payway`):* Web Serial, WebUSB y puente local (`tools/bridge`), simulador, máquina de estados, kinds `posnet_integrado` / `pinpad` por caja, Conectar y venta de prueba, "Tarjeta en terminal" en el cobro, bitácora `terminal_transactions` y validación del cupón en `payments`. Feature `terminal_integrada` (Pro+). **Paso:** aplicar `20261018100000_terminal_integrada`.
+- [ ] **H19c · Payway posnet integrado y pinpad.** Adaptador VPI implementado según fuentes públicas no oficiales (`unverified`). **Bloqueo:** especificación oficial, modelos y VID/PID, tabla de códigos de tarjeta, protocolo del Lane/3000 y homologación. **Paso:** pedirlo a Payway con la lista del relevamiento §7 y probar con una Classic en modo integrado.
+- [ ] **H19d · Getnet integrado.** Placeholder. **Bloqueo:** protocolo de la librería (USB / HTTP) o API de Cloud2Cloud. **Paso:** lista "Qué pedirle a Getnet".
+- [ ] **H19e · Fiserv Posnet integrado.** Placeholder. **Bloqueo:** especificación de la aplicación TRANSACT.
+- [ ] **H19f · Operaciones desde Ventas y Caja:** anulación y devolución con la terminal, cierre de lote con totales y conciliación automática (ADR-044) con la bitácora. Requiere H19c.
+- [ ] **H19g · Instalador del puente local** (servicio de Windows, emparejamiento con código corto).
+
 #### F8 · Cobros en espera y QR más rápido (ADR-048)
 
 - [~] **H21f · Cobros en espera.** *Integrado en código (2026-10-12, rama `feat/cobros-en-espera`):* compartir el QR o link (sistema, WhatsApp, email del servidor con el diseño del negocio, copiar, SMS) y "Dejar en espera": la venta queda en `pending_charges` y se registra sola del lado del servidor al acreditarse (trigger sobre `mp_payment_intents`, idempotente), con aviso en el POS (imprimir ticket o factura) y en la campana. Pestaña propia en el POS y en Operación (filtros, sucursal, detalle con línea de tiempo, cancelar, editar en el POS, reenviar, extender, regenerar, reintentar). Cierre de caja con decisión obligatoria (cancelar o pasar a la próxima apertura). Feature `cobros_en_espera` (Pro+). **Pasos:** aplicar `20261014100000_cobros_en_espera`, deploy de `pending_charge_share` y `pending_charges_sync` (y de las Edges de cobro tocadas), probar en sandbox con Mercado Pago (link) y Pagos360 (sin webhook). **Pendiente:** Realtime en vez de sondeo, factura electrónica desde el aviso (F3), "visto por el cliente" (los proveedores no lo informan).
@@ -1074,6 +1085,55 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Estado de terminales (`payment_terminals.last_seen_at`, último cobro aprobado o rechazado).
   - [ ] Alertas por sucursal: caja abierta hace más de N horas, diferencia de caja sobre tolerancia, terminal sin respuesta, sucursal sin ventas en horario.
   - [ ] *Criterio:* el dueño ve en una pantalla que el Point de Centro no responde desde las 10:12 y que Norte no abrió caja.
+
+#### F17 · Personal, cajas y seguridad operativa (auditoría 2026-10-12, ADR-051)
+
+Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md). Cada hito indica su clasificación según la convención de features de plan.
+
+- [x] **H113: Ciclo de vida del personal.** *(2026-10-12, ADR-051)* · *BASE `personal_estados` (nueva). Requiere H91 para sucursal base y traslados.*
+  - [x] Estados `activo`, `suspendido` (motivo, desde y hasta: vuelve solo), `licencia` (tipo, desde y hasta), `baja` (despido, renuncia, fin de contrato u otro; fecha y motivo) y `reingreso`, para usuarios y perfiles sin cuenta. Historial `staff_status_events` con baja lógica, evaluación perezosa por fecha (sin cron).
+  - [x] RPC `staff_set_status`, `staff_cancel_status`, `staff_rehire`, `staff_board` (owner/manager; un encargado no toca al dueño ni a otro encargado), auditadas.
+  - [x] La suspensión y la licencia cortan la operación al instante en el servidor (turnos, ventas, alcance por sucursal vacío); la baja además revoca sesiones y el negocio activo del JWT, pasa la membresía a `inactive` y libera el cupo de usuarios.
+  - [x] Tablero visual por sucursal con avatares y chips de estado, filtros por estado, ficha con timeline (estados y traslados).
+  - [x] Invitar desde el Panel del dueño (fix del acceso rápido) con sucursal base, adicionales y rol por sucursal; reinvitar a alguien de baja es un reingreso explícito.
+  - [x] Fixes: el encargado no degrada ni suspende al dueño (`member_admin`), invitar no pisa el rol de un miembro existente, el invitado recibe el negocio activo (`app_metadata.current_tenant_id`) y se autocura al entrar.
+  - [ ] *Criterio:* el dueño da de baja a un cajero; ese cajero no puede abrir caja, vender ni leer datos del negocio después de su próximo refresh de sesión; la historia y sus ventas quedan.
+
+- [x] **H114: Propiedad de la caja.** *(2026-10-12, ADR-051)* · *BASE (control interno, sin key nueva) + FLAG-OPERATIVO `shared_shift` (caja compartida, apagado).*
+  - [x] `assert_shift_owner(shift)`: sólo quien abrió el turno vende, retira, ingresa o cierra. `resolve_sale_shift` lo exige (ventas, devoluciones y cambios) sin recrear `create_sale`.
+  - [x] Un turno abierto por usuario en todo el negocio (`open_cash_shift`).
+  - [x] Guarda en `cash_shifts` (cierre sólo del dueño del turno o por `cash_force_close`; sin inserts ni borrados directos) y en `cash_movements` (desde el cliente sólo ingreso, retiro o contramovimiento de una anulación real; sin UPDATE ni DELETE).
+  - [x] `cash_force_close(shift, monto contado, motivo)` para supervisores (sesión o PIN), con Z y auditoría.
+  - [x] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
+  - [ ] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja.
+
+- [~] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas y heartbeat en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
+  - [x] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
+  - [x] Pantalla Caja · Cajas abiertas con contador en vivo y acciones Ver detalle y Cierre forzado (PIN); widget en el Panel del dueño.
+  - [ ] Pendiente (H99): heartbeat, alertas por caja abierta hace más de N horas, terminales.
+
+- [x] **H116: PIN de supervisor y políticas por acción.** *(2026-10-12, ADR-051)* · *BASE `pin_supervisor` (nueva). Reemplaza el gating por `cuenta_corriente` del PIN (las RPC `account_*` siguen).*
+  - [x] `security_settings` por negocio: acciones que piden PIN con umbral (descuento sobre X %, anulación desde $Y, devolución desde $Y, retiro desde $Y, ingreso, cierre forzado), roles y usuarios supervisores, intentos y minutos de bloqueo, rotación del PIN en días, caja compartida.
+  - [x] RPC generales `supervisor_pin_status`, `supervisor_set_pin`, `supervisor_clear_pin`, `supervisor_list`, `supervisor_authorize` (token de un solo uso atado a acción, cajero y monto, 5 minutos).
+  - [x] Enforcement server-side por trigger con el token en el header `x-ninja-supervisor-token`: descuento (`sales`), anulación (`sales`), devolución (`sale_returns`), retiro e ingreso (`cash_movements`), cierre forzado.
+  - [x] Diálogo de PIN reutilizable en el POS, Caja y Ventas que reintenta la acción.
+
+- [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
+  - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
+  - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
+  - [ ] Pendiente: retención por plan, alertas (muchos PIN fallidos, anulaciones fuera de horario), firma o hash encadenado para inmutabilidad.
+
+- [~] **H118: Panel del dueño operativo y por sucursal.** *(2026-10-12, ADR-051: tarjetas, gráficos y selector hechos; `current_tenant_id()` con membresía y lint pendientes)* · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
+  - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
+  - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
+  - [ ] Pendiente: `current_tenant_id()` que valide la membresía activa como initplan (raíz de S-07, medir con `EXPLAIN`), helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
+
+- [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*
+  - [ ] Cambio de precio en la línea con precio resuelto en el servidor (hoy `create_sale` confía en `unit_price`).
+  - [ ] Borrar ítem después de un cobro parcial y cancelar cobros en espera (coordinar con `feat/cobros-en-espera`).
+  - [ ] Reapertura de turno cerrado (hoy no existe) con PIN y motivo.
+  - [ ] Abrir el cajón sin venta y reimpresión de tickets con PIN opcional.
+  - [ ] Descuento por línea sobre el tope (hoy el trigger mira el descuento general de la venta).
 
 > **Orden sugerido dentro de F17:** fix de sucursal en `create_sale` (H90, ya) → H89 + H90 → H91 → H92 + H93 → H94 + H95 → H96 + H97 → H98 (con F3) → H99. Corte de control: cada hito con tests RLS por rol y sucursal y un escenario de 2 sucursales con turnos simultáneos.
 

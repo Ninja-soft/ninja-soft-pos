@@ -127,6 +127,10 @@ const GroupAccountTermsCard = dynamic(
   () => import("@/components/account/GroupAccountTermsCard").then((m) => m.GroupAccountTermsCard),
   { loading },
 );
+const SecuritySettings = dynamic(
+  () => import("@/components/security/SecuritySettings").then((m) => m.SecuritySettings),
+  { loading },
+);
 const SupervisorPinCard = dynamic(
   () => import("@/components/account/SupervisorPinCard").then((m) => m.SupervisorPinCard),
   { loading },
@@ -200,6 +204,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <StoreGroupsCard />
         </>
       );
+    case "seguridad":
+      return <SecuritySettings />;
     // Modelos de ticket (escritura protegida por RLS).
     case "tickets":
       return <TicketTemplatesCard />;

@@ -60,6 +60,8 @@
 
 ## 2. Payway Point (Prisma)
 
+> Actualización 2026-10-12: posnet integrado por cable y pinpad relevados en [`terminal-integrada-payway.md`](terminal-integrada-payway.md) (ADR-053), incluida la API cloud PayStore Terminals.
+
 - Payway ofrece "terminales integradas y PINpad que se conectan a tu sistema de gestión" para grandes comercios [V por snippet: <https://www.payway.com.ar/terminales-punto-venta>; la página dio error de certificado].
 - El portal <https://developers.payway.com.ar/catalog> lista APIs "PayStore Terminals" (Reversals, Settlements: anulaciones, devoluciones y cierres de lote) con OAuth2 [V parcial: <https://developers.payway.com.ar/catalog/doc/paystore_terminals_reversals_v1>, SPA no legible]. **No aparece una API para mandar un cobro a la terminal** [I].
 - "PayStore" sería la tienda de apps de Smart POS (Phoebus): el camino probable es una app propia en la Terminal Smart con homologación, no un REST [I].

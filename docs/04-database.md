@@ -498,6 +498,8 @@ create index payments_tenant_method_idx on payments(tenant_id, method, created_a
 
 Columnas agregadas después (ver migraciones): `card_voucher jsonb` (datos del cupón de tarjeta: `lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `comercio`, `cuotas`, `adquirente`, opcionales salvo lo que exijan las reglas del cupón de `pos_settings.card_voucher_rules`, validadas por el trigger `payments_card_voucher`, ADR-054) y `reconciled_at timestamptz` / `reconciled_by uuid` (conciliación de tarjetas, ADR-044). Las dos de conciliación sólo cambian por la RPC `set_payments_reconciled` (trigger `payments_reconcile_guard` rechaza el UPDATE directo).
 
+La numeración del cupón (`lote`, `cupon`, `autorizacion`, `ultimos4`, `comercio`, `cuotas`) se corrige sólo por la RPC `update_payment_voucher` (dueño o encargado cualquiera; cajero los de sus turnos y pendientes), que deja el historial en `payment_voucher_edits` (`payment_id`, `edited_by` / `edited_by_name`, `edited_at`, `changed_keys`, `before_data`, `after_data`, `was_reconciled`, `as_supervisor`, `reason`; lectura por tenant con `internal_scope()`, sin escritura por PostgREST) y en `audit_logs` (`payment_voucher_updated`). Migración `20261018200000_edicion_cupon_tarjeta`, ADR-044 (adenda).
+
 ---
 
 ## 5. Diagrama ER simplificado
@@ -798,7 +800,7 @@ Migraciones `20261015100000_config_heredable`, `20261015110000_terminales_cobro`
 - [x] Resolución: `_effective_config(tenant, domain, key, store, register)` (service_role, triggers) y `effective_config(domain, key, store, register)` (JWT, valida sucursal del negocio y `user_can_access_store`) → `{ value, sources }`. Orden negocio ← grupo ← sucursal ← caja; mapas mezclados por clave; sin `multi_sucursal` no aplican grupo ni sucursal, sin `multi_caja` no aplica la caja. Espejo puro en `lib/config/inheritance.ts`.
 - [x] RPC `config_override_set` (campos y "volver a heredar"), `config_override_copy` (copiar de otra sucursal, `replace` / `merge`) y `config_override_reset_field` ("aplicar a todas"): owner/manager con acceso a la sucursal (grupo exige alcance central), gating `multi_sucursal` / `multi_caja`, `payment_method_plan_key` antes de prender un medio, `audit_logs`.
 - [x] Enforcement: trigger `payments_branch_method` (medio apagado por override en la sucursal o caja de la venta → `payment_method_disabled_in_store`, vía `payment_method_blocked_at`). `create_sale` y `close_cash_shift` leen la configuración efectiva del turno (`_pos_close_config`); con `stock_sucursales` y 2+ sucursales, sin venta en negativo también se controla el saldo de la sucursal (`insufficient_stock_branch`).
-- [x] `payment_terminals(tenant_id, store_id, cash_register_id, provider_key, kind point|qr_caja|clover|posnet_manual, external_id, external_meta, environment, label, merchant_number, acquirer, is_default, active, last_seen_at, notes, deleted_at)`. Único por `(tenant_id, provider_key, environment, external_id)` vivo y un default por `(cash_register_id, provider_key)`. Trigger de reglas (caja de la sucursal, tipo coherente con el proveedor). RLS lectura por `user_allowed_store_ids()`, escritura owner/manager con acceso a la sucursal; auditada. `terminal_for_user(tenant, user, terminal, store)` (service_role) para las Edges. `mp_payment_intents.payment_terminal_id`. Backfill de `config.mp_qr`, `point_pos_ids` de Nave y `device_serials` de Clover a terminales flotantes de la sucursal principal (lo viejo no se borra).
+- [x] `payment_terminals(tenant_id, store_id, cash_register_id, provider_key, kind point|qr_caja|clover|posnet_manual|posnet_integrado|pinpad (ADR-053), external_id, external_meta, environment, label, merchant_number, acquirer, is_default, active, last_seen_at, notes, deleted_at)`. Único por `(tenant_id, provider_key, environment, external_id)` vivo y un default por `(cash_register_id, provider_key)`. Trigger de reglas (caja de la sucursal, tipo coherente con el proveedor). RLS lectura por `user_allowed_store_ids()`, escritura owner/manager con acceso a la sucursal; auditada. `terminal_for_user(tenant, user, terminal, store)` (service_role) para las Edges. `mp_payment_intents.payment_terminal_id`. Backfill de `config.mp_qr`, `point_pos_ids` de Nave y `device_serials` de Clover a terminales flotantes de la sucursal principal (lo viejo no se borra).
 - [x] `printers(tenant_id, store_id, cash_register_id, name, kind thermal_58|thermal_80|a4|label|kitchen, connection, address, active, notes, last_test_at, last_test_ok, deleted_at)` con la misma RLS que las terminales y `printer_mark_test(printer, ok)`. Los perfiles por documento (`print_profiles`, ahora con `kitchen` y `transfer`) suman `printer_id` y `fallback_printer_id` y se heredan con `config_overrides`.
 - [x] `stores.logo_path` / `logo_url` (logo propio opcional, bucket `tenant-assets/<tenant>/stores/<store>/`).
 - [x] Reportes: `report_store_filter(p_store_id)` y `p_store_id` opcional en `sales_report`, `staff_productivity` y `gastro_*_report`; `register_stock_waste` con sucursal.
@@ -806,6 +808,25 @@ Migraciones `20261015100000_config_heredable`, `20261015110000_terminales_cobro`
 - [x] Políticas nuevas con `internal_scope()` (nunca `or is_internal()`, ADR-052).
 
 ---
+
+## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
+
+Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja` y `20261017130000_monitor_cajas_auditoria`.
+
+- [x] `staff_status_events(tenant_id, user_id | cashier_profile_id, kind, subtype, starts_on, ends_on, reason, notes, deleted_at, ...)`: suspensiones, licencias, bajas y reingresos con vigencias. Lectura: dueño, encargado o la propia persona; escritura sólo por RPC (`staff_set_status`, `staff_end_status`, `staff_rehire`). `tenant_users.status` suma `inactive`.
+- [x] `security_settings(tenant_id pk, pin_policy jsonb, supervisor_roles, supervisor_user_ids, pin_max_attempts, pin_lock_minutes, pin_rotation_days, shared_shift)`: lectura del negocio, escritura `security_settings_save` (dueño).
+- [x] `supervisor_auth_tokens`: autorizaciones de un solo uso (acción, supervisor, quien pidió, monto, vencimiento). Sin acceso de clientes. `account_supervisor_pins.pin_set_at` para la rotación.
+- [x] Guardas por trigger: `cash_shifts_guard`, `cash_movements_guard`, `sales_supervisor`, `sale_returns_supervisor`. Policy RESTRICTIVE `audit_logs_role_scope`.
+- [x] Lecturas por RPC: `cash_monitor`, `owner_dashboard_stats`, `audit_log_search`, `audit_log_facets`, `staff_people`, `my_staff_status`, `supervisor_list`, `supervisor_pin_status`.
+
+## 8.11 Extensión F8: terminal integrada (ADR-053)
+
+Migración `20261018100000_terminal_integrada` (no aplicada).
+
+- [x] Feature `terminal_integrada` (OPTIONAL, grupo pagos, Pro+).
+- [x] `payment_terminals.kind` suma `posnet_integrado` y `pinpad` (marcas `payway`, `fiserv`, `getnet`); configuración en `external_meta.integration` (adaptador, transporte, puerto, destino del puente, timeout, códigos de tarjeta, razón social, CUIT). El trigger de reglas exige la feature y la marca en el plan al dar de alta, pasar a integrada o reactivar.
+- [x] `terminal_transactions(tenant_id, terminal_id, store_id, cash_register_id, op sale|void|refund|close_batch|test, status approved|declined|timeout|cancelled|error, amount, installments, adapter, simulated, result jsonb, raw, client_ref, payment_id unique, created_by, created_at)`. RLS sólo lectura (`internal_scope()` o negocio actual y sucursales del usuario). Escritura sólo por `terminal_tx_record(...)` (SECURITY DEFINER: rol, terminal del usuario, feature, `audit_logs`, `last_seen_at`).
+- [x] Triggers `payments_terminal_tx` (BEFORE INSERT: un `card_voucher` con `origen = 'terminal'` exige `terminal_tx` de una venta aprobada, mismo negocio y monto, menos de 24 h y sin usar; pisa lote, cupón, autorización y últimos 4 con la bitácora; `simulado` si vino del simulador) y `payments_terminal_tx_link` (AFTER INSERT: vincula `payment_id`).
 
 ## 9. Migraciones iniciales sugeridas
 

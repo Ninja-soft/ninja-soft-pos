@@ -36,6 +36,7 @@ export type SettingsSectionKey =
   | "diseno-pos"
   | "rubro"
   | "sucursales"
+  | "seguridad"
   | "marca"
   | "tickets"
   | "impresion"
@@ -123,6 +124,15 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Tus locales, sus cajas y qué personal trabaja en cada uno, con traslados programados.",
         icon: Building2,
         keywords: "sucursal local caja punto de venta personal empleados traslado cobertura multi",
+      },
+      {
+        key: "seguridad",
+        label: "Seguridad y auditoría",
+        title: "Seguridad y auditoría",
+        description:
+          "Qué acciones piden PIN de supervisor y desde qué monto, quién autoriza, tu PIN y el registro de todo lo que pasa en el negocio.",
+        icon: ShieldCheck,
+        keywords: "pin supervisor autorizacion anulacion devolucion retiro descuento auditoria registro log caja compartida",
       },
     ],
   },
@@ -382,6 +392,9 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cupon: "posnet",
   voucher: "posnet",
   tema: "apariencia",
+  auditoria: "seguridad",
+  pin: "seguridad",
+  supervisor: "seguridad",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

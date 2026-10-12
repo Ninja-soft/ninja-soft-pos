@@ -28,6 +28,29 @@ export function useZClosures(range?: { from?: Date; to?: Date }, storeId?: strin
   });
 }
 
+export function useCashMonitor(storeId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["cash", "monitor", storeId],
+    queryFn: () => cashApi.monitor(storeId),
+    enabled,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+}
+
+export function useForceClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { shiftId: string; closing: number; reason: string }) =>
+      cashApi.forceClose(v.shiftId, v.closing, v.reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cash"] });
+      qc.invalidateQueries({ queryKey: ["pos"] });
+      qc.invalidateQueries({ queryKey: ["owner-stats"] });
+    },
+  });
+}
+
 export function useAddMovement() {
   const qc = useQueryClient();
   return useMutation({

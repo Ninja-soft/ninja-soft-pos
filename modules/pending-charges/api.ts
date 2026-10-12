@@ -7,6 +7,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { posApi } from "@/modules/pos/api";
+import { withSupervisor } from "@/modules/security/supervisor";
 import type {
   PendingCharge,
   PendingChargeEvent,
@@ -74,6 +75,15 @@ export interface ProviderCharge {
   qr_data?: string;
 }
 
+// Porcentaje de descuento general manual del carrito (ADR-051): estacionar corre
+// create_sale en seco y puede pedir PIN de supervisor por el descuento.
+function discountPct(sale: Record<string, unknown> | null | undefined): number {
+  const items = (Array.isArray(sale?.items) ? sale!.items : []) as { unit_price?: number; quantity?: number; discount?: number }[];
+  const subtotal = items.reduce((a, it) => a + (Number(it.unit_price) || 0) * (Number(it.quantity) || 0) - (Number(it.discount) || 0), 0);
+  const disc = Number(sale?.discount_total) || 0;
+  return subtotal > 0 ? Math.round((disc / subtotal) * 10000) / 100 : 0;
+}
+
 const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
   const { data, error } = await createClient().rpc(fn as never, args as never);
   if (error) throw new Error(error.message);
@@ -122,7 +132,7 @@ export const pendingChargesApi = {
   },
 
   park: (a: ParkArgs) =>
-    rpc<{ id: string; expires_at: string; amount: number }>("park_pending_charge", {
+    withSupervisor(() => rpc<{ id: string; expires_at: string; amount: number }>("park_pending_charge", {
       p_intent_id: a.intentId,
       p_sale: a.sale,
       p_cart: a.cart,
@@ -136,7 +146,7 @@ export const pendingChargesApi = {
       p_customer_phone: a.customerPhone,
       p_expires_minutes: a.expiresMinutes,
       p_notes: a.notes ?? null,
-    }),
+    }), { discount_over: discountPct(a.sale) }),
 
   complete: (id: string, force = false) =>
     rpc<{ status: string; sale_id?: string; number?: number; error?: string }>("complete_pending_charge", {

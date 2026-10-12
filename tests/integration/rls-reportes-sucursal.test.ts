@@ -127,10 +127,10 @@ describe.skipIf(!enabled)("F17 · reportes y merma por sucursal", () => {
     const cajaCentro = list.find((r) => r.store_id === ctx.centro)!.id;
     const cajaNorte = list.find((r) => r.store_id === ctx.norte)!.id;
 
+    // ADR-051 (H114): un turno abierto por usuario. El dueño vende en Centro,
+    // cierra y vende en Norte.
     const a = await rpc(owner.client, "open_cash_shift", { p_register_id: cajaCentro, p_opening_amount: 0 });
     if (a.error) throw new Error(a.error.message);
-    const b = await rpc(owner.client, "open_cash_shift", { p_register_id: cajaNorte, p_opening_amount: 0 });
-    if (b.error) throw new Error(b.error.message);
 
     const item = (price: number) => [{ product_id: ctx.product, quantity: 1, unit_price: price, discount: 0 }];
     const sC = await rpc(owner.client, "create_sale", {
@@ -139,6 +139,10 @@ describe.skipIf(!enabled)("F17 · reportes y merma por sucursal", () => {
       p_cash_shift_id: a.data,
     });
     if (sC.error) throw new Error(sC.error.message);
+    const closeC = await rpc(owner.client, "close_cash_shift", { p_shift_id: a.data, p_closing_amount: 100 });
+    if (closeC.error) throw new Error(closeC.error.message);
+    const b = await rpc(owner.client, "open_cash_shift", { p_register_id: cajaNorte, p_opening_amount: 0 });
+    if (b.error) throw new Error(b.error.message);
     const sN = await rpc(owner.client, "create_sale", {
       p_items: item(40),
       p_payments: [{ method: "cash", amount: 40 }],

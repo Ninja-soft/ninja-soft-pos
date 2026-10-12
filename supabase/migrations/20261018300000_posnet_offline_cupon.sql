@@ -303,6 +303,10 @@ begin
   if coalesce(new.amount, 0) <= 0 then return new; end if;
   -- Ensayo de cobros en espera (_pc_dry_run): no es un cobro real.
   if coalesce(current_setting('ninja.pc_dry_run', true), '') = 'on' then return new; end if;
+  -- Terminal integrada (ADR-053): el cupón lo informó la terminal y el
+  -- trigger payments_terminal_tx (20261018100000) ya lo valida contra
+  -- terminal_transactions (venta aprobada del mismo negocio).
+  if v_cv ? 'terminal_tx' or v_cv ->> 'origen' = 'terminal' then return new; end if;
 
   -- Cobro integrado (Point, terminal por API, cobro en espera): el proveedor
   -- ya verificó la operación; el cupón lo completa la integración.

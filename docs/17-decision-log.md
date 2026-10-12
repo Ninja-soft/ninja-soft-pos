@@ -1519,6 +1519,19 @@ Los comercios cobran con tarjeta en posnets propios (Tarjeta en posnet, ADR-042)
 - Cobros sin `comercio` (anteriores a los números de comercio o de marcas sin número) se agrupan como "Sin n° de comercio"; los integrados sin cupón quedan como "Sin lote" y muestran la referencia del proveedor como ayuda.
 - Pendiente (v2): importar la liquidación del adquirente (CSV / Excel) y conciliar automático por lote y cupón; fecha de acreditación y aranceles / retenciones por cobro; conciliación de QR y billeteras.
 
+### Adenda (2026-10-12): edición de la numeración y tabla nueva
+
+**Contexto.** El dueño pidió "mejorame la tabla, que no se rompa; además permitime editar la numeración si es mi caja, o todas las cajas si soy supervisor". La tabla partía encabezados, mezclaba fuentes, llenaba de guiones y se rompía en anchos chicos.
+
+**Decisión.**
+- **Tabla:** encabezados cortos que no se parten (nombre completo en el tooltip) y fijos arriba con scroll propio dentro de la card; jerarquía día (fila con día de la semana, total y "x de y conciliados") → comercio (subencabezado liviano) → lote (checkbox, subtotal alineado con la columna Monto y estado: Conciliado, Pendiente o "x de y"); una sola familia tipográfica con `tabular-nums`; vacíos con `NoData`; estado por cobro; checkbox nuevo del sistema `components/ui/Checkbox.tsx` (selección neutra, estado mixto). Debajo de `md`, tarjetas por lote en lugar de la tabla.
+- **Edición:** lápiz por cobro que abre `VoucherEditModal` (hoja en mobile) con lote, cupón, autorización, últimos 4, n° de comercio y cuotas, motivo opcional e historial (quién, cuándo, qué cambió). Validación en `lib/reports/voucherEdit.ts`, espejo de la del servidor.
+- **Servidor:** RPC `update_payment_voucher(p_payment_id, p_patch, p_reason)` SECURITY DEFINER con `search_path`: cobro de tarjeta del tenant, plan con `conciliacion_tarjetas`; dueño o encargado editan cualquiera; cajero sólo cobros de ventas de un turno que abrió él; solo lectura nunca. Cobro ya conciliado: el cajero queda bloqueado; dueño o encargado lo editan, **sigue conciliado** y la edición queda con `was_reconciled = true` (la tabla lo marca en ámbar para revisarlo). Claves en lista blanca, valores validados (lote hasta 10 dígitos, cupón hasta 12, comercio hasta 20, autorización alfanumérica hasta 20 en mayúsculas, últimos 4 exactos, cuotas 1 a 99), vacío borra la clave, y se mezcla en `card_voucher` sin tocar `marca` ni otras claves. Historial en la tabla nueva `payment_voucher_edits` (lectura `tenant_id = current_tenant_id() or internal_scope()`, ADR-052; sin escritura por PostgREST) y `audit_logs` (`payment_voucher_updated`, antes y después). No toca `reconciled_*`: el guard `payments_reconcile_guard` sigue igual.
+
+**Alternativas descartadas.** Guardar el historial dentro de `card_voucher._edits` (ensucia un dato que se imprime y viaja a otros lados); desconciliar solo al editar (el supervisor ya verificó el lote; se prefiere marcarlo y que lo revise).
+
+**Consecuencias.** Migración `20261018200000_edicion_cupon_tarjeta` (no aplicada). Orden de deploy: migración primero; sin ella la pantalla funciona igual pero el historial pide una tabla que no existe (404 en consola) y el lápiz falla al guardar. Tests: `tests/unit/voucherEdit.test.ts` y `tests/integration/rls-voucher-edit.test.ts`.
+
 ---
 
 ## ADR-047: Clover Point (Fiserv) por Cloud Pay Display y estado del resto de los Points
@@ -1754,6 +1767,45 @@ Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, m
 
 ---
 
+## ADR-051: Personal con estados, propiedad de la caja, PIN de supervisor por acción y auditoría del negocio (F17 · H113 a H119)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-personal-cajas`, migraciones sin aplicar) · **Base:** ADR-045, ADR-049 (personal al invitar y `audit_logs.store_id`), ADR-052 · **Auditoría:** [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md)
+
+### Contexto
+
+El dueño pidió que cada usuario trabaje sólo en su sucursal, que el dueño cobre en cualquiera pero abriendo su caja, que nadie invada la caja de otro, estados de personal (suspensión, licencia, baja, reingreso), ver qué cajas están abiertas, configurar PIN de supervisor y auditoría, y un panel del dueño más útil. La auditoría encontró huecos P0: cualquier miembro cierra o vende en el turno de otro, `cash_movements` se escribe y borra por REST, un encargado puede degradar al dueño, el invitado no recibe el negocio activo y el PIN sólo existe para cuenta corriente.
+
+### Decisión
+
+1. **Estados del personal como historial con vigencias** (`staff_status_events`: `suspension`, `leave`, `termination`, `rehire`), igual que las asignaciones por sucursal: evaluación perezosa por fecha (`staff_effective_status`), sin cron, baja lógica para cancelar. Prioridad baja > suspensión > licencia. La suspensión y la licencia no tocan la membresía: cortan la operación en el servidor (`user_allowed_store_ids()` vacío, `assert_staff_operational()` en apertura de turno y en `resolve_sale_shift`, `is_tenant_manager()` falso). La baja además pasa `tenant_users.status` a `inactive` (valor nuevo), borra las sesiones del usuario y saca el negocio de `app_metadata.current_tenant_id` si era el activo, así la RLS lo deja afuera en el próximo refresh. El reingreso vuelve a `active` y restaura el negocio activo si no tiene otro. Un encargado no puede cambiar el estado del dueño ni de otro encargado; nadie se cambia a sí mismo.
+2. **Propiedad de la caja en un helper, no en `create_sale`.** `assert_shift_owner(shift)` (dueño del turno o `shared_shift` para vender). `resolve_sale_shift` (que usan venta, devolución y cambio) lo exige y deja de inferir turnos ajenos; `open_cash_shift` (recreada desde `20261013120000`) exige un turno abierto por usuario y personal operativo. Guardas por trigger en `cash_shifts` (cierre sólo por el dueño del turno o con la marca de transacción que pone `cash_force_close`; sin insert ni delete desde el cliente) y en `cash_movements` (desde el cliente sólo ingreso, retiro o el contramovimiento de una anulación real del mismo turno; nunca UPDATE o DELETE). Se distingue cliente de RPC con `current_user in ('authenticated','anon')`, como en `20261012120000`. Así no se recrean `create_sale`, `close_cash_shift`, `void_sale` ni las devoluciones, que tocan otras ramas.
+3. **Cierre forzado** `cash_force_close(shift, monto, motivo)`: supervisor por rol o con token de PIN, motivo obligatorio, llama a `close_cash_shift` (Z normal) con una marca de transacción y audita `cash_shift_force_closed` con el dueño del turno.
+4. **PIN de supervisor general.** Misma tabla `account_supervisor_pins` (los PIN existentes siguen valiendo) con RPC nuevas sin gating de cuenta corriente. `security_settings` por negocio guarda la política: acciones con umbral, roles y usuarios supervisores, intentos, minutos de bloqueo, rotación y caja compartida. `supervisor_authorize` devuelve un token de un solo uso (acción, cajero, monto, 5 minutos). **El token viaja en el header `x-ninja-supervisor-token`** y lo consumen triggers en `sales` (descuento general sobre X % al insertar; anulación desde $Y), `sale_returns` (devolución desde $Y) y `cash_movements` (retiro e ingreso). Quien ya es supervisor actúa con su sesión. Es server-side real sin cambiar firmas de RPC.
+5. **Monitor de cajas** por RPC `cash_monitor` (respeta `user_allowed_store_ids`), pantalla `/caja/monitor` y widget del panel.
+6. **Auditoría:** registrar sigue siendo BASE. La lectura directa de `audit_logs` se restringe (policy RESTRICTIVE: dueño, encargado o filas propias). El visor usa `audit_log_search` gateada por `auditoria` (OPTIONAL Business), con export XLSX en el cliente.
+7. **Features (CLAUDE.md §6):** `personal_estados`, `monitor_cajas` y `pin_supervisor` son BASE (`is_basic`, en todos los planes); `auditoria` (existente) pasa de MARKETING-FUTURO a OPTIONAL con gating real; `shared_shift` es FLAG-OPERATIVO.
+8. **Cobros en espera (ADR-048) y caja propia.** Estacionar un cobro corre `create_sale` en seco (`_pc_dry_run`) con el usuario que estaciona: exige caja propia, personal activo y el PIN de supervisor si el descuento lo pide (el cliente manda el token al estacionar). Acreditarlo cuando el cliente paga (`_pc_complete`, recreada desde `20261014100000` en `20261017140000`) marca la transacción con `ninja.pc_complete`: `resolve_sale_shift` acepta el turno destino que elige `_pc_target_shift` aunque sea de otra persona (el de su caja o el más reciente de su sucursal) y no evalúa el estado de quien lo estacionó, y el trigger de supervisor de `sales` no vuelve a pedir PIN. La plata ya entró: la venta no puede quedar colgada por una regla de caja.
+9. **`close_cash_shift` tiene una sola firma** (4 args con `p_pending_action`, de `20261014100000` y `20261015120000`). `cash_force_close(turno, monto, motivo, p_pending_action default 'carry')` la llama con 4 args: por defecto los cobros abiertos del turno forzado pasan a la próxima apertura de esa caja; con `'cancel'` se cancelan los que esperan (los pagados se acreditan igual).
+10. **Invitación:** `invite_user` no pisa el rol de un miembro existente (sólo agrega o reactiva con el rol pedido si no era dueño), setea el negocio activo del invitado si no tiene, y deja el reingreso de una baja como evento. `member_admin` valida jerarquía (encargado no toca dueño ni encargados). `ensure_current_tenant()` cura al entrar a quienes tienen membresía activa sin negocio activo.
+
+### Alternativas descartadas
+
+- **Recrear `create_sale`, `close_cash_shift` y `void_sale` con los controles:** choca con `feat/cobros-en-espera` y `feat/sucursales-config-terminales`; los triggers y `resolve_sale_shift` cubren lo mismo.
+- **`current_tenant_id()` que valide la membresía en cada policy:** es la raíz correcta para S-07 pero cambia el costo de todas las policies (no se pueden asumir initplans); queda en H118 con medición.
+- **Cambiar parámetros de las RPC para mandar el token del PIN:** obliga a recrear funciones ajenas; el header es explícito, se valida en el servidor y no cambia firmas.
+- **Suspensión como cambio de `tenant_users.status`:** no permite "vuelve sola el lunes" sin cron y saca al usuario de listas e historia; se usa el historial con vigencias.
+- **pg_cron para vencer suspensiones y licencias:** igual que en ADR-045, la vigencia calculada al consultar es exacta y gratis.
+
+### Consecuencias
+
+- Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja`, `20261017130000_monitor_cajas_auditoria` y `20261017140000_caja_propia_cobros_en_espera` (sin aplicar). Van después de `20261014100000` (cobros en espera), `20261015*` (configuración por sucursal) y `20261016*` (compras). Orden de deploy: **front primero** (el cliente nuevo cae a la ruta vieja si una RPC no existe), después las migraciones en orden, después las Edge `invite_user` y `member_admin`.
+- **Cambio de conducta:** desde el deploy nadie vende en el turno de otro. Si hoy dos personas comparten un turno, el dueño activa "Caja compartida" en Seguridad o cada uno abre su caja. Los turnos abiertos al momento del deploy siguen; sólo su dueño los opera y cierra (o un supervisor con cierre forzado).
+- Un usuario con turno abierto en Centro tiene que cerrarlo para abrir otro en Norte (un turno por usuario).
+- Residual S-07: un suspendido o de licencia con sesión viva todavía puede **leer** datos del negocio por API hasta H118; no puede operar caja ni vender.
+- Tests: unitarios de la máquina de estados, reglas de propiedad y evaluación de políticas de PIN; RLS de propiedad del turno, cierre forzado, guardas de `cash_movements`, estados y PIN por header.
+
+---
+
 ## ADR-052: Aislamiento del staff interno: internal_scope() en vez de is_internal() en RLS de negocio
 
 **Fecha:** 2026-10-12 · **Estado:** aceptada · **Severidad:** incidente de aislamiento multi-tenant
@@ -1767,6 +1819,39 @@ Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, m
 - Guardarraíl: `rls_internal_scope_leaks()` (service_role) y un test en el job `rls` de CI que exige 0 filas; regla agregada en CLAUDE.md §3.
 
 **Consecuencias.** Toda política nueva de negocio debe usar `internal_scope()`. Las Edge Functions internas no cambian (validan el JWT y usan service_role). Orden de deploy: front primero (el header es inocuo sin la migración), después la migración.
+
+---
+
+## ADR-053: Terminal integrada (posnet y pinpad conectados a la caja), base vendor-agnóstica y simulador
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/terminal-integrada-payway`; migración sin aplicar; Payway sin homologar; Fiserv y Getnet pendientes del kit) · **Hito:** F8 · H19b · **Base:** ADR-042, ADR-044, ADR-047, ADR-049, ADR-052 · **Numeración:** ADR-054 queda para la tarjeta en posnet offline.
+
+### Contexto
+
+El dueño: "lo que quiero es que la terminal cobre y envíe los datos al POS, ya sea posnet o pinpad", con terminales Payway clásicas (countertop o móvil) y pinpad conectado a la PC; después sumó Getnet. La Payway Smart (Android) queda fuera. Hoy la tarjeta con posnet propio se cobra en la terminal y el cajero carga el cupón a mano (Tarjeta en posnet, ADR-042). Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md). Hallazgos: el "POS Integrado" de LaPos / Payway por cable existe y lo usan otros sistemas; su protocolo (VPI PC, 19200 8N1, STX/ETX/LRC, comandos de 3 letras) sólo está descripto por fuentes públicas no oficiales; el pinpad Lane/3000 no tiene nada público; Payway tiene además una API cloud PayStore Terminals con homologación; Getnet tiene una librería con modos USB, HTTP local y Cloud2Cloud sin protocolo público; Fiserv Posnet no publica nada.
+
+### Decisión
+
+1. **Base vendor-agnóstica en el navegador** (`lib/payments/terminal`): `TerminalAdapter` (connect, sale, void, refund, closeBatch, status, lastTransaction opcional) que devuelve un `TerminalResult` normalizado (aprobado, autorización, lote, cupón, marca, tipo, últimos 4, cuotas, n° de comercio, código y mensaje, crudo). Transportes `ByteTransport`: **Web Serial** y **WebUSB** (Chrome / Edge de escritorio, permiso con gesto del usuario, emparejamiento guardado por PC en `localStorage`) y **Puente local NinjaPOS** (WebSocket en 127.0.0.1 con token y origen permitido; protocolo y referencia en Node en `tools/bridge`, sin binario). Framing ISO 1745 parametrizable (STX/ETX/LRC, ACK/NAK, reintentos).
+2. **Adaptadores:** `SimulatorAdapter` (demos y tests, escenarios por centavos, lote y cupones, anulación, devolución, cierre y última operación); `PaywayAdapter` con el formato VPI implementado según las fuentes públicas, estado **`unverified`** (no se copió código ni se usan DLLs del fabricante; el protocolo pide el código de tarjeta, que el dueño carga desde la tabla que da Payway); `FiservPosnetAdapter` y `GetnetAdapter` **placeholders** (`pending_kit`: conexión física sí, operaciones `spec_pending`).
+3. **Máquina de estados del cobro** (`charge.ts`): conectando, esperando, aprobado, rechazado, timeout, cancelado, error; reintentar nunca sobre un aprobado; el **timeout es incierto** (pudo cobrar) y una aprobación tardía se respeta; "Consultar la terminal" (última operación) para recuperar el cupón antes de reintentar.
+4. **Registro por caja (extiende ADR-049):** `payment_terminals.kind` suma `posnet_integrado` y `pinpad` para las marcas `payway`, `fiserv` y `getnet`; la configuración compartida (protocolo, conexión, puerto, destino del puente, timeout, códigos de tarjeta, razón social, CUIT) va en `external_meta.integration`; lo de cada PC (dispositivo emparejado, token del puente) en el navegador. Configuración, Terminales: tipo, campos de integración y **Conectar** (emparejar, probar conexión, venta de prueba con el simulador).
+5. **POS:** con una terminal integrada en la caja (o flotante de la sucursal), la hoja de cobro ofrece **"Tarjeta en terminal"** antes de "Tarjeta en posnet" (se engancha a nivel tender, `card:terminal`, sin tocar el asistente manual). Débito / crédito, cuotas con su recargo (y la marca si el protocolo la pide) y "Cobrar en la terminal": espera con cancelar, timeout y reintentar; aprobado completa `card_voucher` (lote, cupón, autorización, marca, últimos 4, cuotas, comercio, **adquirente**, `origen: "terminal"`, `terminal_tx`) y registra el pago (bloqueado en la hoja); rechazo muestra el motivo; siempre se puede pasar a la carga manual.
+6. **Servidor (lo que se escribe):** bitácora `terminal_transactions` (sólo lectura por RLS con `internal_scope()` y sucursales del usuario; escritura sólo por la RPC `terminal_tx_record`: rol, terminal del usuario vía `terminal_for_user`, feature y `audit_logs`). Trigger en `payments`: un cupón con `origen: "terminal"` exige `terminal_tx` de una **venta aprobada** del mismo negocio, mismo monto, de las últimas 24 h y no usada (bloqueo `FOR UPDATE` y vínculo por un trigger `AFTER INSERT`), y pisa lote, cupón, autorización y últimos 4 con los de la bitácora; si vino del simulador, marca `simulado`. Si la bitácora no se pudo guardar, el POS registra el cobro como carga manual (la plata ya se cobró).
+7. **Feature `terminal_integrada`:** OPTIONAL, grupo pagos, desde **Pro** (Pro, Business, Enterprise). Gating real en el trigger de `payment_terminals` (alta, cambio a integrada o reactivación; además la marca tiene que estar en el plan), en la RPC de bitácora y en el trigger de `payments`. Copy en `featureInfo`; la comparación de planes la deriva de la matriz.
+
+### Alternativas descartadas
+
+- **Usar la DLL del fabricante (`vpipc.dll`) con un agente local:** no se puede redistribuir sin permiso de Payway y ata la solución a Windows; el formato público alcanza para el navegador o el puente.
+- **Cloud API (PayStore) como única vía:** no sirve para el pinpad por cable y no está confirmado para la Classic; queda como alternativa a evaluar con Payway.
+- **Confiar en el cupón que manda el navegador:** el trigger lo valida contra la bitácora; un cupón "de terminal" no se puede inventar.
+- **Rediseñar el asistente de Tarjeta en posnet:** otra rama lo está cambiando; la integración se suma como tender propio.
+
+### Consecuencias
+
+- Deploy: migración `20261018100000_terminal_integrada` (después de `20261015110000` de ADR-049 y de `20261013900000` de ADR-052). Sin Edges nuevas.
+- Lo que el comercio necesita: Chrome o Edge de escritorio en https (o el puente), la terminal en modo integrado y, para Payway, los códigos de tarjeta.
+- **Pendiente con los adquirentes:** especificación oficial y homologación de Payway (lista en el relevamiento), protocolo de Fiserv Posnet, librería o Cloud2Cloud de Getnet. Anulación, devolución y cierre de lote desde Ventas y la Caja quedan para cuando haya protocolo validado (el adaptador ya los tiene). Instalador del puente. Cobro de una venta aprobada cuya venta falla después queda en la bitácora sin pago (conciliable), igual que un Point.
 
 ---
 
@@ -1806,4 +1891,4 @@ No es una feature de plan nueva: es parte de Tarjeta en posnet (BASE, ADR-042). 
 - Deploy: aplicar `20261018300000_posnet_offline_cupon.sql` después de `20261015100000` y `20261015120000` (usa `_effective_config`). El front nuevo funciona contra la base vieja (sin columna, `parseRules` devuelve `{}` y el POS pide lo de siempre); guardar reglas requiere la migración.
 - Negocios con `require_card_voucher` prendido: desde la migración el servidor rechaza débito o crédito manual sin cupón, lote y autorización, o con caracteres que no sean letras y números (antes texto libre). El POS ya los exigía y ahora limpia lo tipeado.
 - Límite conocido: un cambio con diferencia en tarjeta no valida el cupón (la pantalla de cambios no lo pide). Un pago con referencia de intent existente se toma como integrado.
-- Coordinación: la rama de terminales integradas (`feat/terminal-integrada-payway`) completa `card_voucher` con los mismos nombres; sus pagos llevan intent y el trigger no los frena.
+- Terminal integrada (ADR-053): sus pagos traen `card_voucher.origen = 'terminal'` y `terminal_tx`; `payments_card_voucher` los saltea porque `payments_terminal_tx` (`20261018100000`) ya los valida contra `terminal_transactions`. Comparten los nombres del cupón (`lote`, `cupon`, `autorizacion`, `marca`, `ultimos4`, `cuotas`, `comercio`, `adquirente`) y las claves de adquirente (`payway`, `getnet`, `fiserv`: el POS traduce el `provider_key` de la terminal con `acquirerOfProvider`). La Conciliación nueva suma el filtro Adquirente cuando algún cobro lo trae.

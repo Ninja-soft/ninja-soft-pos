@@ -182,6 +182,19 @@ describe.skipIf(!enabled)("ADR-054 · cupón del posnet offline validado en el s
     const badAcq = await sale(ctx.shift1, { lote: "", cupon: "", autorizacion: "", ultimos4: "4242", adquirente: "visa" });
     expect(badAcq.error?.message).toMatch(/card_voucher_invalid: adquirente/);
 
+    // Terminal integrada (ADR-053): las reglas del posnet no aplican; la valida
+    // payments_terminal_tx contra terminal_transactions (acá, un id falso).
+    const integrated = await sale(ctx.shift1, {
+      lote: "",
+      cupon: "",
+      autorizacion: "",
+      adquirente: "payway",
+      origen: "terminal",
+      terminal_tx: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(integrated.error?.message ?? "").not.toMatch(/card_voucher_(required|invalid)/);
+    expect(integrated.error?.message).toMatch(/terminal_tx/);
+
     const ok = await sale(ctx.shift1, { lote: "123", cupon: "", autorizacion: "", ultimos4: "4242", adquirente: "payway" });
     expect(ok.error).toBeNull();
     const saleId = (ok.data as { sale_id: string }).sale_id;

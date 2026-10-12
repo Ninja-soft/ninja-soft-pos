@@ -1016,6 +1016,45 @@ Edge `payway` con `create` (POST `{checkout}/link` con apikey privada en header 
 
 ---
 
+## ADR-031 — Getnet (QR/link) vía Checkout Geopagos
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de validación con cobro real) · **Hito:** F8 · H18
+
+### Contexto
+
+Getnet Argentina (Santander) corre sobre la plataforma white-label de **Geopagos**. No hay documentación pública de la API de Argentina (docs.globalgetnet.com cubre la API regional/global, que es otra) ni **sandbox público de Getnet AR** (no se encontró ninguno; las credenciales se generan en `dashboard.globalgetnet.com.ar/dashboard/merchant/credentials` y son de producción). La única referencia oficial ejecutable es el plugin de WooCommerce publicado por Getnet Argentina (`integrar-getnet-con-woo` v0.1.5).
+
+### Decisión
+
+Canal **QR + link** (`getnet`) por el Checkout de Geopagos, mismo patrón que Payway/Pagos360:
+
+- Edge `getnet` (verify_jwt **true**) con `create` y `status`. `create` exige `tenant_has_feature_for(tenant,'getnet')`, pide token OAuth2 `client_credentials` a `https://auth.geopagos.com/oauth/token`, crea un intent en `mp_payment_intents` (`provider_key='getnet'`) y la orden `POST https://api.globalgetnet.com.ar/api/v2/orders` con un único ítem por el total (centavos, moneda `032`), `webhookUrl` por orden (`getnet_webhook?intent=<uuid>`), `redirect_urls` a la pantalla neutra de retorno y `expireLimitMinutes: 30`. El checkout hosted (`data.links[0].checkout`) es el `init_point` que `QrCheckoutModal` muestra como QR y "Abrir link de pago" (provider self-managed: tarjeta/cuotas se eligen en Getnet). `status` re-consulta `GET /api/v2/orders/{uuid}`.
+- Edge `getnet_webhook` (verify_jwt **false**): **nunca confía en el cuerpo**. Re-consulta la orden guardada al crear (`preference_id`) con el token del tenant; el `data.order.uuid` del cuerpo sólo descarta notificaciones ajenas. Acredita sólo `APPROVED`/`PROCESSED`/`SUCCESS` con **monto exacto en centavos**; sin monto legible no acredita (queda pending). Idempotente con updates condicionales por estado; un intent ya aprobado no se toca, y uno que el POS dio por rechazado puede pasar a `approved` si Getnet lo confirma (aparece en la conciliación como cobro sin venta).
+- Lógica pura (payload, token, estados, monto) en `supabase/functions/_shared/getnet.ts`, testeada con Vitest (`tests/unit/getnet.test.ts`). Auditoría en `audit_logs` (`getnet_order_created`, `getnet_payment_<estado>`).
+- Credenciales por tenant: `client_id` + `client_secret` vía `set_payment_secret` (`getnet` ya estaba en ALLOWED). **Sin switch Sandbox** para Getnet: no hay ambiente de prueba AR; la columna `sandbox` se ignora.
+- Gating: feature `getnet` (ya existente, `payment_method_plan_key('getnet')='getnet'`); la venta entra como `method='qr'` con `reference` = intent, y el trigger de `payments` resuelve el provider del intent. Sin migraciones nuevas.
+
+**Verificado (plugin oficial):** URL y body del token; URL, headers `application/vnd.api+json` y body de la orden (ítems con `unitPrice.amount` en centavos como string, `redirect_urls`, `webhookUrl`, `expireLimitMinutes`); checkout en `data.links[0].checkout`; webhook con `data.order.uuid`; `GET /api/v2/orders/{uuid}` con `status` en la raíz y los estados aprobados `APPROVED`/`PROCESSED`/`SUCCESS`.
+
+**Inferido (a confirmar con el primer cobro real):** uuid de la orden en `data.id` (fallback `attributes.uuid`); forma del monto en el GET (se prioriza la suma de ítems, fallback `amount`/`total`); estados de rechazo (`REJECTED`/`DECLINED`/`DENIED`/`FAILED`) y vencimiento (`EXPIRED`/`CANCELLED`); que el GET acepte el mismo Bearer (el plugin arma ese header de forma inválida, así que no lo prueba); que el checkout hosted ofrezca pago desde el celular escaneando el QR; tope de largo de `webhookUrl`.
+
+### Getnet Point (`getnet_point`): NO se implementa
+
+Sigue "Próximamente". La integración de terminales de Getnet ("Integrated POS" de Getnet Global: SDK .NET/JS/Android, modos Http/Usb/Cloud2Cloud) no está confirmada para Argentina y todo indica que es **sólo para partners homologados**. Para implementarla haría falta: (1) alta como partner/integrador con Getnet AR y credenciales de terminal; (2) documentación del modo Cloud2Cloud para AR (endpoint para empujar un monto a una terminal por id, consulta de estado y cancelación); (3) terminales de prueba o homologación; (4) una Edge `getnet_point` con el patrón de `mp_point` (intent + poll + verificación de monto) y su feature `getnet_point` (ya existe en el catálogo y en `payment_method_plan_key`).
+
+### Consecuencias
+
+- Getnet queda transaccionable por QR/link sin PCI en NinjaPos; el cobro de prueba debe hacerse con credenciales y tarjeta reales por un monto chico (no hay sandbox).
+- Mientras el monto del GET no se confirme, un pago aprobado sin monto legible queda pending (el webhook o el poll lo resuelven cuando se ajuste el parser): se prefiere no acreditar a acreditar sin verificar.
+- La botonera del POS (`app/(app)/pos/page.tsx`) no se tocó: el rediseño del POS cablea el tender de Getnet hacia `QrCheckoutModal` con `provider="getnet"`.
+
+### Referencias
+
+- `supabase/functions/getnet/index.ts`, `supabase/functions/getnet_webhook/index.ts`, `supabase/functions/_shared/getnet.ts`, `tests/unit/getnet.test.ts`, `components/pos/QrCheckoutModal.tsx`, `components/dashboard-team/PaymentMethodsCard.tsx`, `modules/pos/api.ts`, `lib/saas/featureInfo.ts`.
+- Plugin oficial: wordpress.org/plugins/integrar-getnet-con-woo (v0.1.5, `wanderlust-getnet.php`).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

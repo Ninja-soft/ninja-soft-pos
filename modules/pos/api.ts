@@ -688,6 +688,38 @@ export const posApi = {
     return data as { status: string; mp_payment_id: string | null };
   },
 
+  // ── Getnet (H18): Checkout hosted de Getnet AR (Geopagos) ─────────────────
+  // create devuelve el checkout de la orden como init_point (QR + link). El
+  // estado se sondea vía la Edge, que re-consulta la orden en Getnet.
+  createGetnetLink: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("getnet", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { intent_id: string; init_point: string };
+  },
+
+  getnetIntentStatus: async (
+    id: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("getnet", {
+      body: { action: "status", intent_id: id },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
   // Estado del intent MODO sincronizado server-side (Edge modo_create_qr,
   // action status): MODO no tiene webhook por intención, así que el poll del
   // POS consulta la API real en cada tick (patrón pagos360).

@@ -1,5 +1,6 @@
 "use client";
 
+import { useBranchContext } from "@/modules/branches/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { useFeature } from "@/modules/saas/gating";
@@ -36,14 +37,19 @@ export function useMultiStoreStock() {
   };
 }
 
-/**
- * Sucursal "actual" del usuario. Hasta que exista el contexto de sucursal
- * (F17/H90, rama multisucursal-base) es la principal; ese contexto la va a
- * reemplazar sin cambiar a los consumidores.
- */
+/** Sucursal "actual" del usuario, desde el contexto de sucursal (F17 · H90). */
 export function useCurrentStoreId(): string | null {
   const { data: stores } = useStores();
-  return stores?.find((s) => s.is_default)?.id ?? stores?.[0]?.id ?? null;
+  // Contexto de sucursal (H90): la elegida en el panel o, con "Todas", la del
+  // POS; si el contexto todavía no cargó, la sucursal por defecto.
+  const ctx = useBranchContext();
+  return (
+    ctx.filterStoreId ??
+    ctx.posStoreId ??
+    stores?.find((s) => s.is_default)?.id ??
+    stores?.[0]?.id ??
+    null
+  );
 }
 
 export function useCurrentUserId() {

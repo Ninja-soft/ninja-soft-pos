@@ -20,6 +20,8 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   mobbex: "QR o link al checkout de Mobbex",
   pagos360: "Link o QR: tarjeta, débito, DEBIN o efectivo",
   fiserv: "Terminales Posnet y Clover",
+  gocuotas: "QR o link: el cliente paga en cuotas con su débito",
+  directo: "Cobrás en el portal de Directo y registrás la operación",
 };
 
 // Explicación desplegable por canal: qué pasa al activarlo y cómo es el cobro.
@@ -111,6 +113,15 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "En el POS tocás Cobrar con QR · Mobbex.",
       "El cliente escanea el QR y paga con tarjeta o saldo.",
       "Al acreditarse, la venta se cierra sola.",
+    ],
+  },
+  gocuotas: {
+    activa:
+      "Habilita el cobro con GO Cuotas: el cliente paga en 2 a 4 cuotas sin interés con su tarjeta de débito, desde el QR o el link. El cobro mínimo es de $1.500.",
+    pasos: [
+      "En el POS elegís cobrar con GO Cuotas.",
+      "El cliente escanea el QR o abre el link y elige las cuotas.",
+      "GO Cuotas nos avisa, verificamos la orden y la venta se cierra sola.",
     ],
   },
   pagos360: {

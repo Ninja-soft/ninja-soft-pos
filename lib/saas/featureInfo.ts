@@ -122,6 +122,18 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Conectar la cuenta de Nave (Client ID, Client Secret y punto de venta) y pasarle a Nave la URL de notificaciones.",
   },
+  gocuotas: {
+    desc: "Cobros con GO Cuotas por QR y link de pago: el cliente paga en 2 a 4 cuotas sin interés con su tarjeta de débito y la venta se cierra sola al aprobarse. Monto mínimo por cobro: $1.500.",
+    impact: "Desactivado, GO Cuotas no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Conectar la cuenta de GO Cuotas con la API Key de la sucursal (Sucursales, Editar, Ver ApiKeys de la sucursal).",
+  },
+  directo: {
+    desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. El cobro se hace en el portal de comercios de Directo (QR o link) y el POS registra el número de operación.",
+    impact: "Desactivado, Directo no aparece como medio de pago al cobrar.",
+    minPlan: "Pro",
+    needs: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
+  },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",
     impact: "Desactivado, la terminal de Payway no queda integrada al cobro del POS.",

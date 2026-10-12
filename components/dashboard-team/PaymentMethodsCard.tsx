@@ -20,6 +20,7 @@ import {
   type ConnectSave,
 } from "@/components/dashboard-team/payments/ConnectProviderModal";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
+import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 
 // Configuración de medios de pago, agrupada por marca → canal (QR + link ·
@@ -211,7 +212,11 @@ export function PaymentMethodsCard() {
           onOpenPlans: (key, name) => setPlansFor({ key, name }),
           onConnect: (b) => setConnectBrand(b),
           renderChannelExtra: (key, m) =>
-            key === "mercadopago" && m?.config?.connected ? <MpQrPosSetup method={m} /> : null,
+            key === "mercadopago" && m?.config?.connected ? (
+              <MpQrPosSetup method={m} />
+            ) : key === "directo" ? (
+              <DirectoInfo />
+            ) : null,
         }}
       />
 

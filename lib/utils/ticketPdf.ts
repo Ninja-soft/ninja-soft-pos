@@ -10,6 +10,7 @@ const METHOD_LABELS: Record<string, string> = {
   transfer: "Transferencia",
   qr: "QR",
   other: "Otro",
+  directo: "Directo",
 };
 
 export interface TicketPdfData {

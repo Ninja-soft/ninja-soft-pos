@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { CreditCard } from "lucide-react";
 import { Heading } from "@/components/ui/Typography";
-import { groupProvidersByBrand, connectionKeyOf, type ProviderRow } from "@/lib/payments/catalog";
+import { DIRECT_BRANDS, groupProvidersByBrand, connectionKeyOf, type ProviderRow } from "@/lib/payments/catalog";
 import type { PlanForUpgrade } from "@/modules/saas/gating";
 import { BrandCard, ManualCard, type ChannelHandlers } from "./BrandCard";
 import { Eyebrow } from "./ui";
@@ -30,7 +30,7 @@ export function PaymentMethodsView({
     return m;
   }, [methods]);
   const groups = useMemo(() => groupProvidersByBrand(providers), [providers]);
-  const manual = groups.filter((g) => g.channels.every((c) => c.channel === "manual"));
+  const manual = groups.filter((g) => DIRECT_BRANDS.has(g.brand.key));
   const brands = groups.filter((g) => !manual.includes(g));
 
   const enabled = methods.filter((m) => m.enabled).length;

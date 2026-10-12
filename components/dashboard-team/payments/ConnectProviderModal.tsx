@@ -86,6 +86,12 @@ const FORMS: Record<string, FormSpec> = {
     intro: "Pegá tu API Key de Pagos360 (Panel › Configuración › Credenciales).",
     fields: [{ name: "api_key", label: "API Key", secret: true, min: 10, placeholder: "Tu API Key" }],
   },
+  gocuotas: {
+    intro:
+      "Pegá la API Key de tu sucursal (panel de GO Cuotas › Sucursales › Editar › Ver ApiKeys de la sucursal).",
+    fields: [{ name: "api_key", label: "API Key de la sucursal", secret: true, min: 8, placeholder: "Tu API Key" }],
+    envNote: "GO Cuotas muestra una API Key de producción y otra de prueba: usá la del ambiente elegido.",
+  },
   mobbex: {
     intro: "Pegá tus credenciales de Mobbex (Desarrollo › Credenciales).",
     fields: [
@@ -97,6 +103,10 @@ const FORMS: Record<string, FormSpec> = {
 };
 
 const STEPS = ["Credenciales", "Ambiente", "Listo"];
+
+// Foco neutro (sin borde ni anillo de color, pedido del dueño): el campo activo
+// se distingue por el borde en tono de texto secundario.
+const NEUTRAL_FOCUS = "focus:border-[color:var(--muted-foreground)] focus:ring-0";
 
 function fieldError(f: Field, v: string): string | undefined {
   const t = v.trim();
@@ -373,6 +383,7 @@ export function ConnectProviderModal({
                     autoComplete="new-password"
                     data-1p-ignore
                     data-lpignore="true"
+                    className={NEUTRAL_FOCUS}
                     value={mpToken}
                     onChange={(e) => setMpToken(e.target.value)}
                     placeholder="APP_USR-..."
@@ -397,6 +408,7 @@ export function ConnectProviderModal({
                     autoComplete={f.secret ? "new-password" : "off"}
                     data-1p-ignore
                     data-lpignore="true"
+                    className={NEUTRAL_FOCUS}
                     value={values[f.name] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
                     onBlur={() => setTouched((t) => ({ ...t, [f.name]: true }))}
@@ -457,6 +469,7 @@ export function ConnectProviderModal({
                 autoComplete="new-password"
                 data-1p-ignore
                 data-lpignore="true"
+                className={NEUTRAL_FOCUS}
                 value={mpTestToken}
                 onChange={(e) => setMpTestToken(e.target.value)}
                 placeholder={hasTest ? "•••••• (ya cargado)" : "APP_USR-... o TEST-..."}
@@ -617,6 +630,7 @@ function MpEnvPanel({
             autoComplete="new-password"
             data-1p-ignore
             data-lpignore="true"
+            className={NEUTRAL_FOCUS}
             value={token}
             onChange={(e) => onToken(e.target.value)}
             placeholder={hasTest ? "•••••• (ya cargado)" : "APP_USR-... o TEST-..."}

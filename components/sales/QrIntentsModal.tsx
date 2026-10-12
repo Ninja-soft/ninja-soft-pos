@@ -25,6 +25,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   mercadopago_point: "Mercado Point",
   nave: "Nave",
   nave_point: "Nave Point",
+  gocuotas: "GO Cuotas",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",

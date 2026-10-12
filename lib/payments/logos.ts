@@ -16,6 +16,8 @@ const FILE_PREFIX: Record<string, string> = {
   mobbex: "mobbex",
   pagos360: "pagos360",
   fiserv: "fiserv",
+  gocuotas: "gocuotas",
+  directo: "directo",
 };
 
 // Marcas sin logo horizontal propio (son genéricos).

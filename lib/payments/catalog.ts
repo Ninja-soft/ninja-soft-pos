@@ -91,8 +91,27 @@ export const BRANDS: BrandDef[] = [
     credentialsLabel: "Panel de Pagos360",
     channels: ["pagos360"],
   },
+  {
+    key: "gocuotas",
+    name: "GO Cuotas",
+    tagline: "2 a 4 cuotas sin interés con débito",
+    credentialsUrl: "https://www.gocuotas.com",
+    credentialsLabel: "Panel de GO Cuotas",
+    channels: ["gocuotas"],
+  },
+  {
+    key: "directo",
+    name: "Directo",
+    tagline: "Crédito en cuotas fijas sin tarjeta",
+    channels: ["directo"],
+  },
   { key: "fiserv", name: "Fiserv", tagline: "Terminales Posnet y Clover", channels: ["fiserv"] },
 ];
+
+// Marcas que se cobran a mano, sin cuenta conectada: van en "Cobros directos".
+// Directo también es manual, pero tiene su propia tarjeta (gating por plan y
+// explicación del circuito en su portal).
+export const DIRECT_BRANDS = new Set(["cash", "transfer"]);
 
 export const BRAND_BY_KEY: Record<string, BrandDef> = Object.fromEntries(
   BRANDS.map((b) => [b.key, b]),
@@ -114,6 +133,8 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   mobbex: { brand: "mobbex", channel: "qr_link" },
   pagos360: { brand: "pagos360", channel: "qr_link" },
   fiserv: { brand: "fiserv", channel: "point" },
+  gocuotas: { brand: "gocuotas", channel: "qr_link" },
+  directo: { brand: "directo", channel: "manual" },
 };
 
 // Canales con flujo de cobro real implementado. El resto se muestra como
@@ -130,11 +151,13 @@ export const IMPLEMENTED = new Set([
   "getnet",
   "nave",
   "nave_point",
+  "gocuotas",
+  "directo",
 ]);
 
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point
@@ -166,7 +189,7 @@ export function surchargeModeOf(channelKey: string, channel: PaymentChannel): Su
 // Point no piden credenciales propias.
 export function connectionKeyOf(brandKey: string): string | null {
   const b = BRAND_BY_KEY[brandKey];
-  if (!b || brandKey === "cash" || brandKey === "transfer") return null;
+  if (!b || DIRECT_BRANDS.has(brandKey)) return null;
   const qr = b.channels.find((c) => PROVIDER_CHANNEL_FALLBACK[c]?.channel === "qr_link");
   return qr ?? null;
 }

@@ -1127,6 +1127,88 @@ Mercado Pago unificó el cobro presencial en la **Orders API** (`/v1/orders`): "
 
 ---
 
+## ADR-033 — GO Cuotas (QR + link) vía API Redirect V1
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración, deploy y validación en sandbox) · **Hito:** F8 · H21d
+
+### Contexto
+
+El dueño pidió integrar GO Cuotas: el cliente paga en 2 a 4 cuotas sin interés con su **tarjeta de débito**. GO Cuotas publica su API en Stoplight (`gocuotas-api.stoplight.io/docs/gocuotas`, leída 2026-10-11) con varias APIs: **Redirect V1** (checkout web), **QR V1** (venta en local), Light/Full Sale V1 (código por SMS que carga el comercio) y Client V1 (liquidaciones). Hosts: `https://www.gocuotas.com` (producción) y `https://sandbox.gocuotas.com`. Cada sucursal tiene **API Key** propia (una de producción y otra de prueba) que se manda como `Authorization: Bearer <API_KEY>` y no expira.
+
+### Decisión
+
+- **Canal QR + link por Redirect V1** (provider/feature `gocuotas`, marca `gocuotas`, canal `qr_link`, OPTIONAL desde Pro). `POST /api_redirect/v1/checkouts` con los parámetros **por query** (como documenta la API): `amount_in_cents`, `order_reference_id` = id del intent, `webhook_url` = `gocuotas_webhook?intent=<uuid>`, `url_success`/`url_failure` a la pantalla neutra de retorno. La respuesta es `{ url_init }`, que el POS muestra como QR y "Abrir link de pago" (`QrCheckoutModal`, provider self-managed: el cliente elige las cuotas en GO Cuotas).
+- **QR V1 descartado:** `POST /api/qr/v1/checkouts` devuelve sólo `sale_token`/`status`/`expire_at`, sin un payload escaneable (el QR es el del local) y con **una sola venta activa por vendedor**. No sirve para un QR por cobro en pantalla; Redirect sí.
+- **Edge `gocuotas`** (JWT): `create` (gating `tenant_has_feature_for(tenant,'gocuotas')`, valida monto y **mínimo de $1.500** antes de crear el intent → `gocuotas_min_amount` con copy claro; 401/403 → `gocuotas_auth_failed`), `status` (re-consulta) y `cancel` (baja local: Redirect no anula checkouts sin pagar; antes de cancelar re-consulta por si el cliente justo pagó).
+- **Correlación sin id de orden:** el checkout no devuelve id. La orden se ubica por la pista del webhook (`order_id` → `GET /api_redirect/v1/orders/{id}`) y, si no corresponde, por `GET /api_redirect/v1/orders?delivered_start&delivered_end&order_reference_id=<intent>` (ventana en hora AR desde 24 h antes del intent). **Sólo cuenta una orden con `order_reference_id` = intent.** El id de orden aprobado se guarda en `mp_payment_id` y una orden acredita a un único intent.
+- **Edge `gocuotas_webhook`** (verify_jwt **false**): GO Cuotas no documenta firma, así que el cuerpo es sólo una pista. Re-consulta con la API Key del tenant en el ambiente del intent y acredita sólo `approved` + referencia propia + **monto exacto en centavos**; `denied` → rejected. Idempotente (updates condicionales; un approved verificado pasa también desde rejected/cancelled para que la conciliación lo vea). Siempre 200. Su GET sirve la pantalla neutra de retorno.
+- **Ambiente:** switch Sandbox del medio (`tenant_payment_methods.sandbox`). El intent guarda `mp_env` (`test` = sandbox) y status/webhook usan ese host aunque cambie el switch.
+- Credencial `payment_secrets(gocuotas) = { api_key }` vía `set_payment_secret` (ALLOWED += `gocuotas`). Lógica pura en `supabase/functions/_shared/gocuotas.ts` (Vitest, `tests/unit/gocuotas.test.ts`); helpers server en `_shared/gocuotas_server.ts`. Auditoría: `gocuotas_checkout_created`, `gocuotas_checkout_cancelled`, `gocuotas_payment_<estado>`.
+- Gating: la venta entra como `method='qr'` con `reference` = intent; el trigger de `payments` resuelve el provider y `payment_method_plan_key('gocuotas')='gocuotas'` (migración `20261011180000_gocuotas_directo`).
+
+**Verificado (doc oficial):** hosts, Bearer con API Key, endpoint y parámetros del checkout, `url_init`, `GET /orders/{id}` y su esquema (`id`, `amount_in_cents`, `status`, `order_reference_id`), listado con `delivered_start`/`delivered_end` requeridos y filtro `order_reference_id`, cuerpo del webhook, estados `undefined`/`approved`/`denied`, mínimo $1.500.
+
+**Inferido (a confirmar con la API Key de prueba de una sucursal):** forma exacta del listado (array, objeto o envoltorio: se normaliza), zona horaria de `delivered_*` (AR), que `GET /orders/{id}` devuelva el `order_reference_id` que mandamos (el ejemplo de la doc lo muestra `null` en una orden creada sin referencia; si no viniera, el listado por referencia es el respaldo), y que el listado incluya órdenes aprobadas recién creadas.
+
+### Consecuencias
+
+- Deploy: migración `20261011180000_gocuotas_directo` antes de usar el medio; Edges `gocuotas`, `gocuotas_webhook` (`--no-verify-jwt`) y `set_payment_secret`.
+- Pendiente de cablear (fuera de este cambio): botón "Cobrar con GO Cuotas" en el POS (igual que Payway). La conexión de GO Cuotas quedó en el modal genérico de Medios de pago (ADR-035; `GoCuotasConnectForm` se reemplazó).
+- Credenciales de prueba: la API Key de prueba sale del panel de la sucursal (Sucursales, Editar, Ver ApiKeys) o pidiéndola a integraciones@gocuotas.com. El comprador de prueba del sandbox es público (FAQ oficial).
+
+---
+
+## ADR-034 — Directo como tender manual (sin API pública)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** F8 · H21e
+
+### Contexto
+
+El dueño pidió sumar "Directo, medio de pago de crédito directo": **Crédito Directo S.A.** (directo.com.ar), financiación en cuotas fijas sin tarjeta de crédito. Los comercios cobran "con QR o link de pago a través de nuestro portal" (`minegocio.directo.com.ar`). No se encontró API pública, portal de desarrolladores, sandbox ni webhooks.
+
+### Decisión
+
+- **Tender manual** (provider/feature `directo`, marca `directo`, canal `manual`, OPTIONAL desde Pro): el cajero genera el cobro en el portal de Directo y en el POS elige **"Directo (crédito)"** y carga el **número de operación**, obligatorio para confirmar.
+- **`payments.method = 'directo'`** (se extiende `payments_method_check`) en lugar de `'other'`: queda identificado en caja, reportes, cierres y ticket ("Directo"), y el **gating coarse** del trigger de `payments` lo corta por plan vía `payment_method_plan_key('directo')='directo'`, sin reescribir `create_sale`. Constraint `payments_directo_reference_check`: con `method='directo'` el `reference` (Nº de operación) es obligatorio (1 a 64 caracteres).
+- No se ofrece en "Dividir cuenta" (pediría un número de operación por línea).
+- Sin credenciales: `DirectoInfo` explica el circuito en Medios de pago (portal y alta de comercio). Copy de plan: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación".
+
+### Alternativas consideradas
+
+- `method='other'` + provider en metadata: `create_sale` no persiste metadata y el trigger no podría gatear por plan sin reescribir la RPC.
+- Esperar una API privada: se puede pedir por contacto comercial; si aparece, se suma un canal `qr_link` sin romper el tender manual.
+
+### Consecuencias
+
+- No hay verificación automática del cobro: el número de operación es la evidencia para conciliar con las liquidaciones de Directo.
+- `DirectoInfo` cableado en Medios de pago (ADR-035).
+
+---
+
+## ADR-035 — Configuración de medios de pago por marca y canal (rediseño)
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** F8
+
+### Contexto
+
+El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar mucho la configuración de medios de pago, logos oficiales y pantallas lindas (sin bordes ni anillos de color en la opción elegida del ambiente).
+
+### Decisión
+
+- **Tarjetas por marca con canales adentro** (`QR + link` · `Point`), leídas de `payment_providers.brand/channel`. Si la base todavía no tiene esas columnas, `lib/payments/catalog.ts` resuelve marca y canal con un mapeo local por `provider_key` (la UI funciona antes y después de la migración `20261011150000_payment_channels`). Canales esperados no implementados (Payway Point, Getnet Point) se muestran como "Próximamente" sin acciones.
+- Efectivo y transferencia van juntos en "Cobros directos". Directo tiene su tarjeta (gating por plan + explicación del circuito en su portal); GO Cuotas se conecta con el mismo modal que el resto (API Key + ambiente).
+- **Planes por canal que los usa:** Mercado Pago → Point; Payway → QR + link (y Point cuando exista); Mobbex → su checkout. **Modelo de datos intacto:** los Planes de MP siguen en `payment_plans.provider_key = 'mercadopago'` (y su recargo único en la fila `mercadopago` de `tenant_payment_methods`); sólo se mueve la UI (`PLANS_KEY_BY_CHANNEL`). El QR + link de MP muestra "Recargo en Planes de Point" porque el cobro QR del POS (`QrCheckoutModal`) sigue leyendo esos mismos planes; si el dueño quiere que el QR deje de ofrecer cuotas, es un cambio aparte del flujo de cobro.
+- **Modal de conexión con stepper** (Credenciales → Ambiente → Listo), formularios declarativos por proveedor, selector de ambiente segmentado con segmento activo relleno (sin bordes ni anillos de color), validación inline, spinner al guardar y estado de éxito. "Administrar" muestra resumen, ambiente (MP: token de prueba, ADR-032), actualizar credenciales y desconexión con confirmación en línea (sin `confirm()`).
+- **Logos** en `public/images/payments/<marca>-icon.webp` (isotipo cuadrado) y `<marca>-wordmark.webp` (horizontal, sobre placa blanca en los 4 temas). Fuente única `lib/payments/logos.ts`. Se quitan los assets viejos sin uso; quedan en `public/img/medios_de_pago/` sólo los que todavía usa `app/(app)/pos/page.tsx` (`*_cube.webp` de MP, Mobbex, MODO, Pagos360, Payway) y `cards/` (marcas de tarjeta).
+- Los tokens semánticos del tema (`--muted`, `--foreground`, `--destructive`) son colores completos: los modificadores de opacidad de Tailwind (`bg-muted/50`) no generan nada. Para tintes se usa `color-mix(in srgb, var(--token) N%, transparent)`.
+
+### Consecuencias
+
+- `PaymentMethodsCard` sólo trae datos y guarda; la vista vive en `components/dashboard-team/payments/*` y se puede probar con datos simulados.
+- Pendiente: migrar `app/(app)/pos/page.tsx` a `paymentIcon()` y borrar los `*_cube.webp` legacy.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

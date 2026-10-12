@@ -28,6 +28,18 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.nave?.needs).toMatch(/Conectar la cuenta de Nave/);
   });
 
+  it("GO Cuotas pide la API Key de la sucursal y es desde Pro", () => {
+    expect(FEATURE_INFO.gocuotas?.needs).toMatch(/API Key de la sucursal/);
+    expect(FEATURE_INFO.gocuotas?.minPlan).toBe("Pro");
+  });
+
+  it("Directo aclara que el cobro se hace en su portal", () => {
+    expect(FEATURE_INFO.directo?.needs).toBe(
+      "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
+    );
+    expect(FEATURE_INFO.directo?.minPlan).toBe("Pro");
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

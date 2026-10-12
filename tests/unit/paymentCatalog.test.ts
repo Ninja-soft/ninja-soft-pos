@@ -48,6 +48,18 @@ describe("groupProvidersByBrand", () => {
     expect(g!.channels.map((c) => c.key)).toEqual(["nave"]);
   });
 
+  it("GO Cuotas es QR + link con conexión propia; Directo es manual sin conexión", () => {
+    const groups = groupProvidersByBrand([row("gocuotas", 1), row("directo", 2, { kind: "manual" })]);
+    expect(groups.map((g) => [g.brand.key, g.channels[0]!.channel])).toEqual([
+      ["gocuotas", "qr_link"],
+      ["directo", "manual"],
+    ]);
+    expect(connectionKeyOf("gocuotas")).toBe("gocuotas");
+    expect(connectionKeyOf("directo")).toBeNull();
+    expect(paymentIcon("gocuotas")).toBe("/images/payments/gocuotas-icon.webp");
+    expect(paymentWordmark("directo")).toBe("/images/payments/directo-wordmark.webp");
+  });
+
   it("muestra marcas desconocidas al final", () => {
     const groups = groupProvidersByBrand([row("cash", 1), row("nueva", 2)]);
     expect(groups.map((g) => g.brand.key)).toEqual(["cash", "nueva"]);

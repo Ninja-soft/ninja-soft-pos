@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   ChevronDown,
-  Clock,
   CreditCard,
   Link2,
   Lock,
@@ -87,7 +86,9 @@ export function BrandCard({
   const env = envOf(connKey, byKey);
   const gates = channels.map((c) => ({ c, ...gateOf(c, gate) }));
   const live = gates.filter((x) => x.c.implemented);
-  const allSoon = live.length === 0 || !connKey;
+  const allSoon = live.length === 0;
+  // Marcas sin cuenta que conectar (Directo): se cobran en su portal.
+  const noConnection = !connKey;
   const allLocked = live.length > 0 && live.every((x) => x.locked);
   const firstLocked = live.find((x) => x.locked);
 
@@ -95,6 +96,7 @@ export function BrandCard({
   let label = "Sin conectar";
   if (allSoon) [tone, label] = ["soon", "Próximamente"];
   else if (allLocked) [tone, label] = ["locked", `Plan ${firstLocked?.planName}`];
+  else if (noConnection) [tone, label] = ["idle", "Registro manual"];
   else if (connected && env === "test") [tone, label] = ["test", "Prueba"];
   else if (connected) [tone, label] = ["ok", "Conectado"];
 
@@ -102,7 +104,7 @@ export function BrandCard({
     <Button size="sm" variant="secondary" onClick={() => setUpgradeKey(firstLocked?.featureKey ?? null)}>
       <Lock size={14} /> Mejorar plan
     </Button>
-  ) : (
+  ) : noConnection ? null : (
     <Button size="sm" variant="secondary" onClick={() => handlers.onConnect(brand.key)}>
       {connected ? <Settings2 size={14} /> : <Plug size={14} />}
       {connected ? "Administrar" : "Conectar"}
@@ -236,8 +238,9 @@ function ChannelRow({
   const info = CHANNEL_INFO[c.key];
   const needs = featureInfo(PROVIDER_FEATURE[c.key] ?? "")?.needs;
   const extra = !soon && !locked ? handlers.renderChannelExtra?.(c.key, m) : null;
-  const title = manual ? brandName : channelLabel(c.channel);
+  const title = manual ? brandName : c.channel === "manual" ? "Cobro en su portal" : channelLabel(c.channel);
   const isPoint = c.channel === "point";
+  const hasConnection = connectionKeyOf(brandKey) !== null;
 
   return (
     <div className={cn("px-4 py-3.5 sm:px-5")}>
@@ -248,9 +251,7 @@ function ChannelRow({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={cn("text-sm font-semibold", soon && "text-muted-foreground")}>{title}</span>
             {soon && (
-              <StatusChip tone="soon">
-                <Clock size={10} className="-ml-0.5" /> Próximamente
-              </StatusChip>
+              <StatusChip tone="soon">Próximamente</StatusChip>
             )}
             {locked && <StatusChip tone="locked">Plan {planName}</StatusChip>}
           </div>
@@ -290,6 +291,7 @@ function ChannelRow({
               {mode === "shared" && <Pill>Recargo en Planes de Point</Pill>}
               {mode === "terminal" && <Pill>Cuotas en la terminal</Pill>}
               {isPoint &&
+                hasConnection &&
                 (brandConnected ? (
                   <Pill>
                     <Link2 size={12} /> Usa la conexión de {brandName}
@@ -310,7 +312,7 @@ function ChannelRow({
                   aria-expanded={open}
                   className="inline-flex h-8 items-center gap-1 rounded-lg px-1.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
                 >
-                  {extra ? "Configurar" : "Cómo funciona"}
+                  {extra && info ? "Configurar" : "Cómo funciona"}
                   <ChevronDown size={14} className={cn("transition-transform", open && "rotate-180")} />
                 </button>
               )}

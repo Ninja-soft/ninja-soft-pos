@@ -1,7 +1,7 @@
 // Punitorios de cuenta corriente (Cuenta corriente v2).
 //
 // ESPEJO del SQL: account_accrue_interest() en
-// supabase/migrations/20261011180000_cuenta_corriente_v2.sql.
+// supabase/migrations/20261011180100_cuenta_corriente_v2_rpc.sql.
 //
 // Reglas:
 // - El punitorio corre desde el día siguiente al vencimiento + días de gracia

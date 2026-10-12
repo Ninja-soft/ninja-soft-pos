@@ -1,7 +1,7 @@
 // Antigüedad de deuda por VENCIMIENTO (Cuenta corriente v2).
 //
 // ESPEJO del SQL: account_aging() en
-// supabase/migrations/20261011180000_cuenta_corriente_v2.sql.
+// supabase/migrations/20261011180100_cuenta_corriente_v2_rpc.sql.
 // Tramos: no vencido (vence hoy o después) / 1-30 / 31-60 / 61-90 / 90+ días.
 import { diffDays } from "./terms";
 

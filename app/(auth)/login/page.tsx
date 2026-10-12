@@ -21,6 +21,7 @@ import { Accent, Eyebrow } from "@/components/ui/Typography";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { useToast } from "@/components/ui/Toast";
 import { callbackUrl, safeNextPath } from "@/lib/auth/redirect";
+import { appOrigin } from "@/lib/site";
 
 export default function LoginPage({
   searchParams,
@@ -67,7 +68,7 @@ export default function LoginPage({
     setShowGoogleHint(false);
     setGoogleLoading(true);
     const supabase = createClient();
-    const origin = window.location.origin;
+    const origin = appOrigin();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callbackUrl(origin, safeNextPath(safeNext)) },

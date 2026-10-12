@@ -40,6 +40,7 @@ import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { PaymentHistory, type PaymentRecord } from "@/components/saas/PaymentHistory";
 import { useMyPaymentHistory } from "@/modules/saas/paymentHistory";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { appOrigin } from "@/lib/site";
 
 // Tipos de los RPC (no están en los tipos generados → cast laxo).
 type Addon = {
@@ -302,7 +303,7 @@ export function SubscriptionCard() {
 
   const startCheckout = useMutation({
     mutationFn: async () => {
-      const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
+      const backUrl = `${appOrigin()}/dashboard-team?sub=ok`;
       return startOwnerSubscriptionCheckout(backUrl);
     },
     onSuccess: (initPoint) => {

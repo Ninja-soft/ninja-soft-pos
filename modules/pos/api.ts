@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
+import { appOrigin } from "@/lib/site";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -823,13 +824,15 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     // El QR abre el checkout PROPIO de la tienda (/pagar/{intent}): el cliente
-    // elige tarjeta y cuotas ahí. origin = dominio actual (multi-dominio).
+    // elige tarjeta y cuotas ahí. origin = dominio canónico en producción
+    // (pos.soft.ninja aunque se cobre desde el alias *.vercel.app); localhost
+    // y los previews mandan su propio origen para probar.
     const { data, error } = await supabase.functions.invoke("payway", {
       body: {
         action: "create",
         amount,
         title,
-        origin: window.location.origin,
+        origin: appOrigin(),
       },
     });
     if (error) throw error;

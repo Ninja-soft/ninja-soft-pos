@@ -15,6 +15,7 @@ import {
   useGlobalPlansForUpgrade,
   type PlanForUpgrade,
 } from "@/modules/saas/gating";
+import { appOrigin } from "@/lib/site";
 
 // Ruta del panel del dueño (gestión de plan / facturación). Fallback cuando el
 // upgrade self-serve no aplica (p. ej. el usuario no es dueño).
@@ -66,7 +67,7 @@ export function UpgradeModal({
         p_plan_key: plan.key,
       });
       if (error) throw new Error(error.message ?? "error");
-      const backUrl = `${window.location.origin}/dashboard-team?sub=ok`;
+      const backUrl = `${appOrigin()}/dashboard-team?sub=ok`;
       return startOwnerSubscriptionCheckout(backUrl);
     },
     onSuccess: (initPoint) => {

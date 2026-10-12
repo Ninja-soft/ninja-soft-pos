@@ -1,9 +1,16 @@
 // =============================================================================
 // Edge Function: mp_create_qr — crea una preferencia de Checkout Pro de Mercado
-// Pago para cobrar por QR. Lee el Access Token del tenant (payment_secrets,
-// service_role), registra un mp_payment_intents y devuelve el init_point para QR.
+// Pago (link de pago). Lee el Access Token del tenant (payment_secrets,
+// service_role), registra un mp_payment_intents y devuelve el init_point.
+//
+// Desde ADR-032 es el camino "Enviar link" (link compartible por WhatsApp /
+// mail) y el respaldo cuando el tenant todavía no configuró su caja QR; el QR
+// en el local va por la Orders API (Edge mp_qr). Respeta el switch Sandbox
+// (token de prueba) y guarda el ambiente en el intent (mp_env) para que
+// mp_webhook consulte el pago con la misma credencial.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { MP_API, tenantMpCredential } from "../_shared/mpAuth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -60,99 +67,36 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
-  // Gating de plan (enforcement real): el botón "Cobrar con QR · Mercado Pago"
-  // del POS sólo se oculta en la UI; acá se bloquea de verdad. Esta Edge corre
-  // con service_role (saltea RLS) y crea el intent ANTES del cobro, así que es
-  // el primer punto donde hay que validar el plan del tenant. Sin el feature
-  // 'mercado_pago' no se genera el QR. (El trigger en `payments` es la red de
-  // seguridad para el registro de la venta.)
+  // Gating de plan (enforcement real): el botón del POS sólo se oculta en la
+  // UI; acá se bloquea de verdad. Esta Edge corre con service_role (saltea
+  // RLS) y crea el intent ANTES del cobro, así que es el primer punto donde hay
+  // que validar el plan del tenant. Sin el feature 'mercado_pago' no se genera
+  // el link. (El trigger en `payments` es la red de seguridad de la venta.)
   const { data: mpAllowed } = await admin.rpc("tenant_has_feature_for", {
     p_tenant: tenantId,
     p_key: "mercado_pago",
   });
   if (mpAllowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
 
-  // Access Token del tenant.
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mercadopago")
-    .maybeSingle();
-  const sec = (secretRow?.secrets ?? {}) as {
-    access_token?: string;
-    refresh_token?: string | null;
-    expires_at?: string | null;
-    via?: string;
-  };
-  let accessToken = sec.access_token;
-  if (!accessToken) return json({ error: "not_connected" }, 400);
-
-  // Refresca el token OAuth si está por vencer (margen 5 min). Los tokens
-  // manuales (sin refresh_token) se usan tal cual.
-  const aboutToExpire =
-    sec.expires_at && Date.parse(sec.expires_at) - Date.now() < 5 * 60 * 1000;
-  if (sec.via === "oauth" && sec.refresh_token && aboutToExpire) {
-    const { data: plat } = await admin
-      .from("platform_secrets")
-      .select("secrets")
-      .eq("key", "mercadopago")
-      .maybeSingle();
-    const ps = (plat?.secrets ?? {}) as {
-      client_id?: string;
-      client_secret?: string;
-    };
-    if (ps.client_id && ps.client_secret) {
-      const r = await fetch("https://api.mercadopago.com/oauth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          client_id: ps.client_id,
-          client_secret: ps.client_secret,
-          grant_type: "refresh_token",
-          refresh_token: sec.refresh_token,
-        }),
-      });
-      if (r.ok) {
-        const t = (await r.json()) as {
-          access_token?: string;
-          refresh_token?: string;
-          expires_in?: number;
-        };
-        if (t.access_token) {
-          accessToken = t.access_token;
-          const updated = {
-            ...sec,
-            access_token: t.access_token,
-            refresh_token: t.refresh_token ?? sec.refresh_token,
-            expires_at: t.expires_in
-              ? new Date(Date.now() + t.expires_in * 1000).toISOString()
-              : sec.expires_at,
-          };
-          await admin
-            .from("payment_secrets")
-            .update({ secrets: updated })
-            .eq("tenant_id", tenantId)
-            .eq("provider_key", "mercadopago");
-        }
-      }
-    }
-  }
+  // Access Token del tenant (producción o prueba según el switch Sandbox;
+  // refresh OAuth incluido).
+  const cred = await tenantMpCredential(admin, tenantId);
+  if (!cred) return json({ error: "not_connected" }, 400);
 
   // Intent (pending) → external_reference.
   const { data: intent, error: intErr } = await admin
     .from("mp_payment_intents")
-    .insert({ tenant_id: tenantId, amount, provider_key: "mercadopago" })
+    .insert({ tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env })
     .select("id")
     .single();
   if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
   const notificationUrl = `${url}/functions/v1/mp_webhook?intent=${intent.id}`;
 
-  const prefRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
+  const prefRes = await fetch(`${MP_API}/checkout/preferences`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${cred.token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -183,7 +127,11 @@ Deno.serve(async (req: Request) => {
     init_point: string;
     sandbox_init_point?: string;
   };
-  const initPoint = pref.init_point || pref.sandbox_init_point || "";
+  // Con credenciales de prueba el checkout válido es el sandbox_init_point.
+  const initPoint =
+    cred.env === "test"
+      ? pref.sandbox_init_point || pref.init_point || ""
+      : pref.init_point || pref.sandbox_init_point || "";
 
   await admin
     .from("mp_payment_intents")

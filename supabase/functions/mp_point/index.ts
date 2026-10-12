@@ -1,38 +1,56 @@
 // =============================================================================
-// Edge Function: mp_point — cobro presencial con lectores Mercado Point
-// (F8 · H15 resto). Reutiliza la conexión Mercado Pago del tenant
-// (payment_secrets provider_key='mercadopago'; OAuth con refresh o token
-// manual): NO pide credenciales nuevas.
+// Edge Function: mp_point — cobro presencial con lectores Mercado Point sobre
+// la Orders API unificada (ADR-032; antes Point Payment Intents API, ADR-027).
+// Reutiliza la conexión Mercado Pago del tenant (payment_secrets
+// provider_key='mercadopago'; OAuth con refresh o token manual; token de
+// prueba con el switch Sandbox): NO pide credenciales nuevas.
 //
 // Actions (body.action):
-//   * devices            → lista los lectores Point de la cuenta MP del tenant
-//                          (id, modelo, operating_mode).
-//   * pdv    {device_id} → pone el lector en modo PDV (necesario para poder
-//                          empujarle cobros por API).
-//   * create {device_id, amount, title?}
-//                        → crea mp_payment_intents (provider_key
-//                          'mercadopago_point') + el payment intent EN el
-//                          dispositivo. preference_id guarda el id del intent
-//                          de la Point API; point_device_id, el lector.
-//   * status {intent_id} → sondea la Point API y sincroniza el intent local:
-//                          FINISHED → approved (+ mp_payment_id + card_type
-//                          debit/credit desde /v1/payments); CANCELED/ERROR/
-//                          ABANDONED → cancelled. El POS registra la venta
-//                          recién con approved (patrón conservador: nunca se
-//                          acredita sin confirmación de la API).
-//   * cancel {intent_id} → cancela en el dispositivo (si sigue abierto) y
-//                          marca el intent local como cancelled.
+//   * devices            → GET /terminals/v1/list (id, operating_mode).
+//   * pdv    {device_id} → PATCH /terminals/v1/setup operating_mode PDV
+//                          (necesario para empujarle cobros por API).
+//   * create {device_id, amount, title?, installments?, default_type?}
+//                        → intent local (provider_key 'mercadopago_point',
+//                          mp_env) + POST /v1/orders type "point" con
+//                          X-Idempotency-Key = intent.id. mp_order_id guarda
+//                          la order; point_device_id, el lector.
+//   * status {intent_id} → GET /v1/orders/{id} y sincroniza (approved sólo con
+//                          pago processed + monto exacto; card_type
+//                          debit/credit desde payment_method.type).
+//   * cancel {intent_id} → POST /v1/orders/{id}/cancel con
+//                          x-allow-cancelable-status: at_terminal. created →
+//                          200 cancelada; at_terminal → 202 (cancelación
+//                          pedida: el estado final llega por status/webhook,
+//                          el POS sigue sondeando: si el cliente ya pagó, la
+//                          venta se registra igual).
+//
+// Compatibilidad: los intents creados con la Payment Intents API (sin
+// mp_order_id) siguen resolviendo status/cancel por el camino legacy.
 //
 // Gating real de plan: tenant_has_feature_for(tenant,'mercadopago_point') en
-// create (la UI nunca es la única barrera). devices/pdv sólo exigen membresía
-// owner/manager (configuración), status/cancel membresía activa.
+// create (la UI nunca es la única barrera). devices/pdv exigen owner/manager.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
+import {
+  applyOrderToIntent,
+  fetchOrder,
+  ORDER_INTENT_COLUMNS,
+  type OrderIntentRow,
+} from "../_shared/mpIntents.ts";
+import {
+  amountsMatch,
+  buildPointOrderBody,
+  cardTypeOf,
+  isOrdersIntent,
+  legacyPointStatus,
+  mapTerminals,
+  type MpOrder,
+} from "../_shared/mpOrders.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (b: unknown, s = 200) =>
@@ -41,82 +59,17 @@ const json = (b: unknown, s = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
-const MP = "https://api.mercadopago.com";
+type PointRow = OrderIntentRow & {
+  point_device_id: string | null;
+  preference_id: string | null;
+};
 
-type Admin = ReturnType<typeof createClient>;
-
-// Access token MP del tenant con refresh OAuth si está por vencer (mismo
-// comportamiento que mp_create_qr; los tokens manuales se usan tal cual).
-async function tenantMpToken(
-  admin: Admin,
-  tenantId: string,
-): Promise<string | null> {
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mercadopago")
-    .maybeSingle();
-  const sec = (secretRow?.secrets ?? {}) as {
-    access_token?: string;
-    refresh_token?: string | null;
-    expires_at?: string | null;
-    via?: string;
-  };
-  let accessToken = sec.access_token ?? null;
-  if (!accessToken) return null;
-
-  const aboutToExpire =
-    sec.expires_at && Date.parse(sec.expires_at) - Date.now() < 5 * 60 * 1000;
-  if (sec.via === "oauth" && sec.refresh_token && aboutToExpire) {
-    const { data: plat } = await admin
-      .from("platform_secrets")
-      .select("secrets")
-      .eq("key", "mercadopago")
-      .maybeSingle();
-    const ps = (plat?.secrets ?? {}) as {
-      client_id?: string;
-      client_secret?: string;
-    };
-    if (ps.client_id && ps.client_secret) {
-      const r = await fetch(`${MP}/oauth/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          client_id: ps.client_id,
-          client_secret: ps.client_secret,
-          grant_type: "refresh_token",
-          refresh_token: sec.refresh_token,
-        }),
-      });
-      if (r.ok) {
-        const t = (await r.json()) as {
-          access_token?: string;
-          refresh_token?: string;
-          expires_in?: number;
-        };
-        if (t.access_token) {
-          accessToken = t.access_token;
-          await admin
-            .from("payment_secrets")
-            .update({
-              secrets: {
-                ...sec,
-                access_token: t.access_token,
-                refresh_token: t.refresh_token ?? sec.refresh_token,
-                expires_at: t.expires_in
-                  ? new Date(Date.now() + t.expires_in * 1000).toISOString()
-                  : sec.expires_at,
-              },
-            })
-            .eq("tenant_id", tenantId)
-            .eq("provider_key", "mercadopago");
-        }
-      }
-    }
-  }
-  return accessToken;
-}
+const cardTypeFromOrder = (order: MpOrder): "debit" | "credit" | null => {
+  const paid = (order.transactions?.payments ?? []).find(
+    (p) => String(p.status ?? "").toLowerCase() === "processed",
+  );
+  return paid ? cardTypeOf(paid.payment_method?.type) : null;
+};
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -146,6 +99,9 @@ Deno.serve(async (req: Request) => {
     return json({ error: "invalid_json" }, 400);
   }
   const action = String(b.action ?? "");
+  if (!["devices", "pdv", "create", "status", "cancel"].includes(action)) {
+    return json({ error: "invalid_action" }, 400);
+  }
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
@@ -160,56 +116,45 @@ Deno.serve(async (req: Request) => {
   if (!mem) return json({ error: "forbidden" }, 403);
   const canManage = mem.role === "owner" || mem.role === "manager";
 
-  const accessToken = await tenantMpToken(admin, tenantId);
-  if (!accessToken) return json({ error: "not_connected" }, 400);
-  const mpHeaders = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-
-  // ── devices: lista los lectores Point de la cuenta ──────────────────────────
-  if (action === "devices") {
+  // ── devices: lista las terminales Point de la cuenta ───────────────────────
+  if (action === "devices" || action === "pdv") {
     if (!canManage) return json({ error: "forbidden" }, 403);
-    const r = await fetch(`${MP}/point/integration-api/devices?limit=50`, {
-      headers: mpHeaders,
-    });
-    if (!r.ok) {
-      return json(
-        { error: "mp_error", detail: (await r.text()).slice(0, 300) },
-        502,
-      );
+    const cred = await tenantMpCredential(admin, tenantId);
+    if (!cred) return json({ error: "not_connected" }, 400);
+
+    if (action === "devices") {
+      const r = await fetch(`${MP_API}/terminals/v1/list?limit=50`, {
+        headers: mpHeaders(cred.token),
+      });
+      if (!r.ok) {
+        return json({ error: "mp_error", detail: (await r.text()).slice(0, 300) }, 502);
+      }
+      return json({ devices: mapTerminals(await r.json()), env: cred.env });
     }
-    const body = (await r.json()) as {
-      devices?: { id: string; operating_mode?: string; pos_id?: number }[];
-    };
-    return json({
-      devices: (body.devices ?? []).map((d) => ({
-        id: d.id,
-        operating_mode: d.operating_mode ?? "UNKNOWN",
-      })),
-    });
-  }
 
-  // ── pdv: pone un lector en modo PDV (acepta cobros por API) ─────────────────
-  if (action === "pdv") {
-    if (!canManage) return json({ error: "forbidden" }, 403);
+    // pdv: modo PDV (acepta cobros por API).
     const deviceId = String(b.device_id ?? "");
     if (!deviceId) return json({ error: "invalid_device" }, 400);
-    const r = await fetch(`${MP}/point/integration-api/devices/${deviceId}`, {
+    const r = await fetch(`${MP_API}/terminals/v1/setup`, {
       method: "PATCH",
-      headers: mpHeaders,
-      body: JSON.stringify({ operating_mode: "PDV" }),
+      headers: mpHeaders(cred.token),
+      body: JSON.stringify({ terminals: [{ id: deviceId, operating_mode: "PDV" }] }),
     });
     if (!r.ok) {
-      return json(
-        { error: "mp_error", detail: (await r.text()).slice(0, 300) },
-        502,
-      );
+      return json({ error: "mp_error", detail: (await r.text()).slice(0, 300) }, 502);
     }
+    await admin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      entity_type: "tenant_payment_methods",
+      entity_id: null,
+      action: "mp_point_pdv_mode",
+      after_data: { provider_key: "mercadopago_point", device_id: deviceId },
+    });
     return json({ ok: true });
   }
 
-  // ── create: intent local + payment intent EN el dispositivo ─────────────────
+  // ── create: intent local + order Point en el lector ────────────────────────
   if (action === "create") {
     // Gating de plan (enforcement real; la UI nunca es la única barrera).
     const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
@@ -224,6 +169,14 @@ Deno.serve(async (req: Request) => {
     if (!Number.isFinite(amount) || amount <= 0) {
       return json({ error: "invalid_amount" }, 400);
     }
+    const installments = Math.min(24, Math.max(1, Math.floor(Number(b.installments) || 1)));
+    const defaultType =
+      b.default_type === "debit_card" || b.default_type === "credit_card"
+        ? b.default_type
+        : undefined;
+
+    const cred = await tenantMpCredential(admin, tenantId);
+    if (!cred) return json({ error: "not_connected" }, 400);
 
     const { data: intent, error: intErr } = await admin
       .from("mp_payment_intents")
@@ -232,148 +185,177 @@ Deno.serve(async (req: Request) => {
         amount,
         provider_key: "mercadopago_point",
         point_device_id: deviceId,
+        mp_env: cred.env,
       })
       .select("id")
       .single();
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
-    // Point API: el monto viaja como entero en centavos (ARS).
-    const r = await fetch(
-      `${MP}/point/integration-api/devices/${deviceId}/payment-intents`,
-      {
-        method: "POST",
-        headers: mpHeaders,
-        body: JSON.stringify({
-          amount: Math.round(amount * 100),
-          additional_info: {
-            external_reference: intent.id,
-            print_on_terminal: true,
-          },
+    const r = await fetch(`${MP_API}/v1/orders`, {
+      method: "POST",
+      headers: mpHeaders(cred.token, intent.id),
+      body: JSON.stringify(
+        buildPointOrderBody({
+          intentId: intent.id,
+          amount,
+          terminalId: deviceId,
+          title: typeof b.title === "string" ? b.title : undefined,
+          installments,
+          defaultType,
         }),
-      },
-    );
+      ),
+    });
     if (!r.ok) {
-      const detail = await r.text();
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", intent.id);
+      const detail = (await r.text()).slice(0, 300);
+      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
       // 409 típico: el lector no está en modo PDV o tiene un cobro abierto.
-      return json({ error: "mp_error", detail: detail.slice(0, 300) }, 502);
+      // 400 missing_installments_cost / cuotas no habilitadas por MP.
+      return json({ error: "mp_error", detail }, 502);
     }
-    const pi = (await r.json()) as { id: string };
-    await admin
-      .from("mp_payment_intents")
-      .update({ preference_id: pi.id })
-      .eq("id", intent.id);
-    return json({ intent_id: intent.id, point_intent_id: pi.id });
+    const order = (await r.json()) as { id?: string };
+    if (!order.id) {
+      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
+      return json({ error: "mp_error", detail: "no_order_id" }, 502);
+    }
+    await admin.from("mp_payment_intents").update({ mp_order_id: order.id }).eq("id", intent.id);
+    return json({ intent_id: intent.id, order_id: order.id });
   }
 
-  // ── status / cancel: sobre un intent local Point del tenant ─────────────────
+  // ── status / cancel: sobre un intent Point del tenant ──────────────────────
   const intentId = String(b.intent_id ?? "");
   if (!intentId) return json({ error: "invalid_intent" }, 400);
-  const { data: row } = await admin
+  const { data: rowRaw } = await admin
     .from("mp_payment_intents")
-    .select("id, status, amount, preference_id, point_device_id, mp_payment_id")
+    .select(ORDER_INTENT_COLUMNS)
     .eq("id", intentId)
     .eq("tenant_id", tenantId)
     .eq("provider_key", "mercadopago_point")
     .maybeSingle();
+  const row = rowRaw as PointRow | null;
   if (!row) return json({ error: "intent_not_found" }, 404);
 
-  if (action === "status") {
-    // Ya resuelto: devolver el estado local (idempotente).
-    if (row.status !== "pending") {
-      return json({
-        status: row.status,
-        mp_payment_id: row.mp_payment_id,
-        card_type: null,
+  // Ya resuelto: estado local (idempotente).
+  if (row.status !== "pending") {
+    return json({ status: row.status, mp_payment_id: row.mp_payment_id, card_type: null });
+  }
+
+  const cred = await tenantMpCredential(admin, tenantId, row.mp_env ?? "prod");
+  if (!cred) return json({ error: "not_connected" }, 400);
+  const h = mpHeaders(cred.token);
+
+  // ── Orders API ──────────────────────────────────────────────────────────────
+  if (isOrdersIntent(row)) {
+    const orderId = row.mp_order_id!;
+    let cancelRequested = false;
+    if (action === "cancel") {
+      const c = await fetch(`${MP_API}/v1/orders/${encodeURIComponent(orderId)}/cancel`, {
+        method: "POST",
+        headers: {
+          ...mpHeaders(cred.token, `${row.id}-cancel`),
+          "x-allow-cancelable-status": "at_terminal",
+        },
       });
+      // 202: la order estaba en el lector; la cancelación queda pedida.
+      cancelRequested = c.status === 202;
+      if (c.ok) {
+        await admin.from("audit_logs").insert({
+          tenant_id: tenantId,
+          actor_user_id: user.id,
+          entity_type: "mp_payment_intents",
+          entity_id: row.id,
+          action: "mp_order_cancelled",
+          after_data: {
+            provider_key: "mercadopago_point",
+            mp_order_id: orderId,
+            at_terminal: cancelRequested,
+          },
+        });
+      }
     }
+
+    const got = await fetchOrder(cred.token, orderId);
+    if (!got.ok) return json({ error: "mp_error", detail: got.detail }, 502);
+    const res = await applyOrderToIntent(admin, row, got.order, {
+      userId: user.id,
+      source: "poll",
+    });
+    const status = res.reason === "reference_mismatch" ? "pending" : res.status;
+    return json({
+      status,
+      mp_payment_id: res.paymentId,
+      card_type: status === "approved" ? (res.cardType ?? cardTypeFromOrder(got.order)) : null,
+      state: String(got.order.status ?? ""),
+      cancel_requested: cancelRequested,
+    });
+  }
+
+  // ── Legacy: Point Payment Intents API (intents creados antes de ADR-032) ───
+  if (action === "status") {
     const r = await fetch(
-      `${MP}/point/integration-api/payment-intents/${row.preference_id}`,
-      { headers: mpHeaders },
+      `${MP_API}/point/integration-api/payment-intents/${row.preference_id}`,
+      { headers: h },
     );
     if (!r.ok) {
-      return json(
-        { error: "mp_error", detail: (await r.text()).slice(0, 300) },
-        502,
-      );
+      return json({ error: "mp_error", detail: (await r.text()).slice(0, 300) }, 502);
     }
-    const pi = (await r.json()) as {
-      state?: string;
-      payment?: { id?: number | string };
-    };
-    const state = String(pi.state ?? "").toUpperCase();
+    const pi = (await r.json()) as { state?: string; payment?: { id?: number | string } };
+    const st = legacyPointStatus(String(pi.state ?? ""));
 
-    if (state === "FINISHED" && pi.payment?.id) {
-      // Verificación independiente del pago antes de acreditar (patrón
-      // conservador): monto y estado desde /v1/payments.
-      const payRes = await fetch(`${MP}/v1/payments/${pi.payment.id}`, {
-        headers: mpHeaders,
-      });
+    if (st === "finished" && pi.payment?.id) {
+      // Verificación independiente del pago antes de acreditar.
+      const payRes = await fetch(`${MP_API}/v1/payments/${pi.payment.id}`, { headers: h });
       if (!payRes.ok) {
-        return json(
-          { error: "mp_error", detail: (await payRes.text()).slice(0, 300) },
-          502,
-        );
+        return json({ error: "mp_error", detail: (await payRes.text()).slice(0, 300) }, 502);
       }
       const pay = (await payRes.json()) as {
         status?: string;
         transaction_amount?: number;
-        payment_method?: { type?: string };
         payment_type_id?: string;
+        payment_method?: { type?: string };
       };
-      const approved = pay.status === "approved";
-      const amountOk =
-        Math.abs(Number(pay.transaction_amount ?? 0) - Number(row.amount)) < 0.01;
-      if (approved && amountOk) {
+      const paymentId = String(pi.payment.id);
+      if (pay.status === "approved" && amountsMatch(pay.transaction_amount, row.amount)) {
         await admin
           .from("mp_payment_intents")
-          .update({ status: "approved", mp_payment_id: String(pi.payment.id) })
-          .eq("id", row.id);
-        const type = pay.payment_type_id ?? pay.payment_method?.type ?? "";
+          .update({ status: "approved", mp_payment_id: paymentId })
+          .eq("id", row.id)
+          .neq("status", "approved");
         return json({
           status: "approved",
-          mp_payment_id: String(pi.payment.id),
-          card_type: type === "debit_card" ? "debit" : "credit",
+          mp_payment_id: paymentId,
+          card_type: cardTypeOf(pay.payment_type_id ?? pay.payment_method?.type),
         });
       }
-      // FINISHED pero no aprobado o monto distinto → NO se acredita.
       await admin
         .from("mp_payment_intents")
-        .update({ status: "rejected", mp_payment_id: String(pi.payment.id) })
-        .eq("id", row.id);
-      return json({ status: "rejected", mp_payment_id: String(pi.payment.id), card_type: null });
+        .update({ status: "rejected", mp_payment_id: paymentId })
+        .eq("id", row.id)
+        .eq("status", "pending");
+      return json({ status: "rejected", mp_payment_id: paymentId, card_type: null });
     }
 
-    if (["CANCELED", "CANCELLED", "ERROR", "ABANDONED", "EXPIRED"].includes(state)) {
+    if (st === "cancelled") {
       await admin
         .from("mp_payment_intents")
         .update({ status: "cancelled" })
-        .eq("id", row.id);
+        .eq("id", row.id)
+        .eq("status", "pending");
       return json({ status: "cancelled", mp_payment_id: null, card_type: null });
     }
-
-    // OPEN / ON_TERMINAL / PROCESSING → sigue pendiente.
-    return json({ status: "pending", mp_payment_id: null, card_type: null, state });
+    return json({ status: "pending", mp_payment_id: null, card_type: null, state: pi.state });
   }
 
-  if (action === "cancel") {
-    if (row.status === "pending" && row.point_device_id && row.preference_id) {
-      // Best-effort: si el lector ya lo procesó, el DELETE falla y el estado
-      // real lo resuelve el próximo `status`.
-      await fetch(
-        `${MP}/point/integration-api/devices/${row.point_device_id}/payment-intents/${row.preference_id}`,
-        { method: "DELETE", headers: mpHeaders },
-      ).catch(() => null);
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "cancelled" })
-        .eq("id", row.id);
-    }
-    return json({ ok: true });
+  // cancel legacy (best-effort: si el lector ya lo procesó, el DELETE falla).
+  if (row.point_device_id && row.preference_id) {
+    await fetch(
+      `${MP_API}/point/integration-api/devices/${row.point_device_id}/payment-intents/${row.preference_id}`,
+      { method: "DELETE", headers: h },
+    ).catch(() => null);
   }
-
-  return json({ error: "invalid_action" }, 400);
+  await admin
+    .from("mp_payment_intents")
+    .update({ status: "cancelled" })
+    .eq("id", row.id)
+    .eq("status", "pending");
+  return json({ status: "cancelled", mp_payment_id: null, card_type: null });
 });

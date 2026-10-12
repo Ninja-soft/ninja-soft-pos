@@ -107,7 +107,18 @@ Deno.serve(async (req: Request) => {
     ? new Date(Date.now() + tok.expires_in * 1000).toISOString()
     : null;
 
+  // Conserva el token de PRUEBA (switch Sandbox, ADR-032) si ya estaba cargado.
+  const { data: prevSecret } = await admin
+    .from("payment_secrets")
+    .select("secrets")
+    .eq("tenant_id", tenantId)
+    .eq("provider_key", "mercadopago")
+    .maybeSingle();
+  const prevTest = (prevSecret?.secrets as { test_access_token?: string } | null)
+    ?.test_access_token;
+
   const secrets = {
+    ...(prevTest ? { test_access_token: prevTest } : {}),
     access_token: tok.access_token,
     refresh_token: tok.refresh_token ?? null,
     public_key: tok.public_key ?? null,

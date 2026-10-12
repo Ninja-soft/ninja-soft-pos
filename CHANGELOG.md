@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **F8 · H15 — Mercado Pago presencial sobre la Orders API (ADR-032).** QR dinámico de la **caja del local** (`POST /v1/orders` type `qr`, un QR único por cobro, dibujado en el POS sin servicios externos) con alta única de sucursal + caja desde Medios de pago; **"Enviar link"** de Checkout Pro desde el mismo modal (y fallback automático si no hay caja); **Point** migrado de la Payment Intents API a orders type `point` (preselección débito/crédito/cuotas, cancelación en la terminal sin perder pagos hechos, intents viejos siguen resolviendo); webhook topic `order` (`mp_orders_webhook`) que re-lee la order con el token del tenant y acredita sólo con monto exacto; **switch Sandbox** de Mercado Pago con token de prueba que convive con la conexión real. Migración `20261011170000_mp_orders_api` (sin aplicar).
+
 ### Fixed
 
 - **CI — el job `rls` volvió a verde después de un mes rojo.** Fallaba en todos los merges desde el 2026-06-13. Dos causas apiladas: (1) **breaking change del Supabase CLI v2.106.0** (el workflow usa `setup-cli latest`): el start local ahora revoca los privilegios Data API por defecto → `permission denied for table tenants` en el setup de la suite — fix con `auto_expose_new_tables = true` en `supabase/config.toml` (solo local/CI; follow-up durable: migración de GRANTs explícitos preservando el hardening); (2) los **triggers de gating de escritura** de f13 (9-jun) rompían 4 tests — el setup ahora habilita todas las features gateadas vía addon (patrón `listas_precios`). Bisect por historial de runs + changelog oficial del CLI.

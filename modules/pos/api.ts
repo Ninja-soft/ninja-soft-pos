@@ -563,6 +563,81 @@ export const posApi = {
     };
   },
 
+  // ── Mercado Pago QR dinámico (Orders API, ADR-032) ─────────────────────────
+  // Edge mp_qr: order type "qr" atada a la caja del tenant. Devuelve el
+  // qr_data (EMVCo) que el POS dibuja local. Sin caja configurada lanza
+  // "qr_pos_not_configured" y el modal cae al link de Checkout Pro.
+  createMpOrderQr: async (
+    amount: number,
+    title: string,
+  ): Promise<{ intent_id: string; init_point: string; order_id: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_qr", {
+      body: { action: "create", amount, title },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    const r = data as { intent_id: string; qr_data: string; order_id: string };
+    return { intent_id: r.intent_id, init_point: r.qr_data, order_id: r.order_id };
+  },
+
+  // Estado de una order QR: la Edge sincroniza contra GET /v1/orders/{id}
+  // (funciona aunque el webhook no esté configurado en la cuenta de MP).
+  mpOrderStatus: async (
+    intentId: string,
+  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_qr", {
+      body: { action: "status", intent_id: intentId },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+    return data as { status: string; mp_payment_id: string | null };
+  },
+
+  cancelMpOrder: async (intentId: string): Promise<void> => {
+    const supabase = createClient();
+    await supabase.functions.invoke("mp_qr", {
+      body: { action: "cancel", intent_id: intentId },
+    });
+  },
+
+  // Alta única de sucursal + caja en MP (owner/manager). Guarda los ids en
+  // tenant_payment_methods(mercadopago).config.mp_qr[env].
+  mpQrSetup: async (input: {
+    name: string;
+    street_name: string;
+    street_number: string;
+    city_name: string;
+    state_name: string;
+    coordinates: string;
+    reference?: string;
+  }): Promise<{ env: "prod" | "test" }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_qr", {
+      body: { action: "setup", ...input },
+    });
+    if (error) throw error;
+    const res = data as { error?: string; field?: string; env?: "prod" | "test" };
+    if (res?.error) throw new Error(res.field ? `${res.error}:${res.field}` : res.error);
+    return { env: res.env ?? "prod" };
+  },
+
+  mpQrReset: async (): Promise<void> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("mp_qr", {
+      body: { action: "reset" },
+    });
+    if (error) throw error;
+    if ((data as { error?: string })?.error) {
+      throw new Error((data as { error: string }).error);
+    }
+  },
+
   // ── Mercado Point (H15 resto): cobro presencial en el lector ───────────────
   // Todas pasan por la Edge mp_point (usa la conexión MP del tenant; gating de
   // plan server-side en create). El POS sondea pointIntentStatus hasta approved.
@@ -589,13 +664,22 @@ export const posApi = {
     }
   },
 
+  // Orders API type "point" (ADR-032). Sin `installments` el cliente elige
+  // medio y cuotas en el lector; con cuotas > 1 se preselecciona crédito.
   createPointIntent: async (
     deviceId: string,
     amount: number,
+    opts?: { installments?: number; defaultType?: "debit_card" | "credit_card" },
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
-      body: { action: "create", device_id: deviceId, amount },
+      body: {
+        action: "create",
+        device_id: deviceId,
+        amount,
+        ...(opts?.installments ? { installments: opts.installments } : {}),
+        ...(opts?.defaultType ? { default_type: opts.defaultType } : {}),
+      },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -626,11 +710,18 @@ export const posApi = {
     };
   },
 
-  cancelPointIntent: async (intentId: string): Promise<void> => {
+  // Cancela en el lector. Si la order ya estaba en la terminal (at_terminal)
+  // MP responde 202: la cancelación queda pedida y el estado final llega por
+  // status (cancel_requested=true → el modal sigue sondeando).
+  cancelPointIntent: async (
+    intentId: string,
+  ): Promise<{ status: string; cancel_requested: boolean }> => {
     const supabase = createClient();
-    await supabase.functions.invoke("mp_point", {
+    const { data } = await supabase.functions.invoke("mp_point", {
       body: { action: "cancel", intent_id: intentId },
     });
+    const r = (data ?? {}) as { status?: string; cancel_requested?: boolean };
+    return { status: r.status ?? "pending", cancel_requested: Boolean(r.cancel_requested) };
   },
 
   // ── Pagos360 (H21): link de pago / checkout hosted ─────────────────────────

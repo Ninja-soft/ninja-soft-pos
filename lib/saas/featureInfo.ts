@@ -95,7 +95,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   mercado_pago: {
-    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio y cobra desde el celular del cliente. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Mercado Pago por QR y link de pago: conecta la cuenta del negocio, cobra con un QR único por venta en la caja del local o manda el link por WhatsApp. El Point (terminal) es una función aparte.",
     impact: "Sin esto no se puede cobrar con Mercado Pago ni vincular la cuenta del comercio.",
     minPlan: "Pro",
   },

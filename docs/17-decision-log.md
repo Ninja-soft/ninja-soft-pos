@@ -1336,6 +1336,44 @@ El dueño pidió: "Planes · Mercado Pago debe ir en Point, no en QR", mejorar m
 
 ---
 
+## ADR-039 — Asistente IA: acceso total de lectura (`ai_query`) e historial por usuario de 15 días
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada · **Hito:** Asistente IA (addon `asistente_ia`)
+
+### Contexto
+
+El asistente sólo respondía lo que cubrían 7 tools curadas (ventas, top, clientes, caja, stock, búsqueda de productos, panorama). Preguntas simples como "¿cuántas categorías tengo cargadas?" quedaban sin respuesta ("no tengo una herramienta…"). Además el chat se perdía al cerrar la burbuja. El dueño pidió que la IA "tenga acceso a todo" y que los mensajes se guarden 15 días por usuario.
+
+### Decisión
+
+**1. Consulta genérica de solo lectura `ai_query` sobre una whitelist.**
+- El modelo no escribe SQL: manda un pedido JSON (`entity`, `select`, `filters` eq/neq/gt/gte/lt/lte/ilike/in/between/is_null/not_null, `group_by` ≤ 2 con `trunc` day/week/month/year en hora AR, `aggregates` count/count_distinct/sum/avg/min/max, `order_by` ≤ 3, `limit` 1..200). Columnas de entidades relacionadas con `ref.col` (joins acotados declarados en el catálogo, hasta un nivel extra con `via`).
+- Catálogo único en `supabase/functions/_shared/aiQuery.ts` (47 entidades: catálogo, variantes, stock, listas de precios, clientes y grupos, cuenta corriente, saldo a favor y vales, ventas, renglones, pagos, devoluciones, sucursales, cajas, turnos, movimientos, cierres Z, promociones, cupones, garantías, seriales, profesionales, agenda, packs, salón/mesas/comandas/reservas, delivery y zonas, cartas, equipo, cajeros, planes de cuotas, medios de pago, suscripción, complementos). La copia SQL (`ai__query_catalog()`) se genera de `catalogForSql()` y un test de Vitest verifica que no diverjan.
+- Doble validación: TS (`validateQuery`, errores claros para que el modelo corrija) y SQL (`ai_query`, la barrera real): cada identificador se resuelve contra la whitelist y se cita con `quote_ident`; los valores pasan por cast tipado + `quote_literal`; operadores, agregados y `trunc` son listas cerradas.
+- **`SECURITY INVOKER` con el JWT del usuario** (la Edge la llama con el cliente del usuario, nunca con service_role): RLS de cada tabla aplica y además se fuerza `t.tenant_id = current_tenant_id()` (también en los joins), así que ni el staff interno con policies `or is_internal()` cruza tenants. Filas con `deleted_at` excluidas.
+- Fuera de la whitelist: `payment_secrets`, `platform_secrets`, SMTP, `email_providers`, `mp_*` internos, `audit_logs`, `users`, `invite_codes`, `pin_hash`, `tenant_payment_methods.config`, `payments.metadata/card_voucher`, código de vales y todo jsonb interno.
+- Tool `ai_schema` (pura, sin DB) describe columnas y relaciones en español; el system prompt lista las entidades, la fecha/hora AR actual y la regla "responder desde los datos, citar cifras, no inventar; si el dato no está, decir qué no es accesible".
+- Las tools curadas existentes se mantienen. Claude pasa a tener el mismo loop de tool use que Gemini (antes era single-shot). Tope de 8 vueltas y de 40 000 caracteres por resultado.
+
+**2. Historial por usuario (`ai_conversations`, `ai_messages`).**
+- RLS de lectura: `tenant_id = current_tenant_id() and user_id = auth.uid()` (sin excepción para staff: el chat es personal). Sin policies de escritura: escribe sólo la Edge `ai_assistant` (service_role server-side) con tenant y usuario resueltos del JWT; un `conversation_id` ajeno se ignora y se abre una conversación nueva.
+- La UI lee con el cliente del navegador bajo RLS: al abrir retoma la última conversación, lista las de los últimos 15 días, "Nueva conversación" y borrar (confirmación en línea).
+- **Borrado del usuario = baja lógica** (`deleted_at`, vía Edge). **Retención = borrado físico** por pg_cron diario (`purge_ai_conversations`, 04:41 UTC) de conversaciones sin actividad hace más de 15 días (incluidas las dadas de baja); los mensajes caen por cascade. Excepción explícita a la regla de baja lógica: es dato transitorio de conversación, no dato de negocio, y conservarlo indefinidamente sólo suma riesgo de privacidad y volumen.
+
+### Consecuencias
+
+- `ai_query` se otorga a `authenticated`: un usuario podría llamarla por PostgREST sin el addon, pero sólo lee lo que RLS ya le permite leer por PostgREST (sólo suma agregados y joins acotados). No es una superficie nueva de datos; el addon sigue gateado en la Edge.
+- El tiempo máximo lo pone el `statement_timeout` del rol `authenticated` (8 s en Supabase) más un timeout de 12 s en la Edge. Para tenants enormes, consultas agregadas sin filtros pueden cortar por timeout: el modelo recibe el error y puede acotar.
+- Si una columna nueva debe ser visible para la IA, hay que sumarla al catálogo TS y regenerar el bloque `$catalog$` de la migración nueva (el test falla si divergen).
+- Fuera de alcance: proveedores/compras (no existen tablas), facturación AFIP (marketing futuro).
+- Cuota mensual y bitácora `ai_usage` sin cambios.
+
+### Referencias
+
+- `supabase/migrations/20261011220000_ai_acceso_total_historial.sql`, `supabase/functions/_shared/aiQuery.ts`, `supabase/functions/ai_assistant/index.ts`, `components/ai/AssistantBubble.tsx`, `components/ai/AssistantChat.tsx`, `tests/unit/aiQuery.test.ts`, `tests/unit/aiHistory.test.ts`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

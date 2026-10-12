@@ -3,13 +3,17 @@
 import { forwardRef, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ArrowUp,
   ArrowUpRight,
   Database,
+  History,
   Lock,
+  MessageSquare,
   PackageSearch,
   SquarePen,
   Sparkles,
+  Trash2,
   TrendingUp,
   Trophy,
   Wallet,
@@ -31,6 +35,13 @@ export type ChatMessage = {
   consultedData?: boolean;
 };
 
+// Conversación guardada del usuario (historial de 15 días).
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
 // Sugerencias del estado vacío: un toque las envía tal cual.
 const SUGGESTIONS: { icon: LucideIcon; text: string }[] = [
   { icon: TrendingUp, text: "¿Cuánto vendí hoy?" },
@@ -38,6 +49,33 @@ const SUGGESTIONS: { icon: LucideIcon; text: string }[] = [
   { icon: Trophy, text: "¿Cuáles son mis productos más vendidos este mes?" },
   { icon: Wallet, text: "¿Cómo hago el cierre de caja?" },
 ];
+
+// Fecha corta y relativa para la lista del historial ("Hoy 14:32", "Ayer",
+// "lun 6/10").
+export function conversationDateLabel(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const tz = "America/Argentina/Buenos_Aires";
+  const day = (x: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(x);
+  // Armado a mano desde las partes: el formato de es-AR varía entre motores
+  // (12/24 h, "6/10" vs "6-10").
+  const parts = new Intl.DateTimeFormat("es-AR", {
+    timeZone: tz,
+    weekday: "short",
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (t: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === t)?.value ?? "";
+  const time = `${get("hour").padStart(2, "0")}:${get("minute")}`;
+  if (day(d) === day(now)) return `Hoy ${time}`;
+  if (day(d) === day(new Date(now.getTime() - 86_400_000))) return `Ayer ${time}`;
+  return `${get("weekday").replace(".", "")} ${get("day")}/${get("month")}`;
+}
 
 // ── Launcher ────────────────────────────────────────────────────────────────
 
@@ -154,11 +192,30 @@ type PanelProps = {
   onSend: (text: string) => void;
   onReset: () => void;
   onClose: () => void;
+  // Historial (sólo con acceso).
+  view: "chat" | "history";
+  onToggleHistory: () => void;
+  conversations: ConversationSummary[];
+  conversationsLoading: boolean;
+  activeConversationId: string | null;
+  loadingConversation: boolean;
+  deletingConversationId: string | null;
+  onOpenConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
 };
 
 export function AssistantPanel(props: PanelProps) {
-  const { locked, providerName, providerImage, messages, onClose, onReset } =
-    props;
+  const {
+    locked,
+    providerName,
+    providerImage,
+    messages,
+    onClose,
+    onReset,
+    view,
+    onToggleHistory,
+    pending,
+  } = props;
   const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
 
@@ -237,8 +294,22 @@ export function AssistantPanel(props: PanelProps) {
               </p>
             )}
           </div>
-          {!locked && messages.length > 0 && (
-            <HeaderButton label="Nueva conversación" onClick={onReset}>
+          {!locked && (
+            <HeaderButton
+              label={view === "history" ? "Volver al chat" : "Conversaciones"}
+              onClick={onToggleHistory}
+              disabled={pending}
+              active={view === "history"}
+            >
+              {view === "history" ? <ArrowLeft size={17} /> : <History size={17} />}
+            </HeaderButton>
+          )}
+          {!locked && view === "chat" && messages.length > 0 && (
+            <HeaderButton
+              label="Nueva conversación"
+              onClick={onReset}
+              disabled={pending}
+            >
               <SquarePen size={17} />
             </HeaderButton>
           )}
@@ -249,6 +320,8 @@ export function AssistantPanel(props: PanelProps) {
 
         {locked ? (
           <LockedBody {...props} panelRef={panelRef} />
+        ) : view === "history" ? (
+          <HistoryBody {...props} />
         ) : (
           <ChatBody {...props} panelRef={panelRef} />
         )}
@@ -261,10 +334,14 @@ function HeaderButton({
   label,
   onClick,
   children,
+  disabled,
+  active,
 }: {
   label: string;
   onClick: () => void;
   children: React.ReactNode;
+  disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
@@ -272,10 +349,146 @@ function HeaderButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-95"
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        "grid h-9 w-9 shrink-0 place-items-center rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-95 disabled:opacity-50 disabled:active:scale-100",
+        active
+          ? "bg-ninja-flame/15 text-primary"
+          : "bg-secondary text-muted-foreground hover:text-foreground",
+      )}
     >
       {children}
     </button>
+  );
+}
+
+// ── Historial de conversaciones (últimos 15 días) ───────────────────────────
+
+function HistoryBody({
+  conversations,
+  conversationsLoading,
+  activeConversationId,
+  deletingConversationId,
+  onOpenConversation,
+  onDeleteConversation,
+  onReset,
+  onToggleHistory,
+}: PanelProps) {
+  // Confirmación en línea (sin confirm()): el primer toque en el tacho pide
+  // confirmar en la misma fila.
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  return (
+    <div className="slim-scrollbar relative flex flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-5">
+      <div className="flex items-center justify-between gap-2 pb-3">
+        <div>
+          <p className="font-display text-[15px] font-semibold text-foreground">
+            Conversaciones
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Se guardan 15 días desde el último mensaje.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onReset();
+            onToggleHistory();
+          }}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-ninja-flame/15 px-3.5 text-[13px] font-semibold text-primary outline-none transition hover:bg-ninja-flame/20 focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-95"
+        >
+          <SquarePen size={14} /> Nueva
+        </button>
+      </div>
+
+      {conversationsLoading ? (
+        <div className="flex flex-1 items-center justify-center py-10">
+          <Spinner size={22} />
+        </div>
+      ) : conversations.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+            <MessageSquare size={20} />
+          </span>
+          <p className="mt-3 text-sm font-medium text-foreground">
+            Todavía no tenés conversaciones
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cuando le preguntes algo al asistente, la charla queda guardada acá.
+          </p>
+        </div>
+      ) : (
+        <ul className="grid gap-1.5" aria-label="Conversaciones recientes">
+          {conversations.map((c) => {
+            const isActive = c.id === activeConversationId;
+            const isDeleting = c.id === deletingConversationId;
+            if (confirmId === c.id) {
+              return (
+                <li
+                  key={c.id}
+                  className="flex min-h-[56px] items-center gap-2 rounded-2xl bg-danger/10 px-3.5 py-2"
+                >
+                  <span className="min-w-0 flex-1 text-sm text-foreground">
+                    ¿Borrar esta conversación?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(null)}
+                    className="h-8 rounded-full bg-secondary px-3 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ninja-flame"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmId(null);
+                      onDeleteConversation(c.id);
+                    }}
+                    className="h-8 rounded-full bg-destructive px-3 text-xs font-semibold text-destructive-foreground outline-none focus-visible:ring-2 focus-visible:ring-ninja-flame"
+                  >
+                    Borrar
+                  </button>
+                </li>
+              );
+            }
+            return (
+              <li key={c.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onOpenConversation(c.id)}
+                  disabled={isDeleting}
+                  aria-current={isActive ? "true" : undefined}
+                  className={cn(
+                    "flex min-h-[56px] min-w-0 flex-1 flex-col justify-center rounded-2xl px-3.5 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ninja-flame active:scale-[0.99] disabled:opacity-60",
+                    isActive
+                      ? "bg-ninja-flame/10"
+                      : "bg-secondary hover:bg-ninja-flame/[0.07]",
+                  )}
+                >
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {c.title}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {conversationDateLabel(c.updated_at)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmId(c.id)}
+                  disabled={isDeleting}
+                  aria-label={`Borrar conversación: ${c.title}`}
+                  title="Borrar"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition hover:bg-danger/10 hover:text-danger focus-visible:ring-2 focus-visible:ring-ninja-flame"
+                >
+                  {isDeleting ? <Spinner size={14} /> : <Trash2 size={16} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -305,6 +518,7 @@ function ChatBody({
   providerName,
   onSend,
   panelRef,
+  loadingConversation,
 }: PanelProps & { panelRef: React.RefObject<HTMLElement> }) {
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -335,14 +549,14 @@ function ChatBody({
 
   function submit(text = input) {
     const t = text.trim();
-    if (!t || pending) return;
+    if (!t || pending || loadingConversation) return;
     onSend(t);
     setInput("");
     inputRef.current?.focus();
   }
 
   const remaining = quota ? Math.max(0, quota.cap - quota.used) : null;
-  const canSend = input.trim().length > 0 && !pending;
+  const canSend = input.trim().length > 0 && !pending && !loadingConversation;
 
   return (
     <>
@@ -353,7 +567,15 @@ function ChatBody({
         aria-label="Conversación con el asistente"
         className="slim-scrollbar relative flex-1 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-5"
       >
-        {messages.length === 0 ? (
+        {loadingConversation ? (
+          <div
+            role="status"
+            aria-label="Cargando conversación"
+            className="flex min-h-full items-center justify-center py-10"
+          >
+            <Spinner size={22} />
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex min-h-full flex-col justify-end pb-1 pt-4">
             <div className="flex flex-col items-center px-2 text-center">
               <AssistantMark size={68} animated />
@@ -361,8 +583,8 @@ function ChatBody({
                 ¿En qué te ayudo hoy?
               </p>
               <p className="mt-1.5 max-w-[30ch] text-sm leading-relaxed text-muted-foreground">
-                Preguntame por tus ventas, tu stock o cómo usar cualquier
-                pantalla del sistema.
+                Preguntame lo que quieras de tu negocio: ventas, stock,
+                clientes, caja o cómo usar cualquier pantalla.
               </p>
             </div>
             <div className="mt-6 grid gap-2">

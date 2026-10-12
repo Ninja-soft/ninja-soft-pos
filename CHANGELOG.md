@@ -9,6 +9,10 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **Asistente IA: acceso total de lectura e historial de 15 días.** Nueva consulta genérica `ai_query` (y `ai_schema`) para que el asistente responda cualquier pregunta sobre los datos del negocio (cantidades, totales, rankings, comparaciones por fecha, cliente, vendedor o categoría) sobre una whitelist de 47 entidades, sin secretos. Corre con el JWT del usuario (SECURITY INVOKER, RLS) y fuerza el tenant de la sesión; identificadores validados contra la whitelist en TS y en SQL, valores tipados y citados, hasta 200 filas. Claude ahora también usa herramientas. El chat se guarda por usuario: al abrir retoma la última conversación, lista las de los últimos 15 días, "Nueva conversación" y borrar; pg_cron purga a diario lo inactivo hace más de 15 días. Migración `20261011220000_ai_acceso_total_historial.sql` (no aplicada). ADR-039.
+
 ### Changed
 
 - **Reportes: gráficos con ECharts y sección rediseñada.** Recharts se reemplaza por ECharts (carga diferida, colores de cada tema, accesible con tabla oculta para lectores, exportar cada gráfico a PNG). Nuevo switch Gráfico / Tabla estilo iOS que recuerda la elección por sección. KPIs con variación vs. el período anterior y mini tendencia (total, ventas, ticket promedio, mejor día). Evolución de ventas en área/línea/barras con métrica Vendido/Ventas/Ticket, línea del período anterior, promedio y zoom en rangos largos. Nuevas secciones **Ventas por día y hora** (mapa de calor u horas) y **Flujo de caja** (ingresos, egresos y neto por día), que consultan recién al entrar en pantalla. Medios de pago y categorías en dona/mosaico/barras, top productos y clientes en ranking, staff apilado comisión + propinas, stock bajo como bullet (stock vs. mínimo). ADR-035.

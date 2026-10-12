@@ -290,7 +290,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Extras ──────────────────────────────────────────────────────────────────
   asistente_ia: {
-    desc: "Asistente con IA para el POS: responde consultas y ayuda a operar el negocio con inteligencia artificial.",
+    desc: "Asistente con IA para el POS: responde cualquier consulta sobre los datos del negocio (ventas, stock, clientes, caja, agenda y más) con acceso de solo lectura, y guarda las conversaciones de cada usuario por 15 días.",
     impact: "Se gestiona como add-on: se contrata aparte y no se incluye marcándolo en el plan.",
     minPlan: "Add-on",
   },

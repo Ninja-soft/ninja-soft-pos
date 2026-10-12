@@ -69,11 +69,14 @@ Deno.serve(async (req: Request) => {
       .select("tenant_id")
       .eq("provider_key", CONNECTION)
       .eq("secrets->>merchant_id", m.merchantId);
-    for (const c of (conns ?? []) as { tenant_id: string }[]) {
+    // ADR-057: el merchant puede estar en la fila del negocio y en la de una
+    // sucursal del mismo negocio: un recorrido por negocio.
+    const tenantIds = [...new Set(((conns ?? []) as { tenant_id: string }[]).map((c) => c.tenant_id))];
+    for (const tenantId of tenantIds) {
       const { data: rows } = await admin
         .from("mp_payment_intents")
         .select(INTENT_COLS)
-        .eq("tenant_id", c.tenant_id)
+        .eq("tenant_id", tenantId)
         .eq("provider_key", PROVIDER)
         .eq("status", "pending")
         .gte("created_at", since)

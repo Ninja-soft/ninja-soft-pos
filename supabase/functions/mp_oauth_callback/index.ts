@@ -5,6 +5,12 @@
 // tokens, los guarda en payment_secrets del tenant y marca el medio conectado.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import {
+  loadProviderSecret,
+  saveProviderSecret,
+  scopeErrorStatus,
+  storeFromOAuthState,
+} from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +51,18 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!stateRow) return json({ error: "invalid_state" }, 400);
   const tenantId = stateRow.tenant_id as string;
+  // ADR-057: sucursal (si el OAuth se pidió para una) y re-validación del
+  // alcance con quien lo inició.
+  const storeId = storeFromOAuthState(state);
+  if (storeId) {
+    const { data: err, error: rpcErr } = await admin.rpc("payment_secret_scope_check", {
+      p_tenant: tenantId,
+      p_user: stateRow.user_id,
+      p_store: storeId,
+    });
+    if (rpcErr) return json({ error: "scope_check_failed" }, 500);
+    if (err) return json({ error: err }, scopeErrorStatus(String(err)));
+  }
 
   // Credenciales de la app MP de NinjaSoft.
   const { data: plat } = await admin
@@ -108,13 +126,10 @@ Deno.serve(async (req: Request) => {
     : null;
 
   // Conserva el token de PRUEBA (switch Sandbox, ADR-032) si ya estaba cargado.
-  const { data: prevSecret } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mercadopago")
-    .maybeSingle();
-  const prevTest = (prevSecret?.secrets as { test_access_token?: string } | null)
+  // Sólo la fila de ESE alcance (sin heredar el token de prueba del negocio).
+  const prevSecret = await loadProviderSecret(admin, tenantId, "mercadopago", { scopeStoreId: storeId });
+  const samePrev = prevSecret && prevSecret.scopeStoreId === storeId ? prevSecret : null;
+  const prevTest = (samePrev?.secrets as { test_access_token?: string } | undefined)
     ?.test_access_token;
 
   const secrets = {
@@ -127,12 +142,12 @@ Deno.serve(async (req: Request) => {
     via: "oauth",
   };
 
-  const up = await admin
-    .from("payment_secrets")
-    .upsert(
-      { tenant_id: tenantId, provider_key: "mercadopago", secrets },
-      { onConflict: "tenant_id,provider_key" },
-    );
+  const up = await saveProviderSecret(admin, {
+    tenantId,
+    providerKey: "mercadopago",
+    storeId,
+    secrets,
+  });
   if (up.error) return json({ error: "save_failed", detail: up.error.message }, 500);
 
   // Marca conectado (sin pisar enabled/surcharge si ya existen).
@@ -146,10 +161,14 @@ Deno.serve(async (req: Request) => {
     ...((cur?.config as Record<string, unknown>) ?? {}),
     connected: true,
   };
-  await admin.from("tenant_payment_methods").upsert(
-    { tenant_id: tenantId, provider_key: "mercadopago", config },
-    { onConflict: "tenant_id,provider_key" },
-  );
+  // Una cuenta de sucursal no marca conectado al negocio entero (ADR-057):
+  // la UI lee payment_secret_scopes().
+  if (!storeId) {
+    await admin.from("tenant_payment_methods").upsert(
+      { tenant_id: tenantId, provider_key: "mercadopago", config },
+      { onConflict: "tenant_id,provider_key" },
+    );
+  }
 
   await admin
     .from("mp_oauth_states")
@@ -162,7 +181,7 @@ Deno.serve(async (req: Request) => {
     entity_type: "payment_secrets",
     entity_id: null,
     action: "payment_oauth_connected",
-    after_data: { provider_key: "mercadopago", mp_user_id: secrets.mp_user_id },
+    after_data: { provider_key: "mercadopago", mp_user_id: secrets.mp_user_id, store_id: storeId },
   });
 
   return json({ ok: true });

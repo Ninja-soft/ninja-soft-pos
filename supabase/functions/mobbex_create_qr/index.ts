@@ -25,6 +25,7 @@ import {
   mobbexCustomer,
   parseCheckoutResponse,
 } from "../_shared/mobbex.ts";
+import { bodyStoreId, insertIntentWithScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -92,21 +93,16 @@ Deno.serve(async (req: Request) => {
   if (mbxAllowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
 
   // Credenciales Mobbex del tenant.
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mobbex")
-    .maybeSingle();
+  const secretRow = await loadProviderSecret(admin, tenantId, "mobbex", { storeId: bodyStoreId(b) });
   const sec = (secretRow?.secrets ?? {}) as { api_key?: string; access_token?: string };
   if (!sec.api_key || !sec.access_token) return json({ error: "not_connected" }, 400);
 
   // Intent pendiente.
-  const { data: intent, error: intErr } = await admin
-    .from("mp_payment_intents")
-    .insert({ tenant_id: tenantId, amount, provider_key: "mobbex" })
-    .select("id")
-    .single();
+  const { data: intent, error: intErr } = await insertIntentWithScope<{ id: string }>(
+    admin,
+    { tenant_id: tenantId, amount, provider_key: "mobbex" },
+    secretRow?.scopeStoreId ?? null,
+  );
   if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
   const webhook = `${url}/functions/v1/mobbex_webhook?intent=${intent.id}`;

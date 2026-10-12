@@ -15,6 +15,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
+import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const html = (body: string) =>
   new Response(
@@ -71,12 +72,7 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { status: 200 });
   }
 
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", row.tenant_id)
-    .eq("provider_key", "payway")
-    .maybeSingle();
+  const secretRow = await loadProviderSecret(admin, row.tenant_id, "payway", { scopeStoreId: await intentSecretScope(admin, row.id) });
   const sec = (secretRow?.secrets ?? {}) as { private_apikey?: string };
   if (!sec.private_apikey) return new Response("ok", { status: 200 });
 

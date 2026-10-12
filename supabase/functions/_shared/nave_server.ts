@@ -24,6 +24,7 @@ import {
   type PaymentEvaluation,
   type PointTerminal,
 } from "./nave.ts";
+import { loadProviderSecret } from "./paymentSecrets.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Admin = SupabaseClient<any, "public", any>;
@@ -44,22 +45,22 @@ export type NaveConnection = {
   client: NaveClient;
   posId: string | null;
   terminals: PointTerminal[];
+  /** Sucursal de la credencial usada (null = la del negocio, ADR-057). */
+  scopeStoreId: string | null;
 };
 
 // Conexión Nave del tenant. Secretos: client_id, client_secret, pos_id (QR +
 // link), point_pos_ids (terminales Point, opcional), audience (opcional).
 // Ambiente: tenant_payment_methods.sandbox de la fila 'nave'.
+// ADR-057: `opts.storeId` usa la conexión propia de la sucursal (pos_id del
+// local) si tiene; `opts.scopeStoreId` (del intent) la exacta.
 export async function loadNaveConnection(
   admin: Admin,
   tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
 ): Promise<NaveConnection | null> {
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "nave")
-    .maybeSingle();
-  const sec = ((secretRow as { secrets?: unknown } | null)?.secrets ?? {}) as {
+  const loaded = await loadProviderSecret(admin, tenantId, "nave", opts);
+  const sec = (loaded?.secrets ?? {}) as {
     client_id?: string;
     client_secret?: string;
     pos_id?: string;
@@ -84,6 +85,7 @@ export async function loadNaveConnection(
     }),
     posId: sec.pos_id?.trim() || null,
     terminals: parsePointTerminals(sec.point_pos_ids),
+    scopeStoreId: loaded?.scopeStoreId ?? null,
   };
 }
 

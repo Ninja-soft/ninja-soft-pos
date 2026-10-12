@@ -38,6 +38,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 import {
   applyOrderToIntent,
   fetchOrder,
@@ -126,7 +127,8 @@ Deno.serve(async (req: Request) => {
   // ── devices: lista las terminales Point de la cuenta ───────────────────────
   if (action === "devices" || action === "pdv") {
     if (!canManage) return json({ error: "forbidden" }, 403);
-    const cred = await tenantMpCredential(admin, tenantId);
+    // ADR-057: con store_id, la cuenta de MP propia de esa sucursal (si tiene).
+    const cred = await tenantMpCredential(admin, tenantId, null, { storeId: bodyStoreId(b) });
     if (!cred) return json({ error: "not_connected" }, 400);
 
     if (action === "devices") {
@@ -203,21 +205,22 @@ Deno.serve(async (req: Request) => {
         ? b.default_type
         : undefined;
 
-    const cred = await tenantMpCredential(admin, tenantId);
+    // ADR-057: credencial de la sucursal del cobro (la de la terminal manda).
+    const cred = await tenantMpCredential(admin, tenantId, null, { storeId });
     if (!cred) return json({ error: "not_connected" }, 400);
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({
+    const { data: intent, error: intErr } = await insertIntentWithScope<{ id: string }>(
+      admin,
+      {
         tenant_id: tenantId,
         amount,
         provider_key: "mercadopago_point",
         point_device_id: deviceId,
         mp_env: cred.env,
         ...(terminalId ? { payment_terminal_id: terminalId } : {}),
-      })
-      .select("id")
-      .single();
+      },
+      cred.scopeStoreId,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
     const r = await fetch(`${MP_API}/v1/orders`, {
@@ -269,7 +272,9 @@ Deno.serve(async (req: Request) => {
     return json({ status: row.status, mp_payment_id: row.mp_payment_id, card_type: null });
   }
 
-  const cred = await tenantMpCredential(admin, tenantId, row.mp_env ?? "prod");
+  const cred = await tenantMpCredential(admin, tenantId, row.mp_env ?? "prod", {
+    scopeStoreId: await intentSecretScope(admin, row.id),
+  });
   if (!cred) return json({ error: "not_connected" }, 400);
   const h = mpHeaders(cred.token);
 

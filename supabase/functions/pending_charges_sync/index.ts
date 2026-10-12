@@ -19,6 +19,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { loadPagos360, syncPagos360Intent } from "../_shared/pagos360_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
@@ -70,14 +71,25 @@ Deno.serve(async (req: Request) => {
   let checked = 0;
   let approved = 0;
   let failed = 0;
-  // Un negocio a la vez (su API key), sus intents en paralelo de a 5.
+  // Un negocio a la vez, sus intents en paralelo de a 5. ADR-057: cada intent
+  // se verifica con la API key (negocio o sucursal) con la que se creó; las
+  // conexiones se cachean por alcance.
   for (const [tenantId, list] of byTenant) {
-    const conn = await loadPagos360(admin, tenantId);
-    if (!conn) continue;
+    const conns = new Map<string, Awaited<ReturnType<typeof loadPagos360>>>();
+    const connFor = async (intentId: string) => {
+      const scope = await intentSecretScope(admin, intentId);
+      const key = scope ?? "";
+      if (!conns.has(key)) conns.set(key, await loadPagos360(admin, tenantId, { scopeStoreId: scope }));
+      return conns.get(key) ?? null;
+    };
     for (let i = 0; i < list.length; i += 5) {
       const chunk = list.slice(i, i + 5);
       const results = await Promise.all(
-        chunk.map((c) => syncPagos360Intent(admin, conn, tenantId, c.intent_id).catch(() => null)),
+        chunk.map(async (c) => {
+          const conn = await connFor(c.intent_id);
+          if (!conn) return null;
+          return await syncPagos360Intent(admin, conn, tenantId, c.intent_id).catch(() => null);
+        }),
       );
       for (const r of results) {
         checked++;

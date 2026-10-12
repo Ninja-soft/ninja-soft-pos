@@ -54,6 +54,7 @@ import {
 import { authMember, cors, json } from "../_shared/nave_server.ts";
 import { runInBackground } from "../_shared/mpAuth.ts";
 import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
+import { bodyStoreId, insertIntentWithScope } from "../_shared/paymentSecrets.ts";
 
 // La Edge corta el POST antes de su límite de reloj; la terminal sigue con el
 // cobro y el poll lo resuelve por externalPaymentId.
@@ -146,7 +147,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, status });
   }
 
-  const conn = await loadCloverConnection(admin, tenantId);
+  // ADR-057: conexión de la sucursal del POS (si tiene una propia).
+  let conn = await loadCloverConnection(admin, tenantId, undefined, { storeId: bodyStoreId(b) });
   if (!conn) return json({ error: "not_connected" }, 400);
 
   // ── devices: terminales (sin secretos) ──────────────────────────────────────
@@ -173,6 +175,11 @@ Deno.serve(async (req: Request) => {
     terminalId = t.terminal.id;
     storeId = t.terminal.store_id;
     registerId = registerId ?? t.terminal.cash_register_id;
+    // La terminal manda: su sucursal define la conexión.
+    if (storeId !== loc.storeId) {
+      conn = await loadCloverConnection(admin, tenantId, undefined, { storeId });
+      if (!conn) return json({ error: "not_connected" }, 400);
+    }
   }
   if (!isSafeCloverId(deviceId)) return json({ error: "invalid_device" }, 400);
 
@@ -219,18 +226,19 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_installments" }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({
+    const { data: intent, error: intErr } = await insertIntentWithScope(
+      admin,
+      {
         tenant_id: tenantId,
         amount,
         provider_key: PROVIDER,
         point_device_id: deviceId,
         mp_env: intentEnvOf(conn.env),
         ...(terminalId ? { payment_terminal_id: terminalId } : {}),
-      })
-      .select(INTENT_COLS)
-      .single();
+      },
+      conn.scopeStoreId,
+      INTENT_COLS,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const row = intent as IntentRow;
 

@@ -30,6 +30,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { loadPagos360, syncPagos360Intent } from "../_shared/pagos360_server.ts";
 import { edgeTimer } from "../_shared/timing.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -93,7 +94,13 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle(),
-    loadPagos360(admin, tenantId),
+    // ADR-057: al crear, la API key de la sucursal del POS (si tiene); sobre un
+    // intent, la misma con la que se creó.
+    action === "create"
+      ? loadPagos360(admin, tenantId, { storeId: bodyStoreId(b) })
+      : intentSecretScope(admin, String(b.intent_id ?? "")).then((scope) =>
+          loadPagos360(admin, tenantId, { scopeStoreId: scope })
+        ),
     action === "create"
       ? admin
           .rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "pagos360" })
@@ -118,9 +125,11 @@ Deno.serve(async (req: Request) => {
     // corren en paralelo (external_reference = intent).
     const intentId = crypto.randomUUID();
     const [ins, r] = await Promise.all([
-      admin
-        .from("mp_payment_intents")
-        .insert({ id: intentId, tenant_id: tenantId, amount, provider_key: "pagos360" }),
+      insertIntentWithScope(
+        admin,
+        { id: intentId, tenant_id: tenantId, amount, provider_key: "pagos360" },
+        conn.scopeStoreId,
+      ),
       fetch(`${conn.base}/payment-request`, {
         method: "POST",
         headers: conn.headers,

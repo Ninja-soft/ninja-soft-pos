@@ -29,6 +29,7 @@ import {
   webhookPaymentId,
   webhookType,
 } from "../_shared/mobbex.ts";
+import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 Deno.serve(async (req: Request) => {
   const ok = () =>
@@ -63,12 +64,7 @@ Deno.serve(async (req: Request) => {
     if (!intent) return ok();
     if (intent.status === "approved") return ok(); // idempotencia barata.
 
-    const { data: secretRow } = await admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", intent.tenant_id)
-      .eq("provider_key", "mobbex")
-      .maybeSingle();
+    const secretRow = await loadProviderSecret(admin, intent.tenant_id, "mobbex", { scopeStoreId: await intentSecretScope(admin, intent.id) });
     const sec = (secretRow?.secrets ?? {}) as { api_key?: string; access_token?: string };
     if (!sec.api_key || !sec.access_token) {
       console.error("[mobbex_webhook] no_credentials, leaving pending", { intentId });

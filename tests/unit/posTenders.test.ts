@@ -244,9 +244,10 @@ describe("tarjeta en posnet", () => {
     { id: "vd", base: "debito", brand: "visa", installments: 1 },
   ];
 
-  it("ofrece las entidades con planes cargados y siempre Otra", () => {
-    expect(availableCardBrands(plans).map((b) => b.key)).toEqual(["visa", "master", "other"]);
-    expect(availableCardBrands([]).map((b) => b.key)).toContain("amex");
+  it("ofrece siempre todas las entidades (con o sin planes) y Otra al final", () => {
+    const all = ["visa", "master", "amex", "cabal", "naranja", "maestro", "diners", "other"];
+    expect(availableCardBrands(plans).map((b) => b.key)).toEqual(all);
+    expect(availableCardBrands([]).map((b) => b.key)).toEqual(all);
   });
 
   it("filtra los planes por entidad y tipo, ordenados por cuotas", () => {

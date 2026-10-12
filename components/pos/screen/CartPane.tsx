@@ -459,10 +459,12 @@ export function CartSummary(p: CartSummaryProps) {
                     // Tarjeta manual (posnet propio): ícono genérico, no el logo de una red.
                     <CreditCard size={20} className="shrink-0 text-muted-foreground" aria-hidden />
                   ) : (
-                    <BrandIcon logo={t.logo} alt="" size={20} />
+                    // Los logos tienen el peso visual abajo (sombra, fajos): subirlos 1px
+                    // y bajar 1px el texto los alinea al ojo con la línea del texto.
+                    <BrandIcon logo={t.logo} alt="" size={20} className="-translate-y-px" />
                   )}
                   {/* "Tarjeta en posnet" no entra en un botón de un tercio. */}
-                  <span className="truncate">{t.group === "card" ? "Tarjeta" : t.label}</span>
+                  <span className="translate-y-px truncate leading-none">{t.group === "card" ? "Tarjeta" : t.label}</span>
                 </button>
               ))}
             </div>

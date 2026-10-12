@@ -13,14 +13,16 @@ export type CardKind = "debit" | "credit";
 export interface CardBrand {
   key: string;
   label: string;
+  /** Nombre corto para placas chicas (selector de entidad). */
+  short?: string;
   /** Tipos que emite la entidad (Maestro sólo débito; Amex, Naranja, Diners sólo crédito). */
   kinds: CardKind[];
 }
 
 export const CARD_BRANDS: CardBrand[] = [
   { key: "visa", label: "Visa", kinds: ["debit", "credit"] },
-  { key: "master", label: "Mastercard", kinds: ["debit", "credit"] },
-  { key: "amex", label: "American Express", kinds: ["credit"] },
+  { key: "master", label: "Mastercard", short: "Master", kinds: ["debit", "credit"] },
+  { key: "amex", label: "American Express", short: "Amex", kinds: ["credit"] },
   { key: "cabal", label: "Cabal", kinds: ["debit", "credit"] },
   { key: "naranja", label: "Naranja", kinds: ["credit"] },
   { key: "maestro", label: "Maestro", kinds: ["debit"] },
@@ -51,13 +53,11 @@ export function cardBrandByKey(key: string | null | undefined): CardBrand | null
 }
 
 /**
- * Entidades a ofrecer: las que tienen planes cargados (en el orden del
- * catálogo) o, sin planes con entidad, el catálogo completo. "Otra" siempre.
+ * Entidades a ofrecer: siempre el catálogo completo y "Otra" al final. Una
+ * entidad sin planes propios cobra con los planes generales (sin entidad).
  */
-export function availableCardBrands(plans: { brand?: string | null }[]): CardBrand[] {
-  const withPlans = new Set(plans.map((p) => p.brand).filter((b): b is string => Boolean(b)));
-  const list = withPlans.size > 0 ? CARD_BRANDS.filter((b) => withPlans.has(b.key)) : CARD_BRANDS;
-  return [...list, OTHER_CARD_BRAND];
+export function availableCardBrands(_plans?: { brand?: string | null }[]): CardBrand[] {
+  return [...CARD_BRANDS, OTHER_CARD_BRAND];
 }
 
 /** Planes de cuotas de la entidad y tipo elegidos (los sin entidad aplican a todas). */

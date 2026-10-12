@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeDollarSign, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
@@ -90,21 +89,6 @@ export function PriceListsCard() {
   return (
     <Card>
       <CardContent className="space-y-5 p-6">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
-            <BadgeDollarSign size={18} />
-          </span>
-          <div>
-            <Heading as="h3" className="text-base">
-              Listas de precios
-            </Heading>
-            <p className="text-sm text-muted-foreground">
-              Precios por canal (mostrador, catálogo, mayorista). Ajuste % global
-              o precio puntual por producto/variante.
-            </p>
-          </div>
-        </div>
-
         {/* Nueva lista */}
         <div className="rounded-lg border border-border p-3">
           <div className="grid gap-2 sm:grid-cols-3">

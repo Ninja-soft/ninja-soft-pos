@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LayoutTemplate, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
@@ -80,17 +79,11 @@ export function PosLayoutCard() {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Heading as="h2" className="flex items-center gap-2 text-base">
-            <LayoutTemplate size={18} /> Diseño del POS
-          </Heading>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Elegí cómo se ve la pantalla de venta y ajustala a tu forma de trabajar. Es gratis en todos
-            los planes y se puede cambiar cuando quieras.
-          </p>
-        </div>
-        <div className="inline-flex gap-1 rounded-2xl bg-fg-6 p-1">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Gratis en todos los planes. Aplicalo a todo el negocio o sólo a tu usuario.
+        </p>
+        <div className="inline-flex gap-1 rounded-lg bg-fg-6 p-1">
           {(
             [
               ["business", "Para todo el negocio"],
@@ -103,7 +96,7 @@ export function PosLayoutCard() {
               disabled={k === "business" && !canManage}
               onClick={() => setScope(k)}
               className={cn(
-                "h-9 rounded-xl px-3 text-[13px] font-bold transition disabled:opacity-40",
+                "h-8 rounded-md px-3 text-[13px] font-semibold transition disabled:opacity-40",
                 scope === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
               )}
             >

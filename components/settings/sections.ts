@@ -1,0 +1,391 @@
+import {
+  BadgeDollarSign,
+  Bike,
+  CalendarDays,
+  Clock,
+  CreditCard,
+  LayoutTemplate,
+  Mail,
+  MonitorSmartphone,
+  Package,
+  Palette,
+  Percent,
+  Printer,
+  ReceiptText,
+  RotateCcw,
+  ScanLine,
+  ShieldCheck,
+  SlidersHorizontal,
+  Store,
+  Tag,
+  Users,
+  Utensils,
+  Wallet,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+
+// Mapa del centro de Configuración: grupos, secciones, textos del encabezado
+// y palabras clave del buscador. Las keys son las de `?seccion=` (no se
+// renombran: hay links internos que apuntan a ellas; los alias de abajo
+// cubren nombres alternativos).
+
+export type SettingsSectionKey =
+  | "apariencia"
+  | "diseno-pos"
+  | "rubro"
+  | "marca"
+  | "tickets"
+  | "impresion"
+  | "email"
+  | "pagos"
+  | "operacion"
+  | "salones"
+  | "menus"
+  | "zonas"
+  | "profesionales"
+  | "paquetes"
+  | "clientes"
+  | "cuenta-corriente"
+  | "devoluciones"
+  | "escaner"
+  | "pantalla-cliente"
+  | "hardware"
+  | "precios"
+  | "garantias"
+  | "promociones";
+
+export type SettingsSectionDef = {
+  key: SettingsSectionKey;
+  /** Etiqueta corta del menú (una línea). */
+  label: string;
+  /** Título del encabezado de la sección (puede ser más largo). */
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  /** Términos extra para el buscador del menú. */
+  keywords?: string;
+  // `feature` (opcional): si el plan no la incluye, la sección queda
+  // deshabilitada (candado) y el click abre el UpgradeModal en lugar de entrar.
+  feature?: string;
+  // `requiresDining` / `requiresDelivery` (opcional): la sección sólo se
+  // muestra con el modo gastronómico (H43) o delivery (H49) activos. No es
+  // gating de plan sino un toggle del tenant: se oculta, sin candado.
+  requiresDining?: boolean;
+  requiresDelivery?: boolean;
+};
+
+export type SettingsGroup = { title: string; sections: SettingsSectionDef[] };
+
+export const SETTINGS_GROUPS: SettingsGroup[] = [
+  {
+    title: "Personal",
+    sections: [
+      {
+        key: "apariencia",
+        label: "Apariencia",
+        title: "Apariencia",
+        description:
+          "Tema, tipografías y fondo de la app. Se guardan en tu cuenta y te siguen en cualquier dispositivo.",
+        icon: Palette,
+        keywords: "tema oscuro claro fuente tipografia fondo color precios modo",
+      },
+    ],
+  },
+  {
+    title: "Negocio",
+    sections: [
+      {
+        key: "rubro",
+        label: "Rubro",
+        title: "Rubro del negocio",
+        description: "Tu actividad define qué funciones del POS se adaptan a cómo trabajás.",
+        icon: Tag,
+        keywords: "actividad vertical kiosco textil restaurante catalogo vaciar",
+      },
+      {
+        key: "marca",
+        label: "Marca",
+        title: "Marca del negocio",
+        description: "Logo, color y datos que se ven en tickets, comprobantes y catálogo.",
+        icon: Store,
+        feature: "personalizacion_marca",
+        keywords: "logo color razon social cuit direccion telefono",
+      },
+    ],
+  },
+  {
+    title: "Punto de venta",
+    sections: [
+      {
+        key: "diseno-pos",
+        label: "Diseño del POS",
+        title: "Diseño del POS",
+        description:
+          "Cómo se ve la pantalla de venta: estilo, grilla, carrito, medios fijados y teclas rápidas.",
+        icon: LayoutTemplate,
+        keywords: "pantalla venta grilla carrito teclas rapidas layout",
+      },
+      {
+        key: "operacion",
+        label: "Operación y productos",
+        title: "Operación y productos",
+        description: "Reglas de cobro y de productos que se aplican en el punto de venta.",
+        icon: SlidersHorizontal,
+        keywords: "gastronomico mesas delivery venta libre plu stock redondeo vuelto",
+      },
+      {
+        key: "salones",
+        label: "Salones y mesas",
+        title: "Salones y mesas",
+        description:
+          "Tus salones (Salón principal, Terraza, Barra) y las mesas de cada uno con su capacidad. La atención por mesas está en Salón.",
+        icon: Utensils,
+        requiresDining: true,
+        keywords: "gastronomia restaurante mesas sector",
+      },
+      {
+        key: "menus",
+        label: "Menús por horario",
+        title: "Menús por horario",
+        description:
+          "Cartas por franja (Desayuno, Almuerzo, Happy hour, Cena) con su horario y productos. Sin horario, el menú está siempre disponible.",
+        icon: Clock,
+        requiresDining: true,
+        keywords: "carta horario franja gastronomia",
+      },
+      {
+        key: "zonas",
+        label: "Zonas de envío",
+        title: "Zonas de envío",
+        description:
+          "Zonas de reparto con tarifa y tiempo estimado. Al tomar un pedido elegís la zona y el envío se completa solo.",
+        icon: Bike,
+        requiresDelivery: true,
+        keywords: "delivery reparto envio tarifa",
+      },
+      {
+        key: "profesionales",
+        label: "Profesionales",
+        title: "Profesionales y agenda",
+        description:
+          "Quienes prestan los servicios (peluquería, estética, turnos), con color y comisión. Los turnos se gestionan en Agenda.",
+        icon: CalendarDays,
+        feature: "agenda",
+        keywords: "agenda turnos peluqueria estetica comision",
+      },
+      {
+        key: "paquetes",
+        label: "Paquetes y sesiones",
+        title: "Paquetes y sesiones",
+        description:
+          "Bonos de sesiones (4 cortes, 10 sesiones). Al venderlos se acreditan al cliente y cada visita consume una al cobrar.",
+        icon: Package,
+        feature: "packs",
+        keywords: "packs bonos sesiones servicios",
+      },
+    ],
+  },
+  {
+    title: "Cobros",
+    sections: [
+      {
+        key: "pagos",
+        label: "Medios de pago",
+        title: "Medios de pago",
+        description: "Conectá tus cuentas y elegí con qué canales cobrás en el POS.",
+        icon: CreditCard,
+        keywords: "mercado pago tarjetas cuotas qr posnet transferencia efectivo recargo",
+      },
+      // Promociones (F9 · H53): por ahora SIN gating de plan, es sólo la
+      // DEFINICIÓN. El gating por `promociones` se suma con la aplicación.
+      {
+        key: "promociones",
+        label: "Promociones y cupones",
+        title: "Promociones y cupones",
+        description:
+          "Promos por condiciones que el POS aplica solas y códigos de descuento que el cajero ingresa al cobrar.",
+        icon: Percent,
+        keywords: "descuento cupon codigo 2x1 oferta",
+      },
+      {
+        key: "cuenta-corriente",
+        label: "Cuenta corriente",
+        title: "Cuenta corriente",
+        description:
+          "Plazos, cuotas, punitorios, bloqueo por mora y recordatorios. Cada cliente o grupo puede tener condiciones propias.",
+        icon: Wallet,
+        feature: "cuenta_corriente",
+        keywords: "fiado credito mora punitorios pin supervisor grupos",
+      },
+    ],
+  },
+  {
+    title: "Catálogo y precios",
+    sections: [
+      {
+        key: "precios",
+        label: "Listas de precios",
+        title: "Listas de precios",
+        description:
+          "Precios por canal (mostrador, catálogo, mayorista) con ajuste % global o precio puntual por producto.",
+        icon: BadgeDollarSign,
+        feature: "listas_precios",
+        keywords: "mayorista canal ajuste porcentaje",
+      },
+      {
+        key: "garantias",
+        label: "Garantías extendidas",
+        title: "Garantías extendidas",
+        description:
+          "Planes que ofrecés al cobrar: meses extra, prima fija o % del precio y comisión del vendedor.",
+        icon: ShieldCheck,
+        feature: "garantias",
+        keywords: "garantia extendida prima",
+      },
+    ],
+  },
+  {
+    title: "Clientes y postventa",
+    sections: [
+      {
+        key: "clientes",
+        label: "Datos del cliente",
+        title: "Datos del cliente",
+        description: "Qué pedir al crear o editar un cliente y cómo se maneja su cuenta.",
+        icon: Users,
+        keywords: "documento dni obligatorio email comprobante",
+      },
+      {
+        key: "devoluciones",
+        label: "Devoluciones",
+        title: "Devoluciones",
+        description: "Cómo se resuelven las devoluciones y los vales (saldo a favor) del negocio.",
+        icon: RotateCcw,
+        feature: "devoluciones",
+        keywords: "cambio vale saldo a favor reintegro motivos",
+      },
+    ],
+  },
+  {
+    // Tickets: el ingreso NO se gatea. El ticket predeterminado siempre se
+    // imprime y se envía; la personalización (modelos custom) queda detrás de
+    // `tickets_pro` dentro de la sección.
+    title: "Comprobantes",
+    sections: [
+      {
+        key: "tickets",
+        label: "Modelos de ticket",
+        title: "Modelos de ticket",
+        description: "Diseñá cómo se imprimen tus comprobantes con bloques arrastrables.",
+        icon: ReceiptText,
+        keywords: "ticket comprobante plantilla diseño",
+      },
+      {
+        key: "impresion",
+        label: "Impresión",
+        title: "Impresión",
+        description:
+          "Por tipo de comprobante: formato, copias y si sale solo al confirmar o con un botón.",
+        icon: Printer,
+        keywords: "impresora termica 58 80 mm a4 pdf copias",
+      },
+      {
+        key: "email",
+        label: "Email del negocio",
+        title: "Email del negocio",
+        description: "Enviá los comprobantes a tus clientes desde tu propio email.",
+        icon: Mail,
+        feature: "email_comprobantes",
+        keywords: "correo smtp gmail envio comprobante",
+      },
+    ],
+  },
+  {
+    title: "Hardware",
+    sections: [
+      {
+        key: "escaner",
+        label: "Escáner",
+        title: "Escáner",
+        description:
+          "Perfil del lector de código de barras: prefijo y sufijo, beep de confirmación y anti-duplicado.",
+        icon: ScanLine,
+        keywords: "lector codigo de barras scanner",
+      },
+      {
+        key: "pantalla-cliente",
+        label: "Pantalla del cliente",
+        title: "Pantalla del cliente",
+        description:
+          "Una segunda pantalla de cara al cliente con el carrito, el total, el QR de pago y el vuelto en vivo.",
+        icon: MonitorSmartphone,
+        keywords: "doble pantalla monitor tablet",
+      },
+      {
+        key: "hardware",
+        label: "Diagnóstico",
+        title: "Diagnóstico de hardware",
+        description:
+          "Estado de los periféricos y pruebas guiadas. Si algo falla, exportá el diagnóstico y mandalo a soporte.",
+        icon: Wrench,
+        keywords: "hardware impresora cajon balanza soporte prueba",
+      },
+    ],
+  },
+];
+
+/** Lista plana (validación del query param, buscador). */
+export const SETTINGS_SECTIONS: SettingsSectionDef[] = SETTINGS_GROUPS.flatMap(
+  (g) => g.sections,
+);
+
+/** Nombres alternativos aceptados en `?seccion=`. */
+export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
+  cupones: "promociones",
+  diagnostico: "hardware",
+  pantalla: "pantalla-cliente",
+  cuenta: "cuenta-corriente",
+  "listas-precios": "precios",
+  "medios-pago": "pagos",
+  tema: "apariencia",
+};
+
+export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";
+
+/** Resuelve `?seccion=` (key o alias) a una sección válida, o null. */
+export function resolveSection(q: string | null | undefined): SettingsSectionKey | null {
+  if (!q) return null;
+  if (SETTINGS_SECTIONS.some((s) => s.key === q)) return q as SettingsSectionKey;
+  return SECTION_ALIASES[q] ?? null;
+}
+
+function normalize(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
+/**
+ * Filtra los grupos por texto (etiqueta, título, grupo y palabras clave, sin
+ * tildes). Todas las palabras de la búsqueda tienen que aparecer.
+ */
+export function filterSettingsGroups(
+  groups: SettingsGroup[],
+  query: string,
+): SettingsGroup[] {
+  const terms = normalize(query).split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return groups;
+  return groups
+    .map((g) => ({
+      ...g,
+      sections: g.sections.filter((s) => {
+        const hay = normalize(
+          [g.title, s.label, s.title, s.keywords ?? ""].join(" "),
+        );
+        return terms.every((t) => hay.includes(t));
+      }),
+    }))
+    .filter((g) => g.sections.length > 0);
+}

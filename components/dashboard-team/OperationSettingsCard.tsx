@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  SlidersHorizontal,
   Percent,
   CircleDollarSign,
   PackageMinus,
@@ -34,7 +33,6 @@ import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { ChoiceDot } from "@/components/ui/ChoiceCard";
@@ -296,26 +294,6 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
 
   return (
     <section className="space-y-4">
-      {view === "operacion" ? (
-        <div>
-          <Heading as="h2" className="flex items-center gap-2 text-base">
-            <SlidersHorizontal size={18} /> Operación y productos
-          </Heading>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Reglas de cobro y de productos que se aplican en el punto de venta.
-          </p>
-        </div>
-      ) : (
-        <div>
-          <Heading as="h2" className="flex items-center gap-2 text-base">
-            <Users size={18} /> Datos del cliente
-          </Heading>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Qué pedir al crear o editar un cliente y cómo se maneja su cuenta.
-          </p>
-        </div>
-      )}
-
       {/* ===================== Vista: OPERACIÓN Y PRODUCTOS ===================== */}
       {view === "operacion" && (
         <>
@@ -330,7 +308,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           ADITIVO: con off, el POS mostrador queda idéntico. Con on, aparece la
           sección "Salón" en el menú y "Salones y mesas" en Configuración. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Utensils size={16} className="text-ninja-flameSoft" /> Modo gastronómico (mesas)
@@ -356,7 +334,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           mesas: puede ir sin modo gastronómico. Aparece la sección Delivery en
           el menú. El POS de mostrador no cambia. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Bike size={16} className="text-ninja-flameSoft" /> Delivery y take away
@@ -423,7 +401,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
 
       {/* Redondeo */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <CircleDollarSign size={16} className="text-ninja-flameSoft" /> Redondeo del total
@@ -490,7 +468,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           prima entra como línea de la venta. Los planes se configuran en
           Configuración → Garantías. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <ShieldCheck size={16} className="text-ninja-flameSoft" /> Ofrecer garantía extendida al cobrar
@@ -515,7 +493,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           POSNET. Quedan guardados junto al pago y visibles en el detalle de la
           venta. Por defecto desactivado. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <CreditCard size={16} className="text-ninja-flameSoft" /> Voucher de tarjeta obligatorio
@@ -538,7 +516,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           botón sólo lo ve owner/manager; este flag deja apagar la función por
           completo aun para roles habilitados. Default activado. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Banknote size={16} className="text-ninja-flameSoft" /> Permitir venta libre (monto manual)
@@ -562,7 +540,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           todo. El match usuario↔profesional usa el usuario vinculado a cada
           profesional. Default desactivado (todos ven todo). */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Users size={16} className="text-ninja-flameSoft" /> El staff ve sólo lo suyo
@@ -593,7 +571,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
 
       {/* Venta en negativo */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <PackageMinus size={16} className="text-ninja-flameSoft" /> Vender sin stock
@@ -718,7 +696,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           caro) comparando contra el precio de mercado. Es orientativo. */}
       {hasCatalog && (
         <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div>
               <div className="flex items-center gap-2 font-semibold">
                 <TrendingUp size={16} className="text-ninja-flameSoft" /> Comparar precios con el catálogo
@@ -790,7 +768,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
 
       {/* Tamaño de página de los listados */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Rows3 size={16} className="text-ninja-flameSoft" /> Filas por página
@@ -824,7 +802,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
         <>
       {/* Requerir cliente */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <UserCheck size={16} className="text-ninja-flameSoft" /> Requerir cliente al cobrar
@@ -844,7 +822,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
       {/* Documento obligatorio: si está activo, el formulario de alta de cliente
           exige tipo + número de documento. Default activado. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <IdCard size={16} className="text-ninja-flameSoft" /> Documento obligatorio
@@ -897,7 +875,7 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
 
       {/* Comprobante por email automático */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Mail size={16} className="text-ninja-flameSoft" /> Comprobante por email automático
@@ -947,14 +925,17 @@ function CollapsibleGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="pt-2">
+    <div>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-md px-1 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 transition hover:text-foreground"
+        className={
+          "flex h-12 w-full items-center gap-2.5 rounded-lg border border-border px-4 text-left text-sm font-semibold text-foreground transition hover:bg-muted " +
+          (open ? "bg-muted/60" : "bg-card")
+        }
       >
-        <Icon size={14} className="text-ninja-flameSoft" />
+        <Icon size={16} className="shrink-0 text-ninja-flameSoft" />
         <span className="flex-1">{title}</span>
         <ChevronDown
           size={16}

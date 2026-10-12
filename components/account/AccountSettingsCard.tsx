@@ -45,7 +45,7 @@ export function AccountSettingsCard() {
       <CardContent className="space-y-4 p-5">
         <div>
           <div className="flex items-center gap-2 font-semibold">
-            <Wallet size={16} className="text-ninja-flameSoft" /> Cuenta corriente
+            <Wallet size={16} className="text-ninja-flameSoft" /> Condiciones generales
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Plazos, cuotas, punitorios, bloqueo por mora y recordatorios. Cada cliente puede tener condiciones

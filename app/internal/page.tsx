@@ -36,7 +36,7 @@ const PLAN_COLOR: Record<string, string> = {
 };
 
 export default async function InternalHomePage() {
-  const supabase = createClient();
+  const supabase = createClient({ scope: "internal" });
 
   const [{ data: rawTenants }, { count: staffCount }] = await Promise.all([
     supabase

@@ -1,3 +1,4 @@
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import type { Paged } from "@/lib/utils/pagination";
@@ -468,6 +469,7 @@ export const branchesApi = {
     const { data } = await supabase
       .from("stores")
       .select("id, name, is_default")
+      .eq("tenant_id", (await getCurrentTenantId()) ?? "")
       .is("deleted_at", null)
       .order("is_default", { ascending: false })
       .order("created_at");

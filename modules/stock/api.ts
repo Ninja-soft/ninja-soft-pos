@@ -1,4 +1,5 @@
 "use client";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 
 // Stock por sucursal y traslados (F17 · H94 + H95, ADR-046).
 // Lecturas por tabla con RLS y RPC; toda escritura por RPC SECURITY DEFINER
@@ -146,6 +147,7 @@ export const stockApi = {
     const { data, error } = await supabase
       .from("stores")
       .select("id, name, is_default")
+      .eq("tenant_id", (await getCurrentTenantId()) ?? "")
       .is("deleted_at", null)
       .eq("is_active", true)
       .order("is_default", { ascending: false })

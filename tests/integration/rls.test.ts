@@ -536,6 +536,17 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
   // ledger sólo por RPC, cobro con caja + recibo + idempotencia, aging y
   // reversa al anular.
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Aislamiento del staff interno (ADR-052): ninguna política PERMISSIVE de una
+  // tabla de negocio puede abrir filas de otros negocios con is_internal() a
+  // secas; tiene que usar internal_scope() (sólo desde el panel interno).
+  // ---------------------------------------------------------------------------
+  it("ninguna política de negocio abre otros tenants al staff interno fuera de /internal", async () => {
+    const { data, error } = await ctx.admin.rpc("rls_internal_scope_leaks" as never);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+  });
+
   describe("cuenta corriente v2", () => {
     const acc = {} as { customer: string; saleId: string; paymentId: string };
 

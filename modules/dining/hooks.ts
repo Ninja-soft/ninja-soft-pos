@@ -17,17 +17,21 @@ import {
 // ── Modo gastronómico (H43): pos_settings.dining_enabled ───────────────────────
 // Lee el toggle del tenant. Gatea el nav del POS (Salón) y la gestión de salones.
 // La columna no está en los tipos generados (no se regeneran): select + cast.
+export async function fetchDiningEnabled(): Promise<boolean> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("pos_settings")
+    .select("dining_enabled")
+    .maybeSingle();
+  return Boolean((data as { dining_enabled?: boolean } | null)?.dining_enabled);
+}
+
+export const DINING_ENABLED_KEY = ["dining", "enabled"] as const;
+
 export function useDiningEnabled() {
   return useQuery({
-    queryKey: ["dining", "enabled"],
-    queryFn: async (): Promise<boolean> => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("pos_settings")
-        .select("dining_enabled")
-        .maybeSingle();
-      return Boolean((data as { dining_enabled?: boolean } | null)?.dining_enabled);
-    },
+    queryKey: DINING_ENABLED_KEY,
+    queryFn: fetchDiningEnabled,
     staleTime: 60_000,
   });
 }

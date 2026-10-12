@@ -131,6 +131,8 @@ export function PosShell(p: PosShellProps) {
 
   return (
     <div
+      data-preset={layout.preset}
+      data-checkout={layout.checkout.layout}
       className="pos-root relative flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top))] flex-col overflow-hidden lg:h-dvh"
       style={{ ...accentVars(layout.accent), zoom: layout.fontScale !== 1 ? layout.fontScale : undefined }}
     >

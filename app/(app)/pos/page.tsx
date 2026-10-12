@@ -29,10 +29,19 @@ import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 import { usePosBranchStock } from "@/modules/pos/branchStock";
 import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, otherBranchesText } from "@/lib/stock/posBranchStock";
 import { formatQty } from "@/lib/utils/format";
-import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
+import { branchErrorMessage, liveRegisters, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
 import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
-import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
+import {
+  usePosBootSnapshot,
+  usePosLayout,
+  usePosLayoutMutations,
+  useResolvedTenders,
+  useTendersReady,
+} from "@/modules/pos/layoutHooks";
+import { effectivePreset, posBootKey, posBootScope, safeLocalStorage, writePosBoot } from "@/lib/pos/bootCache";
+import { useReconciled } from "@/hooks/useReconciled";
+import { PosBootSkeleton } from "@/components/pos/screen/PosBootSkeleton";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
@@ -61,7 +70,7 @@ import {
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
 import { pinnedTenders } from "@/lib/pos/tenders";
-import type { PosPreset } from "@/lib/pos/layout";
+import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
@@ -177,15 +186,35 @@ function PosPageInner() {
   }, []);
 
   // ── Diseño ──────────────────────────────────────────────────────────────────
-  const { layout, user: userLayout, hasUserOverride } = usePosLayout();
+  // El diseño efectivo depende de varias consultas (settings, override del
+  // usuario, overrides por sucursal/caja, modo gastronómico). Para no pintar el
+  // preset por defecto y saltar al real: el primer cuadro usa la foto guardada
+  // en este dispositivo (usuario + negocio + caja) y, sin foto, un esqueleto
+  // neutro. Al llegar el servidor se reconcilia (sólo cambia si es distinto).
+  const liveLayout = usePosLayout();
+  const { user: userLayout, hasUserOverride } = liveLayout;
   const { saveUser } = usePosLayoutMutations();
-  const { data: diningEnabled } = useDiningEnabled();
+  const { data: diningEnabled, isFetched: diningFetched } = useDiningEnabled();
+  const branchCtx = useBranchContext();
+  const bootScope = useBranchScope().data ?? null;
+  const currentUserId = bootScope?.userId ?? null;
+  const { data: register, store: registerStore, isFetched: registerFetched } = useDefaultRegister();
+  const bootKey = posBootKey(bootScope?.tenantId ?? null, currentUserId, registerFetched ? (register?.id ?? null) : null);
+  const boot = usePosBootSnapshot(registerFetched ? bootKey : null, posBootScope(bootScope?.tenantId ?? null, currentUserId));
   // Salón requiere el modo gastronómico: sin él cae a Mostrador.
-  const effectiveLayout = useMemo(
-    () => (layout.preset === "salon" && diningEnabled === false ? { ...layout, preset: "mostrador" as const } : layout),
-    [layout, diningEnabled],
-  );
-  const preset = effectiveLayout.preset;
+  const layoutLive = liveLayout.ready && (liveLayout.layout.preset !== "salon" || diningFetched);
+  const resolvedLayout = layoutLive ? effectivePreset(liveLayout.layout, diningEnabled) : (boot?.layout ?? null);
+  const shownLayout = useReconciled(resolvedLayout);
+  const layout = shownLayout ?? PRESET_DEFAULTS.mostrador;
+  const effectiveLayout = layout;
+  const preset = layout.preset;
+  const usingOwn = liveLayout.ready ? hasUserOverride && Boolean(userLayout.preset) : (boot?.usingOwn ?? false);
+  // Red de seguridad: si alguna consulta no responde, no dejar el esqueleto.
+  const [bootTimedOut, setBootTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setBootTimedOut(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
 
   // ── Estado de la pantalla ───────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -267,21 +296,21 @@ function PosPageInner() {
   }, [categories, categoryFilter]);
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
-  const { data: register, store: registerStore } = useDefaultRegister();
-  const branchCtx = useBranchContext();
-  const currentUserId = useBranchScope().data?.userId ?? null;
   const { open, close } = usePosMutations();
-  const { data: myTenant } = useMyTenant();
-  const quickSale = verticalHas(myTenant?.industry, "quickSale");
+  const { data: myTenant, isFetched: myTenantFetched } = useMyTenant();
+  // Rubro y rol cambian piezas visibles (frecuentes, venta libre): hasta que
+  // llegan se usa lo de la foto del arranque.
+  const quickSale = myTenantFetched ? verticalHas(myTenant?.industry, "quickSale") : (boot?.quickSale ?? false);
   // Descuentos manuales: feature de plan (Pro). Sin ella el campo queda bloqueado.
   const discountGate = useFeatureGate("descuentos", "Descuentos");
-  const { data: posSettings } = usePosSettings();
+  const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
   const { data: warrantyPlans } = useWarrantyPlans(true);
   const offerWarranty = posSettings?.offerWarranty ?? true;
   const role = myTenant?.role ?? "cashier";
   // Venta libre (H36): flag del negocio Y sólo owner/manager.
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
-  const canFreeSale = allowFreeSale && (role === "owner" || role === "manager");
+  const liveFreeSale = allowFreeSale && (role === "owner" || role === "manager");
+  const canFreeSale = myTenantFetched && posSettingsFetched ? liveFreeSale : (boot?.freeSale ?? false);
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
   const rounding = posSettings?.rounding ?? 0;
   const requireCustomer = posSettings?.requireCustomer ?? false;
@@ -925,7 +954,51 @@ function PosPageInner() {
 
   // ── Cobro ──────────────────────────────────────────────────────────────────
   const tenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
-  const pinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
+  const livePinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
+  const tendersReady = useTendersReady();
+  const pinned = useReconciled(
+    useMemo(
+      () =>
+        tendersReady || !boot
+          ? livePinned.map((t) => ({ id: t.id, group: t.group, label: t.label, logo: t.logo }))
+          : boot.pinned,
+      [tendersReady, boot, livePinned],
+    ),
+  );
+  // Estado de la caja: hasta que llega el turno se muestra el último conocido.
+  const shiftKnown = shiftFetched && shiftOwnership.ready;
+  const shiftShown = shiftKnown ? hasShift : (boot?.shiftOpen ?? false);
+  const locationSnap = useMemo(
+    () =>
+      registerStore
+        ? {
+            full: locationLabel(registerStore, register ?? null),
+            short: locationLabel(registerStore, register ?? null, true),
+            color: registerStore.color ?? null,
+            pickable:
+              branchCtx.allowed.filter((b) => b.is_active).length > 1 ||
+              liveRegisters(registerStore.registers).length > 1,
+          }
+        : null,
+    [registerStore, register, branchCtx.allowed],
+  );
+  // Todo lo que define el primer cuadro ya llegó del servidor.
+  const bootLive =
+    layoutLive && shiftKnown && tendersReady && branchCtx.ready && registerFetched && myTenantFetched && posSettingsFetched;
+  const canPaint = bootLive || Boolean(boot) || bootTimedOut;
+  useEffect(() => {
+    if (!bootLive || !bootKey || !resolvedLayout) return;
+    writePosBoot(safeLocalStorage(), bootKey, {
+      layout: resolvedLayout,
+      dining: Boolean(diningEnabled),
+      usingOwn,
+      location: locationSnap,
+      shiftOpen: hasShift,
+      pinned,
+      freeSale: canFreeSale,
+      quickSale,
+    });
+  }, [bootLive, bootKey, resolvedLayout, diningEnabled, usingOwn, locationSnap, hasShift, pinned, canFreeSale, quickSale]);
   const canCheckout = hasShift && lines.length > 0;
   function startCheckout(tenderId?: string) {
     if (shiftOwnership.foreign) {
@@ -1053,7 +1126,8 @@ function PosPageInner() {
       total={total}
       itemCount={itemCount}
       pinned={pinned}
-      hasShift={hasShift}
+      hasShift={shiftShown}
+      shiftPending={!shiftKnown}
       canCheckout={canCheckout}
       checkingOut={saving}
       onCheckout={startCheckout}
@@ -1179,16 +1253,20 @@ function PosPageInner() {
       />
     );
 
+  if (!canPaint) return <PosBootSkeleton />;
+
   return (
     <>
       <PosShell
         layout={effectiveLayout}
         topBar={
           <PosTopBar
-            hasShift={hasShift}
+            hasShift={shiftShown}
+            shiftPending={!shiftKnown}
             registerName={register?.name ?? null}
             location={
               <PosLocationPicker
+                placeholder={boot?.location ?? null}
                 lockedReason={
                   lines.length > 0
                     ? "Terminá o vaciá la venta en curso para cambiar de sucursal o caja."
@@ -1228,7 +1306,7 @@ function PosPageInner() {
               ) : undefined
             }
             preset={preset}
-            usingOwn={hasUserOverride && Boolean(userLayout.preset)}
+            usingOwn={usingOwn}
             diningEnabled={Boolean(diningEnabled)}
             onPickPreset={pickPreset}
             onResetPreset={() => saveUser.mutate(null)}
@@ -1464,7 +1542,7 @@ function PosPageInner() {
 // useSearchParams (cobro desde turno, mesa, delivery) requiere Suspense.
 export default function PosPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PosBootSkeleton />}>
       <PosPageInner />
     </Suspense>
   );

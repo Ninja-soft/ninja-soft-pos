@@ -14,14 +14,23 @@ type ShiftLike = { id: string; opened_by: string; status: string; opened_at: str
 // H114). Ajeno = de otra persona y sin caja compartida: se ve, pero no se vende.
 export function useShiftOwnership(shift: ShiftLike) {
   const me = useBranchScope().data?.userId ?? null;
-  const { data: security } = useSecuritySettings();
+  const { data: security, isFetched: securityFetched } = useSecuritySettings();
   const situation = registerSituation(shift, me, security?.shared_shift ?? false);
-  return { situation, usable: situation === "mine" || situation === "shared", foreign: situation === "foreign" };
+  // ¿La situación ya es definitiva? Con un turno de otra persona depende de la
+  // política de turno compartido; mientras no llega no se avisa "ajena".
+  const ready = !shift || shift.status !== "open" || (me !== null && (shift.opened_by === me || securityFetched));
+  return {
+    situation,
+    ready,
+    usable: situation === "mine" || situation === "shared",
+    foreign: situation === "foreign",
+  };
 }
 
 // Aviso en el POS cuando la caja elegida la tiene abierta otra persona.
 export function ForeignShiftBanner({ shift }: { shift: ShiftLike }) {
-  const { foreign } = useShiftOwnership(shift);
+  const { foreign: ajena, ready } = useShiftOwnership(shift);
+  const foreign = ajena && ready;
   const { data: people } = useStaffPeople(foreign);
   if (!foreign || !shift) return null;
   const owner = (people ?? []).find((p) => p.user_id === shift.opened_by);

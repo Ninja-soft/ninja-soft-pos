@@ -18,9 +18,13 @@ import { cn } from "@/lib/utils/cn";
 // vos). No se cambia con el carrito cargado ni con un turno propio abierto.
 export function PosLocationPicker({
   lockedReason,
+  placeholder,
 }: {
   // Motivo por el que no se puede cambiar ahora (null = se puede).
   lockedReason: string | null;
+  // Último rótulo conocido en este dispositivo: se muestra mientras carga el
+  // contexto de sucursales para que la barra no salte (null = no hay chip).
+  placeholder?: { full: string; short: string; color: string | null; pickable: boolean } | null;
 }) {
   const ctx = useBranchContext();
   const current = useCurrentRegister();
@@ -31,7 +35,24 @@ export function PosLocationPicker({
   const viewStore = ctx.allowed.find((b) => b.id === viewStoreId) ?? null;
   const shifts = useStoreOpenShifts(open ? viewStoreId : null);
 
-  if (!ctx.ready || !current.store) return null;
+  if (!ctx.ready) {
+    if (!placeholder) return null;
+    return (
+      <span
+        aria-busy="true"
+        className="flex h-11 min-w-0 shrink items-center gap-2 rounded-lg bg-fg-4 px-3 text-[13px]"
+        title={`Estás vendiendo en ${placeholder.full}`}
+      >
+        <BranchDot branch={{ color: placeholder.color }} />
+        <span className="truncate font-medium text-foreground">
+          <span className="sm:hidden">{placeholder.short}</span>
+          <span className="hidden sm:inline">{placeholder.full}</span>
+        </span>
+        {placeholder.pickable && <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden />}
+      </span>
+    );
+  }
+  if (!current.store) return null;
 
   const registers = viewStore ? liveRegisters(viewStore.registers) : [];
   const choices = ctx.allowed.filter((b) => b.is_active);

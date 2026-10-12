@@ -98,6 +98,44 @@ test.describe("pos", () => {
     }
   }
 
+  // Bug de producción: al entrar a Vender se pintaba el diseño por defecto y
+  // después saltaba al elegido. El primer contenedor del POS que aparece tiene
+  // que ser el del preset final, tanto en frío (sin foto en el dispositivo:
+  // esqueleto neutro → preset) como en caliente (foto guardada → preset).
+  test("el POS no salta de diseño al cargar", async ({ page }) => {
+    try {
+      await gotoClean(page, "/pos");
+      await setPosPreset(page, "Boutique");
+      await page.addInitScript(() => {
+        const seen: string[] = [];
+        (window as unknown as { __posPresets: string[] }).__posPresets = seen;
+        const record = () => {
+          const el = document.querySelector("[data-preset]");
+          const v = el?.getAttribute("data-preset");
+          if (v && seen[seen.length - 1] !== v) seen.push(v);
+        };
+        new MutationObserver(record).observe(document, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          attributeFilter: ["data-preset"],
+        });
+      });
+      const presetsSeen = async () => {
+        await expect(page.locator("[data-preset]")).toHaveAttribute("data-preset", "boutique");
+        await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
+        return page.evaluate(() => (window as unknown as { __posPresets: string[] }).__posPresets);
+      };
+      for (const cold of [true, false]) {
+        if (cold) await page.evaluate(() => localStorage.removeItem("ninja-pos-boot.v1"));
+        await page.goto("/pos");
+        expect(await presetsSeen(), cold ? "carga en frío" : "carga con foto").toEqual(["boutique"]);
+      }
+    } finally {
+      await resetPosPreset(page);
+    }
+  });
+
   test("efectivo con monto rápido y vuelto", async ({ page }) => {
     await cartWithProduct(page);
     const sheet = await openCheckout(page);

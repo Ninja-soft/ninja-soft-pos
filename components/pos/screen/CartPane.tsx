@@ -259,8 +259,11 @@ export interface CartSummaryProps {
   deliveryFee: number;
   total: number;
   itemCount: number;
-  pinned: ResolvedTender[];
+  // Sólo lo que pinta el botón: puede venir de la foto del arranque.
+  pinned: { id: ResolvedTender["id"]; group: string; label: string; logo: string | null }[];
   hasShift: boolean;
+  // El turno todavía no llegó (se muestra el último estado conocido, sin acción).
+  shiftPending?: boolean;
   canCheckout: boolean;
   checkingOut?: boolean;
   onCheckout: (tenderId?: string) => void;
@@ -511,7 +514,8 @@ export function CartSummary(p: CartSummaryProps) {
       ) : (
         <button
           type="button"
-          onClick={p.onOpenShift}
+          onClick={p.shiftPending ? undefined : p.onOpenShift}
+          aria-busy={p.shiftPending || undefined}
           className={cn("flex h-14 w-full items-center justify-center gap-2 rounded-lg text-[15px] font-semibold", POS_QUIET)}
         >
           <Lock size={18} className="text-muted-foreground" aria-hidden />

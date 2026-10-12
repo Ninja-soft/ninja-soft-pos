@@ -75,6 +75,7 @@ import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
+import { usePrefetchPos } from "@/modules/pos/layoutHooks";
 import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
 import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
 import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
@@ -121,6 +122,7 @@ function SellQuickAction({
   onNavigate?: () => void;
 }) {
   const count = useCartStore((s) => s.lines.length);
+  const prefetchPos = usePrefetchPos();
   const href = count > 0 ? "/pos?cobrar=1" : "/pos";
   const label = count > 0 ? "Cobrar" : "Vender";
   const hint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
@@ -128,6 +130,9 @@ function SellQuickAction({
     <Link
       href={href as never}
       onClick={onNavigate}
+      onMouseEnter={prefetchPos}
+      onFocus={prefetchPos}
+      onTouchStart={prefetchPos}
       title={hint}
       aria-label={hint}
       aria-keyshortcuts={SELL_SHORTCUT}
@@ -267,6 +272,9 @@ function NavLink({
   active: boolean;
   onNavigate: () => void;
 }) {
+  const prefetchPos = usePrefetchPos();
+  // "Punto de venta": precarga el diseño y los medios del POS al acercarse.
+  const warm = item.href === "/pos" ? prefetchPos : undefined;
   const Icon = item.icon;
   // Gating del módulo entero: si el plan no incluye la feature, el ítem queda
   // deshabilitado (candado) y el click abre el UpgradeModal en lugar de navegar.
@@ -302,6 +310,9 @@ function NavLink({
     <Link
       href={item.href as never}
       onClick={onNavigate}
+      onMouseEnter={warm}
+      onFocus={warm}
+      onTouchStart={warm}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition",
         active
@@ -443,6 +454,23 @@ export function AppShell({
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
   const canSell = SELL_ROLES.has(shell?.role ?? "");
   const onPos = isPosRoute(pathname);
+
+  // Precarga del POS en idle: entrar a Vender ya encuentra el diseño, los
+  // overrides y los medios en caché (sin esqueleto ni salto de diseño).
+  const prefetchPos = usePrefetchPos();
+  useEffect(() => {
+    if (!canSell || onPos) return;
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(prefetchPos, { timeout: 4000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(prefetchPos, 2000);
+    return () => clearTimeout(t);
+  }, [canSell, onPos, prefetchPos]);
 
   // Atajo global F1: ir a vender (o al cobro si hay carrito).
   useEffect(() => {

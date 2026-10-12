@@ -16,6 +16,10 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   pagos360: "pagos360",
   nave: "nave",
   nave_point: "nave_point",
+  gocuotas: "gocuotas",
+  // Directo es un tender manual (payments.method = 'directo'): el trigger lo
+  // gatea por el método (payment_method_plan_key('directo')).
+  directo: "directo",
 };
 
 export function providerFeature(provider: string): string | null {

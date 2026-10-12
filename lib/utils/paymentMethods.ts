@@ -9,4 +9,5 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   store_credit: "Vale",
   account: "Cuenta corriente",
   other: "Otro",
+  directo: "Directo",
 };

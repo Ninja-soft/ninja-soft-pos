@@ -12,6 +12,10 @@ describe("providerFeature (espejo de payment_method_plan_key)", () => {
   it("Mercado Pago QR + link usa mercado_pago", () => {
     expect(providerFeature("mercadopago")).toBe("mercado_pago");
   });
+  it("GO Cuotas y Directo tienen su propia feature", () => {
+    expect(providerFeature("gocuotas")).toBe("gocuotas");
+    expect(providerFeature("directo")).toBe("directo");
+  });
   it("medios sin gating devuelven null", () => {
     expect(providerFeature("cash")).toBeNull();
   });

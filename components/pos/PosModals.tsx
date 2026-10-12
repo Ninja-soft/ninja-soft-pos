@@ -49,6 +49,9 @@ const ALL_METHODS: { value: SalePaymentInput["method"]; label: string; providers
   { value: "debit",    label: "Débito",          providers: ["mercadopago_point", "payway", "payway_point", "getnet", "getnet_point", "nave_point", "fiserv", "mobbex"] },
   { value: "credit",   label: "Crédito",         providers: ["mercadopago_point", "payway", "payway_point", "getnet", "getnet_point", "nave_point", "fiserv", "mobbex"] },
   { value: "qr",       label: "QR / Terminal",   providers: ["mercadopago", "mobbex", "modo", "pagos360"] },
+  // Directo (ADR-034): se cobra en el portal de Directo; acá sólo se registra
+  // el número de operación.
+  { value: "directo",  label: "Directo (crédito)", providers: ["directo"] },
 ];
 
 // Base del plan según el método seleccionado.
@@ -725,6 +728,9 @@ export function PaymentModal({
   const [voucherLote, setVoucherLote] = useState("");
   const [voucherCupon, setVoucherCupon] = useState("");
   const [voucherAuth, setVoucherAuth] = useState("");
+  // Directo (ADR-034): número de operación del portal de Directo. Obligatorio
+  // para confirmar; viaja como reference del pago.
+  const [directoOp, setDirectoOp] = useState("");
   // Dividir cuenta (F13 · H44): el cobro se reparte en N líneas de pago que suman
   // el total. Cuando está activo, el cobro va por `splitResult` (no por el medio
   // único de arriba). `splitResult` = null mientras las líneas no cuadren.
@@ -764,6 +770,7 @@ export function PaymentModal({
     setVoucherLote("");
     setVoucherCupon("");
     setVoucherAuth("");
+    setDirectoOp("");
   }, [method]);
 
   // Filtrar métodos por los proveedores habilitados del tenant (H14) Y por el
@@ -929,7 +936,12 @@ export function PaymentModal({
   const splitMethods = useMemo(
     () =>
       methods.filter(
-        (m) => m.value !== "store_credit" && m.value !== "account" && m.value !== "qr",
+        // directo: exige Nº de operación por pago (no se pide por línea).
+        (m) =>
+          m.value !== "store_credit" &&
+          m.value !== "account" &&
+          m.value !== "qr" &&
+          m.value !== "directo",
       ),
     [methods],
   );
@@ -1110,6 +1122,29 @@ export function PaymentModal({
           </div>
         )}
 
+        {/* Directo (ADR-034): el cobro se hace en el portal de comercios de
+            Directo (QR o link). Acá se registra su número de operación. */}
+        {!splitOn && method === "directo" && (
+          <div className="rounded-lg bg-muted/50 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/images/payments/directo.webp" alt="Directo" className="h-4 w-auto" />
+            </div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Cobrá {formatCurrency(payTotal)} en el portal de comercios de Directo y cargá el
+              número de operación que te da al aprobarse.
+            </p>
+            <Input
+              label="Número de operación"
+              value={directoOp}
+              maxLength={64}
+              autoComplete="off"
+              onChange={(e) => setDirectoOp(e.target.value)}
+              placeholder="Ej. 123456"
+            />
+          </div>
+        )}
+
         {/* Garantía extendida */}
         {(wplans ?? []).length > 0 && (
           <div>
@@ -1251,13 +1286,17 @@ export function PaymentModal({
           ) : (
             <Button
               loading={loading}
-              disabled={voucherRequired && !voucherComplete}
+              disabled={
+                (voucherRequired && !voucherComplete) ||
+                (method === "directo" && directoOp.trim() === "")
+              }
               onClick={() =>
                 onConfirm(
                   [
                     {
                       method,
                       amount: payTotal,
+                      ...(method === "directo" ? { reference: directoOp.trim() } : {}),
                       // Voucher de tarjeta: se adjunta si es obligatorio o si el
                       // cajero cargó algún dato (siempre en débito/crédito).
                       ...(isCardMethod && (voucherRequired || voucherHasData)

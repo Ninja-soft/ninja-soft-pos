@@ -31,6 +31,9 @@ const ALLOWED = new Set([
   // point_pos_ids y audience opcionales. Nave Point reutiliza ESTA conexión
   // (no hay provider 'nave_point' de secretos).
   "nave",
+  // GO Cuotas (ADR-033): { api_key } de la sucursal (Bearer). El ambiente lo
+  // define el switch Sandbox del medio (sandbox.gocuotas.com vs www).
+  "gocuotas",
 ]);
 
 Deno.serve(async (req: Request) => {

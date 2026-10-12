@@ -4,11 +4,10 @@ import { useState } from "react";
 import {
   ChevronDown,
   CreditCard,
-  Link2,
+  Globe,
   Lock,
   Percent,
   Plug,
-  QrCode,
   Settings2,
   Smartphone,
 } from "lucide-react";
@@ -22,14 +21,13 @@ import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
 import { featureInfo } from "@/lib/saas/featureInfo";
 import {
   PLANS_KEY_BY_CHANNEL,
-  channelLabel,
   connectionKeyOf,
   surchargeModeOf,
   type BrandGroup,
   type ChannelEntry,
 } from "@/lib/payments/catalog";
-import { CHANNEL_INFO, CHANNEL_SUMMARY } from "./copy";
-import { BrandLogo, StatusChip, type StatusTone } from "./ui";
+import { CHANNEL_CAPS, CHANNEL_INFO, CHANNEL_SUMMARY, CHANNEL_TITLE, type ChannelCap } from "./copy";
+import { BrandLogo, CapBadge, StatusChip, type StatusTone } from "./ui";
 import { mpEnvOf, type Method } from "./types";
 
 export type ChannelHandlers = {
@@ -62,8 +60,30 @@ function envOf(connKey: string | null, byKey: Map<string, Method>) {
   return connKey === "mercadopago" ? mpEnvOf(m) : m?.sandbox ? "test" : "prod";
 }
 
+const capsOf = (c: ChannelEntry): ChannelCap[] =>
+  CHANNEL_CAPS[c.key] ?? (c.channel === "point" ? ["point"] : c.channel === "qr_link" ? ["qr", "link"] : []);
+
+// Grupo de la marca en la lista: conectadas primero, después las disponibles,
+// las de otro plan y al final las que todavía no existen.
+export type BrandBucket = "active" | "available" | "locked" | "soon";
+
+export function brandBucket(
+  group: BrandGroup,
+  byKey: Map<string, Method>,
+  features: Record<string, boolean> | undefined,
+  plans: PlanForUpgrade[],
+): BrandBucket {
+  const live = group.channels.filter((c) => c.implemented);
+  if (live.length === 0) return "soon";
+  if (live.every((c) => gateOf(c, { features, plans }).locked)) return "locked";
+  const connKey = connectionKeyOf(group.brand.key);
+  if (connKey) return byKey.get(connKey)?.config?.connected ? "active" : "available";
+  // Sin cuenta que conectar (Directo): activa si algún canal está habilitado.
+  return live.some((c) => byKey.get(c.key)?.enabled) ? "active" : "available";
+}
+
 // =============================================================================
-// BrandCard: una marca con su conexión y sus canales (QR + link · Point).
+// BrandCard: una marca con su conexión y sus canales (celular · terminal).
 // =============================================================================
 export function BrandCard({
   group,
@@ -86,7 +106,6 @@ export function BrandCard({
   const env = envOf(connKey, byKey);
   const gates = channels.map((c) => ({ c, ...gateOf(c, gate) }));
   const live = gates.filter((x) => x.c.implemented);
-  const allSoon = live.length === 0;
   // Marcas sin cuenta que conectar (Directo): se cobran en su portal.
   const noConnection = !connKey;
   const allLocked = live.length > 0 && live.every((x) => x.locked);
@@ -94,13 +113,12 @@ export function BrandCard({
 
   let tone: StatusTone = "idle";
   let label = "Sin conectar";
-  if (allSoon) [tone, label] = ["soon", "Próximamente"];
-  else if (allLocked) [tone, label] = ["locked", `Plan ${firstLocked?.planName}`];
+  if (allLocked) [tone, label] = ["locked", `Plan ${firstLocked?.planName}`];
   else if (noConnection) [tone, label] = ["idle", "Registro manual"];
-  else if (connected && env === "test") [tone, label] = ["test", "Prueba"];
+  else if (connected && env === "test") [tone, label] = ["test", "En prueba"];
   else if (connected) [tone, label] = ["ok", "Conectado"];
 
-  const action = allSoon ? null : allLocked ? (
+  const action = allLocked ? (
     <Button size="sm" variant="secondary" onClick={() => setUpgradeKey(firstLocked?.featureKey ?? null)}>
       <Lock size={14} /> Mejorar plan
     </Button>
@@ -111,38 +129,49 @@ export function BrandCard({
     </Button>
   );
 
+  // Todas las capacidades de la marca (para la tira de las bloqueadas).
+  const allCaps = Array.from(new Set(channels.flatMap(capsOf)));
+
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center gap-3.5 p-4 sm:px-5">
-        <BrandLogo brandKey={brand.key} name={brand.name} size={48} muted={allSoon || allLocked} />
+        <BrandLogo brandKey={brand.key} name={brand.name} size={44} muted={allLocked} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="text-[15px] font-semibold leading-tight">{brand.name}</h3>
             <StatusChip tone={tone}>{label}</StatusChip>
           </div>
-          <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{brand.tagline}</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{brand.tagline}</p>
         </div>
         {action && <div className="hidden shrink-0 sm:block">{action}</div>}
       </div>
-      {action && <div className="-mt-1 px-4 pb-3.5 sm:hidden [&>button]:w-full">{action}</div>}
+      {action && <div className="-mt-1 px-4 pb-4 sm:hidden [&>button]:w-full">{action}</div>}
 
-      {/* Marca entera "Próximamente": sin filas de canales (no hay nada que tocar). */}
-      <div className={cn("divide-y divide-border border-t border-border", allSoon && "hidden")}>
-        {gates.map(({ c, locked, planName, featureKey }) => (
-          <ChannelRow
-            key={c.key}
-            channel={c}
-            brandName={brand.name}
-            brandKey={brand.key}
-            method={byKey.get(c.key)}
-            brandConnected={connected}
-            locked={locked}
-            planName={planName}
-            onUpgrade={() => setUpgradeKey(featureKey ?? null)}
-            handlers={handlers}
-          />
-        ))}
-      </div>
+      {allLocked ? (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-4 py-3 sm:px-5">
+          <span className="mr-1 text-xs text-muted-foreground">Incluye</span>
+          {allCaps.map((cap) => (
+            <CapBadge key={cap} cap={cap} muted />
+          ))}
+        </div>
+      ) : (
+        <div className="divide-y divide-border border-t border-border">
+          {gates.map(({ c, locked, planName, featureKey }) => (
+            <ChannelRow
+              key={c.key}
+              channel={c}
+              brandName={brand.name}
+              brandKey={brand.key}
+              method={byKey.get(c.key)}
+              brandConnected={connected}
+              locked={locked}
+              planName={planName}
+              onUpgrade={() => setUpgradeKey(featureKey ?? null)}
+              handlers={handlers}
+            />
+          ))}
+        </div>
+      )}
 
       {upgradeKey && (
         <UpgradeModal
@@ -152,6 +181,30 @@ export function BrandCard({
           featureLabel={channels.find((c) => PROVIDER_FEATURE[c.key] === upgradeKey)?.name ?? brand.name}
         />
       )}
+    </Card>
+  );
+}
+
+// =============================================================================
+// Próximamente: marcas sin ningún canal implementado, en una lista compacta.
+// =============================================================================
+export function SoonList({ groups }: { groups: BrandGroup[] }) {
+  return (
+    <Card className="divide-y divide-border overflow-hidden">
+      {groups.map((g) => (
+        <div key={g.brand.key} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+          <BrandLogo brandKey={g.brand.key} name={g.brand.name} size={36} muted />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-muted-foreground">{g.brand.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{g.brand.tagline}</p>
+          </div>
+          <div className="hidden gap-1.5 sm:flex">
+            {Array.from(new Set(g.channels.flatMap(capsOf))).map((cap) => (
+              <CapBadge key={cap} cap={cap} muted />
+            ))}
+          </div>
+        </div>
+      ))}
     </Card>
   );
 }
@@ -191,10 +244,17 @@ export function ManualCard({
   );
 }
 
-function ChannelIcon({ channel }: { channel: ChannelEntry["channel"] }) {
-  const Icon = channel === "point" ? Smartphone : channel === "qr_link" ? QrCode : CreditCard;
+const CHANNEL_ICON = { qr_link: Smartphone, point: CreditCard, manual: Globe } as const;
+
+function ChannelIcon({ channel, muted }: { channel: ChannelEntry["channel"]; muted?: boolean }) {
+  const Icon = CHANNEL_ICON[channel];
   return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-muted text-foreground">
+    <span
+      className={cn(
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]",
+        muted ? "bg-muted text-muted-foreground" : "bg-fg-6 text-foreground",
+      )}
+    >
       <Icon size={18} strokeWidth={1.8} />
     </span>
   );
@@ -238,26 +298,49 @@ function ChannelRow({
   const info = CHANNEL_INFO[c.key];
   const needs = featureInfo(PROVIDER_FEATURE[c.key] ?? "")?.needs;
   const extra = !soon && !locked ? handlers.renderChannelExtra?.(c.key, m) : null;
-  const title = manual ? brandName : c.channel === "manual" ? "Cobro en su portal" : channelLabel(c.channel);
+  const title = manual ? brandName : CHANNEL_TITLE[c.channel];
   const isPoint = c.channel === "point";
   const hasConnection = connectionKeyOf(brandKey) !== null;
+  const caps = manual ? [] : capsOf(c);
+
+  // Canal "Próximamente": una línea compacta, sin controles.
+  if (soon) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+        <ChannelIcon channel={c.channel} muted />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-semibold text-muted-foreground">{title}</span>
+            {caps.map((cap) => (
+              <CapBadge key={cap} cap={cap} muted />
+            ))}
+          </div>
+        </div>
+        <StatusChip tone="soon">Próximamente</StatusChip>
+      </div>
+    );
+  }
 
   return (
-    <div className={cn("px-4 py-3.5 sm:px-5")}>
+    <div className="px-4 py-3.5 sm:px-5">
       <div className="flex items-start gap-3">
         {manual ? <BrandLogo brandKey={brandKey} name={brandName} size={36} /> : <ChannelIcon channel={c.channel} />}
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("text-sm font-semibold", soon && "text-muted-foreground")}>{title}</span>
-            {soon && (
-              <StatusChip tone="soon">Próximamente</StatusChip>
-            )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span className="text-sm font-semibold">{title}</span>
             {locked && <StatusChip tone="locked">Plan {planName}</StatusChip>}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{CHANNEL_SUMMARY[c.key] ?? c.name}</p>
+          {caps.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {caps.map((cap) => (
+                <CapBadge key={cap} cap={cap} />
+              ))}
+            </div>
+          )}
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{CHANNEL_SUMMARY[c.key] ?? c.name}</p>
 
-          {!soon && !locked && (
+          {!locked && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               {mode === "flat" && (
                 <label className="inline-flex h-8 items-center gap-1 rounded-lg bg-muted pl-2.5 pr-2 text-xs text-muted-foreground">
@@ -283,28 +366,22 @@ function ChannelRow({
                 <button
                   type="button"
                   onClick={() => handlers.onOpenPlans(planKey, brandName)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ninja-flame/10 px-2.5 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/15"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-fg-6 px-2.5 text-xs font-semibold text-foreground transition hover:bg-fg-10"
                 >
-                  <Percent size={13} /> Planes · {brandName}
+                  <Percent size={13} /> Cuotas y recargos
                 </button>
               )}
-              {mode === "shared" && <Pill>Recargo en Planes de Point</Pill>}
+              {mode === "shared" && <Pill>Recargo en los planes de Point</Pill>}
               {mode === "terminal" && <Pill>Cuotas en la terminal</Pill>}
-              {isPoint &&
-                hasConnection &&
-                (brandConnected ? (
-                  <Pill>
-                    <Link2 size={12} /> Usa la conexión de {brandName}
-                  </Pill>
-                ) : (
+              {isPoint && hasConnection && !brandConnected && (
                   <button
                     type="button"
                     onClick={() => handlers.onConnect(brandKey)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-warning/15 px-2.5 text-xs font-semibold text-warning"
                   >
-                    <Link2 size={12} /> Conectá {brandName} para usarlo
+                    <Plug size={12} /> Conectá {brandName} para usarlo
                   </button>
-                ))}
+              )}
               {(info || extra) && (
                 <button
                   type="button"
@@ -320,25 +397,21 @@ function ChannelRow({
           )}
 
           {locked && (
-            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-ninja-flame/[0.07] px-3 py-2.5">
+            <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-fg-4 px-3 py-2.5">
               <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Lock size={13} className="shrink-0 text-ninja-flameSoft" />
+                <Lock size={13} className="shrink-0" />
                 <span>
                   Disponible desde el plan <strong className="text-foreground">{planName}</strong>
                 </span>
               </span>
-              <button
-                type="button"
-                onClick={onUpgrade}
-                className="text-xs font-semibold text-ninja-flameSoft hover:underline"
-              >
+              <button type="button" onClick={onUpgrade} className="text-xs font-semibold text-foreground hover:underline">
                 Mejorar plan
               </button>
             </div>
           )}
 
-          {open && !soon && !locked && (
-            <div className="mt-3 space-y-3 rounded-xl bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)] p-3.5 text-sm">
+          {open && !locked && (
+            <div className="mt-3 space-y-3 rounded-xl bg-fg-4 p-3.5 text-sm">
               {extra}
               {info && (
                 <>
@@ -347,7 +420,7 @@ function ChannelRow({
                     <ol className="space-y-1.5">
                       {info.pasos.map((step, i) => (
                         <li key={i} className="flex gap-2.5 text-muted-foreground">
-                          <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)] text-[10px] font-bold text-foreground">
+                          <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-fg-10 text-[10px] font-bold text-foreground">
                             {i + 1}
                           </span>
                           <span>{step}</span>
@@ -383,8 +456,7 @@ function ChannelRow({
             </span>
           ) : (
             <Switch
-              checked={!soon && (m?.enabled ?? false)}
-              disabled={soon}
+              checked={m?.enabled ?? false}
               onCheckedChange={(v) => handlers.onToggle(c.key, v)}
               label={`Habilitar ${brandName} ${title} en el POS`}
             />

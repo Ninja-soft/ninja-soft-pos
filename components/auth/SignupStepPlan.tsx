@@ -115,7 +115,7 @@ export function SignupStepPlan({
         className={cn(
           "mt-4 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition",
           addonAi
-            ? "border-transparent bg-ninja-flame/[0.12]"
+            ? "choice-on choice-check"
             : "border-white/10 bg-white/[0.03] hover:bg-muted",
         )}
       >

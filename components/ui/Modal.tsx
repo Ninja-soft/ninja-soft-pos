@@ -15,6 +15,9 @@ interface ModalProps {
   description?: string;
   children?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Encabezado propio (p. ej. logo + nombre + estado). `title` queda como
+   *  título accesible oculto. */
+  header?: React.ReactNode;
   className?: string;
 }
 
@@ -25,6 +28,7 @@ export function Modal({
   description,
   children,
   footer,
+  header,
   className,
 }: ModalProps) {
   return (
@@ -45,7 +49,13 @@ export function Modal({
             aria-hidden
             className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-muted-foreground/30 sm:hidden"
           />
-          {(title || description) && (
+          {header && (
+            <div className="shrink-0 border-b border-border px-5 pb-4 pt-3 pr-12 sm:px-6 sm:pt-4">
+              <Dialog.Title className="sr-only">{title ?? "Diálogo"}</Dialog.Title>
+              {header}
+            </div>
+          )}
+          {!header && (title || description) && (
             <div className="shrink-0 border-b border-border px-5 pb-4 pt-3 pr-12 sm:px-6 sm:pt-4">
               {title && (
                 <Dialog.Title className="text-lg font-bold tracking-tight">

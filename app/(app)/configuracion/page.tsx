@@ -393,7 +393,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 text-left transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on choice-check"
                           : "border-border hover:bg-muted",
                       )}
                     >
@@ -474,7 +474,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on"
                           : "border-border hover:bg-muted",
                       )}
                     >
@@ -505,7 +505,7 @@ function ConfiguracionInner() {
                       className={cn(
                         "rounded-lg border p-2 transition",
                         active
-                          ? "border-transparent bg-ninja-flame/[0.12]"
+                          ? "choice-on choice-check"
                           : "border-border hover:bg-muted",
                       )}
                     >

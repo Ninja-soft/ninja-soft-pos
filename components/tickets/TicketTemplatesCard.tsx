@@ -353,7 +353,7 @@ function DestChip({
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition",
         active
-          ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
+          ? "choice-on"
           : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >

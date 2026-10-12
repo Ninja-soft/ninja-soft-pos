@@ -347,7 +347,7 @@ function Stepper({
                 className={cn(
                   "grid h-8 w-8 place-items-center rounded-full border text-xs font-bold transition-colors",
                   active
-                    ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
+                    ? "choice-on"
                     : done
                       ? "border-transparent bg-emerald-400/15 text-success"
                       : "border-border bg-muted/40 text-muted-foreground",
@@ -402,7 +402,7 @@ function ReturnItemsStep({
             key={it.id}
             className={cn(
               "rounded-xl border p-3 transition-colors",
-              selected ? "border-transparent bg-ninja-flame/[0.08]" : "border-border",
+              selected ? "choice-on" : "border-border",
               available <= 0 && "opacity-60",
             )}
           >
@@ -735,7 +735,7 @@ function DifferenceStep({
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition-colors",
                     active
-                      ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
+                      ? "choice-on"
                       : "border-border text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -835,7 +835,7 @@ function SurplusCard({
       className={cn(
         "flex flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors",
         active
-          ? "border-transparent bg-ninja-flame/[0.12]"
+          ? "choice-on choice-check"
           : "border-border hover:bg-muted/40",
       )}
     >

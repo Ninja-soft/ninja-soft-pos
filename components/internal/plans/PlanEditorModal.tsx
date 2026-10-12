@@ -572,7 +572,7 @@ export function PlanEditorModal({
                   className={cn(
                     "grid h-10 w-10 place-items-center rounded-lg border transition",
                     icon === key
-                      ? "border-transparent bg-ninja-flame/15 text-ninja-flameSoft"
+                      ? "choice-on"
                       : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >

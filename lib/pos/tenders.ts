@@ -9,6 +9,7 @@
 // lib/payments/providerFeature.ts), sin tocar la pantalla.
 
 import { providerFeature } from "@/lib/payments/providerFeature";
+import { paymentIcon } from "@/lib/payments/logos";
 
 export type SaleMethod =
   | "cash"
@@ -93,18 +94,21 @@ export interface TenderDef {
   minAmount?: number;
 }
 
+// Isotipos oficiales: misma fuente que la configuración de medios de pago
+// (lib/payments/logos). Las tarjetas usan sus logos de red.
+const icon = (k: string) => paymentIcon(k) ?? "";
 const LOGO = {
-  cash: "/img/medios_de_pago/Cash_cube.webp",
-  transfer: "/img/medios_de_pago/Transferencia_cube.webp",
-  mercadopago: "/img/medios_de_pago/mercado_pago_cube.webp",
-  payway: "/img/medios_de_pago/payway_cube.webp",
-  getnet: "/img/medios_de_pago/getnet_cube.webp",
-  nave: "/img/medios_de_pago/nave_cube.webp",
-  modo: "/img/medios_de_pago/Modo_cube.webp",
-  mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
-  pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
-  gocuotas: "/images/payments/gocuotas.webp",
-  directo: "/images/payments/directo.webp",
+  cash: icon("cash"),
+  transfer: icon("transfer"),
+  mercadopago: icon("mercadopago"),
+  payway: icon("payway"),
+  getnet: icon("getnet"),
+  nave: icon("nave"),
+  modo: icon("modo"),
+  mobbex: icon("mobbex"),
+  pagos360: icon("pagos360"),
+  gocuotas: icon("gocuotas"),
+  directo: icon("directo"),
   visa: "/img/medios_de_pago/cards/visa_credito.svg",
   visaDebit: "/img/medios_de_pago/cards/visa_debito.svg",
 } as const;

@@ -31,7 +31,10 @@ export function useOpenShift() {
     queryFn: () => posApi.openShift(registerId),
     enabled: register.isFetched,
   });
-  const shiftId = q.data?.id ?? null;
+  // Sólo con el contexto de sucursales cargado (migraciones de F17 aplicadas):
+  // con el respaldo de caja no se manda p_cash_shift_id, que una base vieja
+  // no reconoce.
+  const shiftId = register.store ? (q.data?.id ?? null) : null;
   useEffect(() => {
     if (q.isFetched) setActiveShiftId(shiftId);
   }, [q.isFetched, shiftId, setActiveShiftId]);

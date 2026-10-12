@@ -177,11 +177,29 @@ export function useCurrentRegister(): {
         : null,
     [store, saved, shifts.data, scope.data?.userId],
   );
+  // Respaldo: si el contexto de sucursales no carga (p. ej. el front llega
+  // antes que las migraciones de F17), se usa la primera caja activa como
+  // antes, para no dejar el POS sin poder abrir caja.
+  const fallbackOn = ctx.ready && !store;
+  const fallback = useQuery({
+    queryKey: ["pos", "register", "fallback"],
+    enabled: fallbackOn,
+    queryFn: async () => {
+      const { data: r } = await createClient()
+        .from("cash_registers")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      return (r ?? null) as unknown as BranchRegister | null;
+    },
+  });
   return {
-    data,
+    data: data ?? (fallbackOn ? (fallback.data ?? null) : null),
     store,
     registers: store?.registers ?? [],
-    isFetched: ctx.ready && (!ctx.posStoreId || shifts.isFetched),
+    isFetched: ctx.ready && (store ? shifts.isFetched : !fallbackOn || fallback.isFetched),
   };
 }
 

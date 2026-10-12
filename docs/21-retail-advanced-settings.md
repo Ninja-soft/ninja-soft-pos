@@ -90,11 +90,11 @@ Cuenta corriente v2 (ADR-037, `docs/specs/cuenta-corriente-v2.md`). Se configura
 - [x] Límite por cliente (`customers.credit_limit`, sin carrera: lock al cobrar).
 - [x] Plazo default de pago: días o corte mensual + día de vencimiento (`account_config.terms`), override por grupo y cliente.
 - [x] Cuotas (máximo e intervalo configurables).
-- [x] Punitorios: tasa mensual o diaria, simple o compuesto, días de gracia, tope y mínimo (`cc_punitorios`).
-- [x] Bloqueo por mora (días) con autorización de encargado auditada; estado de la cuenta manual (al día / en observación / bloqueada).
+- [x] Punitorios: tasa mensual o diaria, simple o compuesto, días de gracia, tope y mínimo (`cc_punitorios`). Con tasa diaria, un movimiento por cargo y mes.
+- [x] Bloqueo por mora (días) y por límite con autorización auditada: el encargado logueado con motivo, o un cajero con el **PIN de supervisor** (token de un solo uso, intentos limitados); estado de la cuenta manual (al día / en observación / bloqueada).
 - [x] Antigüedad de deuda por vencimiento (server-side) y tablero de cobranza.
 - [x] Recordatorios por email antes y después del vencimiento (`cc_cobranza`).
-- [~] Grupos de clientes (la config por grupo existe en la base; falta el editor en la UI).
+- [x] Condiciones por grupo de clientes (Configuración → Cuenta corriente → Condiciones por grupo).
 
 ## 8. Pedidos, despacho y entrega
 

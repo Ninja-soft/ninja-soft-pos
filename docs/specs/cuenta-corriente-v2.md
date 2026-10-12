@@ -62,5 +62,12 @@ Edge Function `account_reminders` (cron diario): por tenant con `cc_cobranza`, a
 - POS: al elegir cuenta corriente mostrar saldo, límite disponible, vencidos y elegir cuotas si está habilitado; mensaje claro si está bloqueado (override de gerente inline).
 - Usar ECharts para gráficos.
 
+## Addendum v2b (decisiones del dueño)
+- **PIN de supervisor**: dueños/encargados cargan un PIN (4 a 6 dígitos, hash bcrypt, RLS deny-all). El cajero pide autorización desde el POS eligiendo supervisor + PIN + motivo; `account_authorize_override` limita intentos (5 cada 15 min, bloqueo 15 min), audita y entrega un token de un solo uso (5 min, mismo cliente, mismo cajero, monto <= autorizado) que consume `payment_account_charge`. Cubre mora, cuenta bloqueada y límite. Sigue el override por sesión de dueño/encargado.
+- **Punitorio diario**: un movimiento por cargo y mes calendario, upsert idempotente por `(parent_id, period)` con `accrued_through`.
+- **Grupos**: editor de condiciones por grupo con badge de herencia y vista previa (`account_set_group_config`).
+- **Emails**: vista previa de `account_reminder` y `account_statement` en `/internal/emails`.
+- Migración `20261011200300_cuenta_corriente_v2_pin_supervisor.sql`.
+
 ## Docs
 ADR nuevo "Cuenta corriente v2", roadmap H31/F5 actualizado, `docs/21-retail-advanced-settings.md` §7, CHANGELOG, `featureInfo` (desc/impact/minPlan/requires), `planComparison` derivado.

@@ -1374,6 +1374,35 @@ El asistente sólo respondía lo que cubrían 7 tools curadas (ventas, top, clie
 
 ---
 
+## ADR-040 — Opacidad de Tailwind sobre los tokens temados (`var(--x)`)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada · **Hito:** limpieza de UI
+
+### Contexto
+
+Los tokens semánticos de `tailwind.config.ts` (`background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`) se declaraban como `"var(--x)"`. Tailwind 3 no puede inyectar alpha en un `var()` cuyo valor desconoce, así que las clases con modificador (`bg-muted/50`, `border-border/60`, `bg-destructive/10`, `text-muted-foreground/70`, `bg-background/80`...) **no generaban CSS**: el elemento quedaba sin fondo, con el borde base o con el color de texto heredado. Había ~200 usos así en la app. Además el color por defecto de `ring` (sin clase de color) era el azul de Tailwind (`rgb(59 130 246 / 0.5)`). Como parche se habían sumado utilidades `bg-fg-4/6/10` y valores arbitrarios `bg-[color-mix(...)]`, y ADR-038 registraba la limitación.
+
+Los valores de los tokens son hex en unos temas y `rgba()` en otros, por lo que convertirlos a tripletas RGB (`<alpha-value>`) obligaba a rehacer los cuatro temas y perdía el alpha propio de los tokens translúcidos.
+
+### Decisión
+
+- `tailwind.config.ts` (archivo sensible, cambio acotado a esto) declara cada token como **función de color** `themed("x")`:
+  - sin modificador (Tailwind pasa `opacityVariable`, o nada en `fill`/`stroke`) devuelve `var(--x)`, idéntico a antes;
+  - con modificador devuelve `color-mix(in srgb, var(--x) calc(<alpha> * 100%), transparent)`, que multiplica el alpha propio del token.
+- `ringColor.DEFAULT = themed("ring")`: un `ring-*` sin color usa el token `--ring` del tema al 50 % (opacidad por defecto de ring en Tailwind 3) en lugar del azul.
+- Se mantienen `bg-fg-4/6/10` (nombres estables de la escala del POS) y los `bg-[color-mix(...)]` existentes: generan lo mismo y no vale la pena el churn.
+
+### Consecuencias
+
+- CSS generado: las clases sin modificador sólo suman la declaración inerte `--tw-*-opacity: 1`; el resto es igual. Aparecen ~100 reglas nuevas, una por cada clase con modificador que antes no existía.
+- **Impacto visual (intencional, es lo que el código pedía):** los rellenos `bg-muted/N`, `bg-destructive/10`, `bg-card/N`, `bg-background/N`, `bg-popover/N` ahora se ven (en oscuro son tintes muy sutiles porque `--muted` ya es translúcido; en los temas claros se notan más); los `hover:bg-*/N` ahora tienen hover; los textos `text-muted-foreground/N` pasan de heredar el color de texto (claro) a gris atenuado; `border-border/N` y `border-destructive/N` quedan más suaves; los degradados `from-popover` se desvanecen al popover transparente y no a blanco transparente.
+- ADR-038 queda superada en el punto "los modificadores de opacidad no generan nada": desde acá `bg-muted/50` y `bg-foreground/[.05]` son válidos.
+- Requiere `color-mix()` (Chrome 111, Safari 16.2, Firefox 113), ya usado en la app.
+
+Archivos: `tailwind.config.ts`, `app/globals.css` (comentario de `bg-fg-*`).
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

@@ -695,7 +695,8 @@ html {
    contenedor y en sus hojas (que viven en un portal). */
 @layer utilities {
   /* Rellenos neutros del POS: tinte del color de texto del tema (funciona en
-     claro y oscuro; Tailwind no puede aplicar alpha a var(--foreground)). */
+     claro y oscuro). Desde ADR-040 `bg-foreground/[.04]` genera lo mismo; se
+     mantienen como nombres estables de la escala del POS (4/7/11 %). */
   .bg-fg-4 { background-color: color-mix(in srgb, var(--foreground) 4%, transparent); }
   .bg-fg-6 { background-color: color-mix(in srgb, var(--foreground) 7%, transparent); }
   .bg-fg-10 { background-color: color-mix(in srgb, var(--foreground) 11%, transparent); }

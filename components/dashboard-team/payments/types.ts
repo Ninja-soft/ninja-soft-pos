@@ -15,6 +15,9 @@ export type MethodConfig = {
   connected?: boolean;
   test_connected?: boolean;
   mp_qr?: { prod?: MpQrPos; test?: MpQrPos };
+  // Transferencia (ADR-055): base del negocio (transfer_settings_save).
+  transfer_show_screen?: boolean;
+  transfer_require_reference?: boolean;
 };
 
 export type Method = {

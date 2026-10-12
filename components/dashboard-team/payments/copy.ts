@@ -44,7 +44,7 @@ export function naveRegistrationEmail(businessName: string | null | undefined, w
 // Resumen de una línea por canal (bajo el título del canal).
 export const CHANNEL_SUMMARY: Record<string, string> = {
   cash: "Entra al arqueo de caja",
-  transfer: "Confirmás vos que llegó la plata",
+  transfer: "A tu CBU, CVU o alias, con los datos en pantalla",
   mercadopago: "Un QR por venta en la pantalla o un link por WhatsApp",
   mercadopago_point: "Tarjeta, contactless y cuotas en tu lector Point",
   payway: "Checkout de Payway con tus planes de cuotas",
@@ -75,11 +75,12 @@ export const CHANNEL_INFO: Record<string, Explain> = {
     ],
   },
   transfer: {
-    activa: "Aparece como forma de pago en el POS para cobrar por transferencia a tu cuenta.",
+    activa:
+      "Aparece como forma de pago en el POS. Cargá tus cuentas y el POS muestra banco, titular, CBU / CVU y alias para que el cliente transfiera (también en la pantalla del cliente).",
     pasos: [
-      "El cliente transfiere a tu CBU o alias.",
-      "Verificás que la plata haya llegado.",
-      "Registrás la venta (la confirmación es manual).",
+      "En el POS tocás Cobrar y elegís Transferencia.",
+      "El cliente transfiere a la cuenta que muestra la pantalla.",
+      "Verificás que la plata llegó, cargás el n° de operación si lo pedís y tocás Ya transfirió.",
     ],
   },
   mercadopago: {
@@ -229,9 +230,26 @@ export const CHANNEL_TITLE = {
 // docs/payments/research-points-2026-10.md). Honesto: depende del proveedor.
 export const CHANNEL_SOON_REASON: Record<string, string> = {
   payway_point:
-    "Payway todavía no publica una API para mandar cobros a sus terminales. Mientras tanto, cobrá con Tarjeta en posnet.",
+    "Integración directa: Payway todavía no publica una API para mandar el cobro desde el POS a sus terminales; cuando la publique, el monto va a viajar solo a la terminal.",
   getnet_point:
-    "Getnet ofrece integrar terminales sólo a partners y no confirmó que esté disponible en Argentina. Mientras tanto, cobrá con Tarjeta en posnet.",
+    "Integración directa: Getnet ofrece integrar terminales sólo a partners y no confirmó que esté disponible en Argentina; mientras tanto el cobro se registra con el cupón.",
+};
+
+// Terminales sin integración directa que HOY ya se cobran con el posnet
+// offline (Tarjeta en posnet, ADR-054): el cajero cobra en la terminal y carga
+// el cupón. La fila deja de ser un "Próximamente" vacío y lleva a configurar
+// los datos del cupón.
+export const OFFLINE_TERMINAL: Record<string, { brand: string; today: string }> = {
+  payway_point: {
+    brand: "Payway",
+    today:
+      "Ya podés cobrar con tu terminal Payway: en el POS elegís Tarjeta en posnet, pasás la tarjeta en la terminal y cargás los datos del cupón. Queda registrado con su lote y autorización para conciliar.",
+  },
+  getnet_point: {
+    brand: "Getnet",
+    today:
+      "Ya podés cobrar con tu terminal Getnet: en el POS elegís Tarjeta en posnet, pasás la tarjeta en la terminal y cargás los datos del cupón. Queda registrado con su lote y autorización para conciliar.",
+  },
 };
 
 // Títulos propios de algunos canales (pisan al del canal).

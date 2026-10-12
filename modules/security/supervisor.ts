@@ -89,17 +89,24 @@ export async function withSupervisor<T>(
     );
     return withSupervisorToken(token, fn);
   }
-  try {
-    return await fn();
-  } catch (e) {
-    const action = supervisorRequiredAction(e);
-    if (!action) throw e;
-    const a = await resolveAmounts();
-    const token = await requestSupervisorToken(
-      action,
-      a[action] ?? null,
-      opts.context,
-    );
-    return withSupervisorToken(token, fn);
-  }
+  // Una misma llamada puede pedir más de una autorización (precio y descuento,
+  // ADR-056): cada token nuevo se suma a los anteriores y se reintenta.
+  const asked = new Set<PinAction>();
+  const attempt = async (): Promise<T> => {
+    try {
+      return await fn();
+    } catch (e) {
+      const action = supervisorRequiredAction(e);
+      if (!action || asked.has(action) || asked.size >= 3) throw e;
+      asked.add(action);
+      const a = await resolveAmounts();
+      const token = await requestSupervisorToken(
+        action,
+        a[action] ?? null,
+        opts.context,
+      );
+      return withSupervisorToken(token, attempt);
+    }
+  };
+  return attempt();
 }

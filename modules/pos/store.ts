@@ -35,6 +35,13 @@ export interface CartLine {
   // producto a $0 que el motor agrega solo al cumplirse las condiciones; se quita
   // sola si el carrito deja de calificar. No editable por el cajero.
   giftPromoId?: string | null;
+  // Cambio manual de precio (F18 · H100, ADR-056): el cajero puso otro precio
+  // con motivo. listPrice es el precio con el que entró la línea (lista +
+  // modificadores); el servidor lo recalcula y pide PIN de 'cambio_precio'
+  // según la política. Sin priceOverride, el precio es el de lista.
+  priceOverride?: boolean;
+  overrideReason?: string | null;
+  listPrice?: number | null;
 }
 
 interface CartState {
@@ -103,6 +110,11 @@ interface CartState {
   uncoverLine: (lineId: string) => void;
   setQuantity: (lineId: string, quantity: number) => void;
   setLineDiscount: (lineId: string, discount: number) => void;
+  // Precio manual de una línea con motivo (ADR-056). Volver al precio de lista
+  // (price == listPrice) borra la marca.
+  setLinePrice: (lineId: string, price: number, reason: string) => void;
+  // Precios que mandó el servidor (price_mismatch): reprecia esas líneas.
+  applyServerPrices: (changes: { lineId: string; to: number }[]) => void;
   removeLine: (lineId: string) => void;
   setDiscountTotal: (amount: number) => void;
   // Reconcilia las líneas de REGALO (F9 · H54) con lo que el motor calcula: agrega
@@ -326,6 +338,25 @@ export const useCartStore = create<CartState>((set) => ({
       lines: state.lines.map((l) =>
         l.lineId === lineId ? { ...l, discount } : l,
       ),
+    })),
+  setLinePrice: (lineId, price, reason) =>
+    set((state) => ({
+      lines: state.lines.map((l) => {
+        if (l.lineId !== lineId) return l;
+        // La primera vez, el precio actual de la línea es el de lista.
+        const listPrice = l.listPrice ?? l.unitPrice;
+        const back = Math.abs(price - listPrice) <= 0.01;
+        return back
+          ? { ...l, unitPrice: listPrice, priceOverride: false, overrideReason: null, listPrice }
+          : { ...l, unitPrice: price, priceOverride: true, overrideReason: reason.trim(), listPrice };
+      }),
+    })),
+  applyServerPrices: (changes) =>
+    set((state) => ({
+      lines: state.lines.map((l) => {
+        const c = changes.find((x) => x.lineId === l.lineId);
+        return c ? { ...l, unitPrice: c.to, listPrice: c.to } : l;
+      }),
     })),
   removeLine: (lineId) =>
     set((state) => ({

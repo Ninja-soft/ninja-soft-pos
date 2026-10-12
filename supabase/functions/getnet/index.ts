@@ -30,6 +30,7 @@ import {
   GETNET_ORDERS_URL,
   parseCreateResponse,
 } from "../_shared/getnet.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -83,12 +84,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "getnet")
-    .maybeSingle();
+  const secretRow = await loadProviderSecret(admin, tenantId, "getnet", action === "create" ? { storeId: bodyStoreId(b) } : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) });
   const sec = (secretRow?.secrets ?? {}) as {
     client_id?: string;
     client_secret?: string;
@@ -114,11 +110,11 @@ Deno.serve(async (req: Request) => {
     const token = await fetchGetnetToken(sec.client_id, sec.client_secret);
     if (!token) return json({ error: "getnet_no_token" }, 502);
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "getnet" })
-      .select("id")
-      .single();
+    const { data: intent, error: intErr } = await insertIntentWithScope<{ id: string }>(
+      admin,
+      { tenant_id: tenantId, amount, provider_key: "getnet" },
+      secretRow?.scopeStoreId ?? null,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
     const hook = `${url}/functions/v1/getnet_webhook`;

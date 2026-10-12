@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import {
   ChevronDown,
   ChevronRight,
@@ -34,6 +36,7 @@ import {
   CHANNEL_SUMMARY,
   CHANNEL_TITLE,
   CHANNEL_TITLE_BY_KEY,
+  OFFLINE_TERMINAL,
   type ChannelCap,
 } from "./copy";
 import { BrandLogo, CapBadge, StatusChip, type StatusTone } from "./ui";
@@ -324,6 +327,56 @@ function ChannelRow({
   const isPoint = c.channel === "point";
   const hasConnection = connectionKeyOf(brandKey) !== null;
   const caps = manual ? [] : capsOf(c);
+
+  // Terminal sin integración directa que ya se cobra con el posnet offline
+  // (ADR-054): disponible hoy, con el paso a paso y el acceso a configurar el
+  // cupón. La integración directa queda como dato secundario.
+  const offline = soon ? OFFLINE_TERMINAL[c.key] : undefined;
+  if (offline) {
+    return (
+      <div className="px-4 py-3.5 sm:px-5">
+        <div className="flex items-start gap-3">
+          <ChannelIcon channel={c.channel} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-sm font-semibold">{title}</span>
+              <StatusChip tone="ok">Disponible sin integrar</StatusChip>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{offline.today}</p>
+            <ol className="mt-2.5 grid gap-1.5 sm:grid-cols-3" aria-label="Cómo se cobra">
+              {[
+                `Elegís ${offline.brand} en Tarjeta en posnet`,
+                "Marca, tipo y cuotas",
+                "Cargás lote, cupón y autorización",
+              ].map((step, i) => (
+                <li key={step} className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-xs">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-sm bg-background text-[11px] font-semibold tabular-nums">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0">{step}</span>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Link
+                href={"/configuracion?seccion=posnet" as Route}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-semibold transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Settings2 size={13} aria-hidden /> Configurar datos del cupón
+              </Link>
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
+                Integración directa en desarrollo
+              </span>
+            </div>
+            {CHANNEL_SOON_REASON[c.key] && (
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{CHANNEL_SOON_REASON[c.key]}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Canal "Próximamente": una línea compacta, sin controles.
   if (soon) {

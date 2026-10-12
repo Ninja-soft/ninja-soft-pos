@@ -43,6 +43,10 @@ const PaymentMethodsCard = dynamic(
   () => import("@/components/dashboard-team/PaymentMethodsCard").then((m) => m.PaymentMethodsCard),
   { loading },
 );
+const TransferScopedAccounts = dynamic(
+  () => import("@/components/dashboard-team/payments/TransferScopedAccounts").then((m) => m.TransferScopedAccounts),
+  { loading },
+);
 const OperationSettingsCard = dynamic(
   () => import("@/components/dashboard-team/OperationSettingsCard").then((m) => m.OperationSettingsCard),
   { loading },
@@ -137,6 +141,10 @@ const SupervisorPinCard = dynamic(
 );
 
 // Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
+const PosnetVoucherCard = dynamic(
+  () => import("@/components/config/PosnetVoucherCard").then((m) => m.PosnetVoucherCard),
+  { loading },
+);
 const TerminalsManager = dynamic(
   () => import("@/components/config/TerminalsManager").then((m) => m.TerminalsManager),
   { loading },
@@ -166,6 +174,7 @@ const OPERACION_FIELDS = [
   "require_card_voucher",
   "offer_warranty",
   "allow_free_sale",
+  "max_free_sale",
   "blind_close",
   "close_tolerance",
   "require_close_reason",
@@ -220,10 +229,17 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "pagos":
       return (
         <Suspense fallback={null}>
-          <ScopedSection domain="payment_method">
+          <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
             <PaymentMethodsCard />
           </ScopedSection>
         </Suspense>
+      );
+    // ADR-054: terminales y datos del cupón del posnet offline (heredables).
+    case "posnet":
+      return (
+        <ScopedSection domain="pos_settings" fields={[]} scopedExtra={(s) => <PosnetVoucherCard scope={s} />}>
+          <PosnetVoucherCard />
+        </ScopedSection>
       );
     case "terminales":
       return <TerminalsManager />;

@@ -53,6 +53,8 @@ export interface CartLinesProps {
   creditForLine: (l: CartLine) => PackCredit | null;
   onCover: (lineId: string, creditId: string) => void;
   onUncover: (lineId: string) => void;
+  // Cambio manual de precio (ADR-056). Sin handler no se ofrece.
+  onEditPrice?: (lineId: string) => void;
   emptyHint?: string;
 }
 
@@ -64,6 +66,7 @@ export function CartLines({
   creditForLine,
   onCover,
   onUncover,
+  onEditPrice,
   emptyHint = "Tocá un producto o escaneá un código para empezar.",
 }: CartLinesProps) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -94,6 +97,7 @@ export function CartLines({
                 ? `${l.quantity} × ${money(l.unitPrice)}`
                 : null,
             l.packCreditId ? "Cubierto por el pack" : null,
+            l.priceOverride && l.listPrice != null ? `Lista ${money(l.listPrice)}` : null,
           ]
             .filter(Boolean)
             .join(" · ") || money(l.unitPrice);
@@ -119,6 +123,11 @@ export function CartLines({
                   {l.giftPromoId && (
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold text-success">
                       <Gift size={12} aria-hidden /> Regalo
+                    </span>
+                  )}
+                  {l.priceOverride && (
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
+                      <Tag size={12} aria-hidden /> Precio manual
                     </span>
                   )}
                 </span>
@@ -188,6 +197,15 @@ export function CartLines({
                     </button>
                   )
                 )}
+                {editable && !free && l.productId && onEditPrice && (
+                  <button
+                    type="button"
+                    onClick={() => onEditPrice(l.lineId)}
+                    className={cn(lineAction, "bg-card text-foreground hover:bg-fg-10")}
+                  >
+                    <Tag size={14} aria-hidden /> Cambiar precio
+                  </button>
+                )}
                 {editable && (
                   <button
                     type="button"
@@ -241,8 +259,11 @@ export interface CartSummaryProps {
   deliveryFee: number;
   total: number;
   itemCount: number;
-  pinned: ResolvedTender[];
+  // Sólo lo que pinta el botón: puede venir de la foto del arranque.
+  pinned: { id: ResolvedTender["id"]; group: string; label: string; logo: string | null }[];
   hasShift: boolean;
+  // El turno todavía no llegó (se muestra el último estado conocido, sin acción).
+  shiftPending?: boolean;
   canCheckout: boolean;
   checkingOut?: boolean;
   onCheckout: (tenderId?: string) => void;
@@ -490,7 +511,8 @@ export function CartSummary(p: CartSummaryProps) {
       ) : (
         <button
           type="button"
-          onClick={p.onOpenShift}
+          onClick={p.shiftPending ? undefined : p.onOpenShift}
+          aria-busy={p.shiftPending || undefined}
           className={cn("flex h-14 w-full items-center justify-center gap-2 rounded-lg text-[15px] font-semibold", POS_QUIET)}
         >
           <Lock size={18} className="text-muted-foreground" aria-hidden />

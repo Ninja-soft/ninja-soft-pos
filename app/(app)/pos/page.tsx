@@ -29,10 +29,19 @@ import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 import { usePosBranchStock } from "@/modules/pos/branchStock";
 import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, otherBranchesText } from "@/lib/stock/posBranchStock";
 import { formatQty } from "@/lib/utils/format";
-import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
+import { branchErrorMessage, liveRegisters, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
 import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
-import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
+import {
+  usePosBootSnapshot,
+  usePosLayout,
+  usePosLayoutMutations,
+  useResolvedTenders,
+  useTendersReady,
+} from "@/modules/pos/layoutHooks";
+import { effectivePreset, posBootKey, posBootScope, safeLocalStorage, writePosBoot } from "@/lib/pos/bootCache";
+import { useReconciled } from "@/hooks/useReconciled";
+import { PosBootSkeleton } from "@/components/pos/screen/PosBootSkeleton";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
@@ -53,11 +62,12 @@ import {
   publishDisplayState,
   type DisplayBranding,
   type DisplayQr,
+  type DisplayTransfer,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
 import { pinnedTenders } from "@/lib/pos/tenders";
-import type { PosPreset } from "@/lib/pos/layout";
+import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
@@ -70,8 +80,10 @@ import { accentVars } from "@/components/pos/ui/posStyles";
 import {
   CustomerPickerDialog,
   FreeSaleDialog,
+  PriceOverrideDialog,
   SerialDialog,
   WeighDialog,
+  type PriceOverrideTarget,
 } from "@/components/pos/screen/PosDialogs";
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
@@ -171,15 +183,35 @@ function PosPageInner() {
   }, []);
 
   // ── Diseño ──────────────────────────────────────────────────────────────────
-  const { layout, user: userLayout, hasUserOverride } = usePosLayout();
+  // El diseño efectivo depende de varias consultas (settings, override del
+  // usuario, overrides por sucursal/caja, modo gastronómico). Para no pintar el
+  // preset por defecto y saltar al real: el primer cuadro usa la foto guardada
+  // en este dispositivo (usuario + negocio + caja) y, sin foto, un esqueleto
+  // neutro. Al llegar el servidor se reconcilia (sólo cambia si es distinto).
+  const liveLayout = usePosLayout();
+  const { user: userLayout, hasUserOverride } = liveLayout;
   const { saveUser } = usePosLayoutMutations();
-  const { data: diningEnabled } = useDiningEnabled();
+  const { data: diningEnabled, isFetched: diningFetched } = useDiningEnabled();
+  const branchCtx = useBranchContext();
+  const bootScope = useBranchScope().data ?? null;
+  const currentUserId = bootScope?.userId ?? null;
+  const { data: register, store: registerStore, isFetched: registerFetched } = useDefaultRegister();
+  const bootKey = posBootKey(bootScope?.tenantId ?? null, currentUserId, registerFetched ? (register?.id ?? null) : null);
+  const boot = usePosBootSnapshot(registerFetched ? bootKey : null, posBootScope(bootScope?.tenantId ?? null, currentUserId));
   // Salón requiere el modo gastronómico: sin él cae a Mostrador.
-  const effectiveLayout = useMemo(
-    () => (layout.preset === "salon" && diningEnabled === false ? { ...layout, preset: "mostrador" as const } : layout),
-    [layout, diningEnabled],
-  );
-  const preset = effectiveLayout.preset;
+  const layoutLive = liveLayout.ready && (liveLayout.layout.preset !== "salon" || diningFetched);
+  const resolvedLayout = layoutLive ? effectivePreset(liveLayout.layout, diningEnabled) : (boot?.layout ?? null);
+  const shownLayout = useReconciled(resolvedLayout);
+  const layout = shownLayout ?? PRESET_DEFAULTS.mostrador;
+  const effectiveLayout = layout;
+  const preset = layout.preset;
+  const usingOwn = liveLayout.ready ? hasUserOverride && Boolean(userLayout.preset) : (boot?.usingOwn ?? false);
+  // Red de seguridad: si alguna consulta no responde, no dejar el esqueleto.
+  const [bootTimedOut, setBootTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setBootTimedOut(true), 6000);
+    return () => clearTimeout(t);
+  }, []);
 
   // ── Estado de la pantalla ───────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -261,21 +293,21 @@ function PosPageInner() {
   }, [categories, categoryFilter]);
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
-  const { data: register, store: registerStore } = useDefaultRegister();
-  const branchCtx = useBranchContext();
-  const currentUserId = useBranchScope().data?.userId ?? null;
   const { open, close } = usePosMutations();
-  const { data: myTenant } = useMyTenant();
-  const quickSale = verticalHas(myTenant?.industry, "quickSale");
+  const { data: myTenant, isFetched: myTenantFetched } = useMyTenant();
+  // Rubro y rol cambian piezas visibles (frecuentes, venta libre): hasta que
+  // llegan se usa lo de la foto del arranque.
+  const quickSale = myTenantFetched ? verticalHas(myTenant?.industry, "quickSale") : (boot?.quickSale ?? false);
   // Descuentos manuales: feature de plan (Pro). Sin ella el campo queda bloqueado.
   const discountGate = useFeatureGate("descuentos", "Descuentos");
-  const { data: posSettings } = usePosSettings();
+  const { data: posSettings, isFetched: posSettingsFetched } = usePosSettings();
   const { data: warrantyPlans } = useWarrantyPlans(true);
   const offerWarranty = posSettings?.offerWarranty ?? true;
   const role = myTenant?.role ?? "cashier";
   // Venta libre (H36): flag del negocio Y sólo owner/manager.
   const allowFreeSale = posSettings?.allowFreeSale ?? true;
-  const canFreeSale = allowFreeSale && (role === "owner" || role === "manager");
+  const liveFreeSale = allowFreeSale && (role === "owner" || role === "manager");
+  const canFreeSale = myTenantFetched && posSettingsFetched ? liveFreeSale : (boot?.freeSale ?? false);
   const maxDiscPct = posSettings?.maxDiscount?.[role] ?? 100;
   const rounding = posSettings?.rounding ?? 0;
   const requireCustomer = posSettings?.requireCustomer ?? false;
@@ -337,6 +369,9 @@ function PosPageInner() {
   const { data: dispBranding } = useTicketBranding();
   const [displayQr, setDisplayQr] = useState<DisplayQr | null>(null);
   const handleQrState = useCallback((qr: DisplayQr | null) => setDisplayQr(qr), []);
+  // Cobro por transferencia en curso: datos de la cuenta (ADR-055).
+  const [displayTransfer, setDisplayTransfer] = useState<DisplayTransfer | null>(null);
+  const handleTransferState = useCallback((t: DisplayTransfer | null) => setDisplayTransfer(t), []);
   const [paidView, setPaidView] = useState<{ change: number } | null>(null);
   const paidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayBranding = useMemo<DisplayBranding>(
@@ -367,6 +402,20 @@ function PosPageInner() {
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const setDiscountTotal = useCartStore((s) => s.setDiscountTotal);
+  // F18 · H100 (ADR-056): cambio manual de precio con motivo.
+  const setLinePrice = useCartStore((s) => s.setLinePrice);
+  const [priceTarget, setPriceTarget] = useState<PriceOverrideTarget | null>(null);
+  function openPriceEdit(lineId: string) {
+    const l = useCartStore.getState().lines.find((x) => x.lineId === lineId);
+    if (!l) return;
+    setPriceTarget({
+      lineId,
+      name: l.name,
+      unitPrice: l.unitPrice,
+      listPrice: l.listPrice ?? l.unitPrice,
+      reason: l.overrideReason ?? "",
+    });
+  }
   const clear = useCartStore((s) => s.clear);
 
   // Lista de precios 'mostrador' activa: el precio al agregar se resuelve acá.
@@ -563,7 +612,13 @@ function PosPageInner() {
 
   // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
-    const phase: DisplayState["phase"] = paidView ? "paid" : displayQr ? "paying" : lines.length > 0 ? "cart" : "idle";
+    const phase: DisplayState["phase"] = paidView
+      ? "paid"
+      : displayQr || displayTransfer
+        ? "paying"
+        : lines.length > 0
+          ? "cart"
+          : "idle";
     publishDisplayState({
       v: 1,
       phase,
@@ -582,9 +637,10 @@ function PosPageInner() {
       total,
       change: paidView?.change ?? 0,
       qr: displayQr,
+      transfer: displayTransfer,
       at: Date.now(),
     });
-  }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, paidView]);
+  }, [lines, subtotal, discountTotal, total, displayBranding, displayQr, displayTransfer, paidView]);
 
   // Tope de descuento por rol (H30).
   function handleDiscountChange(value: number) {
@@ -874,7 +930,51 @@ function PosPageInner() {
 
   // ── Cobro ──────────────────────────────────────────────────────────────────
   const tenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
-  const pinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
+  const livePinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
+  const tendersReady = useTendersReady();
+  const pinned = useReconciled(
+    useMemo(
+      () =>
+        tendersReady || !boot
+          ? livePinned.map((t) => ({ id: t.id, group: t.group, label: t.label, logo: t.logo }))
+          : boot.pinned,
+      [tendersReady, boot, livePinned],
+    ),
+  );
+  // Estado de la caja: hasta que llega el turno se muestra el último conocido.
+  const shiftKnown = shiftFetched && shiftOwnership.ready;
+  const shiftShown = shiftKnown ? hasShift : (boot?.shiftOpen ?? false);
+  const locationSnap = useMemo(
+    () =>
+      registerStore
+        ? {
+            full: locationLabel(registerStore, register ?? null),
+            short: locationLabel(registerStore, register ?? null, true),
+            color: registerStore.color ?? null,
+            pickable:
+              branchCtx.allowed.filter((b) => b.is_active).length > 1 ||
+              liveRegisters(registerStore.registers).length > 1,
+          }
+        : null,
+    [registerStore, register, branchCtx.allowed],
+  );
+  // Todo lo que define el primer cuadro ya llegó del servidor.
+  const bootLive =
+    layoutLive && shiftKnown && tendersReady && branchCtx.ready && registerFetched && myTenantFetched && posSettingsFetched;
+  const canPaint = bootLive || Boolean(boot) || bootTimedOut;
+  useEffect(() => {
+    if (!bootLive || !bootKey || !resolvedLayout) return;
+    writePosBoot(safeLocalStorage(), bootKey, {
+      layout: resolvedLayout,
+      dining: Boolean(diningEnabled),
+      usingOwn,
+      location: locationSnap,
+      shiftOpen: hasShift,
+      pinned,
+      freeSale: canFreeSale,
+      quickSale,
+    });
+  }, [bootLive, bootKey, resolvedLayout, diningEnabled, usingOwn, locationSnap, hasShift, pinned, canFreeSale, quickSale]);
   const canCheckout = hasShift && lines.length > 0;
   function startCheckout(tenderId?: string) {
     if (shiftOwnership.foreign) {
@@ -962,6 +1062,7 @@ function PosPageInner() {
       creditForLine={creditForLine}
       onCover={coverLineWithPack}
       onUncover={uncoverLine}
+      onEditPrice={openPriceEdit}
       emptyHint={preset === "caja_rapida" ? "Escaneá un código o tipeá un PLU." : undefined}
     />
   );
@@ -1001,7 +1102,8 @@ function PosPageInner() {
       total={total}
       itemCount={itemCount}
       pinned={pinned}
-      hasShift={hasShift}
+      hasShift={shiftShown}
+      shiftPending={!shiftKnown}
       canCheckout={canCheckout}
       checkingOut={saving}
       onCheckout={startCheckout}
@@ -1116,16 +1218,20 @@ function PosPageInner() {
       />
     );
 
+  if (!canPaint) return <PosBootSkeleton />;
+
   return (
     <>
       <PosShell
         layout={effectiveLayout}
         topBar={
           <PosTopBar
-            hasShift={hasShift}
+            hasShift={shiftShown}
+            shiftPending={!shiftKnown}
             registerName={register?.name ?? null}
             location={
               <PosLocationPicker
+                placeholder={boot?.location ?? null}
                 lockedReason={
                   lines.length > 0
                     ? "Terminá o vaciá la venta en curso para cambiar de sucursal o caja."
@@ -1165,7 +1271,7 @@ function PosPageInner() {
               ) : undefined
             }
             preset={preset}
-            usingOwn={hasUserOverride && Boolean(userLayout.preset)}
+            usingOwn={usingOwn}
             diningEnabled={Boolean(diningEnabled)}
             onPickPreset={pickPreset}
             onResetPreset={() => saveUser.mutate(null)}
@@ -1287,6 +1393,7 @@ function PosPageInner() {
             return handleSale(...args);
           }}
           onQrState={handleQrState}
+          onTransferState={handleTransferState}
           park={{
             blockedReason: parkBlockedReason,
             label: editingCharge ? "Actualizar cobro en espera" : "Dejar en espera",
@@ -1359,6 +1466,14 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
+      <PriceOverrideDialog
+        line={priceTarget}
+        onClose={() => setPriceTarget(null)}
+        onConfirm={(price, reason) => {
+          if (priceTarget) setLinePrice(priceTarget.lineId, price, reason);
+          setPriceTarget(null);
+        }}
+      />
       <FreeSaleDialog
         open={freeOpen}
         onOpenChange={setFreeOpen}
@@ -1392,7 +1507,7 @@ function PosPageInner() {
 // useSearchParams (cobro desde turno, mesa, delivery) requiere Suspense.
 export default function PosPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PosBootSkeleton />}>
       <PosPageInner />
     </Suspense>
   );

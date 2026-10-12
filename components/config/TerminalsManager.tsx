@@ -1,67 +1,61 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Pencil, Plus, QrCode, Star, Trash2 } from "lucide-react";
+import {
+  ArrowLeftRight,
+  CreditCard,
+  ExternalLink,
+  Monitor,
+  Pause,
+  Pencil,
+  Play,
+  Plug,
+  Plus,
+  QrCode,
+  Receipt,
+  Star,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
-import { Switch } from "@/components/ui/Switch";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { SettingsCard } from "@/components/settings/Settings";
 import { BranchDot } from "@/components/branches/BranchSwitcher";
-import {
-  TERMINAL_KIND_LABEL,
-  kindForProvider,
-  lastSeenLabel,
-  terminalExternalIdError,
-  type PaymentTerminal,
-  type TerminalKind,
-} from "@/lib/payments/terminals";
+import { TenderLogo } from "@/components/pos/ui/TenderLogo";
+import { paymentIcon } from "@/lib/payments/logos";
+import { TERMINAL_KIND_LABEL, lastSeenLabel, type PaymentTerminal } from "@/lib/payments/terminals";
+import { groupByRegister, providerLogoKey, registerPickHint } from "@/lib/payments/terminalSetup";
+import { isIntegratedKind } from "@/lib/payments/terminal/config";
 import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 import { branchLabel } from "@/modules/branches/logic";
-import { terminalErrorMessage, type TerminalInput } from "@/modules/config/api";
+import { terminalErrorMessage } from "@/modules/config/api";
 import { usePaymentTerminals, useTerminalMutations } from "@/modules/config/hooks";
 import { posApi } from "@/modules/pos/api";
+import { useFeature } from "@/modules/saas/gating";
 import { providerLabel } from "./ScopedConfig";
+import { TerminalDeviceModal } from "./TerminalDeviceModal";
+import { TerminalWizard, draftFromTerminal, newTerminalDraft, type TerminalDraft } from "./TerminalWizard";
 
 // =============================================================================
 // Terminales de cobro por sucursal y caja (F17 · H93, ADR-049). BASE.
 //
 // Registro de los Point de Mercado Pago, Nave Point, Clover, cajas QR de
-// Mercado Pago y posnets sin integrar: sucursal, caja (o flotante en la
-// sucursal), id del proveedor, n° de comercio y default de la caja. El POS
-// elige la de su caja sola; las Edges validan en el servidor que la terminal
-// sea del negocio y de esa sucursal.
+// Mercado Pago y posnets integrados o sin integrar: sucursal, caja (o toda la
+// sucursal), id del proveedor, n° de comercio y por defecto de la caja. El
+// POS elige la de su caja sola; las Edges validan en el servidor que la
+// terminal sea del negocio y de esa sucursal. El alta es un asistente
+// (TerminalWizard) y arriba se explica cómo se relacionan terminal, caja y
+// cobro.
 // =============================================================================
 
-const PROVIDERS: { key: string; hint: string }[] = [
-  { key: "mercadopago_point", hint: "Device id del lector (se ve en la app de Mercado Pago o con Detectar)." },
-  { key: "nave_point", hint: "ID de punto de venta de la terminal en Nave." },
-  { key: "fiserv_point", hint: "Número de serie de la terminal Clover." },
-  { key: "mercadopago", hint: "Caja QR de Mercado Pago (external_pos_id). Mejor crearla con el botón de la caja." },
-  { key: "payway", hint: "Posnet sin integrar: el n° de terminal es opcional." },
-  { key: "fiserv", hint: "Posnet o Clover sin integrar." },
-  { key: "getnet", hint: "Posnet sin integrar." },
-];
-
-type Draft = {
-  id?: string;
-  store_id: string;
-  cash_register_id: string | null;
-  provider_key: string;
-  external_id: string;
-  environment: "prod" | "test" | null;
-  label: string;
-  merchant_number: string;
-  acquirer: string;
-  is_default: boolean;
-  active: boolean;
-  notes: string;
-};
+function lastSeenText(iso: string | null): string {
+  return iso ? `Última actividad: ${lastSeenLabel(iso).toLowerCase()}` : "Todavía no se usó";
+}
 
 export function TerminalsManager() {
   const ctx = useBranchContext();
@@ -70,65 +64,32 @@ export function TerminalsManager() {
   const mut = useTerminalMutations();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<TerminalDraft | null>(null);
   const [archive, setArchive] = useState<PaymentTerminal | null>(null);
   const [qrFor, setQrFor] = useState<string | null>(null);
+  const [connectFor, setConnectFor] = useState<PaymentTerminal | null>(null);
+  const integratedAllowed = useFeature("terminal_integrada") !== false;
   const canManage = scope.data?.role === "owner" || scope.data?.role === "manager";
 
+  const live = useMemo(() => (terminals ?? []).filter((t) => !t.deleted_at), [terminals]);
   const byStore = useMemo(() => {
     const m = new Map<string, PaymentTerminal[]>();
-    for (const t of terminals ?? []) m.set(t.store_id, [...(m.get(t.store_id) ?? []), t]);
+    for (const t of live) m.set(t.store_id, [...(m.get(t.store_id) ?? []), t]);
     return m;
-  }, [terminals]);
-
-  const newDraft = (storeId: string, registerId: string | null = null): Draft => ({
-    store_id: storeId,
-    cash_register_id: registerId,
-    provider_key: "mercadopago_point",
-    external_id: "",
-    environment: null,
-    label: "",
-    merchant_number: "",
-    acquirer: "",
-    is_default: Boolean(registerId),
-    active: true,
-    notes: "",
-  });
-
-  const save = () => {
-    if (!draft) return;
-    const kind: TerminalKind = kindForProvider(draft.provider_key);
-    const err = terminalExternalIdError(kind, draft.external_id);
-    if (err) return toast({ title: err, variant: "error" });
-    if (!draft.label.trim()) return toast({ title: "Poné un nombre (ej. Point mostrador)", variant: "error" });
-    const input: TerminalInput = {
-      store_id: draft.store_id,
-      cash_register_id: draft.cash_register_id,
-      provider_key: draft.provider_key,
-      kind,
-      external_id: draft.external_id.trim() || null,
-      environment: kind === "qr_caja" ? (draft.environment ?? "prod") : null,
-      label: draft.label.trim(),
-      merchant_number: draft.merchant_number.replace(/[^0-9a-z]/gi, "").slice(0, 20) || null,
-      acquirer: draft.acquirer.trim() || null,
-      is_default: draft.is_default && Boolean(draft.cash_register_id),
-      active: draft.active,
-      notes: draft.notes.trim() || null,
-    };
-    const done = {
-      onSuccess: () => {
-        toast({ title: "Terminal guardada", variant: "success" });
-        setDraft(null);
-      },
-      onError: (e: unknown) => toast({ title: terminalErrorMessage(e), variant: "error" }),
-    };
-    if (draft.id) mut.update.mutate({ id: draft.id, patch: input }, done);
-    else mut.create.mutate(input, done);
-  };
+  }, [live]);
 
   const branches = ctx.allowed;
   const storeOf = (id: string) => ctx.all.find((b) => b.id === id);
   const registersOf = (storeId: string) => (storeOf(storeId)?.registers ?? []).filter((r) => !r.deleted_at);
+  const firstStore = branches[0]?.id ?? "";
+  const quickUpdate = (t: PaymentTerminal, patch: { is_default?: boolean; active?: boolean }, ok: string) =>
+    mut.update.mutate(
+      { id: t.id, patch },
+      {
+        onSuccess: () => toast({ title: ok, variant: "success" }),
+        onError: (e) => toast({ title: terminalErrorMessage(e), variant: "error" }),
+      },
+    );
 
   // Caja QR de MP propia de una caja: usa la dirección de la sucursal.
   const createQrFor = async (registerId: string) => {
@@ -166,235 +127,147 @@ export function TerminalsManager() {
   };
 
   if (isLoading) return null;
+  const empty = live.length === 0;
   return (
     <div className="space-y-4">
-      <Callout tone="info" icon={CreditCard}>
-        El POS usa la terminal de su caja sin preguntar. Si una caja tiene varias, la marcada con la estrella es
-        la que se elige primero; las terminales sin caja sirven para toda la sucursal.
-      </Callout>
-      {branches.map((b) => {
-        const list = byStore.get(b.id) ?? [];
-        return (
-          <SettingsCard
-            key={b.id}
-            title={
-              <span className="flex items-center gap-2">
-                <BranchDot branch={b} /> {branchLabel(b)}
-              </span>
-            }
-            description={list.length === 0 ? "Sin terminales registradas" : `${list.length} terminal${list.length > 1 ? "es" : ""}`}
-            actions={
-              canManage ? (
-                <Button size="sm" variant="secondary" onClick={() => setDraft(newDraft(b.id))}>
-                  <Plus size={14} /> Agregar terminal
-                </Button>
-              ) : undefined
-            }
+      <SettingsCard
+        title="Cómo funcionan las terminales"
+        description="Registrás cada equipo una vez y el POS lo usa solo al cobrar."
+        actions={
+          canManage && !empty && firstStore ? (
+            <Button size="sm" onClick={() => setDraft(newTerminalDraft(firstStore))}>
+              <Plus size={14} /> Agregar terminal
+            </Button>
+          ) : undefined
+        }
+        padded
+      >
+        <ol className="grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr_auto_1fr]" aria-label="Terminal, caja y cobro">
+          <FlowItem n={1} icon={CreditCard} title="Terminal" text="El equipo que cobra: Point, Clover, caja QR o posnet conectado." />
+          <FlowLink />
+          <FlowItem n={2} icon={Monitor} title="Caja" text="Cada terminal va en una caja o queda para toda la sucursal." />
+          <FlowLink />
+          <FlowItem
+            n={3}
+            icon={Receipt}
+            title="Cobro"
+            text="Al cobrar, el POS usa la terminal de su caja sin preguntar y registra el pago solo."
+          />
+        </ol>
+        <p className="mt-4 text-sm text-muted-foreground">
+          ¿Cobrás con un posnet sin integrar? No hace falta registrarlo: el cajero carga el cupón.{" "}
+          <Link
+            href={"/configuracion?seccion=posnet" as never}
+            className="inline-flex items-center gap-1 font-semibold text-foreground hover:underline"
           >
-            {[null, ...registersOf(b.id).map((r) => r.id)].map((regId) => {
-              const rows = list.filter((t) => (t.cash_register_id ?? null) === regId);
-              const reg = regId ? registersOf(b.id).find((r) => r.id === regId) : null;
-              if (!regId && rows.length === 0) return null;
-              return (
-                <div key={regId ?? "store"} className="px-5 py-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {reg ? reg.name : "Toda la sucursal"}
-                    </p>
-                    {reg && canManage && (
-                      <span className="flex gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setDraft(newDraft(b.id, reg.id))}>
+            Configurar Tarjeta en posnet <ExternalLink size={12} aria-hidden />
+          </Link>
+        </p>
+      </SettingsCard>
+
+      {empty ? (
+        <SettingsCard>
+          <EmptyState
+            icon={CreditCard}
+            title="Todavía no registraste terminales"
+            description="Agregá la primera y te guiamos paso a paso: qué tipo es, en qué caja está, cómo se identifica y con qué datos sale el cupón."
+            action={
+              canManage && firstStore ? (
+                <Button onClick={() => setDraft(newTerminalDraft(firstStore))}>
+                  <Plus size={15} /> Agregar la primera terminal
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">Las da de alta el dueño o un encargado.</p>
+              )
+            }
+          />
+        </SettingsCard>
+      ) : (
+        branches.map((b) => {
+          const list = byStore.get(b.id) ?? [];
+          const groups = groupByRegister(list, registersOf(b.id));
+          const floatingCount = list.filter((t) => !t.cash_register_id && t.active).length;
+          return (
+            <SettingsCard
+              key={b.id}
+              title={
+                <span className="flex items-center gap-2">
+                  <BranchDot branch={b} /> {branchLabel(b)}
+                </span>
+              }
+              description={list.length === 0 ? "Sin terminales" : `${list.length} terminal${list.length > 1 ? "es" : ""}`}
+              actions={
+                canManage ? (
+                  <Button size="sm" variant="secondary" onClick={() => setDraft(newTerminalDraft(b.id))}>
+                    <Plus size={14} /> Agregar en esta sucursal
+                  </Button>
+                ) : undefined
+              }
+            >
+              {groups.map((g) => (
+                <div key={g.registerId ?? "store"} className="px-5 py-4">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-sm font-semibold">
+                        <Monitor size={14} className="text-muted-foreground" aria-hidden /> {g.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{registerPickHint(g, floatingCount)}</p>
+                    </div>
+                    {g.registerId && canManage && (
+                      <span className="flex flex-wrap gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setDraft(newTerminalDraft(b.id, g.registerId))}>
                           <Plus size={13} /> Terminal
                         </Button>
-                        <Button size="sm" variant="ghost" disabled={qrFor === reg.id} onClick={() => createQrFor(reg.id)}>
-                          <QrCode size={13} /> {qrFor === reg.id ? "Creando" : "Caja QR propia"}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={qrFor === g.registerId}
+                          onClick={() => createQrFor(g.registerId!)}
+                        >
+                          <QrCode size={13} /> {qrFor === g.registerId ? "Creando" : "Caja QR propia"}
                         </Button>
                       </span>
                     )}
                   </div>
-                  {rows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Usa las terminales de la sucursal.</p>
-                  ) : (
+                  {g.terminals.length > 0 && (
                     <ul className="space-y-2">
-                      {rows.map((t) => (
-                        <li key={t.id} className="flex flex-col gap-2 rounded-lg bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-                              {t.is_default && <Star size={13} className="fill-current text-warning" aria-label="Default de la caja" />}
-                              {t.label}
-                              {!t.active && <Badge tone="warning">Pausada</Badge>}
-                              {t.environment === "test" && <Badge tone="info">Prueba</Badge>}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {providerLabel(t.provider_key)} · {TERMINAL_KIND_LABEL[t.kind]}
-                              {t.external_id ? ` · ${t.external_id}` : ""}
-                              {t.merchant_number ? ` · Comercio ${t.merchant_number}` : ""} · {lastSeenLabel(t.last_seen_at)}
-                            </p>
-                          </div>
-                          {canManage && (
-                            <span className="flex shrink-0 gap-1">
-                              {t.cash_register_id && !t.is_default && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => mut.update.mutate({ id: t.id, patch: { is_default: true } })}
-                                >
-                                  <Star size={13} /> Default
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                aria-label={`Editar ${t.label}`}
-                                onClick={() =>
-                                  setDraft({
-                                    id: t.id,
-                                    store_id: t.store_id,
-                                    cash_register_id: t.cash_register_id,
-                                    provider_key: t.provider_key,
-                                    external_id: t.external_id ?? "",
-                                    environment: t.environment,
-                                    label: t.label,
-                                    merchant_number: t.merchant_number ?? "",
-                                    acquirer: t.acquirer ?? "",
-                                    is_default: t.is_default,
-                                    active: t.active,
-                                    notes: t.notes ?? "",
-                                  })
-                                }
-                              >
-                                <Pencil size={13} />
-                              </Button>
-                              <Button size="sm" variant="ghost" aria-label={`Archivar ${t.label}`} onClick={() => setArchive(t)}>
-                                <Trash2 size={13} />
-                              </Button>
-                            </span>
-                          )}
-                        </li>
+                      {g.terminals.map((t) => (
+                        <TerminalRow
+                          key={t.id}
+                          t={t}
+                          canManage={canManage}
+                          onConnect={() => setConnectFor(t)}
+                          onDefault={() => quickUpdate(t, { is_default: true }, `${t.label} queda por defecto`)}
+                          onToggle={() =>
+                            quickUpdate(t, { active: !t.active }, t.active ? `${t.label} pausada` : `${t.label} activa`)
+                          }
+                          onEdit={() => setDraft(draftFromTerminal(t))}
+                          onArchive={() => setArchive(t)}
+                        />
                       ))}
                     </ul>
                   )}
                 </div>
-              );
-            })}
-          </SettingsCard>
-        );
-      })}
+              ))}
+            </SettingsCard>
+          );
+        })
+      )}
 
-      <Modal
-        open={Boolean(draft)}
-        onOpenChange={(o) => !o && setDraft(null)}
-        title={draft?.id ? "Editar terminal" : "Nueva terminal"}
-        className="max-w-lg"
-      >
-        {draft && (
-          <div className="space-y-3">
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium">Medio</span>
-              <select
-                className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
-                value={draft.provider_key}
-                onChange={(e) => setDraft({ ...draft, provider_key: e.target.value })}
-                disabled={Boolean(draft.id)}
-              >
-                {PROVIDERS.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {providerLabel(p.key)} ({TERMINAL_KIND_LABEL[kindForProvider(p.key)]})
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                {PROVIDERS.find((p) => p.key === draft.provider_key)?.hint}
-              </span>
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Sucursal</span>
-                <select
-                  className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
-                  value={draft.store_id}
-                  onChange={(e) => setDraft({ ...draft, store_id: e.target.value, cash_register_id: null, is_default: false })}
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Caja</span>
-                <select
-                  className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
-                  value={draft.cash_register_id ?? ""}
-                  onChange={(e) => setDraft({ ...draft, cash_register_id: e.target.value || null })}
-                >
-                  <option value="">Toda la sucursal</option>
-                  {registersOf(draft.store_id).map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <Input label="Nombre" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Point mostrador" />
-            <Input
-              label={kindForProvider(draft.provider_key) === "posnet_manual" ? "N° de terminal (opcional)" : "Identificador"}
-              value={draft.external_id}
-              onChange={(e) => setDraft({ ...draft, external_id: e.target.value })}
-            />
-            {kindForProvider(draft.provider_key) === "qr_caja" && (
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Ambiente</span>
-                <select
-                  className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
-                  value={draft.environment ?? "prod"}
-                  onChange={(e) => setDraft({ ...draft, environment: e.target.value as "prod" | "test" })}
-                >
-                  <option value="prod">Producción</option>
-                  <option value="test">Prueba</option>
-                </select>
-              </label>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="N° de comercio (opcional)"
-                value={draft.merchant_number}
-                onChange={(e) => setDraft({ ...draft, merchant_number: e.target.value })}
-                hint="Sale en el cupón para conciliar."
-              />
-              <Input
-                label="Adquirente (opcional)"
-                value={draft.acquirer}
-                onChange={(e) => setDraft({ ...draft, acquirer: e.target.value })}
-                placeholder="Prisma, Fiserv, Getnet"
-              />
-            </div>
-            <Input label="Notas" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
-            <div className="flex flex-wrap gap-4 text-sm">
-              {draft.cash_register_id && (
-                <label className="flex items-center gap-2">
-                  <Switch checked={draft.is_default} onCheckedChange={(v) => setDraft({ ...draft, is_default: v })} label="Default de la caja" />
-                  Default de la caja
-                </label>
-              )}
-              <label className="flex items-center gap-2">
-                <Switch checked={draft.active} onCheckedChange={(v) => setDraft({ ...draft, active: v })} label="Activa" />
-                Activa
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setDraft(null)}>
-                Cancelar
-              </Button>
-              <Button onClick={save} disabled={mut.create.isPending || mut.update.isPending}>
-                Guardar
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {draft && (
+        <TerminalWizard
+          initial={draft}
+          onClose={() => setDraft(null)}
+          branches={branches}
+          registersOf={registersOf}
+          terminals={live}
+          integratedAllowed={integratedAllowed}
+          onCreateQr={createQrFor}
+          onCreatedIntegrated={setConnectFor}
+        />
+      )}
+
+      {connectFor && <TerminalDeviceModal terminal={connectFor} onClose={() => setConnectFor(null)} />}
 
       <ConfirmDialog
         open={Boolean(archive)}
@@ -413,5 +286,107 @@ export function TerminalsManager() {
         }
       />
     </div>
+  );
+}
+
+function FlowItem({ n, icon: Icon, title, text }: { n: number; icon: LucideIcon; title: string; text: string }) {
+  return (
+    <li className="flex gap-3 rounded-lg bg-muted/50 p-3.5">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-foreground" aria-hidden>
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">
+          <span className="text-muted-foreground">{n}.</span> {title}
+        </span>
+        <span className="block text-xs leading-relaxed text-muted-foreground">{text}</span>
+      </span>
+    </li>
+  );
+}
+
+function FlowLink() {
+  return (
+    <li aria-hidden className="hidden place-items-center text-muted-foreground sm:grid">
+      <ArrowLeftRight size={16} />
+    </li>
+  );
+}
+
+function TerminalRow({
+  t,
+  canManage,
+  onConnect,
+  onDefault,
+  onToggle,
+  onEdit,
+  onArchive,
+}: {
+  t: PaymentTerminal;
+  canManage: boolean;
+  onConnect: () => void;
+  onDefault: () => void;
+  onToggle: () => void;
+  onEdit: () => void;
+  onArchive: () => void;
+}) {
+  return (
+    <li className="rounded-lg border border-border">
+      <div className="flex min-w-0 items-start gap-3 p-3">
+        <TenderLogo
+          source={{ logo: paymentIcon(providerLogoKey(t.provider_key)) }}
+          alt={providerLabel(t.provider_key)}
+          size={32}
+          fallback="card"
+        />
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+            {t.label}
+            {t.active ? <Badge tone="success">Activa</Badge> : <Badge tone="warning">Pausada</Badge>}
+            {t.is_default && t.cash_register_id && (
+              <Badge tone="neutral">
+                <Star size={11} className="mr-0.5 inline fill-current" aria-hidden /> Por defecto
+              </Badge>
+            )}
+            {t.environment === "test" && <Badge tone="info">Prueba</Badge>}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {providerLabel(t.provider_key)} · {TERMINAL_KIND_LABEL[t.kind]}
+          </p>
+          {(t.external_id || t.merchant_number) && (
+            <p className="break-all text-xs text-muted-foreground">
+              {t.external_id && <span className="font-mono">{t.external_id}</span>}
+              {t.external_id && t.merchant_number ? " · " : ""}
+              {t.merchant_number ? `Comercio ${t.merchant_number}` : ""}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">{lastSeenText(t.last_seen_at)}</p>
+        </div>
+      </div>
+      {canManage && (
+        <span className="flex flex-wrap items-center gap-1 border-t border-border px-2 py-1.5">
+          {isIntegratedKind(t.kind) && (
+            <Button size="sm" variant="secondary" onClick={onConnect}>
+              <Plug size={13} /> Conectar
+            </Button>
+          )}
+          {t.cash_register_id && !t.is_default && (
+            <Button size="sm" variant="ghost" onClick={onDefault} aria-label={`Usar ${t.label} por defecto`} title="Usar por defecto">
+              <Star size={13} /> <span className="hidden sm:inline">Usar por defecto</span>
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={onToggle} aria-label={`${t.active ? "Pausar" : "Activar"} ${t.label}`} title={t.active ? "Pausar" : "Activar"}>
+            {t.active ? <Pause size={13} /> : <Play size={13} />}{" "}
+            <span className="hidden sm:inline">{t.active ? "Pausar" : "Activar"}</span>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onEdit}>
+            <Pencil size={13} /> Editar
+          </Button>
+          <Button size="sm" variant="ghost" aria-label={`Archivar ${t.label}`} title="Archivar" onClick={onArchive} className="ml-auto">
+            <Trash2 size={13} />
+          </Button>
+        </span>
+      )}
+    </li>
   );
 }

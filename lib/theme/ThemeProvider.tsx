@@ -28,7 +28,8 @@ const VALID = THEMES.map((t) => t.name);
 
 interface ThemeContextValue {
   theme: ThemeName;
-  setTheme: (theme: ThemeName) => void;
+  /** `persist: false` aplica sin volver a escribir en el servidor (carga remota). */
+  setTheme: (theme: ThemeName, opts?: { persist?: boolean }) => void;
   toggleTheme: () => void;
 }
 
@@ -44,7 +45,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (current && VALID.includes(current)) setThemeState(current);
   }, []);
 
-  const setTheme = useCallback((next: ThemeName) => {
+  const setTheme = useCallback((next: ThemeName, opts?: { persist?: boolean }) => {
     setThemeState(next);
     document.documentElement.setAttribute("data-theme", next);
     try {
@@ -52,7 +53,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // sin persistencia
     }
-    void persistPrefs();
+    if (opts?.persist !== false) void persistPrefs();
   }, []);
 
   // Toggle rápido claro/oscuro (alterna entre el dark y light por defecto).

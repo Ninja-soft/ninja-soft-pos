@@ -24,7 +24,14 @@ import {
 } from "@/components/dashboard-team/payments/ConnectProviderModal";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
+import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
+import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
+import { useBranchContext } from "@/modules/branches/hooks";
+
+// Alcances con credencial propia (F17 · ADR-057). Sin la migración la RPC no
+// existe: no hay credenciales por sucursal.
+type SecretScope = { provider_key: string; store_id: string | null; keys: string[] };
 
 // Configuración de medios de pago, agrupada por marca → canal (QR + link ·
 // Point). Este componente sólo trae datos y guarda; la vista vive en
@@ -46,6 +53,10 @@ export function PaymentMethodsCard() {
   const searchParams = useSearchParams();
   const [connectBrand, setConnectBrand] = useState<string | null>(null);
   const [plansFor, setPlansFor] = useState<{ key: string; name: string } | null>(null);
+  // Credencial que se edita: del negocio (null) o de una sucursal.
+  const [connectScope, setConnectScope] = useState<string | null>(null);
+  const branchCtx = useBranchContext();
+  const liveBranches = branchCtx.all.filter((b) => !b.deleted_at);
 
   // Resultado del redirect del OAuth de Mercado Pago (?mp=ok|err|denied).
   useEffect(() => {
@@ -120,6 +131,16 @@ export function PaymentMethodsCard() {
     },
   });
 
+  const { data: secretScopes = [] } = useQuery({
+    queryKey: ["payment-secret-scopes", tenantId],
+    enabled: !!tenantId && liveBranches.length > 1,
+    queryFn: async (): Promise<SecretScope[]> => {
+      const { data, error } = await supabase.rpc("payment_secret_scopes" as never);
+      if (error) return [];
+      return (data ?? []) as SecretScope[];
+    },
+  });
+
   const byKey = useMemo(() => {
     const m = new Map<string, Method>();
     methods.forEach((x) => m.set(x.provider_key, x));
@@ -128,7 +149,7 @@ export function PaymentMethodsCard() {
 
   const { data: gating } = useGating();
   // Planes de cuotas activos por medio: cantidad + tarjetas en cada canal.
-  const { data: activePlans } = usePaymentPlans();
+  const { data: activePlans } = usePaymentPlans(null);
   const planSummary = useMemo(() => summarizePlans(activePlans ?? []), [activePlans]);
   const { data: plans = [] } = useGlobalPlansForUpgrade();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods", tenantId] });
@@ -157,8 +178,10 @@ export function PaymentMethodsCard() {
 
   // OAuth: pide la URL de autorización y redirige a Mercado Pago.
   const oauthStart = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("mp_oauth_start", { body: {} });
+    mutationFn: async (storeId: string | null = null) => {
+      const { data, error } = await supabase.functions.invoke("mp_oauth_start", {
+        body: storeId ? { store_id: storeId } : {},
+      });
       if (error) throw error;
       const res = data as { url?: string; error?: string };
       if (res?.error || !res?.url) throw new Error(res?.error ?? "no_url");
@@ -191,12 +214,61 @@ export function PaymentMethodsCard() {
   );
   const channelKeys = connectChannels.map((c) => c.key);
 
-  // Guarda credenciales (y el ambiente elegido, en proveedores con prueba real).
-  const saveConnection = async (key: string, v: ConnectSave) => {
-    await invokeSecret({ provider_key: key, secrets: v.secrets ?? { access_token: v.token } });
-    if (v.env && SANDBOX_PROVIDERS.has(key)) await upsertMethod(key, { sandbox: v.env === "test" });
+  // Guarda credenciales (y el ambiente elegido, en proveedores con prueba
+  // real). Con sucursal, la credencial es propia de esa sucursal y el
+  // ambiente sigue siendo el del negocio.
+  const saveConnection = async (key: string, v: ConnectSave, storeId: string | null) => {
+    await invokeSecret({
+      provider_key: key,
+      secrets: v.secrets ?? { access_token: v.token },
+      ...(storeId ? { store_id: storeId } : {}),
+    });
+    if (!storeId && v.env && SANDBOX_PROVIDERS.has(key)) await upsertMethod(key, { sandbox: v.env === "test" });
     await invalidate();
+    await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
   };
+
+  const scopeBranch = connectScope ? (liveBranches.find((b) => b.id === connectScope) ?? null) : null;
+  const ownScopes = connKey
+    ? secretScopes.filter((s) => s.provider_key === connKey && s.store_id)
+    : [];
+  const ownNames = ownScopes
+    .map((s) => liveBranches.find((b) => b.id === s.store_id)?.name)
+    .filter(Boolean) as string[];
+  const tenantMethod = connKey ? byKey.get(connKey) : undefined;
+  // En una sucursal, "conectado" es tener credencial propia.
+  const scopedMethod: Method | undefined =
+    connKey && connectScope
+      ? ({
+          ...(tenantMethod ?? { provider_key: connKey, enabled: false, sandbox: false, surcharge_pct: 0 }),
+          config: {
+            ...(tenantMethod?.config ?? {}),
+            connected: ownScopes.some((s) => s.store_id === connectScope),
+            test_connected: ownScopes.some(
+              (s) => s.store_id === connectScope && s.keys.includes("test_access_token"),
+            ),
+          },
+        } as Method)
+      : tenantMethod;
+  const scopeSel: ScopeSel = connectScope ? { scope: "store", id: connectScope } : { scope: "tenant" };
+  const scopeSlot =
+    liveBranches.length > 1 ? (
+      <div className="space-y-2">
+        <ScopeBar
+          value={scopeSel}
+          onChange={(s) => setConnectScope(s.scope === "store" ? s.id : null)}
+          allowRegister={false}
+          allowGroup={false}
+        />
+        <p className="text-xs text-muted-foreground">
+          {connectScope
+            ? `${scopeBranch?.name ?? "Esta sucursal"} usa sus propias credenciales si las cargás acá; si no, cobra con las del negocio.`
+            : ownNames.length > 0
+              ? `Con credenciales propias: ${ownNames.join(", ")}. El resto de las sucursales cobra con estas.`
+              : "Todas las sucursales cobran con estas credenciales. Elegí una sucursal para cargarle las suyas."}
+        </p>
+      </div>
+    ) : undefined;
 
   // MP: token de prueba (sin pisar producción) y ambiente (ADR-032).
   const changeMpEnv = async (v: MpEnvChange) => {
@@ -236,6 +308,11 @@ export function PaymentMethodsCard() {
                 onReconnect={() => setConnectBrand("mercadopago")}
                 onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
               />
+            ) : key === "transfer" ? (
+              <TransferAccountsSetup
+                showScreen={m?.config?.transfer_show_screen !== false}
+                requireReference={m?.config?.transfer_require_reference === true}
+              />
             ) : key === "directo" ? (
               <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
             ) : null,
@@ -244,21 +321,34 @@ export function PaymentMethodsCard() {
 
       {brand && connKey && (
         <ConnectProviderModal
+          key={`${connKey}:${connectScope ?? "tenant"}`}
           open
-          onOpenChange={(o) => !o && setConnectBrand(null)}
+          onOpenChange={(o) => {
+            if (o) return;
+            setConnectBrand(null);
+            setConnectScope(null);
+          }}
           brand={brand}
           providerKey={connKey}
-          method={byKey.get(connKey)}
+          method={scopedMethod}
           channelNames={channelNames}
           channelKeys={channelKeys}
-          onSave={(v) => saveConnection(connKey, v)}
+          scopeSlot={scopeSlot}
+          scopeName={scopeBranch?.name ?? null}
+          onSave={(v) => saveConnection(connKey, v, connectScope)}
           onDisconnect={async () => {
-            await invokeSecret({ provider_key: connKey, action: "clear" });
+            await invokeSecret({
+              provider_key: connKey,
+              action: "clear",
+              ...(connectScope ? { store_id: connectScope } : {}),
+            });
             await invalidate();
+            await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
           }}
-          onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate() : undefined}
+          onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate(connectScope) : undefined}
           oauthPending={oauthStart.isPending}
-          onMpEnv={connKey === "mercadopago" ? changeMpEnv : undefined}
+          // El ambiente y el token de prueba son del negocio.
+          onMpEnv={connKey === "mercadopago" && !connectScope ? changeMpEnv : undefined}
         />
       )}
 

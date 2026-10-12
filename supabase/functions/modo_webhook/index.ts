@@ -29,6 +29,7 @@
 // correcto; de lo contrario el intent permanece pending.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 // ⚠️ VALIDAR MODO — base URLs / endpoints (mismos overrides que modo_create_qr).
 const MODO_API_BASE =
@@ -151,12 +152,7 @@ Deno.serve(async (req: Request) => {
     // logramos, ESA es la fuente de verdad. Si no, caemos a un manejo
     // conservador que NUNCA acredita desde el body.
     let verified: ModoView | null = null;
-    const { data: secretRow } = await admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", intent.tenant_id)
-      .eq("provider_key", "modo")
-      .maybeSingle();
+    const secretRow = await loadProviderSecret(admin, intent.tenant_id, "modo", { scopeStoreId: await intentSecretScope(admin, intent.id) });
     const sec = (secretRow?.secrets ?? {}) as {
       client_id?: string;
       client_secret?: string;

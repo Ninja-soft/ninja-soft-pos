@@ -192,6 +192,25 @@
     caret-color: var(--foreground);
   }
 
+  /* <select> nativo. El popup de opciones en Chrome / Edge de Windows toma el
+     fondo del propio select; con un fondo translúcido (bg-card en oscuro) lo
+     compone sobre blanco y la lista se veía blanca con texto claro. Las
+     opciones llevan siempre el popover opaco del tema. El foco usa el mismo
+     anillo que <Input> en lugar del contorno blanco del navegador. */
+  select {
+    color: var(--foreground);
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select:focus {
+    outline: none;
+    border-color: rgb(var(--ninja-flame-soft));
+    box-shadow: 0 0 0 2px rgb(var(--ninja-flame-soft) / 0.2);
+  }
+
   /* Autofill: el navegador fuerza un fondo claro y el texto blanco quedaba
      invisible. Forzamos color del texto al foreground del tema y matamos el
      fondo de autofill con el truco de transition + box-shadow. */
@@ -734,6 +753,25 @@ html {
   -webkit-text-fill-color: var(--foreground);
   color: var(--foreground);
 }
+/* Variante plana del mismo resalte: color sólido del acento elegido en
+   Apariencia, sin texto con degradado (dirección visual plana). Los temas
+   claros usan un tono más oscuro para mantener el contraste. */
+.price-solid {
+  color: var(--price-solid, var(--foreground));
+}
+[data-price-accent="marca"] { --price-solid: #ff4b22; }
+[data-price-accent="flama"] { --price-solid: #ff6a1a; }
+[data-price-accent="violeta"] { --price-solid: #a487ff; }
+[data-price-accent="oro"] { --price-solid: #ffc21f; }
+[data-price-accent="neutro"] { --price-solid: var(--foreground); }
+[data-theme="ninja-light"][data-price-accent="marca"],
+[data-theme="ninja-sand"][data-price-accent="marca"] { --price-solid: #d9360f; }
+[data-theme="ninja-light"][data-price-accent="flama"],
+[data-theme="ninja-sand"][data-price-accent="flama"] { --price-solid: #d6400f; }
+[data-theme="ninja-light"][data-price-accent="violeta"],
+[data-theme="ninja-sand"][data-price-accent="violeta"] { --price-solid: #6a3cf0; }
+[data-theme="ninja-light"][data-price-accent="oro"],
+[data-theme="ninja-sand"][data-price-accent="oro"] { --price-solid: #a86a00; }
 
 /* ── Asistente IA ──────────────────────────────────────────────────────────
    Animaciones del launcher y del chat (components/ai). Solo transform y

@@ -32,7 +32,7 @@ import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
-import { Isotype } from "@/components/brand/Logo";
+import { Isotype, WordmarkPos } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 
@@ -130,11 +130,10 @@ export function InternalShell({
         className="mb-1 flex items-center gap-2.5 px-2 py-2"
       >
         <Isotype className="h-8 w-auto" priority />
-        <span className="flex flex-col leading-none">
-          <span className="font-display text-sm font-extrabold tracking-tight text-foreground">
-            NinjaPos
-          </span>
-          <span className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-ninja-flameSoft">
+        <span className="flex flex-col items-start leading-none">
+          {/* Logo oficial NinjaPos: versión clara u oscura según el tema. */}
+          <WordmarkPos className="h-5 w-auto" priority />
+          <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em] text-ninja-flameSoft">
             Panel interno
           </span>
         </span>
@@ -253,6 +252,7 @@ export function InternalShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
+          <WordmarkPos className="h-5 w-auto" />
           <span className="text-xs font-semibold text-ninja-flameSoft">Interno</span>
         </header>
 

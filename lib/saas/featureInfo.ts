@@ -125,9 +125,15 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   transferencia: {
-    desc: "Cobro por transferencia bancaria: registra el pago como transferencia para la conciliación.",
+    desc: "Cobro por transferencia: cargás tu cuenta (banco o billetera con su logo, titular, CBU / CVU y alias) y el POS la muestra al cobrar, también en la pantalla del cliente, con número de operación opcional u obligatorio. Cada cobro guarda la cuenta usada para conciliar. Podés omitir la pantalla y cerrar el ticket directo.",
     impact: "Desactivado, no se puede registrar la transferencia como medio de pago en la venta.",
     minPlan: "Start",
+  },
+  transferencia_multicuenta: {
+    desc: "Varias cuentas de transferencia: más de una cuenta activa (por ejemplo un banco y una billetera, o pesos y dólares), el cajero elige en cuál transfiere el cliente y cada sucursal muestra sus propias cuentas y su cuenta por defecto.",
+    impact: "Desactivado, se usa una sola cuenta (la por defecto) en todas las cajas; el servidor rechaza activar una segunda o elegir cuentas por sucursal.",
+    minPlan: "Pro",
+    requires: ["transferencia"],
   },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
@@ -209,6 +215,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["fiserv"],
     needs: "Marca Fiserv conectada (el Merchant ID y el token de Clover del comercio) y la app Cloud Pay Display abierta en cada terminal.",
   },
+  terminal_integrada: {
+    desc: "Terminal integrada: el posnet (por cable o red) o el pinpad conectado a la PC cobra el monto que manda el POS y devuelve lote, cupón, autorización, tarjeta, últimos 4 y cuotas, que quedan en el cobro sin cargarlos a mano. Configuración, Terminales, por caja; incluye un simulador para probar sin hardware.",
+    impact: "Desactivado, se cobra con Tarjeta en posnet y el cajero carga el cupón a mano.",
+    minPlan: "Pro",
+    needs: "Chrome o Edge de escritorio (Web Serial / WebUSB) o el puente local NinjaPOS en la PC de la caja, y la terminal en modo integrado. Payway: protocolo sin homologar todavía; Fiserv y Getnet: pendientes de la especificación del adquirente.",
+  },
   pagos360: {
     desc: "Cobros con Pagos360: links de pago y DEBIN para cobrar a distancia o por débito inmediato.",
     impact: "Sin esto no se pueden generar links de pago ni cobros DEBIN con Pagos360.",
@@ -266,6 +278,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",
     minPlan: "Pro",
+  },
+  historial_precios: {
+    desc: "Historial de precios: cada cambio del precio del producto, sus variantes y las listas con quién, cuándo y de dónde vino (manual, importación, masivo o lista), con gráfico en la ficha.",
+    impact: "Desactivado, los cambios se siguen registrando pero no se pueden consultar.",
+    minPlan: "Start",
   },
   listas_precios: {
     desc: "Múltiples listas de precios: precios distintos por lista (mayorista, minorista, etc.) aplicables según el cliente.",
@@ -337,7 +354,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Integraciones ──────────────────────────────────────────────────────────
   multi_sucursal: {
-    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales.",
+    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales. Credenciales de cobro y planes de cuotas propios por sucursal, sucursales nuevas desde otra o desde una plantilla, y reportes comparativos entre sucursales.",
     impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },

@@ -144,7 +144,8 @@ describe.skipIf(!enabled)("F17 · reportes y merma por sucursal", () => {
     const b = await rpc(owner.client, "open_cash_shift", { p_register_id: cajaNorte, p_opening_amount: 0 });
     if (b.error) throw new Error(b.error.message);
     const sN = await rpc(owner.client, "create_sale", {
-      p_items: item(40),
+      // ADR-056: el producto vale 100; el dueño (supervisor) lo vende a 40 con motivo.
+      p_items: [{ ...item(40)[0], price_override: true, override_reason: "Precio de prueba" }],
       p_payments: [{ method: "cash", amount: 40 }],
       p_cash_shift_id: b.data,
     });

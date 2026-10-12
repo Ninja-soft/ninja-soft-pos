@@ -11,6 +11,7 @@ import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
 import { buildSaleItemsAndExtras, displayLines, pendingChargeErrorCopy } from "@/modules/pending-charges/logic";
 import type { CartLine } from "@/modules/pos/store";
 import { cartToSaleLines } from "./usePosSale";
+import { usePriceRefresh } from "./usePriceRefresh";
 
 // "Dejar en espera" desde la hoja de cobro (ADR-048): arma los argumentos de
 // create_sale con el MISMO mapeo que la venta inmediata, guarda el carrito para
@@ -36,6 +37,7 @@ export function usePosPark(ctx: {
 }) {
   const { toast } = useToast();
   const m = usePendingChargeMutations();
+  const handlePriceMismatch = usePriceRefresh();
 
   // Email y celular del cliente para compartir (prefill).
   const { data: contact } = useQuery({
@@ -123,6 +125,8 @@ export function usePosPark(ctx: {
       const msg = e instanceof Error ? e.message : "";
       // El modal maneja "ya pagó" (registra la venta como siempre).
       if (msg.includes("intent_already_paid")) throw e;
+      // ADR-056: el ensayo rechazó un precio viejo → se reprecia y se avisa.
+      if (handlePriceMismatch(e, ctx.lines)) return null;
       toast({ title: pendingChargeErrorCopy(msg), variant: "error" });
       return null;
     }

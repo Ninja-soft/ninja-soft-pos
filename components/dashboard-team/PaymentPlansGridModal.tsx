@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileDown, Info, Plus, Save, Upload, X } from "lucide-react";
+import { Download, EyeOff, FileDown, Info, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useProviderPlans, usePaymentPlanMutations } from "@/modules/pos/hooks";
-import { type PaymentPlan } from "@/modules/pos/api";
+import { planCode, type PaymentPlan } from "@/modules/pos/api";
 import {
   ALL_BRANDS,
   BRAND_LABEL,
@@ -26,6 +26,9 @@ import { cleanMerchantNumber, type MerchantNumbers } from "@/lib/payments/mercha
 import { Callout } from "@/components/ui/Callout";
 import { CardBrandLogo } from "@/components/ui/ThemedLogo";
 import { BrandLogo } from "@/components/dashboard-team/payments/ui";
+import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { cellState, clearActionForBranch, overridesByStore, type PlanOrigin } from "@/lib/payments/planScope";
 
 type MethodConfig = {
   installments?: number[];
@@ -63,8 +66,25 @@ export function PaymentPlansGridModal({
   const { toast } = useToast();
   const qc = useQueryClient();
   const supabase = createClient();
-  const { data: plans = [] } = useProviderPlans(open ? providerKey : null);
-  const m = usePaymentPlanMutations(providerKey);
+  // Alcance (F17 · ADR-057): "Todo el negocio" o una sucursal. En una
+  // sucursal la grilla muestra el valor heredado del negocio y lo que la
+  // sucursal pisa u oculta.
+  const branchCtx = useBranchContext();
+  const liveBranches = branchCtx.all.filter((b) => !b.deleted_at);
+  const showScope = liveBranches.length > 1;
+  const [scope, setScope] = useState<ScopeSel>({ scope: "tenant" });
+  const storeId = scope.scope === "store" ? scope.id : null;
+  const { data: rows = [] } = useProviderPlans(open ? providerKey : null, storeId);
+  const m = usePaymentPlanMutations(providerKey, storeId);
+  // Planes del alcance que se editan, exportan y cuentan: en el negocio, los
+  // del negocio; en una sucursal, los efectivos (propios activos + heredados).
+  const plans = rows.filter((p) => {
+    const sid = (p as { store_id?: string | null }).store_id ?? null;
+    if (!storeId) return sid === null;
+    const st = cellState(rows, storeId, providerKey, p.code ?? "");
+    return st.plan === p && st.origin !== "hidden";
+  });
+  const branchOverrides = overridesByStore(rows, providerKey);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importRows, setImportRows] = useState<PlanRow[] | null>(null);
   const [importMerchants, setImportMerchants] = useState<MerchantNumbers>({});
@@ -105,11 +125,18 @@ export function PaymentPlansGridModal({
 
   // Inicializa la vigencia visible desde el primer plan que tenga una ventana
   // cargada (setProviderValidity escribe la misma en todos, así que es consistente).
+  const validitySource = (storeId
+    ? rows.filter((p) => (p as { store_id?: string | null }).store_id === storeId)
+    : plans
+  ).find((p) => p.valid_from || p.valid_until);
   useEffect(() => {
-    const withValidity = plans.find((p) => p.valid_from || p.valid_until);
-    setValidFrom(withValidity?.valid_from ?? "");
-    setValidUntil(withValidity?.valid_until ?? "");
-  }, [plans]);
+    setValidFrom(validitySource?.valid_from ?? "");
+    setValidUntil(validitySource?.valid_until ?? "");
+  }, [validitySource?.valid_from, validitySource?.valid_until, storeId]);
+  // Cada apertura arranca en "Todo el negocio".
+  useEffect(() => {
+    if (open) setScope({ scope: "tenant" });
+  }, [open]);
 
   const saveConfig = useMutation({
     mutationFn: async (patch: MethodConfig) => {
@@ -132,6 +159,16 @@ export function PaymentPlansGridModal({
   // Guardar: persiste recargo único + modo y activa/desactiva los planes del medio.
   const saveAll = useMutation({
     mutationFn: async () => {
+      // En una sucursal sólo se guarda la vigencia de sus planes propios: el
+      // recargo único y los n° de comercio por sucursal van por Medios de pago
+      // (configuración heredable, ADR-049).
+      if (storeId) {
+        await m.setProviderValidity.mutateAsync({
+          validFrom: validFrom || null,
+          validUntil: validUntil || null,
+        });
+        return;
+      }
       const { data: row } = await supabase
         .from("tenant_payment_methods")
         .select("config")
@@ -174,6 +211,8 @@ export function PaymentPlansGridModal({
 
   const byKey = new Map<string, PaymentPlan>();
   for (const p of plans) byKey.set(keyOf(p.base ?? "otro", p.brand, p.installments ?? 1), p);
+  const cellOf = (base: string, brand: string | null, n: number) =>
+    cellState(rows, storeId, providerKey, planCode(base, brand, n));
 
   function setCell(base: string, brand: string | null, n: number, pct: number) {
     m.setCell.mutate(
@@ -184,6 +223,7 @@ export function PaymentPlansGridModal({
         installments: n,
         surcharge_pct: pct,
         label: planLabel(base, brand, n),
+        is_active: true,
       },
       {
         onSuccess: () => toast({ title: "Recargo guardado", variant: "success" }),
@@ -197,9 +237,43 @@ export function PaymentPlansGridModal({
     );
   }
   function clearCell(base: string, brand: string | null, n: number) {
+    if (storeId) {
+      const st = cellOf(base, brand, n);
+      const action = clearActionForBranch(st);
+      if (action === "hide") {
+        // La sucursal oculta el plan del negocio (fila propia inactiva).
+        m.setCell.mutate(
+          {
+            provider_key: providerKey,
+            base,
+            brand,
+            installments: n,
+            surcharge_pct: Number(st.inherited?.surcharge_pct ?? st.plan?.surcharge_pct ?? 0),
+            label: planLabel(base, brand, n),
+            is_active: false,
+          },
+          {
+            onSuccess: () => toast({ title: "No se ofrece en esta sucursal", variant: "success" }),
+            onError: () => toast({ title: "No se pudo quitar", variant: "error" }),
+          },
+        );
+        return;
+      }
+      if (action === "none") return;
+    }
     m.removeCell.mutate(
       { base, brand, installments: n },
       { onError: () => toast({ title: "No se pudo quitar", variant: "error" }) },
+    );
+  }
+  // Volver a heredar: borra la fila propia de la sucursal.
+  function inheritCell(base: string, brand: string | null, n: number) {
+    m.removeCell.mutate(
+      { base, brand, installments: n },
+      {
+        onSuccess: () => toast({ title: "Vuelve a heredar del negocio", variant: "success" }),
+        onError: () => toast({ title: "No se pudo volver a heredar", variant: "error" }),
+      },
     );
   }
 
@@ -238,10 +312,10 @@ export function PaymentPlansGridModal({
   }
 
   async function exportPlans() {
-    await exportXlsx(`planes-${providerKey}`, [
+    await exportXlsx(`planes-${providerKey}${scopeTag}`, [
       {
         name: "Planes",
-        title: `Planes · ${providerName}`,
+        title: `Planes · ${providerName}${scopeName ? ` · ${scopeName}` : ""}`,
         columns: XLSX_COLUMNS,
         rows: plans.map((p) => ({
           tipo: BASE_LABEL[p.base ?? ""] ?? p.base,
@@ -288,7 +362,22 @@ export function PaymentPlansGridModal({
   }
 
   const debitBrands = brands.filter((b) => DEBIT_BRANDS.has(b));
-  const disabled = globalMode;
+  // En una sucursal el recargo único del negocio no apaga su grilla: el modo
+  // por sucursal se pisa en Medios de pago.
+  const disabled = globalMode && !storeId;
+  const branchMode = Boolean(storeId);
+  const scopeBranch = storeId ? liveBranches.find((b) => b.id === storeId) : null;
+  const scopeName = scopeBranch ? scopeBranch.name : null;
+  const scopeTag = scopeBranch ? `-${(scopeBranch.short_name || scopeBranch.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : "";
+  const cellProps = (base: string, brand: string | null, n: number) => {
+    const st = cellOf(base, brand, n);
+    return {
+      plan: st.origin === "hidden" ? undefined : st.plan,
+      origin: branchMode ? st.origin : null,
+      inheritedPct: st.inherited ? Number(st.inherited.surcharge_pct) : null,
+      onInherit: branchMode && (st.origin === "store" || st.origin === "hidden") ? () => inheritCell(base, brand, n) : undefined,
+    };
+  };
 
   return (
     <Modal
@@ -319,7 +408,27 @@ export function PaymentPlansGridModal({
         </p>
         <PlansProviderNote providerKey={providerKey} />
 
+        {showScope && (
+          <ScopeBar value={scope} onChange={setScope} allowRegister={false} allowGroup={false} />
+        )}
+        {branchMode && (
+          <Callout icon={Info} title={`Planes de ${scopeName ?? "la sucursal"}`}>
+            Cada celda hereda el recargo de <strong>Todo el negocio</strong> salvo que la cambies acá.
+            Vaciar una celda heredada la oculta sólo en esta sucursal; con{" "}
+            <RotateCcw size={12} className="inline" aria-hidden /> vuelve a heredar. El recargo único y
+            los n° de comercio de la sucursal se cambian en Medios de pago con el selector de alcance.
+          </Callout>
+        )}
+        {!branchMode && showScope && Object.keys(branchOverrides).length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {Object.keys(branchOverrides).length === 1
+              ? "1 sucursal tiene planes propios para este medio."
+              : `${Object.keys(branchOverrides).length} sucursales tienen planes propios para este medio.`}
+          </p>
+        )}
+
         {/* Recargo único del medio */}
+        {!branchMode && (
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
@@ -350,6 +459,7 @@ export function PaymentPlansGridModal({
             </div>
           )}
         </div>
+        )}
 
         {/* Vigencia de la financiación (H27): ventana de fechas para los planes
             del medio. Al cobrar, sólo se ofrecen los planes vigentes hoy. Vacío =
@@ -400,6 +510,7 @@ export function PaymentPlansGridModal({
 
         {/* N° de comercio por marca (opcional): se guarda con el cobro para
             conciliar contra la liquidación de la tarjeta. Se guarda al Guardar. */}
+        {!branchMode && (
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <div className="font-semibold">
             Números de comercio <span className="text-sm font-normal text-muted-foreground">(opcional)</span>
@@ -427,6 +538,7 @@ export function PaymentPlansGridModal({
             ))}
           </div>
         </div>
+        )}
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
@@ -441,17 +553,19 @@ export function PaymentPlansGridModal({
           </Button>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={onFile} />
           <span className="flex-1" />
-          <Button
-            variant={editBrands ? "primary" : "ghost"}
-            size="sm"
-            onClick={() => setEditBrands((v) => !v)}
-          >
-            Marcas
-          </Button>
+          {!branchMode && (
+            <Button
+              variant={editBrands ? "primary" : "ghost"}
+              size="sm"
+              onClick={() => setEditBrands((v) => !v)}
+            >
+              Marcas
+            </Button>
+          )}
         </div>
 
         {/* Editor de marcas */}
-        {editBrands && (
+        {editBrands && !branchMode && (
           <div className="flex flex-wrap gap-2 rounded-xl bg-fg-4 p-3">
             {BRAND_OPTIONS.map((b) => {
               const on = brands.includes(b.value);
@@ -500,7 +614,7 @@ export function PaymentPlansGridModal({
               {debitBrands.map((b) => (
                 <BrandRow key={`d-${b}`} brand={b}>
                   <PlanCell
-                    plan={byKey.get(keyOf("debito", b, 1))}
+                    {...cellProps("debito", b, 1)}
                     label="Pago"
                     disabled={disabled}
                     onSet={(pct) => setCell("debito", b, 1, pct)}
@@ -515,7 +629,7 @@ export function PaymentPlansGridModal({
             title="Crédito"
             action={
               <div className="flex flex-wrap items-center gap-1.5">
-                {installments
+                {!branchMode && installments
                   .filter((n) => n > 1)
                   .map((n) => (
                     <span
@@ -540,14 +654,14 @@ export function PaymentPlansGridModal({
                 {installments.map((n) => (
                   <PlanCell
                     key={n}
-                    plan={byKey.get(keyOf("credito", b, n))}
+                    {...cellProps("credito", b, n)}
                     label={n === 1 ? "1 pago" : `${n} cuotas`}
                     disabled={disabled}
                     onSet={(pct) => setCell("credito", b, n, pct)}
                     onClear={() => clearCell("credito", b, n)}
                   />
                 ))}
-                {!disabled && <AddCuotaCell onAdd={addCuotaNum} />}
+                {!disabled && !branchMode && <AddCuotaCell onAdd={addCuotaNum} />}
               </BrandRow>
             ))}
           </Section>
@@ -556,7 +670,7 @@ export function PaymentPlansGridModal({
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
           <span className="text-xs text-muted-foreground">
-            Los recargos por celda se guardan al instante.
+            Los recargos por celda se guardan al instante{branchMode && scopeName ? ` en ${scopeName}` : ""}.
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -590,7 +704,8 @@ export function PaymentPlansGridModal({
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Leí <strong>{importRows?.length ?? 0}</strong> planes del archivo. ¿Qué
-            querés hacer con los planes de {providerName}?
+            querés hacer con los planes de {providerName}
+            {scopeName ? ` en ${scopeName}` : ""}?
           </p>
           <div className="flex flex-col gap-2">
             <Button onClick={() => runImport("replace")} loading={m.replaceProvider.isPending}>
@@ -692,12 +807,19 @@ function PlanCell({
   disabled,
   onSet,
   onClear,
+  origin = null,
+  inheritedPct = null,
+  onInherit,
 }: {
   plan: PaymentPlan | undefined;
   label: string;
   disabled?: boolean;
   onSet: (pct: number) => void;
   onClear: () => void;
+  /** En una sucursal: de dónde sale el valor (null en "Todo el negocio"). */
+  origin?: PlanOrigin | null;
+  inheritedPct?: number | null;
+  onInherit?: () => void;
 }) {
   const [val, setVal] = useState(plan ? String(plan.surcharge_pct) : "");
   useEffect(() => {
@@ -727,9 +849,32 @@ function PlanCell({
         ? "border-ninja-flameSoft/70"
         : "border-red-500/70";
 
+  const originTitle =
+    origin === "store"
+      ? `Propio de la sucursal${inheritedPct !== null ? ` (el negocio: ${inheritedPct}%)` : ""}`
+      : origin === "hidden"
+        ? `Oculto en esta sucursal${inheritedPct !== null ? ` (el negocio: ${inheritedPct}%)` : ""}`
+        : origin === "tenant"
+          ? "Heredado de Todo el negocio"
+          : undefined;
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+    <div className="flex flex-col items-center gap-1" title={originTitle}>
+      <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+        {origin === "store" && <span className="h-1.5 w-1.5 rounded-full bg-ninja-flameSoft" aria-label="Propio" />}
+        {origin === "hidden" && <EyeOff size={10} aria-label="Oculto en la sucursal" />}
+        {onInherit && (
+          <button
+            type="button"
+            onClick={onInherit}
+            className="text-muted-foreground hover:text-foreground"
+            title="Volver a heredar del negocio"
+            aria-label="Volver a heredar del negocio"
+          >
+            <RotateCcw size={10} />
+          </button>
+        )}
+      </span>
       <span className="relative">
         <input
           value={val}
@@ -739,7 +884,7 @@ function PlanCell({
           placeholder=""
           disabled={disabled}
           title={has ? undefined : "Vacío: este plan no se ofrece al cobrar"}
-          className={`h-9 w-[72px] rounded-md border bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft ${border}`}
+          className={`h-9 w-[72px] rounded-md border bg-background px-2 pr-6 text-right text-sm outline-none focus:border-ninja-flameSoft ${border} ${origin === "tenant" ? "text-muted-foreground" : ""}`}
         />
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
           %

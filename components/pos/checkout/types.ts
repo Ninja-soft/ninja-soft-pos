@@ -34,10 +34,53 @@ export interface CheckoutPayment {
   amount: number;
   reference?: string;
   /**
-   * payments.card_voucher (jsonb). `marca` y `ultimos4` los suma la tarjeta en
-   * posnet (opcionales; el ticket sigue leyendo lote/cupón/autorización).
+   * payments.card_voucher (jsonb). `marca`, `ultimos4` y `adquirente` los suma
+   * la tarjeta en posnet (opcionales; el ticket sigue leyendo
+   * lote/cupón/autorización). Mismos nombres que las terminales integradas.
    */
-  card_voucher?: { lote: string; cupon: string; autorizacion: string; marca?: string; ultimos4?: string; comercio?: string; cuotas?: number };
+  card_voucher?: {
+    lote: string;
+    cupon: string;
+    autorizacion: string;
+    marca?: string;
+    ultimos4?: string;
+    comercio?: string;
+    cuotas?: number;
+    /** Adquirente (payway, fiserv, getnet...). */
+    adquirente?: string;
+    /** Terminal integrada (ADR-053): el cupón lo informó la terminal. */
+    origen?: "terminal";
+    /** terminal_transactions.id; lo valida el trigger de payments. */
+    terminal_tx?: string;
+  };
+  /**
+   * Transferencia cobrada desde el POS (ADR-055): cuenta donde transfirió el
+   * cliente (null = la por defecto de la caja). El servidor guarda la cuenta y
+   * un snapshot en payments.metadata.transfer.
+   */
+  transfer?: { accountId: string | null };
+}
+
+/** Cobro aprobado por la terminal integrada (ADR-053). */
+export interface TerminalChargeResult {
+  method: "debit" | "credit";
+  card_voucher: NonNullable<CheckoutPayment["card_voucher"]>;
+  /** Marca (clave de lib/pos/cardBrands) para el logo, si se reconoce. */
+  brandKey: string | null;
+}
+
+/** Pedido de cobro que la hoja delega a la terminal integrada de la caja. */
+export interface TerminalChargeRequest {
+  amount: number;
+  /** Cuotas pedidas (null = las elige el cliente en la terminal, si se puede). */
+  installments: number | null;
+  cardKind: "debit" | "credit";
+  /** Marca elegida (clave de lib/pos/cardBrands) si el protocolo la pide. */
+  cardBrand: string | null;
+  onApproved: (r: TerminalChargeResult) => void;
+  /** Pasar a "Tarjeta en posnet" con carga manual del cupón. */
+  onManual: () => void;
+  onClose: () => void;
 }
 
 /** Resultado aprobado de un cobro electrónico (QR / link / Point). */

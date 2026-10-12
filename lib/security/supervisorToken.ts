@@ -6,6 +6,8 @@
 // fetch del cliente Supabase agrega el header a las requests REST/RPC.
 // Una request ajena que salga en esa ventana lo lleva sin efecto: el token
 // sólo lo consume un trigger de la misma acción y del mismo usuario.
+// Anidados se acumulan separados por coma (ADR-056): una venta puede pedir PIN
+// por el cambio de precio y por el descuento, y el servidor usa el de cada acción.
 
 export const SUPERVISOR_TOKEN_HEADER = "x-ninja-supervisor-token";
 
@@ -17,7 +19,7 @@ export function currentSupervisorToken(): string | null {
 
 export async function withSupervisorToken<T>(token: string, fn: () => Promise<T>): Promise<T> {
   const prev = current;
-  current = token;
+  current = prev && !prev.split(",").includes(token) ? `${prev},${token}` : token;
   try {
     return await fn();
   } finally {

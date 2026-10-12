@@ -3,11 +3,13 @@
 // Sin red ni React: la usa la pantalla /reportes/conciliacion y sus tests.
 //
 // Los datos del cupón vienen de payments.card_voucher (jsonb, todo opcional):
-// { lote, cupon, autorizacion, marca, ultimos4, comercio, cuotas? }. `marca`
+// { lote, cupon, autorizacion, marca, ultimos4, comercio, cuotas?, adquirente? }
+// (adquirente: terminal del posnet offline, ADR-054). `marca`
 // se guarda con la etiqueta de la entidad ("Visa", "Mastercard"); acá se
 // traduce a la clave de lib/pos/cardBrands para el logo.
 
 import { CARD_BRANDS } from "@/lib/pos/cardBrands";
+import { acquirerLabel } from "@/lib/payments/acquirers";
 
 export type CardKind = "debit" | "credit";
 export type ReconcileStatus = "all" | "pending" | "reconciled";
@@ -22,7 +24,11 @@ export interface RawCardPayment {
   reconciled_at: string | null;
   card_voucher: unknown;
   metadata?: unknown;
-  sales: { number: number | string | null } | null;
+  sales: {
+    number: number | string | null;
+    /** Turno de caja de la venta (para saber si el cobro es de "mi caja"). */
+    cash_shift?: { opened_by: string | null } | null;
+  } | null;
 }
 
 export interface CardRecRow {
@@ -40,10 +46,14 @@ export interface CardRecRow {
   autorizacion: string;
   ultimos4: string;
   comercio: string;
+  /** Adquirente de la terminal (getnet, payway...; "" = sin dato). ADR-054. */
+  adquirente: string;
   amount: number;
   /** Referencia del proveedor integrado (intent / operación), si hay. */
   reference: string | null;
   reconciledAt: string | null;
+  /** Usuario que abrió el turno de caja de la venta (null si no hay turno). */
+  shiftOpenedBy: string | null;
 }
 
 export interface CardRecFilters {
@@ -53,10 +63,13 @@ export interface CardRecFilters {
   /** "all", un número de comercio, o `NO_MERCHANT`. */
   comercio: string;
   status: ReconcileStatus;
+  /** "all" (o ausente), una clave de adquirente, o `NO_ACQUIRER`. ADR-054. */
+  acquirer?: string;
 }
 
 export const NO_BRAND = "__sin_marca__";
 export const NO_MERCHANT = "__sin_comercio__";
+export const NO_ACQUIRER = "__sin_adquirente__";
 export const DEFAULT_FILTERS: CardRecFilters = { kind: "all", brand: "all", comercio: "all", status: "all" };
 
 export const KIND_LABEL: Record<CardKind, string> = { debit: "Débito", credit: "Crédito" };
@@ -112,6 +125,11 @@ function installmentsFrom(v: Record<string, unknown>): number | null {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
 }
 
+/** Clave del adquirente guardado, en minúsculas (las desconocidas se conservan). */
+export function acquirerFrom(v: unknown): string {
+  return str(v).toLowerCase();
+}
+
 /** Normaliza un pago de tarjeta crudo. null si no es débito ni crédito. */
 export function normalizeCardPayment(p: RawCardPayment): CardRecRow | null {
   if (p.method !== "debit" && p.method !== "credit") return null;
@@ -135,9 +153,11 @@ export function normalizeCardPayment(p: RawCardPayment): CardRecRow | null {
     autorizacion: str(v.autorizacion),
     ultimos4: str(v.ultimos4),
     comercio: str(v.comercio),
+    adquirente: acquirerFrom(v.adquirente),
     amount: Number(p.amount) || 0,
     reference: str(p.reference) || null,
     reconciledAt: p.reconciled_at,
+    shiftOpenedBy: p.sales?.cash_shift?.opened_by ?? null,
   };
 }
 
@@ -158,6 +178,9 @@ export function filterCardRows(rows: CardRecRow[], f: CardRecFilters): CardRecRo
     }
     if (f.comercio !== "all") {
       if (f.comercio === NO_MERCHANT ? r.comercio !== "" : r.comercio !== f.comercio) return false;
+    }
+    if (f.acquirer && f.acquirer !== "all") {
+      if (f.acquirer === NO_ACQUIRER ? r.adquirente !== "" : r.adquirente !== f.acquirer) return false;
     }
     if (f.status === "pending" && r.reconciledAt) return false;
     if (f.status === "reconciled" && !r.reconciledAt) return false;
@@ -312,6 +335,21 @@ export function brandOptions(rows: CardRecRow[]): FilterOption[] {
   return out;
 }
 
+/** Adquirentes presentes en los cobros (filtro "Adquirente"). */
+export function acquirerOptions(rows: CardRecRow[]): FilterOption[] {
+  const seen = new Set<string>();
+  let none = false;
+  for (const r of rows) {
+    if (r.adquirente) seen.add(r.adquirente);
+    else none = true;
+  }
+  const out = [...seen]
+    .map((value) => ({ value, label: acquirerLabel(value) }))
+    .sort((a, b) => a.label.localeCompare(b.label, "es"));
+  if (none) out.push({ value: NO_ACQUIRER, label: "Sin adquirente" });
+  return out;
+}
+
 export function merchantOptions(rows: CardRecRow[]): FilterOption[] {
   const seen = new Set<string>();
   let none = false;
@@ -340,10 +378,20 @@ export function dayLabel(day: string): string {
   return `${d}/${m}/${y}`;
 }
 
+const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/** "Lunes 12/10/2026" de un día yyyy-MM-dd (independiente de la zona horaria). */
+export function dayLongLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const wd = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay();
+  return `${WEEKDAYS[wd]} ${dayLabel(day)}`;
+}
+
 export const XLSX_COLUMNS = [
   { header: "Fecha", key: "fecha", width: 14 },
   { header: "Hora", key: "hora", width: 8 },
   { header: "Ticket", key: "ticket", type: "number" as const, width: 10 },
+  { header: "Adquirente", key: "adquirente", width: 16 },
   { header: "Marca", key: "marca", width: 16 },
   { header: "Tipo", key: "tipo", width: 10 },
   { header: "Cuotas", key: "cuotas", type: "number" as const, width: 8 },
@@ -371,6 +419,7 @@ export function xlsxDetailRows(groups: DayGroup[]): Array<Record<string, unknown
             fecha: dayLabel(r.day),
             hora: localTime(r.createdAt),
             ticket: r.ticket,
+            adquirente: r.adquirente ? acquirerLabel(r.adquirente) : "",
             marca: r.brandLabel || "Sin marca",
             tipo: KIND_LABEL[r.kind],
             cuotas: r.installments,

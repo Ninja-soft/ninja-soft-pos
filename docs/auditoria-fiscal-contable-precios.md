@@ -48,7 +48,7 @@ Fecha: 2026-10-12 · Fase nueva en el roadmap: **F18** (H100 a H112) · Decisió
 | Actualización masiva por proveedor, marca, categoría | Falta | Sólo import XLSX de productos (TX-4) |
 | Actualización por índice (IPC, dólar BNA o MEP) | Falta | |
 | Etiquetas de góndola al cambiar precio | Parcial | Perfil de impresión `product_label` (`lib/print/profiles.ts`), sin cola de "precios cambiados" |
-| Validación del precio en el servidor | Falta | `create_sale` confía en `unit_price` (§1.2) |
+| Validación del precio en el servidor | Existe (ADR-056) | `create_sale` recalcula el precio de lista y rechaza el distinto; cambio manual con motivo y PIN (§1.2) |
 
 ### 2.2 Diseño: modo simple y modo profesional
 

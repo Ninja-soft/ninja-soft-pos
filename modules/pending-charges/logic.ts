@@ -419,6 +419,11 @@ export interface SaleArgsLine {
   discount: number;
   packId?: string | null;
   packCreditId?: string | null;
+  // ADR-056: regalo de promo a $0 y precio cambiado a mano (con motivo).
+  giftPromoId?: string | null;
+  priceOverride?: boolean;
+  overrideReason?: string | null;
+  listPrice?: number | null;
 }
 
 export interface SaleArgsExtra {
@@ -438,6 +443,12 @@ export interface SaleArgsItem {
   quantity: number;
   unit_price: number;
   discount: number;
+  // ADR-056: señales para el precio autoritativo del servidor.
+  gift_promo_id?: string;
+  pack_credit_id?: string;
+  price_override?: boolean;
+  override_reason?: string;
+  list_price?: number;
 }
 
 export interface SaleArgsExtraOut {
@@ -465,6 +476,17 @@ export function buildSaleItemsAndExtras(
     quantity: l.quantity,
     unit_price: l.packCreditId ? 0 : l.unitPrice,
     discount: l.packCreditId ? 0 : l.discount,
+    // ADR-056: el servidor valida el precio; estas marcas explican los $0 y el
+    // cambio manual (list_price es informativo: el servidor usa el suyo).
+    ...(l.giftPromoId ? { gift_promo_id: l.giftPromoId } : {}),
+    ...(l.packCreditId ? { pack_credit_id: l.packCreditId } : {}),
+    ...(l.priceOverride && !l.packCreditId
+      ? {
+          price_override: true,
+          override_reason: l.overrideReason ?? "",
+          ...(l.listPrice != null ? { list_price: l.listPrice } : {}),
+        }
+      : {}),
   }));
   for (const ex of extras ?? []) {
     if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {

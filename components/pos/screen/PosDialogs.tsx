@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -272,5 +273,89 @@ export function SerialDialog({
         </div>
       </div>
     </Modal>
+  );
+}
+
+// Cambio manual de precio de una línea (F18 · H100, ADR-056). El servidor
+// recalcula el precio de lista: el cambio viaja marcado con su motivo y, según
+// la política de Seguridad, pide el PIN de un supervisor al cobrar.
+export interface PriceOverrideTarget {
+  lineId: string;
+  name: string;
+  unitPrice: number;
+  listPrice: number;
+  reason: string;
+}
+
+export function PriceOverrideDialog({
+  line,
+  onClose,
+  onConfirm,
+}: {
+  line: PriceOverrideTarget | null;
+  onClose: () => void;
+  onConfirm: (price: number, reason: string) => void;
+}) {
+  return (
+    <Modal open={line !== null} onOpenChange={(o) => !o && onClose()} title="Cambiar precio">
+      {line && <PriceOverrideForm key={line.lineId} line={line} onClose={onClose} onConfirm={onConfirm} />}
+    </Modal>
+  );
+}
+
+function PriceOverrideForm({
+  line,
+  onClose,
+  onConfirm,
+}: {
+  line: PriceOverrideTarget;
+  onClose: () => void;
+  onConfirm: (price: number, reason: string) => void;
+}) {
+  const [price, setPrice] = useState(String(line.unitPrice));
+  const [reason, setReason] = useState(line.reason);
+  const p = Number(price);
+  const valid = price.trim() !== "" && Number.isFinite(p) && p >= 0;
+  const backToList = valid && Math.abs(p - line.listPrice) <= 0.01;
+  const reasonOk = backToList || reason.trim().length >= 3;
+  const submit = () => {
+    if (valid && reasonOk) onConfirm(Math.round(p * 100) / 100, reason);
+  };
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        <span className="font-semibold text-foreground">{line.name}</span>. Precio de lista{" "}
+        <span className="tabular-nums">{money(line.listPrice)}</span>. El cambio queda registrado con tu motivo y
+        puede pedir el PIN de un supervisor al cobrar.
+      </p>
+      <Input
+        label="Precio unitario"
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min="0"
+        autoFocus
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+      />
+      {!backToList && (
+        <Input
+          label="Motivo"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Ej.: producto con falla, precio de góndola"
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
+      )}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button onClick={submit} disabled={!valid || !reasonOk}>
+          {backToList ? "Volver al precio de lista" : "Aplicar precio"}
+        </Button>
+      </div>
+    </div>
   );
 }

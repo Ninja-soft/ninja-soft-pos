@@ -15,6 +15,7 @@ import {
   type DirectoCreds,
   type DirectoEnv,
 } from "./directo.ts";
+import { loadProviderSecret } from "./paymentSecrets.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Admin = SupabaseClient<any, "public", any>;
@@ -37,14 +38,24 @@ export const envOfIntent = (row: { mp_env: string | null }): DirectoEnv =>
   row.mp_env === "test" ? "qa" : "prod";
 export const intentEnvValue = (env: DirectoEnv) => (env === "qa" ? "test" : "prod");
 
-export async function loadCreds(admin: Admin, tenantId: string): Promise<DirectoCreds | null> {
-  const { data } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "directo")
-    .maybeSingle();
-  return parseCreds((data as { secrets?: unknown } | null)?.secrets);
+// ADR-057: `opts.storeId` usa la conexión propia de la sucursal si tiene;
+// `opts.scopeStoreId` (del intent) la exacta.
+export async function loadCredsScoped(
+  admin: Admin,
+  tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<{ creds: DirectoCreds; scopeStoreId: string | null } | null> {
+  const loaded = await loadProviderSecret(admin, tenantId, "directo", opts);
+  const creds = parseCreds(loaded?.secrets);
+  return creds ? { creds, scopeStoreId: loaded?.scopeStoreId ?? null } : null;
+}
+
+export async function loadCreds(
+  admin: Admin,
+  tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<DirectoCreds | null> {
+  return (await loadCredsScoped(admin, tenantId, opts))?.creds ?? null;
 }
 
 export async function loadEnv(admin: Admin, tenantId: string): Promise<DirectoEnv> {

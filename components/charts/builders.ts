@@ -845,3 +845,118 @@ export function bulletOption(input: {
     };
   };
 }
+
+// ── Varias series con color propio (comparativo entre sucursales, F17 · H97) ──
+// Barras agrupadas o apiladas por categoría, o líneas en el tiempo. Cada serie
+// puede traer su color (el de la sucursal); si no, la paleta en orden fijo.
+export function multiSeriesOption(input: {
+  categories: string[];
+  tooltipCategories?: string[];
+  series: { name: string; values: number[]; color?: string | null }[];
+  /** Barras de una sola serie: color por categoría (p. ej. el de cada sucursal). */
+  itemColors?: (string | null | undefined)[];
+  format: ValueFormat;
+  kind: "bar" | "line";
+  stacked?: boolean;
+  /** Valores en % (0 a 100): eje con sufijo % y tope 100 si es apilado. */
+  percent?: boolean;
+}) {
+  return ({ theme: t, compact }: ChartContext): EChartsCoreOption => {
+    const n = input.categories.length;
+    const colorOf = (i: number) =>
+      input.series[i]?.color || t.palette[i % t.palette.length] || t.primary;
+    const fmt = (v: number) =>
+      input.percent
+        ? `${v.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %`
+        : formatChartValue(v, input.format);
+    const baseAxis = valueAxis(t, input.format, compact);
+    const val = input.percent
+      ? {
+          ...baseAxis,
+          max: input.stacked ? 100 : undefined,
+          axisLabel: { ...baseAxis.axisLabel, formatter: (v: number) => `${v} %` },
+        }
+      : baseAxis;
+    const dz = input.kind === "line" ? zoom(t, n, compact) : undefined;
+    const labels = input.categories.map((c) => truncateLabel(c, compact ? 10 : 16));
+    return {
+      grid: {
+        left: 4,
+        right: 12,
+        top: compact ? 12 : 36,
+        bottom: (dz ? (compact ? 58 : 34) : 4) + (compact ? 28 : 0),
+        containLabel: true,
+      },
+      legend: legend(t, compact, { data: input.series.map((s) => s.name) }),
+      tooltip: {
+        ...tooltipBase(t),
+        trigger: "axis",
+        axisPointer: {
+          type: input.kind === "bar" ? "shadow" : "line",
+          lineStyle: { color: t.muted, width: 1, type: "dashed" },
+          shadowStyle: { color: t.isDark ? "rgba(255,255,255,0.04)" : "rgba(30,22,60,0.05)" },
+        },
+        formatter: (params: { dataIndex: number; seriesIndex: number; value: number }[]) => {
+          const i = params[0]?.dataIndex ?? 0;
+          let html = title(input.tooltipCategories?.[i] ?? input.categories[i] ?? "");
+          for (const p of params) {
+            const single = input.itemColors && input.series.length === 1;
+            html += row(
+              dot(single ? input.itemColors?.[i] || colorOf(0) : colorOf(p.seriesIndex)),
+              input.series[p.seriesIndex]?.name ?? "",
+              fmt(p.value ?? 0),
+              t,
+            );
+          }
+          return html;
+        },
+      },
+      xAxis:
+        input.kind === "bar"
+          ? {
+              ...categoryAxis(t, labels, true),
+              axisLabel: { color: t.muted, fontSize: 11, interval: 0, hideOverlap: true },
+            }
+          : categoryAxis(t, labels, false),
+      yAxis: val,
+      dataZoom: dz,
+      series: input.series.map((s, i) => {
+        const color = colorOf(i);
+        return input.kind === "bar"
+          ? {
+              name: s.name,
+              type: "bar",
+              data:
+                input.itemColors && input.series.length === 1
+                  ? s.values.map((v, j) => ({
+                      value: v,
+                      itemStyle: { color: input.itemColors?.[j] || color },
+                    }))
+                  : s.values,
+              stack: input.stacked ? "total" : undefined,
+              barMaxWidth: input.stacked ? 36 : 22,
+              itemStyle: {
+                color,
+                borderColor: t.surface,
+                borderWidth: input.stacked ? 1 : 0,
+                borderRadius: input.stacked ? 0 : [3, 3, 0, 0],
+              },
+              emphasis: { focus: "none" },
+            }
+          : {
+              name: s.name,
+              type: "line",
+              data: s.values,
+              smooth: 0.25,
+              smoothMonotone: "x",
+              showSymbol: n <= 14,
+              symbol: "circle",
+              symbolSize: 6,
+              lineStyle: { width: 2, color },
+              itemStyle: { color, borderColor: t.surface, borderWidth: 2 },
+              emphasis: { focus: "series" },
+            };
+      }),
+    };
+  };
+}

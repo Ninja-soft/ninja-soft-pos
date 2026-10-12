@@ -34,7 +34,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   multi_caja: {
-    desc: "Multi-caja: varias cajas en una misma sucursal, cada una con su turno, su arqueo y su cierre Z. Cada dispositivo recuerda su caja.",
+    desc: "Multi-caja: varias cajas en una misma sucursal, cada una con su turno, su arqueo y su cierre Z. Cada dispositivo recuerda su caja, y cada caja puede tener su configuración propia (medios habilitados, cierre, pantalla del cliente e impresoras).",
     impact: "Desactivado, cada sucursal opera con una sola caja (la primera caja siempre está incluida).",
     minPlan: "Pro",
   },
@@ -304,7 +304,7 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
 
   // ── Integraciones ──────────────────────────────────────────────────────────
   multi_sucursal: {
-    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal.",
+    desc: "Multi-sucursal: varias sucursales en el mismo negocio, cada una con sus cajas, su personal (traslados y coberturas programadas) y sus ventas. Siempre se ve en qué sucursal y caja estás, y los listados filtran por sucursal. Configuración heredable por grupo y sucursal: medios de pago, recargos y n° de comercio, ticket, logo y operación del POS, con copia entre sucursales.",
     impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },

@@ -862,3 +862,23 @@ html {
 :root:not([data-theme="ninja-light"]):not([data-theme="ninja-sand"]) .logo-on-light {
   display: none !important;
 }
+
+/* -----------------------------------------------------------------------------
+ * Página de prueba de impresora (F17 · ADR-049): sólo la prueba queda visible.
+ * -------------------------------------------------------------------------- */
+@media print {
+  body:has(.printer-test-print) * {
+    visibility: hidden;
+  }
+  .printer-test-print,
+  .printer-test-print * {
+    visibility: visible;
+  }
+  .printer-test-print {
+    position: fixed;
+    left: 0;
+    top: 0;
+    background: #fff;
+    color: #000;
+  }
+}

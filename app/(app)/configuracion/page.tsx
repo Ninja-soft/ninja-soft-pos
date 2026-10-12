@@ -13,6 +13,7 @@ import { useDeliveryEnabled } from "@/modules/delivery/hooks";
 import { useGating } from "@/modules/saas/gating";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { SettingsCard, SettingsSection } from "@/components/settings/Settings";
+import { ScopedSection } from "@/components/config/ScopedConfig";
 import { SettingsMobileNav, SettingsSideNav } from "@/components/settings/SettingsNav";
 import {
   DEFAULT_SECTION,
@@ -131,6 +132,43 @@ const SupervisorPinCard = dynamic(
   { loading },
 );
 
+// Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
+const TerminalsManager = dynamic(
+  () => import("@/components/config/TerminalsManager").then((m) => m.TerminalsManager),
+  { loading },
+);
+const PrintersManager = dynamic(
+  () => import("@/components/config/PrintersManager").then((m) => m.PrintersManager),
+  { loading },
+);
+const ScopedPrintProfiles = dynamic(
+  () => import("@/components/config/PrintersManager").then((m) => m.ScopedPrintProfiles),
+  { loading },
+);
+const BranchLogoField = dynamic(
+  () => import("@/components/config/BranchBranding").then((m) => m.BranchLogoField),
+  { loading },
+);
+const StoreGroupsCard = dynamic(
+  () => import("@/components/config/BranchBranding").then((m) => m.StoreGroupsCard),
+  { loading },
+);
+
+// Campos de pos_settings que se pisan por sucursal o caja en cada sección.
+const OPERACION_FIELDS = [
+  "rounding_multiple",
+  "allow_negative_stock",
+  "max_discount",
+  "require_card_voucher",
+  "offer_warranty",
+  "allow_free_sale",
+  "blind_close",
+  "close_tolerance",
+  "require_close_reason",
+];
+const CLIENTES_FIELDS = ["require_customer", "auto_email_receipt"];
+const DISPLAY_FIELDS = ["display_show_unit_prices", "display_welcome_message", "display_thanks_message"];
+
 // Contenido de cada sección. El encabezado (título + bajada) lo pone
 // SettingsSection a partir de `sections.ts`; acá va sólo el cuerpo.
 function SectionBody({ section }: { section: SettingsSectionKey }) {
@@ -141,27 +179,54 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "rubro":
       return <RubroCard />;
     case "marca":
-      return <BrandingCard />;
+      return (
+        <ScopedSection
+          domain="ticket"
+          scopedExtra={(s) => (s.scope === "store" ? <BranchLogoField storeId={s.id} /> : null)}
+        >
+          <BrandingCard />
+        </ScopedSection>
+      );
     // Sucursales y cajas (F17 · H89/H91): ABM, personal y traslados. La
     // primera sucursal y caja son BASE; la segunda pide su feature adentro.
     case "sucursales":
-      return <BranchesManager />;
+      return (
+        <>
+          <BranchesManager />
+          <StoreGroupsCard />
+        </>
+      );
     // Modelos de ticket (escritura protegida por RLS).
     case "tickets":
       return <TicketTemplatesCard />;
     // Impresión por tipo de documento (F10 · H22; owner/manager).
     case "impresion":
-      return <PrintSettingsCard />;
+      return (
+        <>
+          <ScopedSection domain="pos_settings" fields={[]} scopedExtra={(s) => <ScopedPrintProfiles scope={s} />}>
+            <PrintSettingsCard />
+          </ScopedSection>
+          <PrintersManager />
+        </>
+      );
     case "email":
       return <TenantEmailCard />;
     case "pagos":
       return (
         <Suspense fallback={null}>
-          <PaymentMethodsCard />
+          <ScopedSection domain="payment_method">
+            <PaymentMethodsCard />
+          </ScopedSection>
         </Suspense>
       );
+    case "terminales":
+      return <TerminalsManager />;
     case "operacion":
-      return <OperationSettingsCard view="operacion" />;
+      return (
+        <ScopedSection domain="pos_settings" fields={OPERACION_FIELDS}>
+          <OperationSettingsCard view="operacion" />
+        </ScopedSection>
+      );
     // Diseño del POS: preset, grilla, carrito, medios fijados y teclas rápidas.
     case "diseno-pos":
       return <PosLayoutCard />;
@@ -202,7 +267,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
         </SettingsCard>
       );
     case "clientes":
-      return <OperationSettingsCard view="clientes" />;
+      return (
+        <ScopedSection domain="pos_settings" fields={CLIENTES_FIELDS}>
+          <OperationSettingsCard view="clientes" />
+        </ScopedSection>
+      );
     // Cuenta corriente v2: plazos, cuotas, punitorios, bloqueo y recordatorios.
     case "cuenta-corriente":
       return (
@@ -218,7 +287,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <ScannerCard />;
     // Pantalla del cliente / doble pantalla (F10 · H25).
     case "pantalla-cliente":
-      return <CustomerDisplayCard />;
+      return (
+        <ScopedSection domain="pos_settings" fields={DISPLAY_FIELDS}>
+          <CustomerDisplayCard />
+        </ScopedSection>
+      );
     // Centro de diagnóstico de hardware (F10 · H26).
     case "hardware":
       return <HardwareCard />;

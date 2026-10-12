@@ -248,7 +248,7 @@ export function OnboardingChecklist() {
     if (!celebrate) return null;
     return (
       <div className="mt-6 animate-slide-up">
-        <div className="relative overflow-hidden rounded-ninjaLg border border-ninja-flame/25 bg-card/80 p-5 shadow-ninjaSoft backdrop-blur-xl sm:p-6">
+        <div className="relative overflow-hidden rounded-ninjaLg border border-ninja-flame/25 bg-card/80 p-5 shadow-ninjaSoft glass-blur sm:p-6">
           <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-ninja-flame/15 blur-3xl" />
           <div className="relative flex items-center gap-4">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-ninjaMd bg-ninja-gradient text-white shadow-ninjaGlow">
@@ -299,7 +299,7 @@ export function OnboardingChecklist() {
 
   return (
     <>
-      <div className="relative mt-6 animate-slide-up overflow-hidden rounded-ninjaLg border border-border bg-card/70 shadow-ninjaSoft backdrop-blur-xl">
+      <div className="relative mt-6 animate-slide-up overflow-hidden rounded-ninjaLg border border-border bg-card/70 shadow-ninjaSoft glass-blur">
         {/* Glow decorativo flame */}
         <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-ninja-flame/10 blur-3xl" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ninja-flame/40 to-transparent" />

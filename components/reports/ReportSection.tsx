@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { BarChart3, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import {
-  ReportChart,
-  type ChartType,
-  type ReportChartDatum,
-} from "./ReportChart";
+import dynamic from "next/dynamic";
+import type { ChartType, ReportChartDatum } from "./ReportChart";
+
+// recharts (~100 kB gzip) en un chunk aparte: no bloquea el primer render de
+// Reportes. El placeholder reserva el alto del gráfico (sin salto de layout).
+const ReportChart = dynamic(() => import("./ReportChart").then((m) => m.ReportChart), {
+  ssr: false,
+  loading: () => <div style={{ height: 240 }} aria-hidden />,
+});
 
 type View = "chart" | "table";
 

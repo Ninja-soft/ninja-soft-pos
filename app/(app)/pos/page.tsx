@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Banknote,
@@ -45,7 +46,6 @@ import {
   useCustomerLastSaleItems,
 } from "@/modules/customers/hooks";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { DniScanModal } from "@/components/customers/DniScanModal";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import {
@@ -65,10 +65,6 @@ import type { SaleExtraInput } from "@/modules/pos/api";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
 import { useFeatureGate } from "@/components/saas/GatedAction";
-import { QrCheckoutModal } from "@/components/pos/QrCheckoutModal";
-import { PointCheckoutModal } from "@/components/pos/PointCheckoutModal";
-import { VariantPickerModal } from "@/components/pos/VariantPickerModal";
-import { ModifierPickerModal } from "@/components/pos/ModifierPickerModal";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { useProductsWithModifiers } from "@/modules/products/modifiers";
 import { productsApi, variantLabel } from "@/modules/products/api";
@@ -103,18 +99,10 @@ import {
   useDeliveryOrder,
   useDeliveryOrderItems,
 } from "@/modules/delivery/hooks";
-import {
-  OpenShiftModal,
-  CloseShiftModal,
-  PaymentModal,
-  type PaymentExtra,
-} from "@/components/pos/PosModals";
-import { TicketModal } from "@/components/sales/TicketModal";
-import { VoucherRedeemModal } from "@/components/pos/VoucherRedeemModal";
-import { SellPackModal } from "@/components/pos/SellPackModal";
+import type { PaymentExtra } from "@/components/pos/PosModals";
 import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import type { CustomerPackCredit } from "@/modules/packs/api";
-import { BarcodeScanner } from "@/components/pos/BarcodeScanner";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import {
   publishDisplayState,
@@ -123,6 +111,128 @@ import {
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
+
+// Modales del POS: se cargan en chunks aparte (next/dynamic) para no inflar el
+// JS inicial de la pantalla. Los de cobro/turno quedan siempre montados (el
+// PaymentModal precarga sus datos); el resto se monta recién al abrirlo
+// (MountWhenOpened). Tras el primer render se precargan los chunks en idle para
+// que abrirlos no tenga demora.
+const loadPosModals = () => import("@/components/pos/PosModals");
+const loadQrCheckout = () => import("@/components/pos/QrCheckoutModal");
+const loadPointCheckout = () => import("@/components/pos/PointCheckoutModal");
+const loadVariantPicker = () => import("@/components/pos/VariantPickerModal");
+const loadModifierPicker = () => import("@/components/pos/ModifierPickerModal");
+const loadTicketModal = () => import("@/components/sales/TicketModal");
+const loadVoucherRedeem = () => import("@/components/pos/VoucherRedeemModal");
+const loadSellPack = () => import("@/components/pos/SellPackModal");
+const loadBarcodeScanner = () => import("@/components/pos/BarcodeScanner");
+const loadDniScan = () => import("@/components/customers/DniScanModal");
+
+const OpenShiftModal = dynamic(() => loadPosModals().then((m) => m.OpenShiftModal), { ssr: false });
+const CloseShiftModal = dynamic(() => loadPosModals().then((m) => m.CloseShiftModal), { ssr: false });
+const PaymentModal = dynamic(() => loadPosModals().then((m) => m.PaymentModal), { ssr: false });
+const QrCheckoutModal = dynamic(() => loadQrCheckout().then((m) => m.QrCheckoutModal), { ssr: false });
+const PointCheckoutModal = dynamic(() => loadPointCheckout().then((m) => m.PointCheckoutModal), { ssr: false });
+const VariantPickerModal = dynamic(() => loadVariantPicker().then((m) => m.VariantPickerModal), { ssr: false });
+const ModifierPickerModal = dynamic(() => loadModifierPicker().then((m) => m.ModifierPickerModal), { ssr: false });
+const TicketModal = dynamic(() => loadTicketModal().then((m) => m.TicketModal), { ssr: false });
+const VoucherRedeemModal = dynamic(() => loadVoucherRedeem().then((m) => m.VoucherRedeemModal), { ssr: false });
+const SellPackModal = dynamic(() => loadSellPack().then((m) => m.SellPackModal), { ssr: false });
+const BarcodeScanner = dynamic(() => loadBarcodeScanner().then((m) => m.BarcodeScanner), { ssr: false });
+const DniScanModal = dynamic(() => loadDniScan().then((m) => m.DniScanModal), { ssr: false });
+
+type PickInput = {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: number;
+  unit: string;
+  is_serialized?: boolean;
+  has_variants?: boolean;
+  warranty_months?: number;
+  categoryId?: string | null;
+};
+
+// Grilla de productos memoizada: no se re-renderiza en cada tecla de la
+// búsqueda ni con cambios del carrito, sólo cuando cambia la lista.
+const ProductGrid = memo(function ProductGrid({
+  products,
+  onPick,
+}: {
+  products: Product[] | undefined;
+  onPick: (p: PickInput) => void;
+}) {
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {products?.map((p) => (
+        <button
+          key={p.id}
+          onClick={() =>
+            onPick({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              price: p.price,
+              unit: p.unit,
+              is_serialized: p.is_serialized,
+              has_variants: p.has_variants,
+              warranty_months: p.warranty_months,
+              categoryId: p.category_id,
+            })
+          }
+          className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
+        >
+          <div className="flex items-start justify-between gap-1.5">
+            <div className="truncate font-medium text-foreground">{p.name}</div>
+            {p.has_variants && (
+              <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
+                Variantes
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {formatQty(p.stock)} {p.unit}
+            </span>
+            {p.plu && (
+              <span className="rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono font-semibold text-ninja-flameSoft">
+                {p.plu}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 font-semibold text-foreground">
+            {formatCurrency(p.price)}
+            {p.unit === "kg" && (
+              <span className="text-xs font-normal text-muted-foreground"> /kg</span>
+            )}
+          </div>
+        </button>
+      ))}
+      {products?.length === 0 && (
+        <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
+          Sin resultados.
+        </p>
+      )}
+    </div>
+  );
+});
+
+function preloadPosModals() {
+  for (const load of [
+    loadPosModals,
+    loadQrCheckout,
+    loadPointCheckout,
+    loadVariantPicker,
+    loadModifierPicker,
+    loadTicketModal,
+    loadVoucherRedeem,
+    loadSellPack,
+    loadBarcodeScanner,
+    loadDniScan,
+  ]) {
+    void load().catch(() => {});
+  }
+}
 
 // Mensajes legibles para los rechazos de validate_coupon (F9 · H54).
 function couponReasonMsg(reason?: string): string {
@@ -184,6 +294,19 @@ function PosPageInner() {
   const { data: deliveryItems } = useDeliveryOrderItems(deliveryOrderId);
   // Sólo una carga por pedido de delivery (no en cada render).
   const loadedDeliveryRef = useRef<string | null>(null);
+  // Precarga en idle los chunks de los modales (ver loadPosModals arriba).
+  useEffect(() => {
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(preloadPosModals);
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(preloadPosModals, 1500);
+    return () => clearTimeout(t);
+  }, []);
   const [search, setSearch] = useState("");
   const [openShiftModal, setOpenShiftModal] = useState(false);
   const [closeShiftModal, setCloseShiftModal] = useState(false);
@@ -555,6 +678,10 @@ function PosPageInner() {
       });
     }
   }
+  // Callback estable para la grilla memoizada (lee siempre el pickProduct vigente).
+  const pickProductRef = useRef(pickProduct);
+  pickProductRef.current = pickProduct;
+  const onPickProduct = useCallback((p: PickInput) => pickProductRef.current(p), []);
 
   // ----- Favoritos / cantidades rápidas (H36) -----
   // Tap del botón favorito: rutea por tipo (serial/variante/peso) o agrega 1.
@@ -1760,57 +1887,7 @@ function PosPageInner() {
               {categoryPath}
             </div>
           )}
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {products?.map((p) => (
-              <button
-                key={p.id}
-                onClick={() =>
-                  pickProduct({
-                    id: p.id,
-                    name: p.name,
-                    sku: p.sku,
-                    price: p.price,
-                    unit: p.unit,
-                    is_serialized: p.is_serialized,
-                    has_variants: p.has_variants,
-                    warranty_months: p.warranty_months,
-                    categoryId: p.category_id,
-                  })
-                }
-                className="rounded-lg border border-border bg-card p-4 text-left transition hover:border-ninja-flameSoft/30 hover:bg-muted"
-              >
-                <div className="flex items-start justify-between gap-1.5">
-                  <div className="truncate font-medium text-foreground">{p.name}</div>
-                  {p.has_variants && (
-                    <span className="shrink-0 rounded-full bg-ninja-flame/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ninja-flameSoft">
-                      Variantes
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {formatQty(p.stock)} {p.unit}
-                  </span>
-                  {p.plu && (
-                    <span className="rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono font-semibold text-ninja-flameSoft">
-                      {p.plu}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-2 font-semibold text-foreground">
-                  {formatCurrency(p.price)}
-                  {p.unit === "kg" && (
-                    <span className="text-xs font-normal text-muted-foreground"> /kg</span>
-                  )}
-                </div>
-              </button>
-            ))}
-            {products?.length === 0 && (
-              <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-                Sin resultados.
-              </p>
-            )}
-          </div>
+          <ProductGrid products={products} onPick={onPickProduct} />
         </section>
 
         {/* Carrito */}
@@ -2329,7 +2406,9 @@ function PosPageInner() {
         </div>
       </Modal>
 
-      <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={quickAddFromDni} />
+      <MountWhenOpened open={dniOpen}>
+        <DniScanModal open={dniOpen} onOpenChange={setDniOpen} onConfirm={quickAddFromDni} />
+      </MountWhenOpened>
 
       {discountGate.modal}
       <OpenShiftModal
@@ -2359,136 +2438,160 @@ function PosPageInner() {
         cartPromo={cartPromo}
         promoForMethod={promoForMethod}
       />
-      <QrCheckoutModal
-        open={qrOpen}
-        onOpenChange={setQrOpen}
-        base={total}
-        onQrState={handleQrState}
-        onApproved={(reference, amount, extras) => {
-          setQrOpen(false);
-          handleSale([{ method: "qr", amount, reference }], extras);
-        }}
-      />
-      <QrCheckoutModal
-        open={qrMobbexOpen}
-        onOpenChange={setQrMobbexOpen}
-        base={total}
-        provider="mobbex"
-        providerName="Mobbex"
-        onQrState={handleQrState}
-        onApproved={(reference, amount, extras) => {
-          setQrMobbexOpen(false);
-          handleSale([{ method: "qr", amount, reference }], extras);
-        }}
-      />
-      <QrCheckoutModal
-        open={qrModoOpen}
-        onOpenChange={setQrModoOpen}
-        base={total}
-        provider="modo"
-        providerName="MODO"
-        onQrState={handleQrState}
-        onApproved={(reference, amount, extras) => {
-          setQrModoOpen(false);
-          handleSale([{ method: "qr", amount, reference }], extras);
-        }}
-      />
-      <PointCheckoutModal
-        open={pointOpen}
-        onOpenChange={setPointOpen}
-        base={total}
-        onApproved={(reference, amount, cardType) => {
-          setPointOpen(false);
-          // La tarjeta real (débito/crédito) la informa la API de MP al
-          // aprobar; las cuotas las eligió el cliente en el lector.
-          handleSale([{ method: cardType, amount, reference }], []);
-        }}
-      />
-      <QrCheckoutModal
-        open={qrPagos360Open}
-        onOpenChange={setQrPagos360Open}
-        base={total}
-        provider="pagos360"
-        providerName="Pagos360"
-        onQrState={handleQrState}
-        onApproved={(reference, amount, extras) => {
-          setQrPagos360Open(false);
-          handleSale([{ method: "qr", amount, reference }], extras);
-        }}
-      />
-      <QrCheckoutModal
-        open={qrPaywayOpen}
-        onOpenChange={setQrPaywayOpen}
-        base={total}
-        provider="payway"
-        providerName="Payway"
-        onQrState={handleQrState}
-        onApproved={(reference, amount, extras) => {
-          setQrPaywayOpen(false);
-          handleSale([{ method: "qr", amount, reference }], extras);
-        }}
-      />
-      <TicketModal
-        open={ticketOpen}
-        onOpenChange={setTicketOpen}
-        saleId={ticketId}
-        autoPrint={autoPrint}
-      />
-      <VoucherRedeemModal
-        open={voucherOpen}
-        onOpenChange={setVoucherOpen}
-        customer={customer}
-        storeId={register?.store_id ?? null}
-      />
-      <SellPackModal
-        open={sellPackOpen}
-        onOpenChange={setSellPackOpen}
-        onPick={(p) => {
-          addPack(p);
-          toast({ title: `Pack "${p.name}" agregado`, variant: "success" });
-        }}
-      />
-      <BarcodeScanner
-        open={scanOpen}
-        onOpenChange={setScanOpen}
-        onDetected={(code) => setSearch(code)}
-      />
-      <VariantPickerModal
-        product={variantProduct}
-        onClose={() => setVariantProduct(null)}
-        onPick={({ variantId, variantLabel: label, price }) => {
-          if (!variantProduct) return;
-          addVariant({
-            id: variantProduct.id,
-            name: variantProduct.name,
-            sku: variantProduct.sku,
-            price: priceFor(variantProduct.id, variantId, price),
-            variantId,
-            variantLabel: label,
-            warrantyMonths: variantProduct.warrantyMonths ?? 0,
-            categoryId: variantProduct.categoryId ?? null,
-          });
-          setVariantProduct(null);
-        }}
-      />
-      <ModifierPickerModal
-        product={modifierProduct}
-        onClose={() => setModifierProduct(null)}
-        onConfirm={({ price, modifiers, modifiersLabel }) => {
-          if (!modifierProduct) return;
-          addWithModifiers({
-            id: modifierProduct.id,
-            name: modifierProduct.name,
-            sku: modifierProduct.sku,
-            price, // base (lista mostrador) + suma de deltas
-            modifiers,
-            modifiersLabel,
-            warrantyMonths: modifierProduct.warrantyMonths ?? 0,
-            categoryId: modifierProduct.categoryId ?? null,
-          });
-          setModifierProduct(null);
-        }}
-      />
+      <MountWhenOpened open={qrOpen}>
+        <QrCheckoutModal
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          base={total}
+          onQrState={handleQrState}
+          onApproved={(reference, amount, extras) => {
+            setQrOpen(false);
+            handleSale([{ method: "qr", amount, reference }], extras);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrMobbexOpen}>
+        <QrCheckoutModal
+          open={qrMobbexOpen}
+          onOpenChange={setQrMobbexOpen}
+          base={total}
+          provider="mobbex"
+          providerName="Mobbex"
+          onQrState={handleQrState}
+          onApproved={(reference, amount, extras) => {
+            setQrMobbexOpen(false);
+            handleSale([{ method: "qr", amount, reference }], extras);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrModoOpen}>
+        <QrCheckoutModal
+          open={qrModoOpen}
+          onOpenChange={setQrModoOpen}
+          base={total}
+          provider="modo"
+          providerName="MODO"
+          onQrState={handleQrState}
+          onApproved={(reference, amount, extras) => {
+            setQrModoOpen(false);
+            handleSale([{ method: "qr", amount, reference }], extras);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={pointOpen}>
+        <PointCheckoutModal
+          open={pointOpen}
+          onOpenChange={setPointOpen}
+          base={total}
+          onApproved={(reference, amount, cardType) => {
+            setPointOpen(false);
+            // La tarjeta real (débito/crédito) la informa la API de MP al
+            // aprobar; las cuotas las eligió el cliente en el lector.
+            handleSale([{ method: cardType, amount, reference }], []);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrPagos360Open}>
+        <QrCheckoutModal
+          open={qrPagos360Open}
+          onOpenChange={setQrPagos360Open}
+          base={total}
+          provider="pagos360"
+          providerName="Pagos360"
+          onQrState={handleQrState}
+          onApproved={(reference, amount, extras) => {
+            setQrPagos360Open(false);
+            handleSale([{ method: "qr", amount, reference }], extras);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={qrPaywayOpen}>
+        <QrCheckoutModal
+          open={qrPaywayOpen}
+          onOpenChange={setQrPaywayOpen}
+          base={total}
+          provider="payway"
+          providerName="Payway"
+          onQrState={handleQrState}
+          onApproved={(reference, amount, extras) => {
+            setQrPaywayOpen(false);
+            handleSale([{ method: "qr", amount, reference }], extras);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={ticketOpen}>
+        <TicketModal
+          open={ticketOpen}
+          onOpenChange={setTicketOpen}
+          saleId={ticketId}
+          autoPrint={autoPrint}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={voucherOpen}>
+        <VoucherRedeemModal
+          open={voucherOpen}
+          onOpenChange={setVoucherOpen}
+          customer={customer}
+          storeId={register?.store_id ?? null}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={sellPackOpen}>
+        <SellPackModal
+          open={sellPackOpen}
+          onOpenChange={setSellPackOpen}
+          onPick={(p) => {
+            addPack(p);
+            toast({ title: `Pack "${p.name}" agregado`, variant: "success" });
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={scanOpen}>
+        <BarcodeScanner
+          open={scanOpen}
+          onOpenChange={setScanOpen}
+          onDetected={(code) => setSearch(code)}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={variantProduct !== null}>
+        <VariantPickerModal
+          product={variantProduct}
+          onClose={() => setVariantProduct(null)}
+          onPick={({ variantId, variantLabel: label, price }) => {
+            if (!variantProduct) return;
+            addVariant({
+              id: variantProduct.id,
+              name: variantProduct.name,
+              sku: variantProduct.sku,
+              price: priceFor(variantProduct.id, variantId, price),
+              variantId,
+              variantLabel: label,
+              warrantyMonths: variantProduct.warrantyMonths ?? 0,
+              categoryId: variantProduct.categoryId ?? null,
+            });
+            setVariantProduct(null);
+          }}
+        />
+      </MountWhenOpened>
+      <MountWhenOpened open={modifierProduct !== null}>
+        <ModifierPickerModal
+          product={modifierProduct}
+          onClose={() => setModifierProduct(null)}
+          onConfirm={({ price, modifiers, modifiersLabel }) => {
+            if (!modifierProduct) return;
+            addWithModifiers({
+              id: modifierProduct.id,
+              name: modifierProduct.name,
+              sku: modifierProduct.sku,
+              price, // base (lista mostrador) + suma de deltas
+              modifiers,
+              modifiersLabel,
+              warrantyMonths: modifierProduct.warrantyMonths ?? 0,
+              categoryId: modifierProduct.categoryId ?? null,
+            });
+            setModifierProduct(null);
+          }}
+        />
+      </MountWhenOpened>
       <Modal open={freeOpen} onOpenChange={setFreeOpen} title="Venta libre">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">

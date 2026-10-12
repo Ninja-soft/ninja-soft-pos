@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 
 // =============================================================================
 // Estado de la CUENTA (suscripción) del tenant activo, para gatear el acceso a
@@ -85,9 +86,7 @@ export function useAccountStatus() {
     queryKey: ["account-status"],
     queryFn: async (): Promise<AccountStatusInfo> => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         return {
           status: "unknown",

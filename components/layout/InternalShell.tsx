@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
@@ -27,13 +28,23 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { Isotype } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/Avatar";
-import { ChangePasswordModal } from "@/components/ui/ChangePasswordModal";
-import { ProfileEditModal } from "@/components/account/ProfileEditModal";
+import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
+
+// Modales del menú de usuario: chunks aparte y montados recién al abrirlos.
+const ChangePasswordModal = dynamic(
+  () => import("@/components/ui/ChangePasswordModal").then((m) => m.ChangePasswordModal),
+  { ssr: false },
+);
+const ProfileEditModal = dynamic(
+  () => import("@/components/account/ProfileEditModal").then((m) => m.ProfileEditModal),
+  { ssr: false },
+);
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import {
   Dropdown,
@@ -84,9 +95,7 @@ export function InternalShell({
     queryKey: ["internal-shell-profile"],
     queryFn: async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       // Cuenta (users) con fallback a la foto/nombre de membresía (POS).
       const [acc, mem] = await Promise.all([
@@ -218,7 +227,7 @@ export function InternalShell({
     <div className="flex min-h-dvh">
       {/* Auto-logout por inactividad: aplica también al staff. */}
       <InactivityGuard />
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 backdrop-blur-xl lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>
 
@@ -239,7 +248,7 @@ export function InternalShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/70 px-4 glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
           </button>
@@ -252,8 +261,12 @@ export function InternalShell({
         </main>
       </div>
 
-      <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
-      <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      <MountWhenOpened open={pwOpen}>
+        <ChangePasswordModal open={pwOpen} onOpenChange={setPwOpen} />
+      </MountWhenOpened>
+      <MountWhenOpened open={pfOpen}>
+        <ProfileEditModal open={pfOpen} onOpenChange={setPfOpen} />
+      </MountWhenOpened>
     </div>
   );
 }

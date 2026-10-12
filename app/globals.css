@@ -241,9 +241,25 @@
 
 /* Fondo de las pantallas. Color base por token (theme-aware) + patrón
    seleccionable vía [data-bg]. Ver brand book §26. Default: dots. */
+/* Sin `background-attachment: fixed`: en Chrome obliga a repintar TODO el fondo
+   en cada frame de scroll (y a recalcular el blur de cada card encima). Como
+   .app-bg se usa en el <main> que es el contenedor que scrollea, el default
+   (`scroll`) ya deja el patrón quieto mientras el contenido se desplaza. */
 .app-bg {
   background-color: var(--background);
-  background-attachment: fixed;
+}
+/* Vidrio esmerilado de las superficies (Card, sidebar). Sólo tiene sentido en
+   los temas con superficies translúcidas (dark/noir); en light/sand la card es
+   opaca y el blur era costo de GPU sin efecto visible. 12px alcanza para
+   disolver el patrón del fondo (antes 24px, el doble de caro por card). */
+.glass-blur {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+[data-theme="ninja-light"] .glass-blur,
+[data-theme="ninja-sand"] .glass-blur {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 /* Dot grid (default). */
 [data-bg="dots"] .app-bg {

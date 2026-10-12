@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
+import { withSupervisor } from "@/modules/security/supervisor";
 
 export type CashMovement = Tables<"cash_movements">;
 export type ZClosure = Tables<"cash_z_closures">;
@@ -32,13 +33,18 @@ export const cashApi = {
     reason: string,
   ): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.from("cash_movements").insert({
-      cash_shift_id: shiftId,
-      type,
-      amount,
-      reason,
-    });
-    if (error) throw error;
+    // ADR-051 (H114 + H116): sólo en el turno propio; el retiro o ingreso sobre
+    // el umbral pide PIN de supervisor y se reintenta con el token.
+    const run = async () => {
+      const { error } = await supabase.from("cash_movements").insert({
+        cash_shift_id: shiftId,
+        type,
+        amount,
+        reason,
+      });
+      if (error) throw error;
+    };
+    await withSupervisor(run, { cash_out: amount, cash_in: amount });
   },
 
   // Historial inmutable de cierres Z (más reciente primero).

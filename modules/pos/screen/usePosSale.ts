@@ -17,6 +17,14 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("shift_ambiguous")) return "Hay cajas abiertas en varias sucursales: elegí tu caja arriba";
   if (msg.includes("shift_not_open")) return "El turno de esta caja ya se cerró: abrí la caja de nuevo";
   if (msg.includes("store_not_allowed")) return "No tenés acceso a la sucursal de esta caja";
+  // ADR-051: caja propia, PIN de supervisor y estado del personal.
+  if (msg.includes("shift_not_owned")) return "Esta caja la tiene abierta otra persona: abrí la tuya para cobrar";
+  if (msg.includes("no_open_shift")) return "No tenés una caja abierta: abrí la tuya para cobrar";
+  if (msg.includes("supervisor_cancelled")) return "Cancelaste la autorización del supervisor";
+  if (msg.includes("supervisor_token_invalid")) return "La autorización venció o ya se usó: pedila de nuevo";
+  if (msg.includes("supervisor_required")) return "Hace falta la autorización de un supervisor";
+  if (msg.includes("staff_suspended") || msg.includes("staff_on_leave") || msg.includes("staff_terminated"))
+    return "Tu usuario no está habilitado para vender ahora";
   return msg.includes("account_inactive")
     ? "Tu suscripción venció. Renovala para volver a cobrar."
     : msg.includes("coupon_usage_exceeded")

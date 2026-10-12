@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId } from "@/modules/branches/store";
+import { withSupervisor } from "@/modules/security/supervisor";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -1303,6 +1304,11 @@ export const posApi = {
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
+    // ADR-051 (H116): si el descuento general pide supervisor, el servidor
+    // contesta supervisor_required y se reintenta con el PIN (mismo payload).
+    const subtotal = items.reduce((a, it) => a + it.unit_price * it.quantity - (it.discount ?? 0), 0);
+    const discountPct = subtotal > 0 ? Math.round((discountTotal / subtotal) * 10000) / 100 : 0;
+    const run = async (): Promise<CreateSaleResult> => {
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
       p_payments: payments as unknown as Json,
@@ -1332,5 +1338,7 @@ export const posApi = {
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;
+    };
+    return withSupervisor(run, { discount_over: discountPct });
   },
 };

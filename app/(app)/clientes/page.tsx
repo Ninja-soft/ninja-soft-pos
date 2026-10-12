@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
@@ -11,7 +12,6 @@ import { Pagination } from "@/components/ui/Pagination";
 import { GatedButton } from "@/components/saas/GatedAction";
 import { CustomerFormModal } from "@/components/customers/CustomerFormModal";
 import { CustomerHistoryModal } from "@/components/customers/CustomerHistoryModal";
-import { AccountsReceivableModal } from "@/components/customers/AccountsReceivableModal";
 import { BirthdaysModal } from "@/components/customers/BirthdaysModal";
 import { ImportCustomersModal } from "@/components/customers/ImportCustomersModal";
 import { useCustomersPaged, useCustomerMutations } from "@/modules/customers/hooks";
@@ -29,11 +29,11 @@ import { NoData } from "@/components/ui/NoData";
 
 export default function ClientesPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const pageSize = usePageSize();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [arOpen, setArOpen] = useState(false);
   const [bdayOpen, setBdayOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -134,9 +134,9 @@ export default function ClientesPage() {
               featureLabel="Cuenta corriente"
               variant="secondary"
               className="shrink-0"
-              onClick={() => setArOpen(true)}
+              onClick={() => router.push("/clientes/cuentas")}
             >
-              <Wallet size={16} /> Cuentas por cobrar
+              <Wallet size={16} /> Cuentas corrientes
             </GatedButton>
             <Button variant="secondary" className="shrink-0" onClick={() => setBdayOpen(true)}>
               <Cake size={16} /> Cumpleaños
@@ -266,7 +266,6 @@ export default function ClientesPage() {
         customer={selected}
       />
       <ImportCustomersModal open={importOpen} onOpenChange={setImportOpen} />
-      <AccountsReceivableModal open={arOpen} onOpenChange={setArOpen} />
       <BirthdaysModal open={bdayOpen} onOpenChange={setBdayOpen} />
       <CustomerHistoryModal
         open={historyCustomer !== null}

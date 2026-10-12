@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { customersApi, customerGroupsApi } from "./api";
+import { accountApi, type CollectionItem } from "./account";
 import type { CustomerOutput } from "./schemas";
 
 export function useCustomers(search: string) {
@@ -79,12 +80,96 @@ export function useCustomerUpcomingAppointments(
   });
 }
 
-export function useAccountsReceivable(enabled = true) {
+// ── Cuenta corriente v2 (RPC server-side) ────────────────────────────────────
+
+export function useAccountAging(asOf?: string | null, enabled = true) {
   return useQuery({
-    queryKey: ["customers", "accounts-receivable"],
+    queryKey: ["account", "aging", asOf ?? ""],
     enabled,
-    queryFn: () => customersApi.accountsReceivable(),
+    queryFn: () => accountApi.aging(asOf),
   });
+}
+
+export function useAccountStatement(
+  customerId: string | null | undefined,
+  range?: { from?: string | null; to?: string | null },
+) {
+  return useQuery({
+    queryKey: ["account", "statement", customerId, range?.from ?? "", range?.to ?? ""],
+    enabled: Boolean(customerId),
+    queryFn: () => accountApi.statement(customerId!, range?.from, range?.to),
+  });
+}
+
+// Info de cuenta para el POS (saldo, disponible, vencido, cuotas, bloqueo).
+export function useAccountPosInfo(customerId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["account", "pos-info", customerId],
+    enabled: enabled && Boolean(customerId),
+    queryFn: () => accountApi.posInfo(customerId!),
+    // Siempre fresco: cada cobro a cuenta cambia el saldo y el disponible.
+    staleTime: 0,
+  });
+}
+
+export function useAccountTenantConfig() {
+  return useQuery({
+    queryKey: ["account", "tenant-config"],
+    queryFn: () => accountApi.tenantConfig(),
+  });
+}
+
+export function useTeamMembers(enabled = true) {
+  return useQuery({
+    queryKey: ["account", "team"],
+    enabled,
+    queryFn: () => accountApi.team(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useAccountMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["account"] });
+    qc.invalidateQueries({ queryKey: ["customers", "history"] });
+  };
+  return {
+    collect: useMutation({ mutationFn: accountApi.collect, onSuccess: invalidate }),
+    voidPayment: useMutation({
+      mutationFn: (v: { id: string; reason: string }) => accountApi.voidPayment(v.id, v.reason),
+      onSuccess: invalidate,
+    }),
+    waiveInterest: useMutation({
+      mutationFn: (v: { id: string; amount: number; reason: string }) =>
+        accountApi.waiveInterest(v.id, v.amount, v.reason),
+      onSuccess: invalidate,
+    }),
+    adjust: useMutation({ mutationFn: accountApi.adjust, onSuccess: invalidate }),
+    setTerms: useMutation({
+      mutationFn: accountApi.setCustomerTerms,
+      onSuccess: () => {
+        invalidate();
+        qc.invalidateQueries({ queryKey: ["customers"] });
+      },
+    }),
+    addItem: useMutation({ mutationFn: accountApi.addItem, onSuccess: invalidate }),
+    updateItem: useMutation({
+      mutationFn: (v: { id: string; status: CollectionItem["status"]; remove?: boolean }) =>
+        accountApi.updateItem(v.id, v.status, v.remove),
+      onSuccess: invalidate,
+    }),
+    sendStatement: useMutation({
+      mutationFn: (v: { customerId: string; to?: string | null }) =>
+        accountApi.sendStatement(v.customerId, v.to),
+      onSuccess: invalidate,
+    }),
+    accrue: useMutation({ mutationFn: accountApi.accrueInterest, onSuccess: invalidate }),
+    saveSettings: useMutation({
+      mutationFn: accountApi.saveSettings,
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 export function useBirthdays(month: number, enabled = true) {

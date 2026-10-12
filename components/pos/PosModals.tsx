@@ -18,6 +18,7 @@ import { useGating } from "@/modules/saas/gating";
 import type { CardVoucher, PaymentPlan } from "@/modules/pos/api";
 import type { WarrantyPlan } from "@/modules/products/api";
 import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
+import { AccountPayPanel, type AccountPayState } from "@/components/pos/AccountPayPanel";
 
 // Extra del cobro que emite el PaymentModal hacia el POS. `kind` decide qué hace
 // create_sale (ver SaleExtraInput): warranty/surcharge entran como ítem de venta;
@@ -658,6 +659,7 @@ export function PaymentModal({
   loading,
   storeCreditBalance = 0,
   hasCustomer = false,
+  customerId = null,
   initialWarrantyId = "",
   splitItems = [],
   deliveryFee = 0,
@@ -681,6 +683,9 @@ export function PaymentModal({
   loading: boolean;
   storeCreditBalance?: number;
   hasCustomer?: boolean;
+  // Cliente de la venta (Cuenta corriente v2): el panel de cuenta corriente lee
+  // su saldo, disponible, vencido, cuotas y bloqueo por mora.
+  customerId?: string | null;
   // Plan de garantía pre-seleccionado por la oferta contextual (H28). Al abrir,
   // el modal arranca con esta garantía elegida; el cajero puede cambiarla.
   initialWarrantyId?: string;
@@ -738,6 +743,10 @@ export function PaymentModal({
     (r: { payments: SalePaymentInput[]; change: number } | null) => setSplitResult(r),
     [],
   );
+  // Cuenta corriente v2: cuotas / override de mora (viaja en payments.reference)
+  // y si el cobro a cuenta está bloqueado (límite, mora sin autorización).
+  const [accountPay, setAccountPay] = useState<AccountPayState>({ reference: undefined, blocked: false });
+  const handleAccountChange = useCallback((s: AccountPayState) => setAccountPay(s), []);
 
   // Reset al abrir (el modal queda montado entre ventas). La garantía arranca con
   // la pre-seleccionada por la oferta contextual (H28), si la hay.
@@ -799,7 +808,9 @@ export function PaymentModal({
       ...(canVale
         ? [{ value: "store_credit" as const, label: `Vale (saldo ${formatCurrency(storeCreditBalance)})`, providers: [] }]
         : []),
-      ...(hasCustomer
+      // Cuenta corriente: con cliente y si el plan la incluye (espejo del gating
+      // server-side: payment_method_plan_key('account') → cuenta_corriente).
+      ...(hasCustomer && (gating ? gating.features.cuenta_corriente === true : true)
         ? [{ value: "account" as const, label: "Cuenta corriente (fiado)", providers: [] }]
         : []),
     ];
@@ -1022,6 +1033,11 @@ export function PaymentModal({
             ))}
           </select>
         </div>
+        )}
+
+        {/* Cuenta corriente v2: saldo, disponible, vencido, cuotas y bloqueo. */}
+        {!splitOn && method === "account" && (
+          <AccountPayPanel customerId={customerId} total={payTotal} onChange={handleAccountChange} />
         )}
 
         {/* Profesional / vendedor (H39): atribuye la comisión de la venta. Sólo
@@ -1251,13 +1267,19 @@ export function PaymentModal({
           ) : (
             <Button
               loading={loading}
-              disabled={voucherRequired && !voucherComplete}
+              disabled={
+                (voucherRequired && !voucherComplete) || (method === "account" && accountPay.blocked)
+              }
               onClick={() =>
                 onConfirm(
                   [
                     {
                       method,
                       amount: payTotal,
+                      // Cuenta corriente: cuotas / override de mora para el trigger de cargo.
+                      ...(method === "account" && accountPay.reference
+                        ? { reference: accountPay.reference }
+                        : {}),
                       // Voucher de tarjeta: se adjunta si es obligatorio o si el
                       // cajero cargó algún dato (siempre en débito/crédito).
                       ...(isCardMethod && (voucherRequired || voucherHasData)

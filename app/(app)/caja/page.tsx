@@ -202,7 +202,11 @@ export default function CajaPage() {
                               ? "Egreso"
                               : m.type === "sale"
                                 ? "Venta"
-                                : "Anulación"}
+                                : m.type === "account_payment"
+                                  ? "Cobro cuenta corriente"
+                                  : m.type === "account_payment_void"
+                                    ? "Anulación cobro cuenta corriente"
+                                    : "Anulación"}
                         </span>
                         {m.reason && (
                           <span className="ml-2 text-muted-foreground">{m.reason}</span>
@@ -216,7 +220,9 @@ export default function CajaPage() {
                       </div>
                       <span
                         className={
-                          m.type === "expense" || m.type === "sale_void"
+                          m.type === "expense" ||
+                          m.type === "sale_void" ||
+                          m.type === "account_payment_void"
                             ? "text-danger"
                             : "text-success"
                         }

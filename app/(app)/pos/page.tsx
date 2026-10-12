@@ -1427,6 +1427,10 @@ function PosPageInner() {
             ? "La cuenta corriente no está incluida en tu plan"
             : msg.includes("credit_limit_exceeded")
               ? "Supera el límite de cuenta corriente del cliente"
+              : msg.includes("account_overdue_blocked") || msg.includes("account_blocked")
+                ? "La cuenta corriente del cliente está bloqueada"
+              : msg.includes("installments_not_allowed")
+                ? "Esa cantidad de cuotas no está habilitada"
               : msg.includes("account_needs_customer")
                 ? "La cuenta corriente necesita un cliente"
                 : msg.includes("insufficient_store_credit")
@@ -2353,6 +2357,7 @@ function PosPageInner() {
         loading={sale.isPending}
         storeCreditBalance={scBalance ?? 0}
         hasCustomer={customer !== null}
+        customerId={customer?.id ?? null}
         initialWarrantyId={offeredWarrantyId}
         splitItems={splitItems}
         deliveryFee={deliveryFee}

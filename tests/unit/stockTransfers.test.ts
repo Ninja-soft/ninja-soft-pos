@@ -22,7 +22,7 @@ describe("máquina de estados de traslados", () => {
   it("cada estado tiene etiqueta sin guion largo", () => {
     for (const st of TRANSFER_STATUSES) {
       expect(TRANSFER_STATUS_LABEL[st]).toBeTruthy();
-      expect(TRANSFER_STATUS_LABEL[st]).not.toContain("—");
+      expect(TRANSFER_STATUS_LABEL[st]).not.toContain(String.fromCharCode(0x2014));
     }
   });
 

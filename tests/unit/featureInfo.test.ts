@@ -55,4 +55,13 @@ describe("dependencias de features", () => {
     }
     expect(FEATURE_INFO.cc_cobranza?.needs).toBeTruthy();
   });
+
+  it("stock por sucursal y traslados dependen de multi-sucursal (mismo plan)", () => {
+    expect(featureRequires("stock_sucursales")).toEqual(["multi_sucursal"]);
+    expect(featureRequires("traslados")).toEqual(["stock_sucursales"]);
+    for (const key of ["stock_sucursales", "traslados"]) {
+      expect(FEATURE_INFO[key]?.minPlan, key).toBe(FEATURE_INFO.multi_sucursal?.minPlan);
+    }
+    expect(FEATURE_INFO.traslados?.needs).toMatch(/dos sucursales/);
+  });
 });

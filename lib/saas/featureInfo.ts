@@ -204,6 +204,19 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin categorías el catálogo queda plano, sin agrupar ni filtrar por tipo de producto.",
     minPlan: "Start",
   },
+  stock_sucursales: {
+    desc: "Stock por sucursal: cada local tiene su propio stock, con mínimo, máximo y ubicación; ajustes y conteos por sucursal y desglose en Productos.",
+    impact: "Desactivado, se ve un único stock del negocio y no se ajusta ni configura por sucursal (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["multi_sucursal"],
+  },
+  traslados: {
+    desc: "Traslados entre sucursales: programados para una fecha, con aprobación opcional, mercadería en tránsito, recepción parcial con diferencias y motivo, remito interno imprimible y sugerencias por stock bajo.",
+    impact: "Desactivado, no se pueden mover productos entre sucursales desde el sistema (el servidor lo rechaza).",
+    minPlan: "Business",
+    requires: ["stock_sucursales"],
+    needs: "Al menos dos sucursales activas.",
+  },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",

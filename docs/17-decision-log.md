@@ -1629,6 +1629,43 @@ Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, m
 
 ---
 
+## ADR-051: Personal con estados, propiedad de la caja, PIN de supervisor por acción y auditoría del negocio (F17 · H113 a H119)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/sucursales-personal-cajas`, migraciones sin aplicar) · **Base:** ADR-045, ADR-049 (personal al invitar y `audit_logs.store_id`), ADR-052 · **Auditoría:** [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-personal-cajas.md)
+
+### Contexto
+
+El dueño pidió que cada usuario trabaje sólo en su sucursal, que el dueño cobre en cualquiera pero abriendo su caja, que nadie invada la caja de otro, estados de personal (suspensión, licencia, baja, reingreso), ver qué cajas están abiertas, configurar PIN de supervisor y auditoría, y un panel del dueño más útil. La auditoría encontró huecos P0: cualquier miembro cierra o vende en el turno de otro, `cash_movements` se escribe y borra por REST, un encargado puede degradar al dueño, el invitado no recibe el negocio activo y el PIN sólo existe para cuenta corriente.
+
+### Decisión
+
+1. **Estados del personal como historial con vigencias** (`staff_status_events`: `suspension`, `leave`, `termination`, `rehire`), igual que las asignaciones por sucursal: evaluación perezosa por fecha (`staff_effective_status`), sin cron, baja lógica para cancelar. Prioridad baja > suspensión > licencia. La suspensión y la licencia no tocan la membresía: cortan la operación en el servidor (`user_allowed_store_ids()` vacío, `assert_staff_operational()` en apertura de turno y en `resolve_sale_shift`, `is_tenant_manager()` falso). La baja además pasa `tenant_users.status` a `inactive` (valor nuevo), borra las sesiones del usuario y saca el negocio de `app_metadata.current_tenant_id` si era el activo, así la RLS lo deja afuera en el próximo refresh. El reingreso vuelve a `active` y restaura el negocio activo si no tiene otro. Un encargado no puede cambiar el estado del dueño ni de otro encargado; nadie se cambia a sí mismo.
+2. **Propiedad de la caja en un helper, no en `create_sale`.** `assert_shift_owner(shift)` (dueño del turno o `shared_shift` para vender). `resolve_sale_shift` (que usan venta, devolución y cambio) lo exige y deja de inferir turnos ajenos; `open_cash_shift` (recreada desde `20261013120000`) exige un turno abierto por usuario y personal operativo. Guardas por trigger en `cash_shifts` (cierre sólo por el dueño del turno o con la marca de transacción que pone `cash_force_close`; sin insert ni delete desde el cliente) y en `cash_movements` (desde el cliente sólo ingreso, retiro o el contramovimiento de una anulación real del mismo turno; nunca UPDATE o DELETE). Se distingue cliente de RPC con `current_user in ('authenticated','anon')`, como en `20261012120000`. Así no se recrean `create_sale`, `close_cash_shift`, `void_sale` ni las devoluciones, que tocan otras ramas.
+3. **Cierre forzado** `cash_force_close(shift, monto, motivo)`: supervisor por rol o con token de PIN, motivo obligatorio, llama a `close_cash_shift` (Z normal) con una marca de transacción y audita `cash_shift_force_closed` con el dueño del turno.
+4. **PIN de supervisor general.** Misma tabla `account_supervisor_pins` (los PIN existentes siguen valiendo) con RPC nuevas sin gating de cuenta corriente. `security_settings` por negocio guarda la política: acciones con umbral, roles y usuarios supervisores, intentos, minutos de bloqueo, rotación y caja compartida. `supervisor_authorize` devuelve un token de un solo uso (acción, cajero, monto, 5 minutos). **El token viaja en el header `x-ninja-supervisor-token`** y lo consumen triggers en `sales` (descuento general sobre X % al insertar; anulación desde $Y), `sale_returns` (devolución desde $Y) y `cash_movements` (retiro e ingreso). Quien ya es supervisor actúa con su sesión. Es server-side real sin cambiar firmas de RPC.
+5. **Monitor de cajas** por RPC `cash_monitor` (respeta `user_allowed_store_ids`), pantalla `/caja/monitor` y widget del panel.
+6. **Auditoría:** registrar sigue siendo BASE. La lectura directa de `audit_logs` se restringe (policy RESTRICTIVE: dueño, encargado o filas propias). El visor usa `audit_log_search` gateada por `auditoria` (OPTIONAL Business), con export XLSX en el cliente.
+7. **Features (CLAUDE.md §6):** `personal_estados`, `monitor_cajas` y `pin_supervisor` son BASE (`is_basic`, en todos los planes); `auditoria` (existente) pasa de MARKETING-FUTURO a OPTIONAL con gating real; `shared_shift` es FLAG-OPERATIVO.
+8. **Invitación:** `invite_user` no pisa el rol de un miembro existente (sólo agrega o reactiva con el rol pedido si no era dueño), setea el negocio activo del invitado si no tiene, y deja el reingreso de una baja como evento. `member_admin` valida jerarquía (encargado no toca dueño ni encargados). `ensure_current_tenant()` cura al entrar a quienes tienen membresía activa sin negocio activo.
+
+### Alternativas descartadas
+
+- **Recrear `create_sale`, `close_cash_shift` y `void_sale` con los controles:** choca con `feat/cobros-en-espera` y `feat/sucursales-config-terminales`; los triggers y `resolve_sale_shift` cubren lo mismo.
+- **`current_tenant_id()` que valide la membresía en cada policy:** es la raíz correcta para S-07 pero cambia el costo de todas las policies (no se pueden asumir initplans); queda en H118 con medición.
+- **Cambiar parámetros de las RPC para mandar el token del PIN:** obliga a recrear funciones ajenas; el header es explícito, se valida en el servidor y no cambia firmas.
+- **Suspensión como cambio de `tenant_users.status`:** no permite "vuelve sola el lunes" sin cron y saca al usuario de listas e historia; se usa el historial con vigencias.
+- **pg_cron para vencer suspensiones y licencias:** igual que en ADR-045, la vigencia calculada al consultar es exacta y gratis.
+
+### Consecuencias
+
+- Migraciones `20261017100000_personal_estados`, `20261017110000_propiedad_caja`, `20261017120000_pin_supervisor_politicas`, `20261017130000_monitor_auditoria` (sin aplicar). Orden de deploy: **front primero** (el cliente nuevo cae a la ruta vieja si una RPC no existe), después las migraciones en orden, después las Edge `invite_user` y `member_admin`.
+- **Cambio de conducta:** desde el deploy nadie vende en el turno de otro. Si hoy dos personas comparten un turno, el dueño activa "Caja compartida" en Seguridad o cada uno abre su caja. Los turnos abiertos al momento del deploy siguen; sólo su dueño los opera y cierra (o un supervisor con cierre forzado).
+- Un usuario con turno abierto en Centro tiene que cerrarlo para abrir otro en Norte (un turno por usuario).
+- Residual S-07: un suspendido o de licencia con sesión viva todavía puede **leer** datos del negocio por API hasta H118; no puede operar caja ni vender.
+- Tests: unitarios de la máquina de estados, reglas de propiedad y evaluación de políticas de PIN; RLS de propiedad del turno, cierre forzado, guardas de `cash_movements`, estados y PIN por header.
+
+---
+
 ## ADR-052: Aislamiento del staff interno: internal_scope() en vez de is_internal() en RLS de negocio
 
 **Fecha:** 2026-10-12 · **Estado:** aceptada · **Severidad:** incidente de aislamiento multi-tenant

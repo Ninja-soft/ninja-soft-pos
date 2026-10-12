@@ -10,18 +10,27 @@ import {
   FlaskConical,
   KeyRound,
   Lock,
+  Mail,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Unplug,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
 import { CredentialInput } from "@/components/ui/CredentialInput";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { SANDBOX_PROVIDERS, type BrandDef } from "@/lib/payments/catalog";
-import { CHANNEL_CAPS, CONNECT_GUIDE, NAVE_WEBHOOK_URL, SECURITY_NOTE, type ChannelCap } from "./copy";
+import {
+  CHANNEL_CAPS,
+  CONNECT_GUIDE,
+  NAVE_WEBHOOK_URL,
+  SECURITY_NOTE,
+  naveRegistrationEmail,
+  type ChannelCap,
+} from "./copy";
+import { useMyTenant } from "@/modules/tenants/hooks";
 import {
   BrandLogo,
   CapBadge,
@@ -679,6 +688,13 @@ function NextStep({ n, children }: { n: number; children: React.ReactNode }) {
 
 function NaveWebhookBox() {
   const { toast } = useToast();
+  const { data: me } = useMyTenant();
+  const email = naveRegistrationEmail(me?.name);
+  const copy = (text: string, title: string) =>
+    navigator.clipboard
+      .writeText(text)
+      .then(() => toast({ title, variant: "success" }))
+      .catch(() => toast({ title: "No se pudo copiar", variant: "error" }));
   return (
     <div className="space-y-2.5 rounded-2xl bg-fg-4 p-3.5">
       <div className="flex items-center gap-2.5">
@@ -698,15 +714,24 @@ function NaveWebhookBox() {
           type="button"
           size="sm"
           variant="secondary"
-          onClick={() =>
-            navigator.clipboard
-              .writeText(NAVE_WEBHOOK_URL)
-              .then(() => toast({ title: "URL copiada", variant: "success" }))
-              .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
-          }
+          onClick={() => copy(NAVE_WEBHOOK_URL, "URL copiada")}
         >
           <Copy size={14} /> Copiar
         </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Te armamos el mail para {email.to}: pide registrar la URL en sandbox y producción, y tus credenciales.
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Button type="button" size="sm" variant="secondary" onClick={() => copy(email.text, "Copiado")}>
+          <Copy size={14} /> Copiar mail para Nave
+        </Button>
+        <a
+          href={email.mailto}
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          <Mail size={14} /> Abrir en mi correo
+        </a>
       </div>
     </div>
   );

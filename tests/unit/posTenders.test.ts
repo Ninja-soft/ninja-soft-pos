@@ -108,6 +108,19 @@ describe("disponibilidad", () => {
     expect(ids(ctx({ storeCreditBalance: 500 }))).not.toContain("store_credit");
   });
 
+  it("GO Cuotas va con su conexión y Directo sólo si está habilitado", () => {
+    const providers = [row("cash"), row("gocuotas"), row("directo", false)];
+    expect(ids(ctx({ providers }))).toEqual(
+      expect.arrayContaining(["gocuotas:qr", "gocuotas:link", "directo"]),
+    );
+    expect(TENDER_BY_ID["gocuotas:qr"]?.minAmount).toBe(1500);
+    expect(TENDER_BY_ID.directo?.requiresReference).toBe(true);
+    expect(ids(ctx({ providers, features: { directo: false, gocuotas: false } }))).not.toEqual(
+      expect.arrayContaining(["directo"]),
+    );
+    expect(ids(ctx())).not.toContain("directo");
+  });
+
   it("toma el recargo del medio sólo para efectivo y transferencia", () => {
     const tenders = resolveTenders(
       ctx({

@@ -164,6 +164,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [cardKind, setCardKind] = useState<"debit" | "credit">("debit");
   const [planId, setPlanId] = useState("");
   const [voucher, setVoucher] = useState({ lote: "", cupon: "", autorizacion: "" });
+  // Número de operación (Directo): obligatorio, viaja como reference del pago.
+  const [opRef, setOpRef] = useState("");
   const [itemsOpen, setItemsOpen] = useState(false);
   const [pickedItems, setPickedItems] = useState<string[]>([]);
   const [tipPct, setTipPct] = useState<number | null>(null);
@@ -313,14 +315,24 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     !isCard ||
     (voucher.lote.trim() !== "" && voucher.cupon.trim() !== "" && voucher.autorizacion.trim() !== "");
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
+  const refOk = !active?.requiresReference || opRef.trim() !== "";
+  const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
   const canCommit =
-    Boolean(active) && portion > 0 && settle.amount > 0 && voucherOk && !receivedShort && !electronic;
+    Boolean(active) &&
+    portion > 0 &&
+    settle.amount > 0 &&
+    voucherOk &&
+    refOk &&
+    !belowMin &&
+    !receivedShort &&
+    !electronic;
 
   // Reset de los campos al cambiar de medio.
   useEffect(() => {
     setPlanId("");
     setReceivedStr("");
     setVoucher({ lote: "", cupon: "", autorizacion: "" });
+    setOpRef("");
   }, [activeId, cardKind]);
 
   function pickTender(t: ResolvedTender) {
@@ -363,6 +375,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setItemsOpen(false);
     setPlanId("");
     setVoucher({ lote: "", cupon: "", autorizacion: "" });
+    setOpRef("");
     const t = tipFor(next, null);
     if (totalsFor(next, promoFor(next, null, t), t).settled) {
       finalize(next);
@@ -392,13 +405,16 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           ? `Recibido ${money(received)}, vuelto ${money(received - settle.amount)}`
           : plan
             ? plan.label
-            : undefined,
+            : active.requiresReference
+              ? `Operación ${opRef.trim()}`
+              : undefined,
       logo: active.logo,
       method: activeMethod,
       amount: settle.amount,
       surcharge: settle.surcharge,
       surchargeItems: settle.surcharge > 0 ? [{ name: surchargeName, amount: settle.surcharge }] : [],
       received: active.flow === "cash" ? (received ?? settle.amount) : undefined,
+      reference: active.requiresReference ? opRef.trim() : undefined,
       card_voucher: hasVoucher
         ? {
             lote: voucher.lote.trim(),
@@ -829,6 +845,33 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                   </div>
                 )}
 
+                {active.requiresReference && (
+                  <div className="mt-4">
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Número de operación
+                    </label>
+                    <input
+                      value={opRef}
+                      maxLength={64}
+                      autoComplete="off"
+                      onChange={(e) => setOpRef(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && onCta()}
+                      placeholder="Ej. 123456"
+                      aria-label="Número de operación"
+                      className="mt-1.5 h-11 w-full rounded-xl bg-muted/70 px-3 text-sm font-semibold outline-none focus:bg-muted"
+                    />
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      Cobrá {money(settle.amount)} en el portal de {active.brandLabel} y cargá el número que
+                      te da al aprobarse.
+                    </p>
+                  </div>
+                )}
+                {belowMin && active.minAmount && (
+                  <p className="mt-3 rounded-xl bg-warning/12 px-3 py-2 text-xs font-semibold text-warning">
+                    {active.brandLabel} acepta cobros desde {money(active.minAmount)}. Usá otro medio para
+                    montos menores.
+                  </p>
+                )}
                 {settle.surcharge > 0 && (
                   <p className="mt-3 text-xs text-muted-foreground">
                     Incluye recargo de {money(settle.surcharge)}.

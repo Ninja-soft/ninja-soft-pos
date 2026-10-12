@@ -18,7 +18,8 @@ export type SaleMethod =
   | "qr"
   | "other"
   | "store_credit"
-  | "account";
+  | "account"
+  | "directo";
 
 export type TenderChannel = "manual" | "qr" | "link" | "point";
 
@@ -59,7 +60,8 @@ export type QrProviderKey =
   | "pagos360"
   | "payway"
   | "getnet"
-  | "nave";
+  | "nave"
+  | "gocuotas";
 export type PointProviderKey = "mercadopago_point" | "nave_point";
 
 export interface TenderDef {
@@ -85,6 +87,10 @@ export interface TenderDef {
   pointProvider?: PointProviderKey;
   /** Ayuda corta debajo del rótulo. */
   hint?: string;
+  /** Exige un número de operación (viaja como reference del pago). */
+  requiresReference?: boolean;
+  /** Monto mínimo que acepta el proveedor. */
+  minAmount?: number;
 }
 
 const LOGO = {
@@ -97,6 +103,8 @@ const LOGO = {
   modo: "/img/medios_de_pago/Modo_cube.webp",
   mobbex: "/img/medios_de_pago/Mobbex_cube.webp",
   pagos360: "/img/medios_de_pago/Pagos360_cube.webp",
+  gocuotas: "/images/payments/gocuotas.webp",
+  directo: "/images/payments/directo.webp",
   visa: "/img/medios_de_pago/cards/visa_credito.svg",
   visaDebit: "/img/medios_de_pago/cards/visa_debito.svg",
 } as const;
@@ -258,6 +266,27 @@ export const TENDERS: TenderDef[] = [
   qr("mobbex", "Mobbex", "wallets", "qr"),
   qr("mobbex", "Mobbex", "wallets", "link"),
   qr("pagos360", "Pagos360", "wallets", "link", "Link de pago"),
+  // GO Cuotas (ADR-033): checkout Redirect como QR + link; desde $1.500.
+  { ...qr("gocuotas", "GO Cuotas", "wallets", "qr", "Cuotas con débito"), minAmount: 1500 },
+  { ...qr("gocuotas", "GO Cuotas", "wallets", "link", "Cuotas con débito"), minAmount: 1500 },
+  // Directo (ADR-034): se cobra en el portal de Directo y acá se registra el
+  // número de operación.
+  {
+    id: "directo",
+    group: "wallets",
+    brand: "directo",
+    brandLabel: "Directo",
+    channel: "manual",
+    label: "Crédito",
+    method: "directo",
+    provider: "directo",
+    connection: null,
+    featureKey: providerFeature("directo"),
+    logo: LOGO.directo,
+    flow: "direct",
+    hint: "Con número de operación",
+    requiresReference: true,
+  },
   {
     id: "store_credit",
     group: "customer",
@@ -348,7 +377,8 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
   switch (t.flow) {
     case "cash":
     case "direct":
-      return noConfig || enabled.has(t.provider ?? "");
+      // Sin configuración sólo se ofrecen efectivo y transferencia.
+      return (noConfig && !t.requiresReference) || enabled.has(t.provider ?? "");
     case "card":
       return (
         noConfig ||
@@ -377,7 +407,10 @@ export function resolveTenders(ctx: TenderContext): ResolvedTender[] {
     ...t,
     // Recargo global del medio: sólo efectivo y transferencia (los QR lo
     // aplica su propio modal; las tarjetas usan planes de cuotas).
-    surchargePct: t.flow === "cash" || t.flow === "direct" ? pct.get(t.provider ?? "") ?? 0 : 0,
+    surchargePct:
+      (t.flow === "cash" || t.flow === "direct") && !t.requiresReference
+        ? (pct.get(t.provider ?? "") ?? 0)
+        : 0,
   }));
 }
 

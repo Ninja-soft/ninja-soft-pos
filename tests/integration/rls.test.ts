@@ -113,6 +113,8 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       "cuenta_corriente",
       "cc_punitorios",
       "cc_cobranza",
+      // Conciliación de tarjetas (bloque al final de la suite).
+      "conciliacion_tarjetas",
     ];
     const { error: addonErr } = await admin.from("subscription_addons").insert(
       [ctx.tenantA, ctx.tenantB].flatMap((t) =>
@@ -676,6 +678,101 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       const st = data as unknown as { balance: number; open_items: unknown[] };
       expect(Number(st.balance)).toBe(-30);
       expect(st.open_items).toEqual([]);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Conciliación de tarjetas (ADR-043): sólo por RPC, owner/manager, tenant propio.
+  // ---------------------------------------------------------------------------
+  describe("conciliación de tarjetas", () => {
+    const rec = {} as { paymentA: string; cashPaymentA: string };
+
+    beforeAll(async () => {
+      const { admin } = ctx;
+      const { data: store, error: sErr } = await admin
+        .from("stores")
+        .insert({ tenant_id: ctx.tenantA, name: `Local conciliación ${STAMP}` })
+        .select("id")
+        .single();
+      if (sErr || !store) throw sErr ?? new Error("store");
+      const { data: sale, error: saleErr } = await admin
+        .from("sales")
+        .insert({ tenant_id: ctx.tenantA, store_id: store.id, number: 990001, subtotal: 300, total: 300 })
+        .select("id")
+        .single();
+      if (saleErr || !sale) throw saleErr ?? new Error("sale");
+      const { data: pays, error: pErr } = await admin
+        .from("payments")
+        .insert([
+          {
+            tenant_id: ctx.tenantA,
+            sale_id: sale.id,
+            method: "debit",
+            amount: 200,
+            card_voucher: { lote: "12", cupon: "345", autorizacion: "A1", marca: "Visa", comercio: "111" },
+          },
+          { tenant_id: ctx.tenantA, sale_id: sale.id, method: "other", amount: 100 },
+        ] as never)
+        .select("id, method");
+      if (pErr || !pays) throw pErr ?? new Error("payments");
+      const list = pays as unknown as { id: string; method: string }[];
+      rec.paymentA = list.find((p) => p.method === "debit")!.id;
+      rec.cashPaymentA = list.find((p) => p.method === "other")!.id;
+    }, 60_000);
+
+    const call = (client: SupabaseClient, ids: string[], reconciled: boolean) =>
+      client.rpc("set_payments_reconciled" as never, { p_payment_ids: ids, p_reconciled: reconciled } as never);
+
+    it("el cashier no puede conciliar", async () => {
+      const { error } = await call(ctx.cashierA, [rec.paymentA], true);
+      expect(error).not.toBeNull();
+    });
+
+    it("el owner B no puede conciliar pagos del tenant A", async () => {
+      const { error } = await call(ctx.ownerB, [rec.paymentA], true);
+      expect(error).not.toBeNull();
+    });
+
+    it("sólo pagos de tarjeta: un pago que no es de tarjeta hace fallar todo el pedido", async () => {
+      const { error } = await call(ctx.ownerA, [rec.paymentA, rec.cashPaymentA], true);
+      expect(error).not.toBeNull();
+      const { data } = await ctx.admin.from("payments").select("reconciled_at" as never).eq("id", rec.paymentA).single();
+      expect((data as unknown as { reconciled_at: string | null }).reconciled_at).toBeNull();
+    });
+
+    it("nadie cambia la conciliación con UPDATE directo", async () => {
+      const { error } = await ctx.ownerA
+        .from("payments")
+        .update({ reconciled_at: new Date().toISOString() } as never)
+        .eq("id", rec.paymentA);
+      expect(error).not.toBeNull();
+    });
+
+    it("el owner concilia y desconcilia, con auditoría", async () => {
+      const { data, error } = await call(ctx.ownerA, [rec.paymentA], true);
+      expect(error).toBeNull();
+      expect((data as unknown as { updated: number }).updated).toBe(1);
+
+      const again = await call(ctx.ownerA, [rec.paymentA], true);
+      expect((again.data as unknown as { updated: number }).updated).toBe(0);
+
+      const { data: row } = await ctx.ownerA
+        .from("payments")
+        .select("reconciled_at, reconciled_by" as never)
+        .eq("id", rec.paymentA)
+        .single();
+      expect((row as unknown as { reconciled_at: string | null }).reconciled_at).not.toBeNull();
+
+      const undo = await call(ctx.ownerA, [rec.paymentA], false);
+      expect(undo.error).toBeNull();
+      expect((undo.data as unknown as { updated: number }).updated).toBe(1);
+
+      const { data: logs } = await ctx.admin
+        .from("audit_logs")
+        .select("action")
+        .eq("tenant_id", ctx.tenantA)
+        .in("action", ["payments_reconciled", "payments_unreconciled"]);
+      expect(logs?.map((l) => l.action).sort()).toEqual(["payments_reconciled", "payments_unreconciled"]);
     });
   });
 });

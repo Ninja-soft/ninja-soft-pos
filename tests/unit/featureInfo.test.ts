@@ -44,6 +44,12 @@ describe("dependencias de features", () => {
     expect(featureRequires("pos_quick_keys_pro")).toEqual(["pos"]);
   });
 
+  it("conciliación de tarjetas: Pro, sin dependencias de plan y aclara el n° de comercio", () => {
+    expect(FEATURE_INFO.conciliacion_tarjetas?.minPlan).toBe("Pro");
+    expect(featureRequires("conciliacion_tarjetas")).toEqual([]);
+    expect(FEATURE_INFO.conciliacion_tarjetas?.needs).toMatch(/números de comercio/);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });

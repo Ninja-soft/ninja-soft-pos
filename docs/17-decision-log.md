@@ -1498,6 +1498,29 @@ El dueño pidió auditar Napse (relevamiento de Bridge Manager 7.9, 253 pantalla
 
 ---
 
+## ADR-044: Conciliación de tarjetas v1 (día, n° de comercio y lote)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración y validación en QA) · **Hito:** Reportes
+
+### Contexto
+
+Los comercios cobran con tarjeta en posnets propios (Tarjeta en posnet, ADR-042) o integrados (Point, Payway, Getnet, Nave...) y después tienen que controlar, contra la liquidación de cada adquirente, que cada lote se haya acreditado. Hoy ese control se hace a mano con el cierre de lote impreso. Los datos ya están: `payments.card_voucher` guarda lote, cupón, autorización, marca y últimos 4, y desde la rama de números de comercio también `comercio` (el n° de comercio de la marca configurado en `tenant_payment_methods.config.merchant_numbers`).
+
+### Decisión
+
+- **Pantalla `/reportes/conciliacion`** (botón en Reportes e ítem "Conciliación de tarjetas" en el menú, con candado sin plan). Filtros: período, tipo (débito / crédito), marca, n° de comercio y estado (pendiente / conciliado). Tabla agrupada como la liquidación del adquirente: **día → n° de comercio → lote**, con cantidad y monto en cada nivel; filas con fecha y hora, ticket, marca (`CardBrandLogo`), tipo, cuotas (si el cupón las trae), lote, cupón, autorización, últimos 4, comercio y monto. Checkbox por cobro y por lote (con estado intermedio). Resumen total / conciliado / pendiente. "Exportar XLSX" (gateado por `export_xlsx`) con hoja de detalle con subtotales por lote, comercio y día y hoja resumen por lote. Se excluyen las ventas anuladas.
+- **Datos:** `payments.reconciled_at` / `reconciled_by` (null = pendiente). La lectura es un SELECT sobre `payments` + `sales` con RLS (índice existente `payments_tenant_method_idx`). La escritura **sólo** por la RPC `set_payments_reconciled(p_payment_ids uuid[], p_reconciled boolean)`: SECURITY DEFINER con `search_path`, exige tenant activo, rol owner o manager (`is_tenant_manager()`), plan con la feature (`tenant_has_feature_for`), y que **todos** los ids sean pagos de tarjeta del tenant (si no, no cambia nada). Sólo toca los que cambian de estado y escribe `audit_logs` (`payments_reconciled` / `payments_unreconciled` con ids, cantidad y monto). Un trigger `BEFORE UPDATE` rechaza cambiar esas columnas desde `authenticated` / `anon` (la policy de aislamiento de `payments` es FOR ALL).
+- **Feature de plan** `conciliacion_tarjetas`: **OPTIONAL**, grupo `reportes`, desde **Pro** (Pro, Business y Enterprise; Start no). Mismo nivel que `export_xlsx`: es control administrativo de un comercio que ya opera con varios medios; los planes a medida heredan el valor de `export_xlsx`. Copy en `lib/saas/featureInfo.ts` (sin `requires`; `needs` aclara que rinde más con los números de comercio cargados en Medios de pago, Planes de cuotas). Aparece en la comparación de planes por derivación de la matriz.
+- Lógica pura (normalización del cupón, filtros, agrupado y subtotales, filas del XLSX) en `lib/reports/cardReconciliation.ts` con tests (`tests/unit/cardReconciliation.test.ts`). Tests de RLS / RPC en `tests/integration/rls.test.ts`.
+
+### Consecuencias
+
+- Deploy: migración `20261012120000_conciliacion_tarjetas` (no aplicada).
+- Cobros sin `comercio` (anteriores a los números de comercio o de marcas sin número) se agrupan como "Sin n° de comercio"; los integrados sin cupón quedan como "Sin lote" y muestran la referencia del proveedor como ayuda.
+- Pendiente (v2): importar la liquidación del adquirente (CSV / Excel) y conciliar automático por lote y cupón; fecha de acreditación y aranceles / retenciones por cobro; conciliación de QR y billeteras.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

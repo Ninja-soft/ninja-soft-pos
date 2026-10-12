@@ -14,12 +14,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { cardLogo, paymentWordmark } from "@/lib/payments/logos";
+import { cardAppIcon, paymentWordmark } from "@/lib/payments/logos";
 import { paywayPayMessage, paywayTokenMessage } from "@/lib/payments/paywayMessages";
 import {
   accentPalette,
   availablePlans,
-  brandFamily,
   brandForDetected,
   detectCardFamily,
   formatCardNumber,
@@ -218,209 +217,302 @@ export default function PagarPage() {
     "--acc-softer": pal.softer,
   } as CSSProperties;
 
+  const showForm = !loadError && (phase === "form" || phase === "paying");
+  const brandLabel = BRAND_LABELS[brand] ?? brand;
+
+  // Estados terminales (error de carga, aprobado, revisión, no disponible):
+  // una sola columna angosta y centrada, igual en el celu y en la PC.
+  if (!showForm) {
+    return (
+      <main className="min-h-dvh bg-[#F4F4F7] text-neutral-900 antialiased" style={vars}>
+        <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col px-4 md:pt-10 lg:pt-16">
+          <MerchantHeader info={info} accent={pal.base} />
+          {loadError ? (
+            <StateCard
+              tone="neutral"
+              title="No encontramos este cobro"
+              text="Pedile al cajero que genere el QR de nuevo."
+            />
+          ) : phase === "done" ? (
+            <StateCard
+              tone="success"
+              title="¡Pago aprobado!"
+              text="Listo, ya podés cerrar esta pantalla. El mostrador registra la venta automáticamente."
+            >
+              {paid && paid.total > 0 && (
+                <div className="mt-6 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-neutral-600">Pagaste</span>
+                    <span className="text-lg font-bold tabular-nums">{fmt(paid.total)}</span>
+                  </div>
+                  {paid.installments > 1 && (
+                    <p className="mt-0.5 text-right text-neutral-600">
+                      en {paid.installments} cuotas de {fmt(paid.total / paid.installments)}
+                    </p>
+                  )}
+                </div>
+              )}
+            </StateCard>
+          ) : phase === "review" ? (
+            <StateCard tone="warning" title="Pago en revisión" text={payError?.text ?? ""} />
+          ) : (
+            <StateCard
+              tone="neutral"
+              title="Este cobro ya no está disponible"
+              text={paywayPayMessage({ error: "intent_not_pending" })}
+            />
+          )}
+          <SecureFooter />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-dvh bg-[#F4F4F7] text-neutral-900 antialiased" style={vars}>
-      <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-col px-4">
-        <MerchantHeader info={info} accent={pal.base} />
-
-        {loadError ? (
-          <StateCard
-            tone="neutral"
-            title="No encontramos este cobro"
-            text="Pedile al cajero que genere el QR de nuevo."
-          />
-        ) : phase === "done" ? (
-          <StateCard
-            tone="success"
-            title="¡Pago aprobado!"
-            text="Listo, ya podés cerrar esta pantalla. El mostrador registra la venta automáticamente."
-          >
-            {paid && paid.total > 0 && (
-              <div className="mt-5 rounded-2xl bg-neutral-50 px-4 py-3 text-sm">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-neutral-600">Pagaste</span>
-                  <span className="text-lg font-bold tabular-nums">{fmt(paid.total)}</span>
-                </div>
-                {paid.installments > 1 && (
-                  <p className="mt-0.5 text-right text-neutral-600">
-                    en {paid.installments} cuotas de {fmt(paid.total / paid.installments)}
-                  </p>
-                )}
+      <div className="mx-auto flex min-h-dvh w-full max-w-[480px] flex-col px-4 md:max-w-[600px] md:px-6 lg:max-w-[1080px] lg:px-8">
+        {/* Celu / tablet: comercio arriba y el total fijo mientras se completa. */}
+        <div className="lg:hidden">
+          <MerchantHeader info={info} accent={pal.base} />
+        </div>
+        {info && (
+          <div className="sticky top-0 z-20 -mx-4 border-b border-transparent bg-[#F4F4F7]/95 px-4 pb-3 pt-3 backdrop-blur-md md:-mx-6 md:px-6 lg:hidden">
+            <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-600">
+                  Total a pagar
+                </p>
+                <p className="shrink-0 text-sm font-semibold tabular-nums">
+                  {quote.installments === 1
+                    ? "1 pago"
+                    : `${quote.installments} × ${fmt(quote.perInstallment)}`}
+                </p>
               </div>
-            )}
-          </StateCard>
-        ) : phase === "review" ? (
-          <StateCard tone="warning" title="Pago en revisión" text={payError?.text ?? ""} />
-        ) : phase === "unavailable" ? (
-          <StateCard
-            tone="neutral"
-            title="Este cobro ya no está disponible"
-            text={paywayPayMessage({ error: "intent_not_pending" })}
-          />
-        ) : !info ? (
-          <LoadingSkeleton />
-        ) : (
-          <>
-            {/* Resumen del monto: fijo arriba mientras se completa el pago. */}
-            <div className="sticky top-0 z-20 -mx-4 bg-[#F4F4F7]/90 px-4 pb-3 pt-3 backdrop-blur-md">
-              <div className="rounded-3xl bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,.06),0_8px_24px_-12px_rgba(16,24,40,.18)] ring-1 ring-black/[0.04]">
-                <div className="flex items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium uppercase tracking-wide text-neutral-600">
-                      Total a pagar
-                    </p>
-                    <p className="mt-0.5 text-[28px] font-extrabold leading-none tracking-tight tabular-nums">
-                      {fmt(quote.total)}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right text-sm">
-                    <p className="font-semibold tabular-nums">
-                      {quote.installments === 1
-                        ? "1 pago"
-                        : `${quote.installments} × ${fmt(quote.perInstallment)}`}
-                    </p>
-                    <InterestPill quote={quote} />
-                  </div>
-                </div>
+              <div className="mt-1 flex flex-wrap items-end justify-between gap-x-3">
+                <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">
+                  {fmt(quote.total)}
+                </p>
+                <InterestPill quote={quote} />
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="space-y-4 pb-4">
-              {/* 1 · Tarjeta */}
-              <Section n={1} title="Elegí tu tarjeta">
-                <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Tarjeta">
-                  {offered.map((br) => {
-                    const debit = (info.debit_brands ?? []).includes(br);
-                    const logo = cardLogo(br, { on: "light" }) ?? cardLogo(brandFamily(br), { on: "light" });
-                    const active = brand === br;
-                    const label = BRAND_LABELS[br] ?? br;
-                    return (
-                      <button
-                        key={br}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        aria-label={label}
-                        onClick={() => selectBrand(br)}
-                        className="relative flex h-[68px] flex-col items-center justify-center gap-1 rounded-2xl px-2 pb-1.5 pt-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--acc)]"
-                        style={{ background: active ? "var(--acc-soft)" : "#F6F6F8" }}
-                      >
-                        {logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={logo} alt="" className="h-7 w-auto max-w-full object-contain" />
-                        ) : (
-                          <span className="text-xs font-bold text-neutral-700">{label}</span>
-                        )}
-                        <span
-                          className="text-[10px] font-semibold leading-none"
-                          style={{ color: active ? "var(--acc-text)" : "#525252" }}
-                        >
-                          {debit ? "Débito" : "Crédito"}
-                        </span>
-                        {active && (
-                          <span
-                            className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full text-white"
-                            style={{ background: "var(--acc)" }}
-                          >
-                            <CheckIcon className="h-2.5 w-2.5" />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+        <div className="flex-1 lg:grid lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] lg:items-start lg:gap-10 lg:py-12 xl:gap-14">
+          {/* PC: resumen de la orden, fijo a la izquierda. */}
+          <aside className="hidden lg:sticky lg:top-12 lg:block" aria-label="Resumen del pago">
+            {info ? (
+              <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+                <div className="p-6">
+                  <MerchantHeader info={info} accent={pal.base} compact />
                 </div>
-                <p className="mt-3 text-xs text-neutral-600">
-                  Pagás con <span className="font-semibold text-neutral-800">{BRAND_LABELS[brand] ?? brand}</span>
-                  {family ? ". La detectamos por el número de tu tarjeta." : "."}
-                </p>
-              </Section>
+                <div className="border-t border-neutral-200 p-6">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-600">
+                    Total a pagar
+                  </p>
+                  <p className="mt-2 text-[40px] font-extrabold leading-none tracking-tight tabular-nums">
+                    {fmt(quote.total)}
+                  </p>
+                  <dl className="mt-6 space-y-3 text-sm">
+                    <SummaryRow label="Tarjeta">
+                      <span className="inline-flex items-center gap-2">
+                        <BrandIcon brand={brand} label={brandLabel} size={22} />
+                        <span className="font-semibold">{brandLabel}</span>
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="Forma de pago">
+                      <span className="font-semibold tabular-nums">
+                        {quote.installments === 1
+                          ? "1 pago"
+                          : `${quote.installments} cuotas de ${fmt(quote.perInstallment)}`}
+                      </span>
+                    </SummaryRow>
+                    <SummaryRow label="Monto">
+                      <span className="tabular-nums">{fmt(base)}</span>
+                    </SummaryRow>
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-md px-3 py-2"
+                      style={{ background: "var(--acc-soft)", color: "var(--acc-text)" }}
+                    >
+                      <dt className="font-medium">Interés</dt>
+                      <dd className="text-right font-semibold tabular-nums">
+                        {interestLabel(quote, fmt)}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="border-t border-neutral-200 bg-neutral-50 p-6">
+                  <SecureNote />
+                </div>
+              </div>
+            ) : (
+              <div className="h-[460px] animate-pulse rounded-lg bg-white" />
+            )}
+            <div className="mt-5 px-1">
+              <PoweredBy />
+              <Legal className="mt-4 text-left" />
+            </div>
+          </aside>
 
-              {/* 2 · Cuotas */}
-              <Section n={2} title="Elegí las cuotas">
-                <div className="overflow-hidden rounded-2xl ring-1 ring-neutral-200" role="radiogroup" aria-label="Cuotas">
-                  {cuotas.map((c, idx) => {
-                    const q = quoteInstallments(base, c);
-                    const active = quote.installments === q.installments;
-                    return (
-                      <button
-                        key={c.installments}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        onClick={() => setInstallments(c.installments)}
-                        className={`flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--acc)] ${
-                          idx > 0 ? "border-t border-neutral-200" : ""
-                        }`}
-                        style={{ background: active ? "var(--acc-soft)" : "#fff" }}
-                      >
-                        <span
-                          className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-white transition-colors"
+          {/* Formulario de pago */}
+          <div className="pb-4 pt-1 lg:pb-0 lg:pt-0">
+            {!info ? (
+              <LoadingSkeleton />
+            ) : (
+              <div className="space-y-3 md:space-y-4">
+                <div className="hidden lg:mb-2 lg:block">
+                  <h2 className="text-2xl font-bold tracking-tight">Pagá con tarjeta</h2>
+                  <p className="mt-1 text-sm text-neutral-600">
+                    Elegí la tarjeta y las cuotas, y completá los datos.
+                  </p>
+                </div>
+
+                {/* 1 · Tarjeta */}
+                <Section n={1} title="Elegí tu tarjeta">
+                  <div className="grid grid-cols-4 gap-2 md:gap-3" role="radiogroup" aria-label="Tarjeta">
+                    {offered.map((br) => {
+                      const debit = (info.debit_brands ?? []).includes(br);
+                      const active = brand === br;
+                      const label = BRAND_LABELS[br] ?? br;
+                      return (
+                        <button
+                          key={br}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          aria-label={`${label} ${debit ? "débito" : "crédito"}`}
+                          onClick={() => selectBrand(br)}
+                          className={`relative flex flex-col items-center justify-center gap-2 rounded-md border px-1 pb-2 pt-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--acc)] focus-visible:ring-offset-1 ${
+                            active ? "" : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50"
+                          }`}
                           style={
                             active
-                              ? { background: "var(--acc)" }
-                              : { boxShadow: "inset 0 0 0 1.5px #a3a3a3" }
+                              ? { background: "var(--acc-soft)", borderColor: "var(--acc)" }
+                              : undefined
                           }
-                          aria-hidden
                         >
-                          {active && <CheckIcon className="h-3 w-3" />}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-start justify-between gap-3">
-                            <span className="min-w-0">
-                              <span className="block text-[13px] text-neutral-600">
-                                {q.installments === 1 ? "1 pago de" : `${q.installments} cuotas de`}
+                          <BrandIcon brand={br} label={label} size={40} />
+                          <span
+                            className="text-[11px] font-semibold leading-none"
+                            style={{ color: active ? "var(--acc-text)" : "#525252" }}
+                          >
+                            {debit ? "Débito" : "Crédito"}
+                          </span>
+                          {active && (
+                            <span
+                              className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-white"
+                              style={{ background: "var(--acc)" }}
+                              aria-hidden
+                            >
+                              <CheckIcon className="h-2.5 w-2.5" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-xs text-neutral-600">
+                    Pagás con <span className="font-semibold text-neutral-800">{brandLabel}</span>
+                    {family ? ". La detectamos por el número de tu tarjeta." : "."}
+                  </p>
+                </Section>
+
+                {/* 2 · Cuotas */}
+                <Section n={2} title="Elegí las cuotas">
+                  <div
+                    className="overflow-hidden rounded-md border border-neutral-200"
+                    role="radiogroup"
+                    aria-label="Cuotas"
+                  >
+                    {cuotas.map((c, idx) => {
+                      const q = quoteInstallments(base, c);
+                      const active = quote.installments === q.installments;
+                      return (
+                        <button
+                          key={c.installments}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setInstallments(c.installments)}
+                          className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--acc)] ${
+                            idx > 0 ? "border-t border-neutral-200" : ""
+                          } ${active ? "" : "bg-white hover:bg-neutral-50"}`}
+                          style={active ? { background: "var(--acc-soft)" } : undefined}
+                        >
+                          <span
+                            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-white transition-colors"
+                            style={
+                              active
+                                ? { background: "var(--acc)" }
+                                : { border: "1.5px solid #a3a3a3" }
+                            }
+                            aria-hidden
+                          >
+                            {active && <CheckIcon className="h-3 w-3" />}
+                          </span>
+                          <span className="min-w-0 flex-1 md:flex md:items-center md:justify-between md:gap-4">
+                            <span className="flex items-start justify-between gap-3 md:block">
+                              <span className="min-w-0">
+                                <span className="block text-[13px] text-neutral-600">
+                                  {q.installments === 1 ? "1 pago de" : `${q.installments} cuotas de`}
+                                </span>
+                                <span className="block text-lg font-bold leading-tight tabular-nums">
+                                  {fmt(q.perInstallment)}
+                                </span>
                               </span>
-                              <span className="block text-lg font-bold leading-tight tabular-nums">
-                                {fmt(q.perInstallment)}
+                              <span className="shrink-0 pt-0.5 text-right md:hidden">
+                                <span className="block text-[11px] uppercase tracking-wide text-neutral-600">
+                                  Total
+                                </span>
+                                <span className="block text-sm font-semibold tabular-nums">
+                                  {fmt(q.total)}
+                                </span>
                               </span>
                             </span>
-                            <span className="shrink-0 pt-0.5 text-right">
-                              <span className="block text-[11px] uppercase tracking-wide text-neutral-600">
-                                Total
-                              </span>
+                            <span className="md:hidden">
+                              <InterestPill quote={q} />
+                            </span>
+                            <span className="hidden shrink-0 text-right md:block">
                               <span className="block text-sm font-semibold tabular-nums">
-                                {fmt(q.total)}
+                                Total {fmt(q.total)}
                               </span>
+                              <InterestPill quote={q} />
                             </span>
                           </span>
-                          <InterestPill quote={q} />
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {isDebit && (
-                  <p className="mt-3 text-xs text-neutral-600">Con débito se paga en 1 pago.</p>
-                )}
-              </Section>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {isDebit && (
+                    <p className="mt-3 text-xs text-neutral-600">Con débito se paga en 1 pago.</p>
+                  )}
+                </Section>
 
-              {/* 3 · Datos de la tarjeta */}
-              <Section n={3} title="Datos de la tarjeta">
-                <div className="space-y-3">
-                  <Field label="Número de tarjeta" id="cc-number" error={showErr("number")}>
-                    <div className="relative">
-                      <input
-                        id="cc-number"
-                        className={inputCls(!!showErr("number"))}
-                        inputMode="numeric"
-                        autoComplete="cc-number"
-                        placeholder="0000 0000 0000 0000"
-                        value={cardNumber}
-                        onChange={(e) => onCardNumber(e.target.value)}
-                        onBlur={() => setTouched((t) => ({ ...t, number: true }))}
-                        aria-invalid={!!showErr("number")}
-                      />
-                      {family && cardLogo(family, { on: "light" }) && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={cardLogo(family, { on: "light" })!}
-                          alt={BRAND_LABELS[family] ?? family}
-                          className="pointer-events-none absolute right-3 top-1/2 h-6 w-auto -translate-y-1/2"
-                        />
-                      )}
+                {/* 3 · Datos de la tarjeta */}
+                <Section n={3} title="Datos de la tarjeta">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                    <div className="col-span-2">
+                      <Field label="Número de tarjeta" id="cc-number" error={showErr("number")}>
+                        <div className="relative">
+                          <input
+                            id="cc-number"
+                            className={`${inputCls(!!showErr("number"))} pr-14`}
+                            inputMode="numeric"
+                            autoComplete="cc-number"
+                            placeholder="0000 0000 0000 0000"
+                            value={cardNumber}
+                            onChange={(e) => onCardNumber(e.target.value)}
+                            onBlur={() => setTouched((t) => ({ ...t, number: true }))}
+                            aria-invalid={!!showErr("number")}
+                          />
+                          {family && cardAppIcon(family) && (
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                              <BrandIcon brand={family} label={BRAND_LABELS[family] ?? family} size={28} />
+                            </span>
+                          )}
+                        </div>
+                      </Field>
                     </div>
-                  </Field>
-                  <div className="grid grid-cols-2 gap-3">
                     <Field label="Vencimiento" id="cc-exp" error={showErr("exp")}>
                       <input
                         id="cc-exp"
@@ -447,84 +539,92 @@ export default function PagarPage() {
                         aria-invalid={!!showErr("cvv")}
                       />
                     </Field>
+                    <div className="col-span-2 md:col-span-1">
+                      <Field label="Nombre del titular" id="cc-name" error={showErr("holder")}>
+                        <input
+                          id="cc-name"
+                          className={inputCls(!!showErr("holder"))}
+                          autoComplete="cc-name"
+                          autoCapitalize="characters"
+                          placeholder="Como figura en la tarjeta"
+                          value={holder}
+                          onChange={(e) => setHolder(e.target.value)}
+                          onBlur={() => setTouched((t) => ({ ...t, holder: true }))}
+                          aria-invalid={!!showErr("holder")}
+                        />
+                      </Field>
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                      <Field label="DNI del titular" id="cc-dni" error={showErr("dni")}>
+                        <input
+                          id="cc-dni"
+                          className={inputCls(!!showErr("dni"))}
+                          inputMode="numeric"
+                          autoComplete="off"
+                          placeholder="Sin puntos"
+                          value={dni}
+                          onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                          onBlur={() => setTouched((t) => ({ ...t, dni: true }))}
+                          aria-invalid={!!showErr("dni")}
+                        />
+                      </Field>
+                    </div>
                   </div>
-                  <Field label="Nombre del titular" id="cc-name" error={showErr("holder")}>
-                    <input
-                      id="cc-name"
-                      className={inputCls(!!showErr("holder"))}
-                      autoComplete="cc-name"
-                      autoCapitalize="characters"
-                      placeholder="Como figura en la tarjeta"
-                      value={holder}
-                      onChange={(e) => setHolder(e.target.value)}
-                      onBlur={() => setTouched((t) => ({ ...t, holder: true }))}
-                      aria-invalid={!!showErr("holder")}
-                    />
-                  </Field>
-                  <Field label="DNI del titular" id="cc-dni" error={showErr("dni")}>
-                    <input
-                      id="cc-dni"
-                      className={inputCls(!!showErr("dni"))}
-                      inputMode="numeric"
-                      autoComplete="off"
-                      placeholder="Sin puntos"
-                      value={dni}
-                      onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                      onBlur={() => setTouched((t) => ({ ...t, dni: true }))}
-                      aria-invalid={!!showErr("dni")}
-                    />
-                  </Field>
-                </div>
-              </Section>
+                </Section>
 
-              {payError && (
-                <div
-                  ref={errorRef}
-                  role="alert"
-                  className="flex gap-3 rounded-2xl bg-red-50 p-4 ring-1 ring-red-200"
-                >
-                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-white">
-                    <AlertIcon className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="text-sm">
-                    <p className="font-semibold text-red-800">{payError.title}</p>
-                    <p className="mt-0.5 text-red-700">{payError.text}</p>
+                {payError && (
+                  <div
+                    ref={errorRef}
+                    role="alert"
+                    className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4"
+                  >
+                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-600 text-white">
+                      <AlertIcon className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="text-sm">
+                      <p className="font-semibold text-red-800">{payError.title}</p>
+                      <p className="mt-0.5 text-red-700">{payError.text}</p>
+                    </div>
                   </div>
-                </div>
-              )}
-
-              <button
-                type="button"
-                disabled={phase === "paying"}
-                onClick={pagar}
-                className="flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl text-base font-bold text-white shadow-[0_8px_20px_-8px_var(--acc)] transition active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--acc-softer)]"
-                style={{ background: "var(--acc)" }}
-              >
-                {phase === "paying" ? (
-                  <>
-                    <span
-                      className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
-                      aria-hidden
-                    />
-                    Procesando pago…
-                  </>
-                ) : (
-                  <>
-                    <LockIcon className="h-4 w-4" />
-                    Pagar {fmt(quote.total)}
-                  </>
                 )}
-              </button>
-              {!formOk && Object.keys(touched).length > 0 && (
-                <p className="text-center text-xs text-neutral-600">
-                  Completá los datos marcados para continuar.
-                </p>
-              )}
-            </div>
-          </>
-        )}
 
-        <SecureFooter />
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    disabled={phase === "paying"}
+                    onClick={pagar}
+                    className="flex h-14 w-full items-center justify-center gap-2.5 rounded-lg text-base font-bold text-white transition hover:brightness-110 active:brightness-95 disabled:cursor-wait disabled:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--acc)] focus-visible:ring-offset-2"
+                    style={{ background: "var(--acc)" }}
+                  >
+                    {phase === "paying" ? (
+                      <>
+                        <span
+                          className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                          aria-hidden
+                        />
+                        Procesando pago…
+                      </>
+                    ) : (
+                      <>
+                        <LockIcon className="h-4 w-4" />
+                        Pagar {fmt(quote.total)}
+                      </>
+                    )}
+                  </button>
+                  {!formOk && Object.keys(touched).length > 0 && (
+                    <p className="mt-3 text-center text-xs text-neutral-600">
+                      Completá los datos marcados para continuar.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:hidden">
+          <SecureFooter />
+        </div>
       </div>
     </main>
   );
@@ -533,9 +633,43 @@ export default function PagarPage() {
 // ── Piezas ───────────────────────────────────────────────────────────────────
 
 function inputCls(invalid: boolean) {
-  return `h-12 w-full rounded-xl border bg-white px-4 text-base text-neutral-900 placeholder:text-neutral-400 outline-none transition-shadow focus:border-[color:var(--acc)] focus:ring-4 focus:ring-[color:var(--acc-soft)] ${
-    invalid ? "border-red-500" : "border-neutral-300"
+  return `h-12 w-full rounded-md border bg-white px-3.5 text-base text-neutral-900 placeholder:text-neutral-400 outline-none transition-colors focus:border-[color:var(--acc)] focus:ring-2 focus:ring-[color:var(--acc-softer)] ${
+    invalid ? "border-red-500" : "border-neutral-300 hover:border-neutral-400"
   }`;
+}
+
+// Ícono de app de la red (set de soft.ninja): placa blanca cuadrada con radio
+// 22.5% y borde de 1px, sin sombra (como CardBrandLogo, versión plana).
+function BrandIcon({ brand, label, size }: { brand: string; label: string; size: number }) {
+  const src = cardAppIcon(brand);
+  if (!src) {
+    return (
+      <span
+        className="grid place-items-center rounded-[22.5%] border border-neutral-200 bg-white px-1 text-[10px] font-bold text-neutral-700"
+        style={{ width: size, height: size }}
+      >
+        {label.slice(0, 4)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="grid shrink-0 place-items-center overflow-hidden rounded-[22.5%] bg-white ring-1 ring-black/10"
+      style={{ width: size, height: size }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" draggable={false} className="h-full w-full select-none object-contain" />
+    </span>
+  );
+}
+
+function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3">
+      <dt className="text-neutral-600">{label}</dt>
+      <dd className="text-right">{children}</dd>
+    </div>
+  );
 }
 
 function InterestPill({ quote }: { quote: ReturnType<typeof quoteInstallments> }) {
@@ -554,19 +688,28 @@ function InterestPill({ quote }: { quote: ReturnType<typeof quoteInstallments> }
   );
 }
 
-function MerchantHeader({ info, accent }: { info: Info | null; accent: string }) {
+function MerchantHeader({
+  info,
+  accent,
+  compact = false,
+}: {
+  info: Info | null;
+  accent: string;
+  compact?: boolean;
+}) {
+  const box = compact ? "h-12 w-12" : "h-14 w-14";
   return (
-    <header className="flex items-center gap-3 pb-1 pt-6">
+    <header className={`flex items-center gap-3 ${compact ? "" : "pb-1 pt-6"}`}>
       {info?.logo_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={info.logo_url}
           alt=""
-          className="h-14 w-14 rounded-2xl bg-white object-contain p-1.5 shadow-sm ring-1 ring-black/5"
+          className={`${box} shrink-0 rounded-lg border border-neutral-200 bg-white object-contain p-1.5`}
         />
       ) : (
         <span
-          className="grid h-14 w-14 place-items-center rounded-2xl text-xl font-black text-white shadow-sm"
+          className={`${box} grid shrink-0 place-items-center rounded-lg text-xl font-black text-white`}
           style={{ background: info ? accent : "#d4d4d4" }}
         >
           {(info?.tenant_name ?? "").slice(0, 1).toUpperCase()}
@@ -574,11 +717,11 @@ function MerchantHeader({ info, accent }: { info: Info | null; accent: string })
       )}
       <div className="min-w-0 flex-1">
         <p className="text-sm text-neutral-600">Estás pagando a</p>
-        <h1 className="truncate text-xl font-bold leading-tight">
+        <h1 className={`truncate font-bold leading-tight ${compact ? "text-lg" : "text-xl"}`}>
           {info?.tenant_name ?? <span className="inline-block h-5 w-32 animate-pulse rounded bg-neutral-200" />}
         </h1>
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
         <LockIcon className="h-3 w-3" />
         Seguro
       </span>
@@ -588,11 +731,12 @@ function MerchantHeader({ info, accent }: { info: Info | null; accent: string })
 
 function Section({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
-    <section className="rounded-3xl bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,.05)] ring-1 ring-black/[0.04]">
+    <section className="rounded-lg border border-neutral-200 bg-white p-4 sm:p-5 lg:p-6">
       <h2 className="mb-4 flex items-center gap-2.5 text-[15px] font-bold">
         <span
-          className="grid h-6 w-6 place-items-center rounded-full text-xs font-bold text-white"
+          className="grid h-6 w-6 place-items-center rounded-md text-xs font-bold text-white"
           style={{ background: "var(--acc)" }}
+          aria-hidden
         >
           {n}
         </span>
@@ -638,7 +782,7 @@ function StateCard({
 }) {
   const icon =
     tone === "success" ? (
-      <span className="grid h-16 w-16 place-items-center rounded-full bg-emerald-600 text-white shadow-[0_10px_30px_-10px_rgba(5,150,105,.8)]">
+      <span className="grid h-16 w-16 place-items-center rounded-full bg-emerald-600 text-white">
         <CheckIcon className="h-8 w-8" />
       </span>
     ) : tone === "warning" ? (
@@ -651,7 +795,7 @@ function StateCard({
       </span>
     );
   return (
-    <div className="mt-6 rounded-3xl bg-white p-8 text-center shadow-[0_1px_2px_rgba(16,24,40,.05)] ring-1 ring-black/[0.04]">
+    <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-8 text-center">
       <div className="flex justify-center">{icon}</div>
       <h2 className="mt-5 text-xl font-bold">{title}</h2>
       <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-neutral-600">{text}</p>
@@ -662,55 +806,72 @@ function StateCard({
 
 function LoadingSkeleton() {
   return (
-    <div className="mt-4 space-y-4" aria-busy="true" aria-label="Cargando">
-      <div className="h-20 animate-pulse rounded-3xl bg-white" />
-      <div className="h-48 animate-pulse rounded-3xl bg-white" />
-      <div className="h-56 animate-pulse rounded-3xl bg-white" />
+    <div className="mt-4 space-y-4 lg:mt-0" aria-busy="true" aria-label="Cargando">
+      <div className="h-20 animate-pulse rounded-lg bg-white lg:hidden" />
+      <div className="h-48 animate-pulse rounded-lg bg-white" />
+      <div className="h-56 animate-pulse rounded-lg bg-white" />
     </div>
   );
 }
 
-function SecureFooter() {
+function SecureNote() {
+  return (
+    <div className="flex gap-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
+        <LockIcon className="h-4 w-4" />
+      </span>
+      <p className="text-[13px] leading-relaxed text-neutral-700">
+        <span className="font-semibold text-neutral-900">Pago seguro.</span> Tus datos de tarjeta
+        van cifrados directo a Payway. NinjaPOS y el comercio no los ven ni los guardan.
+      </p>
+    </div>
+  );
+}
+
+function PoweredBy() {
   const payway = paymentWordmark("payway");
   return (
+    <div className="flex items-end justify-between gap-3">
+      <span className="flex flex-col items-start gap-1.5 text-[11px] text-neutral-600">
+        Procesado por
+        {payway && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={payway} alt="Payway" className="h-4 w-auto" />
+        )}
+      </span>
+      <a
+        href="https://pos.soft.ninja"
+        target="_blank"
+        rel="noreferrer"
+        className="flex flex-col items-end gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--acc)] focus-visible:ring-offset-2"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/ninjapos-logo-light-mode.webp" alt="NinjaPOS" className="h-4 w-auto" />
+        <span className="whitespace-nowrap text-[11px] text-neutral-600">Un producto de Ninja Soft</span>
+      </a>
+    </div>
+  );
+}
+
+function Legal({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-[11px] leading-relaxed text-neutral-500 ${className}`}>
+      El comercio es el responsable de la venta. NinjaPOS brinda la plataforma de cobro.
+      <br />© {new Date().getFullYear()} Ninja Soft · Rosario, Argentina
+    </p>
+  );
+}
+
+function SecureFooter() {
+  return (
     <footer className="mt-auto pb-8 pt-6">
-      <div className="rounded-3xl bg-white/70 p-5 ring-1 ring-black/[0.04]">
-        <div className="flex gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
-            <LockIcon className="h-4 w-4" />
-          </span>
-          <p className="text-[13px] leading-relaxed text-neutral-700">
-            <span className="font-semibold text-neutral-900">Pago seguro.</span> Tus datos de
-            tarjeta van cifrados directo a Payway. NinjaPOS y el comercio no los ven ni los
-            guardan.
-          </p>
-        </div>
-        <div className="mt-4 flex items-end justify-between gap-3 border-t border-neutral-200 pt-4">
-          <span className="flex flex-col items-start gap-1.5 text-[11px] text-neutral-600">
-            Procesado por
-            {payway && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={payway} alt="Payway" className="h-4 w-auto" />
-            )}
-          </span>
-          <a
-            href="https://pos.soft.ninja"
-            target="_blank"
-            rel="noreferrer"
-            className="flex flex-col items-end gap-1.5"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/ninjapos-logo-light-mode.webp" alt="NinjaPOS" className="h-4 w-auto" />
-            <span className="whitespace-nowrap text-[11px] text-neutral-600">
-              Un producto de Ninja Soft
-            </span>
-          </a>
+      <div className="rounded-lg border border-neutral-200 bg-white/70 p-5">
+        <SecureNote />
+        <div className="mt-4 border-t border-neutral-200 pt-4">
+          <PoweredBy />
         </div>
       </div>
-      <p className="mt-4 text-center text-[11px] leading-relaxed text-neutral-500">
-        El comercio es el responsable de la venta. NinjaPOS brinda la plataforma de cobro.
-        <br />© {new Date().getFullYear()} Ninja Soft · Rosario, Argentina
-      </p>
+      <Legal className="mt-4 text-center" />
     </footer>
   );
 }

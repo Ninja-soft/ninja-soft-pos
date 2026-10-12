@@ -52,3 +52,20 @@ export interface ElectronicRequest {
   onApproved: (r: ElectronicResult) => void;
   onClose: () => void;
 }
+
+/**
+ * Estado del panel de cuenta corriente v2 (AccountPayPanel). `reference` viaja
+ * en payments.reference para el trigger de cargo: {"installments": N} y/o
+ * {"override_reason": "..."} (dueño/encargado) o {"override_token": "..."}
+ * (PIN de supervisor). `blocked` = no se puede registrar el pago todavía.
+ */
+export interface AccountPayState {
+  reference: string | undefined;
+  blocked: boolean;
+}
+
+/** Pedido de render del panel de cuenta corriente para el monto de la línea. */
+export interface AccountPayRequest {
+  amount: number;
+  onChange: (s: AccountPayState) => void;
+}

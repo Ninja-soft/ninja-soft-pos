@@ -8,11 +8,16 @@ import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr } from "@/lib/pos/customerDisplay";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
-import type { ElectronicRequest } from "./types";
+import type { AccountPayRequest, ElectronicRequest } from "./types";
 
 // Cobros electrónicos: los modales existentes de cada proveedor, en su chunk.
 const QrCheckoutModal = dynamic(
   () => import("@/components/pos/QrCheckoutModal").then((m) => m.QrCheckoutModal),
+  { ssr: false },
+);
+// Cuenta corriente v2 (saldo, cuotas, autorización): sólo carga si se elige.
+const AccountPayPanel = dynamic(
+  () => import("@/components/pos/AccountPayPanel").then((m) => m.AccountPayPanel),
   { ssr: false },
 );
 const PointCheckoutModal = dynamic(
@@ -22,11 +27,19 @@ const PointCheckoutModal = dynamic(
 
 type Connected = Omit<
   CheckoutSheetProps,
-  "cardPlans" | "warrantyPlans" | "professionals" | "voucherRequired" | "renderElectronic"
+  | "cardPlans"
+  | "warrantyPlans"
+  | "professionals"
+  | "voucherRequired"
+  | "renderElectronic"
+  | "renderAccount"
 > & {
   /** Reporta el QR activo a la pantalla del cliente (H25). */
   onQrState?: (qr: DisplayQr | null) => void;
-  /** Cliente de la venta (Mobbex lo informa como customer del checkout). */
+  /**
+   * Cliente de la venta (Mobbex lo informa como customer del checkout; la
+   * cuenta corriente lee su saldo, disponible, vencido, cuotas y bloqueo).
+   */
   customerId?: string | null;
 };
 
@@ -94,6 +107,10 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
     return null;
   };
 
+  const renderAccount = (req: AccountPayRequest) => (
+    <AccountPayPanel customerId={customerId} total={req.amount} onChange={req.onChange} />
+  );
+
   return (
     <CheckoutSheet
       {...props}
@@ -102,6 +119,7 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       professionals={professionals ?? []}
       voucherRequired={Boolean(posSettings?.requireCardVoucher)}
       renderElectronic={renderElectronic}
+      renderAccount={renderAccount}
     />
   );
 }

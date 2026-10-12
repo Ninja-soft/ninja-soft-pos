@@ -47,6 +47,14 @@ export function saleErrorTitle(msg: string): string {
                                   ? "La cuenta corriente no está incluida en tu plan"
                                   : msg.includes("credit_limit_exceeded")
                                     ? "Supera el límite de cuenta corriente del cliente"
+                                    : msg.includes("account_overdue_blocked") || msg.includes("account_blocked")
+                                      ? "La cuenta corriente del cliente está bloqueada"
+                                    : msg.includes("installments_not_allowed")
+                                      ? "Esa cantidad de cuotas no está habilitada"
+                                    : msg.includes("override_token_invalid")
+                                      ? "La autorización venció o ya se usó: pedila de nuevo"
+                                    : msg.includes("override_reason_required")
+                                      ? "Escribí el motivo de la autorización"
                                     : msg.includes("account_needs_customer")
                                       ? "La cuenta corriente necesita un cliente"
                                       : msg.includes("insufficient_store_credit")

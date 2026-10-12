@@ -39,6 +39,8 @@ import { PosSheet } from "../ui/PosSheet";
 import { POS_CTA, POS_IDLE, POS_SELECTED, money } from "../ui/posStyles";
 import { TenderPicker } from "./TenderPicker";
 import type {
+  AccountPayRequest,
+  AccountPayState,
   CheckoutPayment,
   ElectronicRequest,
   ElectronicResult,
@@ -115,6 +117,12 @@ export interface CheckoutSheetProps {
     appliedPromo: Promo | null,
   ) => void;
   renderElectronic: (req: ElectronicRequest) => React.ReactNode;
+  /**
+   * Panel de cuenta corriente v2 (saldo, disponible, vencido, cuotas y
+   * autorización por mora / límite). Lo provee CheckoutSheetConnected; sin él
+   * la cuenta corriente se registra como un pago simple.
+   */
+  renderAccount?: (req: AccountPayRequest) => React.ReactNode;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -151,12 +159,19 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     style,
     onConfirm,
     renderElectronic,
+    renderAccount,
   } = props;
 
-  const sections = useMemo(() => groupTenders(tenders, prefs), [tenders, prefs]);
+  const [lines, setLines] = useState<PaidLine[]>([]);
+  // Cuenta corriente: una sola línea por venta (el cargo, sus cuotas y el token
+  // de autorización de un solo uso van en ese único pago; ver ADR-037).
+  const hasAccountLine = lines.some((l) => l.method === "account");
+  const sections = useMemo(
+    () => groupTenders(hasAccountLine ? tenders.filter((t) => t.flow !== "account") : tenders, prefs),
+    [tenders, prefs, hasAccountLine],
+  );
   const visible = useMemo(() => sections.flatMap((s) => s.tenders), [sections]);
 
-  const [lines, setLines] = useState<PaidLine[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [view, setView] = useState<"tenders" | "editor">("tenders");
   const [portionStr, setPortionStr] = useState("");
@@ -175,6 +190,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [electronic, setElectronic] = useState<{ tender: ResolvedTender; amount: number } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // Estado del panel de cuenta corriente (reference JSON con cuotas / override y
+  // si el cargo está bloqueado). Arranca bloqueado hasta que el panel lea la cuenta.
+  const [accountPay, setAccountPay] = useState<AccountPayState>({ reference: undefined, blocked: true });
+  const onAccountChange = useCallback((st: AccountPayState) => setAccountPay(st), []);
   const editorRef = useRef<HTMLDivElement>(null);
 
   // Reset al abrir (la hoja queda montada entre ventas).
@@ -324,8 +343,11 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const isElectronic = active?.flow === "qr" || active?.flow === "point";
   const refOk = !active?.requiresReference || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
+  const isAccount = active?.flow === "account";
+  const accountOk = !isAccount || !renderAccount || !accountPay.blocked;
   const canCommit =
     Boolean(active) &&
+    accountOk &&
     portion > 0 &&
     settle.amount > 0 &&
     voucherOk &&
@@ -340,6 +362,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setReceivedStr("");
     setVoucher({ lote: "", cupon: "", autorizacion: "" });
     setOpRef("");
+    // El estado de cuenta corriente NO se resetea acá: el panel lo reporta al
+    // montarse (y su efecto corre antes que éste, lo pisaría).
   }, [activeId, cardKind]);
 
   function pickTender(t: ResolvedTender) {
@@ -416,14 +440,20 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             ? plan.label
             : active.requiresReference
               ? `Operación ${opRef.trim()}`
-              : undefined,
+              : isAccount
+                ? accountDetail(accountPay.reference)
+                : undefined,
       logo: active.logo,
       method: activeMethod,
       amount: settle.amount,
       surcharge: settle.surcharge,
       surchargeItems: settle.surcharge > 0 ? [{ name: surchargeName, amount: settle.surcharge }] : [],
       received: active.flow === "cash" ? (received ?? settle.amount) : undefined,
-      reference: active.requiresReference ? opRef.trim() : undefined,
+      reference: active.requiresReference
+        ? opRef.trim()
+        : isAccount && renderAccount
+          ? accountPay.reference
+          : undefined,
       card_voucher: hasVoucher
         ? {
             lote: voucher.lote.trim(),
@@ -875,6 +905,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     </p>
                   </div>
                 )}
+                {/* Cuenta corriente v2: saldo, disponible, vencido, cuotas y bloqueo
+                    con autorización (motivo de encargado o PIN de supervisor). */}
+                {isAccount && renderAccount && settle.amount > 0 && (
+                  <div className="mt-4">
+                    {renderAccount({ amount: settle.amount, onChange: onAccountChange })}
+                  </div>
+                )}
                 {belowMin && active.minAmount && (
                   <p className="mt-3 rounded-xl bg-warning/15 px-3 py-2 text-xs font-semibold text-warning">
                     {active.brandLabel} acepta cobros desde {money(active.minAmount)}. Usá otro medio para
@@ -1049,6 +1086,20 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         })}
     </PosSheet>
   );
+}
+
+// Detalle de la línea de cuenta corriente (cuotas / autorización).
+function accountDetail(reference: string | undefined): string | undefined {
+  if (!reference) return undefined;
+  try {
+    const r = JSON.parse(reference) as { installments?: number; override_reason?: string; override_token?: string };
+    const parts: string[] = [];
+    if (r.installments && r.installments > 1) parts.push(`${r.installments} cuotas`);
+    if (r.override_reason || r.override_token) parts.push("Autorizado");
+    return parts.length ? parts.join(" · ") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: "success" }) {

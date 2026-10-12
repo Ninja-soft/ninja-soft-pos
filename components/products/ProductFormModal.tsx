@@ -39,6 +39,8 @@ import { KDS_STATIONS, KDS_STATION_LABELS } from "@/modules/dining/api";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { usePriceLists } from "@/modules/prices/hooks";
 import { PriceHistoryPanel } from "@/components/products/PriceHistoryPanel";
+import { ProductPricesPanel } from "@/components/products/ProductPricesPanel";
+import { useMyTenant } from "@/modules/tenants/hooks";
 import { useFeature } from "@/modules/saas/gating";
 import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
@@ -97,7 +99,7 @@ const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "medidas", label: "Medidas", icon: Boxes },
   { key: "mas", label: "Más", icon: Settings2 },
   // F18 · H100 (ADR-056): sólo con el producto guardado.
-  { key: "historial", label: "Historial de precios", icon: History },
+  { key: "historial", label: "Precios e historial", icon: History },
 ];
 
 // Campo → pestaña (para llevar al usuario al error si está en otra pestaña).
@@ -204,6 +206,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { data: priceLists = [] } = usePriceLists();
   const packagesAllowed = useFeature("medidas_bultos") !== false;
   const historyAllowed = useFeature("historial_precios") !== false;
+  const { data: myTenant } = useMyTenant();
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
@@ -955,6 +958,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       {/* ── Historial de precios (fuera del form: sólo lectura) ─────── */}
       {active && historyAllowed && (
         <div className={show("historial")}>
+          {tab === "historial" && <ProductPricesPanel productId={active.id} canEdit={Boolean(myTenant?.canManage)} />}
           <PriceHistoryPanel
             productId={active.id}
             active={tab === "historial"}

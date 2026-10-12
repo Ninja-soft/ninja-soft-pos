@@ -297,9 +297,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   listas_precios: {
-    desc: "Múltiples listas de precios: precios distintos por lista (mayorista, minorista, etc.) aplicables según el cliente.",
-    impact: "Sin esto sólo existe un precio por producto; no se pueden manejar listas diferenciadas.",
+    desc: "Múltiples listas de precios (mayorista, catálogo, tarjeta): % sobre el precio de venta y precios fijos por producto, con vigencia, precios programados por fecha, lista por cliente, grupo o sucursal, elegibles en el POS e import y export en Excel.",
+    impact: "Sin esto sólo existe un precio por producto; no se pueden manejar listas diferenciadas. El asistente para actualizar el precio de venta en masa y las etiquetas a reimprimir siguen disponibles.",
     minPlan: "Business",
+  },
+  listas_precios_pro: {
+    desc: "Listas de precios profesionales para quien compra e importa: listas derivadas de otra, sobre costo con markup o margen, en dólares con cotización (oficial, BNA, MEP o manual), escalas por cantidad, plazos de pago con recargo financiero, redondeo psicológico, margen y precio mínimo, actualización por índice o dólar y aprobación del dueño para cambios masivos.",
+    impact: "Desactivado, toda lista funciona como fija (% y precios fijos); lo profesional que ya estaba cargado deja de aplicarse (no se borra) y el servidor rechaza crear lo nuevo.",
+    minPlan: "Business",
+    requires: ["listas_precios"],
+    needs: "Activá el modo profesional en Configuración > Precios.",
   },
   catalogo_publico: {
     desc: "Catálogo web público: una vitrina online del comercio con sus productos y precios, compartible por link.",

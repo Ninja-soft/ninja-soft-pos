@@ -25,8 +25,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useExchangeSale, useReturnReasons, useReturnSettings } from "@/modules/sales/hooks";
 import { useCustomers } from "@/modules/customers/hooks";
 import { useProducts } from "@/modules/products/hooks";
-import { useMostradorPricing } from "@/modules/prices/hooks";
-import { resolvePrice } from "@/lib/prices/resolve";
+import { usePriceResolver } from "@/modules/prices/proHooks";
 import type { ExchangeNewItem, ExchangeResult, SaleDetail } from "@/modules/sales/api";
 import { STOCK_DESTINATIONS } from "@/modules/sales/api";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
@@ -529,10 +528,11 @@ function TakeProductsStep({
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const { data: products } = useProducts(search);
-  const { data: mostrador } = useMostradorPricing();
+  // Mismo resolver que el servidor (ADR-058): sin sucursal ni cliente, como el trigger.
+  const prices = usePriceResolver({ storeId: null, customerId: null });
 
   function priceFor(productId: string, basePrice: number): number {
-    return resolvePrice(basePrice, productId, null, mostrador?.list ?? null, mostrador?.items ?? []);
+    return prices.priceFor({ productId, basePrice });
   }
 
   function add(p: { id: string; name: string; price: number; has_variants?: boolean }) {

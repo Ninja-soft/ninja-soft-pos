@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { DniScanModal } from "@/components/customers/DniScanModal";
+import { CustomerPricingFields } from "@/components/customers/CustomerPricingFields";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import {
   CustomerSchema,
@@ -297,6 +298,12 @@ export function CustomerFormModal({
             </Button>
           </div>
         </div>
+        {isEdit && customer && (
+          <CustomerPricingFields
+            customerId={customer.id}
+            termId={((customer as { payment_term_id?: string | null }).payment_term_id) ?? null}
+          />
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar

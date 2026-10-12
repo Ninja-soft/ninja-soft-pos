@@ -1458,6 +1458,98 @@ El dueño marcó la hoja de cobro como fea: muchos degradados (monto en degradad
 
 ---
 
+## ADR-043: Multi-sucursal como contexto de primera clase, configuración heredable y bloque fiscal-contable (F17 y F18)
+
+**Fecha:** 2026-10-12 · **Estado:** propuesta (sólo documentación; sin código ni migraciones) · **Hitos:** F17 (H89 a H99) y F18 (H100 a H112)
+
+### Contexto
+
+El dueño pidió auditar Napse (relevamiento de Bridge Manager 7.9, 253 pantallas) con foco en gestión de sucursales, "en qué sucursal estoy", medios de pago y terminales en todas las sucursales, compartir configuración, clientes, productos y contabilidad; y después una auditoría con mirada de contador sobre listas de precios, compras e importaciones, impuestos internos, padrones, percepciones, retenciones, facturación y contabilidad. Resultado en [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md) y [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md). Hallazgos clave en el código:
+
+- `stores` y `cash_registers` existen sin ABM. `create_sale`, `exchange_sale`, `return_sale` y los RPC de stock eligen **la sucursal default** (`order by is_default desc, created_at limit 1`) en vez de la de la caja del turno: con dos sucursales, las ventas quedarían en la equivocada.
+- Stock único (`products.stock`); toda la configuración (medios, credenciales, cuotas, POS, tickets, impresión) es por negocio; roles por negocio; terminales Point recordadas en `localStorage`.
+- `create_sale` acepta el `unit_price` que manda el navegador: debilidad de control interno.
+- `products.tax_rate` numérico sin distinguir exento, no gravado y 0 %; sin impuestos internos, percepciones, retenciones, padrones, compras, libros ni asientos.
+- `multi_sucursal` y `facturacion_afip` están en planes sin función (MARKETING-FUTURO).
+
+### Decisión
+
+1. **Sucursal y caja como contexto de primera clase (F17).** La sucursal de toda operación se deriva de `cash_shift → cash_register → store`. Indicador visible siempre (chip en el topbar del panel, "Centro · Caja 1" en el POS, ticket, Z y display); selector "Todas / sucursal" para quien tiene alcance central.
+2. **Configuración heredable negocio → grupo → sucursal → caja** con una tabla genérica de overrides **por campo** (`config_overrides`) y una función de valor efectivo que informa el origen de cada campo. "Compartir configuración" = no copiar: la sucursal sólo guarda lo que pisa; acciones explícitas "Aplicar a todas", "Copiar desde" (con diff) y "Plantilla de sucursal". Es el primer corte concreto de F14/H57. El override nunca habilita algo fuera del plan.
+3. **Terminales como entidad** (`payment_terminals`, con sucursal, caja, proveedor, id externo, adquirente y n° de comercio) y credenciales de proveedor opcionalmente por sucursal (`payment_secrets.store_id`).
+4. **Permisos por sucursal** con `tenant_user_stores` (rol que pisa el del negocio) y helper RLS `user_can_access_store`; sin filas = acceso total (compatibilidad). Maestros (productos, clientes, medios, listas) siguen por negocio.
+5. **Bloque fiscal y contable (F18)** con toda alícuota, tope, mínimo y código de tributo como **parámetro con vigencia**. Antes de F3 deben estar el catálogo de alícuotas IVA e internos (H103) y la condición fiscal del receptor con padrones (H104). El POS genera asientos inmutables y exporta a los sistemas de los estudios; no pretende reemplazar al sistema contable.
+6. **Dos P0 inmediatos e independientes:** fix de sucursal en los RPC de venta (F17/H90) y validación del precio en el servidor (F18/H100).
+7. **Clasificación de features** según `CLAUDE.md`: `multi_sucursal` (existe) cubre sucursales, herencia, stock y reportes; nuevas keys OPTIONAL `multi_caja`, `transferencias_stock`, `multi_razon_social`, `monitoreo_sucursales`, `listas_precios_pro`, `compras`, `importaciones`, `impuestos_internos`, `padrones`, `percepciones`, `retenciones`, `factura_exportacion`, `export_contable`, `contabilidad`, `conciliacion_tarjetas`, `conciliacion_bancaria`, `tesoreria`, `sepa`; ADDON `integracion_erp`. BASE: primera sucursal y caja, indicador, registro de terminales, validación de precio, historial de precios, alícuotas IVA, condición fiscal manual y campos de registro de producto.
+
+### Alternativas descartadas
+
+- **Copiar la configuración a cada sucursal** (una fila de `tenant_payment_methods` por sucursal): duplica datos, un cambio central no llega a todas y el dueño no sabe qué local es distinto.
+- **Una tabla de override por dominio** (`store_payment_methods`, `store_pos_settings`...): más tablas, más policies y la misma lógica repetida; se usa la tabla genérica y, si un dominio caliente lo necesita, una vista materializada.
+- **Parámetros sueltos por categoría como Napse** (52 categorías de `systemProperty`): potente pero opaco; se elige mostrar valor efectivo y origen en la misma pantalla de cada configuración.
+- **Resolver impuestos y precios sólo en el front:** no es auditable ni seguro; el servidor recalcula.
+
+### Consecuencias
+
+- Roadmap: F4 apunta a F17; nuevas fases F17 (H89 a H99) y F18 (H100 a H112); F3 lista sus prerrequisitos fiscales; F11/H33 y F14/H64 apuntan a F17 y F18.
+- RLS de `sales` y `payments` cambia en H91: requiere `EXPLAIN` y tests por rol y sucursal antes de activar.
+- La comparación de planes debe mostrar como "Próximamente" las keys sin función (hoy `multi_sucursal`, `facturacion_afip` y las nuevas) hasta que existan.
+- **Pendiente con el dueño:** confirmar qué quiso decir con "tag registration" (interpretaciones en §5 de la auditoría fiscal) y validar el alcance fiscal con un estudio contable antes de implementar F18.
+
+---
+
+## ADR-044: Conciliación de tarjetas v1 (día, n° de comercio y lote)
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración y validación en QA) · **Hito:** Reportes
+
+### Contexto
+
+Los comercios cobran con tarjeta en posnets propios (Tarjeta en posnet, ADR-042) o integrados (Point, Payway, Getnet, Nave...) y después tienen que controlar, contra la liquidación de cada adquirente, que cada lote se haya acreditado. Hoy ese control se hace a mano con el cierre de lote impreso. Los datos ya están: `payments.card_voucher` guarda lote, cupón, autorización, marca y últimos 4, y desde la rama de números de comercio también `comercio` (el n° de comercio de la marca configurado en `tenant_payment_methods.config.merchant_numbers`).
+
+### Decisión
+
+- **Pantalla `/reportes/conciliacion`** (botón en Reportes e ítem "Conciliación de tarjetas" en el menú, con candado sin plan). Filtros: período, tipo (débito / crédito), marca, n° de comercio y estado (pendiente / conciliado). Tabla agrupada como la liquidación del adquirente: **día → n° de comercio → lote**, con cantidad y monto en cada nivel; filas con fecha y hora, ticket, marca (`CardBrandLogo`), tipo, cuotas (si el cupón las trae), lote, cupón, autorización, últimos 4, comercio y monto. Checkbox por cobro y por lote (con estado intermedio). Resumen total / conciliado / pendiente. "Exportar XLSX" (gateado por `export_xlsx`) con hoja de detalle con subtotales por lote, comercio y día y hoja resumen por lote. Se excluyen las ventas anuladas.
+- **Datos:** `payments.reconciled_at` / `reconciled_by` (null = pendiente). La lectura es un SELECT sobre `payments` + `sales` con RLS (índice existente `payments_tenant_method_idx`). La escritura **sólo** por la RPC `set_payments_reconciled(p_payment_ids uuid[], p_reconciled boolean)`: SECURITY DEFINER con `search_path`, exige tenant activo, rol owner o manager (`is_tenant_manager()`), plan con la feature (`tenant_has_feature_for`), y que **todos** los ids sean pagos de tarjeta del tenant (si no, no cambia nada). Sólo toca los que cambian de estado y escribe `audit_logs` (`payments_reconciled` / `payments_unreconciled` con ids, cantidad y monto). Un trigger `BEFORE UPDATE` rechaza cambiar esas columnas desde `authenticated` / `anon` (la policy de aislamiento de `payments` es FOR ALL).
+- **Feature de plan** `conciliacion_tarjetas`: **OPTIONAL**, grupo `reportes`, desde **Pro** (Pro, Business y Enterprise; Start no). Mismo nivel que `export_xlsx`: es control administrativo de un comercio que ya opera con varios medios; los planes a medida heredan el valor de `export_xlsx`. Copy en `lib/saas/featureInfo.ts` (sin `requires`; `needs` aclara que rinde más con los números de comercio cargados en Medios de pago, Planes de cuotas). Aparece en la comparación de planes por derivación de la matriz.
+- Lógica pura (normalización del cupón, filtros, agrupado y subtotales, filas del XLSX) en `lib/reports/cardReconciliation.ts` con tests (`tests/unit/cardReconciliation.test.ts`). Tests de RLS / RPC en `tests/integration/rls.test.ts`.
+
+### Consecuencias
+
+- Deploy: migración `20261012120000_conciliacion_tarjetas` (no aplicada).
+- Cobros sin `comercio` (anteriores a los números de comercio o de marcas sin número) se agrupan como "Sin n° de comercio"; los integrados sin cupón quedan como "Sin lote" y muestran la referencia del proveedor como ayuda.
+- Pendiente (v2): importar la liquidación del adquirente (CSV / Excel) y conciliar automático por lote y cupón; fecha de acreditación y aranceles / retenciones por cobro; conciliación de QR y billeteras.
+
+---
+
+## ADR-047: Clover Point (Fiserv) por Cloud Pay Display y estado del resto de los Points
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (pendiente de migración, deploy y validación en sandbox de Clover) · **Hito:** F8 · H19
+
+### Contexto
+
+El dueño pidió avanzar con Fiserv y Clover y con los Points que falten. Fiserv estaba en el catálogo como un único canal `fiserv` marcado `point` sin flujo (sólo habilitaba la tarjeta en posnet). El relevamiento ([`docs/payments/research-points-2026-10.md`](payments/research-points-2026-10.md)) encontró que Clover es la única terminal de un adquirente grande con API cloud documentada y sandbox self-service: **Cloud Pay Display** (REST Pay Display API en la nube), listada para Argentina en la guía LATAM en español y en la matriz por región, aunque la página "Argentina merchants" la marca como no soportada. Payway y Getnet no publican una API utilizable hoy; el resto no tiene terminal propia o API.
+
+### Decisión
+
+- **Canal nuevo `fiserv_point`** (marca `fiserv`, canal `point`, nombre "Clover Point"), siguiendo el patrón `<marca>_point`. `fiserv` pasa a canal `manual` ("Posnet o Clover sin integrar": habilita la Tarjeta en posnet) y **guarda la conexión de la marca** (`BrandDef.connection = "fiserv"`, porque Fiserv no tiene canal QR + link). Marca en `MANUAL_FALLBACK`: sin conectar, igual se cobra a mano.
+- **Plan:** OPTIONAL desde **Business** (no Pro como el resto de los Point) porque depende de la feature `fiserv` (`requires: ["fiserv"]` en `featureInfo`), que es Business+: la dependencia tiene que estar activa en el mismo plan. `needs`: "Marca Fiserv conectada (Merchant ID y token de Clover) y la app Cloud Pay Display abierta en cada terminal".
+- **Gating real:** `payment_method_plan_key('fiserv_point') = 'fiserv_point'` (trigger de `tenant_payment_methods`), y la Edge `clover_point` exige `tenant_has_feature_for` de **`fiserv_point` y `fiserv`** antes de crear el cobro; sin conexión Fiserv responde `not_connected`. La terminal pedida tiene que ser del comercio (lista de Clover acotada por las series cargadas).
+- **Conexión** (`set_payment_secret` provider `fiserv`, ya permitido): `merchant_id`, `access_token`, `refresh_token` (opcional) y `device_serials` (opcional, "Caja 1: serie"). Ambiente por `tenant_payment_methods.sandbox` de la fila `fiserv`: sandbox `apisandbox.dev.clover.com`, producción `api.la.clover.com`. El intent guarda `mp_env` y status/cancel/webhook usan ese ambiente. Si Clover responde 401 y hay `refresh_token` + secret de función `CLOVER_APP_ID`, se renueva el par (`/oauth/v2/refresh`) una vez y se persiste.
+- **Edge `clover_point`** (JWT): `devices` (`GET /v3/merchants/{mId}/devices`, id = número de serie), `ping`, `create`, `status`, `cancel`. `create` inserta el intent (`mp_payment_intents`, `provider_key='fiserv_point'`, `point_device_id` = serie) y lanza en segundo plano (`EdgeRuntime.waitUntil`) `POST /connect/v1/payments` con `Idempotency-Key` = id del intent, `externalPaymentId` = id sin guiones (32), `final: true` y el monto **del intent guardado** en centavos; cuotas opcionales por `regionalExtras.argentina.numInstallments`. El POST bloquea hasta que el cliente termina, por eso no se espera en la request: el POS sondea `status`.
+- **Fuente de verdad:** `GET /connect/v1/payments/external/{ext}`. Sólo `SUCCESS` (o `VOID_FAILED`) + `externalPaymentId` del intent + **monto exacto** en centavos (sin propina) acredita; `FAIL` → rejected; `VOIDED` → cancelled; el resto sigue pending. Débito o crédito por el tender del pago (`expand=tender`); sin dato, crédito. Errores del POST: 209 → cancelled, 503 → rejected `device_busy`, 400/415/501 → rejected, 500/504/red → indeterminado (decide la consulta). Transiciones condicionales e idempotentes; un pago verificado sobre un intent cancelado queda `approved` con auditoría `approved_after_*` (nunca se pierde plata cobrada). `cancel` = `PUT /connect/v1/device/reset`, re-consulta y cancela local.
+- **Edge `clover_webhook`** (`--no-verify-jwt`): los webhooks de Clover son por app. `{ verificationCode }` se escribe en el log; el resto exige `X-Clover-Auth` igual al secret `CLOVER_WEBHOOK_AUTH` (comparación de tiempo constante) y, por cada merchant con pagos (`P:`), re-consulta los intents pendientes de las últimas 24 h de los tenants con ese Merchant ID. Nunca usa el cuerpo como verdad. Opcional: el poll alcanza.
+- **UI:** fila "Clover Point · Terminal en el mostrador" en la tarjeta Fiserv, conexión con stepper (Merchant ID, token, refresh, terminales; Prueba/Producción; aviso de Cloud Pay Display), tender "Clover Point" en el POS (`PointCheckoutModal` con terminal recordada por caja y cuotas En la terminal / 1 / 3 / 6 / 12), conciliación en "Cobros QR". Logos oficiales de ar.clover.com (`clover-icon` / `clover-wordmark` + `-on-dark` en blanco) vía `LOGO_OVERRIDE` en `lib/payments/logos.ts`.
+- **Payway Point y Getnet Point** siguen "Próximamente" con la explicación honesta en la fila (`CHANNEL_SOON_REASON`). Mobbex, MODO, Ualá Bis, Viumi, Naranja X, Posnet/LaPos legacy, Cuenta DNI y Personal Pay se descartan como Point.
+- Lógica pura en `supabase/functions/_shared/clover.ts` (Vitest, `tests/unit/clover.test.ts`); helpers server en `_shared/clover_server.ts`.
+
+### Consecuencias
+
+- Deploy: migración `20261013300000_fiserv_clover_point`; Edges `clover_point` y `clover_webhook` (`--no-verify-jwt`). Secrets de función opcionales: `CLOVER_APP_ID` (renovar tokens) y `CLOVER_WEBHOOK_AUTH` (webhook).
+- **Inferido, a confirmar en el primer cobro de sandbox:** que Cloud Pay Display esté habilitado para comercios AR en producción; que el token de API del comercio sirva para Pay Display (los docs piden token OAuth de app); que `regionalExtras` viaje en Cloud Pay Display; que el tender traiga `debit_card` / `credit_card`.
+- Fuera de alcance: anulación y devolución desde el POS (`/void`, `/refunds`), recibos por la terminal, propinas en la terminal y el flujo OAuth completo de alta (redirect desde el App Market): se suman cuando la app de NinjaSoft esté aprobada.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

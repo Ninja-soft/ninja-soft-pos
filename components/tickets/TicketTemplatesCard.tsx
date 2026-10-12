@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Eye, Mail, Pencil, Plus, Printer, Receipt, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Eye, Mail, Pencil, Plus, Printer, Sparkles, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
@@ -192,19 +191,11 @@ export function TicketTemplatesCard() {
     <Card>
       <CardContent className="space-y-5 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/12 text-ninja-flameSoft">
-              <Receipt size={18} />
-            </span>
-            <div>
-              <Heading as="h3" className="text-base">
-                Modelos de ticket
-              </Heading>
-              <p className="text-sm text-muted-foreground">
-                Diseñá cómo se imprimen tus comprobantes con bloques arrastrables.
-              </p>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {list.length === 0
+              ? "Todavía no creaste modelos propios."
+              : `${list.length} ${list.length === 1 ? "modelo propio" : "modelos propios"}`}
+          </p>
           <Button
             size="sm"
             onClick={openNew}

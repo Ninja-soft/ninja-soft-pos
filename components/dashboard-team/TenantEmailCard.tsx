@@ -6,7 +6,6 @@ import { AlertCircle, Check, ExternalLink, Eye, HelpCircle, Info, KeyRound, Mail
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { CredentialInput } from "@/components/ui/CredentialInput";
 import { Segmented } from "@/components/ui/Segmented";
@@ -325,19 +324,9 @@ export function TenantEmailCard() {
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-fg-6 text-foreground">
-              <Mail size={18} />
-            </span>
-            <div>
-              <Heading as="h3" className="text-base">
-                Email del negocio
-              </Heading>
-              <p className="text-sm text-muted-foreground">
-                Solo el dueño puede configurar el email del negocio.
-              </p>
-            </div>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Solo el dueño puede configurar el email del negocio.
+          </p>
         </CardContent>
       </Card>
     );
@@ -357,19 +346,7 @@ export function TenantEmailCard() {
       <CardContent className="space-y-6 p-6">
         {/* Encabezado + chip de estado */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-fg-6 text-foreground">
-              <Mail size={18} />
-            </span>
-            <div>
-              <Heading as="h3" className="text-base">
-                Email del negocio
-              </Heading>
-              <p className="text-sm text-muted-foreground">
-                Enviá los comprobantes a tus clientes desde tu propio email.
-              </p>
-            </div>
-          </div>
+          <span className="text-sm font-medium text-muted-foreground">Cuenta de envío</span>
           {configured ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-xs font-medium text-success">
               <Check size={13} /> Configurado

@@ -27,7 +27,15 @@ import {
   type BrandGroup,
   type ChannelEntry,
 } from "@/lib/payments/catalog";
-import { CHANNEL_CAPS, CHANNEL_INFO, CHANNEL_SUMMARY, CHANNEL_TITLE, type ChannelCap } from "./copy";
+import {
+  CHANNEL_CAPS,
+  CHANNEL_INFO,
+  CHANNEL_SOON_REASON,
+  CHANNEL_SUMMARY,
+  CHANNEL_TITLE,
+  CHANNEL_TITLE_BY_KEY,
+  type ChannelCap,
+} from "./copy";
 import { BrandLogo, CapBadge, StatusChip, type StatusTone } from "./ui";
 import { mpEnvOf, type Method } from "./types";
 import { CardBrandLogo } from "@/components/ui/ThemedLogo";
@@ -312,7 +320,7 @@ function ChannelRow({
   const info = CHANNEL_INFO[c.key];
   const needs = featureInfo(PROVIDER_FEATURE[c.key] ?? "")?.needs;
   const extra = !soon && !locked ? handlers.renderChannelExtra?.(c.key, m) : null;
-  const title = manual ? brandName : CHANNEL_TITLE[c.channel];
+  const title = manual ? brandName : (CHANNEL_TITLE_BY_KEY[c.key] ?? CHANNEL_TITLE[c.channel]);
   const isPoint = c.channel === "point";
   const hasConnection = connectionKeyOf(brandKey) !== null;
   const caps = manual ? [] : capsOf(c);
@@ -329,6 +337,9 @@ function ChannelRow({
               <CapBadge key={cap} cap={cap} muted />
             ))}
           </div>
+          {CHANNEL_SOON_REASON[c.key] && (
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{CHANNEL_SOON_REASON[c.key]}</p>
+          )}
         </div>
         <StatusChip tone="soon">Próximamente</StatusChip>
       </div>
@@ -338,7 +349,12 @@ function ChannelRow({
   return (
     <div className="px-4 py-3.5 sm:px-5">
       <div className="flex items-start gap-3">
-        {manual ? <BrandLogo brandKey={brandKey} name={brandName} size={36} /> : <ChannelIcon channel={c.channel} />}
+        {manual ? (
+          <BrandLogo brandKey={brandKey} name={brandName} size={36} />
+        ) : (
+          // Terminal sin integrar (Fiserv): ícono de tarjeta, no de portal.
+          <ChannelIcon channel={c.key === "fiserv" ? "point" : c.channel} />
+        )}
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">

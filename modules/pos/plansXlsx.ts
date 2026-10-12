@@ -2,11 +2,14 @@
 import type ExcelJS from "exceljs";
 import type { PaymentPlanInput } from "./api";
 import { ALL_BRANDS, BASE_LABEL, BRAND_LABEL, planLabel } from "./planConstants";
+import { cleanMerchantNumber, type MerchantNumbers } from "@/lib/payments/merchantNumbers";
 
 export type PlanRow = Omit<PaymentPlanInput, "provider_key">;
 export interface PlanParseResult {
   rows: PlanRow[];
   errors: string[];
+  /** N° de comercio por marca (columna opcional "n° de comercio"). */
+  merchantNumbers: MerchantNumbers;
 }
 
 function stripAccents(s: string): string {
@@ -41,14 +44,15 @@ function cellText(v: ExcelJS.CellValue): string {
   return String(v);
 }
 
-// Columnas esperadas (header, insensible a may/acentos): base, marca, cuotas, recargo.
+// Columnas esperadas (header, insensible a may/acentos): tipo (o base), marca,
+// cuotas, recargo y, opcional, n° de comercio.
 export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResult> {
   // exceljs se carga bajo demanda: sólo hace falta al importar un archivo.
   const { default: Excel } = await import("exceljs");
   const wb = new Excel.Workbook();
   await wb.xlsx.load(buffer);
   const ws = wb.worksheets[0];
-  if (!ws) return { rows: [], errors: ["El archivo no tiene hojas."] };
+  if (!ws) return { rows: [], errors: ["El archivo no tiene hojas."], merchantNumbers: {} };
 
   const grid: string[][] = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
@@ -56,25 +60,27 @@ export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResu
     row.eachCell({ includeEmpty: true }, (cell) => cells.push(cellText(cell.value).trim()));
     grid.push(cells);
   });
-  if (grid.length < 2) return { rows: [], errors: ["El archivo no tiene filas de datos."] };
+  if (grid.length < 2) return { rows: [], errors: ["El archivo no tiene filas de datos."], merchantNumbers: {} };
 
   // Busca la fila de encabezado (la que tiene "base"); el export trae una fila
   // de título arriba, así que el header no siempre está en la fila 0.
-  const headerIdx = grid.findIndex((row) => row.map(norm).includes("base"));
-  if (headerIdx < 0) return { rows: [], errors: ['Falta la columna "base".'] };
+  const headerIdx = grid.findIndex((row) => row.map(norm).some((h) => h === "base" || h === "tipo"));
+  if (headerIdx < 0) return { rows: [], errors: ['Falta la columna "tipo".'], merchantNumbers: {} };
 
   const header = grid[headerIdx]!.map((h) => norm(h));
   const col = (...names: string[]) => header.findIndex((h) => names.includes(h));
-  const iBase = col("base");
+  const iBase = col("base", "tipo");
   const iBrand = col("marca", "brand");
   const iCuotas = col("cuotas", "installments", "cuota");
   const iRec = col("recargo", "recargo %", "recargo%", "surcharge", "recargo_pct");
+  const iCom = col("n° de comercio", "nº de comercio", "n de comercio", "nro de comercio", "numero de comercio", "comercio");
 
   const errors: string[] = [];
   if (iCuotas < 0) errors.push('Falta la columna "cuotas".');
-  if (errors.length) return { rows: [], errors };
+  if (errors.length) return { rows: [], errors, merchantNumbers: {} };
 
   const rows: PlanRow[] = [];
+  const merchantNumbers: MerchantNumbers = {};
   for (let r = headerIdx + 1; r < grid.length; r++) {
     const line = grid[r]!;
     const baseRaw = norm(line[iBase] ?? "");
@@ -90,6 +96,8 @@ export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResu
       errors.push(`Fila ${r + 1}: marca desconocida "${line[iBrand]}".`);
       continue;
     }
+    const comercio = iCom >= 0 ? cleanMerchantNumber(line[iCom] ?? "") : "";
+    if (brand && comercio && !merchantNumbers[brand]) merchantNumbers[brand] = comercio;
     const installments = Math.max(1, parseInt(line[iCuotas] ?? "1", 10) || 1);
     const surcharge_pct =
       iRec >= 0 ? Number((line[iRec] ?? "0").replace(",", ".").replace("%", "")) || 0 : 0;
@@ -101,5 +109,5 @@ export async function parsePlansXlsx(buffer: ArrayBuffer): Promise<PlanParseResu
       label: planLabel(base, brand, installments),
     });
   }
-  return { rows, errors };
+  return { rows, errors, merchantNumbers };
 }

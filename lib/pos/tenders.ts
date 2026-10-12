@@ -52,6 +52,7 @@ export type TenderGroupKey =
   | "payway"
   | "getnet"
   | "nave"
+  | "fiserv"
   | "wallets"
   | "customer";
 
@@ -65,7 +66,7 @@ export type QrProviderKey =
   | "nave"
   | "gocuotas"
   | "directo";
-export type PointProviderKey = "mercadopago_point" | "nave_point";
+export type PointProviderKey = "mercadopago_point" | "nave_point" | "fiserv_point";
 
 export interface TenderDef {
   /** Id estable "marca:canal" (se usa en pos_layout.payments). */
@@ -116,6 +117,7 @@ const LOGO = {
   pagos360: icon("pagos360"),
   gocuotas: icon("gocuotas"),
   directo: icon("directo"),
+  clover: icon("fiserv_point"),
 } as const;
 
 // Proveedores que habilitan la tarjeta manual (débito/crédito con posnet
@@ -129,6 +131,7 @@ export const CARD_PROVIDERS = [
   "getnet_point",
   "nave_point",
   "fiserv",
+  "fiserv_point",
   "mobbex",
 ] as const;
 
@@ -260,6 +263,24 @@ export const TENDERS: TenderDef[] = [
     pointProvider: "nave_point",
     hint: "Terminal Nave",
   },
+  {
+    // Clover Point (ADR-047): terminal Clover de Fiserv por Cloud Pay Display.
+    // Usa la conexión de la marca Fiserv (fila `fiserv`).
+    id: "fiserv:point",
+    group: "fiserv",
+    brand: "fiserv",
+    brandLabel: "Clover",
+    channel: "point",
+    label: "Point",
+    method: null,
+    provider: "fiserv_point",
+    connection: "fiserv",
+    featureKey: providerFeature("fiserv_point"),
+    logo: LOGO.clover,
+    flow: "point",
+    pointProvider: "fiserv_point",
+    hint: "Terminal Clover",
+  },
   qr("modo", "MODO", "wallets", "qr", "App de los bancos"),
   qr("mobbex", "Mobbex", "wallets", "qr"),
   qr("mobbex", "Mobbex", "wallets", "link"),
@@ -329,6 +350,7 @@ export const TENDER_GROUPS: { key: TenderGroupKey; label: string }[] = [
   { key: "payway", label: "Payway" },
   { key: "getnet", label: "Getnet" },
   { key: "nave", label: "Nave" },
+  { key: "fiserv", label: "Clover" },
   { key: "wallets", label: "Billeteras y links" },
   { key: "customer", label: "Cuenta del cliente" },
 ];

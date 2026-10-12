@@ -11,6 +11,8 @@ export interface XlsxColumn {
   key: string;
   type?: XlsxCellType;
   width?: number;
+  /** Lista desplegable (validación de datos) en las filas de esta columna. */
+  options?: readonly string[];
 }
 
 export interface XlsxSheet {

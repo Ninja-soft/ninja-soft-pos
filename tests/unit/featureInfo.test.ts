@@ -19,9 +19,15 @@ describe("dependencias de features", () => {
   });
 
   it("los canales Point de cada marca tienen copy y aclaran su requisito", () => {
-    for (const key of ["mercadopago_point", "payway_point", "getnet_point", "nave_point"]) {
+    for (const key of ["mercadopago_point", "payway_point", "getnet_point", "nave_point", "fiserv_point"]) {
       expect(FEATURE_INFO[key]?.needs, key).toBeTruthy();
     }
+  });
+
+  it("Clover Point depende de la marca Fiserv conectada y va en su mismo plan", () => {
+    expect(featureRequires("fiserv_point")).toEqual(["fiserv"]);
+    expect(FEATURE_INFO.fiserv_point?.minPlan).toBe(FEATURE_INFO.fiserv?.minPlan);
+    expect(FEATURE_INFO.fiserv_point?.needs).toMatch(/Marca Fiserv conectada/);
   });
 
   it("Nave QR + link aclara que hay que conectar la cuenta", () => {
@@ -42,6 +48,12 @@ describe("dependencias de features", () => {
   it("las teclas rápidas pro tienen copy, plan mínimo y dependen del POS", () => {
     expect(FEATURE_INFO.pos_quick_keys_pro?.minPlan).toBe("Pro");
     expect(featureRequires("pos_quick_keys_pro")).toEqual(["pos"]);
+  });
+
+  it("conciliación de tarjetas: Pro, sin dependencias de plan y aclara el n° de comercio", () => {
+    expect(FEATURE_INFO.conciliacion_tarjetas?.minPlan).toBe("Pro");
+    expect(featureRequires("conciliacion_tarjetas")).toEqual([]);
+    expect(FEATURE_INFO.conciliacion_tarjetas?.needs).toMatch(/números de comercio/);
   });
 
   it("featureRequires devuelve las dependencias directas", () => {

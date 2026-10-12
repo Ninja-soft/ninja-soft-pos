@@ -6,7 +6,6 @@ import { Copy, Info, Printer, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
@@ -116,17 +115,6 @@ export function PrintSettingsCard() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <Printer size={18} /> Impresión
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configurá, por tipo de comprobante, cómo se imprime: formato, copias y
-          si sale solo al confirmar (automático) o con un botón (manual). El punto
-          de venta lo respeta al cobrar, al cerrar caja y al hacer devoluciones.
-        </p>
-      </div>
-
       {/* Límite actual + qué queda para más adelante. Honesto: hoy es web print. */}
       <Card>
         <CardContent className="space-y-2 p-5">

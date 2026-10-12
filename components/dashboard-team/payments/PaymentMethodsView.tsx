@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { CreditCard } from "lucide-react";
-import { Heading } from "@/components/ui/Typography";
 import { DIRECT_BRANDS, groupProvidersByBrand, connectionKeyOf, type ProviderRow } from "@/lib/payments/catalog";
 import type { PlanForUpgrade } from "@/modules/saas/gating";
 import { BrandCard, ManualCard, SoonList, brandBucket, type BrandBucket, type ChannelHandlers } from "./BrandCard";
@@ -60,14 +58,6 @@ export function PaymentMethodsView({
   return (
     <section className="space-y-6">
       <div className="space-y-3">
-        <div>
-          <Heading as="h2" className="flex items-center gap-2 text-base">
-            <CreditCard size={18} /> Medios de pago
-          </Heading>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Conectá tus cuentas y elegí con qué canales cobrás en el POS.
-          </p>
-        </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <span className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
             <strong className="text-foreground">{enabled}</strong> {enabled === 1 ? "canal activo" : "canales activos"}

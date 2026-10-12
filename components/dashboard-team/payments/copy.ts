@@ -56,7 +56,8 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   modo: "Pagan con MODO o la app de su banco",
   mobbex: "Checkout de Mobbex con tarjetas y cuotas",
   pagos360: "Tarjeta, débito, DEBIN o efectivo",
-  fiserv: "Terminales Posnet y Clover",
+  fiserv: "Cobrás en tu terminal Fiserv y cargás el cupón en el POS",
+  fiserv_point: "El monto viaja a tu terminal Clover: tarjeta, contactless y cuotas",
   gocuotas: "2 a 4 cuotas sin interés con débito",
   directo: "QR y link de Directo, o registro manual de la operación",
 };
@@ -132,6 +133,24 @@ export const CHANNEL_INFO: Record<string, Explain> = {
       "Al aprobarse, la venta se registra sola.",
     ],
   },
+  fiserv: {
+    activa:
+      "Suma Tarjeta en posnet al POS: cobrás en tu terminal Posnet o Clover y cargás los datos del cupón. No hace falta conectar nada.",
+    pasos: [
+      "En el POS elegís Tarjeta en posnet.",
+      "Cobrás en la terminal Fiserv.",
+      "Cargás el cupón y la venta queda como débito o crédito.",
+    ],
+  },
+  fiserv_point: {
+    activa:
+      "El POS manda el monto a tu terminal Clover (Flex o Mini) y el cliente paga ahí con tarjeta, contactless o en cuotas.",
+    pasos: [
+      "Conectá Fiserv con el Merchant ID y el token de Clover.",
+      "En cada terminal abrí la app Cloud Pay Display y dejala abierta.",
+      "En el POS elegís Clover Point y la terminal: al aprobarse, la venta se registra sola.",
+    ],
+  },
   modo: {
     activa: "El cliente paga con MODO o la app de su banco y la plata entra a tu cuenta de comercio.",
     pasos: [
@@ -190,6 +209,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   gocuotas: ["qr", "link"],
   directo: ["qr", "link"],
   fiserv: ["point"],
+  fiserv_point: ["point"],
 };
 
 export const CAP_COPY: Record<ChannelCap, { label: string; legend: string }> = {
@@ -204,6 +224,21 @@ export const CHANNEL_TITLE = {
   point: "Terminal en el mostrador",
   manual: "Cobro en su portal",
 } as const;
+
+// Por qué un canal sigue en "Próximamente" (relevamiento 2026-10, ver
+// docs/payments/research-points-2026-10.md). Honesto: depende del proveedor.
+export const CHANNEL_SOON_REASON: Record<string, string> = {
+  payway_point:
+    "Payway todavía no publica una API para mandar cobros a sus terminales. Mientras tanto, cobrá con Tarjeta en posnet.",
+  getnet_point:
+    "Getnet ofrece integrar terminales sólo a partners y no confirmó que esté disponible en Argentina. Mientras tanto, cobrá con Tarjeta en posnet.",
+};
+
+// Títulos propios de algunos canales (pisan al del canal).
+export const CHANNEL_TITLE_BY_KEY: Record<string, string> = {
+  fiserv: "Posnet o Clover sin integrar",
+  fiserv_point: "Clover Point · Terminal en el mostrador",
+};
 
 // =============================================================================
 // Guía de conexión por proveedor (modal Conectar). Texto corto, voseo.
@@ -294,6 +329,19 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Consola › Desarrollo › Credenciales",
     note: "Mobbex usa el ambiente de tu cuenta: cargá las credenciales con las que vas a cobrar.",
+  },
+  fiserv: {
+    steps: [
+      { icon: "login", text: "Entrá al Dashboard de Clover con un usuario administrador." },
+      { icon: "store", text: "Copiá el Merchant ID de los datos del comercio." },
+      { icon: "key", text: "Pegá el token de Clover que te dio NinjaSoft o el de tu comercio de prueba." },
+    ],
+    where: "Dashboard de Clover › Cuenta y configuración",
+    note: "Prueba usa el sandbox de Clover con un comercio de prueba. Producción cobra en Clover Argentina.",
+    warning: {
+      title: "App Cloud Pay Display",
+      text: "Instalala en el Dashboard (Más herramientas, buscá Cloud Pay Display, Conectar) y dejala abierta en cada terminal.",
+    },
   },
   mercadopago: {
     steps: [

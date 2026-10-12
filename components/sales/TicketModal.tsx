@@ -316,15 +316,16 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
 }
 
 // Voucher de tarjeta (H27) por pago. payments.card_voucher (jsonb) guarda
-// { lote, cupon, autorizacion } cuando el negocio exige voucher en débito/crédito.
+// { lote, cupon, autorizacion, comercio } (comercio: n° de comercio de la marca,
+// para conciliar).
 // Sólo renderiza si algún pago tiene voucher cargado. No se imprime en el ticket.
-type VoucherPay = { method: string; card_voucher?: { lote?: string; cupon?: string; autorizacion?: string } | null };
+type VoucherPay = { method: string; card_voucher?: { lote?: string; cupon?: string; autorizacion?: string; comercio?: string } | null };
 
 function CardVoucherDetail({ payments }: { payments: unknown[] }) {
   const METHOD_LABEL: Record<string, string> = { debit: "Débito", credit: "Crédito" };
   const withVoucher = (payments as VoucherPay[]).filter((p) => {
     const v = p.card_voucher;
-    return v && (v.lote || v.cupon || v.autorizacion);
+    return v && (v.lote || v.cupon || v.autorizacion || v.comercio);
   });
   if (withVoucher.length === 0) return null;
   return (
@@ -338,6 +339,7 @@ function CardVoucherDetail({ payments }: { payments: unknown[] }) {
               <Field label="Lote" value={v.lote} />
               <Field label="Cupón" value={v.cupon} />
               <Field label="Autorización" value={v.autorizacion} />
+              {v.comercio && <Field label="N° de comercio" value={v.comercio} />}
               {METHOD_LABEL[p.method] && (
                 <span className="col-span-3 text-xs text-muted-foreground">
                   {METHOD_LABEL[p.method]}

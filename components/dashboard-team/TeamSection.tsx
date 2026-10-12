@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, IdCard, Check, ImagePlus } from "lucide-react";
+import { UserPlus, Pencil, IdCard, Check, ImagePlus, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
+import { SectionHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -318,16 +318,20 @@ export function TeamSection({
   };
 
   return (
-    <section className="mt-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Heading as="h2">Equipo</Heading>
-        {canManage && (
-          <div className="flex gap-2">
-            <ProfileDialog tenantId={tenantId} onDone={refresh} />
-            <InviteDialog onDone={refresh} />
-          </div>
-        )}
-      </div>
+    <section>
+      <SectionHeader
+        title="Equipo"
+        icon={Users}
+        description="Quiénes usan tu NinjaPos y con qué permisos."
+        actions={
+          canManage ? (
+            <>
+              <ProfileDialog tenantId={tenantId} onDone={refresh} />
+              <InviteDialog onDone={refresh} />
+            </>
+          ) : undefined
+        }
+      />
 
       {/* Usuarios con login */}
       <Card className="mt-3">
@@ -456,6 +460,18 @@ export function TeamSection({
 
   function InviteDialog({ onDone }: { onDone: () => void }) {
     const [open, setOpen] = useState(false);
+    // Acceso rápido del panel: el link "#invitar" abre este diálogo. Limpiamos
+    // el hash al abrir para que se pueda volver a usar.
+    useEffect(() => {
+      function fromHash() {
+        if (window.location.hash !== "#invitar") return;
+        window.history.replaceState(null, "", "#equipo");
+        setOpen(true);
+      }
+      fromHash();
+      window.addEventListener("hashchange", fromHash);
+      return () => window.removeEventListener("hashchange", fromHash);
+    }, []);
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
     const [role, setRole] = useState<AssignableRole>("cashier");

@@ -186,7 +186,9 @@ export function PaymentMethodsCard() {
         .find((g) => g.brand.key === connectBrand)
         ?.channels.filter((c) => c.implemented) ?? [])
     : [];
-  const channelNames = connectChannels.map((c) => (c.channel === "point" ? "la terminal Point" : "QR y link"));
+  const channelNames = connectChannels.map((c) =>
+    c.channel === "point" ? "la terminal Point" : c.channel === "manual" ? "la terminal sin integrar" : "QR y link",
+  );
   const channelKeys = connectChannels.map((c) => c.key);
 
   // Guarda credenciales (y el ambiente elegido, en proveedores con prueba real).

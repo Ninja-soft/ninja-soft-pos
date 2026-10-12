@@ -90,7 +90,24 @@ describe("planes y recargo por canal", () => {
     expect(connectionKeyOf("mercadopago")).toBe("mercadopago");
     expect(connectionKeyOf("nave")).toBe("nave");
     expect(connectionKeyOf("cash")).toBeNull();
-    expect(connectionKeyOf("fiserv")).toBeNull();
+    expect(connectionKeyOf("fiserv")).toBe("fiserv");
+  });
+
+  it("Fiserv: Posnet sin integrar (manual) + Clover Point, con conexión en la fila fiserv", () => {
+    const [g] = groupProvidersByBrand([row("fiserv", 7), row("fiserv_point", 8)]);
+    expect(g!.brand.key).toBe("fiserv");
+    expect(g!.channels.map((c) => [c.key, c.channel, c.implemented])).toEqual([
+      ["fiserv", "manual", true],
+      ["fiserv_point", "point", true],
+    ]);
+    expect(surchargeModeOf("fiserv", "manual")).toBe("terminal");
+    expect(surchargeModeOf("fiserv_point", "point")).toBe("terminal");
+    expect(SANDBOX_PROVIDERS.has("fiserv")).toBe(true);
+    // La terminal integrada usa el logo de Clover (con variante para fondo oscuro).
+    expect(paymentIcon("fiserv_point")).toBe("/images/payments/clover-icon.webp");
+    expect(paymentIcon("fiserv_point", { on: "dark" })).toBe("/images/payments/clover-icon-on-dark.webp");
+    expect(paymentWordmark("fiserv_point", { on: "dark" })).toBe("/images/payments/clover-wordmark-on-dark.webp");
+    expect(paymentIcon("fiserv")).toBe("/images/payments/fiserv-icon.webp");
   });
 });
 

@@ -18,13 +18,11 @@ import {
   Scale,
   Trash2,
   Usb,
-  Wrench,
   XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
@@ -374,20 +372,9 @@ export function HardwareCard() {
 
   return (
     <section className="space-y-5">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <Wrench size={18} /> Centro de diagnostico de hardware
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Estado de los perifericos del mostrador y pruebas guiadas. Si algo
-          falla, exporta el diagnostico y mandaselo a soporte NinjaSoft: no
-          necesitan conectarse a tu equipo para ver que pasa.
-        </p>
-      </div>
-
       {/* Export - bloque destacado arriba para acceso rapido de soporte. */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Download size={16} className="text-ninja-flameSoft" /> Exportar diagnostico

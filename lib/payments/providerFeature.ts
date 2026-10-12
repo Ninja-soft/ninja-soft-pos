@@ -13,6 +13,8 @@ export const PROVIDER_FEATURE: Record<string, string> = {
   getnet: "getnet",
   getnet_point: "getnet_point",
   fiserv: "fiserv",
+  // Clover Point (ADR-047): terminal Clover integrada; depende de `fiserv`.
+  fiserv_point: "fiserv_point",
   pagos360: "pagos360",
   nave: "nave",
   nave_point: "nave_point",

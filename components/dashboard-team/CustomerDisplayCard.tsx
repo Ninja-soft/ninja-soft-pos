@@ -6,7 +6,6 @@ import { ExternalLink, MonitorSmartphone, Tags } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Heading } from "@/components/ui/Typography";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -112,16 +111,6 @@ export function CustomerDisplayCard() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <Heading as="h2" className="flex items-center gap-2 text-base">
-          <MonitorSmartphone size={18} /> Pantalla del cliente
-        </Heading>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Una segunda pantalla (monitor o tablet de cara al cliente) que muestra
-          el carrito, el total, el QR de pago y el vuelto en vivo mientras cobrás.
-        </p>
-      </div>
-
       {/* Cómo se abre + limitación técnica */}
       <Card>
         <CardContent className="space-y-3 p-5">
@@ -148,7 +137,7 @@ export function CustomerDisplayCard() {
 
       {/* Mostrar precios unitarios */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div>
             <div className="flex items-center gap-2 font-semibold">
               <Tags size={16} className="text-ninja-flameSoft" /> Mostrar precios unitarios

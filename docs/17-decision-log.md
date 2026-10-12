@@ -1626,3 +1626,20 @@ El dueño pidió traslados "muy flexibles y configurables, programados, muy robu
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.
+
+---
+
+## ADR-052: Aislamiento del staff interno: internal_scope() en vez de is_internal() en RLS de negocio
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada · **Severidad:** incidente de aislamiento multi-tenant
+
+**Contexto.** Muchas políticas RLS de tablas de negocio eran `tenant_id = current_tenant_id() OR is_internal()`. Un usuario interno usando el panel de SU negocio veía filas de todos los negocios en cualquier lista sin filtro explícito por tenant (Sucursales y cajas mostró las sucursales de los 4 negocios). Ningún cliente final podía ver datos ajenos (requiere JWT interno), pero la UI mezclaba negocios.
+
+**Decisión.**
+- `internal_scope()` = `is_internal()` y header `x-ninja-scope: internal`. Sólo lo mandan los clientes Supabase en rutas `/internal` (navegador: fetch con el header según la ruta; servidor: `createClient({ scope: "internal" })`).
+- Migración `20261013900000_aislamiento_staff_interno` reescribe todas las políticas PERMISSIVE de tablas con `tenant_id` que usaban `is_internal()`. Las RESTRICTIVE (alcance por sucursal) y las de tablas de plataforma no cambian.
+- Defensa en profundidad: las listas del panel del negocio filtran por `getCurrentTenantId()`.
+- Guardarraíl: `rls_internal_scope_leaks()` (service_role) y un test en el job `rls` de CI que exige 0 filas; regla agregada en CLAUDE.md §3.
+
+**Consecuencias.** Toda política nueva de negocio debe usar `internal_scope()`. Las Edge Functions internas no cambian (validan el JWT y usan service_role). Orden de deploy: front primero (el header es inocuo sin la migración), después la migración.
+

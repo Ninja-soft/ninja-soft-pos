@@ -7,7 +7,7 @@ export default async function InternalLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = createClient();
+  const supabase = createClient({ scope: "internal" });
   const {
     data: { user },
   } = await supabase.auth.getUser();

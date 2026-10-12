@@ -47,3 +47,13 @@ export async function getCurrentUser(): Promise<User | null> {
   }
   return inflight;
 }
+
+/**
+ * Negocio activo del usuario (app_metadata.current_tenant_id del JWT). El staff
+ * interno pasa la RLS de varias tablas para todos los negocios (is_internal()),
+ * así que las listas del panel del negocio filtran explícitamente por este id.
+ */
+export async function getCurrentTenantId(): Promise<string | null> {
+  const user = await getCurrentUser();
+  return ((user?.app_metadata as { current_tenant_id?: string } | undefined)?.current_tenant_id) ?? null;
+}

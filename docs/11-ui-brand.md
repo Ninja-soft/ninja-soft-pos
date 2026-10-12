@@ -155,6 +155,8 @@ Iconos personalizados de NinjaSoft: solo cuando ningún ícono de Lucide encaja.
 
 ## 8. Sombras y elevación
 
+**Nunca bordes de color al costado** (`border-l-*` de color en tarjetas, filas o avisos): quedan poco profesionales. Si hace falta marcar estado o color, usar una franja arriba (`border-t-2` con el color) y las esquinas de arriba rectas (`rounded-t-none`), o un punto de color.
+
 Sin sombras paralelas, glow ni degradados decorativos (dirección 2026-10). La elevación se resuelve con:
 - Borde de 1px del tema (`border-border`).
 - Cambio de relleno (`bg-card` sobre `bg-background`, `bg-muted` para zonas internas).

@@ -18,12 +18,13 @@ import type {
   NotificationType,
 } from "@/modules/notifications/api";
 
+// Severidad como punto de color (sin bordes de color al costado).
 const SEVERITY_BORDER: Record<NotificationSeverity, string> = {
-  info: "border-l-blue-500",
-  success: "border-l-emerald-500",
-  warning: "border-l-amber-500",
-  critical: "border-l-red-500",
-  blocking: "border-l-red-700",
+  info: "bg-blue-500",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  critical: "bg-red-500",
+  blocking: "bg-red-700",
 };
 
 const TYPE_LABELS: Record<NotificationType, string> = {
@@ -79,11 +80,14 @@ function NotificationItem({
   return (
     <div
       className={cn(
-        "group relative border-l-2 px-3 py-2.5 transition hover:bg-muted/60",
-        severityBorder(n.severity),
+        "group relative py-2.5 pl-5 pr-3 transition hover:bg-muted/60",
         !n.read && "bg-muted/30",
       )}
     >
+      <span
+        aria-hidden
+        className={cn("absolute left-2 top-[18px] h-1.5 w-1.5 rounded-full", severityBorder(n.severity))}
+      />
       <button
         type="button"
         onClick={() => !n.read && onRead(n.id)}

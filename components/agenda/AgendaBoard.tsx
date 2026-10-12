@@ -50,8 +50,8 @@ function AppointmentBlock({
     <button
       type="button"
       onClick={onClick}
-      style={{ top, height, borderLeftColor: color }}
-      className={`absolute left-0.5 right-0.5 overflow-hidden rounded-md border border-l-[3px] px-1.5 py-1 text-left text-[11px] leading-tight transition hover:z-10 hover:brightness-110 ${
+      style={{ top, height, borderTopColor: color }}
+      className={`absolute left-0.5 right-0.5 overflow-hidden rounded-b-md rounded-t-none border border-t-[3px] px-1.5 py-1 text-left text-[11px] leading-tight transition hover:z-10 hover:brightness-110 ${
         cancelled
           ? "border-border bg-muted/50 text-muted-foreground line-through opacity-70"
           : done

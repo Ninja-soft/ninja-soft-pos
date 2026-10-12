@@ -2,15 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, RotateCcw, Search } from "lucide-react";
+import { Ban, RotateCcw, Search, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { useToast } from "@/components/ui/Toast";
 import { useInternalUsers, useSetUserActive } from "@/modules/internal/hooks";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { TableStateRow } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const LEVEL_LABELS: Record<string, string> = {
   super_admin: "Super admin",
@@ -96,12 +98,17 @@ export default function InternalUsersPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Usuarios</Display>
-      <p className="mt-2 text-muted-foreground">
-        Todas las cuentas de la plataforma, con sus membresías por negocio.
-        {isAdmin && " Podés suspender/reactivar cuentas (queda auditado)."}
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Usuarios"
+        icon={Users}
+        description={
+          <>
+            Todas las cuentas de la plataforma, con sus membresías por negocio.
+            {isAdmin && " Podés suspender/reactivar cuentas (queda auditado)."}
+          </>
+        }
+      />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -153,11 +160,14 @@ export default function InternalUsersPage() {
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Sin resultados.
-                </td>
-              </tr>
+              <TableStateRow colSpan={6}>
+                <EmptyState
+                  compact
+                  icon={Search}
+                  title="Sin resultados"
+                  description="Probá con otro nombre o email."
+                />
+              </TableStateRow>
             )}
             {filtered.map((u) => {
               const canTouch =

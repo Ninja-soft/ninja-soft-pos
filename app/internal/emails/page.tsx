@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Mail, Plus, RefreshCw, Send, Server, Zap } from "lucide-react";
+import { Download, Mail, Plus, RefreshCw, Send, Server, Zap, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Eyebrow, Display } from "@/components/ui/Typography";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -29,6 +28,9 @@ import { EMAIL_TEMPLATES, renderTemplate, sampleVars } from "@/lib/email/templat
 import { cn } from "@/lib/utils/cn";
 import { NoData } from "@/components/ui/NoData";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { IntegrationLogo, isIntegrationKey } from "@/components/ui/IntegrationLogo";
 
 type Saved = Record<string, { subject: string; html: string }>;
 
@@ -150,11 +152,16 @@ export default function InternalEmailsPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Emails del sistema</Display>
-      <p className="mt-2 text-muted-foreground">
-        Editá los emails que NinjaPos envía a los usuarios y configurá los proveedores de envío.
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Emails del sistema"
+        icon={Mail}
+        description={
+          <>
+            Editá los emails que NinjaPos envía a los usuarios y configurá los proveedores de envío.
+          </>
+        }
+      />
 
       {/* Proveedores de email (Resend + failover SMTP). Camino de envío principal. */}
       <EmailProvidersCard />
@@ -493,7 +500,12 @@ function SlotEditor({
                 : "border-border text-muted-foreground hover:bg-muted",
             )}
           >
-            <opt.icon size={14} /> {opt.label}
+            {opt.key === "resend" ? (
+              <IntegrationLogo name="resend" size={18} />
+            ) : (
+              <opt.icon size={14} />
+            )}{" "}
+            {opt.label}
           </button>
         ))}
       </div>
@@ -536,12 +548,17 @@ function SlotEditor({
                     type="button"
                     onClick={() => pickPreset(p.key)}
                     className={cn(
-                      "rounded-lg border px-2 py-2 text-xs font-medium transition",
+                      "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition",
                       smtpPreset === p.key
                         ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
                         : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
+                    {isIntegrationKey(p.key) ? (
+                      <IntegrationLogo name={p.key} size={16} />
+                    ) : (
+                      <Server size={13} />
+                    )}
                     {p.label}
                   </button>
                 ))}
@@ -793,11 +810,15 @@ function SystemEmailsLog() {
         {isLoading ? (
           <SpinnerBlock className="py-6" />
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {emails.length === 0
-              ? "Todavía no hay envíos registrados."
-              : "No hay envíos que coincidan con los filtros."}
-          </p>
+          <EmptyState
+            compact
+            icon={emails.length === 0 ? Mail : Search}
+            title={
+              emails.length === 0
+                ? "Todavía no hay envíos registrados"
+                : "No hay envíos que coincidan con los filtros"
+            }
+          />
         ) : (
           <div className="-mx-1 overflow-x-auto px-1">
             <table className="w-full min-w-[760px] text-sm">

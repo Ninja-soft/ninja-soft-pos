@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Eye, Mail, Zap } from "lucide-react";
+import { AlertCircle, Check, Eye, Mail, Server } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/Modal";
 import { cn } from "@/lib/utils/cn";
 import { useTenantSmtpStatus, useTicketBranding } from "@/modules/tickets/hooks";
 import { buildReceiptEmailHtml } from "@/lib/email/receiptTemplates";
+import { IntegrationLogo, isIntegrationKey, type IntegrationKey } from "@/components/ui/IntegrationLogo";
 
 // Método de envío del negocio: por cuenta de correo (SMTP) o por API (Resend).
 type EmailMethod = "smtp" | "resend";
@@ -385,12 +386,14 @@ export function TenantEmailCard() {
               onClick={() => setMethod("smtp")}
               title="Mi cuenta de correo"
               desc="Gmail, Outlook u otro (SMTP)"
+              logos={["gmail", "outlook"]}
             />
             <MethodCard
               active={method === "resend"}
               onClick={() => setMethod("resend")}
               title="Resend (API)"
               desc="Servicio de envío por API"
+              logos={["resend"]}
             />
           </div>
 
@@ -403,12 +406,17 @@ export function TenantEmailCard() {
                     type="button"
                     onClick={() => pickProvider(p.key)}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-sm font-medium transition",
+                      "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition",
                       provider === p.key
                         ? "border-transparent bg-ninja-flame/[0.12] text-foreground"
                         : "border-border text-muted-foreground hover:bg-muted",
                     )}
                   >
+                    {isIntegrationKey(p.key) ? (
+                      <IntegrationLogo name={p.key} size={18} />
+                    ) : (
+                      <Server size={15} />
+                    )}
                     {p.label}
                   </button>
                 ))}
@@ -747,18 +755,20 @@ function MethodCard({
   onClick,
   title,
   desc,
+  logos,
 }: {
   active: boolean;
   onClick: () => void;
   title: string;
   desc: string;
+  logos: IntegrationKey[];
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 text-left transition",
+        "relative flex flex-col items-start gap-0.5 rounded-lg border px-3 py-2.5 pr-16 text-left transition",
         active
           ? "border-transparent bg-ninja-flame/[0.12]"
           : "border-border hover:bg-muted",
@@ -773,6 +783,11 @@ function MethodCard({
         {title}
       </span>
       <span className="text-xs text-muted-foreground">{desc}</span>
+      <span className="absolute right-3 top-1/2 flex -translate-y-1/2 -space-x-1.5">
+        {logos.map((l) => (
+          <IntegrationLogo key={l} name={l} size={24} />
+        ))}
+      </span>
     </button>
   );
 }
@@ -788,9 +803,7 @@ function ResendGuide() {
   return (
     <div className="mt-3 rounded-lg bg-ninja-flame/[0.08] p-3.5">
       <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
-          <Zap size={15} />
-        </span>
+        <IntegrationLogo name="resend" size={28} className="mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-foreground">
             ¿Qué es Resend?

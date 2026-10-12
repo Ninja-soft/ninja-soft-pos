@@ -39,6 +39,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented } from "@/components/ui/Segmented";
 import { Card } from "@/components/ui/Card";
+import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
 
 // Tablero de delivery / take away (F13 · H49): columnas por estado (recibido →
 // preparando → en camino → entregado), cada tarjeta con cliente/tel/dirección/
@@ -308,7 +309,8 @@ function OrderCard({
 
         <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide">
+            <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide">
+              {order.channel === "whatsapp" && <IntegrationLogo name="whatsapp" size={14} />}
               {DELIVERY_CHANNEL_LABELS[order.channel]}
             </span>
           </div>

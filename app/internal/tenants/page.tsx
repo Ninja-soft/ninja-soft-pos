@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, X } from "lucide-react";
-import { Eyebrow, Display } from "@/components/ui/Typography";
+import { Search, X, Building2 } from "lucide-react";
 import {
   DateRangePicker,
   type DateRange,
@@ -17,6 +16,9 @@ import {
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { TableStateRow } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Trial",
@@ -86,12 +88,17 @@ export default function InternalTenantsPage() {
 
   return (
     <>
-      <Eyebrow>Operaciones</Eyebrow>
-      <Display className="mt-3 text-3xl md:text-4xl">Negocios</Display>
-      <p className="mt-2 text-muted-foreground">
-        Todos los clientes del SaaS. Entrá a uno para gestionar su plan y
-        suscripción.
-      </p>
+      <PageHeader
+        eyebrow="Operaciones"
+        title="Negocios"
+        icon={Building2}
+        description={
+          <>
+            Todos los clientes del SaaS. Entrá a uno para gestionar su plan y
+            suscripción.
+          </>
+        }
+      />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
@@ -184,13 +191,18 @@ export default function InternalTenantsPage() {
               </tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  {tenants?.length === 0
-                    ? "No hay tenants."
-                    : "Sin resultados para los filtros elegidos."}
-                </td>
-              </tr>
+              <TableStateRow colSpan={6}>
+                {tenants?.length === 0 ? (
+                  <EmptyState compact icon={Building2} title="Todavía no hay negocios" />
+                ) : (
+                  <EmptyState
+                    compact
+                    icon={Search}
+                    title="Sin resultados"
+                    description="Probá con otros filtros."
+                  />
+                )}
+              </TableStateRow>
             )}
             {filtered.map((t) => (
               <tr key={t.id} className="transition hover:bg-muted/40">

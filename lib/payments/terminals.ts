@@ -10,7 +10,7 @@
 // Con más de una candidata en el mismo nivel no se adivina: el POS muestra el
 // selector (salvo que una sea la recordada).
 
-export type TerminalKind = "point" | "qr_caja" | "clover" | "posnet_manual";
+export type TerminalKind = "point" | "qr_caja" | "clover" | "posnet_manual" | "posnet_integrado" | "pinpad";
 
 export interface PaymentTerminal {
   id: string;
@@ -36,6 +36,8 @@ export const TERMINAL_KIND_LABEL: Record<TerminalKind, string> = {
   qr_caja: "Caja QR",
   clover: "Clover",
   posnet_manual: "Posnet sin integrar",
+  posnet_integrado: "Posnet integrado",
+  pinpad: "Pinpad",
 };
 
 /** Proveedor → tipo de terminal que le corresponde. */
@@ -100,6 +102,35 @@ export function pickTerminal(input: PickInput): PickResult {
   const floating = candidates.filter((t) => !t.cash_register_id);
   if (floating.length === 1) return { terminal: floating[0]!, candidates, reason: "store" };
   if (remembered) return { terminal: remembered, candidates, reason: "remembered" };
+  if (floating.length > 1) return { terminal: null, candidates, reason: "ambiguous" };
+  return { terminal: null, candidates, reason: "none" };
+}
+
+/**
+ * Terminal integrada (posnet integrado o pinpad, ADR-053) que usa la caja para
+ * "Tarjeta". Misma prioridad que pickTerminal pero sin filtrar por marca: la
+ * caja tiene una sola terminal de tarjeta integrada en uso.
+ */
+export function pickIntegratedTerminal(input: {
+  terminals: PaymentTerminal[];
+  storeId: string | null;
+  registerId: string | null;
+}): PickResult {
+  const candidates = input.terminals.filter(
+    (t) =>
+      !t.deleted_at &&
+      t.active &&
+      (t.kind === "posnet_integrado" || t.kind === "pinpad") &&
+      (!input.storeId || t.store_id === input.storeId) &&
+      (!t.cash_register_id || !input.registerId || t.cash_register_id === input.registerId),
+  );
+  const own = candidates.filter((t) => input.registerId && t.cash_register_id === input.registerId);
+  const def = own.find((t) => t.is_default);
+  if (def) return { terminal: def, candidates, reason: "register_default" };
+  if (own.length === 1) return { terminal: own[0]!, candidates, reason: "register" };
+  if (own.length > 1) return { terminal: null, candidates, reason: "ambiguous" };
+  const floating = candidates.filter((t) => !t.cash_register_id);
+  if (floating.length === 1) return { terminal: floating[0]!, candidates, reason: "store" };
   if (floating.length > 1) return { terminal: null, candidates, reason: "ambiguous" };
   return { terminal: null, candidates, reason: "none" };
 }

@@ -28,6 +28,7 @@ import type {
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type Audience = "all" | "tenant";
 
@@ -471,7 +472,7 @@ export default function InternalNotificacionesPage() {
           {sentLoading ? (
             <SpinnerBlock className="py-6" />
           ) : sent.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin notificaciones aún.</p>
+            <EmptyState compact icon={Bell} title="Todavía no enviaste notificaciones" />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">

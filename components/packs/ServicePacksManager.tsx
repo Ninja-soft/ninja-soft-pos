@@ -15,6 +15,7 @@ import {
 } from "@/modules/packs/hooks";
 import type { ServicePack } from "@/modules/packs/api";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 function PackModal({
   open,
@@ -228,11 +229,9 @@ export function ServicePacksManager() {
       {isLoading ? (
         <SpinnerBlock className="py-6" />
       ) : (packs ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          Sin paquetes. Creá bonos de sesiones (ej. &quot;4 cortes&quot;, &quot;10
-          sesiones de estética&quot;) para venderlos y que el cliente los use en
-          sus próximas visitas.
-        </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={Package} title="Todavía no hay paquetes" description="Creá bonos de sesiones (4 cortes, 10 sesiones de estética) para que el cliente los use en sus próximas visitas." />
+        </div>
       ) : (
         <div className="space-y-2">
           {packs!.map((p) => (

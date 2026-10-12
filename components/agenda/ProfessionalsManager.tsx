@@ -13,6 +13,7 @@ import {
 } from "@/modules/agenda/hooks";
 import type { Professional } from "@/modules/agenda/api";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // Paleta de colores para la columna del profesional en la agenda (sobrios,
 // alineados al tema ninja). El dueño elige uno; el chip se ve en el calendario.
@@ -202,10 +203,9 @@ export function ProfessionalsManager() {
       {isLoading ? (
         <SpinnerBlock className="py-6" />
       ) : (professionals ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          Sin profesionales. Agregá a quienes prestan los servicios (ej. Ana, Lucas)
-          para poder asignarles turnos.
-        </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={UserCog} title="Todavía no hay profesionales" description="Agregá a quienes prestan los servicios para poder asignarles turnos." />
+        </div>
       ) : (
         <div className="space-y-2">
           {professionals!.map((p) => (

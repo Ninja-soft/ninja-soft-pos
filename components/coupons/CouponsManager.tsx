@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, TicketPercent } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,6 +12,7 @@ import { useCoupons, useCouponMutations } from "@/modules/coupons/hooks";
 import type { Coupon, CouponInput } from "@/modules/coupons/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // F9 · H54 — Administrador de cupones. El dueño define códigos con % o monto fijo,
 // monto mínimo, vigencia y topes de uso. El límite de uso lo enforce create_sale
@@ -49,9 +50,9 @@ export function CouponsManager() {
       {isLoading ? (
         <SpinnerBlock className="py-6" />
       ) : (coupons ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-          Sin cupones. Creá uno (ej. “BIENVENIDO10”, 10% con monto mínimo).
-        </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={TicketPercent} title="Todavía no hay cupones" description="Creá uno, por ejemplo “BIENVENIDO10”: 10% con monto mínimo." />
+        </div>
       ) : (
         <div className="space-y-2">
           {(coupons ?? []).map((c: Coupon) => (

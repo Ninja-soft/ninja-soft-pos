@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, LineChart, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { BarChart3, LineChart, Pencil, Plus, Tag, Trash2, BadgePercent } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { PromotionSimModal } from "@/components/promotions/PromotionSimModal";
 import { PromotionPerfModal } from "@/components/promotions/PromotionPerfModal";
@@ -18,6 +18,7 @@ import type { Promotion, PromotionInput } from "@/modules/promotions/api";
 import { WEEKDAYS_SHORT, minToTime, timeToMin } from "@/lib/gastro/menuTime";
 import { formatCurrency } from "@/lib/utils/format";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 // F9 · H53 — Administrador de promociones. El dueño define promos (condiciones →
 // acción). El POS las aplicará al carrito cuando se integre el motor (follow-up).
@@ -57,9 +58,9 @@ export function PromotionsManager() {
       {isLoading ? (
         <SpinnerBlock className="py-6" />
       ) : (promos ?? []).length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-          Sin promociones. Creá una (ej. “10% los martes”, “$500 off en Bebidas”).
-        </p>
+        <div className="rounded-xl bg-muted/50">
+          <EmptyState compact icon={BadgePercent} title="Todavía no hay promociones" description="Creá una, por ejemplo “10% los martes” o “$500 off en Bebidas”." />
+        </div>
       ) : (
         <div className="space-y-2">
           {(promos ?? []).map((p: Promotion) => (

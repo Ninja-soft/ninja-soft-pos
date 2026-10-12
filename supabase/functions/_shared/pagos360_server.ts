@@ -7,6 +7,7 @@
 // Regla conservadora (ADR-028): sólo acredita con state=paid y monto exacto.
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { loadProviderSecret } from "./paymentSecrets.ts";
 
 // deno-lint-ignore no-explicit-any
 type Admin = SupabaseClient<any, "public", any>;
@@ -14,17 +15,22 @@ type Admin = SupabaseClient<any, "public", any>;
 export interface Pagos360Conn {
   base: string;
   headers: Record<string, string>;
+  /** Sucursal de la credencial usada (null = la del negocio, ADR-057). */
+  scopeStoreId: string | null;
 }
 
-/** API key del tenant + base sandbox/prod. null = sin conectar. */
-export async function loadPagos360(admin: Admin, tenantId: string): Promise<Pagos360Conn | null> {
-  const [{ data: secretRow }, { data: methodRow }] = await Promise.all([
-    admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", "pagos360")
-      .maybeSingle(),
+/**
+ * API key del tenant + base sandbox/prod. null = sin conectar.
+ * ADR-057: `opts.storeId` usa la de la sucursal si tiene; `opts.scopeStoreId`
+ * (del intent) la exacta.
+ */
+export async function loadPagos360(
+  admin: Admin,
+  tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<Pagos360Conn | null> {
+  const [loaded, { data: methodRow }] = await Promise.all([
+    loadProviderSecret(admin, tenantId, "pagos360", opts),
     admin
       .from("tenant_payment_methods")
       .select("sandbox")
@@ -32,11 +38,12 @@ export async function loadPagos360(admin: Admin, tenantId: string): Promise<Pago
       .eq("provider_key", "pagos360")
       .maybeSingle(),
   ]);
-  const apiKey = ((secretRow?.secrets ?? {}) as { api_key?: string }).api_key;
+  const apiKey = ((loaded?.secrets ?? {}) as { api_key?: string }).api_key;
   if (!apiKey) return null;
   return {
     base: methodRow?.sandbox ? "https://api.sandbox.pagos360.com": "https://api.pagos360.com",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    scopeStoreId: loaded?.scopeStoreId ?? null,
   };
 }
 

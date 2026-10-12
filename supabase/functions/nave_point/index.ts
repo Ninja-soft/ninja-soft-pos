@@ -40,6 +40,7 @@ import {
   type IntentRow,
 } from "../_shared/nave_server.ts";
 import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 // Tiempo para que el cliente pague en la terminal.
 const POINT_DURATION_SECONDS = 10 * 60;
@@ -60,7 +61,15 @@ Deno.serve(async (req: Request) => {
   }
   const action = String(b.action ?? "");
 
-  const conn = await loadNaveConnection(admin, tenantId);
+  // ADR-057: conexión de la sucursal (si tiene una propia) para listar y
+  // cobrar; sobre un intent, la misma con la que se creó.
+  let conn = await loadNaveConnection(
+    admin,
+    tenantId,
+    action === "devices" || action === "create"
+      ? { storeId: bodyStoreId(b) }
+      : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) },
+  );
   if (!conn) return json({ error: "not_connected" }, 400);
 
   // ── devices: terminales configuradas (sin secretos) ─────────────────────────
@@ -94,6 +103,11 @@ Deno.serve(async (req: Request) => {
       terminalId = t.terminal.id;
       storeId = t.terminal.store_id;
       registerId = registerId ?? t.terminal.cash_register_id;
+      // La terminal manda: su sucursal define la conexión.
+      if (storeId !== loc.storeId) {
+        conn = await loadNaveConnection(admin, tenantId, { storeId });
+        if (!conn) return json({ error: "not_connected" }, 400);
+      }
     }
     if (!terminalId && !conn.terminals.some((t) => t.id === deviceId)) {
       // Compatibilidad: id suelto, válido si está registrado como terminal del negocio.
@@ -118,17 +132,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_amount" }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({
+    const { data: intent, error: intErr } = await insertIntentWithScope(
+      admin,
+      {
         tenant_id: tenantId,
         amount,
         provider_key: "nave_point",
         point_device_id: deviceId,
         ...(terminalId ? { payment_terminal_id: terminalId } : {}),
-      })
-      .select("id")
-      .single();
+      },
+      conn.scopeStoreId,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const intentId = (intent as { id: string }).id;
 

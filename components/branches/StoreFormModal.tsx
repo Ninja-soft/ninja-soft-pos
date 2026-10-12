@@ -7,7 +7,9 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { useBranchMutations } from "@/modules/branches/hooks";
+import { useBranchContext, useBranchMutations } from "@/modules/branches/hooks";
+import { INHERIT_ALL, StoreSetupPicker, useApplySetup, type SetupChoice } from "@/components/branches/StoreSetup";
+import { useFeature } from "@/modules/saas/gating";
 import type { StoreInput } from "@/modules/branches/api";
 import {
   branchErrorMessage,
@@ -86,11 +88,18 @@ export function StoreFormModal({
   const m = useBranchMutations();
   const [f, setF] = useState<Form>(() => toForm(branch));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Configuración inicial de una sucursal nueva (F17 · ADR-057).
+  const ctx = useBranchContext();
+  const multiStore = useFeature("multi_sucursal") === true;
+  const [setup, setSetup] = useState<SetupChoice>(INHERIT_ALL);
+  const applySetup = useApplySetup();
+  const canCopy = !branch && multiStore && ctx.allowed.length > 0;
 
   useEffect(() => {
     if (open) {
       setF(toForm(branch));
       setErrors({});
+      setSetup(INHERIT_ALL);
     }
   }, [open, branch]);
 
@@ -146,7 +155,10 @@ export function StoreFormModal({
     };
     try {
       if (branch) await m.updateStore.mutateAsync({ id: branch.id, patch: input });
-      else await m.createStore.mutateAsync(input);
+      else {
+        const id = await m.createStore.mutateAsync(input);
+        if (canCopy) await applySetup.apply(id, setup);
+      }
       toast({ title: branch ? "Sucursal actualizada" : "Sucursal creada", variant: "success" });
       onOpenChange(false);
     } catch (e) {
@@ -154,7 +166,7 @@ export function StoreFormModal({
     }
   }
 
-  const saving = m.createStore.isPending || m.updateStore.isPending;
+  const saving = m.createStore.isPending || m.updateStore.isPending || applySetup.pending;
 
   return (
     <Modal
@@ -299,6 +311,13 @@ export function StoreFormModal({
         </div>
 
         <Input label="Notas internas" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Ej.: llave en la caja fuerte de la oficina" />
+
+        {canCopy && (
+          <div>
+            <div className="mb-2 text-sm font-medium text-muted-foreground">Configuración inicial</div>
+            <StoreSetupPicker value={setup} onChange={setSetup} branches={ctx.allowed} />
+          </div>
+        )}
       </div>
     </Modal>
   );

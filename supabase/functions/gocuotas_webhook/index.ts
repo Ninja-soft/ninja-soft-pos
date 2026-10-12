@@ -16,6 +16,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractWebhookHint } from "../_shared/gocuotas.ts";
 import { INTENT_COLS, loadApiKey, syncIntent, type IntentRow } from "../_shared/gocuotas_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const html = (body: string) =>
   new Response(
@@ -64,7 +65,10 @@ Deno.serve(async (req: Request) => {
     const row = data as IntentRow | null;
     if (!row || row.status === "approved") return ok(); // idempotente
 
-    const apiKey = await loadApiKey(admin, row.tenant_id);
+    // ADR-057: la API Key (negocio o sucursal) con la que se creó el cobro.
+    const apiKey = await loadApiKey(admin, row.tenant_id, {
+      scopeStoreId: await intentSecretScope(admin, row.id),
+    });
     if (!apiKey) return ok();
 
     const res = await syncIntent(admin, row, apiKey, "webhook", hint.orderId, null);

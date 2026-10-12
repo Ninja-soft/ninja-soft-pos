@@ -12,6 +12,7 @@ import {
   resolveOrder,
   type GoCuotasEnv,
 } from "./gocuotas.ts";
+import { loadProviderSecret } from "./paymentSecrets.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Admin = SupabaseClient<any, "public", any>;
@@ -35,15 +36,24 @@ export const envOfIntent = (row: { mp_env: string | null }): GoCuotasEnv =>
   row.mp_env === "test" ? "sandbox" : "prod";
 export const intentEnvValue = (env: GoCuotasEnv) => (env === "sandbox" ? "test" : "prod");
 
-export async function loadApiKey(admin: Admin, tenantId: string): Promise<string | null> {
-  const { data } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "gocuotas")
-    .maybeSingle();
-  const key = ((data as { secrets?: { api_key?: string } } | null)?.secrets?.api_key ?? "").trim();
-  return key || null;
+// ADR-057: "API Key de la sucursal". `opts.storeId` usa la propia de la
+// sucursal si tiene; `opts.scopeStoreId` (del intent) la exacta.
+export async function loadApiKeyScoped(
+  admin: Admin,
+  tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<{ key: string; scopeStoreId: string | null } | null> {
+  const loaded = await loadProviderSecret(admin, tenantId, "gocuotas", opts);
+  const key = String((loaded?.secrets as { api_key?: string } | undefined)?.api_key ?? "").trim();
+  return key ? { key, scopeStoreId: loaded?.scopeStoreId ?? null } : null;
+}
+
+export async function loadApiKey(
+  admin: Admin,
+  tenantId: string,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<string | null> {
+  return (await loadApiKeyScoped(admin, tenantId, opts))?.key ?? null;
 }
 
 export async function loadEnv(admin: Admin, tenantId: string): Promise<GoCuotasEnv> {

@@ -26,11 +26,12 @@ import { buildCheckoutUrl, parseCheckoutResponse } from "../_shared/gocuotas.ts"
 import {
   INTENT_COLS,
   intentEnvValue,
-  loadApiKey,
+  loadApiKeyScoped,
   loadEnv,
   syncIntent,
   type IntentRow,
 } from "../_shared/gocuotas_server.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -83,8 +84,17 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
-  const apiKey = await loadApiKey(admin, tenantId);
-  if (!apiKey) return json({ error: "not_connected" }, 400);
+  // ADR-057: al crear, la API Key de la sucursal del POS (si tiene); sobre un
+  // intent, la misma con la que se creó.
+  const cred = await loadApiKeyScoped(
+    admin,
+    tenantId,
+    action === "create"
+      ? { storeId: bodyStoreId(b) }
+      : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) },
+  );
+  if (!cred) return json({ error: "not_connected" }, 400);
+  const apiKey = cred.key;
 
   // ── create ─────────────────────────────────────────────────────────────────
   if (action === "create") {
@@ -114,16 +124,16 @@ Deno.serve(async (req: Request) => {
       return json({ error: code }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({
+    const { data: intent, error: intErr } = await insertIntentWithScope(
+      admin,
+      {
         tenant_id: tenantId,
         amount,
         provider_key: "gocuotas",
         mp_env: intentEnvValue(env),
-      })
-      .select("id")
-      .single();
+      },
+      cred.scopeStoreId,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const intentId = (intent as { id: string }).id;
 

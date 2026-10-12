@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
-import { getActiveShiftId } from "@/modules/branches/store";
+import { getActiveShiftId, useBranchStore } from "@/modules/branches/store";
 import { parseRules, type CardVoucherRules } from "@/lib/payments/voucherRules";
 import { withSupervisor } from "@/modules/security/supervisor";
 import { priceDeviationPct } from "@/lib/pos/priceMismatch";
+import { effectivePlans } from "@/lib/payments/planScope";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -191,40 +192,91 @@ function planRow(v: PaymentPlanInput) {
   };
 }
 
+// ── Alcance de los planes (F17 · ADR-057) ───────────────────────────────────
+// null = planes del negocio; un id = planes propios de esa sucursal. Antes de
+// la migración 20261020110000 la columna store_id no existe: cada consulta
+// con alcance cae a la consulta de siempre (sólo hay planes del negocio).
+type PlanScope = string | null;
+
+function isMissingScopeColumn(e: { code?: string; message?: string } | null | undefined): boolean {
+  if (!e) return false;
+  return (
+    e.code === "42703" ||
+    e.code === "PGRST204" ||
+    e.code === "42P10" ||
+    /store_id/.test(e.message ?? "")
+  );
+}
+
+type ScopeFilterable<Q> = { or: (filters: string) => Q };
+
+function scoped<Q extends ScopeFilterable<Q>>(q: Q, storeId: PlanScope): Q {
+  return q.or(storeId ? `store_id.eq.${storeId}` : "store_id.is.null");
+}
+
+function scopedRow(v: PaymentPlanInput, storeId: PlanScope) {
+  const row = planRow(v);
+  return storeId ? { ...row, store_id: storeId } : row;
+}
+
+const SCOPED_CONFLICT = "tenant_id,provider_key,code,store_id";
+const LEGACY_CONFLICT = "tenant_id,provider_key,code";
+
 export const paymentPlansApi = {
-  // Planes de un medio (provider). activeOnly false en el editor.
+  // Planes de un medio para el editor: los del negocio y, con sucursal, los
+  // propios de esa sucursal (la grilla resuelve la herencia con planScope).
   listByProvider: async (
     providerKey: string,
     activeOnly = false,
+    storeId: PlanScope = null,
   ): Promise<PaymentPlan[]> => {
     const supabase = createClient();
-    let q = supabase
-      .from("payment_plans")
-      .select("*")
-      .eq("provider_key", providerKey)
-      .order("sort")
-      .order("label");
-    if (activeOnly) q = q.eq("is_active", true);
-    const { data } = await q;
-    return (data ?? []) as PaymentPlan[];
+    const build = (withScope: boolean) => {
+      let q = supabase
+        .from("payment_plans")
+        .select("*")
+        .eq("provider_key", providerKey)
+        .order("sort")
+        .order("label");
+      if (activeOnly) q = q.eq("is_active", true);
+      if (withScope) q = q.or(storeId ? `store_id.is.null,store_id.eq.${storeId}` : "store_id.is.null");
+      return q;
+    };
+    const r = await build(true);
+    if (r.error && isMissingScopeColumn(r.error)) {
+      const legacy = await build(false);
+      return (legacy.data ?? []) as PaymentPlan[];
+    }
+    return (r.data ?? []) as PaymentPlan[];
   },
 
-  // Todos los planes activos (para el POS al cobrar).
-  listActive: async (): Promise<PaymentPlan[]> => {
+  // Planes efectivos para cobrar en una sucursal (null = sólo los del
+  // negocio). Trae activos e inactivos del alcance para que una fila inactiva
+  // de la sucursal oculte el plan del negocio.
+  listActive: async (storeId: PlanScope = null, multiStore = true): Promise<PaymentPlan[]> => {
     const supabase = createClient();
-    const { data } = await supabase
+    const scopedQ = await supabase
       .from("payment_plans")
       .select("*")
-      .eq("is_active", true)
+      .or(storeId && multiStore ? `store_id.is.null,store_id.eq.${storeId}` : "store_id.is.null")
       .order("sort")
       .order("label");
-    return (data ?? []) as PaymentPlan[];
+    if (scopedQ.error && isMissingScopeColumn(scopedQ.error)) {
+      const { data } = await supabase
+        .from("payment_plans")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort")
+        .order("label");
+      return (data ?? []) as PaymentPlan[];
+    }
+    return effectivePlans((scopedQ.data ?? []) as PaymentPlan[], storeId, multiStore);
   },
 
-  create: async (v: PaymentPlanInput): Promise<void> => {
+  create: async (v: PaymentPlanInput, storeId: PlanScope = null): Promise<void> => {
     const supabase = createClient();
     // valid_from/valid_until no están en los tipos generados (no se regeneran): cast.
-    const { error } = await supabase.from("payment_plans").insert(planRow(v) as never);
+    const { error } = await supabase.from("payment_plans").insert(scopedRow(v, storeId) as never);
     if (error) throw error;
   },
 
@@ -234,17 +286,21 @@ export const paymentPlansApi = {
     if (error) throw error;
   },
 
-  // Celda del grid: crea o actualiza el plan (provider+base+marca+cuotas).
-  setCell: async (v: PaymentPlanInput): Promise<void> => {
+  // Celda del grid: crea o actualiza el plan (provider+base+marca+cuotas) del
+  // alcance. En una sucursal, `isActive` false oculta el plan del negocio.
+  setCell: async (v: PaymentPlanInput, storeId: PlanScope = null, isActive = true): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .upsert(planRow(v) as never, { onConflict: "tenant_id,provider_key,code" });
-    if (error) throw error;
+    const row = { ...scopedRow(v, storeId), is_active: isActive };
+    const r = await supabase.from("payment_plans").upsert(row as never, { onConflict: SCOPED_CONFLICT });
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await supabase.from("payment_plans").upsert(row as never, { onConflict: LEGACY_CONFLICT });
+      if (legacy.error) throw legacy.error;
+      return;
+    }
+    if (r.error) throw r.error;
   },
 
   // Vigencia por celda (provider+code): set targeteado que NO toca el recargo.
-  // Permite editar la vigencia de un plan ya cargado desde el grid.
   setCellValidity: async (
     providerKey: string,
     base: string,
@@ -252,95 +308,143 @@ export const paymentPlansApi = {
     installments: number,
     validFrom: string | null,
     validUntil: string | null,
+    storeId: PlanScope = null,
   ): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .update({ valid_from: validFrom, valid_until: validUntil } as never)
-      .eq("provider_key", providerKey)
-      .eq("code", planCode(base, brand, installments));
-    if (error) throw error;
+    const run = (withScope: boolean) => {
+      const q = supabase
+        .from("payment_plans")
+        .update({ valid_from: validFrom, valid_until: validUntil } as never)
+        .eq("provider_key", providerKey)
+        .eq("code", planCode(base, brand, installments));
+      return withScope ? scoped(q, storeId) : q;
+    };
+    const r = await run(true);
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await run(false);
+      if (legacy.error) throw legacy.error;
+      return;
+    }
+    if (r.error) throw r.error;
   },
 
-  // Vigencia para TODOS los planes de un medio a la vez (campaña de financiación
-  // del medio). Escribe las columnas valid_from/valid_until de cada plan.
+  // Vigencia para TODOS los planes de un medio en el alcance (campaña de
+  // financiación del medio).
   setProviderValidity: async (
     providerKey: string,
     validFrom: string | null,
     validUntil: string | null,
+    storeId: PlanScope = null,
   ): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .update({ valid_from: validFrom, valid_until: validUntil } as never)
-      .eq("provider_key", providerKey);
-    if (error) throw error;
+    const run = (withScope: boolean) => {
+      const q = supabase
+        .from("payment_plans")
+        .update({ valid_from: validFrom, valid_until: validUntil } as never)
+        .eq("provider_key", providerKey);
+      return withScope ? scoped(q, storeId) : q;
+    };
+    const r = await run(true);
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await run(false);
+      if (legacy.error) throw legacy.error;
+      return;
+    }
+    if (r.error) throw r.error;
   },
 
-  // Borra la celda (combinación) de un medio.
+  // Borra la celda (combinación) de un medio en el alcance. En una sucursal
+  // es "volver a heredar" el plan del negocio.
   removeCell: async (
     providerKey: string,
     base: string,
     brand: string | null,
     installments: number,
+    storeId: PlanScope = null,
   ): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .delete()
-      .eq("provider_key", providerKey)
-      .eq("code", planCode(base, brand, installments));
-    if (error) throw error;
+    const run = (withScope: boolean) => {
+      const q = supabase
+        .from("payment_plans")
+        .delete()
+        .eq("provider_key", providerKey)
+        .eq("code", planCode(base, brand, installments));
+      return withScope ? scoped(q, storeId) : q;
+    };
+    const r = await run(true);
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await run(false);
+      if (legacy.error) throw legacy.error;
+      return;
+    }
+    if (r.error) throw r.error;
   },
 
   // Siembra los planes AR que falten en el medio (no pisa los existentes).
   seedTypical: async (
     providerKey: string,
     rows: Omit<PaymentPlanInput, "provider_key">[],
+    storeId: PlanScope = null,
   ): Promise<number> => {
     const supabase = createClient();
-    const { data, error } = await supabase
+    const payload = rows.map((r) => scopedRow({ ...r, provider_key: providerKey }, storeId));
+    const r = await supabase
       .from("payment_plans")
-      .upsert(
-        rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never,
-        { onConflict: "tenant_id,provider_key,code", ignoreDuplicates: true },
-      )
+      .upsert(payload as never, { onConflict: SCOPED_CONFLICT, ignoreDuplicates: true })
       .select("id");
-    if (error) throw error;
-    return (data ?? []).length;
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await supabase
+        .from("payment_plans")
+        .upsert(payload as never, { onConflict: LEGACY_CONFLICT, ignoreDuplicates: true })
+        .select("id");
+      if (legacy.error) throw legacy.error;
+      return (legacy.data ?? []).length;
+    }
+    if (r.error) throw r.error;
+    return (r.data ?? []).length;
   },
 
   // Import XLSX: agrega/actualiza (upsert por code) sin borrar el resto.
   bulkUpsert: async (
     providerKey: string,
     rows: Omit<PaymentPlanInput, "provider_key">[],
+    storeId: PlanScope = null,
   ): Promise<number> => {
     if (rows.length === 0) return 0;
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .upsert(rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never, {
-        onConflict: "tenant_id,provider_key,code",
-      });
-    if (error) throw error;
+    const payload = rows.map((r) => ({
+      ...scopedRow({ ...r, provider_key: providerKey }, storeId),
+      is_active: true,
+    }));
+    const r = await supabase.from("payment_plans").upsert(payload as never, { onConflict: SCOPED_CONFLICT });
+    if (r.error && !storeId && isMissingScopeColumn(r.error)) {
+      const legacy = await supabase.from("payment_plans").upsert(payload as never, { onConflict: LEGACY_CONFLICT });
+      if (legacy.error) throw legacy.error;
+      return rows.length;
+    }
+    if (r.error) throw r.error;
     return rows.length;
   },
 
-  // Import XLSX: reemplaza todos los planes del medio por los del archivo.
+  // Import XLSX: reemplaza todos los planes del medio en el alcance por los
+  // del archivo (en una sucursal, sólo los propios: los del negocio quedan).
   replaceProvider: async (
     providerKey: string,
     rows: Omit<PaymentPlanInput, "provider_key">[],
+    storeId: PlanScope = null,
   ): Promise<number> => {
     const supabase = createClient();
-    const { error: delErr } = await supabase
-      .from("payment_plans")
-      .delete()
-      .eq("provider_key", providerKey);
-    if (delErr) throw delErr;
+    const del = (withScope: boolean) => {
+      const q = supabase.from("payment_plans").delete().eq("provider_key", providerKey);
+      return withScope ? scoped(q, storeId) : q;
+    };
+    let d = await del(true);
+    if (d.error && !storeId && isMissingScopeColumn(d.error)) d = await del(false);
+    if (d.error) throw d.error;
     if (rows.length === 0) return 0;
     const { error } = await supabase
       .from("payment_plans")
-      .insert(rows.map((r) => planRow({ ...r, provider_key: providerKey })) as never);
+      .insert(rows.map((r) => scopedRow({ ...r, provider_key: providerKey }, storeId)) as never);
     if (error) throw error;
     return rows.length;
   },
@@ -350,15 +454,18 @@ export const paymentPlansApi = {
     const { error } = await supabase.from("payment_plans").update({ is_active }).eq("id", id);
     if (error) throw error;
   },
-  // Activa/desactiva todos los planes de un medio (modo "recargo único" del medio
-  // desactiva los planes para que no se ofrezcan al cobrar).
+  // Activa/desactiva todos los planes del negocio de un medio (modo "recargo
+  // único" del medio desactiva los planes para que no se ofrezcan al cobrar).
+  // Los planes propios de las sucursales no se tocan.
   setProviderActive: async (providerKey: string, is_active: boolean): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("payment_plans")
-      .update({ is_active })
-      .eq("provider_key", providerKey);
-    if (error) throw error;
+    const run = (withScope: boolean) => {
+      const q = supabase.from("payment_plans").update({ is_active }).eq("provider_key", providerKey);
+      return withScope ? scoped(q, null) : q;
+    };
+    let r = await run(true);
+    if (r.error && isMissingScopeColumn(r.error)) r = await run(false);
+    if (r.error) throw r.error;
   },
   remove: async (id: string): Promise<void> => {
     const supabase = createClient();
@@ -505,6 +612,14 @@ function locationBody(loc?: PaymentLocation): Record<string, string> {
   return out;
 }
 
+// Sucursal del POS de este dispositivo (F17 · ADR-057): las Edges de cobro la
+// usan para elegir la credencial de la sucursal (o la del negocio si no tiene
+// propia). Sin sucursal elegida, no se manda y vale la del negocio.
+function posStoreBody(): Record<string, string> {
+  const id = useBranchStore.getState().posStoreId;
+  return id ? { store_id: id } : {};
+}
+
 // supabase-js envuelve los no-2xx: se lee el código del body para mostrarlo.
 async function edgeError(error: unknown): Promise<Error> {
   const ctx = (error as { context?: Response }).context;
@@ -589,7 +704,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mobbex_create_qr", {
-      body: { amount, title, customer_id: customerId ?? null },
+      body: { amount, title, customer_id: customerId ?? null, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -607,7 +722,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("modo_create_qr", {
-      body: { amount, title },
+      body: { amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -685,7 +800,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_create_qr", {
-      body: { amount, title },
+      body: { amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -795,7 +910,7 @@ export const posApi = {
   pointDevices: async (): Promise<{ id: string; operating_mode: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -807,7 +922,7 @@ export const posApi = {
   pointSetPdv: async (deviceId: string): Promise<void> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
-      body: { action: "pdv", device_id: deviceId },
+      body: { action: "pdv", device_id: deviceId, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -886,7 +1001,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("pagos360", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -911,6 +1026,7 @@ export const posApi = {
         amount,
         title,
         origin: appOrigin(),
+        ...posStoreBody(),
       },
     });
     if (error) throw error;
@@ -943,7 +1059,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -976,7 +1092,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("gocuotas", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1017,7 +1133,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("directo", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1059,7 +1175,7 @@ export const posApi = {
   ): Promise<{ intent_id: string; init_point: string; qr_data: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1096,7 +1212,7 @@ export const posApi = {
   navePointDevices: async (): Promise<{ id: string; label: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1158,7 +1274,7 @@ export const posApi = {
   cloverDevices: async (): Promise<{ id: string; label: string }[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("clover_point", {
-      body: { action: "devices" },
+      body: { action: "devices", ...posStoreBody() },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1170,7 +1286,7 @@ export const posApi = {
   cloverPing: async (deviceId: string): Promise<boolean> => {
     const supabase = createClient();
     const { data } = await supabase.functions.invoke("clover_point", {
-      body: { action: "ping", device_id: deviceId },
+      body: { action: "ping", device_id: deviceId, ...posStoreBody() },
     });
     return Boolean((data as { connected?: boolean } | null)?.connected);
   },

@@ -52,11 +52,25 @@ export function useStoreCreditBalance(customerId: string | null | undefined) {
   });
 }
 
-export function useCustomerHistory(customerId: string | null | undefined) {
+export function useCustomerHistory(
+  customerId: string | null | undefined,
+  storeId: string | null = null,
+) {
   return useQuery({
-    queryKey: ["customers", "history", customerId],
+    queryKey: ["customers", "history", customerId, storeId],
     enabled: Boolean(customerId),
-    queryFn: () => customersApi.history(customerId!),
+    queryFn: () => customersApi.history(customerId!, storeId),
+    // Cambiar el filtro de sucursal no vuelve al spinner.
+    placeholderData: (prev) => prev,
+  });
+}
+
+// Compras por sucursal del cliente (F17 · H96). enabled: sólo con varias sucursales.
+export function useCustomerBranchStats(customerId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["customers", "branch-stats", customerId],
+    enabled: Boolean(customerId) && enabled,
+    queryFn: () => customersApi.branchStats(customerId!),
   });
 }
 

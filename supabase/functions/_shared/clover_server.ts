@@ -26,6 +26,7 @@ import {
   type CloverEnv,
   type CloverEvaluation,
 } from "./clover.ts";
+import { intentSecretScope, loadProviderSecret, updateSecretRow } from "./paymentSecrets.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Admin = SupabaseClient<any, "public", any>;
@@ -42,6 +43,8 @@ export type CloverSecrets = {
 
 export type CloverConnection = {
   tenantId: string;
+  /** Sucursal de la credencial usada (null = la del negocio, ADR-057). */
+  scopeStoreId: string | null;
   env: CloverEnv;
   merchantId: string;
   configured: CloverDevice[];
@@ -51,18 +54,17 @@ export type CloverConnection = {
 
 // Conexión Fiserv del tenant. Ambiente: tenant_payment_methods.sandbox de la
 // fila 'fiserv'. `envOverride` permite consultar en el ambiente del intent.
+// ADR-057: `opts.storeId` usa la conexión propia de la sucursal (otro
+// merchant de Clover) si tiene; `opts.scopeStoreId` (del intent) la exacta.
 export async function loadCloverConnection(
   admin: Admin,
   tenantId: string,
   envOverride?: CloverEnv,
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
 ): Promise<CloverConnection | null> {
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", CONNECTION)
-    .maybeSingle();
-  const sec = ((secretRow as { secrets?: unknown } | null)?.secrets ?? {}) as CloverSecrets;
+  const loaded = await loadProviderSecret(admin, tenantId, CONNECTION, opts);
+  const sec = (loaded?.secrets ?? {}) as CloverSecrets;
+  const scopeStoreId = loaded?.scopeStoreId ?? null;
   if (!isSafeCloverId(sec.merchant_id) || !sec.access_token) return null;
 
   let env = envOverride;
@@ -96,12 +98,11 @@ export async function loadCloverConnection(
     if (!j?.access_token) return false;
     token = j.access_token;
     const next = { ...sec, access_token: j.access_token, refresh_token: j.refresh_token ?? sec.refresh_token };
-    await admin
-      .from("payment_secrets")
-      .update({ secrets: next })
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", CONNECTION)
-      .then(() => null, () => null);
+    await updateSecretRow(
+      admin,
+      { rowId: loaded?.rowId ?? null, tenantId, providerKey: CONNECTION, storeId: scopeStoreId },
+      next as Record<string, unknown>,
+    ).catch(() => null);
     return true;
   };
 
@@ -120,6 +121,7 @@ export async function loadCloverConnection(
 
   return {
     tenantId,
+    scopeStoreId,
     env: theEnv,
     merchantId: sec.merchant_id,
     configured: parseDeviceSerials(sec.device_serials),
@@ -326,6 +328,9 @@ export async function syncIntent(
 }
 
 // Conexión en el ambiente en el que se creó el intent.
-export function loadConnectionForIntent(admin: Admin, row: IntentRow) {
-  return loadCloverConnection(admin, row.tenant_id, cloverEnvFromIntent(row.mp_env));
+export async function loadConnectionForIntent(admin: Admin, row: IntentRow) {
+  // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
+  return loadCloverConnection(admin, row.tenant_id, cloverEnvFromIntent(row.mp_env), {
+    scopeStoreId: await intentSecretScope(admin, row.id),
+  });
 }

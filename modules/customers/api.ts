@@ -4,8 +4,52 @@ import type { Paged } from "@/lib/utils/pagination";
 import { sanitizeIlike } from "@/lib/utils/search";
 import type { CustomerOutput, CustomerRequired } from "./schemas";
 import type { ParsedCustomer } from "./import";
+import { useBranchStore } from "@/modules/branches/store";
 
 export type Customer = Tables<"customers">;
+
+export interface CustomerBranchStatsRow {
+  storeId: string;
+  name: string;
+  shortName: string | null;
+  color: string | null;
+  count: number;
+  total: number;
+  avgTicket: number;
+  lastAt: string | null;
+  firstAt: string | null;
+  returnsTotal: number;
+}
+export interface CustomerBranchStats {
+  storeIdAlta: string | null;
+  byStore: CustomerBranchStatsRow[];
+}
+
+// Sucursal de alta (F17 · H96, ADR-057): la del POS de este dispositivo. El
+// trigger customers_fill_store_alta la valida (negocio y acceso) y, si falta,
+// la deriva del turno o la sucursal base del usuario.
+function storeAlta(): Record<string, string> {
+  try {
+    const id = useBranchStore.getState().posStoreId;
+    return id ? { store_id_alta: id } : {};
+  } catch {
+    return {};
+  }
+}
+
+type InsertResult<T> = { data: T | null; error: { message: string } | null };
+
+/** Inserta con store_id_alta; sin la columna (migración sin aplicar) reintenta sin ella. */
+async function insertWithStore<T>(
+  row: Record<string, unknown>,
+  run: (r: Record<string, unknown>) => PromiseLike<InsertResult<T>>,
+): Promise<InsertResult<T>> {
+  const extra = storeAlta();
+  if (!extra.store_id_alta) return run(row);
+  const first = await run({ ...row, ...extra });
+  if (first.error && /store_id_alta/.test(first.error.message)) return run(row);
+  return first;
+}
 
 function payload(input: CustomerOutput) {
   return {
@@ -159,13 +203,23 @@ export const customersApi = {
   // Historial del cliente: saldo a favor + ventas + devoluciones.
   // (Cuenta corriente v2: el aging y el cobro de deuda viven en accountApi, por
   // RPC server-side; acá sólo el saldo y el próximo vencimiento para la ficha.)
+  // storeId (F17 · H96): filtra las compras por sucursal (null = todas las que
+  // el usuario ve; la RLS por sucursal de `sales` ya acota).
   history: async (
     customerId: string,
+    storeId: string | null = null,
   ): Promise<{
     creditBalance: number;
     accountDebt: number;
     nextDue: number | null;
-    sales: { id: string; number: number; total: number; status: string; created_at: string }[];
+    sales: {
+      id: string;
+      number: number;
+      total: number;
+      status: string;
+      created_at: string;
+      store_id: string | null;
+    }[];
     returns: { id: string; number: number; total: number; refund_method: string; created_at: string }[];
   }> => {
     const supabase = createClient();
@@ -176,10 +230,17 @@ export const customersApi = {
         .select("delta, created_at, due_date")
         .eq("customer_id", customerId)
         .is("voided_at", null),
-      supabase
-        .from("sales")
-        .select("id, number, total, status, created_at")
-        .eq("customer_id", customerId)
+      (storeId
+        ? supabase
+            .from("sales")
+            .select("id, number, total, status, created_at, store_id")
+            .eq("customer_id", customerId)
+            .eq("store_id", storeId)
+        : supabase
+            .from("sales")
+            .select("id, number, total, status, created_at, store_id")
+            .eq("customer_id", customerId)
+      )
         .order("created_at", { ascending: false })
         .limit(50),
       supabase
@@ -198,6 +259,35 @@ export const customersApi = {
       nextDue,
       sales: (salesRes.data ?? []) as never,
       returns: (returnsRes.data ?? []) as never,
+    };
+  },
+
+  // Compras del cliente por sucursal (F17 · H96, ADR-057): RPC acotada a las
+  // sucursales que el usuario ve. Sin la migración, null (la ficha lo oculta).
+  branchStats: async (customerId: string): Promise<CustomerBranchStats | null> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("customer_branch_stats" as never, {
+      p_customer: customerId,
+    } as never);
+    if (error || !data) return null;
+    const raw = data as unknown as {
+      store_id_alta: string | null;
+      by_store: Record<string, unknown>[] | null;
+    };
+    return {
+      storeIdAlta: raw.store_id_alta ?? null,
+      byStore: (raw.by_store ?? []).map((r) => ({
+        storeId: String(r.store_id),
+        name: String(r.name ?? ""),
+        shortName: (r.short_name as string | null) ?? null,
+        color: (r.color as string | null) ?? null,
+        count: Number(r.count) || 0,
+        total: Number(r.total) || 0,
+        avgTicket: Number(r.avg_ticket) || 0,
+        lastAt: (r.last_at as string | null) ?? null,
+        firstAt: (r.first_at as string | null) ?? null,
+        returnsTotal: Number(r.returns_total) || 0,
+      })),
     };
   },
 
@@ -364,7 +454,9 @@ export const customersApi = {
   create: async (input: CustomerOutput): Promise<void> => {
     const supabase = createClient();
     // payload incluye `preferences` (H40), aún no tipado: cast a never.
-    const { error } = await supabase.from("customers").insert(payload(input) as never);
+    const { error } = await insertWithStore(payload(input), (r) =>
+      supabase.from("customers").insert(r as never),
+    );
     if (error) throw error;
   },
 
@@ -384,9 +476,8 @@ export const customersApi = {
     birth_date?: string | null;
   }): Promise<{ id: string; name: string }> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("customers")
-      .insert({
+    const { data, error } = await insertWithStore<{ id: string; name: string }>(
+      {
         name: input.name.trim(),
         phone: input.phone?.trim() || null,
         email: input.email?.trim() || null,
@@ -394,9 +485,9 @@ export const customersApi = {
         document_number: input.document_number?.trim() || null,
         birth_date: input.birth_date?.trim() || null,
         is_active: true,
-      })
-      .select("id, name")
-      .single();
+      },
+      (r) => supabase.from("customers").insert(r as never).select("id, name").single(),
+    );
     if (error) throw error;
     return data as { id: string; name: string };
   },

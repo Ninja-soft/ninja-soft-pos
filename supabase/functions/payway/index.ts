@@ -24,6 +24,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -77,12 +78,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "payway")
-    .maybeSingle();
+  const secretRow = await loadProviderSecret(admin, tenantId, "payway", action === "create" ? { storeId: bodyStoreId(b) } : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) });
   const sec = (secretRow?.secrets ?? {}) as {
     public_apikey?: string;
     private_apikey?: string;
@@ -128,11 +124,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_origin" }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "payway" })
-      .select("id")
-      .single();
+    const { data: intent, error: intErr } = await insertIntentWithScope<{ id: string }>(
+      admin,
+      { tenant_id: tenantId, amount, provider_key: "payway" },
+      secretRow?.scopeStoreId ?? null,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
 
     const initPoint = `${origin}/pagar/${intent.id}`;

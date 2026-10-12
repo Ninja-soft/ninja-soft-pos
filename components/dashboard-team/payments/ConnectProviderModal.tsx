@@ -219,6 +219,8 @@ export function ConnectProviderModal({
   onOAuth,
   oauthPending = false,
   onMpEnv,
+  scopeSlot,
+  scopeName = null,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -233,6 +235,10 @@ export function ConnectProviderModal({
   onOAuth?: () => void;
   oauthPending?: boolean;
   onMpEnv?: (v: MpEnvChange) => Promise<void>;
+  /** Selector "Todo el negocio / Sucursal X" (F17 · ADR-057). */
+  scopeSlot?: React.ReactNode;
+  /** Sucursal de la credencial que se edita (null = la del negocio). */
+  scopeName?: string | null;
 }) {
   const { toast } = useToast();
   const isMp = providerKey === "mercadopago";
@@ -369,7 +375,9 @@ export function ConnectProviderModal({
         <p className="text-sm">
           <strong className="text-danger">¿Desconectar {brand.name}?</strong>{" "}
           <span className="text-muted-foreground">
-            Se borran las credenciales y dejás de cobrar con {channelNames.join(" ni con ")}.
+            {scopeName
+              ? `Se borran las credenciales propias de ${scopeName} y vuelve a cobrar con las del negocio.`
+              : `Se borran las credenciales y dejás de cobrar con ${channelNames.join(" ni con ")}.`}
           </span>
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -408,7 +416,7 @@ export function ConnectProviderModal({
           </Button>
         )}
         <button type="button" onClick={() => setConfirmOff(true)} className={cn(textBtn, "text-danger hover:text-danger")}>
-          <Unplug size={15} /> Desconectar {brand.name}
+          <Unplug size={15} /> {scopeName ? `Volver a las credenciales del negocio` : `Desconectar ${brand.name}`}
         </button>
       </>
     );
@@ -466,6 +474,8 @@ export function ConnectProviderModal({
         {/* Señuelos anti-autocompletado del navegador. */}
         <input type="text" name="username" autoComplete="username" className="hidden" tabIndex={-1} />
         <input type="password" name="password" autoComplete="new-password" className="hidden" tabIndex={-1} />
+
+        {scopeSlot}
 
         {view === "wizard" && <Stepper steps={STEPS} current={step} />}
 

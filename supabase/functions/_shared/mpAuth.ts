@@ -10,6 +10,7 @@
 // =============================================================================
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { type MpEnv, pickMpCredential } from "./mpOrders.ts";
+import { loadProviderSecret, updateSecretRow } from "./paymentSecrets.ts";
 
 export const MP_API = "https://api.mercadopago.com";
 
@@ -21,9 +22,11 @@ type Secrets = {
   via?: string;
 };
 
+type RowRef = { rowId: string | null; tenantId: string; storeId: string | null };
+
 async function refreshIfNeeded(
   admin: SupabaseClient,
-  tenantId: string,
+  ref: RowRef,
   sec: Secrets,
 ): Promise<Secrets> {
   const aboutToExpire =
@@ -63,31 +66,33 @@ async function refreshIfNeeded(
       ? new Date(Date.now() + t.expires_in * 1000).toISOString()
       : sec.expires_at,
   };
-  await admin
-    .from("payment_secrets")
-    .update({ secrets: updated })
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "mercadopago");
+  // Se reescribe la MISMA fila usada (negocio o sucursal, ADR-057).
+  await updateSecretRow(
+    admin,
+    { rowId: ref.rowId, tenantId: ref.tenantId, providerKey: "mercadopago", storeId: ref.storeId },
+    updated as Record<string, unknown>,
+  );
   return updated;
 }
 
 /**
  * Token MP del tenant. Sin `forceEnv` decide el ambiente por el switch
  * Sandbox; con `forceEnv` usa el del intent (status / webhook / cancel).
+ *
+ * ADR-057: `opts.storeId` resuelve la credencial de la sucursal (si tiene una
+ * propia) antes que la del negocio; `opts.scopeStoreId` (lo registrado en el
+ * intent, incluso null) usa ESA credencial exacta. Devuelve además el alcance
+ * usado (scopeStoreId) para guardarlo en el intent.
  */
 export async function tenantMpCredential(
   admin: SupabaseClient,
   tenantId: string,
   forceEnv?: MpEnv | null,
-): Promise<{ token: string; env: MpEnv } | null> {
+  opts: { storeId?: string | null; scopeStoreId?: string | null } = {},
+): Promise<{ token: string; env: MpEnv; scopeStoreId: string | null } | null> {
   // Secreto y switch Sandbox en paralelo (antes eran dos rondas seguidas).
-  const [{ data: secretRow }, methodRes] = await Promise.all([
-    admin
-      .from("payment_secrets")
-      .select("secrets")
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", "mercadopago")
-      .maybeSingle(),
+  const [loaded, methodRes] = await Promise.all([
+    loadProviderSecret(admin, tenantId, "mercadopago", opts),
     forceEnv
       ? Promise.resolve({ data: null })
       : admin
@@ -97,15 +102,16 @@ export async function tenantMpCredential(
           .eq("provider_key", "mercadopago")
           .maybeSingle(),
   ]);
-  let sec = (secretRow?.secrets ?? {}) as Secrets;
+  let sec = (loaded?.secrets ?? {}) as Secrets;
+  const scopeStoreId = loaded?.scopeStoreId ?? null;
   const sandbox = !forceEnv && (methodRes.data as { sandbox?: boolean } | null)?.sandbox === true;
 
   const pick = pickMpCredential(sec, sandbox, forceEnv ?? null);
   if (pick?.env === "prod") {
-    sec = await refreshIfNeeded(admin, tenantId, sec);
-    return sec.access_token ? { token: sec.access_token, env: "prod" } : null;
+    sec = await refreshIfNeeded(admin, { rowId: loaded?.rowId ?? null, tenantId, storeId: scopeStoreId }, sec);
+    return sec.access_token ? { token: sec.access_token, env: "prod", scopeStoreId } : null;
   }
-  return pick;
+  return pick ? { ...pick, scopeStoreId } : null;
 }
 
 /** Headers estándar de la Orders API (idempotencia obligatoria en POST). */

@@ -44,6 +44,7 @@ import {
   paywayV2Base,
   toCents,
 } from "../_shared/payway.ts";
+import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -91,12 +92,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   const base = paywayV2Base(methodRow?.sandbox);
 
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", row.tenant_id)
-    .eq("provider_key", "payway")
-    .maybeSingle();
+  const secretRow = await loadProviderSecret(admin, row.tenant_id, "payway", { scopeStoreId: await intentSecretScope(admin, row.id) });
   const sec = (secretRow?.secrets ?? {}) as {
     public_apikey?: string;
     private_apikey?: string;

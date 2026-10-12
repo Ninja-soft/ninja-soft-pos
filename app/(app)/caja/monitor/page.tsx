@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CashMonitor } from "@/components/cash/CashMonitor";
+import { BranchOverviewGrid } from "@/components/cash/BranchOverviewGrid";
 import { useBranchContext, useBranchScope } from "@/modules/branches/hooks";
 
 // Cajas abiertas (F17 · H115): por sucursal, quién, desde cuándo, ventas y
@@ -35,7 +36,10 @@ export default function CashMonitorPage() {
       />
       <div className="mt-6">
         {scope.isLoading ? null : allowed ? (
-          <CashMonitor />
+          <div className="space-y-8">
+            <BranchOverviewGrid />
+            <CashMonitor />
+          </div>
         ) : (
           <Card>
             <EmptyState

@@ -33,6 +33,7 @@ import {
   syncIntent,
   type IntentRow,
 } from "../_shared/nave_server.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 
 // Vida de la intención: alcanza para escanear o abrir el link en el mostrador.
 const QR_DURATION_SECONDS = 15 * 60;
@@ -53,7 +54,15 @@ Deno.serve(async (req: Request) => {
   }
   const action = String(b.action ?? "");
 
-  const conn = await loadNaveConnection(admin, tenantId);
+  // ADR-057: al crear, la conexión de la sucursal del POS (si tiene una
+  // propia); sobre un intent, la misma con la que se creó.
+  const conn = await loadNaveConnection(
+    admin,
+    tenantId,
+    action === "create"
+      ? { storeId: bodyStoreId(b) }
+      : { scopeStoreId: await intentSecretScope(admin, String(b.intent_id ?? "")) },
+  );
   if (!conn) return json({ error: "not_connected" }, 400);
 
   // ── create ─────────────────────────────────────────────────────────────────
@@ -70,11 +79,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: "invalid_amount" }, 400);
     }
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "nave" })
-      .select("id")
-      .single();
+    const { data: intent, error: intErr } = await insertIntentWithScope(
+      admin,
+      { tenant_id: tenantId, amount, provider_key: "nave" },
+      conn.scopeStoreId,
+    );
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
     const intentId = (intent as { id: string }).id;
 

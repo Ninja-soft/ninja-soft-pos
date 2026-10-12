@@ -10,6 +10,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { tenantMpCredential } from "../_shared/mpAuth.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 import { amountsMatch, type MpEnv } from "../_shared/mpOrders.ts";
 
 const MP_STATUS: Record<string, string> = {
@@ -66,10 +67,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!intent) return ok();
 
+    // ADR-057: verifica con la misma credencial (negocio o sucursal) con la
+    // que se creó el cobro.
     const cred = await tenantMpCredential(
       admin,
       intent.tenant_id,
       ((intent as { mp_env?: MpEnv | null }).mp_env ?? "prod") as MpEnv,
+      { scopeStoreId: await intentSecretScope(admin, intentId) },
     );
     if (!cred) return ok();
     const accessToken = cred.token;

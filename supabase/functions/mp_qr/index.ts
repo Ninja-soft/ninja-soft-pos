@@ -48,6 +48,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
+import { bodyStoreId, insertIntentWithScope, intentSecretScope } from "../_shared/paymentSecrets.ts";
 import {
   applyOrderToIntent,
   fetchOrder,
@@ -147,7 +148,8 @@ Deno.serve(async (req: Request) => {
       .eq("status", "active")
       .maybeSingle(),
     isCreate ? featureOk() : Promise.resolve(false),
-    isCreate ? tenantMpCredential(admin, tenantId) : Promise.resolve(null),
+    // ADR-057: credencial de la sucursal del POS (si tiene una propia).
+    isCreate ? tenantMpCredential(admin, tenantId, null, { storeId: bodyStoreId(b) }) : Promise.resolve(null),
     isCreate
       ? admin
           .from("tenant_payment_methods")
@@ -326,12 +328,16 @@ Deno.serve(async (req: Request) => {
   if (action === "setup" || action === "reset") {
     if (!canManage) return json({ error: "forbidden" }, 403);
     if (!(await featureOk())) return json({ error: "payment_method_not_allowed" }, 403);
-    const cred = await tenantMpCredential(admin, tenantId);
-    if (!cred) return json({ error: "not_connected" }, 400);
 
     const perRegister = b.cash_register_id !== undefined && b.cash_register_id !== null;
     const register = perRegister ? await loadRegister(b.cash_register_id) : null;
     if (perRegister && !register) return json({ error: "invalid_register" }, 400);
+    // ADR-057: la caja QR se crea en la cuenta de MP de la sucursal de la caja
+    // (o la pedida), si tiene una propia; si no, en la del negocio.
+    const cred = await tenantMpCredential(admin, tenantId, null, {
+      storeId: register?.store_id ?? bodyStoreId(b),
+    });
+    if (!cred) return json({ error: "not_connected" }, 400);
 
     if (action === "reset") {
       if (register) {
@@ -474,7 +480,7 @@ Deno.serve(async (req: Request) => {
     if (!Number.isFinite(amount) || amount <= 0) return json({ error: "invalid_amount" }, 400);
     const title = String(b.title ?? "Venta NinjaPos");
 
-    const cred = createCred;
+    let cred = createCred;
     if (!cred) return json({ error: "not_connected" }, 400);
     // F17 · ADR-049: caja QR registrada de esta caja (terminal_id, validada en
     // el servidor) o la caja única de config.mp_qr (POS viejos).
@@ -493,6 +499,12 @@ Deno.serve(async (req: Request) => {
       });
       if (!t.ok) return json({ error: t.error }, 400);
       if (t.terminal.kind !== "qr_caja") return json({ error: "terminal_provider_mismatch" }, 400);
+      // La terminal manda: si es de otra sucursal que la del body, se vuelve a
+      // resolver la credencial con la suya (ADR-057).
+      if (t.terminal.store_id !== loc.storeId) {
+        cred = await tenantMpCredential(admin, tenantId, null, { storeId: t.terminal.store_id });
+        if (!cred) return json({ error: "not_connected" }, 400);
+      }
       if ((t.terminal.environment ?? cred.env) !== cred.env) return json({ error: "terminal_env_mismatch" }, 400);
       externalPosId = t.terminal.external_id!;
       terminalId = t.terminal.id;
@@ -513,16 +525,18 @@ Deno.serve(async (req: Request) => {
     // antes de responder).
     const intentId = crypto.randomUUID();
     const [ins, r] = await Promise.all([
-      admin
-        .from("mp_payment_intents")
-        .insert({
+      insertIntentWithScope(
+        admin,
+        {
           id: intentId,
           tenant_id: tenantId,
           amount,
           provider_key: "mercadopago",
           mp_env: cred.env,
           ...(terminalId ? { payment_terminal_id: terminalId } : {}),
-        }),
+        },
+        cred.scopeStoreId,
+      ),
       fetch(`${MP_API}/v1/orders`, {
         method: "POST",
         headers: mpHeaders(cred.token, intentId),
@@ -589,7 +603,9 @@ Deno.serve(async (req: Request) => {
   if (row.status !== "pending") {
     return json({ status: row.status, mp_payment_id: row.mp_payment_id });
   }
-  const cred = await tenantMpCredential(admin, tenantId, row.mp_env ?? "prod");
+  const cred = await tenantMpCredential(admin, tenantId, row.mp_env ?? "prod", {
+    scopeStoreId: await intentSecretScope(admin, row.id),
+  });
   if (!cred) return json({ error: "not_connected" }, 400);
 
   if (action === "cancel") {

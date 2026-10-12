@@ -15,6 +15,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { runInBackground, tenantMpCredential } from "../_shared/mpAuth.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 import {
   applyOrderToIntent,
   fetchOrder,
@@ -43,7 +44,10 @@ async function handle(orderId: string): Promise<void> {
   if (!row) return; // order que no es nuestra (u otra integración de la cuenta).
   if (row.status === "approved") return; // ya acreditado: idempotente.
 
-  const cred = await tenantMpCredential(admin, row.tenant_id, row.mp_env ?? "prod");
+  // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
+  const cred = await tenantMpCredential(admin, row.tenant_id, row.mp_env ?? "prod", {
+    scopeStoreId: await intentSecretScope(admin, row.id),
+  });
   if (!cred) return;
   const got = await fetchOrder(cred.token, orderId);
   if (!got.ok) {

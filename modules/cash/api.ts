@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Tables } from "@/types/database";
 import { withSupervisor } from "@/modules/security/supervisor";
+import type { BranchOverview } from "@/lib/branches/monitorAlerts";
 
 export type CashMovement = Tables<"cash_movements">;
 export type ZClosure = Tables<"cash_z_closures">;
@@ -61,6 +62,34 @@ export const cashApi = {
       cash_in: Number(r.cash_in),
       cash_out: Number(r.cash_out),
       cash_expected: Number(r.cash_expected),
+    }));
+  },
+
+  // Vista general por sucursal (branch_monitor_overview, ADR-057): dueño y
+  // encargado. Sin la migración o sin permiso: lista vacía (la grilla se oculta).
+  branchOverview: async (): Promise<BranchOverview[]> => {
+    const sb = createClient() as unknown as LooseRpc;
+    const { data, error } = await sb.rpc<BranchOverview[]>("branch_monitor_overview");
+    if (error) {
+      if (/Could not find the function|PGRST202|does not exist|forbidden|42501/i.test(error.message)) return [];
+      throw new Error(error.message);
+    }
+    return (data ?? []).map((r) => ({
+      ...r,
+      registers_total: Number(r.registers_total) || 0,
+      registers_open: Number(r.registers_open) || 0,
+      open_shifts: r.open_shifts ?? [],
+      sales_today_total: Number(r.sales_today_total) || 0,
+      sales_today_count: Number(r.sales_today_count) || 0,
+      staff_on_shift: Number(r.staff_on_shift) || 0,
+      staff_assigned: Number(r.staff_assigned) || 0,
+      low_stock_count: Number(r.low_stock_count) || 0,
+      pending_waiting: Number(r.pending_waiting) || 0,
+      pending_waiting_amount: Number(r.pending_waiting_amount) || 0,
+      pending_paid_unsold: Number(r.pending_paid_unsold) || 0,
+      terminals: r.terminals ?? [],
+      last_z: r.last_z ? { ...r.last_z, difference: Number(r.last_z.difference) || 0 } : null,
+      close_tolerance: Number(r.close_tolerance) || 0,
     }));
   },
 

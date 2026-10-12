@@ -12,6 +12,7 @@ import { SectionHeader } from "@/components/ui/PageHeader";
 import { Callout } from "@/components/ui/Callout";
 import { buttonVariants } from "@/components/ui/Button";
 import { CashMonitor } from "@/components/cash/CashMonitor";
+import { BranchOverviewGrid } from "@/components/cash/BranchOverviewGrid";
 import { EYEBROW, FLAT_PANEL, KPI } from "@/components/security/styles";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { hourWindow, summarizeOwnerStats, useOwnerStats, type OwnerStats } from "@/modules/dashboard/ownerStats";
@@ -111,6 +112,11 @@ export function OwnerLive() {
           </div>
         </>
       )}
+
+      {/* Sucursales con alertas (ADR-057): sólo aparecen si hay algo para mirar. */}
+      <div className="mt-6 empty:hidden">
+        <BranchOverviewGrid compact storeId={selected} />
+      </div>
 
       <div className="mt-6">
         <p className={cn(EYEBROW, "mb-3")}>Cajas abiertas</p>

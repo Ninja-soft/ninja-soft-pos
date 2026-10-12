@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { posApi, type PaymentPlan } from "@/modules/pos/api";
-import { useProviderPlans } from "@/modules/pos/hooks";
+import { usePosProviderPlans } from "@/modules/pos/hooks";
 import { BASE_LABEL, BRAND_LABEL } from "@/modules/pos/planConstants";
 import { CardBrandLogo, ThemedLogo } from "@/components/ui/ThemedLogo";
 import { createClient } from "@/lib/supabase/client";
@@ -254,7 +254,7 @@ export function QrCheckoutModal({
   const [ttl, setTtl] = useState(() => defaultTtlMinutes(provider));
   const { data: branding } = useTicketBranding(open && Boolean(park));
 
-  const { data: fetchedPlans = [], isLoading: plansLoading } = useProviderPlans(
+  const { data: fetchedPlans, isLoading: plansLoading } = usePosProviderPlans(
     open && !prefetched ? provider : null,
   );
   const plans = prefetched?.plans ?? fetchedPlans;

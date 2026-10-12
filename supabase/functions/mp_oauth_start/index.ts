@@ -5,6 +5,7 @@
 // (cuenta de app de NinjaSoft), no de env, para poder editarlos desde internal.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { isScopeUuid, oauthStateFor, scopeErrorStatus } from "../_shared/paymentSecrets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -54,6 +55,20 @@ Deno.serve(async (req: Request) => {
     return json({ error: "forbidden" }, 403);
   }
 
+  // ADR-057: cuenta de Mercado Pago propia de una sucursal (opcional).
+  const body = (await req.json().catch(() => null)) as { store_id?: unknown } | null;
+  const storeId = isScopeUuid(body?.store_id) ? (body!.store_id as string) : null;
+  if (body?.store_id != null && !storeId) return json({ error: "invalid_store" }, 400);
+  if (storeId) {
+    const { data: err, error: rpcErr } = await admin.rpc("payment_secret_scope_check", {
+      p_tenant: tenantId,
+      p_user: user.id,
+      p_store: storeId,
+    });
+    if (rpcErr) return json({ error: "scope_check_failed" }, 500);
+    if (err) return json({ error: err }, scopeErrorStatus(String(err)));
+  }
+
   // Credenciales de la app de MP de NinjaSoft (plataforma).
   const { data: plat } = await admin
     .from("platform_secrets")
@@ -69,7 +84,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // state anti-CSRF.
-  const state = crypto.randomUUID();
+  const state = oauthStateFor(crypto.randomUUID(), storeId);
   const ins = await admin
     .from("mp_oauth_states")
     .insert({ state, tenant_id: tenantId, user_id: user.id });

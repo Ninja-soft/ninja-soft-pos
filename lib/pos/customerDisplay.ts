@@ -68,10 +68,26 @@ export interface DisplayQr {
   amount: number; // monto a cobrar (con recargo de plan si aplica)
 }
 
+// Cobro por transferencia en curso (ADR-055): datos de la cuenta donde el
+// cliente transfiere. Sólo datos que se le muestran al cliente (nada interno).
+export interface DisplayTransfer {
+  bankName: string;
+  bankSlug: string | null;
+  logoUrl: string | null;
+  holderName: string;
+  cuit: string | null;
+  cbu: string | null;
+  cbuLabel: "CBU" | "CVU";
+  alias: string | null;
+  currency: "ARS" | "USD";
+  note: string | null;
+  amount: number;
+}
+
 // Fase de la pantalla:
 //   idle   → sin venta (logo + bienvenida)
 //   cart   → carrito en construcción (ítems + totales)
-//   paying → cobro por QR en curso (QR + monto)
+//   paying → cobro por QR o transferencia en curso (QR o datos de la cuenta + monto)
 //   paid   → venta confirmada (“Pago recibido ✓ / ¡Gracias!”) → vuelve a idle
 export type DisplayPhase = "idle" | "cart" | "paying" | "paid";
 
@@ -87,6 +103,7 @@ export interface DisplayState {
   // diferencia a favor del cliente. 0/undefined = no mostrar.
   change?: number;
   qr?: DisplayQr | null;
+  transfer?: DisplayTransfer | null;
   // Timestamp de emisión (para ordenar / descartar mensajes viejos).
   at: number;
 }

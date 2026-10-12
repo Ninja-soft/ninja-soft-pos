@@ -13,6 +13,8 @@ import {
   type DisplayBranding,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
+import { BankLogo, BankWordmark } from "@/components/payments/BankLogo";
+import { formatCbu, formatCuit } from "@/lib/payments/transfer";
 import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import { locationLabel } from "@/modules/branches/logic";
 
@@ -189,6 +191,7 @@ function SaleScreen({ state }: { state: DisplayState }) {
   const { branding } = state;
   const showUnit = branding.showUnitPrices;
   const paying = state.phase === "paying" && state.qr;
+  const transfer = state.phase === "paying" && !state.qr ? state.transfer : null;
 
   return (
     <div className="z-10 flex min-h-0 flex-1 flex-col">
@@ -233,6 +236,8 @@ function SaleScreen({ state }: { state: DisplayState }) {
         <aside className="flex flex-col justify-between border-t border-white/10 bg-black/20 px-8 py-6 lg:border-l lg:border-t-0">
           {paying ? (
             <QrPanel state={state} />
+          ) : transfer ? (
+            <TransferPanel state={state} />
           ) : (
             <div className="flex flex-1 flex-col justify-end">
               <Totals state={state} />
@@ -333,6 +338,83 @@ function QrPanel({ state }: { state: DisplayState }) {
       <div className="font-price text-5xl font-black tabular-nums text-[var(--cd-accent)] md:text-6xl">
         {formatCurrency(qr.amount)}
       </div>
+    </div>
+  );
+}
+
+// Datos para transferir (ADR-055): logo de la entidad, titular, CBU / CVU y
+// alias grandes, y el monto. El QR lleva el alias (o el CBU) como texto: la
+// cámara del celular lo ofrece para copiar y pegar en la app del banco.
+function TransferPanel({ state }: { state: DisplayState }) {
+  const t = state.transfer!;
+  const qrText = t.alias || t.cbu || "";
+  const svg = useMemo(() => {
+    if (!qrText) return null;
+    try {
+      const m = encodeQr(qrText, "M");
+      return { path: qrSvgPath(m, 4), dim: m.size + 8 };
+    } catch {
+      return null;
+    }
+  }, [qrText]);
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-5">
+      <div className="text-sm font-semibold uppercase tracking-widest text-white/40">Transferí a</div>
+      <div className="flex items-center gap-4">
+        <BankLogo slug={t.bankSlug} customUrl={t.logoUrl} name={t.bankName} size={64} on="dark" />
+        <div className="min-w-0">
+          <BankWordmark slug={t.bankSlug} name={t.bankName} on="dark" className="h-9 w-auto max-w-[240px]" />
+          <div className={t.bankSlug ? "mt-1 truncate text-base text-white/60" : "truncate text-2xl font-bold"}>
+            {t.bankName}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="text-sm text-white/50">Titular</div>
+        <div className="text-2xl font-semibold leading-tight">{t.holderName}</div>
+        {t.cuit && <div className="mt-0.5 text-base text-white/50">CUIT {formatCuit(t.cuit)}</div>}
+      </div>
+      {t.alias && (
+        <div>
+          <div className="text-sm text-white/50">Alias</div>
+          <div className="break-all text-4xl font-black tracking-tight">{t.alias}</div>
+        </div>
+      )}
+      {t.cbu && (
+        <div>
+          <div className="text-sm text-white/50">{t.cbuLabel}</div>
+          <div className="break-all font-mono text-2xl font-semibold tracking-wide">{formatCbu(t.cbu)}</div>
+        </div>
+      )}
+      <div className="flex items-end justify-between gap-4 border-t border-white/15 pt-4">
+        <div>
+          <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
+            Monto{t.currency === "USD" ? " en dólares" : ""}
+          </div>
+          <div className="font-price text-5xl font-black tabular-nums leading-none text-[var(--cd-accent)] md:text-6xl">
+            {formatCurrency(t.amount)}
+          </div>
+        </div>
+        {svg && (
+          <div className="shrink-0 text-center">
+            <div className="rounded-md bg-white p-2">
+              <svg
+                role="img"
+                aria-label={`QR con el ${t.alias ? "alias" : t.cbuLabel}`}
+                viewBox={`0 0 ${svg.dim} ${svg.dim}`}
+                width={112}
+                height={112}
+                shapeRendering="crispEdges"
+              >
+                <rect width={svg.dim} height={svg.dim} fill="#fff" />
+                <path d={svg.path} fill="#000" />
+              </svg>
+            </div>
+            <div className="mt-1.5 text-xs text-white/50">Escaneá para copiar</div>
+          </div>
+        )}
+      </div>
+      {t.note && <div className="text-base text-white/60">{t.note}</div>}
     </div>
   );
 }

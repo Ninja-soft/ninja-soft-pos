@@ -38,6 +38,9 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("insufficient_stock_branch")) return "No hay stock suficiente en esta sucursal";
   if (msg.includes("payment_method_disabled_in_store"))
     return "Ese medio de pago está apagado en esta sucursal o caja";
+  // ADR-055: transferencias.
+  if (msg.includes("transfer_reference_required")) return "Cargá el número de operación de la transferencia";
+  if (msg.includes("transfer_account_not_available")) return "Esa cuenta de transferencia no está disponible en esta caja";
   // ADR-054: reglas del cupón del posnet (validadas en el servidor).
   if (msg.includes("card_voucher_required") || msg.includes("card_voucher_invalid"))
     return cardVoucherErrorTitle(msg);

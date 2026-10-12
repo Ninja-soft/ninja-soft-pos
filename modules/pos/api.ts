@@ -46,6 +46,28 @@ export interface SalePaymentInput {
   reference?: string;
   // Voucher de tarjeta (lote/cupón/autorización). Opcional; sólo débito/crédito.
   card_voucher?: CardVoucher;
+  // Transferencia desde el POS (ADR-055): cuenta elegida (null = por defecto).
+  transfer?: { accountId: string | null };
+}
+
+/**
+ * create_sale guarda card_voucher tal cual: la cuenta de la transferencia
+ * viaja ahí (transfer_account_id + la marca transfer_pos) y el trigger
+ * payments_transfer_account la pasa a payments.metadata.transfer y limpia
+ * card_voucher (ADR-055).
+ */
+export function toSalePayments(payments: SalePaymentInput[]): Record<string, unknown>[] {
+  return payments.map(({ transfer, ...p }) =>
+    transfer && p.method === "transfer"
+      ? {
+          ...p,
+          card_voucher: {
+            transfer_pos: true,
+            ...(transfer.accountId ? { transfer_account_id: transfer.accountId } : {}),
+          },
+        }
+      : p,
+  );
 }
 export interface SaleItemInput {
   product_id: string | null; // null = ítem de monto libre (venta rápida)
@@ -760,6 +782,9 @@ export const posApi = {
       surcharge_pct: number;
       merchant_numbers: Partial<Record<string, string>>;
       plan_mode: string | null;
+      /** Sólo 'transfer' (ADR-055): base del negocio de la pantalla y el n° de operación. */
+      transfer_show_screen?: boolean;
+      transfer_require_reference?: boolean;
     }>
   > => {
     const supabase = createClient();
@@ -775,6 +800,14 @@ export const posApi = {
       merchant_numbers:
         ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
       plan_mode: (r.config as { plan_mode?: string } | null)?.plan_mode ?? null,
+      ...(r.provider_key === "transfer"
+        ? {
+            transfer_show_screen:
+              (r.config as { transfer_show_screen?: boolean } | null)?.transfer_show_screen !== false,
+            transfer_require_reference:
+              (r.config as { transfer_require_reference?: boolean } | null)?.transfer_require_reference === true,
+          }
+        : {}),
     }));
   },
 
@@ -1498,7 +1531,7 @@ export const posApi = {
     const run = async (): Promise<CreateSaleResult> => {
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
-      p_payments: payments as unknown as Json,
+      p_payments: toSalePayments(payments) as unknown as Json,
       p_discount_total: discountTotal,
       p_customer_id: customerId ?? undefined,
       // Señal de gating (garantía/recargos). `p_extras` aún no está en los tipos

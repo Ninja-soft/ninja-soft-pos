@@ -44,7 +44,7 @@ export function naveRegistrationEmail(businessName: string | null | undefined, w
 // Resumen de una línea por canal (bajo el título del canal).
 export const CHANNEL_SUMMARY: Record<string, string> = {
   cash: "Entra al arqueo de caja",
-  transfer: "Confirmás vos que llegó la plata",
+  transfer: "A tu CBU, CVU o alias, con los datos en pantalla",
   mercadopago: "Un QR por venta en la pantalla o un link por WhatsApp",
   mercadopago_point: "Tarjeta, contactless y cuotas en tu lector Point",
   payway: "Checkout de Payway con tus planes de cuotas",
@@ -75,11 +75,12 @@ export const CHANNEL_INFO: Record<string, Explain> = {
     ],
   },
   transfer: {
-    activa: "Aparece como forma de pago en el POS para cobrar por transferencia a tu cuenta.",
+    activa:
+      "Aparece como forma de pago en el POS. Cargá tus cuentas y el POS muestra banco, titular, CBU / CVU y alias para que el cliente transfiera (también en la pantalla del cliente).",
     pasos: [
-      "El cliente transfiere a tu CBU o alias.",
-      "Verificás que la plata haya llegado.",
-      "Registrás la venta (la confirmación es manual).",
+      "En el POS tocás Cobrar y elegís Transferencia.",
+      "El cliente transfiere a la cuenta que muestra la pantalla.",
+      "Verificás que la plata llegó, cargás el n° de operación si lo pedís y tocás Ya transfirió.",
     ],
   },
   mercadopago: {

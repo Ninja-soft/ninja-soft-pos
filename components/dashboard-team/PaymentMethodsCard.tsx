@@ -24,6 +24,7 @@ import {
 } from "@/components/dashboard-team/payments/ConnectProviderModal";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
+import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
 import { useBranchContext } from "@/modules/branches/hooks";
@@ -306,6 +307,11 @@ export function PaymentMethodsCard() {
                 method={m}
                 onReconnect={() => setConnectBrand("mercadopago")}
                 onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
+              />
+            ) : key === "transfer" ? (
+              <TransferAccountsSetup
+                showScreen={m?.config?.transfer_show_screen !== false}
+                requireReference={m?.config?.transfer_require_reference === true}
               />
             ) : key === "directo" ? (
               <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />

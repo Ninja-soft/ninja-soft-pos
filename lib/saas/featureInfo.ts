@@ -125,9 +125,15 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
   },
   transferencia: {
-    desc: "Cobro por transferencia bancaria: registra el pago como transferencia para la conciliación.",
+    desc: "Cobro por transferencia: cargás tu cuenta (banco o billetera con su logo, titular, CBU / CVU y alias) y el POS la muestra al cobrar, también en la pantalla del cliente, con número de operación opcional u obligatorio. Cada cobro guarda la cuenta usada para conciliar. Podés omitir la pantalla y cerrar el ticket directo.",
     impact: "Desactivado, no se puede registrar la transferencia como medio de pago en la venta.",
     minPlan: "Start",
+  },
+  transferencia_multicuenta: {
+    desc: "Varias cuentas de transferencia: más de una cuenta activa (por ejemplo un banco y una billetera, o pesos y dólares), el cajero elige en cuál transfiere el cliente y cada sucursal muestra sus propias cuentas y su cuenta por defecto.",
+    impact: "Desactivado, se usa una sola cuenta (la por defecto) en todas las cajas; el servidor rechaza activar una segunda o elegir cuentas por sucursal.",
+    minPlan: "Pro",
+    requires: ["transferencia"],
   },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",

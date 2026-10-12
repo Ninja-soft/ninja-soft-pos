@@ -807,6 +807,16 @@ Migraciones `20261015100000_config_heredable`, `20261015110000_terminales_cobro`
 - [x] `audit_logs.store_id` completado por el trigger `audit_logs_fill_store` (fila de `stores` o `store_id` del dato), índice `(tenant_id, store_id, created_at desc)`. `staff_assign_on_invite(...)` (service_role) para invitar con sucursales.
 - [x] Políticas nuevas con `internal_scope()` (nunca `or is_internal()`, ADR-052).
 
+## 8.11 Extensión: cuentas para cobrar por transferencia (ADR-055)
+
+Migración `20261018400000_transferencias_cuentas`.
+
+- [x] `transfer_accounts(tenant_id, bank_slug, bank_name, custom_logo_path, custom_logo_url, holder_name, cuit, cbu, alias, account_type caja_ahorro|cuenta_corriente|cuenta_virtual|otra, currency ARS|USD, note, is_default, is_active, sort, created_by, deleted_at)`. CBU / CVU con `cbu_is_valid` (dos dígitos verificadores), CUIT con `cuit_is_valid`, alias `^[A-Za-z0-9.-]{6,20}$`, CBU o alias obligatorio. Únicos vivos por negocio: CBU, alias (sin mayúsculas) y una sola cuenta por defecto. RLS: lectura miembros (`internal_scope()`), alta y edición owner/manager, sin DELETE (baja lógica). Guard `transfer_accounts_guard` (normaliza, logo sólo de la carpeta del negocio, `transferencia` y la segunda cuenta activa con `transferencia_multicuenta`, cuenta por defecto única y automática) y `transfer_accounts_next_default`. Auditada con `write_audit_log`.
+- [x] Bucket público `transfer-logos` (png, jpeg, webp hasta 512 KB): escritura, listado y borrado sólo en `<tenant>/` con rol owner/manager.
+- [x] Herencia (ADR-049) del medio `transfer`: `transfer_show_screen` (también caja), `transfer_require_reference`, `transfer_accounts` (mapa id → visible) y `transfer_default_account` (grupo y sucursal). Base del negocio en `tenant_payment_methods.config` del medio `transfer` (`transfer_settings_save`, auditada). Trigger `config_overrides_transfer_guard`: campos sólo en `domain_key='transfer'` y elegir cuentas pide `transferencia_multicuenta`.
+- [x] `_transfer_effective(tenant, store, register)` / `transfer_effective(store, register)` (JWT): cuentas visibles, por defecto y flags. Sin `transferencia_multicuenta` sólo la cuenta por defecto.
+- [x] Trigger `payments_transfer_account` (BEFORE INSERT en `payments`): toda transferencia guarda en `metadata.transfer` la cuenta elegida (`card_voucher.transfer_account_id`, que se limpia) o la por defecto de la sucursal, con snapshot (entidad, titular, CUIT, CBU, alias, tipo, moneda, n° de operación). Con la marca del POS (`transfer_pos`) y n° obligatorio rechaza sin número (`transfer_reference_required`); una cuenta oculta en la sucursal, `transfer_account_not_available`.
+
 ---
 
 ## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)

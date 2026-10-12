@@ -422,7 +422,7 @@ grant execute on function require_supervisor(text, numeric, uuid) to authenticat
 -- -----------------------------------------------------------------------------
 alter table pos_settings add column if not exists max_free_sale jsonb not null default '{}'::jsonb;
 
--- Copia de 20261018300000 (incluye card_voucher_rules, ADR-054) con 'max_free_sale' (map_num, grupo y sucursal).
+-- Copia de 20261018300000 (incluye card_voucher_rules, ADR-054) y de 20261018400000 (transfer_*, ADR-055) con 'max_free_sale' (map_num, grupo y sucursal).
 create or replace function config_field_type(p_domain text, p_scope text, p_field text)
 returns text
 language sql
@@ -433,11 +433,16 @@ as $$
     when p_domain = 'payment_method' then
       case
         when p_field = 'enabled' then 'bool'
+        -- Transferencia (ADR-055): la caja puede mostrar u omitir la pantalla.
+        when p_field = 'transfer_show_screen' then 'bool'
         when p_scope = 'register' then null
         when p_field = 'surcharge_pct' then 'num'
         when p_field = 'plan_mode' then 'text'
         when p_field = 'merchant_numbers' then 'map_text'
         when p_field = 'sort' then 'num'
+        when p_field = 'transfer_require_reference' then 'bool'
+        when p_field = 'transfer_accounts' then 'map_any'
+        when p_field = 'transfer_default_account' then 'text'
         else null
       end
     when p_domain = 'pos_settings' then
@@ -468,7 +473,7 @@ as $$
 $$;
 grant execute on function config_field_type(text, text, text) to authenticated, service_role;
 
--- Copia de 20261018300000 (incluye card_voucher_rules, ADR-054) con el rango de 'max_free_sale' (>= 0).
+-- Copia de 20261018300000 (incluye card_voucher_rules, ADR-054) y de 20261018400000 (transfer_*, ADR-055) con el rango de 'max_free_sale' (>= 0).
 create or replace function config_field_error(p_domain text, p_field text, p_type text, p_value jsonb)
 returns text
 language plpgsql
@@ -479,7 +484,23 @@ declare
   v_num numeric;
   k     text;
   v     jsonb;
+  c_uuid constant text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 begin
+  -- Transferencia (ADR-055): mapa id de cuenta → visible y cuenta por defecto.
+  if p_domain = 'payment_method' and p_field = 'transfer_accounts' then
+    if jsonb_typeof(p_value) <> 'object' then return 'invalid_type'; end if;
+    for k, v in select * from jsonb_each(p_value) loop
+      if k !~ c_uuid then return 'invalid_key'; end if;
+      if jsonb_typeof(v) <> 'boolean' then return 'invalid_type'; end if;
+    end loop;
+    return null;
+  end if;
+  if p_domain = 'payment_method' and p_field = 'transfer_default_account' then
+    if jsonb_typeof(p_value) = 'null' then return null; end if;
+    if jsonb_typeof(p_value) <> 'string' or (p_value #>> '{}') !~ c_uuid then return 'invalid_type'; end if;
+    return null;
+  end if;
+
   if p_type = 'bool' then
     if jsonb_typeof(p_value) <> 'boolean' then return 'invalid_type'; end if;
   elsif p_type = 'num' then

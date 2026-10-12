@@ -53,6 +53,12 @@ export interface CheckoutPayment {
     /** terminal_transactions.id; lo valida el trigger de payments. */
     terminal_tx?: string;
   };
+  /**
+   * Transferencia cobrada desde el POS (ADR-055): cuenta donde transfirió el
+   * cliente (null = la por defecto de la caja). El servidor guarda la cuenta y
+   * un snapshot en payments.metadata.transfer.
+   */
+  transfer?: { accountId: string | null };
 }
 
 /** Cobro aprobado por la terminal integrada (ADR-053). */

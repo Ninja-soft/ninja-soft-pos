@@ -1898,6 +1898,37 @@ No es una feature de plan nueva: es parte de Tarjeta en posnet (BASE, ADR-042). 
 
 ---
 
+## ADR-055: Cuentas para cobrar por transferencia, catálogo de bancos y pantalla de transferencia
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/transferencias-bancos`, migración sin aplicar) · **Base:** ADR-049 (herencia), ADR-052 (`internal_scope`)
+
+### Contexto
+
+El dueño pidió poder configurar en Transferencia el banco, el CBU, el alias y demás datos "para que se muestren en pantalla", con los logos de todas las entidades (las de Mercado Pago y el resto de bancos y billeteras de Argentina), la opción de subir un logo propio, y poder elegir si se muestra la pantalla para que el cliente transfiera o se cierra el ticket directo. Hasta acá la transferencia era un medio "directo" sin datos: se registraba tal cual.
+
+### Decisión
+
+1. **Catálogo estático de entidades** (`lib/payments/banks.ts`): slug, nombre, tipo (banco, billetera, fintech, cripto), códigos de entidad del BCRA (3 primeros dígitos del CBU), código de proveedor de CVU (dígitos 4 a 7) cuando hay fuente, alias de búsqueda y logos en `public/images/banks` (isotipo cuadrado y horizontal, WebP transparente, variante `-on-dark` cuando la marca es oscura). Sin logo oficial disponible, monograma neutro marcado `fallback` (nunca un logo inventado). Un código pertenece a una sola entidad (Cuenta DNI usa el de Provincia).
+2. **`transfer_accounts` por negocio** con RLS (lectura del negocio, escritura owner/manager, baja lógica) y un guard que normaliza y valida CBU / CVU (dos dígitos verificadores), CUIT y alias, ata el logo propio a la carpeta del negocio y deja una sola cuenta por defecto. "Otra" entidad sube su logo al bucket `transfer-logos/<tenant>/` (png, jpeg o webp, sin SVG por seguridad).
+3. **Herencia por sucursal y caja con ADR-049**, no una tabla nueva: campos del medio `transfer` en la whitelist. Grupo y sucursal eligen qué cuentas se muestran (mapa id → visible, se mezcla por clave) y la por defecto; la caja sólo muestra u omite la pantalla. La base del negocio vive en `tenant_payment_methods.config` y se guarda por RPC auditada.
+4. **Pantalla de transferencia en la hoja de cobro** (y en la pantalla del cliente por el canal de siempre): cuenta (selector si hay varias), titular, CUIT, CBU / CVU y alias con copiar, monto, n° de operación y "Ya transfirió". Apagada, la transferencia cierra el ticket directo como antes. En la pantalla del cliente el QR lleva el alias (o el CBU) como texto para copiarlo desde la cámara: no existe un QR de transferencia interoperable a partir de un alias sin ser PSP, así que no se promete pago por QR.
+5. **Conciliación en el servidor:** un trigger en `payments` guarda en `metadata.transfer` la cuenta elegida (o la por defecto de la sucursal de la venta) con un snapshot. La cuenta viaja en `card_voucher.transfer_account_id` porque `create_sale` pasa ese jsonb tal cual: así no se recrea `create_sale` (función larga que otras ramas tocan, ver ADR-049) y el trigger limpia `card_voucher`. Una cuenta oculta en la sucursal se rechaza.
+6. **N° de operación obligatorio** exigido por el servidor cuando el pago viene del POS (marca `transfer_pos`). La diferencia de un cambio (`exchange_sale`) no lo pide: su pantalla no tiene el campo.
+7. **Plan (CLAUDE.md §6):** una cuenta, la pantalla y el logo propio son **BASE** (parte de `transferencia`). Más de una cuenta activa y elegir cuentas por sucursal es **OPTIONAL** `transferencia_multicuenta` (Pro, Business y Enterprise), gateado en el guard de `transfer_accounts`, en el trigger de `config_overrides` y en la resolución (sin la feature sólo vale la cuenta por defecto). Copy en `featureInfo.ts`; la comparación de planes la toma de la matriz.
+
+### Alternativas descartadas
+
+- **Guardar CBU y alias en `tenant_payment_methods.config`:** una sola cuenta, sin RLS propia ni auditoría por cuenta.
+- **Recrear `create_sale` para leer la cuenta:** choca con las ramas que la recrean; el trigger es independiente del orden de deploy.
+- **Hotlink a logos de terceros:** dependencia externa y riesgo de cambio; se guardan normalizados en el repo.
+
+### Consecuencias
+
+- Deploy: migración `20261018400000_transferencias_cuentas` después de `20261015100000` (ADR-049) y de `20261016100100` (usa `cuit_is_valid`, que se recrea igual). Front antes o después: sin la migración la hoja de cobro no recibe cuentas (la lista falla y la transferencia se registra como siempre, sin marca).
+- Pendiente: mostrar la cuenta y el n° de operación en el ticket, el detalle de la venta y un reporte de conciliación de transferencias; avisar la recepción automática si el banco o billetera ofrece API (fuera de alcance).
+
+---
+
 ## ADR-056: Precio autoritativo en el servidor, cambio de precio con PIN e historial de precios (F18 · H100 P0)
 
 **Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/precio-servidor`, migraciones sin aplicar) · **Base:** ADR-043, ADR-045, ADR-048, ADR-049, ADR-051, ADR-052 · **Auditoría:** [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md) §1.2 · **Numeración:** ADR-053 a ADR-055 reservadas por otras ramas.

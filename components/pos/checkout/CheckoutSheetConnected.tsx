@@ -10,7 +10,8 @@ import { acquirerMerchantNumber, availableAcquirers, rememberKey } from "@/lib/p
 import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
-import type { DisplayQr } from "@/lib/pos/customerDisplay";
+import type { DisplayQr, DisplayTransfer } from "@/lib/pos/customerDisplay";
+import { usePosTransferConfig } from "@/modules/payments/transfer";
 import { useFeature } from "@/modules/saas/gating";
 import { usePaymentTerminals } from "@/modules/config/hooks";
 import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
@@ -48,7 +49,10 @@ type Connected = Omit<
   | "voucherRequired"
   | "renderElectronic"
   | "renderAccount"
+  | "transfer"
 > & {
+  /** Reporta la cuenta de la transferencia a la pantalla del cliente (ADR-055). */
+  onTransferState?: (t: DisplayTransfer | null) => void;
   /** Reporta el QR activo a la pantalla del cliente (H25). */
   onQrState?: (qr: DisplayQr | null) => void;
   /**
@@ -60,7 +64,22 @@ type Connected = Omit<
 
 // Hoja de cobro con sus datos (planes de cuotas, garantías, vendedores,
 // voucher) y los modales de QR / link / Point de cada proveedor.
-export function CheckoutSheetConnected({ onQrState, customerId = null, ...props }: Connected) {
+export function CheckoutSheetConnected({ onQrState, onTransferState, customerId = null, ...props }: Connected) {
+  // Cuentas de transferencia de la caja (herencia por sucursal y caja).
+  const transferCfg = usePosTransferConfig();
+  const transfer = useMemo(
+    () =>
+      transferCfg.available
+        ? {
+            showScreen: transferCfg.showScreen,
+            requireReference: transferCfg.requireReference,
+            accounts: transferCfg.accounts,
+            defaultAccountId: transferCfg.defaultAccountId,
+            onDisplay: onTransferState,
+          }
+        : null,
+    [transferCfg, onTransferState],
+  );
   const { data: allPlans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
   const { data: allProfessionals } = useProfessionals();
@@ -240,6 +259,7 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       voucherRequired={Boolean(posSettings?.requireCardVoucher)}
       renderElectronic={renderElectronic}
       renderAccount={renderAccount}
+      transfer={transfer}
     />
   );
 }

@@ -9,6 +9,7 @@ import {
   ChartColumn,
   ChartLine,
   ChartPie,
+  CreditCard,
   Download,
   Grid3x3,
   LayoutGrid,
@@ -16,7 +17,9 @@ import {
 } from "lucide-react";
 import { addDays, format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/Button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/Button";
+import { cn } from "@/lib/utils/cn";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
@@ -639,6 +642,12 @@ export default function ReportesPage() {
               <span className="whitespace-nowrap">Período anterior</span>
             </div>
           </div>
+          <Link
+            href="/reportes/conciliacion"
+            className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
+          >
+            <CreditCard size={16} /> Conciliación de tarjetas
+          </Link>
           <GatedButton
             feature="export_xlsx"
             featureLabel="Exportar a Excel"

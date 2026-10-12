@@ -11,6 +11,7 @@ Versionado: [Semver](https://semver.org/lang/es/).
 
 ### Added
 
+- **Conciliación de tarjetas.** Nueva pantalla en Reportes con los cobros de débito y crédito agrupados por día, número de comercio y lote (con subtotales, como la liquidación del adquirente), filtros por período, tipo, marca, comercio y estado, checkbox por cobro y por lote para marcar lo conciliado, resumen total / conciliado / pendiente y exportación a Excel con el mismo agrupado. Feature `conciliacion_tarjetas` desde Pro; el marcado va por la RPC `set_payments_reconciled` (owner o encargado, plan, tenant y auditoría). Migración `20261012120000_conciliacion_tarjetas.sql` (no aplicada). ADR-043.
 - **Pantalla de cobro rediseñada y con variantes.** Sin degradados ni esquinas grandes: tiles con borde sutil, selección con relleno neutro y check, total en números tabulares, CTA sólido y logos transparentes sobre la superficie. Cuatro distribuciones (Dos columnas, Lista compacta, Teclado primero, Botones grandes), favoritos arriba, grupos ocultos, canales en fila y densidad, en Configuración, Diseño del POS (`pos_layout.checkout`, sin migración). ADR-042.
 - **Tarjeta en posnet.** Reemplaza a la tarjeta manual: un solo acceso con entidad (Visa, Mastercard, Amex...), tipo y cuotas con recargo y datos del cupón (cupón, lote, últimos 4, autorización) con resumen antes de registrar. ADR-042.
 - **Acceso rápido "Vender / Cobrar" (F1).** Botón arriba del menú y en el header mobile; con carrito en curso abre el cobro (`/pos?cobrar=1`). Sólo para roles que venden. ADR-042.

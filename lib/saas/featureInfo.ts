@@ -265,6 +265,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, los reportes sólo se ven en pantalla, sin exportación a Excel.",
     minPlan: "Pro",
   },
+  conciliacion_tarjetas: {
+    desc: "Conciliación de tarjetas: los cobros con débito y crédito agrupados por día, número de comercio y lote, con subtotales como la liquidación del adquirente, para marcar lo que ya se acreditó y exportarlo a Excel.",
+    impact: "Desactivado, los cobros con tarjeta se controlan a mano contra las liquidaciones; no se pueden marcar como conciliados.",
+    minPlan: "Pro",
+    needs: "Más útil con los números de comercio cargados en Medios de pago, Planes de cuotas, y con los datos del cupón (lote y cupón) de Tarjeta en posnet.",
+  },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
     impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { normalizeCompareReport, type BranchCompareReport } from "@/lib/reports/branchCompare";
 
 export interface SalesReport {
   total: number;
@@ -109,6 +110,25 @@ export interface StaffProductivityRow {
 const MAX_PAGES = 30;
 
 export const reportsApi = {
+  // Comparativo entre sucursales (F17 · H97 · ADR-057). storeIds null = todas
+  // las que el usuario ve. El servidor valida el acceso a cada sucursal y exige
+  // multi_sucursal para comparar más de una.
+  branchCompare: async (
+    fromISO: string,
+    toISO: string,
+    storeIds: string[] | null = null,
+  ): Promise<BranchCompareReport> => {
+    const supabase = createClient();
+    // RPC nueva: no está en los tipos generados.
+    const { data, error } = await supabase.rpc("branch_compare_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+      p_store_ids: storeIds && storeIds.length > 0 ? storeIds : null,
+    } as never);
+    if (error) throw error;
+    return normalizeCompareReport(data);
+  },
+
   // storeId: sucursal del chip (null = todas las que el usuario puede ver; el
   // servidor recorta a las permitidas, F17 · H97).
   sales: async (fromISO: string, toISO: string, storeId: string | null = null): Promise<SalesReport> => {

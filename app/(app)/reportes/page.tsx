@@ -54,6 +54,9 @@ import {
 } from "@/modules/reports/derive";
 import { useDiningEnabled } from "@/modules/dining/hooks";
 import { useBranchContext } from "@/modules/branches/hooks";
+import { ALL_BRANCHES } from "@/modules/branches/logic";
+import { BranchCompare } from "@/components/reports/BranchCompare";
+import { BranchDot } from "@/components/branches/BranchSwitcher";
 import { useLowStockByStore, useMultiStoreStock } from "@/modules/stock/hooks";
 import { branchFileTag, filterByStore, reportScopeLabel } from "@/lib/reports/branchScope";
 import { useDeliveryEnabled } from "@/modules/delivery/hooks";
@@ -108,6 +111,7 @@ const REPORTS = [
   { key: "gastro_top_items", label: "Gastro · Top ítems" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
+type ReportView = "consolidated" | "branch" | "compare";
 const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_day: true,
   by_hour: true,
@@ -145,7 +149,30 @@ export default function ReportesPage() {
   const storeId = branch.filterStoreId;
   const scopeLabel = reportScopeLabel(branch.isMulti, branch.filterStore);
 
-  const { data, isLoading } = useSalesReport(fromISO, toISO, { storeId });
+  // Vista (F17 · H97 · ADR-057): Consolidado / Por sucursal salen del chip
+  // (una sola fuente de verdad para todo el panel); Comparar es local.
+  const [compareBranches, setCompareBranches] = useState(false);
+  const canCompare = branch.isMulti && branch.allowed.length > 1;
+  const view: ReportView = compareBranches && canCompare ? "compare" : storeId ? "branch" : "consolidated";
+  function changeView(v: ReportView) {
+    if (v === "compare") {
+      setCompareBranches(true);
+      return;
+    }
+    setCompareBranches(false);
+    if (v === "consolidated") branch.setSelection(ALL_BRANCHES);
+    else if (!storeId) {
+      const first = branch.posStoreId ?? branch.allowed[0]?.id;
+      if (first) branch.setSelection(first);
+    }
+  }
+  const viewOptions: SegmentedOption<ReportView>[] = [
+    { value: "consolidated", label: "Consolidado" },
+    { value: "branch", label: "Por sucursal" },
+    ...(canCompare ? [{ value: "compare" as const, label: "Comparar sucursales" }] : []),
+  ];
+
+  const { data, isLoading } = useSalesReport(fromISO, toISO, { storeId, enabled: view !== "compare" });
   const { data: warranty } = useWarrantyReport(fromISO, toISO, storeId);
   // Productividad por profesional (H39): el owner liquida comisiones de la semana
   // mirando esta tabla (+ export XLSX).
@@ -626,10 +653,45 @@ export default function ReportesPage() {
           Reportes
           <InfoHint section="reportes" size={18} />
         </Display>
-        {scopeLabel && (
+        {branch.isMulti && (
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <Segmented
+              aria-label="Alcance del reporte"
+              value={view}
+              onChange={changeView}
+              options={viewOptions}
+              size="sm"
+            />
+            {view === "branch" && (
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Sucursal">
+                {branch.allowed.map((b) => {
+                  const on = b.id === storeId;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => branch.setSelection(b.id)}
+                      className={cn(
+                        "inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs transition-colors",
+                        on ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      <BranchDot branch={b} />
+                      {b.short_name?.trim() || b.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {scopeLabel && view !== "compare" && (
           <p className="mt-2 text-sm text-muted-foreground">
             Mirando <span className="font-medium text-foreground">{scopeLabel}</span>
-            {storeId ? "" : " (consolidado)"}. Cambiala desde el selector de sucursal.
+            {storeId ? "" : " (consolidado de las sucursales que ves)"}. También cambia desde el
+            selector de sucursal del panel.
           </p>
         )}
 
@@ -668,6 +730,7 @@ export default function ReportesPage() {
               ))}
             </div>
           </div>
+          {view !== "compare" && (
           <div className="flex shrink-0 flex-col gap-1">
             <span className="text-xs text-muted-foreground">Comparar</span>
             <div className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
@@ -679,6 +742,7 @@ export default function ReportesPage() {
               <span className="whitespace-nowrap">Período anterior</span>
             </div>
           </div>
+          )}
           {/* Acciones agrupadas a la derecha: si no entran en la fila bajan
               juntas (nunca queda un botón suelto en una segunda fila). */}
           <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
@@ -689,6 +753,7 @@ export default function ReportesPage() {
             >
               <CreditCard size={16} /> Conciliación
             </Link>
+            {view !== "compare" && (
             <GatedButton
               feature="export_xlsx"
               featureLabel="Exportar a Excel"
@@ -699,6 +764,8 @@ export default function ReportesPage() {
             >
               <Download size={16} /> Exportar XLSX
             </GatedButton>
+            )}
+            {view !== "compare" && (
             <Dropdown>
               <DropdownTrigger asChild>
                 <Button variant="secondary" className="shrink-0">
@@ -729,8 +796,22 @@ export default function ReportesPage() {
                 ))}
               </DropdownContent>
             </Dropdown>
+            )}
           </div>
         </div>
+
+        {view === "compare" ? (
+          <div className="mt-6">
+            <BranchCompare
+              fromISO={fromISO}
+              toISO={toISO}
+              rangeFrom={rangeFrom}
+              rangeTo={rangeTo}
+              periodLabel={`${format(rangeFrom, "dd/MM/yyyy")} al ${format(rangeTo, "dd/MM/yyyy")}`}
+            />
+          </div>
+        ) : (
+        <>
 
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiCard
@@ -1392,6 +1473,8 @@ export default function ReportesPage() {
               )}
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </>

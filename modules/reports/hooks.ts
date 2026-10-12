@@ -126,3 +126,26 @@ export function useGastroTopItemsReport(
     enabled,
   });
 }
+
+// Comparativo entre sucursales (F17 · H97). storeIds ordenados en la key para
+// que el orden de selección no duplique la consulta.
+export function useBranchCompare(
+  fromISO: string,
+  toISO: string,
+  storeIds: string[] | null,
+  enabled = true,
+) {
+  const key = storeIds ? [...storeIds].sort() : null;
+  return useQuery({
+    queryKey: ["reports", "branch-compare", fromISO, toISO, key],
+    queryFn: () => reportsApi.branchCompare(fromISO, toISO, key),
+    enabled,
+    retry: (count, err) => !isPlanOrAccessError(err) && count < 2,
+  });
+}
+
+/** Errores que no se reintentan: plan sin la función o sucursal sin acceso. */
+export function isPlanOrAccessError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String((err as { message?: unknown })?.message ?? err ?? "");
+  return /feature_not_in_plan|forbidden/i.test(msg);
+}

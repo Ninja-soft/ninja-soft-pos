@@ -1,6 +1,6 @@
 // @vitest-environment node
 // =============================================================================
-// F17 · H89-H91 — Sucursales, cajas, personal por sucursal y venta en la
+// F17 · H89-H91: sucursales, cajas, personal por sucursal y venta en la
 // sucursal del turno (ADR-045).
 //
 // Corre contra un Supabase LOCAL con las migraciones aplicadas (mismas

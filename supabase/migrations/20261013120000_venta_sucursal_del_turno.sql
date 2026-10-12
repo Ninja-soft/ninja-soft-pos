@@ -19,11 +19,12 @@
 --        si hay turnos abiertos en varias, 'shift_ambiguous' (el POS tiene
 --        que mandar el turno). p_strict = false devuelve nulls en vez de error.
 --
--- Las funciones se copian COMPLETAS desde su última definición (ver cada
+-- Las funciones se copian COMPLETAS desde su última definición viva (ver cada
 -- sección) y sólo cambia el bloque de sucursal y turno. Firmas compatibles:
 -- create_sale, return_sale_v2 y exchange_sale suman p_cash_shift_id opcional al
 -- final (se dropea la firma vieja, como en 20260609320000). return_sale y
--- account_open_shift mantienen su firma.
+-- account_open_shift mantienen su firma. create_sale lleva el separador ' · ' del
+-- nombre de variante que 20261011140000_sin_guion_largo aplicó en la base.
 --
 -- open_cash_shift valida que la caja sea del negocio, esté activa y no
 -- archivada, que la sucursal esté activa y que el usuario pueda operar en ella.
@@ -145,7 +146,7 @@ declare
   v_shift_id uuid;
   v_reg      record;
 begin
-  -- BUG A — no se opera con la cuenta bloqueada por falta de pago.
+  -- BUG A: no se opera con la cuenta bloqueada por falta de pago.
   perform assert_account_active(v_tenant);
 
   -- F17 · H89/H91: la caja tiene que ser del negocio, estar activa, en una
@@ -285,10 +286,10 @@ begin
   -- inferido), no de la sucursal default. Con una sola sucursal es lo de siempre.
   select r.o_shift_id, r.o_store_id into v_shift, v_store
     from resolve_sale_shift(p_cash_shift_id, true) r;
-  if v_store is null then
-    raise exception 'no_store';
-  end if;
   if v_shift is null then
+    if not exists (select 1 from stores where tenant_id = v_tenant and deleted_at is null) then
+      raise exception 'no_store';
+    end if;
     raise exception 'no_open_shift';
   end if;
 
@@ -607,7 +608,7 @@ begin
         if not found then
           raise exception 'variant_not_found';
         end if;
-        v_pname := v_pname || ' — ' || v_variant.option1
+        v_pname := v_pname || ' · ' || v_variant.option1
                    || coalesce(' / ' || v_variant.option2, '');
       elsif v_item.variant_id is not null then
         raise exception 'variant_not_allowed';
@@ -863,7 +864,7 @@ declare
   v_acc    numeric := 0;
 begin
   if v_tenant is null then raise exception 'no_tenant'; end if;
-  -- BUG A — no se opera con la cuenta bloqueada por falta de pago.
+  -- BUG A: no se opera con la cuenta bloqueada por falta de pago.
   perform assert_account_active(v_tenant);
   -- CC v2: se acepta el reintegro a la cuenta corriente.
   if p_refund not in ('cash','store_credit','account') then raise exception 'invalid_refund'; end if;
@@ -1021,7 +1022,7 @@ declare
   v_acc      numeric := 0;
 begin
   if v_tenant is null then raise exception 'no_tenant'; end if;
-  -- BUG A — no se opera con la cuenta bloqueada por falta de pago.
+  -- BUG A: no se opera con la cuenta bloqueada por falta de pago.
   perform assert_account_active(v_tenant);
   -- CC v2: se acepta el reintegro a la cuenta corriente.
   if p_refund not in ('cash','store_credit','account') then raise exception 'invalid_refund'; end if;

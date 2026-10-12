@@ -141,6 +141,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["transferencia"],
   },
+  transferencia_auto_mp: {
+    desc: "Transferencias automáticas con Mercado Pago: mientras la hoja de cobro espera, el POS consulta tu cuenta de Mercado Pago y detecta la transferencia que entra a tu CVU por el monto de la venta (con tolerancia ± en pesos y tiempo de espera configurables). Muestra quién transfirió y cierra la venta sola o le avisa al cajero; si hay dos transferencias iguales o dos cajas esperando el mismo monto, pregunta. Una transferencia nunca se usa dos veces y todo queda auditado.",
+    impact: "Desactivado, el cajero confirma cada transferencia a mano mirando la cuenta y cargando el n° de operación.",
+    minPlan: "Pro",
+    requires: ["transferencia"],
+    needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
+  },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
     impact: "Sin esto MODO no aparece como medio de pago disponible al cobrar.",
@@ -364,6 +371,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, los cobros con tarjeta se controlan a mano contra las liquidaciones; no se pueden marcar como conciliados.",
     minPlan: "Pro",
     needs: "Más útil con los números de comercio cargados en Medios de pago, Planes de cuotas, y con los datos del cupón (lote y cupón) de Tarjeta en posnet.",
+  },
+  conciliacion_procesadores: {
+    desc: "Conciliación de procesadores: los cobros de Mercado Pago llegan solos todos los días por API (y con \"Actualizar ahora\"), la liquidación de Payway, Getnet, Fiserv u otro adquirente se importa desde el Excel o CSV, y se cruzan solos con tus ventas. Muestra en palabras simples cuánto vendiste, cuánto te cobraron de comisiones e impuestos, cuánto te acreditaron y cuánto falta (con fecha), y te deja resolver los cobros sin venta, las ventas sin cobro y las diferencias de monto. Exporta a Excel.",
+    impact: "Desactivado, la liquidación de cada procesador se controla a mano o con un sistema aparte; los cobros con tarjeta se siguen conciliando por lote si el plan trae la conciliación de tarjetas.",
+    minPlan: "Business",
+    needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
   },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",

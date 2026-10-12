@@ -39,6 +39,34 @@ export interface TransferAccount {
   is_active: boolean;
   sort: number;
   deleted_at: string | null;
+  /** Detección automática (ADR-061). Ausentes en una base sin la migración. */
+  auto_detect?: boolean;
+  auto_tolerance?: number;
+  auto_mode?: TransferAutoMode;
+  auto_window_min?: number;
+}
+
+export type TransferAutoMode = "notify" | "auto_close";
+
+export interface TransferAutoSettings {
+  auto_detect: boolean;
+  auto_tolerance: number;
+  auto_mode: TransferAutoMode;
+  auto_window_min: number;
+}
+
+/** Cuenta de Mercado Pago: slug del catálogo o CVU con PSP 0003 (0000003...). */
+export function isMpCvuAccount(a: Pick<TransferAccount, "bank_slug" | "cbu">): boolean {
+  return a.bank_slug === "mercado-pago" || String(a.cbu ?? "").replace(/\D/g, "").startsWith("0000003");
+}
+
+export function autoSettingsOf(a: TransferAccount): TransferAutoSettings {
+  return {
+    auto_detect: a.auto_detect === true,
+    auto_tolerance: Number(a.auto_tolerance ?? 0) || 0,
+    auto_mode: a.auto_mode === "auto_close" ? "auto_close" : "notify",
+    auto_window_min: Number(a.auto_window_min ?? 30) || 30,
+  };
 }
 
 export const digitsOnly = (v: string | null | undefined): string => String(v ?? "").replace(/\D/g, "");

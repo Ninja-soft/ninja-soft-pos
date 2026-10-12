@@ -255,8 +255,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Cuenta corriente v2: tablero de cobranza. Con candado si el plan no la incluye.
         { href: "/clientes/cuentas", label: "Cuentas corrientes", icon: HandCoins, feature: "cuenta_corriente" },
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
-        // Conciliación de tarjetas (ADR-043). Con candado si el plan no la incluye.
-        { href: "/reportes/conciliacion", label: "Conciliación de tarjetas", icon: CreditCard, feature: "conciliacion_tarjetas" },
+        // Conciliación de tarjetas (ADR-044) y de procesadores (ADR-061, pestaña). Con candado si el plan no trae la de tarjetas.
+        { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
         { href: "/configuracion", label: "Configuración", icon: Settings },
       ],
     },

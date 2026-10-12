@@ -69,7 +69,8 @@ import {
 } from "@/lib/payments/voucherRules";
 import { choosablePlans, ctaNext, initialStep } from "@/lib/pos/posnetWizard";
 import { TransferPanel } from "./TransferPanel";
-import { displayDataOf, type TransferAccount } from "@/lib/payments/transfer";
+import { TransferAutoDetect } from "./TransferAutoDetect";
+import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
 import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
 import type {
   AccountPayRequest,
@@ -137,6 +138,11 @@ export interface TransferCheckout {
   defaultAccountId: string | null;
   /** Publica los datos en la pantalla del cliente (null = nada que mostrar). */
   onDisplay?: (t: DisplayTransfer | null) => void;
+  /**
+   * Detección automática de transferencias de Mercado Pago (ADR-061): plan
+   * con transferencia_auto_mp, sucursal y caja del POS.
+   */
+  autoDetect?: { enabled: boolean; storeId: string | null; registerId: string | null } | null;
 }
 
 export interface CheckoutSheetProps {
@@ -289,6 +295,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
   // Número de operación (Directo, transferencia): viaja como reference del pago.
   const [opRef, setOpRef] = useState("");
+  // ADR-061: n° de operación de la transferencia detectada que hay que confirmar.
+  const [autoCommitRef, setAutoCommitRef] = useState<string | null>(null);
   // Cuenta donde transfiere el cliente (ADR-055).
   const [transferAccId, setTransferAccId] = useState<string | null>(null);
   const [itemsOpen, setItemsOpen] = useState(false);
@@ -535,6 +543,11 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const transferAcc = transferScreen
     ? (transferAccounts.find((a) => a.id === transferAccId) ?? transferAccounts[0] ?? null)
     : null;
+  // ADR-061: la cuenta de Mercado Pago con detección automática espera la transferencia sola.
+  const autoTransfer =
+    transferAcc && transfer?.autoDetect?.enabled && transferAcc.auto_detect === true && isMpCvuAccount(transferAcc)
+      ? transfer.autoDetect
+      : null;
   const needsRef = Boolean(active?.requiresReference) || Boolean(isTransfer && transfer?.requireReference);
   const refOk = !needsRef || opRef.trim() !== "";
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
@@ -859,6 +872,14 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     : posnetNext
       ? posnetNextStep === null || portion <= 0
       : !canCommit || loading;
+  // Transferencia detectada (ADR-061): con el n° de operación cargado se
+  // confirma la línea como si el cajero tocara "Ya transfirió".
+  useEffect(() => {
+    if (!autoCommitRef || opRef !== autoCommitRef) return;
+    setAutoCommitRef(null);
+    if (canCommit) commit();
+  }, [autoCommitRef, opRef, canCommit]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function onCta() {
     if (readyToConfirm) finalize(lines);
     else if (posnetNext) {
@@ -1243,6 +1264,19 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           selectedId={transferAcc.id}
           onSelect={setTransferAccId}
           amount={settle.amount}
+        />
+      )}
+      {autoTransfer && transferAcc && settle.amount > 0 && (
+        <TransferAutoDetect
+          key={`${transferAcc.id}:${settle.amount}`}
+          accountId={transferAcc.id}
+          amount={settle.amount}
+          storeId={autoTransfer.storeId}
+          registerId={autoTransfer.registerId}
+          onUse={(id) => {
+            setOpRef(id);
+            setAutoCommitRef(id);
+          }}
         />
       )}
       {isTransfer && (needsRef || transferScreen) && (

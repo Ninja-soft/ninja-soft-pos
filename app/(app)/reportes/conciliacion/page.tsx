@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CreditCard, Download, Info, Lock, Pencil, PencilLine } from "lucide-react";
 import { startOfDay, startOfMonth, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 import { GatedButton } from "@/components/saas/GatedAction";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { VoucherEditModal, formatEditStamp } from "@/components/reports/VoucherEditModal";
+import { ProcessorReconciliation } from "@/components/reports/processors/ProcessorReconciliation";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
@@ -140,7 +142,60 @@ function Locked() {
 
 const plural = (n: number) => `${n} ${n === 1 ? "cobro" : "cobros"}`;
 
-export default function ConciliacionTarjetasPage() {
+type View = "tarjetas" | "procesadores";
+
+// Vistas de la conciliación (ADR-061): tarjetas (ADR-044, por lote) y
+// procesadores (liquidaciones por API o archivo, cruce automático).
+function ViewTabs({ value }: { value: View }) {
+  const router = useRouter();
+  return (
+    <Segmented<View>
+      aria-label="Vista de la conciliación"
+      className="mt-4"
+      value={value}
+      onChange={(v) =>
+        router.replace((v === "procesadores" ? "/reportes/conciliacion?vista=procesadores" : "/reportes/conciliacion") as Route)
+      }
+      options={[
+        { value: "tarjetas", label: "Tarjetas por lote" },
+        { value: "procesadores", label: "Procesadores" },
+      ]}
+    />
+  );
+}
+
+function ProcessorsPage() {
+  return (
+    <PageContainer>
+      <Link href="/reportes" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft size={14} /> Reportes
+      </Link>
+      <PageHeader
+        className="mt-2"
+        eyebrow="Reportes"
+        title="Conciliación de procesadores"
+        description="Lo que cobraste con Mercado Pago, Payway y otros adquirentes, cruzado solo con tus ventas: comisiones, impuestos, lo acreditado y lo que falta."
+      />
+      <ViewTabs value="procesadores" />
+      <ProcessorReconciliation />
+    </PageContainer>
+  );
+}
+
+function ConciliacionView() {
+  const params = useSearchParams();
+  return params.get("vista") === "procesadores" ? <ProcessorsPage /> : <ConciliacionTarjetasPage />;
+}
+
+export default function ConciliacionPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConciliacionView />
+    </Suspense>
+  );
+}
+
+function ConciliacionTarjetasPage() {
   const { toast } = useToast();
   const enabled = useFeature(FEATURE);
   const { data: me } = useMyTenant();
@@ -292,6 +347,8 @@ export default function ConciliacionTarjetasPage() {
           ) : undefined
         }
       />
+
+      <ViewTabs value="tarjetas" />
 
       {enabled === false ? (
         <Locked />

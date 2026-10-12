@@ -409,6 +409,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [x] Habilitación y **configuración por tenant** (`tenant_payment_methods`: enabled, recargo %, sandbox; RLS owner/manager). **Secretos** en `payment_secrets` (RLS deny: solo service_role/Edge Functions). UI `PaymentMethodsCard` en `/dashboard-team`.
   - [x] **UI de cobro abstracta** en el POS: `PaymentModal` lee `tenant_payment_methods.enabled` y muestra solo los medios del tenant (fallback a todos si no hay config). Selector de planes activos para débito/crédito con recargo. Recargo global del medio si `surcharge_pct > 0`. Hook `useEnabledPaymentMethods()`.
   - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
+  - [~] **Detección automática de transferencias en un CVU de Mercado Pago** (feature `transferencia_auto_mp`, Pro): mientras la pantalla de transferencia espera, el servidor busca la transferencia recibida en Mercado Pago y la empareja por monto (± tolerancia) y ventana de tiempo, sin reusar un movimiento y preguntando al cajero si hay más de una opción; avisa o cierra la venta sola. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, adenda). Pendiente: validar con una cuenta real que `payments/search` informa las transferencias entrantes a CVU ("Probar detección"), vincular la venta al watch al confirmar, override por sucursal y caja, y barrido de watches vencidos.*
   - [x] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado. ✓
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
@@ -1281,9 +1282,10 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 - [ ] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
   - [~] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(en curso: `feat/conciliacion-tarjetas`)*
-  - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
-  - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
-  - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.
+  - [~] Import de liquidaciones: **Mercado Pago por API, automático todos los días** (`payments/search`, cada credencial del negocio y de las sucursales); **Payway, Getnet, Fiserv/Posnet, Nave u otro por XLSX o CSV** con mapeo de columnas. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, feature `conciliacion_procesadores`, Business). Pendiente: MODO, Mobbex, Pagos360 y Directo con preset; presets de columnas guardados; Payway por API si la publican.*
+  - [~] Matching automático por id del procesador o intent, **n° de comercio + lote + cupón**, autorización + últimos 4, y monto + día con pareja única; estados Conciliado, Cobro sin venta, Venta sin cobro, Diferencia de monto, Revisado, y Acreditado / Pendiente de acreditación. *Hecho (ADR-061). Pendiente: contracargos como estado propio.*
+  - [~] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas separadas del bruto por cobro (Mercado Pago por `charges_details`; archivos por columna). *Hecho el detalle por cobro (ADR-061). Pendiente: asiento (H109) y registro para H106.*
+  - [x] Detalle de la venta con los cobros y los datos del procesador (comisiones, neto, acreditación, tarjeta, pagador) traídos por API con la credencial del cobro. *(ADR-061)*
   - [ ] Conciliación del turno: marcar un Z como conciliado con motivo.
   - [ ] Conciliación bancaria: extracto importado contra cobros, depósitos, pagos y liquidaciones; SIRCREB e impuesto a los débitos y créditos.
   - [ ] BIN de tarjeta → banco y medio (opcional).

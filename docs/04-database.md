@@ -773,7 +773,7 @@ Migración `20261014100000_cobros_en_espera`.
 - [x] `close_cash_shift(p_shift_id, p_closing_amount, p_notes, p_pending_action)`: con cobros abiertos en el turno exige `cancel` o `carry` (se dropea la firma de 3 args).
 - [x] `notifications.type` suma `cobros`; `system_emails.kind` suma `payment_link`.
 
-## 8.8 Extensión F18: compras, proveedores, costos e importaciones (ADR-050)
+## 8.9 Extensión F18: compras, proveedores, costos e importaciones (ADR-050)
 
 Migraciones `20261016100000` (features `compras` y `compras_importacion`), `20261016100100` (costos, configuración, proveedores), `20261016100200` (órdenes, recepciones, lotes, costeo, sugerencia) y `20261016100300` (comprobantes, pagos, cuenta corriente). Lectura: `tenant_id = current_tenant_id() or internal_scope()` (ADR-052).
 

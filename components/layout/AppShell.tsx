@@ -33,6 +33,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  Hourglass,
   X,
   ArrowLeftRight,
 } from "lucide-react";
@@ -191,6 +192,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
         // defecto; un plan puede apagarla y el ítem queda con candado.
         { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
+        // Cobros en espera (ADR-048): QR y links compartidos que esperan el
+        // pago. Con candado si el plan no la incluye.
+        { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         { href: "/caja", label: "Caja", icon: Wallet },
         { href: "/ventas", label: "Ventas", icon: Receipt },
         {

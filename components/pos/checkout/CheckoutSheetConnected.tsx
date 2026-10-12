@@ -82,6 +82,17 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       );
     }
     if (t.flow === "qr" && t.qrProvider) {
+      // Planes y modo del medio ya cargados: el QR se pide al abrir, sin
+      // esperar dos consultas más (ADR-048, "QR más rápido").
+      const row = (methods ?? []).find((m) => m.provider_key === t.qrProvider);
+      const prefetched =
+        allPlans && methods
+          ? {
+              plans: cardPlans.filter((p) => p.provider_key === t.qrProvider),
+              mode: row?.plan_mode ?? "plans",
+              pct: Number(row?.surcharge_pct) || 0,
+            }
+          : null;
       return (
         <QrCheckoutModal
           open
@@ -89,6 +100,8 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
           providerName={t.brandLabel}
           channel={t.channel === "link" ? "link" : "qr"}
           customerId={customerId}
+          prefetched={prefetched}
+          park={req.park ?? null}
           base={req.amount}
           onQrState={onQrState}
           onOpenChange={(o) => {

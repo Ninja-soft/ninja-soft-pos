@@ -1234,6 +1234,8 @@ export type Database = {
       }
       payment_providers: {
         Row: {
+          brand: string
+          channel: string
           is_active: boolean
           key: string
           kind: string
@@ -1241,6 +1243,8 @@ export type Database = {
           sort: number
         }
         Insert: {
+          brand: string
+          channel: string
           is_active?: boolean
           key: string
           kind: string
@@ -1248,6 +1252,8 @@ export type Database = {
           sort?: number
         }
         Update: {
+          brand?: string
+          channel?: string
           is_active?: boolean
           key?: string
           kind?: string

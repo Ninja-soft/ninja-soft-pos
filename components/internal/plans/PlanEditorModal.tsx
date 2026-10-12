@@ -124,6 +124,15 @@ function FeatureInfoButton({ featureKey }: { featureKey: string }) {
             <span className="font-semibold text-foreground">Si lo desactivás: </span>
             {info.impact}
           </p>
+          {(info.requires?.length || info.needs) && (
+            <p className="mt-2 text-muted-foreground">
+              <span className="font-semibold text-foreground">Requiere: </span>
+              {[
+                ...(info.requires ?? []).map((k) => `activar ${k} en este plan`),
+                ...(info.needs ? [info.needs] : []),
+              ].join(" · ")}
+            </p>
+          )}
           <p className="mt-2 text-[11px] uppercase tracking-wide text-ninja-flameSoft">
             Desde plan: {info.minPlan}
           </p>

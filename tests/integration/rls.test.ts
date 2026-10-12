@@ -711,7 +711,8 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
             amount: 200,
             card_voucher: { lote: "12", cupon: "345", autorizacion: "A1", marca: "Visa", comercio: "111" },
           },
-          { tenant_id: ctx.tenantA, sale_id: sale.id, method: "other", amount: 100 },
+          // Inserts de varias filas: PostgREST manda null en la columna que falta.
+          { tenant_id: ctx.tenantA, sale_id: sale.id, method: "other", amount: 100, card_voucher: {} },
         ] as never)
         .select("id, method");
       if (pErr || !pays) throw pErr ?? new Error("payments");

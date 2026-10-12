@@ -25,6 +25,20 @@ import { capitalizeName } from "@/lib/utils/format";
 // Acento de marca del tenant (hex #rrggbb válido) o el flame de NinjaSoft.
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const NINJA_FLAME = "#FF4B22";
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dueño",
+  manager: "Encargado",
+  cashier: "Cajero",
+  viewer: "Solo lectura",
+};
+const TENANT_STATUS_LABELS: Record<string, string> = {
+  trial: "En prueba",
+  active: "Activo",
+  past_due: "Pago vencido",
+  suspended: "Suspendido",
+  cancelled: "Cancelado",
+};
+
 function brandAccent(accent: string | null | undefined): string {
   return typeof accent === "string" && HEX.test(accent) ? accent : NINJA_FLAME;
 }
@@ -135,7 +149,7 @@ export default async function DashboardPage() {
         )}
 
         {memberships.length > 0 && (
-          <div className="-mx-6 mt-6 flex gap-3 overflow-x-auto px-6 pb-2 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="-mx-4 mt-6 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Link href="/pos" className={buttonVariants() + " shrink-0"}>
               <ShoppingCart size={16} /> Punto de venta
             </Link>
@@ -197,7 +211,10 @@ export default async function DashboardPage() {
                         {m.tenants?.name ?? "Negocio"}
                       </h3>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Rol: {m.role} · {m.tenants?.status}
+                        Rol: {ROLE_LABELS[m.role] ?? m.role}
+                        {m.tenants?.status
+                          ? ` · ${TENANT_STATUS_LABELS[m.tenants.status] ?? m.tenants.status}`
+                          : null}
                       </p>
                     </CardContent>
                   </Card>

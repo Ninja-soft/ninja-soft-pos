@@ -129,7 +129,7 @@ export function CustomerHistoryModal({
 
           {/* Preferencias / gustos del cliente (H40): se muestran si hay. */}
           {preferences && preferences.trim() && (
-            <div className="rounded-lg border border-ninja-flame/25 bg-ninja-flame/[0.06] px-4 py-3">
+            <div className="rounded-xl bg-ninja-flame/[0.08] px-4 py-3">
               <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ninja-flameSoft">
                 <Heart size={13} /> Preferencias
               </div>
@@ -212,8 +212,8 @@ export function CustomerHistoryModal({
                       key={c.id}
                       className={
                         inactive
-                          ? "flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm opacity-70"
-                          : "flex items-center justify-between gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-sm"
+                          ? "flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm opacity-70"
+                          : "flex items-center justify-between gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm"
                       }
                     >
                       <span className="min-w-0">

@@ -1028,6 +1028,7 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Caja QR de Mercado Pago **por caja** (`mp_qr setup` con `cash_register_id`), con la única de siempre como respaldo.
   - [~] N° de comercio por marca con override por sucursal (`merchant_numbers` efectivo) y n° por terminal. *(Autocompletar desde la terminal integrada en el cupón: pendiente.)*
   - [ ] Planes de cuotas y recargos por sucursal (se coordina con F14/H59).
+  - [x] **Cuentas de transferencia** (ADR-055): banco o billetera del catálogo con logo (o propia con logo subido), titular, CUIT, CBU / CVU validados con detección de la entidad, alias, tipo, moneda y nota; pantalla de transferencia en el POS y en la pantalla del cliente (o cierre directo), n° de operación opcional u obligatorio, cuentas y cuenta por defecto por grupo o sucursal y pantalla por caja. Snapshot de la cuenta en `payments.metadata.transfer`. BASE una cuenta; OPTIONAL `transferencia_multicuenta` (Pro).
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
 
 - [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*

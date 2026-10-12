@@ -13,6 +13,8 @@ import {
   type DisplayBranding,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
+import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
+import { locationLabel } from "@/modules/branches/logic";
 
 // =============================================================================
 // Pantalla del cliente / segunda pantalla (F10 · H25)
@@ -35,6 +37,15 @@ const DEFAULT_THANKS = "¡Gracias por tu compra!";
 
 export default function CustomerDisplayPage() {
   const live = useCustomerDisplayState();
+  // Caja de ESTE dispositivo (la misma que usa el POS) y, con 2+ sucursales,
+  // "Centro · Caja 1" (F17 · H90). Antes era la primera caja del negocio.
+  const branchCtx = useBranchContext();
+  const { data: register, store: registerStore } = useCurrentRegister();
+  const regLabel = register
+    ? branchCtx.isMulti && registerStore
+      ? locationLabel(registerStore, register)
+      : register.name
+    : null;
 
   // Branding base del tenant para la pantalla idle (antes de que el POS publique).
   // El estado en vivo del POS trae su propio branding y tiene prioridad.
@@ -43,7 +54,7 @@ export default function CustomerDisplayPage() {
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<DisplayBranding> => {
       const supabase = createClient();
-      const [{ data: b }, { data: s }, { data: reg }] = await Promise.all([
+      const [{ data: b }, { data: s }] = await Promise.all([
         supabase
           .from("tenant_branding")
           .select("legal_name, logo_url, accent")
@@ -53,13 +64,6 @@ export default function CustomerDisplayPage() {
           // Columnas nuevas (H25) aún no en los tipos generados: select("*") +
           // cast vía unknown.
           .select("*")
-          .maybeSingle(),
-        supabase
-          .from("cash_registers")
-          .select("name, stores(name)")
-          .eq("is_active", true)
-          .order("created_at")
-          .limit(1)
           .maybeSingle(),
       ]);
       const settings = (s as unknown as {
@@ -72,18 +76,11 @@ export default function CustomerDisplayPage() {
         logo_url?: string | null;
         accent?: string | null;
       } | null;
-      const register = reg as {
-        name?: string | null;
-        stores?: { name?: string | null } | null;
-      } | null;
-      const regLabel = register
-        ? [register.name, register.stores?.name].filter(Boolean).join(" · ") || null
-        : null;
       return {
         businessName: branding?.legal_name ?? null,
         logoUrl: branding?.logo_url ?? null,
         accent: branding?.accent ?? null,
-        registerLabel: regLabel,
+        registerLabel: null,
         welcomeMessage: settings?.display_welcome_message ?? null,
         thanksMessage: settings?.display_thanks_message ?? null,
         showUnitPrices: settings?.display_show_unit_prices ?? true,
@@ -93,8 +90,8 @@ export default function CustomerDisplayPage() {
 
   // Estado efectivo: el del POS si llegó; si no, idle con el branding propio.
   const state: DisplayState = useMemo(
-    () => live ?? idleState(ownBranding ?? EMPTY_BRANDING),
-    [live, ownBranding],
+    () => live ?? idleState({ ...(ownBranding ?? EMPTY_BRANDING), registerLabel: regLabel }),
+    [live, ownBranding, regLabel],
   );
   const branding = state.branding;
   const accent = branding.accent || "#FF4B22";

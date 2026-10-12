@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Modal } from "@/components/ui/Modal";
@@ -16,6 +16,7 @@ import {
 import type { Product } from "@/modules/products/api";
 import { useProductMutations } from "@/modules/products/hooks";
 import { formatQty } from "@/lib/utils/format";
+import { useCurrentStoreId, useMultiStoreStock } from "@/modules/stock/hooks";
 
 // F13 · H50 — Registrar merma (pérdida de stock) de un producto, con su motivo
 // (vencido/roto/preparación fallida/devolución/otro). Siempre es un EGRESO:
@@ -31,6 +32,14 @@ interface Props {
 export function MermaModal({ open, onOpenChange, product }: Props) {
   const { toast } = useToast();
   const { registerWaste } = useProductMutations();
+  // Stock por sucursal (F17 · H94): la merma se descuenta en la sucursal
+  // elegida (por defecto la del chip del panel o la del POS).
+  const multiStore = useMultiStoreStock();
+  const currentStoreId = useCurrentStoreId();
+  const [storeId, setStoreId] = useState<string>("");
+  useEffect(() => {
+    if (open) setStoreId(currentStoreId ?? multiStore.stores[0]?.id ?? "");
+  }, [open, currentStoreId, multiStore.stores]);
   const {
     register,
     handleSubmit,
@@ -47,7 +56,11 @@ export function MermaModal({ open, onOpenChange, product }: Props) {
   async function onSubmit(values: MermaInput) {
     if (!product) return;
     try {
-      const newStock = await registerWaste.mutateAsync({ id: product.id, input: values });
+      const newStock = await registerWaste.mutateAsync({
+        id: product.id,
+        input: values,
+        storeId: multiStore.enabled && storeId ? storeId : null,
+      });
       toast({
         title: "Merma registrada",
         description: `Nuevo stock: ${formatQty(newStock)}`,
@@ -75,6 +88,24 @@ export function MermaModal({ open, onOpenChange, product }: Props) {
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        {multiStore.enabled && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+              Sucursal
+            </label>
+            <select
+              className="h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+            >
+              {multiStore.stores.map((st) => (
+                <option key={st.id} value={st.id} className="bg-popover text-popover-foreground">
+                  {st.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <Input
           label="Cantidad perdida"
           type="number"

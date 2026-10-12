@@ -408,6 +408,65 @@ async function invokeMpQr<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+// Settings operativos del POS (H30): descuento máximo por rol y redondeo.
+// Incluye los settings de la pantalla del cliente (H25): mostrar precios
+// unitarios y mensajes de idle/agradecimiento.
+export interface PosSettingsView {
+  maxDiscount: Record<string, number>;
+  rounding: number;
+  requireCustomer: boolean;
+  scannerPrefix: string;
+  scannerSuffix: string;
+  scannerBeep: boolean;
+  scannerDupMs: number;
+  displayShowUnitPrices: boolean;
+  displayWelcomeMessage: string | null;
+  displayThanksMessage: string | null;
+  // Oferta contextual automática de garantía extendida en el POS (H28).
+  offerWarranty: boolean;
+  // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
+  requireCardVoucher: boolean;
+  // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
+  // debe ser owner/manager (chequeo en la página). Default true.
+  allowFreeSale: boolean;
+  // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
+  // comisión; el owner ve todo (H39). Default false (todos ven todo).
+  staffSeesOwnOnly: boolean;
+  // Diseño del POS del negocio (pos_settings.pos_layout, sin validar: pasa
+  // por resolveLayout de lib/pos/layout.ts). null = nunca se configuró.
+  posLayout: unknown;
+  // Venta con stock negativo permitida (pos_settings.allow_negative_stock).
+  allowNegativeStock: boolean;
+}
+
+export function mapPosSettings(raw: Record<string, unknown> | null): PosSettingsView | null {
+  if (!raw) return null;
+  const data = raw;
+  return {
+    maxDiscount: (data.max_discount as Record<string, number>) ?? {},
+    rounding: Number(data.rounding_multiple) || 0,
+    requireCustomer: Boolean(data.require_customer),
+    scannerPrefix: (data.scanner_prefix as string) ?? "",
+    scannerSuffix: (data.scanner_suffix as string) ?? "",
+    scannerBeep: (data.scanner_beep as boolean) ?? true,
+    scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
+    displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
+    displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
+    displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
+    // Default true: si la columna no existe aún (settings viejos), se ofrece.
+    offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
+    // Default false: por defecto NO se exige voucher de tarjeta.
+    requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
+    // Default true: la venta libre queda habilitada (igual que hoy donde el
+    // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
+    allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
+    // Default false: por defecto el staff ve todo (no se restringe).
+    staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
+    posLayout: data.pos_layout ?? null,
+    allowNegativeStock: (data.allow_negative_stock as boolean | undefined) ?? true,
+  };
+}
+
 export const posApi = {
   // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
   // criterio histórico: el último turno abierto visible para el usuario.
@@ -553,60 +612,17 @@ export const posApi = {
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   // Incluye los settings de la pantalla del cliente (H25): mostrar precios
   // unitarios y mensajes de idle/agradecimiento.
-  posSettings: async (): Promise<{
-    maxDiscount: Record<string, number>;
-    rounding: number;
-    requireCustomer: boolean;
-    scannerPrefix: string;
-    scannerSuffix: string;
-    scannerBeep: boolean;
-    scannerDupMs: number;
-    displayShowUnitPrices: boolean;
-    displayWelcomeMessage: string | null;
-    displayThanksMessage: string | null;
-    // Oferta contextual automática de garantía extendida en el POS (H28).
-    offerWarranty: boolean;
-    // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
-    requireCardVoucher: boolean;
-    // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
-    // debe ser owner/manager (chequeo en la página). Default true.
-    allowFreeSale: boolean;
-    // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
-    // comisión; el owner ve todo (H39). Default false (todos ven todo).
-    staffSeesOwnOnly: boolean;
-    // Diseño del POS del negocio (pos_settings.pos_layout, sin validar: pasa
-    // por resolveLayout de lib/pos/layout.ts). null = nunca se configuró.
-    posLayout: unknown;
-  } | null> => {
+  // Fila cruda de pos_settings del negocio (la herencia por sucursal y caja
+  // se aplica en usePosSettings, F17 · H92).
+  posSettingsRaw: async (): Promise<Record<string, unknown> | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
     // tipos generados (no se regeneran): select("*") + cast del payload.
     const { data: raw } = await supabase.from("pos_settings").select("*").maybeSingle();
-    if (!raw) return null;
-    const data = raw as Record<string, unknown>;
-    return {
-      maxDiscount: (data.max_discount as Record<string, number>) ?? {},
-      rounding: Number(data.rounding_multiple) || 0,
-      requireCustomer: Boolean(data.require_customer),
-      scannerPrefix: (data.scanner_prefix as string) ?? "",
-      scannerSuffix: (data.scanner_suffix as string) ?? "",
-      scannerBeep: (data.scanner_beep as boolean) ?? true,
-      scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
-      displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
-      displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
-      displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
-      // Default true: si la columna no existe aún (settings viejos), se ofrece.
-      offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
-      // Default false: por defecto NO se exige voucher de tarjeta.
-      requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
-      // Default true: la venta libre queda habilitada (igual que hoy donde el
-      // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
-      allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
-      // Default false: por defecto el staff ve todo (no se restringe).
-      staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
-      posLayout: data.pos_layout ?? null,
-    };
+    return (raw as Record<string, unknown> | null) ?? null;
   },
+
+  posSettings: async (): Promise<PosSettingsView | null> => mapPosSettings(await posApi.posSettingsRaw()),
 
   // Crea la preferencia/QR de cobro y devuelve el init_point.
   createMpQr: async (

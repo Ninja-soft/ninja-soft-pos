@@ -28,6 +28,8 @@ import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { type TicketData } from "@/components/tickets/TicketRenderer";
 import { TemplateRenderer } from "@/components/tickets/TemplateRenderer";
 import { NoData } from "@/components/ui/NoData";
+import { useBranches } from "@/modules/branches/hooks";
+import { ticketLocation } from "@/lib/tickets/location";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
 interface Props {
@@ -65,6 +67,29 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const printedRef = useRef(false);
   const emailedRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
+
+  // Sucursal y caja de la venta (F17 · H90): sólo con 2+ sucursales.
+  const { data: branches } = useBranches();
+  const saleStoreId = (data?.sale as { store_id?: string | null } | undefined)?.store_id ?? null;
+  const saleShiftId = (data?.sale as { cash_shift_id?: string | null } | undefined)?.cash_shift_id ?? null;
+  const multiBranch = (branches ?? []).filter((b) => !b.deleted_at).length > 1;
+  const { data: saleRegisterId } = useQuery({
+    queryKey: ["sales", "shift-register", saleShiftId],
+    enabled: open && multiBranch && Boolean(saleShiftId),
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data: shiftRow } = await createClient()
+        .from("cash_shifts")
+        .select("cash_register_id")
+        .eq("id", saleShiftId!)
+        .maybeSingle();
+      return (shiftRow?.cash_register_id as string | undefined) ?? null;
+    },
+  });
+  const location = useMemo(
+    () => ticketLocation(branches ?? [], saleStoreId, saleRegisterId ?? null),
+    [branches, saleStoreId, saleRegisterId],
+  );
 
   // Preferencia del POS: enviar comprobante por email automáticamente.
   const { data: autoEmailEnabled } = useQuery({
@@ -170,6 +195,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
           ? { name: data.sale.customers.name, email: data.sale.customers.email }
           : null,
         brand: brand ?? null,
+        location,
       }
     : null;
 

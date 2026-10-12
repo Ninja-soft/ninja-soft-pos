@@ -182,10 +182,14 @@ export function useCategories() {
   });
 }
 
-export function useStockMovements(productId: string | null, enabled: boolean) {
+export function useStockMovements(
+  productId: string | null,
+  enabled: boolean,
+  storeId: string | null = null,
+) {
   return useQuery({
-    queryKey: ["products", "movements", productId],
-    queryFn: () => productsApi.movements(productId!),
+    queryKey: ["products", "movements", productId, storeId],
+    queryFn: () => productsApi.movements(productId!, storeId),
     enabled: enabled && Boolean(productId),
   });
 }
@@ -285,8 +289,8 @@ export function useProductMutations() {
     }),
     // Merma tipada (F13 · H50): descuenta stock con sub-motivo.
     registerWaste: useMutation({
-      mutationFn: (vars: { id: string; input: MermaInput }) =>
-        productsApi.registerWaste(vars.id, vars.input),
+      mutationFn: (vars: { id: string; input: MermaInput; storeId?: string | null }) =>
+        productsApi.registerWaste(vars.id, vars.input, vars.storeId ?? null),
       onSuccess: invalidate,
     }),
     // Producción / batch (F13 · H50): suma stock del producto preparado.

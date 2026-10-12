@@ -61,6 +61,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { ProductThumb } from "@/components/products/ProductThumb";
 import { productStockStatus } from "@/modules/products/stockStatus";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { branchStockOf } from "@/lib/reports/branchScope";
 import { cn } from "@/lib/utils/cn";
 import {
   StoreStockChips,
@@ -123,6 +125,10 @@ export default function ProductosPage() {
     multiStore.enabled,
   );
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  // Sucursal elegida en el chip del panel: con stock por sucursal, la columna
+  // Stock muestra el de esa sucursal (y el total debajo). Con "Todas", el total.
+  const { filterStoreId, filterStore } = useBranchContext();
+  const branchStockId = multiStore.enabled ? filterStoreId : null;
 
   // Comparación de precios vs catálogo de referencia: sólo si el tenant compró
   // un catálogo y tiene la sugerencia activada. Las referencias de los EANs
@@ -387,7 +393,13 @@ export default function ProductosPage() {
                 </TableStateRow>
               )}
               {products.map((p) => {
-                const stock = productStockStatus(p);
+                const branchQty =
+                  branchStockId && p.track_stock !== false
+                    ? branchStockOf(storeRows ?? [], p, branchStockId)
+                    : null;
+                const stock = branchQty
+                  ? productStockStatus({ ...p, stock: branchQty.qty, stock_min: branchQty.min })
+                  : productStockStatus(p);
                 const byStore =
                   multiStore.enabled && p.track_stock !== false
                     ? storeQuantities(p, multiStore.stores, storeRows ?? [], currentStoreId)
@@ -441,6 +453,14 @@ export default function ProductosPage() {
                         >
                           {stock.label}
                         </span>
+                        {branchQty && (
+                          <div
+                            className="text-[11px] text-muted-foreground"
+                            title={`Stock en ${filterStore?.short_name || filterStore?.name || "la sucursal"}; debajo, el total del negocio`}
+                          >
+                            Total {productStockStatus(p).label}
+                          </div>
+                        )}
                         {byStore && (
                           <div>
                             <StoreStockInlineSummary

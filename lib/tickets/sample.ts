@@ -31,6 +31,9 @@ export interface SampleTicketData {
   payments: { id: string; method: string; amount: number }[];
   customer?: { name: string; email?: string | null } | null;
   brand: SampleBrand | null;
+  // Sucursal y caja de la venta (F17 · H90). Sólo viene con 2+ sucursales: con
+  // una, el ticket queda igual que siempre.
+  location?: { branch: string | null; register: string | null } | null;
 }
 
 export function sampleTicketData(brand: SampleBrand | null): SampleTicketData {

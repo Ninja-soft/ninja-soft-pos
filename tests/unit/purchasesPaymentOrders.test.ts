@@ -23,8 +23,8 @@ describe("orden de pago: totales e imputación", () => {
   it("total = medios + retenciones; lo no imputado queda a cuenta", () => {
     const t = paymentOrderTotals(
       [{ amount: 700 }, { amount: 250.5 }],
-      [{ kind: "iibb", amount: 49.5 }],
-      [{ invoice_id: "a", amount: 800 }],
+      [{ amount: 49.5 }],
+      [{ amount: 800 }],
     );
     expect(t).toEqual({ net: 950.5, withholdings: 49.5, total: 1000, allocated: 800, onAccount: 200 });
   });

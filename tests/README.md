@@ -1,6 +1,8 @@
 # Tests — NinjaSoft POS
 
-`pnpm test` (Vitest). Cobertura por capa:
+`pnpm test` (Vitest). E2E con Playwright: `pnpm test:e2e`, ver [`e2e/README.md`](e2e/README.md).
+
+Cobertura por capa:
 
 - **Componentes:** `tests/components/` (ej. `Button.test.tsx`).
 - **Store cliente:** `tests/unit/cart.test.ts` (carrito Zustand + subtotales).

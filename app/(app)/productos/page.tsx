@@ -55,12 +55,16 @@ import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { PRODUCT_IMPORT_COLUMNS } from "@/modules/products/import";
 import { formatCurrency } from "@/lib/utils/format";
+import { marginCost, markupPct, productCosts } from "@/lib/purchases/costs";
+import { usePurchaseSettings } from "@/modules/purchases/hooks";
 import { NoData } from "@/components/ui/NoData";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { ProductThumb } from "@/components/products/ProductThumb";
 import { productStockStatus } from "@/modules/products/stockStatus";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { branchStockOf } from "@/lib/reports/branchScope";
 import { cn } from "@/lib/utils/cn";
 import {
   StoreStockChips,
@@ -75,6 +79,9 @@ import {
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
+  // Base de costo del negocio para el margen de la lista (F18 · H101, ADR-050).
+  const { data: purchaseSettings } = usePurchaseSettings();
+  const costBasis = purchaseSettings?.cost_basis ?? "last";
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -123,6 +130,10 @@ export default function ProductosPage() {
     multiStore.enabled,
   );
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  // Sucursal elegida en el chip del panel: con stock por sucursal, la columna
+  // Stock muestra el de esa sucursal (y el total debajo). Con "Todas", el total.
+  const { filterStoreId, filterStore } = useBranchContext();
+  const branchStockId = multiStore.enabled ? filterStoreId : null;
 
   // Comparación de precios vs catálogo de referencia: sólo si el tenant compró
   // un catálogo y tiene la sugerencia activada. Las referencias de los EANs
@@ -387,7 +398,13 @@ export default function ProductosPage() {
                 </TableStateRow>
               )}
               {products.map((p) => {
-                const stock = productStockStatus(p);
+                const branchQty =
+                  branchStockId && p.track_stock !== false
+                    ? branchStockOf(storeRows ?? [], p, branchStockId)
+                    : null;
+                const stock = branchQty
+                  ? productStockStatus({ ...p, stock: branchQty.qty, stock_min: branchQty.min })
+                  : productStockStatus(p);
                 const byStore =
                   multiStore.enabled && p.track_stock !== false
                     ? storeQuantities(p, multiStore.stores, storeRows ?? [], currentStoreId)
@@ -429,6 +446,20 @@ export default function ProductosPage() {
                             />
                           )}
                         </span>
+                        {(() => {
+                          const m = markupPct(Number(p.price), marginCost(costBasis, productCosts(p)));
+                          return m == null ? null : (
+                            <span
+                              className={cn(
+                                "block text-[11px] tabular-nums",
+                                m < 0 ? "text-danger" : "text-muted-foreground",
+                              )}
+                              title="Margen sobre el costo elegido en Configuración de compras"
+                            >
+                              Margen {String(m).replace(".", ",")} %
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span
@@ -441,6 +472,14 @@ export default function ProductosPage() {
                         >
                           {stock.label}
                         </span>
+                        {branchQty && (
+                          <div
+                            className="text-[11px] text-muted-foreground"
+                            title={`Stock en ${filterStore?.short_name || filterStore?.name || "la sucursal"}; debajo, el total del negocio`}
+                          >
+                            Total {productStockStatus(p).label}
+                          </div>
+                        )}
                         {byStore && (
                           <div>
                             <StoreStockInlineSummary

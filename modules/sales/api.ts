@@ -3,6 +3,14 @@ import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import type { Paged } from "@/lib/utils/pagination";
 import { getActiveShiftId } from "@/modules/branches/store";
+import { withSupervisor } from "@/modules/security/supervisor";
+
+// Total de la venta: monto de la autorización de supervisor para anular o
+// devolver (una devolución nunca supera la venta). ADR-051.
+async function saleTotal(id: string): Promise<number | null> {
+  const { data } = await createClient().from("sales").select("total").eq("id", id).maybeSingle();
+  return data ? Number((data as { total: number }).total) : null;
+}
 
 // types/database.ts no se regenera en este PR: las RPC nuevas (return_sale_v2,
 // lookup/redeem voucher) y la tabla store_credit_vouchers aún no están tipadas.
@@ -259,11 +267,14 @@ export const salesApi = {
 
   void: async (id: string, reason: string): Promise<void> => {
     const supabase = createClient();
-    const { error } = await supabase.rpc("void_sale", {
-      p_sale_id: id,
-      p_reason: reason,
-    });
-    if (error) throw error;
+    const run = async () => {
+      const { error } = await supabase.rpc("void_sale", {
+        p_sale_id: id,
+        p_reason: reason,
+      });
+      if (error) throw error;
+    };
+    await withSupervisor(run, async () => ({ sale_void: await saleTotal(id) }));
   },
 
   // Búsqueda server-side de ventas completadas por N° de comprobante (exacto).
@@ -337,6 +348,7 @@ export const salesApi = {
     customerId?: string | null;
     allowedBranchIds?: string[] | null;
   }): Promise<ReturnV2Result> => {
+    const run = async (): Promise<ReturnV2Result> => {
     const { data, error } = await looseClient().rpc("return_sale_v2", {
       p_sale_id: input.saleId,
       p_items: input.items as unknown as Json,
@@ -349,6 +361,8 @@ export const salesApi = {
     });
     if (error) throw error;
     return data as unknown as ReturnV2Result;
+    };
+    return withSupervisor(run, async () => ({ sale_return: await saleTotal(input.saleId) }));
   },
 
   // CAMBIO con diferencia (exchange_sale): orquesta devolución + venta nueva en
@@ -368,6 +382,7 @@ export const salesApi = {
     surplusTo?: "cash" | "store_credit" | null;
     notes?: string | null;
   }): Promise<ExchangeResult> => {
+    const run = async (): Promise<ExchangeResult> => {
     const { data, error } = await looseClient().rpc("exchange_sale", {
       p_sale_id: input.saleId,
       p_return_items: input.returnItems as unknown as Json,
@@ -383,6 +398,8 @@ export const salesApi = {
     });
     if (error) throw error;
     return data as unknown as ExchangeResult;
+    };
+    return withSupervisor(run, async () => ({ sale_return: await saleTotal(input.saleId) }));
   },
 };
 

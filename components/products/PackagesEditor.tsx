@@ -140,14 +140,14 @@ export function PackageCard({
   const unit = unitVolumeCm3(pkg);
   const total = packageTotalCm3(pkg);
   return (
-    <div className="overflow-hidden rounded-2xl bg-card shadow-ninjaSoft">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex gap-4 p-4">
-        <div className="grid h-[104px] w-[104px] shrink-0 place-items-center rounded-2xl bg-muted sm:h-[116px] sm:w-[116px]">
+        <div className="grid h-[104px] w-[104px] shrink-0 place-items-center rounded-lg bg-muted sm:h-[116px] sm:w-[116px]">
           <PackageBox
             heightCm={pkg.heightCm}
             widthCm={pkg.widthCm}
             depthCm={pkg.depthCm}
-            className="h-[88px] w-[88px] drop-shadow-[0_10px_14px_rgba(0,0,0,0.25)] sm:h-[100px] sm:w-[100px]"
+            className="h-[88px] w-[88px] sm:h-[100px] sm:w-[100px]"
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ export function PackagesEditor({
 
   if (value.length === 0) {
     return (
-      <div className="rounded-2xl bg-muted">
+      <div className="rounded-lg bg-muted">
         <EmptyState
           compact
           icon={Boxes}

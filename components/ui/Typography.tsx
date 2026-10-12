@@ -20,7 +20,7 @@ export function Eyebrow({
       )}
     >
       <span
-        className="h-1.5 w-1.5 rounded-full bg-ninja-gradient shadow-ninjaGlow"
+        className="h-1.5 w-1.5 rounded-full bg-ninja-flame"
         aria-hidden
       />
       {children}
@@ -44,7 +44,7 @@ export function Accent({
       className={cn(
         "font-display",
         tone === "gradient"
-          ? "bg-ninja-gradient bg-clip-text text-transparent"
+          ? "text-ninja-flame"
           : "text-ninja-flameSoft",
         className,
       )}

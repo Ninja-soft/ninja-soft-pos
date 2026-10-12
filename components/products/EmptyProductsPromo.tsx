@@ -19,7 +19,7 @@ const STORE_LOGOS = [
 // productos en un clic, con foto, marca y categoría ya armadas.
 export function EmptyProductsPromo() {
   return (
-    <section className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-card">
+    <section className="relative mt-6 overflow-hidden rounded-lg border border-border bg-card">
       <div className="relative z-10 grid items-center gap-8 p-8 md:grid-cols-[1.15fr_1fr] md:p-10">
         {/* Copy + CTA */}
         <div>
@@ -30,7 +30,7 @@ export function EmptyProductsPromo() {
 
           <h2 className="mt-4 text-2xl font-black leading-tight tracking-tight text-foreground sm:text-3xl">
             Sumá{" "}
-            <span className="bg-ninja-gradient bg-clip-text text-transparent">
+            <span className="text-ninja-flame">
               cientos de miles de productos
             </span>{" "}
             en un clic
@@ -46,7 +46,7 @@ export function EmptyProductsPromo() {
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link
               href="/tiendita"
-              className="inline-flex items-center gap-2 rounded-xl bg-ninja-gradient px-5 py-3 text-sm font-bold text-ninja-void transition hover:brightness-110"
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--pos-solid)] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--pos-solid-hover)]"
             >
               <Store size={17} />
               Ir a la Tiendita

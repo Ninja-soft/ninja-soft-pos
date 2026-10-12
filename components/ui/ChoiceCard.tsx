@@ -19,7 +19,7 @@ export const CHOICE_ON = "choice-on";
 /** Clases de selección para cards con título/bajada (con insignia de check). */
 export const CHOICE_ON_CHECK = "choice-on choice-check";
 
-/** Indicador de radio/selección: círculo con gradiente de marca al activarse. */
+/** Indicador de radio/selección: círculo sólido de marca al activarse. */
 export function ChoiceDot({
   selected,
   multiple = false,
@@ -36,7 +36,7 @@ export function ChoiceDot({
         "grid h-[18px] w-[18px] shrink-0 place-items-center transition",
         multiple ? "rounded-md" : "rounded-full",
         selected
-          ? "bg-ninja-gradient text-white shadow-ninjaGlow"
+          ? "bg-[var(--pos-solid)] text-white"
           : "border border-muted-foreground/40 bg-background",
         className,
       )}

@@ -109,12 +109,16 @@ export interface StaffProductivityRow {
 const MAX_PAGES = 30;
 
 export const reportsApi = {
-  sales: async (fromISO: string, toISO: string): Promise<SalesReport> => {
+  // storeId: sucursal del chip (null = todas las que el usuario puede ver; el
+  // servidor recorta a las permitidas, F17 · H97).
+  sales: async (fromISO: string, toISO: string, storeId: string | null = null): Promise<SalesReport> => {
     const supabase = createClient();
+    // p_store_id todavía no está en los tipos generados (no se regeneran).
     const { data, error } = await supabase.rpc("sales_report", {
       p_from: fromISO,
       p_to: toISO,
-    });
+      p_store_id: storeId,
+    } as never);
     if (error) throw error;
     return data as unknown as SalesReport;
   },
@@ -122,17 +126,23 @@ export const reportsApi = {
   // Reporte de garantías vendidas + comisión estimada (H28). Las garantías
   // entran como ítem libre "Garantía <plan>" en la venta; se agrupan por plan y
   // se cruzan con `warranty_plans` para la comisión. Solo lectura.
-  warranties: async (fromISO: string, toISO: string): Promise<WarrantyReport> => {
+  warranties: async (
+    fromISO: string,
+    toISO: string,
+    storeId: string | null = null,
+  ): Promise<WarrantyReport> => {
     const supabase = createClient();
+    let itemsQ = supabase
+      .from("sale_items")
+      .select("product_name, subtotal, sales!inner(created_at, status, store_id)")
+      .is("product_id", null)
+      .ilike("product_name", "Garantía %")
+      .eq("sales.status", "completed")
+      .gte("sales.created_at", fromISO)
+      .lt("sales.created_at", toISO);
+    if (storeId) itemsQ = itemsQ.eq("sales.store_id", storeId);
     const [itemsRes, plansRes] = await Promise.all([
-      supabase
-        .from("sale_items")
-        .select("product_name, subtotal, sales!inner(created_at, status)")
-        .is("product_id", null)
-        .ilike("product_name", "Garantía %")
-        .eq("sales.status", "completed")
-        .gte("sales.created_at", fromISO)
-        .lt("sales.created_at", toISO),
+      itemsQ,
       supabase.from("warranty_plans").select("label, commission_pct"),
     ]);
     if (itemsRes.error) throw itemsRes.error;
@@ -179,11 +189,13 @@ export const reportsApi = {
   staffProductivity: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<StaffProductivityRow[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("staff_productivity" as never, {
       p_from: fromISO,
       p_to: toISO,
+      p_store_id: storeId,
     } as never);
     if (error) throw error;
     return (data ?? []) as unknown as StaffProductivityRow[];
@@ -195,11 +207,13 @@ export const reportsApi = {
   gastroTables: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<GastroTablesReport> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("gastro_tables_report" as never, {
       p_from: fromISO,
       p_to: toISO,
+      p_store_id: storeId,
     } as never);
     if (error) throw error;
     return data as unknown as GastroTablesReport;
@@ -208,11 +222,13 @@ export const reportsApi = {
   gastroKitchen: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<GastroKitchenReport> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("gastro_kitchen_report" as never, {
       p_from: fromISO,
       p_to: toISO,
+      p_store_id: storeId,
     } as never);
     if (error) throw error;
     return data as unknown as GastroKitchenReport;
@@ -221,11 +237,13 @@ export const reportsApi = {
   gastroDelivery: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<GastroDeliveryReport> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("gastro_delivery_report" as never, {
       p_from: fromISO,
       p_to: toISO,
+      p_store_id: storeId,
     } as never);
     if (error) throw error;
     return data as unknown as GastroDeliveryReport;
@@ -234,11 +252,13 @@ export const reportsApi = {
   gastroTopItems: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<GastroTopItemsReport> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("gastro_top_items_report" as never, {
       p_from: fromISO,
       p_to: toISO,
+      p_store_id: storeId,
     } as never);
     if (error) throw error;
     return data as unknown as GastroTopItemsReport;
@@ -251,17 +271,20 @@ export const reportsApi = {
   saleTimes: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<{ created_at: string; total: number }[]> => {
     const supabase = createClient();
     const out: { created_at: string; total: number }[] = [];
     const PAGE = 1000;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const { data, error } = await supabase
+      let q = supabase
         .from("sales")
         .select("created_at, total")
         .eq("status", "completed")
         .gte("created_at", fromISO)
-        .lt("created_at", toISO)
+        .lt("created_at", toISO);
+      if (storeId) q = q.eq("store_id", storeId);
+      const { data, error } = await q
         .order("created_at", { ascending: true })
         .range(page * PAGE, page * PAGE + PAGE - 1);
       if (error) throw error;
@@ -275,20 +298,29 @@ export const reportsApi = {
   cashMovements: async (
     fromISO: string,
     toISO: string,
+    storeId: string | null = null,
   ): Promise<{ type: string; amount: number; created_at: string }[]> => {
     const supabase = createClient();
     const out: { type: string; amount: number; created_at: string }[] = [];
     const PAGE = 1000;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const { data, error } = await supabase
+      // Con sucursal: los movimientos de los turnos de esa sucursal
+      // (cash_shifts.store_id, desnormalizado en F17).
+      let q = supabase
         .from("cash_movements")
-        .select("type, amount, created_at")
+        .select(storeId ? "type, amount, created_at, cash_shifts!inner(store_id)" : "type, amount, created_at")
         .gte("created_at", fromISO)
-        .lt("created_at", toISO)
+        .lt("created_at", toISO);
+      if (storeId) q = q.eq("cash_shifts.store_id" as never, storeId as never);
+      const { data, error } = await q
         .order("created_at", { ascending: true })
         .range(page * PAGE, page * PAGE + PAGE - 1);
       if (error) throw error;
-      out.push(...((data ?? []) as { type: string; amount: number; created_at: string }[]));
+      out.push(
+        ...((data ?? []) as unknown as { type: string; amount: number; created_at: string }[]).map(
+          (m) => ({ type: m.type, amount: m.amount, created_at: m.created_at }),
+        ),
+      );
       if (!data || data.length < PAGE) break;
     }
     return out;

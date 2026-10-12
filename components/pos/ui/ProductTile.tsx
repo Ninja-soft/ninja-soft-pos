@@ -9,6 +9,10 @@ import { POS_TILE, initials, money } from "./posStyles";
 
 export type TileVariant = "text" | "photo";
 
+// Con stock por sucursal (F17 · H94) el POS pasa en `stock` el saldo de SU
+// sucursal y en `stockHint` lo que hay en las otras ("Norte: 3 · Centro: 1").
+type TileProduct = Product & { stockHint?: string | null };
+
 // Foto del producto: WebP del bucket (modules/products/images), diferida y
 // con tamaño fijo para no mover la grilla mientras carga.
 function ProductImage({ src, size, className }: { src: string; size: number; className?: string }) {
@@ -59,7 +63,7 @@ export const ProductTile = memo(function ProductTile({
   showImage,
   onPick,
 }: {
-  product: Product;
+  product: TileProduct;
   variant: TileVariant;
   showStock: boolean;
   showImage: boolean;
@@ -69,7 +73,8 @@ export const ProductTile = memo(function ProductTile({
   const low = Boolean(!out && p.track_stock && p.stock_min != null && Number(p.stock) <= Number(p.stock_min));
   const byWeight = p.unit === "kg";
   const stockLabel = p.track_stock ? (out ? ", sin stock" : low ? ", stock bajo" : "") : "";
-  const label = `${p.name}, ${money(p.price)}${byWeight ? " por kg" : ""}${stockLabel}`;
+  const hint = showStock && p.track_stock ? (p.stockHint ?? null) : null;
+  const label = `${p.name}, ${money(p.price)}${byWeight ? " por kg" : ""}${stockLabel}${hint ? `. ${hint}` : ""}`;
 
   const price = (
     <span className="font-price text-[15px] font-semibold leading-none tabular-nums text-foreground">
@@ -84,6 +89,7 @@ export const ProductTile = memo(function ProductTile({
         type="button"
         onClick={() => onPick(p)}
         aria-label={label}
+        title={hint ?? undefined}
         className={cn("group relative flex flex-col overflow-hidden text-left", POS_TILE)}
       >
         <span className="relative block aspect-[4/5] w-full overflow-hidden bg-fg-4">
@@ -128,6 +134,7 @@ export const ProductTile = memo(function ProductTile({
       type="button"
       onClick={() => onPick(p)}
       aria-label={label}
+      title={hint ?? undefined}
       className={cn(
         "group relative flex min-h-[var(--tile-h,92px)] flex-col justify-between gap-2 p-2.5 text-left",
         POS_TILE,

@@ -629,7 +629,8 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
         p_idempotency_key: `k-${STAMP}`,
         p_note: null,
       };
-      const { data, error } = await ctx.cashierA.rpc("account_collect" as never, args as never);
+      // ADR-051 (H114): el efectivo entra al turno propio; cobra quien abrió la caja.
+      const { data, error } = await ctx.ownerA.rpc("account_collect" as never, args as never);
       expect(error).toBeNull();
       const res = data as unknown as {
         payment_id: string;
@@ -642,7 +643,7 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       expect(Number(res.balance)).toBe(70);
       expect(res.allocations.reduce((a, x) => a + Number(x.amount), 0)).toBe(30);
 
-      const again = await ctx.cashierA.rpc("account_collect" as never, args as never);
+      const again = await ctx.ownerA.rpc("account_collect" as never, args as never);
       expect((again.data as unknown as { payment_id: string }).payment_id).toBe(res.payment_id);
 
       const { data: cm } = await ctx.ownerA

@@ -5,7 +5,8 @@
 // pago". Sin webhook obligatorio: el POS sondea `status`, que sincroniza el
 // estado contra la API de Pagos360 (patrón mp_point) y sólo acredita con
 // state=paid y monto exacto (conservador: nunca se registra venta sin esa
-// confirmación).
+// confirmación). Los cobros en espera (ADR-048) los sincroniza además el cron
+// pending_charges_sync con la misma lógica (_shared/pagos360_server.ts).
 //
 // Actions (body.action):
 //   * create {amount, title?} → intent local (mp_payment_intents,
@@ -19,9 +20,16 @@
 // https://api.sandbox.pagos360.com (permite probar el flujo completo con la
 // API key de sandbox, sin plata real).
 //
+// Latencia (ADR-048): auth y body en paralelo, membresía + conexión + plan en
+// una sola ronda, y el id del intent se genera acá para crear la solicitud en
+// Pagos360 en paralelo con el insert del intent. Tiempos por etapa en el log y
+// en Server-Timing.
+//
 // Gating real de plan: tenant_has_feature_for(tenant,'pagos360') en create.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { loadPagos360, syncPagos360Intent } from "../_shared/pagos360_server.ts";
+import { edgeTimer } from "../_shared/timing.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -29,11 +37,6 @@ const cors = {
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (b: unknown, s = 200) =>
-  new Response(JSON.stringify(b), {
-    status: s,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
 
 // Fecha DD-MM-YYYY en hora argentina (primer vencimiento del link). Mañana:
 // evita el borde de medianoche AR vs UTC para un cobro de mostrador.
@@ -51,6 +54,12 @@ function firstDueDateAr(): string {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const timer = edgeTimer("pagos360");
+  const json = (b: unknown, s = 200) =>
+    new Response(JSON.stringify(b), {
+      status: s,
+      headers: { ...cors, ...timer.headers(), "Content-Type": "application/json" },
+    });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -61,65 +70,43 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     auth: { persistSession: false },
   });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
+  const [{ data: { user }, error }, b] = await Promise.all([
+    userClient.auth.getUser(),
+    req.json().catch(() => null) as Promise<Record<string, unknown> | null>,
+  ]);
+  timer.mark("auth");
   if (error || !user) return json({ error: "unauthorized" }, 401);
   const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
     ?.current_tenant_id;
   if (!tenantId) return json({ error: "no_tenant" }, 400);
-
-  let b: Record<string, unknown>;
-  try {
-    b = await req.json();
-  } catch {
-    return json({ error: "invalid_json" }, 400);
-  }
+  if (!b) return json({ error: "invalid_json" }, 400);
   const action = String(b.action ?? "");
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
+  // Una sola ronda: membresía, conexión (API key + ambiente) y plan.
+  const [{ data: mem }, conn, allowed] = await Promise.all([
+    admin
+      .from("tenant_users")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    loadPagos360(admin, tenantId),
+    action === "create"
+      ? admin
+          .rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "pagos360" })
+          .then((r: { data: unknown }) => r.data === true)
+      : Promise.resolve(true),
+  ]);
+  timer.mark("prechecks");
   if (!mem) return json({ error: "forbidden" }, 403);
-
-  // API key del tenant + base sandbox/prod según la config del medio.
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "pagos360")
-    .maybeSingle();
-  const apiKey = ((secretRow?.secrets ?? {}) as { api_key?: string }).api_key;
-  if (!apiKey) return json({ error: "not_connected" }, 400);
-
-  const { data: methodRow } = await admin
-    .from("tenant_payment_methods")
-    .select("sandbox")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "pagos360")
-    .maybeSingle();
-  const base = methodRow?.sandbox
-    ? "https://api.sandbox.pagos360.com"
-    : "https://api.pagos360.com";
-  const p360Headers = {
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-  };
+  if (!conn) return json({ error: "not_connected" }, 400);
 
   // ── create: intent local + payment_request en Pagos360 ──────────────────────
   if (action === "create") {
-    const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
-      p_tenant: tenantId,
-      p_key: "pagos360",
-    });
-    if (allowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
+    if (!allowed) return json({ error: "payment_method_not_allowed" }, 403);
 
     const amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -127,32 +114,39 @@ Deno.serve(async (req: Request) => {
     }
     const title = String(b.title ?? "Venta NinjaPos").slice(0, 120);
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "pagos360" })
-      .select("id")
-      .single();
-    if (intErr || !intent) return json({ error: "intent_failed" }, 500);
-
-    const r = await fetch(`${base}/payment-request`, {
-      method: "POST",
-      headers: p360Headers,
-      body: JSON.stringify({
-        payment_request: {
-          description: title,
-          first_due_date: firstDueDateAr(),
-          first_total: Math.round(amount * 100) / 100,
-          payer_name: "Consumidor final",
-          external_reference: intent.id,
-        },
-      }),
-    });
-    if (!r.ok) {
-      const detail = await r.text();
+    // El id se genera acá: el insert del intent y la solicitud en Pagos360
+    // corren en paralelo (external_reference = intent).
+    const intentId = crypto.randomUUID();
+    const [ins, r] = await Promise.all([
+      admin
+        .from("mp_payment_intents")
+        .insert({ id: intentId, tenant_id: tenantId, amount, provider_key: "pagos360" }),
+      fetch(`${conn.base}/payment-request`, {
+        method: "POST",
+        headers: conn.headers,
+        body: JSON.stringify({
+          payment_request: {
+            description: title,
+            first_due_date: firstDueDateAr(),
+            first_total: Math.round(amount * 100) / 100,
+            payer_name: "Consumidor final",
+            external_reference: intentId,
+          },
+        }),
+      }).catch(() => null),
+    ]);
+    timer.mark("provider");
+    if (ins.error) {
+      timer.log({ action, error: "intent_failed" });
+      return json({ error: "intent_failed" }, 500);
+    }
+    if (!r || !r.ok) {
+      const detail = r ? await r.text() : "unreachable";
       await admin
         .from("mp_payment_intents")
         .update({ status: "rejected" })
-        .eq("id", intent.id);
+        .eq("id", intentId);
+      timer.log({ action, error: "pagos360_error" });
       return json({ error: "pagos360_error", detail: detail.slice(0, 300) }, 502);
     }
     const pr = (await r.json()) as {
@@ -165,73 +159,27 @@ Deno.serve(async (req: Request) => {
       await admin
         .from("mp_payment_intents")
         .update({ status: "rejected" })
-        .eq("id", intent.id);
+        .eq("id", intentId);
       return json({ error: "pagos360_error", detail: "sin checkout_url" }, 502);
     }
     await admin
       .from("mp_payment_intents")
       .update({ preference_id: String(pr.id), init_point: initPoint })
-      .eq("id", intent.id);
-    return json({ intent_id: intent.id, init_point: initPoint });
+      .eq("id", intentId);
+    timer.mark("save");
+    timer.log({ action });
+    return json({ intent_id: intentId, init_point: initPoint });
   }
 
   // ── status: sincroniza contra Pagos360 y devuelve el estado local ───────────
   if (action === "status") {
     const intentId = String(b.intent_id ?? "");
     if (!intentId) return json({ error: "invalid_intent" }, 400);
-    const { data: row } = await admin
-      .from("mp_payment_intents")
-      .select("id, status, amount, preference_id, mp_payment_id")
-      .eq("id", intentId)
-      .eq("tenant_id", tenantId)
-      .eq("provider_key", "pagos360")
-      .maybeSingle();
-    if (!row) return json({ error: "intent_not_found" }, 404);
-
-    if (row.status !== "pending") {
-      return json({ status: row.status, mp_payment_id: row.mp_payment_id });
+    const res = await syncPagos360Intent(admin, conn, tenantId, intentId);
+    if (!res.ok) {
+      return json({ error: res.error, detail: res.detail }, res.error === "intent_not_found" ? 404 : 502);
     }
-
-    const r = await fetch(`${base}/payment-request/${row.preference_id}`, {
-      headers: p360Headers,
-    });
-    if (!r.ok) {
-      return json(
-        { error: "pagos360_error", detail: (await r.text()).slice(0, 300) },
-        502,
-      );
-    }
-    const pr = (await r.json()) as { state?: string; first_total?: number };
-    const state = String(pr.state ?? "").toLowerCase();
-
-    if (state === "paid") {
-      // Verificación de monto: la solicitud la creamos nosotros con el total
-      // exacto; igual chequeamos que Pagos360 devuelva el mismo importe.
-      const amountOk =
-        Math.abs(Number(pr.first_total ?? 0) - Number(row.amount)) < 0.01;
-      if (amountOk) {
-        await admin
-          .from("mp_payment_intents")
-          .update({ status: "approved", mp_payment_id: String(row.preference_id) })
-          .eq("id", row.id);
-        return json({ status: "approved", mp_payment_id: String(row.preference_id) });
-      }
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "rejected" })
-        .eq("id", row.id);
-      return json({ status: "rejected", mp_payment_id: null });
-    }
-
-    if (["expired", "canceled", "cancelled", "reverted"].includes(state)) {
-      await admin
-        .from("mp_payment_intents")
-        .update({ status: "cancelled" })
-        .eq("id", row.id);
-      return json({ status: "cancelled", mp_payment_id: null });
-    }
-
-    return json({ status: "pending", mp_payment_id: null, state });
+    return json({ status: res.status, mp_payment_id: res.mp_payment_id, ...(res.state ? { state: res.state } : {}) });
   }
 
   return json({ error: "invalid_action" }, 400);

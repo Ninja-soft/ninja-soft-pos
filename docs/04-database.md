@@ -762,7 +762,60 @@ Migraciones `20261013200000` (features), `20261013200100` (stock por sucursal) y
 - [x] Lecturas: `stock_by_store(product_ids)` (saldo, mínimos y en camino) y `stock_low_by_store(limit)` (faltantes por sucursal con el saldo de todas, para sugerir traslados).
 - [ ] RLS por sucursal (`user_can_access_store`) cuando exista H91.
 
+## 8.8 Extensión F8: cobros en espera (ADR-048)
+
+Migración `20261014100000_cobros_en_espera`.
+
+- [x] `pending_charges`: venta estacionada esperando el pago de un QR o link. `tenant_id`, `store_id`, `register_id`, `cash_shift_id` (turno dueño hoy; null = pasado a la próxima apertura), `origin_shift_id`, `created_by`, cliente (`customer_id`, nombre, email, celular), `sale_args` (argumentos de `create_sale`: ítems, extras, descuentos, promo, cupón), `cart` y `lines` (sólo display), `amount` (monto del intent = total + propina autoritativos), `sale_total`, `provider_key`, `channel` (`qr` | `link`), `intent_id` (único, FK `mp_payment_intents`), `previous_intent_ids`, `share_url`, `qr_data`, `shared_via[]`, `share_count`, `status` (`waiting` | `paid` | `completed` | `cancelled` | `expired`), `expires_at`, `paid_at`, `paid_amount`, `completed_at`, `sale_id`, `sale_number`, cancelación, `carry_over`, `needs_review`, `last_error`, `attempts`, `acknowledged_at/by`, `notes`, `version` (edición optimista), timestamps y `deleted_at`.
+- [x] `pending_charge_events`: línea de tiempo (`created`, `shared`, `edited`, `regenerated`, `extended`, `updated`, `paid`, `payment_rejected`, `completed`, `completion_failed`, `cancelled`, `expired`, `carried_over`, `attached_to_shift`, `paid_after_cancel`, `old_intent_paid`, `acknowledged`).
+- [x] RLS: lectura por negocio y sucursal permitida (`user_allowed_store_ids`); sin policies de escritura. Todo cambio por RPC SECURITY DEFINER con `audit_logs`: `park_pending_charge`, `complete_pending_charge`, `cancel_pending_charge`, `update_pending_charge`, `replace_pending_charge_intent`, `mark_pending_charge_shared`, `ack_pending_charge`. La Edge `pending_charge_share` escribe con service_role (envío de email).
+- [x] Venta del lado del servidor: `_pc_complete` (lock del cobro y del intent, idempotente) corre `create_sale` con el carrito guardado, el monto del intent y el turno abierto (el suyo, el de su caja o el de su sucursal), con los claims de la transacción del usuario que estacionó. Disparadores: trigger `AFTER UPDATE OF status` en `mp_payment_intents`, trigger `AFTER INSERT` en `cash_shifts` (enganche y reintentos al abrir caja), cron `pending-charges-tick` (vencimiento y reintentos) y el POS.
+- [x] `close_cash_shift(p_shift_id, p_closing_amount, p_notes, p_pending_action)`: con cobros abiertos en el turno exige `cancel` o `carry` (se dropea la firma de 3 args).
+- [x] `notifications.type` suma `cobros`; `system_emails.kind` suma `payment_link`.
+
+## 8.9 Extensión F18: compras, proveedores, costos e importaciones (ADR-050)
+
+Migraciones `20261016100000` (features `compras` y `compras_importacion`), `20261016100100` (costos, configuración, proveedores), `20261016100200` (órdenes, recepciones, lotes, costeo, sugerencia) y `20261016100300` (comprobantes, pagos, cuenta corriente). Lectura: `tenant_id = current_tenant_id() or internal_scope()` (ADR-052).
+
+- [x] `products.last_cost`, `avg_cost`, `replacement_cost`, `cost_updated_at` (netos de IVA, en pesos) y `product_cost_history` (por trigger `products_cost_track`, con la fuente). Con `purchase_settings.sync_product_cost`, `products.cost` sigue a la base elegida (`cost_basis`: last, average, replacement).
+- [x] `purchase_settings` (pk `tenant_id`): modo simple o profesional, base de costo, reglas de recepción, moneda habitual. Escritura por RPC `purchase_settings_save`.
+- [x] `suppliers` (CUIT único por negocio entre los vigentes, check `cuit_is_valid`, CBU 22 dígitos, alias, baja lógica) y `supplier_products` (único por proveedor, producto y variante vigentes). Escritura por tabla: owner/manager y feature `compras` (`purchase_can_write()`); auditoría con `write_audit_log`.
+- [x] `purchase_orders` (`number` correlativo, estados `draft → sent → partially_received → received / cancelled`, moneda y TC, descuento global, totales) y `purchase_order_items` (`discounts numeric[]` en cascada, `line_net`). RPC `purchase_order_save | _send | _reopen | _cancel | _close`.
+- [x] `goods_receipts` (`number`, OC opcional, sucursal, remito, moneda y TC, `costing` jsonb, `landed_total`, `dispatch_number`, `invoice_id`) y `goods_receipt_items` (esperado, recibido, motivo de diferencia, costo en moneda, en pesos, puesto en depósito y `valued_unit_cost`, peso, volumen, lote, vencimiento). RPC `purchase_receive` (stock + `stock_movements` `purchase` con `store_id`, último costo, promedio ponderado, `supplier_products`) y `purchase_apply_costing` (`compras_importacion`).
+- [x] `product_lots` (lote de ingreso con n° de despacho, vencimiento y costo). Sin consumo por lote todavía.
+- [x] `purchase_events` (timeline de órdenes, recepciones, comprobantes y pagos) + `audit_logs` en cada RPC.
+- [x] `supplier_invoices` (factura, ND, NC; letra, PV y número únicos entre vigentes; `vat_lines` y `other_taxes` jsonb; anulación con motivo) y `supplier_payments` (`number`, medio, referencia, retenciones jsonb, `amount = net_paid + withholdings_total`). RPC `supplier_invoice_save | _void`, `supplier_payment_create | _void`.
+- [x] Vistas `supplier_account_entries` y `supplier_balances` (`security_invoker`): saldo en pesos al TC de cada documento.
+- [x] `purchase_suggestions(store, supplier, limit)` (SECURITY INVOKER): faltantes bajo el mínimo contando traslados en camino y OC abiertas.
+
+## 8.10 Extensión F17: configuración heredable, terminales, impresoras y reportes por sucursal (ADR-049)
+
+Migraciones `20261015100000_config_heredable`, `20261015110000_terminales_cobro`, `20261015120000_venta_config_efectiva`, `20261015130000_impresoras_marca_sucursal`, `20261015200000_reportes_por_sucursal` y `20261015300000_personal_tickets_auditoria_sucursal`.
+
+- [x] `store_groups(tenant_id, name, color, sort, deleted_at)` y `stores.store_group_id`: zona o región, nivel de herencia entre el negocio y la sucursal. RLS lectura miembros, escritura owner/manager (alta con `multi_sucursal`). Auditada.
+- [x] `config_overrides(tenant_id, scope, scope_id, domain, domain_key, patch, updated_by, deleted_at)`: override **por campo** (`patch` parcial) por alcance `store_group` / `store` / `register` y dominio `payment_method` (clave = `provider_key`), `pos_settings` o `ticket`. Único vivo por `(tenant_id, scope, scope_id, domain, domain_key)`. RLS sólo lectura; escritura únicamente por RPC.
+- [x] Whitelist `config_field_type(domain, scope, field)` + validación `config_field_error`. Medios: `enabled` (también caja), `surcharge_pct`, `plan_mode`, `merchant_numbers` (mapa), `sort`. POS: redondeo, venta sin stock, descuento máximo por rol (mapa), cliente obligatorio, cupón de tarjeta, garantía, recibo por mail y, también por caja, venta libre, cierre ciego, tolerancia, motivo de cierre, display de cliente, `print_profiles` y `pos_layout` (mapas). Ticket (grupo y sucursal): razón social, CUIT, teléfono, dirección, título, leyenda, pie y `use_store_contact`.
+- [x] Resolución: `_effective_config(tenant, domain, key, store, register)` (service_role, triggers) y `effective_config(domain, key, store, register)` (JWT, valida sucursal del negocio y `user_can_access_store`) → `{ value, sources }`. Orden negocio ← grupo ← sucursal ← caja; mapas mezclados por clave; sin `multi_sucursal` no aplican grupo ni sucursal, sin `multi_caja` no aplica la caja. Espejo puro en `lib/config/inheritance.ts`.
+- [x] RPC `config_override_set` (campos y "volver a heredar"), `config_override_copy` (copiar de otra sucursal, `replace` / `merge`) y `config_override_reset_field` ("aplicar a todas"): owner/manager con acceso a la sucursal (grupo exige alcance central), gating `multi_sucursal` / `multi_caja`, `payment_method_plan_key` antes de prender un medio, `audit_logs`.
+- [x] Enforcement: trigger `payments_branch_method` (medio apagado por override en la sucursal o caja de la venta → `payment_method_disabled_in_store`, vía `payment_method_blocked_at`). `create_sale` y `close_cash_shift` leen la configuración efectiva del turno (`_pos_close_config`); con `stock_sucursales` y 2+ sucursales, sin venta en negativo también se controla el saldo de la sucursal (`insufficient_stock_branch`).
+- [x] `payment_terminals(tenant_id, store_id, cash_register_id, provider_key, kind point|qr_caja|clover|posnet_manual, external_id, external_meta, environment, label, merchant_number, acquirer, is_default, active, last_seen_at, notes, deleted_at)`. Único por `(tenant_id, provider_key, environment, external_id)` vivo y un default por `(cash_register_id, provider_key)`. Trigger de reglas (caja de la sucursal, tipo coherente con el proveedor). RLS lectura por `user_allowed_store_ids()`, escritura owner/manager con acceso a la sucursal; auditada. `terminal_for_user(tenant, user, terminal, store)` (service_role) para las Edges. `mp_payment_intents.payment_terminal_id`. Backfill de `config.mp_qr`, `point_pos_ids` de Nave y `device_serials` de Clover a terminales flotantes de la sucursal principal (lo viejo no se borra).
+- [x] `printers(tenant_id, store_id, cash_register_id, name, kind thermal_58|thermal_80|a4|label|kitchen, connection, address, active, notes, last_test_at, last_test_ok, deleted_at)` con la misma RLS que las terminales y `printer_mark_test(printer, ok)`. Los perfiles por documento (`print_profiles`, ahora con `kitchen` y `transfer`) suman `printer_id` y `fallback_printer_id` y se heredan con `config_overrides`.
+- [x] `stores.logo_path` / `logo_url` (logo propio opcional, bucket `tenant-assets/<tenant>/stores/<store>/`).
+- [x] Reportes: `report_store_filter(p_store_id)` y `p_store_id` opcional en `sales_report`, `staff_productivity` y `gastro_*_report`; `register_stock_waste` con sucursal.
+- [x] `audit_logs.store_id` completado por el trigger `audit_logs_fill_store` (fila de `stores` o `store_id` del dato), índice `(tenant_id, store_id, created_at desc)`. `staff_assign_on_invite(...)` (service_role) para invitar con sucursales.
+- [x] Políticas nuevas con `internal_scope()` (nunca `or is_internal()`, ADR-052).
+
 ---
+
+## 8.8 Extensión F17: personal, caja propia, PIN y auditoría (ADR-051)
+
+Migraciones `20261017100000_personal_estados`, `20261017110000_pin_supervisor_politicas`, `20261017120000_propiedad_caja` y `20261017130000_monitor_cajas_auditoria`.
+
+- [x] `staff_status_events(tenant_id, user_id | cashier_profile_id, kind, subtype, starts_on, ends_on, reason, notes, deleted_at, ...)`: suspensiones, licencias, bajas y reingresos con vigencias. Lectura: dueño, encargado o la propia persona; escritura sólo por RPC (`staff_set_status`, `staff_end_status`, `staff_rehire`). `tenant_users.status` suma `inactive`.
+- [x] `security_settings(tenant_id pk, pin_policy jsonb, supervisor_roles, supervisor_user_ids, pin_max_attempts, pin_lock_minutes, pin_rotation_days, shared_shift)`: lectura del negocio, escritura `security_settings_save` (dueño).
+- [x] `supervisor_auth_tokens`: autorizaciones de un solo uso (acción, supervisor, quien pidió, monto, vencimiento). Sin acceso de clientes. `account_supervisor_pins.pin_set_at` para la rotación.
+- [x] Guardas por trigger: `cash_shifts_guard`, `cash_movements_guard`, `sales_supervisor`, `sale_returns_supervisor`. Policy RESTRICTIVE `audit_logs_role_scope`.
+- [x] Lecturas por RPC: `cash_monitor`, `owner_dashboard_stats`, `audit_log_search`, `audit_log_facets`, `staff_people`, `my_staff_status`, `supervisor_list`, `supervisor_pin_status`.
 
 ## 9. Migraciones iniciales sugeridas
 

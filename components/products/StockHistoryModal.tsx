@@ -2,6 +2,8 @@
 
 import { Modal } from "@/components/ui/Modal";
 import { useStockMovements } from "@/modules/products/hooks";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { reportScopeLabel } from "@/lib/reports/branchScope";
 import type { Product } from "@/modules/products/api";
 import { formatQty } from "@/lib/utils/format";
 import { SpinnerBlock } from "@/components/ui/Spinner";
@@ -14,6 +16,11 @@ const REASON_LABELS: Record<string, string> = {
   transfer: "Transferencia",
   loss: "Merma",
   return: "Devolución",
+  production: "Producción",
+  count: "Conteo",
+  transfer_out: "Traslado enviado",
+  transfer_in: "Traslado recibido",
+  transfer_return: "Traslado devuelto",
 };
 
 interface Props {
@@ -23,14 +30,19 @@ interface Props {
 }
 
 export function StockHistoryModal({ open, onOpenChange, product }: Props) {
-  const { data, isLoading } = useStockMovements(product?.id ?? null, open);
+  // Sucursal del chip del panel (F17 · H94): con una elegida, sólo sus
+  // movimientos; con "Todas", todos con la sucursal de cada uno.
+  const branch = useBranchContext();
+  const storeId = branch.isMulti ? branch.filterStoreId : null;
+  const scope = reportScopeLabel(branch.isMulti, branch.filterStore);
+  const { data, isLoading } = useStockMovements(product?.id ?? null, open, storeId);
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
       title="Historial de stock"
-      description={product?.name}
+      description={product ? (scope ? `${product.name} · ${scope}` : product.name) : undefined}
     >
       <div className="max-h-96 overflow-y-auto">
         {isLoading ? (
@@ -59,6 +71,9 @@ export function StockHistoryModal({ open, onOpenChange, product }: Props) {
                     )}
                     <div className="text-xs text-muted-foreground">
                       {new Date(m.created_at).toLocaleString("es-AR")}
+                      {branch.isMulti && !storeId && m.store_id && (
+                        <> · {branch.branchName(m.store_id) ?? "Sucursal"}</>
+                      )}
                     </div>
                   </div>
                   <span

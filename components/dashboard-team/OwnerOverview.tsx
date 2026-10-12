@@ -30,7 +30,7 @@ export function SummaryTile({
   children: React.ReactNode;
 }) {
   return (
-    <Card className={cn("flex flex-col p-5", className)}>
+    <Card className={cn("flex flex-col p-5 shadow-none", className)}>
       <TileLabel icon={icon}>{label}</TileLabel>
       <div className="mt-3 flex flex-1 flex-col">{children}</div>
     </Card>
@@ -43,10 +43,13 @@ export function UsageMeter({
   label,
   used,
   limit,
+  hint,
 }: {
   label: string;
   used: number | null;
   limit: number | null;
+  /** Aclaración chica debajo (p. ej. "En la sucursal con más cajas"). */
+  hint?: string;
 }) {
   const unlimited = limit == null;
   const pct = !unlimited && limit > 0 && used != null ? Math.min(100, (used / limit) * 100) : 0;
@@ -61,7 +64,12 @@ export function UsageMeter({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {label}
+          {!unlimited && used != null && pct >= 100 && (
+            <span className="rounded bg-danger/15 px-1.5 text-[10px] font-semibold uppercase text-danger">Al límite</span>
+          )}
+        </span>
         <span className="tabular-nums font-semibold text-foreground">
           {used == null ? <NoData /> : used.toLocaleString("es-AR")}
           <span className="font-normal text-muted-foreground">
@@ -75,10 +83,29 @@ export function UsageMeter({
           style={{ width: unlimited ? "100%" : `${pct}%`, opacity: unlimited ? 0.25 : 1 }}
         />
       </div>
+      {hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }
 UsageMeter.displayName = "UsageMeter";
+
+// Número chico con etiqueta (dentro de una tarjeta del resumen).
+export function MiniStat({ label, value, href }: { label: string; value: React.ReactNode; href?: string }) {
+  const body = (
+    <>
+      <span className="block font-display text-xl font-bold tabular-nums leading-none text-foreground">{value}</span>
+      <span className="mt-1 block text-[11px] text-muted-foreground">{label}</span>
+    </>
+  );
+  return href ? (
+    <Link href={href as Route} className="rounded-md bg-muted px-3 py-2.5 transition-colors hover:bg-fg-10">
+      {body}
+    </Link>
+  ) : (
+    <div className="rounded-md bg-muted px-3 py-2.5">{body}</div>
+  );
+}
+MiniStat.displayName = "MiniStat";
 
 export type QuickAction = {
   href: string;

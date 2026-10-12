@@ -22,17 +22,25 @@ const MAX_ROWS = 20_000;
 const COLUMNS =
   "id, method, amount, reference, created_at, reconciled_at, card_voucher, metadata, sales!inner(number, status)";
 
-async function listCardPayments(fromISO: string, toISO: string): Promise<RawCardPayment[]> {
+// storeId (F17 · H97): sucursal del chip del panel (null = todas las que el
+// usuario puede ver: la RLS por sucursal de sales ya recorta el !inner).
+async function listCardPayments(
+  fromISO: string,
+  toISO: string,
+  storeId: string | null,
+): Promise<RawCardPayment[]> {
   const supabase = createClient();
   const out: RawCardPayment[] = [];
   for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
-    const { data, error } = await supabase
+    let q = supabase
       .from("payments")
       .select(COLUMNS as never)
       .in("method", ["debit", "credit"])
       .gte("created_at", fromISO)
       .lt("created_at", toISO)
-      .neq("sales.status" as never, "voided" as never)
+      .neq("sales.status" as never, "voided" as never);
+    if (storeId) q = q.eq("sales.store_id" as never, storeId as never);
+    const { data, error } = await q
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .range(offset, offset + PAGE - 1);
@@ -62,10 +70,15 @@ async function setReconciled(ids: string[], reconciled: boolean): Promise<Reconc
 
 const KEY = ["reports", "card-reconciliation"] as const;
 
-export function useCardPayments(fromISO: string, toISO: string, enabled: boolean) {
+export function useCardPayments(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+  storeId: string | null = null,
+) {
   return useQuery({
-    queryKey: [...KEY, fromISO, toISO],
-    queryFn: () => listCardPayments(fromISO, toISO),
+    queryKey: [...KEY, fromISO, toISO, storeId],
+    queryFn: () => listCardPayments(fromISO, toISO, storeId),
     enabled,
     staleTime: 30_000,
   });

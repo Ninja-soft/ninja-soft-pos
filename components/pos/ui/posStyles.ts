@@ -14,7 +14,7 @@ import { ACCENT_GRADIENT, type PosAccent } from "@/lib/pos/layout";
 
 /** CTA principal (Cobrar): relleno sólido del acento, texto AA. */
 export const POS_CTA =
-  "bg-[var(--pos-solid)] text-[color:var(--pos-on)] shadow-sm transition-colors hover:bg-[var(--pos-solid-hover)] active:brightness-95 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none";
+  "bg-[var(--pos-solid)] text-[color:var(--pos-on)] transition-colors hover:bg-[var(--pos-solid-hover)] active:brightness-95 disabled:pointer-events-none disabled:opacity-40";
 
 /** Panel del POS (carrito, riel, mesas, ticket). */
 export const POS_PANEL = "rounded-xl border border-border bg-card";

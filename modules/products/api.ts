@@ -258,6 +258,7 @@ export const productsApi = {
         brand_id: input.brand_id ?? null,
         price: input.price,
         cost: input.cost ?? null,
+        replacement_cost: input.replacement_cost ?? null,
         stock: input.stock,
         stock_min: input.stock_min,
         unit: input.unit,
@@ -308,6 +309,7 @@ export const productsApi = {
         brand_id: input.brand_id ?? null,
         price: input.price,
         cost: input.cost ?? null,
+        replacement_cost: input.replacement_cost ?? null,
         stock_min: input.stock_min,
         unit: input.unit,
         tax_rate: input.tax_rate,
@@ -417,9 +419,12 @@ export const productsApi = {
   // sub-motivo (vencido/roto/preparación fallida/devolución/otro) vía
   // register_stock_waste. Devuelve el nuevo stock. La RPC no está en los tipos
   // generados → cast (la DB + RLS validan).
+  // storeId (F17 · H94): sucursal donde se perdió (null = la principal, como
+  // antes). Sólo se manda con stock por sucursal activo.
   registerWaste: async (
     productId: string,
     input: MermaInput,
+    storeId: string | null = null,
   ): Promise<number> => {
     const supabase = createClient();
     const parsed = MermaSchema.parse(input);
@@ -428,6 +433,7 @@ export const productsApi = {
       p_qty: parsed.qty,
       p_loss_reason: parsed.reason,
       p_notes: parsed.notes ?? undefined,
+      ...(storeId ? { p_store_id: storeId } : {}),
     } as never);
     if (error) throw error;
     return data as number;
@@ -450,12 +456,15 @@ export const productsApi = {
     return data as number;
   },
 
-  movements: async (productId: string): Promise<StockMovement[]> => {
+  // storeId (F17 · H94): sólo los movimientos de esa sucursal; null = todas.
+  movements: async (productId: string, storeId: string | null = null): Promise<StockMovement[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let q = supabase
       .from("stock_movements")
       .select("*")
-      .eq("product_id", productId)
+      .eq("product_id", productId);
+    if (storeId) q = q.eq("store_id", storeId);
+    const { data, error } = await q
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw error;

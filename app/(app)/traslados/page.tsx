@@ -78,7 +78,7 @@ function Kpi({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl bg-card p-4 text-left shadow-sm ring-1 ring-border transition hover:ring-ninja-flameSoft/40"
+      className="rounded-lg bg-card p-4 text-left ring-1 ring-border transition hover:ring-ninja-flameSoft/40"
     >
       <div className="text-xs text-muted-foreground">{label}</div>
       <div

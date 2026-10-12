@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId } from "@/modules/branches/store";
+import { withSupervisor } from "@/modules/security/supervisor";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -408,6 +409,95 @@ async function invokeMpQr<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+// Settings operativos del POS (H30): descuento máximo por rol y redondeo.
+// Incluye los settings de la pantalla del cliente (H25): mostrar precios
+// unitarios y mensajes de idle/agradecimiento.
+export interface PosSettingsView {
+  maxDiscount: Record<string, number>;
+  rounding: number;
+  requireCustomer: boolean;
+  scannerPrefix: string;
+  scannerSuffix: string;
+  scannerBeep: boolean;
+  scannerDupMs: number;
+  displayShowUnitPrices: boolean;
+  displayWelcomeMessage: string | null;
+  displayThanksMessage: string | null;
+  // Oferta contextual automática de garantía extendida en el POS (H28).
+  offerWarranty: boolean;
+  // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
+  requireCardVoucher: boolean;
+  // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
+  // debe ser owner/manager (chequeo en la página). Default true.
+  allowFreeSale: boolean;
+  // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
+  // comisión; el owner ve todo (H39). Default false (todos ven todo).
+  staffSeesOwnOnly: boolean;
+  // Diseño del POS del negocio (pos_settings.pos_layout, sin validar: pasa
+  // por resolveLayout de lib/pos/layout.ts). null = nunca se configuró.
+  posLayout: unknown;
+  // Venta con stock negativo permitida (pos_settings.allow_negative_stock).
+  allowNegativeStock: boolean;
+}
+
+export function mapPosSettings(raw: Record<string, unknown> | null): PosSettingsView | null {
+  if (!raw) return null;
+  const data = raw;
+  return {
+    maxDiscount: (data.max_discount as Record<string, number>) ?? {},
+    rounding: Number(data.rounding_multiple) || 0,
+    requireCustomer: Boolean(data.require_customer),
+    scannerPrefix: (data.scanner_prefix as string) ?? "",
+    scannerSuffix: (data.scanner_suffix as string) ?? "",
+    scannerBeep: (data.scanner_beep as boolean) ?? true,
+    scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
+    displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
+    displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
+    displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
+    // Default true: si la columna no existe aún (settings viejos), se ofrece.
+    offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
+    // Default false: por defecto NO se exige voucher de tarjeta.
+    requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
+    // Default true: la venta libre queda habilitada (igual que hoy donde el
+    // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
+    allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
+    // Default false: por defecto el staff ve todo (no se restringe).
+    staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
+    posLayout: data.pos_layout ?? null,
+    allowNegativeStock: (data.allow_negative_stock as boolean | undefined) ?? true,
+  };
+}
+
+// Lugar del cobro presencial (F17 · H93, ADR-049): terminal del registro
+// (payment_terminals) y sucursal / caja del POS. La Edge valida en el servidor
+// que la terminal sea del negocio y de esa sucursal, y que la sucursal o la
+// caja no hayan apagado el medio. Todo opcional: sin datos, el flujo de antes.
+export interface PaymentLocation {
+  terminalId?: string | null;
+  storeId?: string | null;
+  registerId?: string | null;
+}
+
+function locationBody(loc?: PaymentLocation): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (loc?.terminalId) out.terminal_id = loc.terminalId;
+  if (loc?.storeId) out.store_id = loc.storeId;
+  if (loc?.registerId) out.register_id = loc.registerId;
+  return out;
+}
+
+// supabase-js envuelve los no-2xx: se lee el código del body para mostrarlo.
+async function edgeError(error: unknown): Promise<Error> {
+  const ctx = (error as { context?: Response }).context;
+  try {
+    const body = ctx ? ((await ctx.json()) as { error?: string }) : null;
+    if (body?.error) return new Error(body.error);
+  } catch {
+    // body no JSON: se usa el error original.
+  }
+  return error instanceof Error ? error : new Error("edge_error");
+}
+
 export const posApi = {
   // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
   // criterio histórico: el último turno abierto visible para el usuario.
@@ -437,13 +527,17 @@ export const posApi = {
     shiftId: string,
     closing: number,
     notes?: string,
+    // Cobros en espera del turno (ADR-048): cancelarlos o pasarlos a la
+    // próxima apertura. Sin cobros abiertos no hace falta.
+    pendingAction?: "cancel" | "carry" | null,
   ): Promise<number> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("close_cash_shift", {
       p_shift_id: shiftId,
       p_closing_amount: closing,
       p_notes: notes,
-    });
+      ...(pendingAction ? { p_pending_action: pendingAction } : {}),
+    } as never);
     if (error) throw error;
     return data as number;
   },
@@ -553,60 +647,17 @@ export const posApi = {
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   // Incluye los settings de la pantalla del cliente (H25): mostrar precios
   // unitarios y mensajes de idle/agradecimiento.
-  posSettings: async (): Promise<{
-    maxDiscount: Record<string, number>;
-    rounding: number;
-    requireCustomer: boolean;
-    scannerPrefix: string;
-    scannerSuffix: string;
-    scannerBeep: boolean;
-    scannerDupMs: number;
-    displayShowUnitPrices: boolean;
-    displayWelcomeMessage: string | null;
-    displayThanksMessage: string | null;
-    // Oferta contextual automática de garantía extendida en el POS (H28).
-    offerWarranty: boolean;
-    // Exigir voucher de tarjeta (lote/cupón/autorización) en débito/crédito (H27).
-    requireCardVoucher: boolean;
-    // Habilita la "Venta libre" (monto manual) en el POS (H36). El rol además
-    // debe ser owner/manager (chequeo en la página). Default true.
-    allowFreeSale: boolean;
-    // Si está activo, un profesional/cajero ve sólo su propia agenda/ventas/
-    // comisión; el owner ve todo (H39). Default false (todos ven todo).
-    staffSeesOwnOnly: boolean;
-    // Diseño del POS del negocio (pos_settings.pos_layout, sin validar: pasa
-    // por resolveLayout de lib/pos/layout.ts). null = nunca se configuró.
-    posLayout: unknown;
-  } | null> => {
+  // Fila cruda de pos_settings del negocio (la herencia por sucursal y caja
+  // se aplica en usePosSettings, F17 · H92).
+  posSettingsRaw: async (): Promise<Record<string, unknown> | null> => {
     const supabase = createClient();
     // Las columnas display_* (H25) y offer_warranty (H28) aún no están en los
     // tipos generados (no se regeneran): select("*") + cast del payload.
     const { data: raw } = await supabase.from("pos_settings").select("*").maybeSingle();
-    if (!raw) return null;
-    const data = raw as Record<string, unknown>;
-    return {
-      maxDiscount: (data.max_discount as Record<string, number>) ?? {},
-      rounding: Number(data.rounding_multiple) || 0,
-      requireCustomer: Boolean(data.require_customer),
-      scannerPrefix: (data.scanner_prefix as string) ?? "",
-      scannerSuffix: (data.scanner_suffix as string) ?? "",
-      scannerBeep: (data.scanner_beep as boolean) ?? true,
-      scannerDupMs: Number(data.scanner_dup_ms ?? 1500),
-      displayShowUnitPrices: (data.display_show_unit_prices as boolean) ?? true,
-      displayWelcomeMessage: (data.display_welcome_message as string | null) ?? null,
-      displayThanksMessage: (data.display_thanks_message as string | null) ?? null,
-      // Default true: si la columna no existe aún (settings viejos), se ofrece.
-      offerWarranty: (data.offer_warranty as boolean | undefined) ?? true,
-      // Default false: por defecto NO se exige voucher de tarjeta.
-      requireCardVoucher: (data.require_card_voucher as boolean | undefined) ?? false,
-      // Default true: la venta libre queda habilitada (igual que hoy donde el
-      // rubro quickSale ya la mostraba). El dueño puede apagarla en Configuración.
-      allowFreeSale: (data.allow_free_sale as boolean | undefined) ?? true,
-      // Default false: por defecto el staff ve todo (no se restringe).
-      staffSeesOwnOnly: (data.staff_sees_own_only as boolean | undefined) ?? false,
-      posLayout: data.pos_layout ?? null,
-    };
+    return (raw as Record<string, unknown> | null) ?? null;
   },
+
+  posSettings: async (): Promise<PosSettingsView | null> => mapPosSettings(await posApi.posSettingsRaw()),
 
   // Crea la preferencia/QR de cobro y devuelve el init_point.
   createMpQr: async (
@@ -648,12 +699,13 @@ export const posApi = {
   createMpOrderQr: async (
     amount: number,
     title: string,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string; init_point: string; order_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_qr", {
-      body: { action: "create", amount, title },
+      body: { action: "create", amount, title, ...locationBody(loc) },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -707,13 +759,15 @@ export const posApi = {
     longitude?: number;
     coordinates?: string;
     reference?: string;
+    // F17 · ADR-049: caja QR propia de una caja (sin esto, la caja única).
+    cash_register_id?: string;
   }): Promise<{ env: "prod" | "test" }> => {
     const res = await invokeMpQr<{ env?: "prod" | "test" }>({ action: "setup", ...input });
     return { env: res.env ?? "prod" };
   },
 
-  mpQrReset: async (): Promise<void> => {
-    await invokeMpQr({ action: "reset" });
+  mpQrReset: async (cashRegisterId?: string): Promise<void> => {
+    await invokeMpQr({ action: "reset", ...(cashRegisterId ? { cash_register_id: cashRegisterId } : {}) });
   },
 
   // ── Mercado Point (H15 resto): cobro presencial en el lector ───────────────
@@ -748,18 +802,20 @@ export const posApi = {
     deviceId: string,
     amount: number,
     opts?: { installments?: number; defaultType?: "debit_card" | "credit_card" },
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("mp_point", {
       body: {
         action: "create",
         device_id: deviceId,
+        ...locationBody(loc),
         amount,
         ...(opts?.installments ? { installments: opts.installments } : {}),
         ...(opts?.defaultType ? { default_type: opts.defaultType } : {}),
       },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -1033,12 +1089,13 @@ export const posApi = {
   createNavePointIntent: async (
     deviceId: string,
     amount: number,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("nave_point", {
-      body: { action: "create", device_id: deviceId, amount },
+      body: { action: "create", device_id: deviceId, amount, ...locationBody(loc) },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -1104,12 +1161,19 @@ export const posApi = {
     deviceId: string,
     amount: number,
     installments?: number,
+    loc?: PaymentLocation,
   ): Promise<{ intent_id: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("clover_point", {
-      body: { action: "create", device_id: deviceId, amount, installments: installments ?? null },
+      body: {
+        action: "create",
+        device_id: deviceId,
+        amount,
+        installments: installments ?? null,
+        ...locationBody(loc),
+      },
     });
-    if (error) throw error;
+    if (error) throw await edgeError(error);
     if ((data as { error?: string })?.error) {
       throw new Error((data as { error: string }).error);
     }
@@ -1287,6 +1351,11 @@ export const posApi = {
   ): Promise<CreateSaleResult> => {
     const supabase = createClient();
     const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
+    // ADR-051 (H116): si el descuento general pide supervisor, el servidor
+    // contesta supervisor_required y se reintenta con el PIN (mismo payload).
+    const subtotal = items.reduce((a, it) => a + it.unit_price * it.quantity - (it.discount ?? 0), 0);
+    const discountPct = subtotal > 0 ? Math.round((discountTotal / subtotal) * 10000) / 100 : 0;
+    const run = async (): Promise<CreateSaleResult> => {
     const { data, error } = await supabase.rpc("create_sale", {
       p_items: items as unknown as Json,
       p_payments: payments as unknown as Json,
@@ -1316,5 +1385,7 @@ export const posApi = {
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;
+    };
+    return withSupervisor(run, { discount_over: discountPct });
   },
 };

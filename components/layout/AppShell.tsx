@@ -19,6 +19,7 @@ import {
   Lock,
   LogOut,
   Menu,
+  MonitorDot,
   Moon,
   Package,
   Receipt,
@@ -33,8 +34,13 @@ import {
   Users,
   Utensils,
   Wallet,
+  Hourglass,
   X,
   ArrowLeftRight,
+  ClipboardList,
+  FileText,
+  PackageCheck,
+  Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -67,6 +73,8 @@ import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
+import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
+import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -121,7 +129,7 @@ function SellQuickAction({
       aria-label={hint}
       aria-keyshortcuts={SELL_SHORTCUT}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white shadow-sm transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "inline-flex items-center justify-center gap-2 rounded-lg bg-ninja-flame font-semibold text-white transition hover:brightness-105 active:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         compact ? "h-9 px-3 text-sm" : "h-10 w-full px-3 text-sm",
       )}
     >
@@ -158,6 +166,8 @@ type Item = {
   // Sólo con 2+ sucursales (traslados · F17/H95): con una sola no tiene sentido
   // y se oculta sin candado.
   requiresMultiStore?: boolean;
+  // Sólo dueño o encargado (monitor de cajas, ADR-051).
+  managersOnly?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -191,7 +201,12 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Agenda y turnos (F12 · H38). Feature 'agenda' es básica → visible por
         // defecto; un plan puede apagarla y el ítem queda con candado.
         { href: "/agenda", label: "Agenda", icon: CalendarDays, feature: "agenda" },
+        // Cobros en espera (ADR-048): QR y links compartidos que esperan el
+        // pago. Con candado si el plan no la incluye.
+        { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         { href: "/caja", label: "Caja", icon: Wallet },
+        // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
+        { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
         { href: "/ventas", label: "Ventas", icon: Receipt },
         {
           href: "/devoluciones",
@@ -208,6 +223,17 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
+      ],
+    },
+    {
+      // Compras y proveedores (F18 · H101, ADR-050). Con candado si el plan no
+      // incluye la feature compras.
+      label: "Compras",
+      items: [
+        { href: "/compras/ordenes", label: "Órdenes de compra", icon: ClipboardList, feature: "compras" },
+        { href: "/compras/recepciones", label: "Recepciones", icon: PackageCheck, feature: "compras" },
+        { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
+        { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
       ],
     },
     {
@@ -385,6 +411,7 @@ export function AppShell({
   const [open, setOpen] = useState<Record<string, boolean>>({
     Operación: true,
     Catálogo: true,
+    Compras: true,
     Gestión: true,
   });
 
@@ -397,13 +424,11 @@ export function AppShell({
       if (!user) return { isInternal: false, role: null as string | null };
       const isInternal = !!(user.app_metadata as { is_internal?: boolean } | null)
         ?.is_internal;
-      const { data: mem } = await supabase
-        .from("tenant_users")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      // Rol en el negocio ACTIVO (con dos membresías no vale cualquiera).
+      const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)?.current_tenant_id;
+      let q = supabase.from("tenant_users").select("role").eq("user_id", user.id).eq("status", "active");
+      if (tenantId) q = q.eq("tenant_id", tenantId);
+      const { data: mem } = await q.limit(1).maybeSingle();
       return { isInternal, role: mem?.role ?? null };
     },
   });
@@ -433,7 +458,8 @@ export function AppShell({
   const showItem = (it: Item) =>
     (!it.requiresDining || Boolean(diningEnabled)) &&
     (!it.requiresDelivery || Boolean(deliveryEnabled)) &&
-    (!it.requiresMultiStore || (stores?.length ?? 0) > 1);
+    (!it.requiresMultiStore || (stores?.length ?? 0) > 1) &&
+    (!it.managersOnly || canOwnerPanel);
 
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni
@@ -531,7 +557,7 @@ export function AppShell({
             onClick={() => setDrawer(false)}
             className="group flex items-center gap-2.5 rounded-lg border border-border bg-card p-2 transition hover:bg-muted"
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ninja-gradient text-ninja-voidViolet shadow-ninjaGlow">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--pos-solid)] text-white">
               <ShieldCheck size={16} />
             </span>
             <span className="min-w-0 flex-1 leading-tight">
@@ -572,6 +598,9 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       <InactivityGuard />
+      <TenantClaimHealer />
+      <StaffAccessGate email={email} />
+      <SupervisorPinHost />
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">
         {nav}
       </aside>

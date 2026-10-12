@@ -36,11 +36,13 @@ export type SettingsSectionKey =
   | "diseno-pos"
   | "rubro"
   | "sucursales"
+  | "seguridad"
   | "marca"
   | "tickets"
   | "impresion"
   | "email"
   | "pagos"
+  | "terminales"
   | "operacion"
   | "salones"
   | "menus"
@@ -121,6 +123,15 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Tus locales, sus cajas y qué personal trabaja en cada uno, con traslados programados.",
         icon: Building2,
         keywords: "sucursal local caja punto de venta personal empleados traslado cobertura multi",
+      },
+      {
+        key: "seguridad",
+        label: "Seguridad y auditoría",
+        title: "Seguridad y auditoría",
+        description:
+          "Qué acciones piden PIN de supervisor y desde qué monto, quién autoriza, tu PIN y el registro de todo lo que pasa en el negocio.",
+        icon: ShieldCheck,
+        keywords: "pin supervisor autorizacion anulacion devolucion retiro descuento auditoria registro log caja compartida",
       },
     ],
   },
@@ -206,6 +217,15 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Conectá tus cuentas y elegí con qué canales cobrás en el POS.",
         icon: CreditCard,
         keywords: "mercado pago tarjetas cuotas qr posnet transferencia efectivo recargo",
+      },
+      // F17 · H93 (ADR-049): registro de terminales por sucursal y caja (BASE).
+      {
+        key: "terminales",
+        label: "Terminales de cobro",
+        title: "Terminales de cobro",
+        description: "Point, Clover, cajas QR y posnets de cada sucursal y caja. El POS usa la de su caja sola.",
+        icon: CreditCard,
+        keywords: "point clover nave posnet lector terminal caja qr sucursal numero de comercio",
       },
       // Promociones (F9 · H53): por ahora SIN gating de plan, es sólo la
       // DEFINICIÓN. El gating por `promociones` se suma con la aplicación.
@@ -359,6 +379,9 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   "listas-precios": "precios",
   "medios-pago": "pagos",
   tema: "apariencia",
+  auditoria: "seguridad",
+  pin: "seguridad",
+  supervisor: "seguridad",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

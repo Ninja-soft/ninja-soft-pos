@@ -49,6 +49,7 @@ import { AttributesEditor } from "@/components/products/AttributesEditor";
 import { CategoryPathEditor } from "@/components/products/CategoryPathEditor";
 import { PackagesEditor } from "@/components/products/PackagesEditor";
 import { Barcode } from "@/components/products/Barcode";
+import { ProductCostsPanel } from "@/components/purchases/ProductCostsPanel";
 import { FeatureGate } from "@/components/saas/FeatureGate";
 import { normalizeAttributes, type ProductAttribute } from "@/lib/products/attributes";
 import { diffPackages, type ProductPackage } from "@/lib/products/packages";
@@ -92,6 +93,7 @@ const FIELD_TAB: Partial<Record<keyof ProductInput, TabKey>> = {
   model: "general",
   price: "precios",
   cost: "precios",
+  replacement_cost: "precios",
   tax_rate: "precios",
   stock: "stock",
   stock_min: "stock",
@@ -243,6 +245,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       brand_id: product?.brand_id ?? null,
       price: product?.price ?? 0,
       cost: product?.cost ?? undefined,
+      replacement_cost:
+        (product as { replacement_cost?: number | null } | null | undefined)?.replacement_cost ?? undefined,
       stock: product?.stock ?? 0,
       stock_min: product?.stock_min ?? 0,
       unit: product?.unit ?? "un",
@@ -508,7 +512,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </Group>
 
           <Group title="Visibilidad">
-            <div className="divide-y divide-border rounded-2xl bg-muted">
+            <div className="divide-y divide-border rounded-lg bg-muted">
               <SettingRow
                 title="Activo"
                 description="Se puede vender y aparece en el POS."
@@ -588,13 +592,27 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             />
           </Group>
 
+          <Group
+            title="Costos de compra"
+            description="Último costo, promedio ponderado y reposición, sin IVA. El que elegiste en Configuración de compras alimenta el margen."
+          >
+            <ProductCostsPanel
+              product={active}
+              price={price}
+              replacementField={register("replacement_cost")}
+            />
+            {errors.replacement_cost?.message && (
+              <p className="text-xs text-destructive">{errors.replacement_cost.message}</p>
+            )}
+          </Group>
+
           <Group title="Listas de precios" description="Cómo queda este precio en cada lista activa.">
             {listPreview.length === 0 ? (
               <SaveFirst>
                 No tenés listas de precios activas. Las armás en Productos, en Listas de precios.
               </SaveFirst>
             ) : (
-              <div className="divide-y divide-border rounded-2xl bg-muted">
+              <div className="divide-y divide-border rounded-lg bg-muted">
                 {listPreview.map((l) => (
                   <div key={l.id} className="flex items-center justify-between gap-3 px-3.5 py-3 text-sm">
                     <span className="min-w-0 truncate font-medium text-foreground">{l.name}</span>
@@ -619,7 +637,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {/* ── Stock ───────────────────────────────────────────────── */}
         <div className={show("stock")}>
           <Group>
-            <div className="divide-y divide-border rounded-2xl bg-muted">
+            <div className="divide-y divide-border rounded-lg bg-muted">
               <SettingRow
                 title="Controla stock"
                 description="Si está apagado, no descuenta stock al venderse (ej. servicios)."
@@ -695,7 +713,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               />
             </div>
             {barcodeVal?.trim() ? (
-              <div className="flex flex-col items-center gap-1.5 rounded-2xl bg-white px-4 py-4 text-black">
+              <div className="flex flex-col items-center gap-1.5 rounded-lg bg-white px-4 py-4 text-black">
                 <Barcode value={barcodeVal.trim().toUpperCase()} height={44} />
                 <span className="font-mono text-xs tracking-widest">{barcodeVal.trim()}</span>
               </div>
@@ -781,7 +799,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {/* ── Más (tipo de producto, servicio, cocina) ────────────── */}
         <div className={show("mas")}>
           <Group title="Tipo de producto">
-            <div className="divide-y divide-border rounded-2xl bg-muted">
+            <div className="divide-y divide-border rounded-lg bg-muted">
               <SettingRow
                 title="Es un kit / combo"
                 description="Sin stock propio; descuenta el de sus componentes."

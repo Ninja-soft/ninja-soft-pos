@@ -62,8 +62,10 @@ import type {
   AccountPayRequest,
   AccountPayState,
   CheckoutPayment,
+  ElectronicParkInput,
   ElectronicRequest,
   ElectronicResult,
+  SheetParkOptions,
   PaymentExtra,
   Promo,
   SplitItem,
@@ -151,6 +153,8 @@ export interface CheckoutSheetProps {
    * la cuenta corriente se registra como un pago simple.
    */
   renderAccount?: (req: AccountPayRequest) => React.ReactNode;
+  /** Cobros en espera (ADR-048): dejar el QR / link esperando el pago. */
+  park?: SheetParkOptions | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -197,6 +201,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     onConfirm,
     renderElectronic,
     renderAccount,
+    park,
   } = props;
 
   const [lines, setLines] = useState<PaidLine[]>([]);
@@ -440,7 +445,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   }
 
   // ── Armado de extras y cierre de la venta ─────────────────────────────────
-  function finalize(ls: PaidLine[]) {
+  function buildFinal(ls: PaidLine[]) {
     const t = tipFor(ls, null);
     const finalPromo = promoFor(ls, null, t);
     const tt = totalsFor(ls, finalPromo, t);
@@ -459,7 +464,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ...(l.reference ? { reference: l.reference } : {}),
       ...(l.card_voucher ? { card_voucher: l.card_voucher } : {}),
     }));
-    onConfirm(payments, extras, tt.change, finalPromo);
+    return { payments, extras, change: tt.change, promo: finalPromo, settled: tt.settled };
+  }
+
+  function finalize(ls: PaidLine[]) {
+    const f = buildFinal(ls);
+    onConfirm(f.payments, f.extras, f.change, f.promo);
   }
 
   function addLine(line: PaidLine) {
@@ -558,8 +568,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const t = electronic?.tender;
     setElectronic(null);
     if (!t) return;
+    addLine(electronicLine(t, r));
+  }
+
+  // Línea del cobro electrónico aprobado (o por aprobar, si queda en espera).
+  function electronicLine(t: ResolvedTender, r: { reference: string; amount: number; method: SaleMethod; surcharges: { name: string; amount: number }[] }): PaidLine {
     const sc = round2(r.surcharges.reduce((a, s) => a + s.amount, 0));
-    addLine({
+    return {
       key: `l${++keySeq}`,
       tenderId: t.id,
       title: `${t.brandLabel} ${t.label}`,
@@ -572,7 +587,30 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       reference: r.reference,
       locked: true,
       promoEligible: t.flow === "qr",
-    });
+    };
+  }
+
+  // Cobros en espera (ADR-048): la venta se arma igual que al confirmar, con
+  // el QR como único pago, y se estaciona en el servidor.
+  const parkBlockedReason = (() => {
+    if (!park) return null;
+    if (park.blockedReason) return park.blockedReason;
+    if (lines.length > 0) return "Sólo se puede dejar en espera un cobro con un único medio de pago.";
+    if (electronic && electronic.amount + 0.005 < remaining) {
+      return "Para dejarlo en espera, el QR o link tiene que cubrir el total.";
+    }
+    return null;
+  })();
+
+  async function parkElectronic(r: ElectronicParkInput): Promise<{ id: string } | null> {
+    const t = electronic?.tender;
+    if (!park || !t) return null;
+    const ls = [...lines, electronicLine(t, { reference: r.intentId, amount: r.amount, method: "qr", surcharges: r.surcharges })];
+    const f = buildFinal(ls);
+    if (!f.settled) throw new Error("partial_amount");
+    const res = await park.onPark({ payments: f.payments, extras: f.extras, promo: f.promo, qr: r });
+    if (res) setElectronic(null);
+    return res;
   }
 
   function removeLine(key: string) {
@@ -1362,7 +1400,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       {/* Confirmación inline: salir con cobros electrónicos aprobados */}
       {confirmLeave && (
         <div className="absolute inset-0 z-10 flex items-end bg-[color-mix(in_srgb,var(--popover)_92%,transparent)] backdrop-blur-sm md:items-center md:justify-center">
-          <div className="w-full rounded-t-xl border border-border bg-popover p-5 shadow-2xl md:max-w-md md:rounded-xl">
+          <div className="w-full rounded-t-xl border border-border bg-popover p-5 md:max-w-md md:rounded-xl">
             <p className="font-display text-lg font-bold">Hay cobros aprobados</p>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Ya se cobraron {money(lockedTotal)} con QR o Point. Si salís sin confirmar la venta, el cobro queda
@@ -1393,6 +1431,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
           amount: electronic.amount,
           onApproved: onElectronicApproved,
           onClose: () => setElectronic(null),
+          park:
+            park && electronic.tender.flow === "qr"
+              ? {
+                  blockedReason: parkBlockedReason,
+                  label: park.label,
+                  customerName: park.customerName,
+                  customerEmail: park.customerEmail,
+                  customerPhone: park.customerPhone,
+                  onPark: parkElectronic,
+                  onEmail: park.onEmail,
+                }
+              : undefined,
         })}
     </PosSheet>
   );

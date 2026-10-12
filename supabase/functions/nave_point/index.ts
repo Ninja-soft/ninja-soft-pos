@@ -20,6 +20,12 @@
 //
 // Gating real: tenant_has_feature_for(tenant,'nave_point') en create. El
 // pos_id recibido DEBE ser una terminal configurada del tenant.
+//
+// Terminales (ADR-049): create acepta terminal_id (payment_terminals,
+// validado en el servidor con terminal_for_user: negocio, activa, proveedor
+// y sucursal del usuario; si viene store_id, esa sucursal). device_id sigue
+// funcionando (POS viejos). Si la sucursal o la caja apagaron el medio
+// (config_overrides) → payment_method_disabled_in_store.
 // =============================================================================
 import { buildPaymentRequest, naveApiBase } from "../_shared/nave.ts";
 import {
@@ -33,6 +39,7 @@ import {
   syncIntent,
   type IntentRow,
 } from "../_shared/nave_server.ts";
+import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
 
 // Tiempo para que el cliente pague en la terminal.
 const POINT_DURATION_SECONDS = 10 * 60;
@@ -69,9 +76,42 @@ Deno.serve(async (req: Request) => {
     });
     if (allowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
 
-    const deviceId = String(b.device_id ?? "");
-    if (!conn.terminals.some((t) => t.id === deviceId)) {
-      return json({ error: "invalid_device" }, 400);
+    const loc = locationOf(b);
+    let deviceId = String(b.device_id ?? "");
+    let terminalId: string | null = null;
+    let storeId = loc.storeId;
+    let registerId = loc.registerId;
+    if (b.terminal_id !== undefined && b.terminal_id !== null) {
+      const t = await resolveTerminal(admin, {
+        tenantId,
+        userId: userId,
+        terminalId: b.terminal_id,
+        providers: ["nave_point"],
+        storeId: loc.storeId,
+      });
+      if (!t.ok) return json({ error: t.error }, 400);
+      deviceId = t.terminal.external_id!;
+      terminalId = t.terminal.id;
+      storeId = t.terminal.store_id;
+      registerId = registerId ?? t.terminal.cash_register_id;
+    }
+    if (!terminalId && !conn.terminals.some((t) => t.id === deviceId)) {
+      // Compatibilidad: id suelto, válido si está registrado como terminal del negocio.
+      const { data: reg } = await admin
+        .from("payment_terminals")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("provider_key", "nave_point")
+        .eq("external_id", deviceId)
+        .eq("active", true)
+        .is("deleted_at", null)
+        .limit(1);
+      if (!deviceId || !(reg as unknown[] | null)?.length) {
+        return json({ error: "invalid_device" }, 400);
+      }
+    }
+    if (await methodBlockedAt(admin, tenantId, "nave_point", storeId, registerId)) {
+      return json({ error: "payment_method_disabled_in_store" }, 403);
     }
     const amount = Math.round(Number(b.amount) * 100) / 100;
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -85,6 +125,7 @@ Deno.serve(async (req: Request) => {
         amount,
         provider_key: "nave_point",
         point_device_id: deviceId,
+        ...(terminalId ? { payment_terminal_id: terminalId } : {}),
       })
       .select("id")
       .single();
@@ -138,6 +179,7 @@ Deno.serve(async (req: Request) => {
       },
       userId,
     );
+    await touchTerminal(admin, terminalId);
     return json({ intent_id: intentId, point_intent_id: pr.id });
   }
 

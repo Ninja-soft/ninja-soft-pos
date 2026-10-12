@@ -164,7 +164,7 @@ function EditableAvatar({
         </span>
         <span
           aria-hidden
-          className="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border border-border bg-popover text-foreground shadow-sm"
+          className="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border border-border bg-popover text-foreground"
         >
           <Camera size={14} />
         </span>

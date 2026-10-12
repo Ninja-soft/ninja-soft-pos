@@ -5,6 +5,11 @@
 //   2. Invita por email (o reusa si ya existe) y crea/activa la membresía con
 //      rol, nombre visible (real o genérico) y avatar.
 //   3. Audita. service_role solo vive acá (nunca en frontend).
+//   4. (F17 · H91) Opcional: `store_ids` (y `store_role`) asigna sucursales de
+//      una vez: la primera como base y el resto como acceso adicional, vía
+//      staff_assign_on_invite (valida negocio, sucursales vivas, alcance del
+//      que invita y la feature multi_sucursal, y audita). Sin `store_ids` el
+//      body viejo funciona igual.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
@@ -52,6 +57,8 @@ Deno.serve(async (req: Request) => {
     role?: string;
     display_name?: string;
     avatar?: string;
+    store_ids?: unknown;
+    store_role?: string | null;
   };
   try {
     body = await req.json();
@@ -64,6 +71,16 @@ Deno.serve(async (req: Request) => {
   const avatar = (body.avatar ?? "").trim().slice(0, 300) || null;
   if (!EMAIL_RE.test(email)) return json({ error: "invalid_email" }, 400);
   if (!ASSIGNABLE_ROLES.includes(role)) return json({ error: "invalid_role" }, 400);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const rawStores = Array.isArray(body.store_ids) ? body.store_ids : [];
+  if (rawStores.some((v) => typeof v !== "string" || !UUID_RE.test(v)) || rawStores.length > 50) {
+    return json({ error: "invalid_store" }, 400);
+  }
+  const storeIds = [...new Set(rawStores as string[])];
+  const storeRole = body.store_role ? String(body.store_role) : null;
+  if (storeRole && !ASSIGNABLE_ROLES.includes(storeRole)) {
+    return json({ error: "invalid_role" }, 400);
+  }
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
   const { data: caller } = await admin
@@ -75,6 +92,22 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!caller || !["owner", "manager"].includes(caller.role)) {
     return json({ error: "forbidden" }, 403);
+  }
+  // ADR-051: sólo el dueño suma encargados.
+  if (role === "manager" && caller.role !== "owner") {
+    return json({ error: "forbidden_role" }, 403);
+  }
+
+  // Sucursales: se validan ANTES de invitar (que no quede un usuario creado
+  // con sucursales inválidas). La función SQL vuelve a validar todo.
+  if (storeIds.length > 0) {
+    const { data: stores } = await admin
+      .from("stores")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .in("id", storeIds);
+    if ((stores ?? []).length !== storeIds.length) return json({ error: "store_not_found" }, 400);
   }
 
   // Gating server-side (Fase D): enforcement del límite max_users del plan.
@@ -103,6 +136,8 @@ Deno.serve(async (req: Request) => {
 
   // ¿el target ya es miembro activo? entonces no suma asiento.
   let targetAlreadyActive = false;
+  let existingRole: string | null = null;
+  let existingStatus: string | null = null;
   const { data: targetUser } = await admin
     .from("users")
     .select("id")
@@ -111,11 +146,23 @@ Deno.serve(async (req: Request) => {
   if (targetUser) {
     const { data: existingMembership } = await admin
       .from("tenant_users")
-      .select("status")
+      .select("status, role")
       .eq("tenant_id", tenantId)
       .eq("user_id", targetUser.id)
       .maybeSingle();
     targetAlreadyActive = existingMembership?.status === "active";
+    existingRole = existingMembership?.role ?? null;
+    existingStatus = existingMembership?.status ?? null;
+  }
+
+  // ADR-051: invitar NO pisa a un miembro existente (antes un upsert podía
+  // degradar al dueño). Un miembro activo se informa tal cual; uno dado de baja
+  // vuelve por "Reingreso" (queda en su historial), no por invitación.
+  if (existingRole === "owner" || targetAlreadyActive) {
+    return json({ error: "already_member", role: existingRole }, 409);
+  }
+  if (existingStatus === "inactive") {
+    return json({ error: "member_terminated" }, 409);
   }
 
   if (
@@ -161,13 +208,47 @@ Deno.serve(async (req: Request) => {
   );
   if (muErr) return json({ error: "membership_failed", detail: muErr.message }, 500);
 
+  // ADR-051 (B-01): sin app_metadata.current_tenant_id la RLS le niega todo al
+  // invitado. Se setea sólo si no tiene otro negocio activo.
+  if (targetId) {
+    const { data: target } = await admin.auth.admin.getUserById(targetId);
+    const meta = (target?.user?.app_metadata ?? {}) as Record<string, unknown>;
+    if (!meta.current_tenant_id) {
+      await admin.auth.admin.updateUserById(targetId, {
+        app_metadata: { ...meta, current_tenant_id: tenantId },
+      });
+    }
+  }
+
   await admin.from("audit_logs").insert({
     tenant_id: tenantId,
     actor_user_id: user.id,
     entity_type: "tenant_users",
     entity_id: targetId,
     action: "member_invited",
-    after_data: { email, role, display_name: displayName, avatar },
+    after_data: { email, role, display_name: displayName, avatar, store_ids: storeIds },
   });
-  return json({ user_id: targetId, role, existed: !!existing });
+
+  // Sucursales asignadas al invitar. Si falla (p. ej. el plan no tiene
+  // multi_sucursal), la membresía ya quedó: se informa para asignarlas a mano.
+  let branchesAssigned = 0;
+  let branchesError: string | null = null;
+  if (storeIds.length > 0) {
+    const { data: n, error: brErr } = await admin.rpc("staff_assign_on_invite", {
+      p_tenant: tenantId,
+      p_actor: user.id,
+      p_user: targetId,
+      p_store_ids: storeIds,
+      p_role: storeRole,
+    });
+    if (brErr) branchesError = brErr.message.slice(0, 200);
+    else branchesAssigned = Number(n) || 0;
+  }
+  return json({
+    user_id: targetId,
+    role,
+    existed: !!existing,
+    branches_assigned: branchesAssigned,
+    branches_error: branchesError,
+  });
 });

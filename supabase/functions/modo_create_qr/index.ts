@@ -36,6 +36,7 @@
 // Gating real de plan: tenant_has_feature_for(tenant,'modo') en create.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { edgeTimer } from "../_shared/timing.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -43,11 +44,12 @@ const cors = {
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (b: unknown, s = 200) =>
-  new Response(JSON.stringify(b), {
-    status: s,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
+
+// Token de MODO cacheado por instancia (ADR-048, "QR más rápido"): en una
+// instancia caliente el QR no paga la ronda a /middleman/token. Clave por
+// ambiente + usuario; vence a los 10 min (o antes si MODO lo informa).
+const tokenCache = new Map<string, { token: string; exp: number }>();
+const TOKEN_TTL_MS = 10 * 60 * 1000;
 
 const MODO_BASE_PROD =
   Deno.env.get("MODO_API_BASE") ??
@@ -58,6 +60,12 @@ const MODO_BASE_PREPROD =
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const timer = edgeTimer("modo_create_qr");
+  const json = (b: unknown, s = 200) =>
+    new Response(JSON.stringify(b), {
+      status: s,
+      headers: { ...cors, ...timer.headers(), "Content-Type": "application/json" },
+    });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -68,44 +76,54 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     auth: { persistSession: false },
   });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
+  // Auth y body en paralelo.
+  const [{ data: { user }, error }, body] = await Promise.all([
+    userClient.auth.getUser(),
+    req.json().catch(() => null) as Promise<Record<string, unknown> | null>,
+  ]);
+  timer.mark("auth");
   if (error || !user) return json({ error: "unauthorized" }, 401);
   const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
     ?.current_tenant_id;
   if (!tenantId) return json({ error: "no_tenant" }, 400);
-
-  let b: Record<string, unknown>;
-  try {
-    b = await req.json();
-  } catch {
-    return json({ error: "invalid_json" }, 400);
-  }
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const b: Record<string, unknown> = body;
   const action = String(b.action ?? "create");
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  // Miembro activo del tenant.
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!mem) return json({ error: "forbidden" }, 403);
-
-  // Credenciales del comercio. Acepta las keys nuevas (username/password, el
+  // Una sola ronda: miembro activo, credenciales, ambiente y plan.
+  // Credenciales del comercio: acepta las keys nuevas (username/password, el
   // esquema real de MODO) y las históricas (client_id/client_secret) para no
   // romper conexiones guardadas antes de validar el dialecto.
-  const { data: secretRow } = await admin
-    .from("payment_secrets")
-    .select("secrets")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "modo")
-    .maybeSingle();
+  const [{ data: mem }, { data: secretRow }, { data: methodRow }, allowedCreate] = await Promise.all([
+    admin
+      .from("tenant_users")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    admin
+      .from("payment_secrets")
+      .select("secrets")
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "modo")
+      .maybeSingle(),
+    admin
+      .from("tenant_payment_methods")
+      .select("sandbox")
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "modo")
+      .maybeSingle(),
+    action === "create"
+      ? admin
+          .rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "modo" })
+          .then((r: { data: unknown }) => r.data === true)
+      : Promise.resolve(true),
+  ]);
+  timer.mark("prechecks");
+  if (!mem) return json({ error: "forbidden" }, 403);
   const sec = (secretRow?.secrets ?? {}) as {
     username?: string;
     password?: string;
@@ -117,63 +135,64 @@ Deno.serve(async (req: Request) => {
   const username = sec.username ?? sec.client_id;
   const password = sec.password ?? sec.client_secret;
   if (!username || !password) return json({ error: "not_connected" }, 400);
-
-  const { data: methodRow } = await admin
-    .from("tenant_payment_methods")
-    .select("sandbox")
-    .eq("tenant_id", tenantId)
-    .eq("provider_key", "modo")
-    .maybeSingle();
   const base = methodRow?.sandbox ? MODO_BASE_PREPROD : MODO_BASE_PROD;
+  if (action === "create" && !allowedCreate) {
+    return json({ error: "payment_method_not_allowed" }, 403);
+  }
 
-  // ── Token (middleman) ────────────────────────────────────────────────────
-  let tokRes: Response;
-  try {
-    tokRes = await fetch(`${base}/middleman/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-  } catch (e) {
-    return json({ error: "modo_unreachable", detail: String(e).slice(0, 200) }, 502);
+  // ── Token (middleman), cacheado por instancia ──────────────────────────────
+  const cacheKey = `${base}|${username}`;
+  const cached = tokenCache.get(cacheKey);
+  let accessToken = cached && cached.exp > Date.now() ? cached.token : "";
+  if (!accessToken) {
+    let tokRes: Response;
+    try {
+      tokRes = await fetch(`${base}/middleman/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+    } catch (e) {
+      return json({ error: "modo_unreachable", detail: String(e).slice(0, 200) }, 502);
+    }
+    if (!tokRes.ok) {
+      return json(
+        { error: "modo_no_token", detail: (await tokRes.text()).slice(0, 300) },
+        502,
+      );
+    }
+    const tok = (await tokRes.json()) as { accessToken?: string; expiresIn?: number };
+    if (!tok.accessToken) return json({ error: "modo_no_token" }, 502);
+    accessToken = tok.accessToken;
+    const ttl = tok.expiresIn && tok.expiresIn > 120 ? (tok.expiresIn - 60) * 1000 : TOKEN_TTL_MS;
+    tokenCache.set(cacheKey, { token: accessToken, exp: Date.now() + Math.min(ttl, TOKEN_TTL_MS) });
   }
-  if (!tokRes.ok) {
-    return json(
-      { error: "modo_no_token", detail: (await tokRes.text()).slice(0, 300) },
-      502,
-    );
-  }
-  const tok = (await tokRes.json()) as { accessToken?: string };
-  if (!tok.accessToken) return json({ error: "modo_no_token" }, 502);
+  timer.mark(cached ? "token_cached" : "token");
   const modoHeaders = {
-    Authorization: `Bearer ${tok.accessToken}`,
+    Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
     accept: "application/json",
   };
 
   // ── create ─────────────────────────────────────────────────────────────────
   if (action === "create") {
-    // Gating de plan (enforcement real): la UI nunca es la única barrera. El
-    // trigger en `payments` es la red de seguridad para el registro de la
-    // venta (resuelve el proveedor por mp_payment_intents.provider_key).
-    const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
-      p_tenant: tenantId,
-      p_key: "modo",
-    });
-    if (allowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
-
+    // Gating de plan (enforcement real): ya validado arriba (allowedCreate) en
+    // la misma ronda que las credenciales. El trigger en `payments` es la red
+    // de seguridad para el registro de la venta.
     const amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       return json({ error: "invalid_amount" }, 400);
     }
     const title = String(b.title ?? "Venta NinjaPos").slice(0, 120);
 
-    const { data: intent, error: intErr } = await admin
+    // Id generado acá: el insert del intent corre en paralelo con la intención
+    // en MODO (externalIntentionId = intent).
+    const intent = { id: crypto.randomUUID() };
+    // .then() arranca la consulta ya (los builders de supabase-js son perezosos).
+    const insP = admin
       .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "modo" })
-      .select("id")
-      .single();
-    if (intErr || !intent) return json({ error: "intent_failed" }, 500);
+      .insert({ id: intent.id, tenant_id: tenantId, amount, provider_key: "modo" })
+      .then((res: { error: unknown }) => res);
 
     let r: Response;
     try {
@@ -192,12 +211,20 @@ Deno.serve(async (req: Request) => {
         }),
       });
     } catch (e) {
+      await insP;
       await admin
         .from("mp_payment_intents")
         .update({ status: "rejected" })
         .eq("id", intent.id);
       return json({ error: "modo_unreachable", detail: String(e).slice(0, 200) }, 502);
     }
+    const { error: intErr } = await insP;
+    timer.mark("provider");
+    if (intErr) {
+      timer.log({ action, error: "intent_failed" });
+      return json({ error: "intent_failed" }, 500);
+    }
+    if (r.status === 401 || r.status === 403) tokenCache.delete(cacheKey);
     if (!r.ok) {
       const detail = await r.text();
       await admin
@@ -235,6 +262,8 @@ Deno.serve(async (req: Request) => {
       .from("mp_payment_intents")
       .update({ preference_id: String(pi.id), init_point: initPoint })
       .eq("id", intent.id);
+    timer.mark("save");
+    timer.log({ action });
     return json({ intent_id: intent.id, init_point: initPoint });
   }
 
@@ -259,6 +288,7 @@ Deno.serve(async (req: Request) => {
       `${base}/ecommerce/payment-intention/${row.preference_id}`,
       { headers: modoHeaders },
     );
+    if (r.status === 401 || r.status === 403) tokenCache.delete(cacheKey);
     if (!r.ok) {
       return json(
         { error: "modo_error", detail: (await r.text()).slice(0, 300) },

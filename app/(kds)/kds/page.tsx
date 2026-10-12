@@ -188,7 +188,7 @@ function TicketCard({
               type="button"
               onClick={() => onAdvance(item)}
               disabled={busy}
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-ninja-flame px-3 text-sm font-semibold text-ninja-voidViolet shadow-ninjaGlow transition hover:brightness-110 disabled:opacity-50"
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-ninja-flame px-3 text-sm font-semibold text-ninja-voidViolet transition hover:brightness-110 disabled:opacity-50"
             >
               {next === "preparando" && <ChefHat size={15} />}
               {next === "listo" && <Check size={15} />}
@@ -386,7 +386,7 @@ function KdsInner() {
             {groups.map(([orderId, g]) => (
               <section
                 key={orderId}
-                className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/20 p-2.5"
+                className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2.5"
               >
                 <div className="flex items-center justify-between px-1">
                   <span className="flex items-center gap-1.5 text-base font-bold">

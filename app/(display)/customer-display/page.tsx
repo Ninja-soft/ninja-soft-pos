@@ -13,6 +13,8 @@ import {
   type DisplayBranding,
   type DisplayState,
 } from "@/lib/pos/customerDisplay";
+import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
+import { locationLabel } from "@/modules/branches/logic";
 
 // =============================================================================
 // Pantalla del cliente / segunda pantalla (F10 · H25)
@@ -35,6 +37,15 @@ const DEFAULT_THANKS = "¡Gracias por tu compra!";
 
 export default function CustomerDisplayPage() {
   const live = useCustomerDisplayState();
+  // Caja de ESTE dispositivo (la misma que usa el POS) y, con 2+ sucursales,
+  // "Centro · Caja 1" (F17 · H90). Antes era la primera caja del negocio.
+  const branchCtx = useBranchContext();
+  const { data: register, store: registerStore } = useCurrentRegister();
+  const regLabel = register
+    ? branchCtx.isMulti && registerStore
+      ? locationLabel(registerStore, register)
+      : register.name
+    : null;
 
   // Branding base del tenant para la pantalla idle (antes de que el POS publique).
   // El estado en vivo del POS trae su propio branding y tiene prioridad.
@@ -43,7 +54,7 @@ export default function CustomerDisplayPage() {
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<DisplayBranding> => {
       const supabase = createClient();
-      const [{ data: b }, { data: s }, { data: reg }] = await Promise.all([
+      const [{ data: b }, { data: s }] = await Promise.all([
         supabase
           .from("tenant_branding")
           .select("legal_name, logo_url, accent")
@@ -53,13 +64,6 @@ export default function CustomerDisplayPage() {
           // Columnas nuevas (H25) aún no en los tipos generados: select("*") +
           // cast vía unknown.
           .select("*")
-          .maybeSingle(),
-        supabase
-          .from("cash_registers")
-          .select("name, stores(name)")
-          .eq("is_active", true)
-          .order("created_at")
-          .limit(1)
           .maybeSingle(),
       ]);
       const settings = (s as unknown as {
@@ -72,18 +76,11 @@ export default function CustomerDisplayPage() {
         logo_url?: string | null;
         accent?: string | null;
       } | null;
-      const register = reg as {
-        name?: string | null;
-        stores?: { name?: string | null } | null;
-      } | null;
-      const regLabel = register
-        ? [register.name, register.stores?.name].filter(Boolean).join(" · ") || null
-        : null;
       return {
         businessName: branding?.legal_name ?? null,
         logoUrl: branding?.logo_url ?? null,
         accent: branding?.accent ?? null,
-        registerLabel: regLabel,
+        registerLabel: null,
         welcomeMessage: settings?.display_welcome_message ?? null,
         thanksMessage: settings?.display_thanks_message ?? null,
         showUnitPrices: settings?.display_show_unit_prices ?? true,
@@ -93,8 +90,8 @@ export default function CustomerDisplayPage() {
 
   // Estado efectivo: el del POS si llegó; si no, idle con el branding propio.
   const state: DisplayState = useMemo(
-    () => live ?? idleState(ownBranding ?? EMPTY_BRANDING),
-    [live, ownBranding],
+    () => live ?? idleState({ ...(ownBranding ?? EMPTY_BRANDING), registerLabel: regLabel }),
+    [live, ownBranding, regLabel],
   );
   const branding = state.branding;
   const accent = branding.accent || "#FF4B22";
@@ -107,12 +104,6 @@ export default function CustomerDisplayPage() {
       className="relative flex h-dvh w-full flex-col overflow-hidden bg-[#09051C] text-white"
       style={{ ["--cd-accent" as string]: accent }}
     >
-      {/* Glow de marca de fondo */}
-      <div
-        className="pointer-events-none absolute -top-1/3 left-1/2 h-[80vh] w-[80vh] -translate-x-1/2 rounded-full opacity-20 blur-3xl"
-        style={{ background: accent }}
-      />
-
       {state.phase === "idle" ? (
         <IdleScreen branding={branding} />
       ) : state.phase === "paid" ? (
@@ -151,7 +142,7 @@ function BrandLogo({
   if (branding.logoUrl) {
     return (
       <span
-        className="grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-white/95 p-1.5"
+        className="grid shrink-0 place-items-center overflow-hidden rounded-xl bg-white/95 p-1.5"
         style={{ height: size, width: size }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -165,7 +156,7 @@ function BrandLogo({
   }
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-2xl text-[var(--cd-accent)]"
+      className="grid shrink-0 place-items-center rounded-xl text-[var(--cd-accent)]"
       style={{ height: size, width: size, background: "rgba(255,255,255,0.06)" }}
     >
       <ShoppingBag size={size * 0.5} />
@@ -218,7 +209,7 @@ function SaleScreen({ state }: { state: DisplayState }) {
             {state.lines.map((l) => (
               <li
                 key={l.lineId}
-                className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.04] px-5 py-4"
+                className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.04] px-5 py-4"
               >
                 <div className="min-w-0">
                   <div className="truncate text-2xl font-semibold">{l.name}</div>
@@ -322,7 +313,7 @@ function QrPanel({ state }: { state: DisplayState }) {
       <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
         Escaneá para pagar
       </div>
-      <div className="mt-4 rounded-3xl bg-white p-4 shadow-2xl">
+      <div className="mt-4 rounded-xl bg-white p-4">
         {svg && (
           <svg
             role="img"
@@ -362,7 +353,7 @@ function PaidScreen({ state }: { state: DisplayState }) {
       <h1 className="mt-8 text-5xl font-black tracking-tight md:text-6xl">Pago recibido</h1>
       <p className="mt-4 text-2xl font-medium text-white/70">{thanks}</p>
       {(state.change ?? 0) > 0 && (
-        <div className="mt-8 rounded-2xl bg-white/[0.06] px-8 py-5">
+        <div className="mt-8 rounded-xl bg-white/[0.06] px-8 py-5">
           <div className="text-sm font-semibold uppercase tracking-widest text-white/40">
             Tu vuelto
           </div>

@@ -29,7 +29,7 @@ export function EmptyState({
     >
       <span
         className={cn(
-          "grid place-items-center rounded-2xl bg-ninja-flame/10 text-ninja-flameSoft",
+          "grid place-items-center rounded-lg bg-ninja-flame/10 text-ninja-flameSoft",
           compact ? "h-10 w-10" : "h-14 w-14",
         )}
         aria-hidden

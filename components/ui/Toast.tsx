@@ -7,16 +7,26 @@ import { cn } from "@/lib/utils/cn";
 
 type ToastVariant = "success" | "error" | "info";
 
+// Acción del aviso (p. ej. "Imprimir ticket"). Cierra el aviso al tocarla.
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 interface ToastItem {
   id: number;
   title: string;
   description?: string;
   variant: ToastVariant;
+  actions?: ToastAction[];
+  duration?: number;
 }
 interface ToastInput {
   title: string;
   description?: string;
   variant?: ToastVariant;
+  actions?: ToastAction[];
+  /** ms visible (por defecto 4 s; con acciones conviene más). */
+  duration?: number;
 }
 interface ToastContextValue {
   toast: (input: ToastInput) => void;
@@ -57,9 +67,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <ToastPrimitive.Root
               key={item.id}
+              duration={item.duration}
               onOpenChange={(open) => !open && remove(item.id)}
               className={cn(
-                "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground shadow-ninjaSoft backdrop-blur-xl",
+                "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground backdrop-blur-xl",
                 "data-[state=open]:animate-slide-up data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=cancel]:translate-x-0 data-[swipe=cancel]:transition-transform",
               )}
             >
@@ -72,6 +83,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   <ToastPrimitive.Description className="mt-0.5 text-sm text-muted-foreground">
                     {item.description}
                   </ToastPrimitive.Description>
+                )}
+                {item.actions && item.actions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {item.actions.map((a) => (
+                      <ToastPrimitive.Action key={a.label} altText={a.label} asChild>
+                        <button
+                          type="button"
+                          onClick={a.onClick}
+                          className="rounded-md bg-ninja-flame/15 px-2.5 py-1 text-xs font-semibold text-ninja-flameSoft transition hover:bg-ninja-flame/25"
+                        >
+                          {a.label}
+                        </button>
+                      </ToastPrimitive.Action>
+                    ))}
+                  </div>
                 )}
               </div>
               <ToastPrimitive.Close

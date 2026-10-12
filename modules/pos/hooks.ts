@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   useMutation,
   useQuery,
@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import {
   posApi,
+  mapPosSettings,
   paymentPlansApi,
   professionalsApi,
   type PaymentPlanInput,
@@ -16,6 +17,8 @@ import {
   type SaleExtraInput,
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
+import { resolveEffective } from "@/lib/config/inheritance";
+import { useConfigOverrides, usePosResolveTarget } from "@/modules/config/hooks";
 import { useBranchStore } from "@/modules/branches/store";
 
 // Turno abierto de la caja de ESTE dispositivo (F17 · H90). Antes era "el
@@ -62,11 +65,23 @@ export function useProviderMethod(providerKey: string) {
   });
 }
 
+// Settings del POS con la configuración EFECTIVA de la sucursal y la caja de
+// este dispositivo (F17 · H92, ADR-049): negocio ← grupo ← sucursal ← caja.
+// Sin overrides es exactamente pos_settings.
 export function usePosSettings() {
-  return useQuery({
+  const raw = useQuery({
     queryKey: ["pos", "settings"],
-    queryFn: () => posApi.posSettings(),
+    queryFn: () => posApi.posSettingsRaw(),
   });
+  const { data: overrides } = useConfigOverrides();
+  const target = usePosResolveTarget();
+  const data = useMemo(() => {
+    if (raw.data === undefined) return undefined;
+    if (raw.data === null) return null;
+    const eff = resolveEffective("pos_settings", "", raw.data, overrides ?? [], target).value;
+    return mapPosSettings(eff);
+  }, [raw.data, overrides, target]);
+  return { data, isFetched: raw.isFetched, isLoading: raw.isLoading, refetch: raw.refetch };
 }
 
 // Profesionales/vendedores activos (H38/H39): selector de atribución de comisión
@@ -207,9 +222,16 @@ export function usePosMutations() {
       onSuccess: invalidateShift,
     }),
     close: useMutation({
-      mutationFn: (vars: { shiftId: string; closing: number; notes?: string }) =>
-        posApi.close(vars.shiftId, vars.closing, vars.notes),
-      onSuccess: invalidateShift,
+      mutationFn: (vars: {
+        shiftId: string;
+        closing: number;
+        notes?: string;
+        pendingAction?: "cancel" | "carry" | null;
+      }) => posApi.close(vars.shiftId, vars.closing, vars.notes, vars.pendingAction),
+      onSuccess: () => {
+        invalidateShift();
+        qc.invalidateQueries({ queryKey: ["pending-charges"] });
+      },
     }),
     sale: useMutation({
       mutationFn: (vars: {

@@ -11,6 +11,7 @@ import { useAiPublicConfig } from "@/modules/saas/aiPublicConfig";
 import { PlanCards, type PlanCardModel } from "@/components/saas/PlanCards";
 import { Switch } from "@/components/ui/Switch";
 import { cn } from "@/lib/utils/cn";
+import { Spinner } from "@/components/ui/Spinner";
 
 // Mapea un SignupPlan (forma del selector) al modelo de PlanCards.
 function toPlanCardModel(p: SignupPlan): PlanCardModel {
@@ -74,7 +75,7 @@ export function SignupStepPlan({
   if (isLoading) {
     return (
       <div className="grid place-items-center py-10">
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-ninja-flameSoft border-t-transparent" />
+        <Spinner size={24} />
       </div>
     );
   }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { isPlanActive, type PaymentPlan } from "@/modules/pos/api";
 import { usePaymentPlans, usePosSettings, useProfessionals } from "@/modules/pos/hooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
 import { resolveMerchantNumber } from "@/lib/payments/merchantNumbers";
+import { warmEdgeFunctions } from "@/lib/pos/warmEdge";
 import { useWarrantyPlans } from "@/modules/products/hooks";
 import type { WarrantyPlan } from "@/modules/products/api";
 import type { DisplayQr } from "@/lib/pos/customerDisplay";
@@ -58,6 +59,16 @@ export function CheckoutSheetConnected({ onQrState, customerId = null, ...props 
       resolveMerchantNumber(methods ?? [], brand, providerKey),
     [methods],
   );
+
+  // Precalentado de las Edge de los medios QR / link al abrir la hoja: el
+  // primer "Generar QR" no paga el arranque en frío (ADR-048).
+  const qrProviders = useMemo(
+    () => props.tenders.filter((t) => t.flow === "qr").map((t) => t.qrProvider),
+    [props.tenders],
+  );
+  useEffect(() => {
+    if (props.open && qrProviders.length > 0) warmEdgeFunctions(qrProviders);
+  }, [props.open, qrProviders]);
 
   // Sólo los planes VIGENTES hoy (H27).
   const cardPlans = useMemo(

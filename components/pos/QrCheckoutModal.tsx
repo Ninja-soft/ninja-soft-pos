@@ -62,6 +62,25 @@ type MpChannel = "order" | "link";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// Mercado Pago sin caja QR (Orders API): se recuerda 10 min en la sesión para
+// no pedir primero la order que va a fallar y recién después el link.
+const MP_QR_MISSING_KEY = "mp_qr_pos_missing_at";
+function mpQrPosMissingRecently(): boolean {
+  try {
+    const at = Number(sessionStorage.getItem(MP_QR_MISSING_KEY) ?? 0);
+    return at > 0 && Date.now() - at < 10 * 60_000;
+  } catch {
+    return false;
+  }
+}
+function rememberMpQrPosMissing() {
+  try {
+    sessionStorage.setItem(MP_QR_MISSING_KEY, String(Date.now()));
+  } catch {
+    /* sin storage: se vuelve a probar la order la próxima vez */
+  }
+}
+
 function planText(p: PaymentPlan) {
   const cuotas =
     (p.installments ?? 1) > 1 ? `${p.installments} cuotas` : p.base === "credito" ? "1 pago" : "Pago";
@@ -287,6 +306,16 @@ export function QrCheckoutModal({
         .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
       return;
     }
+    if (provider === "mercadopago" && mpQrPosMissingRecently()) {
+      // Sin caja QR configurada (se supo hace poco): directo al link, sin la
+      // ronda que ya sabemos que falla (ADR-048, "QR más rápido").
+      setMpChannel("link");
+      posApi
+        .createMpQr(amt, "Venta NinjaPos")
+        .then(onCreated)
+        .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
+      return;
+    }
     if (provider === "mercadopago") {
       setMpChannel("order");
       posApi
@@ -295,6 +324,7 @@ export function QrCheckoutModal({
         .catch(async (e) => {
           const { code } = await edgeErrorCode(e);
           if (code !== "qr_pos_not_configured") return onCreateError(code);
+          rememberMpQrPosMissing();
           setMpChannel("link");
           posApi
             .createMpQr(amt, "Venta NinjaPos")

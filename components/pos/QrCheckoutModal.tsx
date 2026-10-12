@@ -2,9 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Hourglass, Link2, Share2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  Copy,
+  ExternalLink,
+  Hourglass,
+  Link2,
+  Share2,
+  XCircle,
+} from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonVariants } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Segmented";
+import { cn } from "@/lib/utils/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { posApi, type PaymentPlan } from "@/modules/pos/api";
@@ -247,6 +260,7 @@ export function QrCheckoutModal({
   const instRef = useRef<number>(1);
   // Cobros en espera (ADR-048).
   const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [parking, setParking] = useState(false);
   const parkingRef = useRef(false);
   const parkedRef = useRef(false);
@@ -473,6 +487,7 @@ export function QrCheckoutModal({
     startedRef.current = false;
     chosenRef.current = null;
     setShareOpen(false);
+    setCopied(false);
     setParking(false);
     parkingRef.current = false;
     parkedRef.current = false;
@@ -614,6 +629,19 @@ export function QrCheckoutModal({
     sharedRef.current.push({ via, to: to ?? null });
   }
 
+  // Copiar el link sin abrir el panel de compartir (cuenta como compartido).
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(initPoint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+      onShared("copy");
+      toast({ title: "Link copiado", variant: "success" });
+    } catch {
+      toast({ title: "No se pudo copiar el link", variant: "error" });
+    }
+  }
+
   async function doPark(): Promise<{ id: string } | null> {
     if (!park || park.blockedReason || parkingRef.current) return null;
     const target = await ensureLink();
@@ -696,228 +724,312 @@ export function QrCheckoutModal({
   // de Mercado Pago: Payway/Pagos360 mostraban la marca equivocada).
   const providerLogo = paymentIcon(provider) ?? paymentIcon("mercadopago")!;
 
+  // Panel visual (columna izquierda desde md): el QR, o un recuadro del mismo
+  // tamaño con el estado, para que el modal no cambie de alto entre fases.
+  // En mobile el QR es más chico y los estados finales van compactos.
+  const qrSize = "h-[min(260px,64vw)] w-[min(260px,64vw)] md:h-[min(320px,45vh)] md:w-[min(320px,45vh)]";
+  const stateBox = cn(
+    "flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-fg-4 p-4 text-center",
+    "w-full py-6 md:aspect-square md:h-[min(320px,45vh)] md:w-[min(320px,45vh)] md:py-4",
+  );
+
   return (
     <Modal
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(true) : close())}
       title={`Cobrar con ${channel === "link" ? "link" : "QR"} · ${providerName}`}
+      className="md:max-w-3xl"
     >
-      <div className="space-y-4 text-center">
-        <div className="flex items-center justify-center py-1">
-          <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
+      <div className="flex flex-col gap-5 md:flex-row md:items-stretch md:gap-6">
+        {/* ── Columna izquierda: QR y estado ─────────────────────────────── */}
+        <div
+          className={cn(
+            "flex shrink-0 flex-col items-center gap-3",
+            // En mobile, la selección de plan no necesita el recuadro.
+            selecting && "hidden md:flex",
+          )}
+        >
+          {selecting && (
+            <div className={stateBox}>
+              <ThemedLogo src={providerLogo} alt={providerName} className="h-12 w-auto" />
+              <p className="max-w-[16rem] text-xs text-muted-foreground">
+                Elegí la tarjeta y el plan. El QR aparece acá con el total final.
+              </p>
+            </div>
+          )}
+
+          {phase === "creating" && (
+            <div className={cn(stateBox, "aspect-square p-0 py-0 md:py-0", qrSize)}>
+              <Spinner size={28} />
+              <span className="text-xs text-muted-foreground">Generando QR…</span>
+            </div>
+          )}
+
+          {phase === "waiting" && (
+            <>
+              <LocalQr value={qrValue} label={`QR de pago ${providerName}`} className={qrSize} />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                <Spinner size={14} />
+                {switching ? "Pasando a link…" : parking ? "Dejando en espera…" : "Esperando pago"}
+              </div>
+            </>
+          )}
+
+          {phase === "approved" && (
+            <div className={cn(stateBox, "text-success")} role="status">
+              <CheckCircle2 size={44} aria-hidden />
+              <div className="text-lg font-bold">¡Pago aprobado!</div>
+              <div className="text-xs text-muted-foreground">Acreditado. Registrando la venta…</div>
+            </div>
+          )}
+
+          {phase === "parked" && (
+            <div className={stateBox} role="status">
+              <Hourglass size={40} aria-hidden className="text-muted-foreground" />
+              <div className="text-lg font-bold">Cobro en espera</div>
+            </div>
+          )}
+
+          {phase === "rejected" && (
+            <div className={cn(stateBox, "text-danger")} role="status">
+              <XCircle size={44} aria-hidden />
+              <div className="text-lg font-bold">Pago rechazado o cancelado</div>
+            </div>
+          )}
+
+          {phase === "error" && (
+            <div className={stateBox} role="status">
+              <AlertTriangle size={40} aria-hidden className="text-danger" />
+              <div className="text-sm font-semibold">No se pudo generar el cobro</div>
+            </div>
+          )}
         </div>
 
-        {selecting && (
-          <div className="space-y-3 text-left">
-            {loadingAll ? (
-              <div className="flex justify-center py-6">
-                <Spinner size={24} />
+        {/* ── Columna derecha: monto, acciones y espera ─────────────────── */}
+        {/* En mobile la columna se "disuelve" (contents) para que el monto
+            quede arriba del QR; desde md es una columna propia. */}
+        <div
+          className={cn(
+            "contents text-left md:flex md:min-w-0 md:flex-1 md:flex-col",
+            shareOpen ? "md:gap-3" : "md:gap-4",
+          )}
+        >
+          <div className="order-first flex items-start justify-between gap-3 md:order-none">
+            <div className="min-w-0">
+              <div className="text-sm text-muted-foreground">
+                {phase === "select" ? "Monto base" : "Total a cobrar"}
               </div>
-            ) : !brand ? (
-              <>
-                <div className="text-sm font-medium">Elegí la tarjeta</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {brands.map((b) => (
-                    <button
-                      key={b}
-                      onClick={() => setBrand(b)}
-                      className="flex flex-col items-center gap-1.5 rounded-xl bg-fg-6 p-3 transition hover:bg-fg-10"
-                    >
-                      <CardBrandLogo brand={b} label={BRAND_LABEL[b] ?? b} height={28} />
-                      <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
-                    </button>
-                  ))}
+              <div className="price-solid font-price text-3xl font-black tabular-nums">
+                {formatCurrency(phase === "select" ? base : amount)}
+              </div>
+            </div>
+            <ThemedLogo src={providerLogo} alt={providerName} className="h-9 w-auto shrink-0" />
+          </div>
+
+          {selecting && (
+            <div className="space-y-3">
+              {loadingAll ? (
+                <div className="flex justify-center py-6">
+                  <Spinner size={24} />
                 </div>
-                <button
-                  onClick={payNoPlan}
-                  className="w-full rounded-xl bg-fg-4 py-2.5 text-sm text-muted-foreground transition hover:bg-fg-6 hover:text-foreground"
-                >
-                  Sin plan · contado ({formatCurrency(base)})
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setBrand(null)}
-                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft size={15} /> {BRAND_LABEL[brand] ?? brand}
-                </button>
-                <div className="text-sm font-medium">Elegí el plan</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {brandPlans.map((p) => {
-                    const sc = round2((base * (Number(p.surcharge_pct) || 0)) / 100);
-                    const total = round2(base + sc);
-                    return (
+              ) : !brand ? (
+                <>
+                  <div className="text-sm font-medium">Elegí la tarjeta</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {brands.map((b) => (
                       <button
-                        key={p.id}
-                        onClick={() => pickPlan(p)}
-                        className="flex flex-col items-start gap-0.5 rounded-lg border border-border p-3 text-left transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
+                        key={b}
+                        onClick={() => setBrand(b)}
+                        className="flex flex-col items-center gap-1.5 rounded-lg bg-fg-6 p-3 transition hover:bg-fg-10"
                       >
-                        <span className="text-xs text-muted-foreground">{planText(p)}</span>
-                        <span className="price-hl font-price text-lg font-black tabular-nums">
-                          {formatCurrency(total)}
-                        </span>
-                        {sc > 0 ? (
-                          <span className="text-[11px] text-ninja-flameSoft">
-                            +{p.surcharge_pct}% ({formatCurrency(sc)})
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-success">sin recargo</span>
-                        )}
+                        <CardBrandLogo brand={b} label={BRAND_LABEL[b] ?? b} height={28} />
+                        <span className="text-xs">{BRAND_LABEL[b] ?? b}</span>
                       </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {phase !== "select" && (
-          <div className="text-sm text-muted-foreground">
-            Total a cobrar
-            <div className="price-hl font-price text-3xl font-black tabular-nums text-foreground">
-              {formatCurrency(amount)}
-            </div>
-          </div>
-        )}
-
-        {phase === "creating" && (
-          <div className="flex flex-col items-center gap-2 py-8">
-            <Spinner size={28} />
-            <span className="sr-only">Generando QR</span>
-          </div>
-        )}
-
-        {phase === "waiting" && (
-          <>
-            <div className="flex justify-center">
-              <LocalQr value={qrValue} label={`QR de pago ${providerName}`} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {isMpOrder
-                ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
-                : `El cliente escanea el QR para pagar con ${providerName}. La pantalla se actualiza sola al acreditarse.`}
-            </p>
-            {isMpOrder ? (
-              <Button variant="secondary" size="sm" disabled={switching || parking} onClick={switchToLink}>
-                {switching ? <Spinner size={14} /> : <Link2 size={14} />} Enviar link
-              </Button>
-            ) : (
-              isLink && (
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <a
-                    href={initPoint}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block text-xs text-ninja-flameSoft hover:underline"
+                    ))}
+                  </div>
+                  <button
+                    onClick={payNoPlan}
+                    className="w-full rounded-lg bg-fg-4 py-2.5 text-sm text-muted-foreground transition hover:bg-fg-6 hover:text-foreground"
                   >
-                    Abrir link de pago
-                  </a>
-                  <Button
-                    variant={shareOpen ? "secondary" : "ghost"}
-                    size="sm"
-                    aria-expanded={shareOpen}
-                    onClick={() => setShareOpen((v) => !v)}
+                    Sin plan · contado ({formatCurrency(base)})
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setBrand(null)}
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                   >
-                    <Share2 size={14} /> Compartir
+                    <ChevronLeft size={15} /> {BRAND_LABEL[brand] ?? brand}
+                  </button>
+                  <div className="text-sm font-medium">Elegí el plan</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {brandPlans.map((p) => {
+                      const sc = round2((base * (Number(p.surcharge_pct) || 0)) / 100);
+                      const total = round2(base + sc);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => pickPlan(p)}
+                          className="flex flex-col items-start gap-0.5 rounded-lg border border-border p-3 text-left transition hover:border-ninja-flameSoft hover:bg-ninja-flame/5"
+                        >
+                          <span className="text-xs text-muted-foreground">{planText(p)}</span>
+                          <span className="price-solid font-price text-lg font-black tabular-nums">
+                            {formatCurrency(total)}
+                          </span>
+                          {sc > 0 ? (
+                            <span className="text-[11px] text-ninja-flameSoft">
+                              +{p.surcharge_pct}% ({formatCurrency(sc)})
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-success">sin recargo</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {phase === "creating" && (
+            <p className="text-sm text-muted-foreground">Generando el cobro con {providerName}…</p>
+          )}
+
+          {phase === "waiting" && (
+            <>
+              <p className={cn("text-sm text-muted-foreground", shareOpen && "md:hidden")}>
+                {isMpOrder
+                  ? "El cliente escanea el QR con la app de Mercado Pago o su billetera. La pantalla se actualiza sola al acreditarse."
+                  : channel === "link"
+                    ? `Compartí el link para que el cliente pague con ${providerName}, o que escanee el QR. La pantalla se actualiza sola al acreditarse.`
+                    : `El cliente escanea el QR para pagar con ${providerName}. La pantalla se actualiza sola al acreditarse.`}
+              </p>
+              {isMpOrder ? (
+                <div>
+                  <Button variant="secondary" size="sm" disabled={switching || parking} onClick={switchToLink}>
+                    {switching ? <Spinner size={14} /> : <Link2 size={14} />} Enviar link
                   </Button>
                 </div>
-              )
-            )}
-            {shareOpen && isLink && (
-              <SharePanel
-                url={initPoint}
-                amountLabel={formatCurrency(amount)}
-                businessName={branding?.legal_name ?? null}
-                customerName={park?.customerName ?? null}
-                customerPhone={park?.customerPhone ?? null}
-                customerEmail={park?.customerEmail ?? null}
-                onShared={onShared}
-                onServerEmail={park && !park.blockedReason && park.onEmail ? parkAndEmail : undefined}
-                serverEmailLabel="Enviar y dejar en espera"
-              />
-            )}
-            {park && (
-              <div className="space-y-2 rounded-xl bg-fg-4 p-3 text-left">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">El link vence en</span>
-                  <select
-                    aria-label="Vencimiento del cobro en espera"
-                    className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
-                    value={ttl}
-                    onChange={(e) => setTtl(Number(e.target.value))}
-                    disabled={Boolean(park.blockedReason)}
+              ) : (
+                isLink && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      aria-expanded={shareOpen}
+                      className={cn(shareOpen && "bg-fg-10")}
+                      onClick={() => setShareOpen((v) => !v)}
+                    >
+                      <Share2 size={14} aria-hidden /> Compartir
+                    </Button>
+                    <a
+                      href={initPoint}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonVariants({ variant: "ghost", size: "sm" })}
+                    >
+                      <ExternalLink size={14} aria-hidden /> Abrir link
+                    </a>
+                    <Button variant="ghost" size="sm" onClick={copyLink}>
+                      {copied ? (
+                        <Check size={14} aria-hidden className="text-success" />
+                      ) : (
+                        <Copy size={14} aria-hidden />
+                      )}
+                      {copied ? "Copiado" : "Copiar"}
+                    </Button>
+                  </div>
+                )
+              )}
+              {shareOpen && isLink && (
+                <SharePanel
+                  url={initPoint}
+                  amountLabel={formatCurrency(amount)}
+                  businessName={branding?.legal_name ?? null}
+                  customerName={park?.customerName ?? null}
+                  customerPhone={park?.customerPhone ?? null}
+                  customerEmail={park?.customerEmail ?? null}
+                  onShared={onShared}
+                  onServerEmail={park && !park.blockedReason && park.onEmail ? parkAndEmail : undefined}
+                  serverEmailLabel="Enviar y dejar en espera"
+                />
+              )}
+              {park && (
+                <div className="space-y-2.5 rounded-lg border border-border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">El link vence en</span>
+                    <div
+                      className={cn(park.blockedReason && "pointer-events-none opacity-50")}
+                      aria-disabled={Boolean(park.blockedReason) || undefined}
+                    >
+                      <Segmented
+                        size="sm"
+                        aria-label="Vencimiento del cobro en espera"
+                        value={String(ttl)}
+                        options={extendOptions(provider).map((o) => ({
+                          value: String(o.minutes),
+                          label: o.label,
+                        }))}
+                        onChange={(v) => setTtl(Number(v))}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    disabled={Boolean(park.blockedReason) || switching}
+                    loading={parking}
+                    onClick={() => void doPark()}
                   >
-                    {extendOptions(provider).map((o) => (
-                      <option key={o.minutes} value={o.minutes}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                    <Hourglass size={16} aria-hidden /> {park.label}
+                  </Button>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    {park.blockedReason ??
+                      "Ya lo compartí, sigo cobrando: la venta queda esperando el pago y se registra sola cuando el cliente paga. Te avisamos para imprimir el ticket."}
+                  </p>
                 </div>
-                <Button
-                  className="w-full"
-                  variant="secondary"
-                  disabled={Boolean(park.blockedReason) || switching}
-                  loading={parking}
-                  onClick={() => void doPark()}
-                >
-                  <Hourglass size={16} aria-hidden /> {park.label}
-                </Button>
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  {park.blockedReason ??
-                    "Ya lo compartí, sigo cobrando: la venta queda esperando el pago y se registra sola cuando el cliente paga. Te avisamos para imprimir el ticket."}
-                </p>
-              </div>
-            )}
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Spinner size={14} /> Esperando pago
-            </div>
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {phase === "parked" && (
-          <div className="py-8">
-            <div className="text-lg font-bold">Cobro en espera</div>
-            <div className="text-sm text-muted-foreground">Seguí cobrando: te avisamos cuando se acredite.</div>
-          </div>
-        )}
+          {phase === "parked" && (
+            <p className="text-sm text-muted-foreground">Seguí cobrando: te avisamos cuando se acredite.</p>
+          )}
 
-        {phase === "approved" && (
-          <div className="py-8 text-success">
-            <div className="text-lg font-bold">¡Pago aprobado!</div>
-            <div className="text-sm text-muted-foreground">Registrando la venta…</div>
-          </div>
-        )}
+          {phase === "approved" && (
+            <p className="text-sm text-muted-foreground">
+              El pago se acreditó. Estamos registrando la venta.
+            </p>
+          )}
 
-        {phase === "rejected" && (
-          <div className="space-y-3 py-6">
-            <div className="text-lg font-bold text-danger">Pago rechazado o cancelado</div>
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-          </div>
-        )}
+          {phase === "rejected" && (
+            <p className="text-sm text-muted-foreground">
+              El cliente no completó el pago. Podés cerrar y cobrar de nuevo con este u otro medio.
+            </p>
+          )}
 
-        {phase === "error" && (
-          <div className="space-y-3 py-6">
-            <div className="text-sm text-muted-foreground">
+          {phase === "error" && (
+            <p className="text-sm text-muted-foreground">
               {errorMsg ||
                 `No se pudo generar el cobro con ${providerName}. Revisá la conexión del medio en Configuración → Medios de pago.`}
-            </div>
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-          </div>
-        )}
+            </p>
+          )}
 
-        {(phase === "creating" || phase === "waiting" || selecting) && (
-          <Button variant="ghost" className="w-full" onClick={close}>
-            Cancelar
-          </Button>
-        )}
+          <div className="mt-auto flex justify-end gap-2 pt-1">
+            {(phase === "creating" || phase === "waiting" || selecting) && (
+              <Button variant="ghost" className="w-full md:w-auto" onClick={close}>
+                Cancelar
+              </Button>
+            )}
+            {(phase === "rejected" || phase === "error") && (
+              <Button variant="secondary" className="w-full md:w-auto" onClick={() => onOpenChange(false)}>
+                Cerrar
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </Modal>
   );

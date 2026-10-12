@@ -24,7 +24,8 @@
 --          propio y abierto (con PIN si la política lo pide) o el
 --          contramovimiento de una anulación real del mismo turno; nunca
 --          UPDATE ni DELETE.
---   E) cash_force_close(turno, monto contado, motivo).
+--   E) cash_force_close(turno, monto contado, motivo, cobros en espera =
+--      'carry' por defecto) sobre close_cash_shift de 4 args (única firma).
 --   F) PIN por política en anulación (sales), descuento general (sales) y
 --      devolución (sale_returns), con el token del header (migración 110000).
 -- =============================================================================
@@ -103,10 +104,16 @@ declare
   v_status  text;
   v_nstores int;
   v_shared  boolean;
+  -- Completitud de un cobro en espera (_pc_complete, 20261017140000): el turno
+  -- destino puede ser de otra persona y quien lo estacionó puede ya no estar
+  -- activo; la plata entró, la venta se registra igual.
+  v_pc      boolean := coalesce(current_setting('ninja.pc_complete', true), '') <> '';
 begin
   if v_tenant is null then raise exception 'no_tenant'; end if;
   -- H113: suspendido, de licencia o dado de baja no vende ni devuelve.
-  perform assert_staff_operational();
+  if not v_pc then
+    perform assert_staff_operational();
+  end if;
   v_shared := (security_effective(v_tenant)).shared_shift;
 
   -- 1) Turno explícito.
@@ -119,6 +126,8 @@ begin
     elsif v_status <> 'open' then
       if p_strict then raise exception 'shift_not_open'; end if;
       o_shift_id := null; o_store_id := null;
+    elsif v_pc then
+      return;
     elsif not user_can_access_store(o_store_id) then
       if p_strict then raise exception 'store_not_allowed'; end if;
       o_shift_id := null; o_store_id := null;
@@ -396,7 +405,10 @@ create trigger cash_movements_guard
 create or replace function cash_force_close(
   p_shift_id       uuid,
   p_closing_amount numeric,
-  p_reason         text
+  p_reason         text,
+  -- Cobros en espera abiertos del turno (ADR-048): 'carry' (por defecto) los
+  -- pasa a la próxima apertura de esa caja; 'cancel' cancela los que esperan.
+  p_pending_action text default 'carry'
 )
 returns jsonb
 language plpgsql
@@ -413,6 +425,7 @@ begin
   if v_tenant is null then raise exception 'no_tenant'; end if;
   if v_reason is null or length(v_reason) < 3 then raise exception 'reason_required'; end if;
   if p_closing_amount is null or p_closing_amount < 0 then raise exception 'invalid_amount'; end if;
+  if coalesce(p_pending_action, 'carry') not in ('carry', 'cancel') then raise exception 'invalid_pending_action'; end if;
   perform assert_staff_operational();
 
   select cs.id, cs.status, cs.opened_by, cs.store_id, cs.cash_register_id, cs.opened_at
@@ -427,7 +440,9 @@ begin
   v_sup := require_supervisor('shift_force_close', null, p_shift_id);
 
   perform set_config('ninja.force_close_shift', p_shift_id::text, true);
-  v_diff := close_cash_shift(p_shift_id, p_closing_amount, 'Cierre forzado: ' || v_reason);
+  -- Firma única de 4 args (20261014100000 / 20261015120000).
+  v_diff := close_cash_shift(p_shift_id, p_closing_amount, 'Cierre forzado: ' || v_reason,
+                             coalesce(p_pending_action, 'carry'));
   perform set_config('ninja.force_close_shift', '', true);
 
   insert into audit_logs (tenant_id, actor_user_id, entity_type, entity_id, action, reason, after_data, store_id)
@@ -435,13 +450,13 @@ begin
           jsonb_build_object('opened_by', v_shift.opened_by, 'opened_at', v_shift.opened_at,
                              'cash_register_id', v_shift.cash_register_id, 'store_id', v_shift.store_id,
                              'supervisor_id', v_sup, 'closing_amount', p_closing_amount,
-                             'difference', v_diff),
+                             'difference', v_diff, 'pending_action', coalesce(p_pending_action, 'carry')),
           v_shift.store_id);
   return jsonb_build_object('ok', true, 'difference', v_diff, 'supervisor_id', v_sup);
 end;
 $$;
-revoke all on function cash_force_close(uuid, numeric, text) from public, anon;
-grant execute on function cash_force_close(uuid, numeric, text) to authenticated;
+revoke all on function cash_force_close(uuid, numeric, text, text) from public, anon;
+grant execute on function cash_force_close(uuid, numeric, text, text) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- F) PIN por política en ventas y devoluciones
@@ -454,6 +469,10 @@ as $$
 declare
   v_manual numeric;
 begin
+  -- Cobro en espera que se acredita: el PIN se pidió al estacionarlo.
+  if coalesce(current_setting('ninja.pc_complete', true), '') <> '' then
+    return new;
+  end if;
   if tg_op = 'INSERT' then
     -- Descuento general manual (sin promociones ni cupones) sobre el subtotal.
     if coalesce(new.subtotal, 0) > 0 then

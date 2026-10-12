@@ -42,6 +42,7 @@ import {
   type OrderIntentRow,
 } from "../_shared/mpIntents.ts";
 import { geocodeAr } from "../_shared/geocode.ts";
+import { edgeTimer } from "../_shared/timing.ts";
 import {
   buildGeocodeQuery,
   buildPosBody,
@@ -63,11 +64,6 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const json = (b: unknown, s = 200) =>
-  new Response(JSON.stringify(b), {
-    status: s,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
 
 type QrPos = {
   user_id: string;
@@ -84,6 +80,12 @@ type GeoCache = { q: string; place: GeoPick; at: string };
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  const timer = edgeTimer("mp_qr");
+  const json = (b: unknown, s = 200) =>
+    new Response(JSON.stringify(b), {
+      status: s,
+      headers: { ...cors, ...timer.headers(), "Content-Type": "application/json" },
+    });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -94,21 +96,19 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     auth: { persistSession: false },
   });
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
+  // Auth y body en paralelo (ADR-048, "QR más rápido").
+  const [{ data: { user }, error }, body] = await Promise.all([
+    userClient.auth.getUser(),
+    req.json().catch(() => null) as Promise<Record<string, unknown> | null>,
+  ]);
+  timer.mark("auth");
   if (error || !user) return json({ error: "unauthorized" }, 401);
   const tenantId = (user.app_metadata as { current_tenant_id?: string } | null)
     ?.current_tenant_id;
   if (!tenantId) return json({ error: "no_tenant" }, 400);
 
-  let b: Record<string, unknown>;
-  try {
-    b = await req.json();
-  } catch {
-    return json({ error: "invalid_json" }, 400);
-  }
+  if (!body) return json({ error: "invalid_json" }, 400);
+  const b: Record<string, unknown> = body;
   const action = String(b.action ?? "");
   if (!["geocode", "setup", "reset", "create", "status", "cancel"].includes(action)) {
     return json({ error: "invalid_action" }, 400);
@@ -116,23 +116,36 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  const { data: mem } = await admin
-    .from("tenant_users")
-    .select("role")
-    .eq("tenant_id", tenantId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
+  // create: membresía, plan, credencial y config de la caja QR en UNA ronda
+  // (antes eran cuatro consultas seguidas antes de llamar a Mercado Pago).
+  const featureOk = () =>
+    admin
+      .rpc("tenant_has_feature_for", { p_tenant: tenantId, p_key: "mercado_pago" })
+      .then((r: { data: unknown }) => r.data === true);
+  const isCreate = action === "create";
+  const [{ data: mem }, createFeature, createCred, createConfig] = await Promise.all([
+    admin
+      .from("tenant_users")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    isCreate ? featureOk() : Promise.resolve(false),
+    isCreate ? tenantMpCredential(admin, tenantId) : Promise.resolve(null),
+    isCreate
+      ? admin
+          .from("tenant_payment_methods")
+          .select("config")
+          .eq("tenant_id", tenantId)
+          .eq("provider_key", "mercadopago")
+          .maybeSingle()
+          .then((r: { data: { config?: unknown } | null }) => (r.data?.config ?? {}) as Record<string, unknown>)
+      : Promise.resolve({} as Record<string, unknown>),
+  ]);
+  timer.mark("prechecks");
   if (!mem) return json({ error: "forbidden" }, 403);
   const canManage = mem.role === "owner" || mem.role === "manager";
-
-  const featureOk = async () => {
-    const { data } = await admin.rpc("tenant_has_feature_for", {
-      p_tenant: tenantId,
-      p_key: "mercado_pago",
-    });
-    return data === true;
-  };
 
   const readConfig = async (): Promise<Record<string, unknown>> => {
     const { data } = await admin
@@ -351,53 +364,71 @@ Deno.serve(async (req: Request) => {
 
   // ── create: order QR dinámica ───────────────────────────────────────────────
   if (action === "create") {
-    if (!(await featureOk())) return json({ error: "payment_method_not_allowed" }, 403);
+    if (!createFeature) return json({ error: "payment_method_not_allowed" }, 403);
     const amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount <= 0) return json({ error: "invalid_amount" }, 400);
     const title = String(b.title ?? "Venta NinjaPos");
 
-    const cred = await tenantMpCredential(admin, tenantId);
+    const cred = createCred;
     if (!cred) return json({ error: "not_connected" }, 400);
-    const config = await readConfig();
-    const pos = ((config.mp_qr as Record<string, QrPos | undefined>) ?? {})[cred.env];
+    const pos = ((createConfig.mp_qr as Record<string, QrPos | undefined>) ?? {})[cred.env];
     if (!pos?.external_pos_id) return json({ error: "qr_pos_not_configured" }, 400);
 
-    const { data: intent, error: intErr } = await admin
-      .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env })
-      .select("id")
-      .single();
-    if (intErr || !intent) return json({ error: "intent_failed" }, 500);
-
-    const r = await fetch(`${MP_API}/v1/orders`, {
-      method: "POST",
-      headers: mpHeaders(cred.token, intent.id),
-      body: JSON.stringify(
-        buildQrOrderBody({
-          intentId: intent.id,
-          amount,
-          externalPosId: pos.external_pos_id,
-          title,
-        }),
-      ),
-    });
-    if (!r.ok) {
-      const detail = (await r.text()).slice(0, 300);
-      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
-      const code = r.status === 404 && detail.includes("pos_not_found") ? "qr_pos_not_found" : "mp_error";
+    // El id del intent se genera acá: el insert y la order en Mercado Pago
+    // corren en paralelo (la order lleva el id como external_reference e
+    // idempotency key; el webhook la encuentra por mp_order_id, que se guarda
+    // antes de responder).
+    const intentId = crypto.randomUUID();
+    const [ins, r] = await Promise.all([
+      admin
+        .from("mp_payment_intents")
+        .insert({ id: intentId, tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env }),
+      fetch(`${MP_API}/v1/orders`, {
+        method: "POST",
+        headers: mpHeaders(cred.token, intentId),
+        body: JSON.stringify(
+          buildQrOrderBody({
+            intentId,
+            amount,
+            externalPosId: pos.external_pos_id,
+            title,
+          }),
+        ),
+      }).catch(() => null),
+    ]);
+    timer.mark("provider");
+    if (ins.error) {
+      // Sin intent no hay conciliación posible: se da de baja la order.
+      const created = r && r.ok ? ((await r.json().catch(() => null)) as { id?: string } | null) : null;
+      if (created?.id) {
+        await fetch(`${MP_API}/v1/orders/${encodeURIComponent(created.id)}/cancel`, {
+          method: "POST",
+          headers: mpHeaders(cred.token, `${intentId}-cancel`),
+        }).catch(() => null);
+      }
+      timer.log({ action, error: "intent_failed" });
+      return json({ error: "intent_failed" }, 500);
+    }
+    if (!r || !r.ok) {
+      const detail = r ? (await r.text()).slice(0, 300) : "unreachable";
+      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intentId);
+      const code = r && r.status === 404 && detail.includes("pos_not_found") ? "qr_pos_not_found" : "mp_error";
+      timer.log({ action, error: code });
       return json({ error: code, detail }, 502);
     }
     const order = (await r.json()) as { id?: string; type_response?: { qr_data?: string } };
     const qrData = order.type_response?.qr_data ?? "";
     if (!order.id || !qrData) {
-      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intent.id);
+      await admin.from("mp_payment_intents").update({ status: "rejected" }).eq("id", intentId);
       return json({ error: "mp_error", detail: "no_qr_data" }, 502);
     }
     await admin
       .from("mp_payment_intents")
       .update({ mp_order_id: order.id, init_point: qrData })
-      .eq("id", intent.id);
-    return json({ intent_id: intent.id, order_id: order.id, qr_data: qrData });
+      .eq("id", intentId);
+    timer.mark("save");
+    timer.log({ action });
+    return json({ intent_id: intentId, order_id: order.id, qr_data: qrData });
   }
 
   // ── status / cancel sobre un intent QR (Orders API) del tenant ─────────────

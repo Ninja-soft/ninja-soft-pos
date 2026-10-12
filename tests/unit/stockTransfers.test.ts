@@ -15,6 +15,7 @@ import {
   transferErrorMessage,
   type TransferSettings,
 } from "@/lib/stock/transfers";
+import { remitoRows, remitoTotals } from "@/lib/stock/remito";
 
 const S = DEFAULT_TRANSFER_SETTINGS;
 
@@ -22,14 +23,22 @@ describe("máquina de estados de traslados", () => {
   it("cada estado tiene etiqueta sin guion largo", () => {
     for (const st of TRANSFER_STATUSES) {
       expect(TRANSFER_STATUS_LABEL[st]).toBeTruthy();
-      expect(TRANSFER_STATUS_LABEL[st]).not.toContain(String.fromCharCode(0x2014));
+      expect(TRANSFER_STATUS_LABEL[st]).not.toContain(
+        String.fromCharCode(0x2014),
+      );
     }
   });
 
   it("el flujo feliz es borrador → programado → en tránsito → recibido", () => {
-    expect(nextStatuses("draft", "submit")).toEqual(["pending_approval", "scheduled"]);
+    expect(nextStatuses("draft", "submit")).toEqual([
+      "pending_approval",
+      "scheduled",
+    ]);
     expect(nextStatuses("scheduled", "dispatch")).toEqual(["in_transit"]);
-    expect(nextStatuses("in_transit", "receive")).toEqual(["partially_received", "received"]);
+    expect(nextStatuses("in_transit", "receive")).toEqual([
+      "partially_received",
+      "received",
+    ]);
     expect(nextStatuses("partially_received", "receive")).toContain("received");
   });
 
@@ -40,7 +49,12 @@ describe("máquina de estados de traslados", () => {
   });
 
   it("se cancela hasta en tránsito, nunca con recepción empezada o terminada", () => {
-    for (const st of ["draft", "pending_approval", "scheduled", "in_transit"] as const) {
+    for (const st of [
+      "draft",
+      "pending_approval",
+      "scheduled",
+      "in_transit",
+    ] as const) {
       expect(canTransition(st, "cancel"), st).toBe(true);
     }
     for (const st of ["partially_received", "received", "cancelled"] as const) {
@@ -55,7 +69,16 @@ describe("máquina de estados de traslados", () => {
   });
 
   it("los estados finales no aceptan ninguna acción", () => {
-    const actions = ["edit", "submit", "approve", "reject", "reschedule", "dispatch", "receive", "cancel"] as const;
+    const actions = [
+      "edit",
+      "submit",
+      "approve",
+      "reject",
+      "reschedule",
+      "dispatch",
+      "receive",
+      "cancel",
+    ] as const;
     for (const a of actions) {
       expect(canTransition("received", a), a).toBe(false);
       expect(canTransition("cancelled", a), a).toBe(false);
@@ -79,7 +102,10 @@ describe("aprobación", () => {
   });
 
   it("con umbral de unidades o de valor alcanza con superar uno", () => {
-    const s = withApproval({ approval_min_units: 10, approval_min_value: 50000 });
+    const s = withApproval({
+      approval_min_units: 10,
+      approval_min_value: 50000,
+    });
     expect(needsApproval(s, 9, 1000)).toBe(false);
     expect(needsApproval(s, 10, 0)).toBe(true);
     expect(needsApproval(s, 1, 50000)).toBe(true);
@@ -102,16 +128,42 @@ describe("acciones por rol", () => {
   });
 
   it("el cajero recibe por defecto pero no despacha", () => {
-    expect(allowedActions({ status: "in_transit", created_by: null }, "cashier", "c")).toEqual(["receive"]);
-    expect(allowedActions({ status: "scheduled", created_by: null }, "cashier", "c")).toEqual([]);
+    expect(
+      allowedActions(
+        { status: "in_transit", created_by: null },
+        "cashier",
+        "c",
+      ),
+    ).toEqual(["receive"]);
+    expect(
+      allowedActions({ status: "scheduled", created_by: null }, "cashier", "c"),
+    ).toEqual([]);
     const s = { ...S, cashier_can_dispatch: true, cashier_can_receive: false };
-    expect(allowedActions({ status: "scheduled", created_by: null }, "cashier", "c", s)).toEqual(["dispatch"]);
-    expect(allowedActions({ status: "in_transit", created_by: null }, "cashier", "c", s)).toEqual([]);
+    expect(
+      allowedActions(
+        { status: "scheduled", created_by: null },
+        "cashier",
+        "c",
+        s,
+      ),
+    ).toEqual(["dispatch"]);
+    expect(
+      allowedActions(
+        { status: "in_transit", created_by: null },
+        "cashier",
+        "c",
+        s,
+      ),
+    ).toEqual([]);
   });
 
   it("el visor no hace nada", () => {
-    expect(allowedActions({ status: "draft", created_by: null }, "viewer", "v")).toEqual([]);
-    expect(allowedActions({ status: "draft", created_by: null }, null, "v")).toEqual([]);
+    expect(
+      allowedActions({ status: "draft", created_by: null }, "viewer", "v"),
+    ).toEqual([]);
+    expect(
+      allowedActions({ status: "draft", created_by: null }, null, "v"),
+    ).toEqual([]);
   });
 });
 
@@ -135,49 +187,68 @@ describe("programación perezosa", () => {
 
 describe("recepción con diferencias", () => {
   it("recepción parcial deja pendiente y no pide motivo", () => {
-    const r = receiveOutcome([{ dispatched: 10, received: 0, incoming: 6 }], false);
+    const r = receiveOutcome(
+      [{ dispatched: 10, received: 0, incoming: 6 }],
+      false,
+    );
     expect(r.status).toBe("partially_received");
-    expect(r.lines[0].pending).toBe(4);
+    expect(r.lines[0]!.pending).toBe(4);
     expect(r.error).toBeNull();
   });
 
   it("si llega todo cierra sola", () => {
-    const r = receiveOutcome([{ dispatched: 10, received: 4, incoming: 6 }], false);
+    const r = receiveOutcome(
+      [{ dispatched: 10, received: 4, incoming: 6 }],
+      false,
+    );
     expect(r.status).toBe("received");
-    expect(r.lines[0].difference).toBe(0);
+    expect(r.lines[0]!.difference).toBe(0);
     expect(r.error).toBeNull();
   });
 
   it("cerrar con faltante exige motivo", () => {
-    const r = receiveOutcome([{ dispatched: 10, received: 0, incoming: 9 }], true);
+    const r = receiveOutcome(
+      [{ dispatched: 10, received: 0, incoming: 9 }],
+      true,
+    );
     expect(r.status).toBe("received");
-    expect(r.lines[0].difference).toBe(-1);
+    expect(r.lines[0]!.difference).toBe(-1);
     expect(r.error).toBe("difference_reason_required");
-    const ok = receiveOutcome([{ dispatched: 10, received: 0, incoming: 9, reason: "danado" }], true);
+    const ok = receiveOutcome(
+      [{ dispatched: 10, received: 0, incoming: 9, reason: "danado" }],
+      true,
+    );
     expect(ok.error).toBeNull();
   });
 
   it("sin exigir motivo, cierra igual", () => {
-    const r = receiveOutcome([{ dispatched: 10, received: 0, incoming: 9 }], true, {
-      ...S,
-      require_difference_reason: false,
-    });
+    const r = receiveOutcome(
+      [{ dispatched: 10, received: 0, incoming: 9 }],
+      true,
+      {
+        ...S,
+        require_difference_reason: false,
+      },
+    );
     expect(r.error).toBeNull();
   });
 
   it("sobrante: permitido por defecto, bloqueable", () => {
-    const line = [{ dispatched: 5, received: 0, incoming: 6, reason: "sobrante" as const }];
-    expect(receiveOutcome(line, true).lines[0].difference).toBe(1);
+    const line = [
+      { dispatched: 5, received: 0, incoming: 6, reason: "sobrante" as const },
+    ];
+    expect(receiveOutcome(line, true).lines[0]!.difference).toBe(1);
     expect(receiveOutcome(line, true).error).toBeNull();
-    expect(receiveOutcome(line, true, { ...S, allow_over_receive: false }).error).toBe(
-      "over_receive_not_allowed",
-    );
+    expect(
+      receiveOutcome(line, true, { ...S, allow_over_receive: false }).error,
+    ).toBe("over_receive_not_allowed");
   });
 
   it("parcial sin nada que recibir es error", () => {
-    expect(receiveOutcome([{ dispatched: 5, received: 0, incoming: 0 }], false).error).toBe(
-      "nothing_to_receive",
-    );
+    expect(
+      receiveOutcome([{ dispatched: 5, received: 0, incoming: 0 }], false)
+        .error,
+    ).toBe("nothing_to_receive");
   });
 
   it("líneas no despachadas no generan diferencia", () => {
@@ -193,9 +264,12 @@ describe("recepción con diferencias", () => {
   });
 
   it("cantidades con decimales (kg) no dejan diferencias fantasma", () => {
-    const r = receiveOutcome([{ dispatched: 1.2, received: 0.7, incoming: 0.5 }], false);
+    const r = receiveOutcome(
+      [{ dispatched: 1.2, received: 0.7, incoming: 0.5 }],
+      false,
+    );
     expect(r.status).toBe("received");
-    expect(r.lines[0].difference).toBe(0);
+    expect(r.lines[0]!.difference).toBe(0);
   });
 });
 
@@ -205,10 +279,59 @@ describe("remito y errores", () => {
     expect(formatRemitoNumber(1234567)).toBe("R-1234567");
   });
   it("traduce los códigos del servidor", () => {
-    expect(transferErrorMessage(new Error("single_store"))).toMatch(/dos sucursales/);
-    expect(transferErrorMessage({ message: "insufficient_stock_origin: Yerba" })).toMatch(/stock suficiente/);
-    expect(transferErrorMessage(new Error("forbidden_approval"))).toMatch(/aprueba el dueño/);
-    expect(transferErrorMessage(new Error("feature_not_in_plan: traslados"))).toMatch(/plan/);
+    expect(transferErrorMessage(new Error("single_store"))).toMatch(
+      /dos sucursales/,
+    );
+    expect(
+      transferErrorMessage({ message: "insufficient_stock_origin: Yerba" }),
+    ).toMatch(/stock suficiente/);
+    expect(transferErrorMessage(new Error("forbidden_approval"))).toMatch(
+      /aprueba el dueño/,
+    );
+    expect(
+      transferErrorMessage(new Error("feature_not_in_plan: traslados")),
+    ).toMatch(/plan/);
     expect(transferErrorMessage(new Error("otra cosa"))).toBe("otra cosa");
+  });
+});
+
+describe("filas del remito", () => {
+  const items = [
+    {
+      product_name: "Remera",
+      variant_label: "M / Rojo",
+      sku: "R-M",
+      unit: "un",
+      qty_requested: 10,
+      qty_dispatched: 8,
+      qty_received: 7,
+      difference_reason: "danado" as const,
+    },
+    {
+      product_name: "Yerba",
+      variant_label: null,
+      sku: null,
+      unit: "un",
+      qty_requested: 5,
+      qty_dispatched: 5,
+      qty_received: 5,
+      difference_reason: null,
+    },
+  ];
+
+  it("antes de recibir no muestra recepción", () => {
+    const rows = remitoRows(items, false);
+    expect(rows[0]!.producto).toBe("Remera (M / Rojo)");
+    expect(rows[0]!.recibido).toBeNull();
+    expect(rows[0]!.diferencia).toBeNull();
+    expect(remitoTotals(rows)).toEqual({ pedido: 15, enviado: 13, recibido: 0 });
+  });
+
+  it("recibido: diferencia con motivo legible", () => {
+    const rows = remitoRows(items, true);
+    expect(rows[0]!.diferencia).toBe(-1);
+    expect(rows[0]!.motivo).toBe("Dañado");
+    expect(rows[1]!.motivo).toBe("");
+    expect(remitoTotals(rows).recibido).toBe(12);
   });
 });

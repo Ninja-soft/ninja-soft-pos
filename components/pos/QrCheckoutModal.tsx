@@ -117,6 +117,7 @@ export function QrCheckoutModal({
   provider = "mercadopago",
   providerName = "Mercado Pago",
   onQrState,
+  customerId = null,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -132,6 +133,8 @@ export function QrCheckoutModal({
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
   // con null cuando ya no hay QR activo (se cerró o cambió de fase).
   onQrState?: (qr: { initPoint: string; amount: number; providerName: string } | null) => void;
+  // Cliente de la venta (sólo lo usa Mobbex para el customer del checkout).
+  customerId?: string | null;
 }) {
   // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
@@ -239,7 +242,7 @@ export function QrCheckoutModal({
     }
     const create =
       provider === "mobbex"
-        ? posApi.createMobbexQr
+        ? (a: number, t: string) => posApi.createMobbexQr(a, t, customerId)
         : provider === "modo"
           ? posApi.createModoQr
           : provider === "pagos360"

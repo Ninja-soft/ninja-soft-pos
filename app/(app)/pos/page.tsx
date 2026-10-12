@@ -2457,6 +2457,7 @@ function PosPageInner() {
           base={total}
           provider="mobbex"
           providerName="Mobbex"
+          customerId={customer?.id ?? null}
           onQrState={handleQrState}
           onApproved={(reference, amount, extras) => {
             setQrMobbexOpen(false);

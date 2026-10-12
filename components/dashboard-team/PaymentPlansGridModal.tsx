@@ -284,9 +284,11 @@ export function PaymentPlansGridModal({
         </p>
         {providerKey === "mobbex" ? (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs leading-relaxed text-muted-foreground">
-            En Mobbex estos planes <strong>sí se aplican en el checkout</strong>: se envían
-            a Mobbex en cada cobro y el cliente paga en esas cuotas con el interés que
-            cargás acá. Dejá la celda en <strong>0</strong> para cuota sin recargo.
+            En Mobbex el plan <strong>solo aumenta el precio base</strong>: el recargo se
+            suma al total del cobro, pero las cuotas y el interés que ve el cliente en el
+            checkout son los que tengas configurados en tu cuenta de Mobbex. Revisá ahí
+            tus planes de cuotas para que coincidan con lo que cargás acá. Dejá la celda
+            en <strong>0</strong> para sin recargo.
           </div>
         ) : (
           <div className="rounded-lg border border-ninja-flameSoft/30 bg-ninja-flame/5 p-3 text-xs leading-relaxed text-muted-foreground">

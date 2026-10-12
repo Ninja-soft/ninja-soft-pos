@@ -1,8 +1,6 @@
 import { createCipheriv } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
-  DIRECTO_HASH_IV_B64,
-  DIRECTO_HASH_KEY_B64,
   baseHeaders,
   buildOrderBody,
   decideIntentUpdate,
@@ -33,6 +31,11 @@ const CREDS: DirectoCreds = {
   subscriptionKey: "sub-456",
   baseUrl: BASE,
 };
+
+// Clave/IV de prueba (los reales viven en los secretos de la función).
+const DIRECTO_HASH_KEY_B64 = Buffer.alloc(32, 7).toString("base64");
+const DIRECTO_HASH_IV_B64 = Buffer.alloc(16, 3).toString("base64");
+const HASH = { keyB64: DIRECTO_HASH_KEY_B64, ivB64: DIRECTO_HASH_IV_B64 };
 
 const res = (status: number, body: unknown) =>
   new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
@@ -112,9 +115,13 @@ describe("directo · credenciales", () => {
 describe("directo · MerchantHash", () => {
   it("coincide con openssl AES-256-CBC del plugin oficial", async () => {
     const plain = notificationHashPayload("tok", "abc-123");
-    expect(await merchantHash(plain)).toBe(opensslHash(plain));
+    expect(await merchantHash(plain, DIRECTO_HASH_KEY_B64, DIRECTO_HASH_IV_B64)).toBe(opensslHash(plain));
     const body = buildOrderBody({ ...ORDER, token: "tok", merchantName: "Kiosco" });
-    expect(await merchantHash(body)).toBe(opensslHash(body));
+    expect(await merchantHash(body, DIRECTO_HASH_KEY_B64, DIRECTO_HASH_IV_B64)).toBe(opensslHash(body));
+  });
+
+  it("sin clave/IV configurados no firma (vienen de los secretos)", async () => {
+    await expect(merchantHash("x")).rejects.toThrow("directo_hash_config");
   });
 
   it("rechaza una clave o IV de largo inválido", async () => {
@@ -261,7 +268,7 @@ describe("directo · cliente HTTP", () => {
       if (url.endsWith("api/merchant/orders")) return res(200, { redirect_Url: "https://pay.example/o/1" });
       return res(200, { merchant_Order_Id: INTENT, status: "Successful" });
     });
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl });
+    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
 
     const order = await client.createOrder(ORDER);
     expect(order).toEqual({ ok: true, value: { redirectUrl: "https://pay.example/o/1" } });
@@ -288,7 +295,7 @@ describe("directo · cliente HTTP", () => {
 
   it("login fallido corta antes de crear la orden", async () => {
     const fetchImpl = vi.fn(async () => res(401, "unauthorized"));
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl });
+    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
     expect(await client.createOrder(ORDER)).toMatchObject({ ok: false, httpStatus: 401 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -297,13 +304,13 @@ describe("directo · cliente HTTP", () => {
     const fetchImpl = vi.fn(async (url: string) =>
       url.endsWith("login") ? res(200, { credentials: "tok" }) : res(200, { ok: true }),
     );
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl });
+    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
     expect(await client.createOrder(ORDER)).toMatchObject({ ok: false, detail: "order_without_redirect_url" });
   });
 
   it("no consulta ids de notificación inválidos", async () => {
     const fetchImpl = vi.fn();
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl });
+    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
     expect(await client.getNotification("../x")).toMatchObject({ ok: false, httpStatus: 400 });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -312,7 +319,7 @@ describe("directo · cliente HTTP", () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("boom");
     });
-    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl });
+    const client = directoClient({ creds: CREDS, baseUrl: BASE, fetchImpl, hash: HASH });
     expect(await client.login()).toMatchObject({ ok: false, httpStatus: 502 });
   });
 });

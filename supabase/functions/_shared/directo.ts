@@ -45,9 +45,8 @@ export const DIRECTO_BASE: Record<DirectoEnv, string | null> = {
   qa: null,
 };
 
-// Constantes del MerchantHash publicadas en el plugin oficial (base64).
-export const DIRECTO_HASH_KEY_B64 = "WNuHEx0cvOwVAsgO85L/PfIgKA8k/hAMCG4K6bhrPt4=";
-export const DIRECTO_HASH_IV_B64 = "jN1fGUSzqxpEldcsyUw+Eg==";
+// Clave e IV del MerchantHash: vienen SIEMPRE de los secretos de la función
+// (DIRECTO_HASH_KEY / DIRECTO_HASH_IV, base64). No se versionan en el repo.
 
 export const DIRECTO_INTEGRATION_TYPE = "API";
 
@@ -160,9 +159,10 @@ function bytesToB64(bytes: Uint8Array): string {
 // OPENSSL_RAW_DATA) del plugin.
 export async function merchantHash(
   plaintext: string,
-  keyB64: string = DIRECTO_HASH_KEY_B64,
-  ivB64: string = DIRECTO_HASH_IV_B64,
+  keyB64?: string,
+  ivB64?: string,
 ): Promise<string> {
+  if (!keyB64 || !ivB64) throw new Error("directo_hash_config");
   const key = b64ToBytes(keyB64);
   const iv = b64ToBytes(ivB64);
   if (key.length !== 32 || iv.length !== 16) throw new Error("directo_hash_config");

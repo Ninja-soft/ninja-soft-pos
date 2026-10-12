@@ -17,6 +17,10 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("shift_ambiguous")) return "Hay cajas abiertas en varias sucursales: elegí tu caja arriba";
   if (msg.includes("shift_not_open")) return "El turno de esta caja ya se cerró: abrí la caja de nuevo";
   if (msg.includes("store_not_allowed")) return "No tenés acceso a la sucursal de esta caja";
+  // F17 · H92/H94 (ADR-049): configuración y stock de la sucursal.
+  if (msg.includes("insufficient_stock_branch")) return "No hay stock suficiente en esta sucursal";
+  if (msg.includes("payment_method_disabled_in_store"))
+    return "Ese medio de pago está apagado en esta sucursal o caja";
   return msg.includes("account_inactive")
     ? "Tu suscripción venció. Renovala para volver a cobrar."
     : msg.includes("coupon_usage_exceeded")

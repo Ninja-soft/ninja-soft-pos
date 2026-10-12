@@ -29,6 +29,12 @@
 //
 // Gating real de plan: tenant_has_feature_for(tenant,'mercadopago_point') en
 // create (la UI nunca es la única barrera). devices/pdv exigen owner/manager.
+//
+// Terminales (ADR-049): create acepta terminal_id (payment_terminals,
+// validado en el servidor con terminal_for_user: negocio, activa, proveedor
+// y sucursal del usuario; si viene store_id, esa sucursal). device_id sigue
+// funcionando (POS viejos). Si la sucursal o la caja apagaron el medio
+// (config_overrides) → payment_method_disabled_in_store.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
@@ -47,6 +53,7 @@ import {
   mapTerminals,
   type MpOrder,
 } from "../_shared/mpOrders.ts";
+import { locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -163,7 +170,28 @@ Deno.serve(async (req: Request) => {
     });
     if (allowed !== true) return json({ error: "payment_method_not_allowed" }, 403);
 
-    const deviceId = String(b.device_id ?? "");
+    const loc = locationOf(b);
+    let deviceId = String(b.device_id ?? "");
+    let terminalId: string | null = null;
+    let storeId = loc.storeId;
+    let registerId = loc.registerId;
+    if (b.terminal_id !== undefined && b.terminal_id !== null) {
+      const t = await resolveTerminal(admin, {
+        tenantId,
+        userId: user.id,
+        terminalId: b.terminal_id,
+        providers: ["mercadopago_point"],
+        storeId: loc.storeId,
+      });
+      if (!t.ok) return json({ error: t.error }, 400);
+      deviceId = t.terminal.external_id!;
+      terminalId = t.terminal.id;
+      storeId = t.terminal.store_id;
+      registerId = registerId ?? t.terminal.cash_register_id;
+    }
+    if (await methodBlockedAt(admin, tenantId, "mercadopago_point", storeId, registerId)) {
+      return json({ error: "payment_method_disabled_in_store" }, 403);
+    }
     const amount = Number(b.amount);
     if (!deviceId) return json({ error: "invalid_device" }, 400);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -186,6 +214,7 @@ Deno.serve(async (req: Request) => {
         provider_key: "mercadopago_point",
         point_device_id: deviceId,
         mp_env: cred.env,
+        ...(terminalId ? { payment_terminal_id: terminalId } : {}),
       })
       .select("id")
       .single();
@@ -218,6 +247,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "mp_error", detail: "no_order_id" }, 502);
     }
     await admin.from("mp_payment_intents").update({ mp_order_id: order.id }).eq("id", intent.id);
+    await touchTerminal(admin, terminalId);
     return json({ intent_id: intent.id, order_id: order.id });
   }
 

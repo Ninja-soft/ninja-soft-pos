@@ -22,6 +22,7 @@ import {
 } from "@/modules/delivery/api";
 import { modifiersSummaryNoPrice, type SaleLineModifierGroup } from "@/modules/products/modifiers";
 import { webPrintCopies } from "@/lib/print/webPrint";
+import { usePrintTarget } from "@/modules/tickets/hooks";
 import { formatQty } from "@/lib/utils/format";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
@@ -144,6 +145,8 @@ export function ComandaModal(props: ComandaModalProps) {
   const { toast } = useToast();
   // reprintAll=false → sólo lo nuevo (no enviado). true → todas las líneas.
   const [reprintAll, setReprintAll] = useState(false);
+  // Perfil "Comanda de cocina" de esta caja (copias, impresora; ADR-049).
+  const kitchenTarget = usePrintTarget("kitchen", open);
   // Filtro por estación (null = todas). Se siembra con initialStation al abrir.
   const [stationFilter, setStationFilter] = useState<string | null>(initialStation);
   const [paper, setPaper] = useState<Paper>("80");
@@ -247,7 +250,7 @@ export function ComandaModal(props: ComandaModalProps) {
   async function handlePrint() {
     if (!orderId || visibleItems.length === 0) return;
     // Dispara la impresión web (reusa el helper de los tickets).
-    webPrintCopies(1);
+    webPrintCopies(kitchenTarget?.profile.copies ?? 1);
     // Marca como enviadas SÓLO las líneas que se imprimieron (las visibles).
     // Reimprimir todo igual marca las que aún fueran nuevas (idempotente en DB).
     try {

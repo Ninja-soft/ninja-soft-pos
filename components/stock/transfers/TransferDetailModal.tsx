@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { webPrintCopies } from "@/lib/print/webPrint";
+import { usePrintTarget, useTicketBranding } from "@/modules/tickets/hooks";
 import {
   DIFFERENCE_REASONS,
   DIFFERENCE_REASON_LABEL,
@@ -79,6 +80,9 @@ export function TransferDetailModal({
   const { toast } = useToast();
   const { data: t, isLoading } = useTransfer(transferId);
   const { data: me } = useMyTenant();
+  // Logo de la sucursal de origen (o el del negocio) para el remito (ADR-049).
+  const { data: originBrand } = useTicketBranding(Boolean(transferId), t?.origin_store_id ?? null);
+  const remitoTarget = usePrintTarget("transfer", Boolean(transferId));
   const { data: userId } = useCurrentUserId();
   const { data: settings } = useTransferSettings(Boolean(transferId));
   const m = useTransferMutations();
@@ -262,7 +266,7 @@ export function TransferDetailModal({
                 );
               else setPanel(a as Panel);
             }}
-            onPrint={() => webPrintCopies(1)}
+            onPrint={() => webPrintCopies(remitoTarget?.profile.copies ?? 1)}
             onExport={exportRemito}
           />
 
@@ -292,6 +296,7 @@ export function TransferDetailModal({
             t={t}
             stores={stores}
             businessName={me?.name ?? ""}
+            logoUrl={originBrand?.logo_url ?? null}
             showReception={showReception}
           />
         </div>
@@ -896,11 +901,13 @@ function RemitoPrint({
   t,
   stores,
   businessName,
+  logoUrl,
   showReception,
 }: {
   t: TransferDetail;
   stores: StoreRef[];
   businessName: string;
+  logoUrl: string | null;
   showReception: boolean;
 }) {
   const rows = remitoRows(t.items, showReception);
@@ -916,6 +923,10 @@ function RemitoPrint({
           }}
         >
           <div>
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" style={{ maxHeight: 48, maxWidth: 160, marginBottom: 4 }} />
+            ) : null}
             <div style={{ fontSize: 18, fontWeight: 700 }}>{businessName}</div>
             <div style={{ fontSize: 12 }}>
               Remito interno de traslado entre sucursales

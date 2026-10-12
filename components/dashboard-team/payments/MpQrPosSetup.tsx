@@ -572,7 +572,7 @@ export function MpQrPosSetup({
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["tenant-payment-methods"] });
   const setup = useMutation({ mutationFn: posApi.mpQrSetup, onSuccess: refresh });
-  const reset = useMutation({ mutationFn: posApi.mpQrReset, onSuccess: refresh });
+  const reset = useMutation({ mutationFn: () => posApi.mpQrReset(), onSuccess: refresh });
 
   return (
     <MpQrPosSetupView

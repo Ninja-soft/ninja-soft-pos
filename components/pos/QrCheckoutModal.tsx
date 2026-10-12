@@ -16,6 +16,9 @@ import { formatCurrency } from "@/lib/utils/format";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
 import { paymentIcon } from "@/lib/payments/logos";
 import { QR_SELF_MANAGED } from "@/lib/pos/tenders";
+import { pickTerminal } from "@/lib/payments/terminals";
+import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
+import { usePaymentTerminals } from "@/modules/config/hooks";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
 // Canal de Mercado Pago (ADR-032): "order" = QR dinámico de la caja (Orders
@@ -82,6 +85,8 @@ async function edgeErrorCode(e: unknown): Promise<{ code: string; detail?: strin
 // mencionaba a Mercado Pago aunque el cobro fuera de MODO/Mobbex/Pagos360).
 function qrErrorCopy(code: string, providerName: string): string {
   switch (code) {
+    case "payment_method_disabled_in_store":
+      return `${providerName} está apagado en esta sucursal o caja (Configuración → Medios de pago).`;
     case "not_connected":
       return `Conectá ${providerName} en Configuración → Medios de pago.`;
     case "payment_method_not_allowed":
@@ -179,6 +184,16 @@ export function QrCheckoutModal({
   // Directo: el cliente arma su crédito en la página de Directo.
   const selfManaged = QR_SELF_MANAGED.has(provider);
   const { toast } = useToast();
+  // Caja QR de MP registrada para esta caja (F17 · H93, ADR-049).
+  const branchCtx = useBranchContext();
+  const currentRegister = useCurrentRegister();
+  const { data: terminals } = usePaymentTerminals();
+  const qrLoc = useMemo(() => {
+    const storeId = branchCtx.posStoreId;
+    const registerId = currentRegister.data?.id ?? null;
+    const pick = pickTerminal({ terminals: terminals ?? [], providerKey: "mercadopago", storeId, registerId });
+    return { terminalId: pick.terminal?.id ?? null, storeId, registerId };
+  }, [terminals, branchCtx.posStoreId, currentRegister.data?.id]);
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
   const [amount, setAmount] = useState(base);
@@ -259,8 +274,19 @@ export function QrCheckoutModal({
     }
     if (provider === "mercadopago") {
       setMpChannel("order");
+      // F17 · ADR-049: caja QR de ESTA caja (o la flotante de la sucursal) si
+      // está registrada; si la terminal no sirve (otro ambiente, archivada),
+      // se reintenta con la caja única de siempre.
+      const legacy = { storeId: qrLoc.storeId, registerId: qrLoc.registerId };
       posApi
-        .createMpOrderQr(amt, "Venta NinjaPos")
+        .createMpOrderQr(amt, "Venta NinjaPos", qrLoc)
+        .catch(async (e) => {
+          const { code } = await edgeErrorCode(e);
+          if (qrLoc.terminalId && code.startsWith("terminal_")) {
+            return posApi.createMpOrderQr(amt, "Venta NinjaPos", legacy);
+          }
+          throw e;
+        })
         .then(onCreated)
         .catch(async (e) => {
           const { code } = await edgeErrorCode(e);

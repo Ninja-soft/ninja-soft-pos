@@ -7,6 +7,8 @@ import { loadPosLayoutPref, savePosLayoutPref } from "@/lib/theme/preferences";
 import { resolveLayout, sanitizeLayout, type PosLayoutOverride } from "@/lib/pos/layout";
 import { resolveTenders, type ResolvedTender } from "@/lib/pos/tenders";
 import { useGating } from "@/modules/saas/gating";
+import { effectiveProviderRows } from "@/lib/config/inheritance";
+import { useConfigOverrides, usePosResolveTarget } from "@/modules/config/hooks";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { posApi } from "./api";
 import { usePosSettings } from "./hooks";
@@ -71,12 +73,23 @@ export function usePosLayoutMutations() {
 
 // ── Medios de cobro ──────────────────────────────────────────────────────────
 
+// Medios con la configuración EFECTIVA de la sucursal y la caja del POS
+// (F17 · H93, ADR-049): habilitado, recargo, modo de cuotas y n° de comercio
+// pueden estar pisados por grupo, sucursal o caja. El servidor vuelve a mirar
+// al cobrar (trigger de payments y Edges).
 export function usePaymentMethodsStatus() {
-  return useQuery({
+  const q = useQuery({
     queryKey: ["pos", "payment-methods-status"],
     queryFn: () => posApi.paymentMethodsStatus(),
     staleTime: 60_000,
   });
+  const { data: overrides } = useConfigOverrides();
+  const target = usePosResolveTarget();
+  const data = useMemo(
+    () => (q.data ? effectiveProviderRows(q.data, overrides ?? [], target) : q.data),
+    [q.data, overrides, target],
+  );
+  return { data, isFetched: q.isFetched, isLoading: q.isLoading };
 }
 
 /** Tenders utilizables por el negocio (registro + config + plan). */

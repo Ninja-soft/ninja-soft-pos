@@ -32,6 +32,19 @@
 // Gating real: tenant_has_feature_for(tenant,'mercado_pago') en setup y
 // create (la UI nunca es la única barrera); el trigger de `payments` vuelve a
 // cortar al registrar la venta.
+//
+// Caja QR por caja (ADR-049, payment_terminals kind 'qr_caja'):
+//   * setup {..., cash_register_id} crea (o reutiliza) una sucursal de MP por
+//     sucursal y una caja de MP por caja, y la registra como terminal default
+//     de esa caja. Sin cash_register_id: la caja única de siempre (se guarda
+//     en config.mp_qr y además como terminal flotante de la sucursal
+//     principal).
+//   * reset {cash_register_id?} olvida la caja de esa caja (o la única).
+//   * create {terminal_id?, store_id?, register_id?}: con terminal_id usa esa
+//     caja QR (validada en el servidor: negocio, activa, sucursal del usuario
+//     y mismo ambiente). Sin terminal_id, la caja única de config.mp_qr (POS
+//     viejos). Medio apagado en la sucursal o la caja →
+//     payment_method_disabled_in_store.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
@@ -51,12 +64,14 @@ import {
   type MpEnv,
   mpCityName,
   mpExternalIds,
+  mpExternalIdsFor,
   mpStoreErrorField,
   parseBusinessAddress,
   parseStoreAddress,
   parseStoreSetup,
   type StoreAddress,
 } from "../_shared/mpOrders.ts";
+import { isUuid, locationOf, methodBlockedAt, resolveTerminal, touchTerminal } from "../_shared/terminals.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -153,6 +168,63 @@ Deno.serve(async (req: Request) => {
       { onConflict: "tenant_id,provider_key" },
     );
   };
+  // Caja QR registrada como terminal (ADR-049). Reutiliza la fila si ya
+  // existe con el mismo id externo y ambiente.
+  const upsertQrTerminal = async (
+    env: MpEnv,
+    value: QrPos,
+    where: { storeId: string; registerId: string | null; label: string },
+  ) => {
+    const { data: found } = await admin
+      .from("payment_terminals")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("provider_key", "mercadopago")
+      .eq("environment", env)
+      .eq("external_id", value.external_pos_id)
+      .is("deleted_at", null)
+      .limit(1);
+    const row = {
+      tenant_id: tenantId,
+      store_id: where.storeId,
+      cash_register_id: where.registerId,
+      provider_key: "mercadopago",
+      kind: "qr_caja",
+      external_id: value.external_pos_id,
+      external_meta: value,
+      environment: env,
+      label: where.label.slice(0, 60),
+      is_default: Boolean(where.registerId),
+      active: true,
+    };
+    const id = (found as { id: string }[] | null)?.[0]?.id;
+    if (id) await admin.from("payment_terminals").update(row).eq("id", id);
+    else await admin.from("payment_terminals").insert({ ...row, created_by: user.id });
+  };
+  const defaultStoreId = async (): Promise<string | null> => {
+    const { data } = await admin
+      .from("stores")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .order("is_default", { ascending: false })
+      .order("created_at")
+      .limit(1);
+    return (data as { id: string }[] | null)?.[0]?.id ?? null;
+  };
+  // Caja del negocio (para setup / reset por caja).
+  const loadRegister = async (id: unknown) => {
+    if (!isUuid(id)) return null;
+    const { data } = await admin
+      .from("cash_registers")
+      .select("id, store_id, name")
+      .eq("id", id)
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    return (data as { id: string; store_id: string; name: string } | null) ?? null;
+  };
+
   // Geocodifica con cache en config.mp_qr_geo (sólo si la fila ya existe).
   const locate = async (
     addr: StoreAddress,
@@ -244,9 +316,29 @@ Deno.serve(async (req: Request) => {
     const cred = await tenantMpCredential(admin, tenantId);
     if (!cred) return json({ error: "not_connected" }, 400);
 
+    const perRegister = b.cash_register_id !== undefined && b.cash_register_id !== null;
+    const register = perRegister ? await loadRegister(b.cash_register_id) : null;
+    if (perRegister && !register) return json({ error: "invalid_register" }, 400);
+
     if (action === "reset") {
-      await writeQrPos(cred.env, null);
-      await audit("mp_qr_pos_reset", null, { provider_key: "mercadopago", env: cred.env });
+      if (register) {
+        await admin
+          .from("payment_terminals")
+          .update({ deleted_at: new Date().toISOString(), is_default: false })
+          .eq("tenant_id", tenantId)
+          .eq("provider_key", "mercadopago")
+          .eq("kind", "qr_caja")
+          .eq("environment", cred.env)
+          .eq("cash_register_id", register.id)
+          .is("deleted_at", null);
+      } else {
+        await writeQrPos(cred.env, null);
+      }
+      await audit("mp_qr_pos_reset", null, {
+        provider_key: "mercadopago",
+        env: cred.env,
+        cash_register_id: register?.id ?? null,
+      });
       return json({ ok: true });
     }
 
@@ -273,7 +365,9 @@ Deno.serve(async (req: Request) => {
     }
     const parsed = parseStoreSetup(input);
     if (!parsed.ok) return json({ error: "invalid_store", field: parsed.field }, 400);
-    const ids = mpExternalIds(tenantId);
+    const ids = register
+      ? mpExternalIdsFor(tenantId, register.store_id, register.id)
+      : mpExternalIds(tenantId);
     const h = mpHeaders(cred.token);
 
     const me = await fetch(`${MP_API}/users/me`, { headers: h });
@@ -319,7 +413,7 @@ Deno.serve(async (req: Request) => {
       const pr = await fetch(`${MP_API}/v2/pos`, {
         method: "POST",
         headers: mpHeaders(cred.token, `${ids.posExternalId}-${cred.env}`),
-        body: JSON.stringify(buildPosBody(storeId, ids)),
+        body: JSON.stringify(buildPosBody(storeId, ids, register ? `Caja ${register.name}` : undefined)),
       });
       if (!pr.ok) {
         return json({ error: "mp_pos_error", detail: (await pr.text()).slice(0, 300) }, 502);
@@ -338,8 +432,19 @@ Deno.serve(async (req: Request) => {
       address: `${loc.street_name} ${loc.street_number}, ${loc.city_name}, ${loc.state_name}`,
       created_at: new Date().toISOString(),
     };
-    await writeQrPos(cred.env, value);
+    if (register) {
+      await upsertQrTerminal(cred.env, value, {
+        storeId: register.store_id,
+        registerId: register.id,
+        label: `Caja QR MP · ${register.name}`,
+      });
+    } else {
+      await writeQrPos(cred.env, value);
+      const st = await defaultStoreId();
+      if (st) await upsertQrTerminal(cred.env, value, { storeId: st, registerId: null, label: "Caja QR Mercado Pago" });
+    }
     await audit("mp_qr_pos_setup", null, {
+      cash_register_id: register?.id ?? null,
       provider_key: "mercadopago",
       env: cred.env,
       store_id: storeId,
@@ -358,13 +463,45 @@ Deno.serve(async (req: Request) => {
 
     const cred = await tenantMpCredential(admin, tenantId);
     if (!cred) return json({ error: "not_connected" }, 400);
-    const config = await readConfig();
-    const pos = ((config.mp_qr as Record<string, QrPos | undefined>) ?? {})[cred.env];
-    if (!pos?.external_pos_id) return json({ error: "qr_pos_not_configured" }, 400);
+    const loc = locationOf(b);
+    let externalPosId = "";
+    let terminalId: string | null = null;
+    let storeId = loc.storeId;
+    let registerId = loc.registerId;
+    if (b.terminal_id !== undefined && b.terminal_id !== null) {
+      const t = await resolveTerminal(admin, {
+        tenantId,
+        userId: user.id,
+        terminalId: b.terminal_id,
+        providers: ["mercadopago"],
+        storeId: loc.storeId,
+      });
+      if (!t.ok) return json({ error: t.error }, 400);
+      if (t.terminal.kind !== "qr_caja") return json({ error: "terminal_provider_mismatch" }, 400);
+      if ((t.terminal.environment ?? cred.env) !== cred.env) return json({ error: "terminal_env_mismatch" }, 400);
+      externalPosId = t.terminal.external_id!;
+      terminalId = t.terminal.id;
+      storeId = t.terminal.store_id;
+      registerId = registerId ?? t.terminal.cash_register_id;
+    } else {
+      const config = await readConfig();
+      const pos = ((config.mp_qr as Record<string, QrPos | undefined>) ?? {})[cred.env];
+      if (!pos?.external_pos_id) return json({ error: "qr_pos_not_configured" }, 400);
+      externalPosId = pos.external_pos_id;
+    }
+    if (await methodBlockedAt(admin, tenantId, "mercadopago", storeId, registerId)) {
+      return json({ error: "payment_method_disabled_in_store" }, 403);
+    }
 
     const { data: intent, error: intErr } = await admin
       .from("mp_payment_intents")
-      .insert({ tenant_id: tenantId, amount, provider_key: "mercadopago", mp_env: cred.env })
+      .insert({
+        tenant_id: tenantId,
+        amount,
+        provider_key: "mercadopago",
+        mp_env: cred.env,
+        ...(terminalId ? { payment_terminal_id: terminalId } : {}),
+      })
       .select("id")
       .single();
     if (intErr || !intent) return json({ error: "intent_failed" }, 500);
@@ -376,7 +513,7 @@ Deno.serve(async (req: Request) => {
         buildQrOrderBody({
           intentId: intent.id,
           amount,
-          externalPosId: pos.external_pos_id,
+          externalPosId,
           title,
         }),
       ),
@@ -397,6 +534,7 @@ Deno.serve(async (req: Request) => {
       .from("mp_payment_intents")
       .update({ mp_order_id: order.id, init_point: qrData })
       .eq("id", intent.id);
+    await touchTerminal(admin, terminalId);
     return json({ intent_id: intent.id, order_id: order.id, qr_data: qrData });
   }
 

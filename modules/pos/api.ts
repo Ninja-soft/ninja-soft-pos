@@ -531,6 +531,7 @@ export const posApi = {
       connected: boolean;
       surcharge_pct: number;
       merchant_numbers: Partial<Record<string, string>>;
+      plan_mode: string | null;
     }>
   > => {
     const supabase = createClient();
@@ -545,6 +546,7 @@ export const posApi = {
       surcharge_pct: Number(r.surcharge_pct) || 0,
       merchant_numbers:
         ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
+      plan_mode: (r.config as { plan_mode?: string } | null)?.plan_mode ?? null,
     }));
   },
 

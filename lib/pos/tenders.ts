@@ -366,7 +366,14 @@ export interface ProviderStatus {
   enabled: boolean;
   connected: boolean;
   surcharge_pct?: number;
+  /** config.plan_mode del medio: "global" = recargo único. */
+  plan_mode?: string | null;
 }
+
+// Medios con checkout propio: medio y cuotas se resuelven en su pantalla, así
+// que el recargo plano del medio se suma siempre al monto del QR / link.
+// Espejo del criterio de QrCheckoutModal.
+export const QR_SELF_MANAGED = new Set(["modo", "pagos360", "payway", "getnet", "nave", "gocuotas", "directo"]);
 
 export interface TenderContext {
   /** Todas las filas de tenant_payment_methods (habilitadas o no). */
@@ -380,6 +387,11 @@ export interface TenderContext {
 export interface ResolvedTender extends TenderDef {
   /** % de recargo del medio (tenant_payment_methods.surcharge_pct). */
   surchargePct: number;
+  /**
+   * % que el modal del QR / link va a sumar solo (checkout propio o recargo
+   * único). Sólo para mostrarlo antes de generar: la hoja NO lo suma.
+   */
+  qrSurchargePct: number;
 }
 
 function featureAllowed(key: string | null, features: Record<string, boolean> | undefined) {
@@ -431,6 +443,9 @@ export function resolveTenders(ctx: TenderContext): ResolvedTender[] {
   const pct = new Map(
     (ctx.providers ?? []).map((r) => [r.provider_key, Number(r.surcharge_pct) || 0]),
   );
+  const globalMode = new Set(
+    (ctx.providers ?? []).filter((r) => r.plan_mode === "global").map((r) => r.provider_key),
+  );
   return TENDERS.filter((t) => tenderReady(t, ctx)).map((t) => ({
     ...t,
     // Recargo global del medio: sólo efectivo y transferencia (los QR lo
@@ -438,6 +453,10 @@ export function resolveTenders(ctx: TenderContext): ResolvedTender[] {
     surchargePct:
       (t.flow === "cash" || t.flow === "direct") && !t.requiresReference
         ? (pct.get(t.provider ?? "") ?? 0)
+        : 0,
+    qrSurchargePct:
+      t.flow === "qr" && t.qrProvider && (QR_SELF_MANAGED.has(t.qrProvider) || globalMode.has(t.qrProvider))
+        ? (pct.get(t.qrProvider) ?? 0)
         : 0,
   }));
 }

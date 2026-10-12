@@ -592,7 +592,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
   else if (active) {
     const amt = money(settle.amount);
-    if (active.flow === "qr") ctaLabel = active.channel === "link" ? `Generar link ${amt}` : `Generar QR ${amt}`;
+    // El modal del QR suma solo el recargo del medio (checkout propio o
+    // recargo único): el botón muestra el monto que va a salir en el QR.
+    const qrAmt = money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)));
+    if (active.flow === "qr") ctaLabel = active.channel === "link" ? `Generar link ${qrAmt}` : `Generar QR ${qrAmt}`;
     else if (active.flow === "point") ctaLabel = `Enviar al Point ${amt}`;
     else if (isPosnet && cardStep < 3) ctaLabel = cardBrand ? "Continuar" : "Elegí la entidad de la tarjeta";
     else if (isPosnet) ctaLabel = `Registrar cobro con tarjeta ${amt}`;
@@ -1007,6 +1010,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       )}
       {settle.surcharge > 0 && !isPosnet && (
         <p className="text-xs text-muted-foreground">Incluye recargo de {money(settle.surcharge)}.</p>
+      )}
+      {active.flow === "qr" && (active.qrSurchargePct || 0) > 0 && settle.amount > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            Recargo de {active.brandLabel} {active.qrSurchargePct}%
+          </span>
+          <span className="font-semibold tabular-nums text-foreground">
+            +{money(round2((settle.amount * (active.qrSurchargePct || 0)) / 100))} · el cliente paga{" "}
+            {money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)))}
+          </span>
+        </div>
       )}
       {isElectronic && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

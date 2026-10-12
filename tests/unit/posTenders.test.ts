@@ -172,6 +172,28 @@ describe("disponibilidad", () => {
     expect(tenders.find((t) => t.id === "cash")?.surchargePct).toBe(5);
     expect(tenders.find((t) => t.id === "mercadopago:qr")?.surchargePct).toBe(0);
   });
+
+  it("anticipa el recargo que el QR va a sumar (checkout propio o recargo único)", () => {
+    const tenders = resolveTenders(
+      ctx({
+        features: undefined,
+        providers: [
+          { ...row("gocuotas"), surcharge_pct: 8 },
+          { ...row("mercadopago"), surcharge_pct: 9 },
+          { ...row("mobbex"), surcharge_pct: 4, plan_mode: "global" },
+        ],
+      }),
+    );
+    const by = (id: string) => tenders.find((t) => t.id === id);
+    // GO Cuotas cobra en su checkout: el recargo plano va siempre.
+    expect(by("gocuotas:qr")?.qrSurchargePct).toBe(8);
+    // MP con planes por cuotas: el recargo sale del plan elegido, no se anticipa.
+    expect(by("mercadopago:qr")?.qrSurchargePct).toBe(0);
+    // Recargo único activado: se anticipa.
+    expect(by("mobbex:qr")?.qrSurchargePct).toBe(4);
+    // Nunca se suma en la hoja (lo suma el modal del QR): sin doble recargo.
+    expect(by("gocuotas:qr")?.surchargePct).toBe(0);
+  });
 });
 
 describe("preferencias del negocio", () => {

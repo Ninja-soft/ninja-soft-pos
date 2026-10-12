@@ -15,14 +15,12 @@ import {
   Plus,
   Receipt,
   Star,
-  Store,
   Users,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Switch";
-import { SectionHeader } from "@/components/ui/PageHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
@@ -139,18 +137,14 @@ export function BranchesManager() {
 
   return (
     <section className="space-y-4">
-      <SectionHeader
-        title="Sucursales y cajas"
-        icon={Store}
-        description="Cada sucursal tiene sus cajas, su personal y sus ventas. El POS y los reportes muestran siempre dónde estás."
-        actions={
-          canManage ? (
-            <Button size="sm" onClick={newStore}>
-              <Plus size={16} /> Nueva sucursal
-            </Button>
-          ) : undefined
-        }
-      />
+      {/* El título y la bajada los pone SettingsSection (Configuración). */}
+      {canManage && (
+        <div>
+          <Button size="sm" onClick={newStore}>
+            <Plus size={16} /> Nueva sucursal
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>

@@ -26,6 +26,7 @@ import { createClient } from "@/lib/supabase/client";
 import { exportXlsx } from "@/lib/utils/xlsx";
 import { CUSTOMER_IMPORT_COLUMNS } from "@/modules/customers/import";
 import { NoData } from "@/components/ui/NoData";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 export default function ClientesPage() {
   const { toast } = useToast();
@@ -180,8 +181,8 @@ export default function ClientesPage() {
             <tbody className="divide-y divide-border text-foreground">
               {isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Cargando…
+                  <td colSpan={5}>
+                    <SpinnerBlock label="Cargando clientes" />
                   </td>
                 </tr>
               )}

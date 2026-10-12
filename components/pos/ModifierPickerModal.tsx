@@ -12,6 +12,7 @@ import {
   type SaleLineModifierGroup,
 } from "@/modules/products/modifiers";
 import { formatCurrency } from "@/lib/utils/format";
+import { SpinnerBlock } from "@/components/ui/Spinner";
 
 export interface ModifierPickerProduct {
   id: string;
@@ -142,7 +143,7 @@ export function ModifierPickerModal({
     >
       <div className="space-y-4">
         {isLoading && (
-          <p className="py-6 text-center text-sm text-muted-foreground">Cargando opciones…</p>
+          <SpinnerBlock className="py-6" label="Cargando opciones" />
         )}
         {!isLoading && groupsView.length === 0 && (
           <p className="py-6 text-center text-sm text-muted-foreground">

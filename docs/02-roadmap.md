@@ -1286,6 +1286,11 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [~] Matching automático por id del procesador o intent, **n° de comercio + lote + cupón**, autorización + últimos 4, y monto + día con pareja única; estados Conciliado, Cobro sin venta, Venta sin cobro, Diferencia de monto, Revisado, y Acreditado / Pendiente de acreditación. *Hecho (ADR-061). Pendiente: contracargos como estado propio.*
   - [~] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas separadas del bruto por cobro (Mercado Pago por `charges_details`; archivos por columna). *Hecho el detalle por cobro (ADR-061). Pendiente: asiento (H109) y registro para H106.*
   - [x] Detalle de la venta con los cobros y los datos del procesador (comisiones, neto, acreditación, tarjeta, pagador) traídos por API con la credencial del cobro. *(ADR-061)*
+
+  - [x] **Integración con NubCeo** (conciliador externo): envío de cada venta con sus cobros, ritmo y ventana, solo simular, mapeo de campos y medios, monitor de envíos, anulaciones y devoluciones, e importación de los asientos contables de NubCeo (API o CSV). *(2026-10-12, ADR-062, `feat/nubceo`, migraciones `20261025100000` y `20261025100100` sin aplicar, Edge `nubceo_sync` sin desplegar)* · *OPTIONAL `integracion_nubceo` (nueva, Business, también add-on).* Ver [`30-nubceo.md`](./30-nubceo.md).
+  - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
+  - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
+  - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.
   - [ ] Conciliación del turno: marcar un Z como conciliado con motivo.
   - [ ] Conciliación bancaria: extracto importado contra cobros, depósitos, pagos y liquidaciones; SIRCREB e impuesto a los débitos y créditos.
   - [ ] BIN de tarjeta → banco y medio (opcional).

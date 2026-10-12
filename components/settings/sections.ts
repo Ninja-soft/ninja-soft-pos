@@ -11,6 +11,7 @@ import {
   Package,
   Palette,
   Percent,
+  Plug,
   Printer,
   ReceiptText,
   RotateCcw,
@@ -58,7 +59,8 @@ export type SettingsSectionKey =
   | "hardware"
   | "precios"
   | "garantias"
-  | "promociones";
+  | "promociones"
+  | "nubceo";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -342,6 +344,22 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       },
     ],
   },
+  // Integraciones con sistemas externos (ADR-062).
+  {
+    title: "Integraciones",
+    sections: [
+      {
+        key: "nubceo",
+        label: "NubCeo",
+        title: "NubCeo",
+        description:
+          "Mandá cada venta con sus cobros a NubCeo para conciliar tarjetas y billeteras, mirá lo enviado y traé los asientos contables.",
+        icon: Plug,
+        feature: "integracion_nubceo",
+        keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
+      },
+    ],
+  },
   {
     title: "Hardware",
     sections: [
@@ -395,6 +413,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   auditoria: "seguridad",
   pin: "seguridad",
   supervisor: "seguridad",
+  integraciones: "nubceo",
+  conciliacion: "nubceo",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

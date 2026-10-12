@@ -395,6 +395,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin esto no se puede integrar el sistema con software de terceros vía API.",
     minPlan: "Enterprise",
   },
+  integracion_nubceo: {
+    desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
+    impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",
+    minPlan: "Business",
+    needs: "Credenciales de la API de NubCeo (API key, API secret y tenant) y el código de sucursal cabecera de cada sucursal.",
+  },
   facturacion_afip: {
     desc: "Facturación electrónica AFIP/ARCA: emite comprobantes fiscales (factura A/B/C) integrados con AFIP.",
     impact: "Desactivado, el sistema sólo emite comprobantes no fiscales; no factura ante AFIP.",

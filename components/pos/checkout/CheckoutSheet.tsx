@@ -1012,15 +1012,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         <p className="text-xs text-muted-foreground">Incluye recargo de {money(settle.surcharge)}.</p>
       )}
       {active.flow === "qr" && (active.qrSurchargePct || 0) > 0 && settle.amount > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-xs">
-          <span className="text-muted-foreground">
-            Recargo de {active.brandLabel} {active.qrSurchargePct}%
-          </span>
-          <span className="font-semibold tabular-nums text-foreground">
-            +{money(round2((settle.amount * (active.qrSurchargePct || 0)) / 100))} · el cliente paga{" "}
-            {money(round2(settle.amount * (1 + (active.qrSurchargePct || 0) / 100)))}
-          </span>
-        </div>
+        <QrSurchargeSummary amount={settle.amount} pct={active.qrSurchargePct} />
       )}
       {isElectronic && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1521,5 +1513,27 @@ function ChangeBox({ short, amount }: { short: boolean; amount: number }) {
         {money(amount)}
       </span>
     </div>
+  );
+}
+
+// Resumen tipo recibo del recargo que el QR / link suma solo: monto, recargo y
+// lo que paga el cliente, cada uno en su fila.
+function QrSurchargeSummary({ amount, pct }: { amount: number; pct: number }) {
+  const surcharge = round2((amount * pct) / 100);
+  return (
+    <dl className="space-y-1.5 rounded-md bg-muted px-3 py-2.5 text-[13px] tabular-nums">
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="text-muted-foreground">Monto</dt>
+        <dd>{money(amount)}</dd>
+      </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="text-muted-foreground">Recargo del medio ({pct}%)</dt>
+        <dd>+{money(surcharge)}</dd>
+      </div>
+      <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
+        <dt className="font-semibold">Paga el cliente</dt>
+        <dd className="font-semibold">{money(round2(amount + surcharge))}</dd>
+      </div>
+    </dl>
   );
 }

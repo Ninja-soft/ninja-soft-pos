@@ -12,8 +12,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { choiceClass } from "@/components/ui/ChoiceCard";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName, formatCurrency } from "@/lib/utils/format";
-import { ACTION_INFO, authorizeErrorMessage } from "@/lib/security/pinPolicy";
+import { ACTION_INFO, actionModes, authorizeErrorMessage } from "@/lib/security/pinPolicy";
+import { PIN_MODE_INFO, PIN_MODES, type PinMode } from "@/lib/security/otp";
 import { securityApi } from "@/modules/security/api";
+import { useSecuritySettings } from "@/modules/security/hooks";
 import { SupervisorCancelled, useSupervisorPrompt } from "@/modules/security/supervisor";
 import { SOLID_CTA } from "@/components/security/styles";
 
@@ -21,6 +23,13 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as co
 
 // Diálogo global de PIN de supervisor (F17 · H116). Lo abre withSupervisor()
 // desde cualquier flujo; devuelve un token de un solo uso al que pidió.
+// ADR-060: el mismo campo acepta el PIN fijo, el rotativo, uno de un uso o el
+// de la app; el servidor detecta cuál es y valida que la acción lo acepte.
+
+function modesText(modes: PinMode[]): string {
+  const names = modes.map((m) => PIN_MODE_INFO[m].label.toLowerCase());
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} o ${names[names.length - 1]}`;
+}
 export function SupervisorPinHost() {
   const request = useSupervisorPrompt((s) => s.request);
   const open = Boolean(request);
@@ -33,6 +42,9 @@ export function SupervisorPinHost() {
     staleTime: 30_000,
   });
   const usable = useMemo(() => (supervisors.data ?? []).filter((s) => s.has_pin && !s.expired), [supervisors.data]);
+  const settings = useSecuritySettings();
+  const modes: PinMode[] = request && settings.data ? actionModes(settings.data, request.action) : [];
+  const restricted = modes.length > 0 && modes.length < PIN_MODES.length && Boolean(settings.data?.pin_autenticador);
 
   const [supervisorId, setSupervisorId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
@@ -75,7 +87,18 @@ export function SupervisorPinHost() {
         request.resolve(r.token);
         return;
       }
-      setError(authorizeErrorMessage(r.error, r));
+      const allowed = r.modes?.length ? r.modes : modes;
+      if (r.error === "pin_not_set" && allowed.includes("one_time")) {
+        setError(
+          allowed.length === 1
+            ? "Esta acción pide un PIN de un uso: pedile al supervisor que lo genere en Mis PINes y te lo pase."
+            : "Ese supervisor no tiene un PIN listo para esta acción. Puede generar un PIN de un uso en Mis PINes.",
+        );
+      } else if (r.error === "pin_invalid" && allowed.length && allowed.length < PIN_MODES.length && settings.data?.pin_autenticador) {
+        setError(`${authorizeErrorMessage(r.error, r, settings.data?.pin_lock_minutes)} Esta acción acepta ${modesText(allowed)}.`);
+      } else {
+        setError(authorizeErrorMessage(r.error, r, settings.data?.pin_lock_minutes));
+      }
       setPin("");
       if (r.error === "pin_locked") void supervisors.refetch();
     } catch {
@@ -160,6 +183,11 @@ export function SupervisorPinHost() {
                     <span className="block text-xs text-muted-foreground">
                       {s.locked ? "Bloqueado" : s.role === "owner" ? "Dueño" : s.role === "manager" ? "Encargado" : "Supervisor"}
                     </span>
+                    {!s.locked && s.methods && s.methods.length > 1 && (
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {s.methods.filter((m) => !modes.length || modes.includes(m)).map((m) => PIN_MODE_INFO[m].short).join(" · ")}
+                      </span>
+                    )}
                   </span>
                 </button>
               ))}
@@ -169,8 +197,11 @@ export function SupervisorPinHost() {
           {selected && (
             <div>
               <span className="mb-2 block text-sm font-medium text-muted-foreground">
-                PIN de {capitalizeName(selected.name)}
+                {restricted ? `Código de ${capitalizeName(selected.name)}` : `PIN o código de ${capitalizeName(selected.name)}`}
               </span>
+              {restricted && (
+                <p className="mb-2 text-xs text-muted-foreground">Esta acción acepta {modesText(modes)}.</p>
+              )}
               <div className="mb-3 flex justify-center gap-2" aria-live="polite" aria-label={`${pin.length} dígitos`}>
                 {Array.from({ length: 6 }).map((_, i) => (
                   <span

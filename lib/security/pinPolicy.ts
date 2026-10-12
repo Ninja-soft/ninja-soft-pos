@@ -4,6 +4,10 @@
 // is_supervisor() en supabase/migrations/20261017110000_pin_supervisor_politicas.sql.
 // El servidor decide (triggers + token en el header); esto sirve para pedir el
 // PIN ANTES de intentar y para la pantalla de Seguridad.
+// Modos del PIN (fijo, rotativo, de un uso, app): ADR-060, espejo de
+// pin_action_modes() en 20261023100000_pin_autenticador.sql.
+
+import { PIN_MODES, type PinMode } from "@/lib/security/otp";
 
 export type PinAction =
   | "discount_over"
@@ -17,6 +21,8 @@ export type PinAction =
 export interface PinRule {
   enabled: boolean;
   threshold: number;
+  /** Modos que acepta la acción (ADR-060). Vacío o ausente: todos los del negocio. */
+  modes?: PinMode[];
 }
 
 export type PinPolicy = Record<PinAction, PinRule>;
@@ -29,6 +35,16 @@ export interface SecuritySettings {
   pin_lock_minutes: number;
   pin_rotation_days: number | null;
   shared_shift: boolean;
+  /** Modos de PIN que acepta el negocio (ADR-060). */
+  pin_modes: PinMode[];
+  /** Modo que se sugiere primero en Mis PINes. */
+  pin_default_mode: PinMode;
+  /** Cada cuántas horas cambia el PIN rotativo (1 a 168). */
+  pin_rotation_hours: number;
+  /** Duración máxima de un PIN de un uso, en minutos (1 a 30). */
+  pin_one_time_max_minutes: number;
+  /** El plan incluye la feature pin_autenticador (sin ella sólo vale el PIN fijo). */
+  pin_autenticador: boolean;
 }
 
 export const PIN_ACTIONS: PinAction[] = [
@@ -60,6 +76,11 @@ export const DEFAULT_SECURITY: SecuritySettings = {
   pin_lock_minutes: 15,
   pin_rotation_days: null,
   shared_shift: false,
+  pin_modes: [...PIN_MODES],
+  pin_default_mode: "fixed",
+  pin_rotation_hours: 24,
+  pin_one_time_max_minutes: 5,
+  pin_autenticador: false,
 };
 
 export const ACTION_INFO: Record<
@@ -117,19 +138,66 @@ export function normalizeSettings(raw: Partial<SecuritySettings> | null | undefi
   for (const a of PIN_ACTIONS) {
     const r = src[a];
     if (r) {
+      const modes = cleanModes(r.modes);
       policy[a] = {
         enabled: a === "shift_force_close" ? true : Boolean(r.enabled),
         threshold: Math.max(0, Number(r.threshold ?? DEFAULT_POLICY[a].threshold) || 0),
+        ...(modes.length ? { modes } : {}),
       };
     }
   }
+  const pinModes = cleanModes(raw?.pin_modes);
+  const modes = pinModes.length ? pinModes : DEFAULT_SECURITY.pin_modes;
+  const def = raw?.pin_default_mode && modes.includes(raw.pin_default_mode) ? raw.pin_default_mode : modes[0]!;
   return {
     ...DEFAULT_SECURITY,
     ...(raw ?? {}),
     pin_policy: policy,
     supervisor_roles: raw?.supervisor_roles?.length ? raw.supervisor_roles : DEFAULT_SECURITY.supervisor_roles,
     supervisor_user_ids: raw?.supervisor_user_ids ?? [],
+    pin_modes: modes,
+    pin_default_mode: def,
+    pin_rotation_hours: clampInt(raw?.pin_rotation_hours, 1, 168, DEFAULT_SECURITY.pin_rotation_hours),
+    pin_one_time_max_minutes: clampInt(raw?.pin_one_time_max_minutes, 1, 30, DEFAULT_SECURITY.pin_one_time_max_minutes),
+    pin_autenticador: Boolean(raw?.pin_autenticador),
   };
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+}
+
+/** Modos válidos, sin repetir y en el orden de PIN_MODES. */
+export function cleanModes(raw: unknown): PinMode[] {
+  if (!Array.isArray(raw)) return [];
+  return PIN_MODES.filter((m) => raw.includes(m));
+}
+
+/**
+ * Modos que acepta una acción (espejo de pin_action_modes()): los del negocio,
+ * recortados por los de la acción. Sin la feature pin_autenticador, sólo el fijo.
+ */
+export function actionModes(s: SecuritySettings, action: PinAction): PinMode[] {
+  if (!s.pin_autenticador) return ["fixed"];
+  const base = s.pin_modes.length ? s.pin_modes : PIN_MODES;
+  const own = s.pin_policy[action]?.modes ?? [];
+  if (!own.length) return [...base];
+  const both = base.filter((m) => own.includes(m));
+  return both.length ? both : [...base];
+}
+
+/** Error de validación de la configuración de modos, o null si está bien. */
+export function modesProblem(s: SecuritySettings): string | null {
+  if (!s.pin_modes.length) return "Tiene que quedar al menos un modo de PIN.";
+  if (!s.pin_modes.includes(s.pin_default_mode)) return "El modo por defecto tiene que estar entre los permitidos.";
+  for (const a of PIN_ACTIONS) {
+    const own = s.pin_policy[a]?.modes ?? [];
+    if (own.length && !own.some((m) => s.pin_modes.includes(m))) {
+      return `${ACTION_INFO[a].label}: ninguno de sus modos está permitido en el negocio.`;
+    }
+  }
+  return null;
 }
 
 /** ¿La acción pide PIN para ese monto? (porcentaje para discount_over) */
@@ -202,6 +270,18 @@ export function authorizeErrorMessage(
       return "Esa persona todavía no cargó su PIN de supervisor.";
     case "pin_expired":
       return "El PIN venció: el supervisor tiene que cargar uno nuevo en Configuración, Seguridad.";
+    case "requester_locked": {
+      const until = extra?.locked_until
+        ? new Date(extra.locked_until).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+        : null;
+      return until
+        ? `Demasiados intentos fallidos desde tu usuario. Probá de nuevo a las ${until}.`
+        : "Demasiados intentos fallidos desde tu usuario.";
+    }
+    case "rate_limited":
+      return "Demasiados intentos seguidos. Esperá un minuto.";
+    case "one_time_scope":
+      return "Ese PIN de un uso es para otra acción o para un monto menor. Pedí uno nuevo.";
     default:
       return "No se pudo autorizar.";
   }

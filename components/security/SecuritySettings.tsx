@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, FileSearch, KeyRound, Lock, Save, ShieldCheck, Trash2, Users, Wallet } from "lucide-react";
+import { Check, FileSearch, KeyRound, Lock, LockOpen, Save, ShieldCheck, Trash2, Users, Wallet } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Segmented";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { Switch } from "@/components/ui/Switch";
@@ -16,14 +15,28 @@ import { CHOICE_ON } from "@/components/ui/ChoiceCard";
 import { AuditLogViewer } from "@/components/security/AuditLogViewer";
 import { EYEBROW, FLAT_PANEL, SOLID_CTA } from "@/components/security/styles";
 import { useBranchScope } from "@/modules/branches/hooks";
-import { usePinMutations, usePinStatus, useSaveSecuritySettings, useSecuritySettings, useSupervisors } from "@/modules/security/hooks";
+import {
+  useMyPinsMutations,
+  usePinMutations,
+  usePinStatus,
+  useSaveSecuritySettings,
+  useSecuritySettings,
+  useSupervisors,
+} from "@/modules/security/hooks";
+import { MyPinsPanel } from "@/components/security/MyPins";
 import { useStaffPeople } from "@/modules/staff/hooks";
-import { ACTION_INFO, PIN_ACTIONS, type PinAction, type SecuritySettings as Settings } from "@/lib/security/pinPolicy";
-import { pinProblem } from "@/lib/account/pin";
+import {
+  ACTION_INFO,
+  PIN_ACTIONS,
+  modesProblem,
+  type PinAction,
+  type SecuritySettings as Settings,
+} from "@/lib/security/pinPolicy";
+import { ONE_TIME_MINUTES_OPTIONS, PIN_MODES, PIN_MODE_INFO, ROTATION_HOURS_OPTIONS, type PinMode } from "@/lib/security/otp";
 import { capitalizeName, formatCurrency } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
-type Tab = "politicas" | "supervisores" | "auditoria";
+type Tab = "mispines" | "politicas" | "supervisores" | "auditoria";
 
 function fmtDate(iso: string | null | undefined) {
   return iso ? new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" }) : "";
@@ -36,6 +49,8 @@ export function SecuritySettings() {
   const isOwner = role === "owner";
   const isManager = role === "owner" || role === "manager";
   const [tab, setTab] = useState<Tab>("politicas");
+  const pinStatus = usePinStatus();
+  const canHavePin = Boolean(pinStatus.data?.can_have_pin);
 
   return (
     <div className="space-y-5">
@@ -44,11 +59,13 @@ export function SecuritySettings() {
         onChange={setTab}
         aria-label="Sección"
         options={[
+          ...(canHavePin ? [{ value: "mispines" as const, label: "Mis PINes", icon: <KeyRound size={15} /> }] : []),
           { value: "politicas", label: "PIN y políticas", icon: <ShieldCheck size={15} /> },
           { value: "supervisores", label: "Supervisores", icon: <Users size={15} /> },
           ...(isManager ? [{ value: "auditoria" as const, label: "Auditoría", icon: <FileSearch size={15} /> }] : []),
         ]}
       />
+      {tab === "mispines" && canHavePin && <MyPinsPanel />}
       {tab === "politicas" && <PolicyPanel editable={isOwner} />}
       {tab === "supervisores" && <SupervisorsPanel isOwner={isOwner} />}
       {tab === "auditoria" && isManager && <AuditLogViewer />}
@@ -72,8 +89,34 @@ function PolicyPanel({ editable }: { editable: boolean }) {
   const setRule = (a: PinAction, patch: Partial<{ enabled: boolean; threshold: number }>) =>
     setDraft((d) => (d ? { ...d, pin_policy: { ...d.pin_policy, [a]: { ...d.pin_policy[a], ...patch } } } : d));
 
+  const problem = modesProblem(draft);
+  const auth = draft.pin_autenticador;
+  const customHours = !(ROTATION_HOURS_OPTIONS as readonly number[]).includes(draft.pin_rotation_hours);
+
+  const toggleMode = (m: PinMode) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const on = d.pin_modes.includes(m);
+      const modes = on ? d.pin_modes.filter((x) => x !== m) : PIN_MODES.filter((x) => x === m || d.pin_modes.includes(x));
+      return { ...d, pin_modes: modes, pin_default_mode: modes.includes(d.pin_default_mode) ? d.pin_default_mode : (modes[0] ?? "fixed") };
+    });
+  const toggleActionMode = (a: PinAction, m: PinMode) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const cur = d.pin_policy[a].modes ?? [];
+      const next = cur.includes(m) ? cur.filter((x) => x !== m) : PIN_MODES.filter((x) => x === m || cur.includes(x));
+      const rule = { ...d.pin_policy[a] };
+      if (next.length) rule.modes = next;
+      else delete rule.modes;
+      return { ...d, pin_policy: { ...d.pin_policy, [a]: rule } };
+    });
+
   async function submit() {
     if (!draft) return;
+    if (problem) {
+      toast({ title: "Revisá los modos de PIN", description: problem, variant: "error" });
+      return;
+    }
     try {
       await save.mutateAsync({
         pin_policy: draft.pin_policy,
@@ -81,6 +124,10 @@ function PolicyPanel({ editable }: { editable: boolean }) {
         pin_lock_minutes: draft.pin_lock_minutes,
         pin_rotation_days: draft.pin_rotation_days,
         shared_shift: draft.shared_shift,
+        pin_modes: draft.pin_modes,
+        pin_default_mode: draft.pin_default_mode,
+        pin_rotation_hours: draft.pin_rotation_hours,
+        pin_one_time_max_minutes: draft.pin_one_time_max_minutes,
       });
       toast({ title: "Guardado", description: "Rige desde ya en todas las cajas.", variant: "success" });
     } catch {
@@ -122,6 +169,31 @@ function PolicyPanel({ editable }: { editable: boolean }) {
                     {always && <Badge tone="neutral">Siempre</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">{info.desc}</p>
+                  {auth && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label={`Modos que acepta ${info.label}`}>
+                      <span className="text-xs text-muted-foreground">Acepta:</span>
+                      {draft.pin_modes.map((m) => {
+                        const on = (r.modes ?? []).includes(m);
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            aria-pressed={on}
+                            disabled={!editable}
+                            onClick={() => toggleActionMode(a, m)}
+                            className={cn(
+                              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs transition disabled:opacity-60",
+                              on ? cn(CHOICE_ON, "text-foreground") : "bg-muted text-muted-foreground hover:bg-secondary",
+                            )}
+                          >
+                            {on && <Check size={12} aria-hidden />}
+                            {PIN_MODE_INFO[m].short}
+                          </button>
+                        );
+                      })}
+                      {!(r.modes ?? []).length && <span className="text-xs text-muted-foreground">(cualquiera)</span>}
+                    </div>
+                  )}
                 </div>
                 {info.unit !== "none" && (
                   <label className={cn("flex items-center gap-2 text-sm", !r.enabled && "opacity-50")}>
@@ -165,6 +237,124 @@ function PolicyPanel({ editable }: { editable: boolean }) {
             ? ` Anular desde ${formatCurrency(draft.pin_policy.sale_void.threshold)} pide PIN.`
             : ""}
         </p>
+      </section>
+
+      <section className={FLAT_PANEL}>
+        <header className="flex items-start gap-3 border-b border-border p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-muted">
+            <KeyRound size={18} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold">Modos de PIN</h3>
+              {!auth && <Badge tone="neutral">Desde Pro</Badge>}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Además del PIN fijo, los supervisores pueden autorizar con un PIN que cambia solo, con uno de un uso generado en
+              el momento o con una app autenticadora. Cada supervisor los activa en Mis PINes.
+            </p>
+          </div>
+        </header>
+        <div className={cn("space-y-4 p-4", !auth && "opacity-60")}>
+          <div>
+            <p className={cn(EYEBROW, "mb-2")}>Modos permitidos</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PIN_MODES.map((m) => {
+                const on = draft.pin_modes.includes(m);
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={!editable || !auth}
+                    onClick={() => toggleMode(m)}
+                    className={cn(
+                      "flex items-start gap-2.5 rounded-md p-3 text-left text-sm transition disabled:cursor-not-allowed",
+                      on ? cn(CHOICE_ON, "text-foreground") : "bg-muted text-muted-foreground hover:bg-secondary",
+                    )}
+                  >
+                    <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center">{on && <Check size={14} aria-hidden />}</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">{PIN_MODE_INFO[m].label}</span>
+                      <span className="block text-xs">{PIN_MODE_INFO[m].desc}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">Modo por defecto</span>
+              <select
+                disabled={!editable || !auth}
+                value={draft.pin_default_mode}
+                onChange={(e) => setDraft((d) => (d ? { ...d, pin_default_mode: e.target.value as PinMode } : d))}
+                className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              >
+                {draft.pin_modes.map((m) => (
+                  <option key={m} value={m}>
+                    {PIN_MODE_INFO[m].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div>
+              <span className="mb-1.5 block text-sm text-muted-foreground">El PIN rotativo cambia cada</span>
+              <div className="flex items-center gap-2">
+                <select
+                  disabled={!editable || !auth}
+                  value={customHours ? 0 : draft.pin_rotation_hours}
+                  onChange={(e) => setDraft((d) => (d ? { ...d, pin_rotation_hours: Number(e.target.value) || 8 } : d))}
+                  aria-label="Período del PIN rotativo"
+                  className="h-11 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm"
+                >
+                  {ROTATION_HOURS_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      {h} horas
+                    </option>
+                  ))}
+                  <option value={0}>A medida</option>
+                </select>
+                {customHours && (
+                  <span className="flex items-center gap-1 text-sm">
+                    <input
+                      type="number"
+                      min={1}
+                      max={168}
+                      disabled={!editable || !auth}
+                      value={draft.pin_rotation_hours}
+                      onChange={(e) =>
+                        setDraft((d) =>
+                          d ? { ...d, pin_rotation_hours: Math.min(168, Math.max(1, Math.round(Number(e.target.value) || 1))) } : d,
+                        )
+                      }
+                      aria-label="Horas del PIN rotativo"
+                      className="h-11 w-20 rounded-md border border-border bg-background px-2 text-right tabular-nums"
+                    />
+                    h
+                  </span>
+                )}
+              </div>
+            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">PIN de un uso, máximo</span>
+              <select
+                disabled={!editable || !auth}
+                value={draft.pin_one_time_max_minutes}
+                onChange={(e) => setDraft((d) => (d ? { ...d, pin_one_time_max_minutes: Number(e.target.value) } : d))}
+                className="h-11 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              >
+                {ONE_TIME_MINUTES_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m === 1 ? "1 minuto" : `${m} minutos`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {problem && <Callout tone="warning">{problem}</Callout>}
+        </div>
       </section>
 
       <section className={cn(FLAT_PANEL, "p-4")}>
@@ -260,6 +450,7 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
   const { data: supervisors = [], isLoading } = useSupervisors();
   const { data: people = [] } = useStaffPeople(isOwner);
   const { clearPin } = usePinMutations();
+  const { unlock, resetMethods } = useMyPinsMutations();
   const [confirmClear, setConfirmClear] = useState<{ id: string; name: string } | null>(null);
 
   const roles = settings?.supervisor_roles ?? ["owner", "manager"];
@@ -277,8 +468,6 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
 
   return (
     <div className="space-y-5">
-      <MyPinCard />
-
       <section className={FLAT_PANEL}>
         <header className="border-b border-border p-4">
           <h3 className="font-semibold">Quién puede autorizar</h3>
@@ -361,6 +550,7 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
                   <p className="text-xs text-muted-foreground">
                     {s.role === "owner" ? "Dueño" : s.role === "manager" ? "Encargado" : "Cajero"}
                     {s.pin_set_at ? ` · PIN del ${fmtDate(s.pin_set_at)}` : ""}
+                    {s.methods?.length ? ` · ${s.methods.map((m) => PIN_MODE_INFO[m]?.short ?? m).join(", ")}` : ""}
                   </p>
                 </div>
                 {s.locked ? (
@@ -372,13 +562,32 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
                 ) : (
                   <Badge tone="success">PIN listo</Badge>
                 )}
+                {isOwner && s.locked && (
+                  <button
+                    type="button"
+                    disabled={unlock.isPending}
+                    onClick={async () => {
+                      try {
+                        await unlock.mutateAsync(s.user_id);
+                        toast({ title: "Desbloqueado", variant: "success" });
+                      } catch {
+                        toast({ title: "No se pudo desbloquear", variant: "error" });
+                      }
+                    }}
+                    className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`Desbloquear a ${s.name}`}
+                    title="Desbloquear"
+                  >
+                    <LockOpen size={16} />
+                  </button>
+                )}
                 {isOwner && s.has_pin && (
                   <button
                     type="button"
                     onClick={() => setConfirmClear({ id: s.user_id, name: s.name })}
                     className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label={`Borrar el PIN de ${s.name}`}
-                    title="Borrar PIN (también desbloquea)"
+                    aria-label={`Borrar los PINes de ${s.name}`}
+                    title="Borrar PINes (también desbloquea)"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -392,15 +601,17 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
       <ConfirmDialog
         open={Boolean(confirmClear)}
         onOpenChange={(o) => !o && setConfirmClear(null)}
-        title={confirmClear ? `Borrar el PIN de ${confirmClear.name}` : "Borrar PIN"}
-        description="Tendrá que cargar uno nuevo para volver a autorizar. Sirve también para desbloquearlo."
-        confirmLabel="Borrar PIN"
+        title={confirmClear ? `Borrar los PINes de ${confirmClear.name}` : "Borrar PINes"}
+        description="Borra su PIN fijo y su PIN rotativo, desvincula su app y revoca sus PIN de un uso activos. Tendrá que configurarlos de nuevo para autorizar. Sirve también para desbloquearlo."
+        confirmLabel="Borrar PINes"
         danger
-        loading={clearPin.isPending}
+        loading={clearPin.isPending || resetMethods.isPending}
         onConfirm={async () => {
           if (!confirmClear) return;
           try {
             await clearPin.mutateAsync(confirmClear.id);
+            // Base sin ADR-060: la RPC no existe y alcanza con el PIN fijo.
+            await resetMethods.mutateAsync(confirmClear.id).catch(() => undefined);
             toast({ title: "PIN borrado", variant: "success" });
           } catch {
             toast({ title: "No se pudo borrar", variant: "error" });
@@ -409,85 +620,5 @@ function SupervisorsPanel({ isOwner }: { isOwner: boolean }) {
         }}
       />
     </div>
-  );
-}
-
-function MyPinCard() {
-  const { toast } = useToast();
-  const { data: status, isLoading } = usePinStatus();
-  const { setPin } = usePinMutations();
-  const [pin, setPinValue] = useState("");
-  const [repeat, setRepeat] = useState("");
-  const problem = pin ? pinProblem(pin) : null;
-  const mismatch = repeat.length > 0 && repeat !== pin;
-  const canSave = pin.length >= 4 && !problem && repeat === pin;
-
-  if (isLoading) return <SpinnerBlock className="py-6" />;
-  if (!status?.can_have_pin) {
-    return (
-      <Callout tone="neutral" icon={KeyRound}>
-        No sos supervisor en este negocio, así que no necesitás PIN. Si hace falta, el dueño te puede sumar.
-      </Callout>
-    );
-  }
-
-  async function save() {
-    if (!canSave) return;
-    try {
-      await setPin.mutateAsync(pin);
-      setPinValue("");
-      setRepeat("");
-      toast({ title: status?.has_pin ? "PIN actualizado" : "PIN guardado", variant: "success" });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      toast({
-        title: "No se pudo guardar el PIN",
-        description: /weak_pin/.test(msg) ? "Es muy fácil: evitá repetidos o escaleras." : undefined,
-        variant: "error",
-      });
-    }
-  }
-
-  return (
-    <section className={cn(FLAT_PANEL, "p-4")}>
-      <div className="flex flex-wrap items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-muted">
-          <KeyRound size={18} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold">Tu PIN de supervisor</h3>
-          <p className="text-sm text-muted-foreground">
-            {status.has_pin
-              ? `Cargado el ${fmtDate(status.set_at)}${status.expires_at ? `, vence el ${fmtDate(status.expires_at)}` : ""}.`
-              : "Todavía no cargaste tu PIN: sin él no podés autorizar desde la caja de otro."}
-          </p>
-        </div>
-        {status.locked_until && <Badge tone="danger">Bloqueado</Badge>}
-        {status.expired && <Badge tone="warning">Vencido</Badge>}
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <Input
-          label={status.has_pin ? "PIN nuevo" : "PIN (4 a 6 números)"}
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          value={pin}
-          onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          error={problem ?? undefined}
-        />
-        <Input
-          label="Repetilo"
-          type="password"
-          inputMode="numeric"
-          autoComplete="new-password"
-          value={repeat}
-          onChange={(e) => setRepeat(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          error={mismatch ? "No coincide" : undefined}
-        />
-        <Button className={SOLID_CTA} disabled={!canSave} loading={setPin.isPending} onClick={save}>
-          <KeyRound size={16} /> {status.has_pin ? "Cambiar" : "Guardar"}
-        </Button>
-      </div>
-    </section>
   );
 }

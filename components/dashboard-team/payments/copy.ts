@@ -21,7 +21,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   pagos360: "Tarjeta, débito, DEBIN o efectivo",
   fiserv: "Terminales Posnet y Clover",
   gocuotas: "2 a 4 cuotas sin interés con débito",
-  directo: "Cobrás en el portal de Directo y registrás la operación",
+  directo: "QR y link de Directo, o registro manual de la operación",
 };
 
 // Explicación desplegable por canal: qué pasa al activarlo y cómo es el cobro.
@@ -151,6 +151,7 @@ export const CHANNEL_CAPS: Record<string, ChannelCap[]> = {
   mobbex: ["qr", "link"],
   pagos360: ["qr", "link"],
   gocuotas: ["qr", "link"],
+  directo: ["qr", "link"],
   fiserv: ["point"],
 };
 
@@ -238,6 +239,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
     ],
     where: "Sucursales › Editar › Ver ApiKeys",
     note: "Hay una API Key de producción y otra de prueba.",
+  },
+  directo: {
+    steps: [
+      { icon: "mail", text: "Pedile a Directo las credenciales de integración por API." },
+      { icon: "key", text: "Copiá la API Key, el usuario, la contraseña y el nombre del comercio." },
+      { icon: "code", text: "Sumá la URL de la API (y la Subscription Key si te la dieron)." },
+    ],
+    where: "Mail de integración de Directo (comercial o soporte de comercios)",
+    note: "QA y producción usan credenciales y URL distintas. Sin conectar, igual podés cobrar en su portal y registrar el número de operación.",
   },
   mobbex: {
     steps: [

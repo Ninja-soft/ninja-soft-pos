@@ -121,6 +121,19 @@ describe("disponibilidad", () => {
     expect(ids(ctx())).not.toContain("directo");
   });
 
+  it("Directo con API conectada cobra por QR + link y oculta el registro manual", () => {
+    const sinApi = ids(ctx({ providers: [row("cash"), row("directo", false)] }));
+    expect(sinApi).toContain("directo");
+    expect(sinApi).not.toContain("directo:qr");
+
+    const conApi = ids(ctx({ providers: [row("cash"), row("directo", true)] }));
+    expect(conApi).toEqual(expect.arrayContaining(["directo:qr", "directo:link"]));
+    expect(conApi).not.toContain("directo");
+    expect(TENDER_BY_ID["directo:qr"]?.qrProvider).toBe("directo");
+    expect(TENDER_BY_ID["directo:link"]?.featureKey).toBe("directo");
+    expect(TENDER_BY_ID.directo?.manualFallback).toBe(true);
+  });
+
   it("toma el recargo del medio sólo para efectivo y transferencia", () => {
     const tenders = resolveTenders(
       ctx({

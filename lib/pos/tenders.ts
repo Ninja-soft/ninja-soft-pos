@@ -62,7 +62,8 @@ export type QrProviderKey =
   | "payway"
   | "getnet"
   | "nave"
-  | "gocuotas";
+  | "gocuotas"
+  | "directo";
 export type PointProviderKey = "mercadopago_point" | "nave_point";
 
 export interface TenderDef {
@@ -92,6 +93,11 @@ export interface TenderDef {
   requiresReference?: boolean;
   /** Monto mínimo que acepta el proveedor. */
   minAmount?: number;
+  /**
+   * Respaldo manual de un proveedor con API: sólo se ofrece mientras su
+   * conexión (provider) NO esté conectada (Directo, ADR-041).
+   */
+  manualFallback?: boolean;
 }
 
 // Isotipos oficiales: misma fuente que la configuración de medios de pago
@@ -273,8 +279,11 @@ export const TENDERS: TenderDef[] = [
   // GO Cuotas (ADR-033): checkout Redirect como QR + link; desde $1.500.
   { ...qr("gocuotas", "GO Cuotas", "wallets", "qr", "Cuotas con débito"), minAmount: 1500 },
   { ...qr("gocuotas", "GO Cuotas", "wallets", "link", "Cuotas con débito"), minAmount: 1500 },
-  // Directo (ADR-034): se cobra en el portal de Directo y acá se registra el
-  // número de operación.
+  // Directo (ADR-041): con la API conectada, QR + link de la orden de
+  // Directo; sin conexión, respaldo manual (ADR-034): se cobra en el portal de
+  // Directo y acá se registra el número de operación.
+  qr("directo", "Directo", "wallets", "qr", "Crédito sin tarjeta"),
+  qr("directo", "Directo", "wallets", "link", "Crédito sin tarjeta"),
   {
     id: "directo",
     group: "wallets",
@@ -290,6 +299,7 @@ export const TENDERS: TenderDef[] = [
     flow: "direct",
     hint: "Con número de operación",
     requiresReference: true,
+    manualFallback: true,
   },
   {
     id: "store_credit",
@@ -381,6 +391,8 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
   switch (t.flow) {
     case "cash":
     case "direct":
+      // Respaldo manual: desaparece cuando el proveedor está conectado por API.
+      if (t.manualFallback && connected(t.provider ?? "")) return false;
       // Sin configuración sólo se ofrecen efectivo y transferencia.
       return (noConfig && !t.requiresReference) || enabled.has(t.provider ?? "");
     case "card":

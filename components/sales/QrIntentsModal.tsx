@@ -27,6 +27,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   nave: "Nave",
   nave_point: "Nave Point",
   gocuotas: "GO Cuotas",
+  directo: "Directo",
 };
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",

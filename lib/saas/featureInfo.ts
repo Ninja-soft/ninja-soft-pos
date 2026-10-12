@@ -148,10 +148,10 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Conectar la cuenta de GO Cuotas con la API Key de la sucursal (Sucursales, Editar, Ver ApiKeys de la sucursal).",
   },
   directo: {
-    desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. El cobro se hace en el portal de comercios de Directo (QR o link) y el POS registra el número de operación.",
+    desc: "Cobros con crédito Directo: el cliente financia la compra en cuotas fijas sin tarjeta. Con la API conectada, el POS muestra el QR y el link de la orden de Directo y la venta se cierra sola al aprobarse; sin conectar, se cobra en el portal de Directo y el POS registra el número de operación.",
     impact: "Desactivado, Directo no aparece como medio de pago al cobrar.",
     minPlan: "Pro",
-    needs: "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
+    needs: "Cuenta de comercio en Directo. Para el cobro integrado, las credenciales de la API de Directo (API Key, usuario y contraseña del comercio y URL de la API); sin ellas se cobra en su portal y se registra el número de operación.",
   },
   payway_point: {
     desc: "Cobros con el Point de Payway: el POS manda el monto a la terminal y el cliente paga con tarjeta en el mostrador.",

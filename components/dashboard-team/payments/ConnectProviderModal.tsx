@@ -49,6 +49,17 @@ type Field = {
   min?: number;
   placeholder?: string;
   hint?: string;
+  // Validación extra (devuelve el error o undefined).
+  validate?: (v: string) => string | undefined;
+};
+
+const httpsUrl = (v: string) => {
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" && !u.search && !u.hash ? undefined : "Tiene que ser una URL https, sin parámetros.";
+  } catch {
+    return "Pegá la URL completa (https://...).";
+  }
 };
 
 // envNote: aclaración del paso Ambiente para proveedores sin prueba real.
@@ -98,6 +109,35 @@ const FORMS: Record<string, FormSpec> = {
   gocuotas: {
     fields: [{ name: "api_key", label: "API Key de la sucursal", secret: true, min: 8, placeholder: "Tu API Key" }],
   },
+  directo: {
+    fields: [
+      { name: "api_key", label: "API Key", secret: true, min: 6, placeholder: "Tu API Key de Directo" },
+      { name: "merchant_username", label: "Usuario del comercio", min: 2, placeholder: "MERCHANT_USERNAME" },
+      { name: "merchant_password", label: "Contraseña del comercio", secret: true, min: 4, placeholder: "MERCHANT_PASSWORD" },
+      {
+        name: "merchant_name",
+        label: "Nombre del comercio",
+        min: 2,
+        placeholder: "Tal como lo dio de alta Directo",
+        hint: "Viaja en cada orden: tiene que coincidir con el alta en Directo.",
+      },
+      {
+        name: "api_base_url",
+        label: "URL de la API",
+        placeholder: "https://...",
+        hint: "Te la da Directo con las credenciales. Es distinta en QA y en producción.",
+        validate: httpsUrl,
+      },
+      {
+        name: "subscription_key",
+        label: "Subscription Key",
+        secret: true,
+        optional: true,
+        placeholder: "Sólo si Directo te la dio",
+      },
+    ],
+    envNote: "Elegí QA (prueba) sólo si las credenciales y la URL son de QA.",
+  },
   mobbex: {
     fields: [
       { name: "api_key", label: "API Key", min: 6, placeholder: "Tu API Key" },
@@ -114,7 +154,7 @@ function fieldError(f: Field, v: string): string | undefined {
   if (f.optional && !t) return undefined;
   if (!t) return `Falta ${f.label}.`;
   if (f.min && t.length < f.min) return "Parece incompleto: copialo entero.";
-  return undefined;
+  return f.validate?.(t);
 }
 
 export type ConnectSave = { secrets?: Record<string, string>; token?: string; env?: Env };
@@ -588,6 +628,11 @@ export function ConnectProviderModal({
               <NextStep n={1}>Activá los canales que vas a usar ({channelNames.join(", ")}).</NextStep>
               {isMp && <NextStep n={2}>Configurá la caja QR para mostrar un QR único por venta.</NextStep>}
               {providerKey === "nave" && <NextStep n={2}>Pasale a Nave la URL de notificaciones.</NextStep>}
+              {providerKey === "directo" && (
+                <NextStep n={2}>
+                  Al cobrar elegís Directo QR o Link: la venta se cierra sola cuando Directo aprueba el crédito.
+                </NextStep>
+              )}
               {(providerKey === "payway" || providerKey === "mobbex") && (
                 <NextStep n={2}>Armá tus planes de cuotas y recargo por tarjeta.</NextStep>
               )}

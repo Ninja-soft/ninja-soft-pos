@@ -103,6 +103,12 @@ function qrErrorCopy(code: string, providerName: string): string {
       return "GO Cuotas rechazó la API Key de la sucursal. Verificá que sea del mismo ambiente que el switch Sandbox del medio.";
     case "gocuotas_error":
       return "GO Cuotas devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
+    case "directo_auth_failed":
+      return "Directo rechazó las credenciales del comercio. Verificá que sean del mismo ambiente que el switch Sandbox del medio.";
+    case "directo_base_url_missing":
+      return "Falta la URL de la API de Directo. Cargala en Configuración → Medios de pago.";
+    case "directo_error":
+      return "Directo devolvió un error al crear el cobro. Probá de nuevo en unos segundos.";
     case "nave_auth_failed":
       return "Nave rechazó las credenciales (Client ID / Client Secret). Verificá que el ambiente coincida con el switch Sandbox del medio.";
     case "nave_unreachable":
@@ -143,7 +149,8 @@ export function QrCheckoutModal({
     | "payway"
     | "getnet"
     | "nave"
-    | "gocuotas";
+    | "gocuotas"
+    | "directo";
   providerName?: string;
   // Notifica el QR de cobro activo a la pantalla del cliente (H25). Se llama con
   // el init_point + monto cuando el QR está listo para escanear (fase waiting), y
@@ -168,13 +175,15 @@ export function QrCheckoutModal({
   // Nave; medio y cuotas se resuelven del lado de Nave.
   // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
   // débito ahí).
+  // Directo: el cliente arma su crédito en la página de Directo.
   const selfManaged =
     provider === "modo" ||
     provider === "pagos360" ||
     provider === "payway" ||
     provider === "getnet" ||
     provider === "nave" ||
-    provider === "gocuotas";
+    provider === "gocuotas" ||
+    provider === "directo";
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);
@@ -285,7 +294,9 @@ export function QrCheckoutModal({
                   ? posApi.createNaveQr
                   : provider === "gocuotas"
                     ? posApi.createGoCuotasLink
-                    : posApi.createMpQr;
+                    : provider === "directo"
+                      ? posApi.createDirectoLink
+                      : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
       .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
@@ -359,7 +370,7 @@ export function QrCheckoutModal({
   //    ser pagable. El link de Checkout Pro NO se cancela (sigue siendo
   //    compartible y, si se paga, la conciliación lo muestra).
   //  - Nave: se da de baja la intención (QR EMV + link).
-  //  - GO Cuotas: baja local del intent (Redirect no anula checkouts).
+  //  - GO Cuotas y Directo: baja local del intent (no anulan órdenes por API).
   function close() {
     if (intentId && phase === "waiting") {
       if (provider === "mercadopago" && mpChannel === "order") {
@@ -368,6 +379,8 @@ export function QrCheckoutModal({
         posApi.cancelNaveIntent(intentId).catch(() => null);
       } else if (provider === "gocuotas") {
         posApi.cancelGoCuotasIntent(intentId).catch(() => null);
+      } else if (provider === "directo") {
+        posApi.cancelDirectoIntent(intentId).catch(() => null);
       }
     }
     onOpenChange(false);
@@ -449,7 +462,9 @@ export function QrCheckoutModal({
                 ? posApi.naveIntentStatus(intentId!)
                 : provider === "gocuotas"
                   ? posApi.gocuotasIntentStatus(intentId!)
-                  : posApi.mpIntentStatus(intentId!),
+                  : provider === "directo"
+                    ? posApi.directoIntentStatus(intentId!)
+                    : posApi.mpIntentStatus(intentId!),
     // Mientras se pasa del QR de caja al link no se sondea: la order vieja se
     // está cancelando y su "cancelled" no debe cerrar el cobro.
     enabled: open && phase === "waiting" && Boolean(intentId) && !switching,

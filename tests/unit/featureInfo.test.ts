@@ -33,10 +33,9 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.gocuotas?.minPlan).toBe("Pro");
   });
 
-  it("Directo aclara que el cobro se hace en su portal", () => {
-    expect(FEATURE_INFO.directo?.needs).toBe(
-      "Tener cuenta de comercio en Directo; el cobro se hace en su portal y en el POS se registra el número de operación",
-    );
+  it("Directo pide las credenciales de su API y aclara el respaldo manual", () => {
+    expect(FEATURE_INFO.directo?.needs).toMatch(/credenciales de la API de Directo/);
+    expect(FEATURE_INFO.directo?.needs).toMatch(/número de operación/);
     expect(FEATURE_INFO.directo?.minPlan).toBe("Pro");
   });
 

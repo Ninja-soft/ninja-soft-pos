@@ -103,15 +103,19 @@ export const BRANDS: BrandDef[] = [
     key: "directo",
     name: "Directo",
     tagline: "Crédito en cuotas fijas sin tarjeta",
+    credentialsUrl: "https://minegocio.directo.com.ar/login",
+    credentialsLabel: "Portal de comercios de Directo",
     channels: ["directo"],
   },
   { key: "fiserv", name: "Fiserv", tagline: "Terminales Posnet y Clover", channels: ["fiserv"] },
 ];
 
 // Marcas que se cobran a mano, sin cuenta conectada: van en "Cobros directos".
-// Directo también es manual, pero tiene su propia tarjeta (gating por plan y
-// explicación del circuito en su portal).
 export const DIRECT_BRANDS = new Set(["cash", "transfer"]);
+
+// Marcas con API que, sin conectar, igual se cobran a mano (registro del
+// número de operación). Directo (ADR-041): conectada cobra por QR + link.
+export const MANUAL_FALLBACK = new Set(["directo"]);
 
 export const BRAND_BY_KEY: Record<string, BrandDef> = Object.fromEntries(
   BRANDS.map((b) => [b.key, b]),
@@ -134,7 +138,7 @@ export const PROVIDER_CHANNEL_FALLBACK: Record<string, { brand: string; channel:
   pagos360: { brand: "pagos360", channel: "qr_link" },
   fiserv: { brand: "fiserv", channel: "point" },
   gocuotas: { brand: "gocuotas", channel: "qr_link" },
-  directo: { brand: "directo", channel: "manual" },
+  directo: { brand: "directo", channel: "qr_link" },
 };
 
 // Canales con flujo de cobro real implementado. El resto se muestra como
@@ -157,7 +161,7 @@ export const IMPLEMENTED = new Set([
 
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas"]);
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point

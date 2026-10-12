@@ -216,7 +216,7 @@ export function PaymentMethodsCard() {
             key === "mercadopago" && m?.config?.connected ? (
               <MpQrPosSetup method={m} />
             ) : key === "directo" ? (
-              <DirectoInfo />
+              <DirectoInfo connected={Boolean(m?.config?.connected)} onConnect={() => setConnectBrand("directo")} />
             ) : null,
         }}
       />

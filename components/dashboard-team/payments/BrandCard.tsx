@@ -20,6 +20,7 @@ import { firstPlanWithFeature, type PlanForUpgrade } from "@/modules/saas/gating
 import { PROVIDER_FEATURE } from "@/lib/payments/providerFeature";
 import { featureInfo } from "@/lib/saas/featureInfo";
 import {
+  MANUAL_FALLBACK,
   PLANS_KEY_BY_CHANNEL,
   connectionKeyOf,
   surchargeModeOf,
@@ -77,8 +78,12 @@ export function brandBucket(
   if (live.length === 0) return "soon";
   if (live.every((c) => gateOf(c, { features, plans }).locked)) return "locked";
   const connKey = connectionKeyOf(group.brand.key);
+  // Directo sin API pero con el registro manual habilitado: ya cobra.
+  if (connKey && MANUAL_FALLBACK.has(group.brand.key) && live.some((c) => byKey.get(c.key)?.enabled)) {
+    return "active";
+  }
   if (connKey) return byKey.get(connKey)?.config?.connected ? "active" : "available";
-  // Sin cuenta que conectar (Directo): activa si algún canal está habilitado.
+  // Sin cuenta que conectar: activa si algún canal está habilitado.
   return live.some((c) => byKey.get(c.key)?.enabled) ? "active" : "available";
 }
 
@@ -106,7 +111,7 @@ export function BrandCard({
   const env = envOf(connKey, byKey);
   const gates = channels.map((c) => ({ c, ...gateOf(c, gate) }));
   const live = gates.filter((x) => x.c.implemented);
-  // Marcas sin cuenta que conectar (Directo): se cobran en su portal.
+  // Marcas sin cuenta que conectar: se cobran a mano.
   const noConnection = !connKey;
   const allLocked = live.length > 0 && live.every((x) => x.locked);
   const firstLocked = live.find((x) => x.locked);
@@ -117,6 +122,7 @@ export function BrandCard({
   else if (noConnection) [tone, label] = ["idle", "Registro manual"];
   else if (connected && env === "test") [tone, label] = ["test", "En prueba"];
   else if (connected) [tone, label] = ["ok", "Conectado"];
+  else if (MANUAL_FALLBACK.has(brand.key)) [tone, label] = ["idle", "Registro manual"];
 
   const action = allLocked ? (
     <Button size="sm" variant="secondary" onClick={() => setUpgradeKey(firstLocked?.featureKey ?? null)}>

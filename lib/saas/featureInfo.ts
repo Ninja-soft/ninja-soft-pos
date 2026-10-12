@@ -161,6 +161,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, las ventas no descuentan stock y no hay control de inventario.",
     minPlan: "Start",
   },
+  medidas_bultos: {
+    desc: "Medidas por bulto de cada producto: alto, ancho, profundidad, peso y unidades por bulto, con volumen y m³ calculados para logística y envíos.",
+    impact: "Desactivado, no se pueden cargar ni editar bultos en la ficha del producto (el servidor rechaza el alta).",
+    minPlan: "Start",
+    requires: ["productos"],
+  },
   categorias: {
     desc: "Categorías de productos: organiza el catálogo en categorías para filtrar y reportar por rubro.",
     impact: "Sin categorías el catálogo queda plano, sin agrupar ni filtrar por tipo de producto.",

@@ -42,6 +42,7 @@ import { ProductImages } from "@/components/products/ProductImages";
 import { KitComponentsEditor } from "@/components/products/KitComponentsEditor";
 import { SerialsEditor } from "@/components/products/SerialsEditor";
 import { VariantsEditor } from "@/components/products/VariantsEditor";
+import { StoreStockPanel } from "@/components/stock/StoreStockPanel";
 import { ModifiersEditor } from "@/components/products/ModifiersEditor";
 import { RecipeEditor } from "@/components/products/RecipeEditor";
 import { AttributesEditor } from "@/components/products/AttributesEditor";
@@ -677,6 +678,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 />
               </div>
             </div>
+            {active && trackStock && <StoreStockPanel product={active} />}
           </Group>
         </div>
 

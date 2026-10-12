@@ -69,7 +69,10 @@ export const OPEN_STATUSES: TransferStatus[] = [
 ];
 
 // Transiciones permitidas por acción (sin mirar rol). `null` = no aplica.
-const TRANSITIONS: Record<TransferAction, Partial<Record<TransferStatus, TransferStatus[]>>> = {
+const TRANSITIONS: Record<
+  TransferAction,
+  Partial<Record<TransferStatus, TransferStatus[]>>
+> = {
   edit: { draft: ["draft"] },
   submit: { draft: ["pending_approval", "scheduled"] },
   approve: { pending_approval: ["scheduled"] },
@@ -93,12 +96,18 @@ const TRANSITIONS: Record<TransferAction, Partial<Record<TransferStatus, Transfe
 };
 
 /** ¿La acción es válida desde ese estado? */
-export function canTransition(status: TransferStatus, action: TransferAction): boolean {
+export function canTransition(
+  status: TransferStatus,
+  action: TransferAction,
+): boolean {
   return Boolean(TRANSITIONS[action][status]);
 }
 
 /** Estados posibles después de aplicar la acción. Vacío si no aplica. */
-export function nextStatuses(status: TransferStatus, action: TransferAction): TransferStatus[] {
+export function nextStatuses(
+  status: TransferStatus,
+  action: TransferAction,
+): TransferStatus[] {
   return TRANSITIONS[action][status] ?? [];
 }
 
@@ -131,7 +140,11 @@ export const DEFAULT_TRANSFER_SETTINGS: TransferSettings = {
  * Con aprobación activa y sin umbrales, todos la necesitan; con umbrales, basta
  * con superar uno (unidades o valor a costo).
  */
-export function needsApproval(s: TransferSettings, units: number, value: number): boolean {
+export function needsApproval(
+  s: TransferSettings,
+  units: number,
+  value: number,
+): boolean {
   if (!s.require_approval) return false;
   if (s.approval_min_units == null && s.approval_min_value == null) return true;
   return (
@@ -147,7 +160,9 @@ export function submitTarget(
   value: number,
   role: TenantRole,
 ): TransferStatus {
-  return needsApproval(s, units, value) && role !== "owner" ? "pending_approval" : "scheduled";
+  return needsApproval(s, units, value) && role !== "owner"
+    ? "pending_approval"
+    : "scheduled";
 }
 
 export interface TransferForActions {
@@ -170,7 +185,8 @@ export function allowedActions(
   };
   add("edit", manage);
   add("submit", manage);
-  const approver = role === "owner" || (role === "manager" && t.created_by !== userId);
+  const approver =
+    role === "owner" || (role === "manager" && t.created_by !== userId);
   add("approve", approver);
   add("reject", approver);
   add("reschedule", manage);
@@ -193,7 +209,8 @@ export function dueState(
   status: TransferStatus,
   today: string,
 ): DueState {
-  if (!["draft", "pending_approval", "scheduled"].includes(status)) return "none";
+  if (!["draft", "pending_approval", "scheduled"].includes(status))
+    return "none";
   if (!scheduledFor) return status === "scheduled" ? "today" : "none";
   const d = scheduledFor.slice(0, 10);
   if (d < today) return "overdue";
@@ -261,7 +278,12 @@ export interface ReceiveOutcome {
   status: "partially_received" | "received";
   lines: ReceiveLineResult[];
   /** Error que daría el servidor, si lo hay. */
-  error: null | "invalid_qty" | "over_receive_not_allowed" | "difference_reason_required" | "nothing_to_receive";
+  error:
+    | null
+    | "invalid_qty"
+    | "over_receive_not_allowed"
+    | "difference_reason_required"
+    | "nothing_to_receive";
 }
 
 /** Simula transfer_receive: estado resultante, diferencias y validaciones. */
@@ -278,7 +300,8 @@ export function receiveOutcome(
     const totalReceived = l.received + Math.max(0, l.incoming);
     got += Math.max(0, l.incoming);
     const overReceived = totalReceived > dispatched;
-    if (overReceived && !s.allow_over_receive) error = error ?? "over_receive_not_allowed";
+    if (overReceived && !s.allow_over_receive)
+      error = error ?? "over_receive_not_allowed";
     const difference = round3(totalReceived - dispatched);
     return {
       totalReceived,
@@ -291,7 +314,11 @@ export function receiveOutcome(
   const open = results.some((r) => r.pending > 0);
   const closing = close || !open;
   if (closing) {
-    if (!error && s.require_difference_reason && results.some((r) => r.needsReason)) {
+    if (
+      !error &&
+      s.require_difference_reason &&
+      results.some((r) => r.needsReason)
+    ) {
       error = "difference_reason_required";
     }
     return { status: "received", lines: results, error };
@@ -314,24 +341,51 @@ export function formatRemitoNumber(n: number): string {
 // ── Errores del servidor → mensaje para el usuario ─────────────────────────
 
 const ERROR_MESSAGES: Array<[RegExp, string]> = [
-  [/feature_not_in_plan: traslados/, "Los traslados no están incluidos en tu plan."],
-  [/feature_not_in_plan: stock_sucursales/, "El stock por sucursal no está incluido en tu plan."],
-  [/feature_not_in_plan: multi_sucursal/, "Tu plan no incluye varias sucursales."],
-  [/single_store/, "Necesitás al menos dos sucursales activas para trasladar stock."],
+  [
+    /feature_not_in_plan: traslados/,
+    "Los traslados no están incluidos en tu plan.",
+  ],
+  [
+    /feature_not_in_plan: stock_sucursales/,
+    "El stock por sucursal no está incluido en tu plan.",
+  ],
+  [
+    /feature_not_in_plan: multi_sucursal/,
+    "Tu plan no incluye varias sucursales.",
+  ],
+  [
+    /single_store/,
+    "Necesitás al menos dos sucursales activas para trasladar stock.",
+  ],
   [/same_store/, "El origen y el destino tienen que ser sucursales distintas."],
   [/stores_required/, "Elegí la sucursal de origen y la de destino."],
   [/store_not_found/, "La sucursal no existe o está inactiva."],
-  [/forbidden_approval/, "Lo aprueba el dueño o un encargado distinto de quien lo armó."],
+  [
+    /forbidden_approval/,
+    "Lo aprueba el dueño o un encargado distinto de quien lo armó.",
+  ],
   [/forbidden/, "No tenés permiso para esta acción."],
-  [/invalid_transition/, "El traslado cambió de estado. Actualizá la pantalla."],
+  [
+    /invalid_transition/,
+    "El traslado cambió de estado. Actualizá la pantalla.",
+  ],
   [/transfer_not_found/, "No encontramos el traslado."],
   [/transfer_empty/, "Agregá al menos un producto."],
-  [/kit_not_transferable/, "Los kits no se trasladan: trasladá sus componentes."],
+  [
+    /kit_not_transferable/,
+    "Los kits no se trasladan: trasladá sus componentes.",
+  ],
   [/untracked_not_transferable/, "Ese producto no controla stock."],
   [/variant_required/, "Elegí la variante (talle, color) del producto."],
-  [/variant_not_found|variant_not_allowed/, "La variante no corresponde al producto."],
+  [
+    /variant_not_found|variant_not_allowed/,
+    "La variante no corresponde al producto.",
+  ],
   [/product_not_found/, "Un producto ya no existe."],
-  [/insufficient_stock_origin/, "No hay stock suficiente en el origen para despachar."],
+  [
+    /insufficient_stock_origin/,
+    "No hay stock suficiente en el origen para despachar.",
+  ],
   [/nothing_to_dispatch/, "No hay nada para despachar."],
   [/nothing_to_receive/, "Indicá cuánto llegó."],
   [/over_receive_not_allowed/, "No se puede recibir más de lo despachado."],

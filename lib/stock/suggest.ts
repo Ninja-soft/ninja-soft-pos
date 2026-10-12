@@ -64,7 +64,9 @@ export function suggestTransfers(
       })
       .filter((n) => n.need > EPS)
       .filter((n) => !opts.destStoreId || n.c.storeId === opts.destStoreId)
-      .sort((a, b) => b.need - a.need || a.c.storeId.localeCompare(b.c.storeId));
+      .sort(
+        (a, b) => b.need - a.need || a.c.storeId.localeCompare(b.c.storeId),
+      );
     if (needy.length === 0) continue;
 
     const needyIds = new Set(needy.map((n) => n.c.storeId));
@@ -72,7 +74,10 @@ export function suggestTransfers(
       .filter((c) => !needyIds.has(c.storeId))
       .map((c) => ({ c, surplus: c.qty - Math.max(c.min, 0) }))
       .filter((d) => d.surplus > EPS)
-      .sort((a, b) => b.surplus - a.surplus || a.c.storeId.localeCompare(b.c.storeId));
+      .sort(
+        (a, b) =>
+          b.surplus - a.surplus || a.c.storeId.localeCompare(b.c.storeId),
+      );
 
     for (const n of needy) {
       let need = n.need;
@@ -80,7 +85,12 @@ export function suggestTransfers(
         if (need <= EPS) break;
         const give = roundQty(Math.min(need, d.surplus), integer);
         if (give <= EPS) continue;
-        out.push({ key, fromStoreId: d.c.storeId, toStoreId: n.c.storeId, qty: give });
+        out.push({
+          key,
+          fromStoreId: d.c.storeId,
+          toStoreId: n.c.storeId,
+          qty: give,
+        });
         d.surplus -= give;
         need -= give;
       }
@@ -96,11 +106,17 @@ export interface SuggestionGroup {
 }
 
 /** Agrupa las sugerencias por par origen → destino (un traslado por grupo). */
-export function groupSuggestions(list: TransferSuggestion[]): SuggestionGroup[] {
+export function groupSuggestions(
+  list: TransferSuggestion[],
+): SuggestionGroup[] {
   const map = new Map<string, SuggestionGroup>();
   for (const s of list) {
     const k = `${s.fromStoreId}>${s.toStoreId}`;
-    const g = map.get(k) ?? { fromStoreId: s.fromStoreId, toStoreId: s.toStoreId, lines: [] };
+    const g = map.get(k) ?? {
+      fromStoreId: s.fromStoreId,
+      toStoreId: s.toStoreId,
+      lines: [],
+    };
     g.lines.push(s);
     map.set(k, g);
   }
@@ -108,11 +124,17 @@ export function groupSuggestions(list: TransferSuggestion[]): SuggestionGroup[] 
 }
 
 /** Clave estable de producto/variante. */
-export function stockKey(productId: string, variantId: string | null | undefined): string {
+export function stockKey(
+  productId: string,
+  variantId: string | null | undefined,
+): string {
   return `${productId}:${variantId ?? ""}`;
 }
 
-export function parseStockKey(key: string): { productId: string; variantId: string | null } {
-  const [productId, variantId] = key.split(":");
+export function parseStockKey(key: string): {
+  productId: string;
+  variantId: string | null;
+} {
+  const [productId = "", variantId] = key.split(":");
   return { productId, variantId: variantId ? variantId : null };
 }

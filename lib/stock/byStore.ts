@@ -56,7 +56,11 @@ export function storeStockLines(
   productMin: number | null | undefined,
   currentStoreId?: string | null,
 ): StoreStockLine[] {
-  const current = currentStoreId ?? stores.find((s) => s.is_default)?.id ?? stores[0]?.id ?? null;
+  const current =
+    currentStoreId ??
+    stores.find((s) => s.is_default)?.id ??
+    stores[0]?.id ??
+    null;
   const lines = stores.map((store) => {
     const r = rows.find(
       (x) =>
@@ -80,7 +84,8 @@ export function storeStockLines(
   });
   return lines.sort((a, b) => {
     if (a.current !== b.current) return a.current ? -1 : 1;
-    if (a.store.is_default !== b.store.is_default) return a.store.is_default ? -1 : 1;
+    if (a.store.is_default !== b.store.is_default)
+      return a.store.is_default ? -1 : 1;
     return a.store.name.localeCompare(b.store.name, "es");
   });
 }

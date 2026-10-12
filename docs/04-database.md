@@ -277,6 +277,18 @@ create table cash_registers (
 );
 ```
 
+#### Extensión F17 · H89-H91 (ADR-045): sucursales, cajas y personal por sucursal
+
+Migraciones `20261013100000_sucursales_cajas`, `20261013110000_personal_por_sucursal` y `20261013120000_venta_sucursal_del_turno`.
+
+- `stores` suma `code` (único vivo por negocio, en mayúsculas), `short_name`, `color` (`#rrggbb`), `email`, `city`, `province`, `postal_code`, `timezone`, `afip_pos_number` (PV ARCA, 1 a 99998), `opening_hours` (jsonb `{ mon: [{from, to}], ... }`), `notes`, `sort`, `archived_reason`. Estados: activa, pausada (`is_active = false`) y archivada (`deleted_at`). Una sola principal viva por negocio (índice parcial; cambiar con `set_default_store`).
+- `cash_registers` suma `code` (único vivo por sucursal), `kind` (`fixed`, `mobile`, `self_service`), `device_notes`, `printer_notes`, `afip_pos_number`, `sort`, `deleted_at`, `archived_reason`.
+- `cash_shifts.store_id` (not null): desnormalizado de la caja por trigger; es histórico (mover la caja no lo cambia).
+- Triggers `stores_enforce_rules` y `cash_registers_enforce_rules`: feature y límite del plan al crear o restaurar (`multi_sucursal` + `max_stores`; `multi_caja` + `max_registers_per_store`), y reglas de archivo y pausa (principal, turno abierto, última sucursal activa, última caja).
+- `staff_branch_assignments(store_id, user_id | cashier_profile_id, kind home|cover|extra, role, valid_from, valid_until, reason, transfer_id, superseded_by, prev_valid_until, deleted_at, cancel_reason)`: personal por sucursal con vigencias. Escritura sólo por `staff_branch_schedule` y `staff_branch_cancel`.
+- Helpers: `branch_today()`, `staff_allowed_store_ids(...)`, `user_allowed_store_ids()`, `user_can_access_store(store)`, `user_store_role(store)`, `tenant_limit_for(tenant, key)`, `resolve_sale_shift(shift, strict)`.
+- RLS: lectura de `stores` y `cash_registers` para miembros, escritura owner/manager, sin DELETE. Policies RESTRICTIVE de lectura por sucursal en `sales`, `cash_shifts`, `cash_movements` y `cash_z_closures`.
+
 #### `categories`
 
 ```sql
@@ -738,6 +750,17 @@ Reglas:
 - [ ] Devoluciones cross-channel vinculan orden/venta original, pago, documento fiscal y movimiento de stock.
 - [ ] Dead-letter y replay son operaciones auditadas y visibles para soporte.
 - [ ] Riesgo/fraude nunca bloquea silenciosamente: debe explicar regla, score y acción requerida.
+
+## 8.7 Extensión F17: stock por sucursal y traslados (ADR-046)
+
+Migraciones `20261013200000` (features), `20261013200100` (stock por sucursal) y `20261013200200` (traslados).
+
+- [x] `product_stock(tenant_id, store_id, product_id, variant_id, qty, min_qty, max_qty, location)`: stock en mano por sucursal, único por `(store_id, product_id, variant_id)` con `nulls not distinct`. Sólo lectura por RLS; el saldo cambia por triggers sobre `stock_movements` y la configuración por RPC (`set_store_stock_settings`).
+- [x] `stock_movements.store_id` se completa en `BEFORE INSERT` (venta referenciada o sucursal principal) y `AFTER INSERT/DELETE` aplica el delta a `product_stock`. Motivos nuevos: `production`, `count`, `transfer_out`, `transfer_in`, `transfer_return`.
+- [x] Invariante al commit (triggers de restricción diferidos): `products.stock` = Σ `product_stock.qty` (variante null) y `product_variants.stock` = Σ por variante. Una diferencia (edición directa, alta con stock inicial, import) entra como movimiento `adjustment` en la sucursal principal. Diagnóstico: `product_stock_mismatches(tenant)` (service_role).
+- [x] `stock_transfers` (remito correlativo `number` por tenant, estados `draft → pending_approval → scheduled → in_transit → partially_received → received / cancelled`), `stock_transfer_items` (pedido, enviado, recibido, motivo de diferencia), `stock_transfer_events` (timeline) y `stock_transfer_settings` (aprobación por unidades o valor, permisos de cajero, sobrantes, motivo obligatorio, bloqueo sin stock). Sólo lectura por RLS (la configuración la escriben owner/manager); todo cambio por RPC `transfer_*` SECURITY DEFINER con `audit_logs`.
+- [x] Lecturas: `stock_by_store(product_ids)` (saldo, mínimos y en camino) y `stock_low_by_store(limit)` (faltantes por sucursal con el saldo de todas, para sugerir traslados).
+- [ ] RLS por sucursal (`user_can_access_store`) cuando exista H91.
 
 ---
 

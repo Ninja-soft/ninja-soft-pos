@@ -268,6 +268,23 @@ Reglas:
 - [ ] Cada cambio de permiso queda en `audit_logs`.
 - [ ] Las Edge Functions revalidan permisos; no alcanza con ocultar botones.
 
+## 9.1b Alcance por sucursal (F17 · H91, ADR-045)
+
+El rol sigue siendo por negocio (`tenant_users.role`); la sucursal define **dónde** se opera y, opcionalmente, pisa el rol en esa sucursal.
+
+| Situación | Sucursales que ve y opera |
+|---|---|
+| Dueño, staff interno, o negocio con una sola sucursal viva | Todas (incluidas archivadas, para la historia) |
+| Con cobertura temporal vigente | Sólo la de la cobertura (exclusiva) |
+| Con base y/o accesos adicionales vigentes | Esas |
+| Encargado sin asignaciones vigentes | Todas (alcance central) |
+| Cajero o solo lectura sin asignaciones vigentes | La sucursal principal |
+
+- Asignaciones en `staff_branch_assignments` con vigencia por fecha (hora de Argentina), evaluadas al consultar: traslados y coberturas se programan sin cron.
+- `user_allowed_store_ids()` alimenta las policies RESTRICTIVE de `sales`, `cash_shifts`, `cash_movements` y `cash_z_closures`, el alta de turnos (`open_cash_shift`) y la venta (`resolve_sale_shift`).
+- `user_store_role(store)` devuelve el rol efectivo (el pisado por la asignación vigente o el del negocio); `create_sale` lo usa para el tope de descuento.
+- Programar, cancelar o finalizar movimientos: owner o manager, con `multi_sucursal` en el plan, auditado (`staff_branch_scheduled`, `staff_branch_cancelled`, `staff_branch_ended`).
+
 ## 9.2 Roles de servicios y agenda
 
 F12 agrega presets para comercios de servicios donde importa la agenda, el profesional y la comisión:

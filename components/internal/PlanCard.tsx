@@ -36,6 +36,7 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
   max_stores: "Sucursales",
+  max_registers_per_store: "Cajas por sucursal",
   max_users: "Usuarios",
   max_products: "Productos",
   max_sales_per_month: "Ventas / mes",
@@ -78,6 +79,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
   const [editPrice, setEditPrice] = useState("");
   const [editLimits, setEditLimits] = useState<Record<LimitKey, string>>({
     max_stores: "",
+    max_registers_per_store: "",
     max_users: "",
     max_products: "",
     max_sales_per_month: "",
@@ -120,6 +122,7 @@ export function PlanCard({ tenantId }: { tenantId: string }) {
     setEditPrice(String(detail.monthlyPrice));
     setEditLimits({
       max_stores: String(numbers.max_stores ?? ""),
+      max_registers_per_store: String(numbers.max_registers_per_store ?? ""),
       max_users: String(numbers.max_users ?? ""),
       max_products: String(numbers.max_products ?? ""),
       max_sales_per_month: String(numbers.max_sales_per_month ?? ""),

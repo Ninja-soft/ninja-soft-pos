@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
+import { getActiveShiftId } from "@/modules/branches/store";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -408,25 +409,13 @@ async function invokeMpQr<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 export const posApi = {
-  defaultRegister: async (): Promise<CashRegister | null> => {
+  // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
+  // criterio histórico: el último turno abierto visible para el usuario.
+  openShift: async (registerId?: string | null): Promise<CashShift | null> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("cash_registers")
-      .select("*")
-      .eq("is_active", true)
-      .order("created_at")
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
-  },
-
-  openShift: async (): Promise<CashShift | null> => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("cash_shifts")
-      .select("*")
-      .eq("status", "open")
+    let q = supabase.from("cash_shifts").select("*").eq("status", "open");
+    if (registerId) q = q.eq("cash_register_id", registerId);
+    const { data, error } = await q
       .order("opened_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -542,6 +531,7 @@ export const posApi = {
       connected: boolean;
       surcharge_pct: number;
       merchant_numbers: Partial<Record<string, string>>;
+      plan_mode: string | null;
     }>
   > => {
     const supabase = createClient();
@@ -556,6 +546,7 @@ export const posApi = {
       surcharge_pct: Number(r.surcharge_pct) || 0,
       merchant_numbers:
         ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
+      plan_mode: (r.config as { plan_mode?: string } | null)?.plan_mode ?? null,
     }));
   },
 
@@ -1319,6 +1310,9 @@ export const posApi = {
         : {}),
       // Cupón (F9 · H54): sólo el id; create_sale calcula y valida el resto.
       ...(couponId ? { p_coupon_id: couponId } : {}),
+      // F17 · H90: turno de la caja de este dispositivo. La venta queda en la
+      // sucursal de ese turno (no en la sucursal principal).
+      ...(getActiveShiftId() ? { p_cash_shift_id: getActiveShiftId() } : {}),
     } as never);
     if (error) throw error;
     return data as unknown as CreateSaleResult;

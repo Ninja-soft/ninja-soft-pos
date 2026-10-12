@@ -56,6 +56,12 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.conciliacion_tarjetas?.needs).toMatch(/números de comercio/);
   });
 
+  it("multi-sucursal y multi-caja tienen copy y plan mínimo (F17 · H89)", () => {
+    expect(FEATURE_INFO.multi_sucursal?.minPlan).toBe("Business");
+    expect(FEATURE_INFO.multi_caja?.minPlan).toBe("Pro");
+    expect(FEATURE_INFO.multi_caja?.impact).toMatch(/primera caja/);
+  });
+
   it("featureRequires devuelve las dependencias directas", () => {
     expect(featureRequires("pos")).toEqual([]);
   });
@@ -66,5 +72,14 @@ describe("dependencias de features", () => {
       expect(FEATURE_INFO[key]?.minPlan, key).toBe(FEATURE_INFO.cuenta_corriente?.minPlan);
     }
     expect(FEATURE_INFO.cc_cobranza?.needs).toBeTruthy();
+  });
+
+  it("stock por sucursal y traslados dependen de multi-sucursal (mismo plan)", () => {
+    expect(featureRequires("stock_sucursales")).toEqual(["multi_sucursal"]);
+    expect(featureRequires("traslados")).toEqual(["stock_sucursales"]);
+    for (const key of ["stock_sucursales", "traslados"]) {
+      expect(FEATURE_INFO[key]?.minPlan, key).toBe(FEATURE_INFO.multi_sucursal?.minPlan);
+    }
+    expect(FEATURE_INFO.traslados?.needs).toMatch(/dos sucursales/);
   });
 });

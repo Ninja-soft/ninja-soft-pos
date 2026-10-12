@@ -538,6 +538,57 @@ html {
 }
 
 /* -----------------------------------------------------------------------------
+ * Remito interno de traslado (F17 · H95). Mismo aislamiento que la comanda:
+ * con un remito en pantalla se oculta el resto de la app y se libera el modal
+ * para que la hoja (A4) pagine. Negro sobre blanco.
+ * -------------------------------------------------------------------------- */
+@media print {
+  .remito-print,
+  .remito-print * {
+    visibility: visible;
+  }
+  body:has(.remito-print) > *:not(:has(.remito-print)) {
+    display: none !important;
+  }
+  body:has(.remito-print) [role="dialog"] {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    max-height: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  body:has(.remito-print) [role="dialog"] > div {
+    overflow: visible !important;
+    max-height: none !important;
+    padding: 0 !important;
+  }
+  body:has(.remito-print) [role="dialog"] > div > *:not(.remito-print):not(:has(.remito-print)) {
+    display: none !important;
+  }
+  .remito-print {
+    position: static;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    background: #fff;
+    color: #000;
+  }
+  .remito-print * {
+    color: #000 !important;
+  }
+  .remito-items th,
+  .remito-items td {
+    border-bottom: 1px solid #000;
+    padding: 4px 6px;
+  }
+}
+
+/* -----------------------------------------------------------------------------
  * Etiquetas de producto (hoja imprimible). En pantalla se ve como una grilla de
  * tarjetas; al imprimir, cada etiqueta es negro sobre blanco, con borde, para
  * que salga prolija en impresora común o de etiquetas. Reusa el aislamiento de

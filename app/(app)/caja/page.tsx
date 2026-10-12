@@ -20,7 +20,8 @@ import { InfoHint } from "@/components/ui/InfoHint";
 import { Card, CardContent } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { Isotype } from "@/components/brand/Logo";
-import { useOpenShift } from "@/modules/pos/hooks";
+import { useDefaultRegister, useOpenShift } from "@/modules/pos/hooks";
+import { locationLabel } from "@/modules/branches/logic";
 import { useShiftMovements, useAddMovement } from "@/modules/cash/hooks";
 import { summarize } from "@/modules/cash/api";
 import { ZClosuresHistory } from "@/components/cash/ZClosuresHistory";
@@ -36,6 +37,9 @@ import { EmptyState } from "@/components/ui/EmptyState";
 export default function CajaPage() {
   const { toast } = useToast();
   const { data: shift } = useOpenShift();
+  // F17 · H90: la caja de este dispositivo ("Centro · Caja 1").
+  const { data: register, store: registerStore } = useDefaultRegister();
+  const where = locationLabel(registerStore, register);
   const { data: movements } = useShiftMovements(shift?.id ?? null);
   const addMovement = useAddMovement();
   // Perfil de impresión del "cierre Z" (H22): copias configuradas por el negocio.
@@ -82,7 +86,7 @@ export default function CajaPage() {
     await exportXlsx(`reporte-z-${format(new Date(), "yyyy-MM-dd")}`, [
       {
         name: "Reporte Z",
-        title: `Reporte Z · turno ${shift.id.slice(0, 8)}`,
+        title: `Reporte Z · ${where ? `${where} · ` : ""}turno ${shift.id.slice(0, 8)}`,
         columns: [
           { header: "Concepto", key: "k", width: 22 },
           { header: "Monto", key: "v", type: "money", width: 18 },
@@ -121,6 +125,7 @@ export default function CajaPage() {
         <PageHeader
           eyebrow="Operación"
           title="Caja"
+          description={where || undefined}
           icon={Wallet}
           help={<InfoHint section="caja" size={18} />}
         />

@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:rls": "vitest run tests/integration/rls.test.ts",
+    "test:rls": "vitest run tests/integration",
     "format": "prettier --write .",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

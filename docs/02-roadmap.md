@@ -28,7 +28,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
-| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🔴 No iniciado (auditoría Napse 2026-10-12, ADR-043) |
+| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🔴 No iniciado (auditoría fiscal 2026-10-12, ADR-043) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
@@ -980,28 +980,28 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
 >
 > **Clasificación (convención de features de plan):** cada hito indica BASE / OPTIONAL / ADDON / FLAG-OPERATIVO y su key. Las keys nuevas siguen el checklist completo de `CLAUDE.md` (features, `plans.limits.modules`, gating server-side, `featureInfo.ts`, `planComparison.ts`).
 
-- [ ] **H89: Sucursales y cajas como entidades administrables.** · *BASE (la primera sucursal y caja) + OPTIONAL `multi_sucursal` (Business, existe) desde la segunda sucursal + OPTIONAL `multi_caja` (nueva, Pro) desde la segunda caja de una sucursal.*
-  - [ ] ABM de sucursales en Configuración: nombre, nombre corto, código, dirección estructurada, teléfono, horario, color, grupo o zona (`store_groups`), estado, baja lógica.
-  - [ ] Datos fiscales por sucursal: domicilio comercial, punto de venta ARCA (`stores.afip_pos_number`), razón social y CUIT opcionales (null = los del negocio).
-  - [ ] ABM de cajas por sucursal: nombre, código, tipo (fija, móvil, autoservicio), baja lógica (`cash_registers.deleted_at`), PV propio opcional.
-  - [ ] Enforcement server-side de `max_stores` y de cajas por plan (trigger en `stores` y `cash_registers` con `tenant_limit` + `tenant_has_feature_for`), no sólo en la UI.
+- [~] **H89: Sucursales y cajas como entidades administrables.** *(2026-10-12, ADR-045: ABM, gating y auditoría hechos; faltan grupos, plantilla e import XLSX)* · *BASE (la primera sucursal y caja) + OPTIONAL `multi_sucursal` (Business, existe) desde la segunda sucursal + OPTIONAL `multi_caja` (nueva, Pro) desde la segunda caja de una sucursal.*
+  - [x] ABM de sucursales en Configuración: nombre, nombre corto, código, dirección estructurada, teléfono, email, horario, color, estado (activa, pausada, archivada), principal y baja lógica. *(Grupo o zona `store_groups`: pendiente, va con H92.)*
+  - [~] Datos fiscales por sucursal: punto de venta ARCA (`stores.afip_pos_number`) y domicilio hechos; razón social y CUIT opcionales pendientes (H98).
+  - [x] ABM de cajas por sucursal: nombre, código, tipo (fija, móvil, autoservicio), notas de dispositivo e impresora, baja lógica (`cash_registers.deleted_at`), PV propio opcional, mover de sucursal sin turno abierto.
+  - [x] Enforcement server-side de `max_stores` y de cajas por plan (`max_registers_per_store`, `multi_caja`) con triggers en `stores` y `cash_registers` (`tenant_limit_for` + `tenant_has_feature_for`), no sólo en la UI.
   - [ ] Plantilla de sucursal nueva: qué configuración hereda y qué se copia al crearla (ver H92).
   - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
   - [ ] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón).
 
-- [ ] **H90: Contexto de sucursal y caja activa ("dónde estoy").** · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
-  - [ ] **Fix P0 independiente:** `create_sale`, `exchange_sale`, `return_sale_*`, cobros de cuenta corriente y RPC de stock derivan `store_id` de `cash_shift → cash_register → store`, no de `stores.is_default`. Test con 2 sucursales y turnos abiertos en ambas. Se puede hacer ya.
-  - [ ] Chip de sucursal en el topbar del panel (nombre corto + color) con selector "Todas las sucursales" o una sucursal; filtra ventas, reportes, stock y caja; recordado en `users.settings.active_store_id`; título de pestaña "Ventas · Centro".
-  - [ ] Cabecera del POS: "Centro · Caja 1 · abierta" (mobile: "Centro · C1"). Sin cambio de sucursal con carrito o turno abierto.
-  - [ ] Entrada al POS: "¿Dónde vendés hoy?" con sucursales y cajas (libre, ocupada por X, cerrada) cuando el usuario puede elegir; el dispositivo recuerda su caja. Reemplaza `posApi.defaultRegister()` (primera caja activa del tenant).
-  - [ ] Apertura y cierre de caja, Cierre Z, ticket y display de cliente muestran sucursal y caja.
+- [~] **H90: Contexto de sucursal y caja activa ("dónde estoy").** *(2026-10-12, ADR-045: fix P0, chip, cabecera del POS, selector de caja y filtros de ventas y Z hechos)* · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
+  - [x] **Fix P0 independiente:** `create_sale`, `exchange_sale`, `return_sale_*` y cobros de cuenta corriente derivan `store_id` del turno (`resolve_sale_shift`), no de `stores.is_default`. Test RLS con 2 sucursales y turnos abiertos en ambas. *(Los RPC de stock, ajuste, merma y producción, van con H94 en `feat/stock-sucursales`.)*
+  - [~] Chip de sucursal en el panel (nombre corto + color) con "Todas las sucursales"; filtra ventas y cierres Z; recordado por usuario y dispositivo (localStorage). *(Reportes y stock: H97 y H94; título de pestaña pendiente.)*
+  - [x] Cabecera del POS: "Centro · Caja 1 · abierta" (mobile: "Centro · C1"). Sin cambio de sucursal con carrito o turno propio abierto.
+  - [x] "¿Dónde vendés hoy?" con sucursales y cajas (libre, abierta, abierta por vos) cuando el usuario puede elegir; el dispositivo recuerda su caja. Reemplaza `posApi.defaultRegister()`.
+  - [~] Apertura y cierre de caja y pantalla Caja muestran sucursal y caja; Cierres Z con columna Sucursal. *(Ticket y display de cliente: pendiente.)*
   - [ ] Aviso de contexto cruzado: si el panel mira "Norte" y el turno abierto es en "Centro", el acceso "Vender" lo dice.
   - [ ] *Criterio:* un cajero con turno en la Caja 2 de Norte vende y la venta, el stock y el Z quedan en Norte; en ninguna pantalla hay duda de en qué sucursal está.
 
-- [ ] **H91: Usuarios, roles y datos por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89.*
-  - [ ] `tenant_user_stores(user_id, store_id, role)`: sucursales permitidas por usuario y rol que pisa el del negocio en esa sucursal (como Napse: el mismo usuario es encargado en Centro y cajero en Norte). Sin filas = acceso a todas (compatibilidad).
+- [~] **H91: Usuarios, roles y datos por sucursal.** *(2026-10-12, ADR-045: personal con vigencias, traslados programados y RLS de lectura hechos)* · *OPTIONAL dentro de `multi_sucursal`. Requiere H89.*
+  - [x] `staff_branch_assignments` (en lugar de `tenant_user_stores`): base, cobertura temporal exclusiva y acceso adicional con vigencias, rol por sucursal, usuarios y perfiles sin cuenta, traslados programados con cancelación que restaura e historial. Sin asignaciones: encargado = todas, cajero = principal.
   - [ ] Alcance central vs sucursal: los maestros (productos, clientes, medios, listas) sólo los edita quien tiene alcance central.
-  - [ ] RLS con helper `user_can_access_store(store_id)` en tablas con `store_id` (`sales`, `cash_z_closures`, `cash_registers`, `stock_levels`, `stock_transfers`, `payment_terminals`); desnormalizar `store_id` en `payments`, `cash_shifts`, `cash_movements`. Medición con `EXPLAIN` y tests RLS por rol y sucursal antes de activar.
+  - [~] RLS restrictiva de lectura con `user_allowed_store_ids()` en `sales`, `cash_shifts` (con `store_id` desnormalizado), `cash_movements` y `cash_z_closures`; tests RLS por rol y sucursal. *(Pendiente: `payments`, `stock_levels`, `stock_transfers`, `payment_terminals` y `EXPLAIN` sobre datos reales.)*
   - [ ] `store_id` en `audit_logs` para filtrar la auditoría por sucursal.
   - [ ] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas").
   - [ ] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo.
@@ -1025,20 +1025,21 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Planes de cuotas y recargos por sucursal (se coordina con F14/H59).
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
 
-- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.*
-  - [ ] `stock_levels(store_id, product_id, variant_id, qty, reserved, in_transit)` mantenido por trigger sobre `stock_movements`; `products.stock` pasa a ser la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal default.
-  - [ ] Venta en negativo y stock mínimo por sucursal.
+- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
+  - [x] `product_stock(store_id, product_id, variant_id, qty, min_qty, max_qty, location)` mantenido por trigger sobre `stock_movements`; `products.stock` sigue como total y al commit se garantiza que es la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal principal. En tránsito se calcula desde los traslados (`stock_by_store`). *(ADR-046; reservado queda pendiente)*
+  - [x] Stock mínimo, máximo y ubicación por sucursal; desglose en Productos y en la ficha; ajuste y conteo por sucursal. *(ADR-046)*
+  - [ ] Venta en negativo por sucursal (hoy el control del POS es sobre el total).
   - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
   - [ ] Listas de precios asignables a sucursal o grupo (`price_list_assignments`, ver F18/H100).
   - [ ] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
   - [ ] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34).
   - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
 
-- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `transferencias_stock` (nueva, Business). Requiere H94.*
-  - [ ] Documento con estados `borrador → confirmada → en tránsito → recibida parcial → recibida / cancelada` (la misma máquina de estados para todo documento de inventario, como Napse).
-  - [ ] Movimientos `transfer_out` / `transfer_in`, stock en tránsito visible, diferencias en la recepción con motivo.
-  - [ ] Remito interno imprimible (con el tratamiento fiscal del traslado entre locales propios), solicitud de transferencia desde la sucursal que necesita, transferencia sugerida por stock mínimo (enlaza con F14/H64).
-  - [ ] Auditoría y reporte de artículos en tránsito.
+- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
+  - [x] Documento con estados `borrador → pendiente de aprobación → programado → en tránsito → recibido parcial → recibido / cancelado`, aprobación configurable por unidades o valor (cuatro ojos) y fecha programada con "Para despachar hoy" (sin cron).
+  - [x] Movimientos `transfer_out` / `transfer_in` / `transfer_return`, stock en tránsito visible, diferencias en la recepción con motivo.
+  - [x] Remito interno imprimible y XLSX con número correlativo; transferencia sugerida por stock mínimo. *(Falta: tratamiento fiscal del remito y solicitud de transferencia desde la sucursal que necesita.)*
+  - [x] Auditoría y timeline por traslado. *(Falta: reporte de artículos en tránsito.)*
   - [ ] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran.
 
 - [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*

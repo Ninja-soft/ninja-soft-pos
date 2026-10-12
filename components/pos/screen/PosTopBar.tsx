@@ -19,6 +19,7 @@ const iconBtn =
 export function PosTopBar({
   hasShift,
   registerName,
+  location,
   onOpenShift,
   onCloseShift,
   onCustomerDisplay,
@@ -30,6 +31,9 @@ export function PosTopBar({
 }: {
   hasShift: boolean;
   registerName: string | null;
+  // Sucursal y caja del dispositivo ("Centro · Caja 1", F17 · H90). Con
+  // ubicación el botón de estado sólo dice abierta o cerrada.
+  location?: React.ReactNode;
   onOpenShift: () => void;
   onCloseShift: () => void;
   onCustomerDisplay: () => void;
@@ -48,6 +52,7 @@ export function PosTopBar({
         <InfoHint section="pos" />
       </h1>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:ml-auto sm:flex-none">
+        {location}
         {/* Estado de la caja: punto de estado + texto, relleno neutro. */}
         <button
           type="button"
@@ -63,7 +68,15 @@ export function PosTopBar({
             )}
           />
           <span className="truncate font-medium text-foreground">
-            {hasShift ? (registerName ? `${registerName} abierta` : "Caja abierta") : "Caja cerrada"}
+            {location
+              ? hasShift
+                ? "Abierta"
+                : "Cerrada"
+              : hasShift
+                ? registerName
+                  ? `${registerName} abierta`
+                  : "Caja abierta"
+                : "Caja cerrada"}
           </span>
           <span className="hidden shrink-0 border-l border-border pl-2.5 text-xs font-medium text-muted-foreground sm:inline">
             {hasShift ? "Cerrar" : "Abrir"}

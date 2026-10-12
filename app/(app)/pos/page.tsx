@@ -25,6 +25,9 @@ import type { ParsedDni } from "@/lib/customers/dniParse";
 import { verticalHas } from "@/lib/verticals/config";
 import { useCartStore } from "@/modules/pos/store";
 import { useOpenShift, useDefaultRegister, usePosMutations, usePosSettings } from "@/modules/pos/hooks";
+import { useBranchScope } from "@/modules/branches/hooks";
+import { branchErrorMessage, locationLabel } from "@/modules/branches/logic";
+import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
 import { usePosLayout, usePosLayoutMutations, useResolvedTenders } from "@/modules/pos/layoutHooks";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
@@ -232,7 +235,8 @@ function PosPageInner() {
   }, [categories, categoryFilter]);
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
-  const { data: register } = useDefaultRegister();
+  const { data: register, store: registerStore } = useDefaultRegister();
+  const currentUserId = useBranchScope().data?.userId ?? null;
   const { open, close } = usePosMutations();
   const { data: myTenant } = useMyTenant();
   const quickSale = verticalHas(myTenant?.industry, "quickSale");
@@ -562,7 +566,12 @@ function PosPageInner() {
       setOpenShiftModal(false);
       toast({ title: "Caja abierta", variant: "success" });
     } catch (e) {
-      toast({ title: "No se pudo abrir", description: e instanceof Error ? e.message : undefined, variant: "error" });
+      const title = branchErrorMessage(e, "No se pudo abrir");
+      toast({
+        title,
+        description: title === "No se pudo abrir" && e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
     }
   }
 
@@ -867,6 +876,17 @@ function PosPageInner() {
           <PosTopBar
             hasShift={hasShift}
             registerName={register?.name ?? null}
+            location={
+              <PosLocationPicker
+                lockedReason={
+                  lines.length > 0
+                    ? "Terminá o vaciá la venta en curso para cambiar de sucursal o caja."
+                    : shift && shift.opened_by === currentUserId
+                      ? "Tenés esta caja abierta: cerrala para cambiar de sucursal o caja."
+                      : null
+                }
+              />
+            }
             onOpenShift={() => setOpenShiftModal(true)}
             onCloseShift={() => setCloseShiftModal(true)}
             onCustomerDisplay={openCustomerDisplay}
@@ -929,10 +949,22 @@ function PosPageInner() {
 
       {discountGate.modal}
       <MountWhenOpened open={openShiftModal}>
-        <OpenShiftModal open={openShiftModal} onOpenChange={setOpenShiftModal} onConfirm={handleOpenShift} loading={open.isPending} />
+        <OpenShiftModal
+          open={openShiftModal}
+          onOpenChange={setOpenShiftModal}
+          onConfirm={handleOpenShift}
+          loading={open.isPending}
+          locationLabel={locationLabel(registerStore, register)}
+        />
       </MountWhenOpened>
       <MountWhenOpened open={closeShiftModal}>
-        <CloseShiftModal open={closeShiftModal} onOpenChange={setCloseShiftModal} onConfirm={handleCloseShift} loading={close.isPending} />
+        <CloseShiftModal
+          open={closeShiftModal}
+          onOpenChange={setCloseShiftModal}
+          onConfirm={handleCloseShift}
+          loading={close.isPending}
+          locationLabel={locationLabel(registerStore, register)}
+        />
       </MountWhenOpened>
 
       {/* Cobro único: todos los medios, pago dividido, propina y promo por medio. */}

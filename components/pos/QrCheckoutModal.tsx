@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { encodeQr, qrSvgPath } from "@/lib/qr/qrcode";
 import { paymentIcon } from "@/lib/payments/logos";
+import { QR_SELF_MANAGED } from "@/lib/pos/tenders";
 
 type Phase = "select" | "creating" | "waiting" | "approved" | "rejected" | "error";
 // Canal de Mercado Pago (ADR-032): "order" = QR dinámico de la caja (Orders
@@ -176,14 +177,7 @@ export function QrCheckoutModal({
   // GO Cuotas: checkout de GO Cuotas (el cliente elige 2 a 4 cuotas con su
   // débito ahí).
   // Directo: el cliente arma su crédito en la página de Directo.
-  const selfManaged =
-    provider === "modo" ||
-    provider === "pagos360" ||
-    provider === "payway" ||
-    provider === "getnet" ||
-    provider === "nave" ||
-    provider === "gocuotas" ||
-    provider === "directo";
+  const selfManaged = QR_SELF_MANAGED.has(provider);
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("select");
   const [brand, setBrand] = useState<string | null>(null);

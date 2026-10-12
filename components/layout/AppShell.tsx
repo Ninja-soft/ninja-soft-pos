@@ -34,8 +34,10 @@ import {
   Utensils,
   Wallet,
   X,
+  ArrowLeftRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useStores } from "@/modules/stock/hooks";
 import { getCurrentUser } from "@/lib/supabase/currentUser";
 import { cn } from "@/lib/utils/cn";
 import { capitalizeName } from "@/lib/utils/format";
@@ -64,6 +66,7 @@ import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
+import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -152,6 +155,9 @@ type Item = {
   // que requiresDining: toggle del tenant, se oculta sin candado. Independiente
   // de las mesas (delivery puede ir sin modo gastronómico de mesas).
   requiresDelivery?: boolean;
+  // Sólo con 2+ sucursales (traslados · F17/H95): con una sola no tiene sentido
+  // y se oculta sin candado.
+  requiresMultiStore?: boolean;
 };
 type Group = { label: string; items: Item[] };
 
@@ -199,6 +205,7 @@ const NAV: { top: Item[]; groups: Group[] } = {
       label: "Catálogo",
       items: [
         { href: "/productos", label: "Productos", icon: Package },
+        { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
@@ -422,9 +429,11 @@ export function AppShell({
   // / requiresDelivery si su toggle del tenant está apagado.
   const { data: diningEnabled } = useDiningEnabled();
   const { data: deliveryEnabled } = useDeliveryEnabled();
+  const { data: stores } = useStores();
   const showItem = (it: Item) =>
     (!it.requiresDining || Boolean(diningEnabled)) &&
-    (!it.requiresDelivery || Boolean(deliveryEnabled));
+    (!it.requiresDelivery || Boolean(deliveryEnabled)) &&
+    (!it.requiresMultiStore || (stores?.length ?? 0) > 1);
 
   // Estado de la cuenta (suspensión / cancelación / past_due). Lo setea el motor
   // de dunning. `suspended` Y `cancelled` bloquean TODA la app del POS: ni
@@ -457,6 +466,11 @@ export function AppShell({
         <div className="hidden lg:block">
           <NotificationBell align="start" />
         </div>
+      </div>
+
+      {/* Sucursal actual (F17 · H90): sólo con más de una sucursal. */}
+      <div className="mb-2 shrink-0 px-1 empty:hidden">
+        <BranchSwitcher />
       </div>
 
       {canSell && (
@@ -587,6 +601,7 @@ export function AppShell({
             <Menu size={20} />
           </button>
           <Isotype className="h-6 w-auto" />
+          <BranchSwitcher compact />
           <div className="ml-auto flex items-center gap-2">
             {canSell && !onPos && <SellQuickAction compact />}
             <NotificationBell />

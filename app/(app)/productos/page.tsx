@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   Download,
   FolderTree,
@@ -62,6 +62,16 @@ import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { ProductThumb } from "@/components/products/ProductThumb";
 import { productStockStatus } from "@/modules/products/stockStatus";
 import { cn } from "@/lib/utils/cn";
+import {
+  StoreStockChips,
+  StoreStockInlineSummary,
+  storeQuantities,
+} from "@/components/stock/StoreStockInline";
+import {
+  useCurrentStoreId,
+  useMultiStoreStock,
+  useStockByStore,
+} from "@/modules/stock/hooks";
 
 export default function ProductosPage() {
   const pageSize = usePageSize();
@@ -103,6 +113,16 @@ export default function ProductosPage() {
   const setFavorite = useSetFavorite();
   const { data: pluSettings } = usePluSettings();
   const noFilters = !debouncedSearch && !categoryId && !brandId;
+
+  // Stock por sucursal (F17 · H94): sólo con 2+ sucursales y la feature. Con
+  // una sola sucursal la lista queda como siempre.
+  const multiStore = useMultiStoreStock();
+  const currentStoreId = useCurrentStoreId();
+  const { data: storeRows } = useStockByStore(
+    (data?.rows ?? []).map((p) => p.id),
+    multiStore.enabled,
+  );
+  const [expandedStock, setExpandedStock] = useState<string | null>(null);
 
   // Comparación de precios vs catálogo de referencia: sólo si el tenant compró
   // un catálogo y tiene la sugerencia activada. Las referencias de los EANs
@@ -368,120 +388,143 @@ export default function ProductosPage() {
               )}
               {products.map((p) => {
                 const stock = productStockStatus(p);
+                const byStore =
+                  multiStore.enabled && p.track_stock !== false
+                    ? storeQuantities(p, multiStore.stores, storeRows ?? [], currentStoreId)
+                    : null;
+                const expanded = expandedStock === p.id;
                 return (
-                  <tr key={p.id} className="transition hover:bg-muted/40">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <ProductThumb src={p.image_url} size={40} />
-                        <div className="min-w-0">
-                          <div className="font-medium text-foreground">{p.name}</div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            {p.plu && (
-                              <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
-                                PLU {p.plu}
-                              </span>
-                            )}
-                            {p.sku && (
-                              <span className="font-mono text-xs text-muted-foreground">
-                                {p.sku}
-                              </span>
-                            )}
+                  <Fragment key={p.id}>
+                    <tr className="transition hover:bg-muted/40">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <ProductThumb src={p.image_url} size={40} />
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground">{p.name}</div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {p.plu && (
+                                <span className="inline-flex items-center rounded bg-ninja-flame/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-ninja-flameSoft">
+                                  PLU {p.plu}
+                                </span>
+                              )}
+                              {p.sku && (
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {p.sku}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {p.categories?.name ?? <NoData />}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="inline-flex items-center justify-end gap-1.5">
-                        {formatCurrency(p.price)}
-                        {hintsActive && p.barcode && (
-                          <CatalogPriceArrow
-                            myPrice={Number(p.price)}
-                            reference={priceRefs?.get(p.barcode.trim())}
-                          />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {p.categories?.name ?? <NoData />}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center justify-end gap-1.5">
+                          {formatCurrency(p.price)}
+                          {hintsActive && p.barcode && (
+                            <CatalogPriceArrow
+                              myPrice={Number(p.price)}
+                              reference={priceRefs?.get(p.barcode.trim())}
+                            />
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span
+                          className={cn(
+                            "tabular-nums",
+                            stock.tone === "untracked" && "whitespace-nowrap text-xs text-muted-foreground",
+                            stock.tone === "low" && "font-semibold text-warning",
+                            stock.tone === "out" && "font-semibold text-danger",
+                          )}
+                        >
+                          {stock.label}
+                        </span>
+                        {byStore && (
+                          <div>
+                            <StoreStockInlineSummary
+                              quantities={byStore}
+                              expanded={expanded}
+                              onToggle={() => setExpandedStock(expanded ? null : p.id)}
+                            />
+                          </div>
                         )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className={cn(
-                          "tabular-nums",
-                          stock.tone === "untracked" && "whitespace-nowrap text-xs text-muted-foreground",
-                          stock.tone === "low" && "font-semibold text-warning",
-                          stock.tone === "out" && "font-semibold text-danger",
-                        )}
-                      >
-                        {stock.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => toggleFavorite(p)}
-                          title={
-                            p.is_favorite
-                              ? "Quitar de favoritos del POS"
-                              : "Marcar como favorito (botón rápido del POS)"
-                          }
-                          aria-pressed={p.is_favorite}
-                          className={
-                            p.is_favorite
-                              ? "rounded-md p-2 text-ninja-flameSoft transition hover:bg-muted"
-                              : "rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
-                          }
-                        >
-                          <Star
-                            size={16}
-                            className={p.is_favorite ? "fill-ninja-flameSoft" : ""}
-                          />
-                        </button>
-                        <button
-                          onClick={() => openAdjust(p)}
-                          title="Ajustar stock"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          <SlidersHorizontal size={16} />
-                        </button>
-                        <button
-                          onClick={() => openMerma(p)}
-                          title="Registrar merma"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-warning"
-                        >
-                          <PackageMinus size={16} />
-                        </button>
-                        <button
-                          onClick={() => openProduction(p)}
-                          title="Registrar producción"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-success"
-                        >
-                          <PackagePlus size={16} />
-                        </button>
-                        <button
-                          onClick={() => openHistory(p)}
-                          title="Historial de stock"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          <History size={16} />
-                        </button>
-                        <button
-                          onClick={() => openEdit(p)}
-                          title="Editar"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() => onDelete(p)}
-                          title="Eliminar"
-                          className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => toggleFavorite(p)}
+                            title={
+                              p.is_favorite
+                                ? "Quitar de favoritos del POS"
+                                : "Marcar como favorito (botón rápido del POS)"
+                            }
+                            aria-pressed={p.is_favorite}
+                            className={
+                              p.is_favorite
+                                ? "rounded-md p-2 text-ninja-flameSoft transition hover:bg-muted"
+                                : "rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                            }
+                          >
+                            <Star
+                              size={16}
+                              className={p.is_favorite ? "fill-ninja-flameSoft" : ""}
+                            />
+                          </button>
+                          <button
+                            onClick={() => openAdjust(p)}
+                            title="Ajustar stock"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          >
+                            <SlidersHorizontal size={16} />
+                          </button>
+                          <button
+                            onClick={() => openMerma(p)}
+                            title="Registrar merma"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-warning"
+                          >
+                            <PackageMinus size={16} />
+                          </button>
+                          <button
+                            onClick={() => openProduction(p)}
+                            title="Registrar producción"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-success"
+                          >
+                            <PackagePlus size={16} />
+                          </button>
+                          <button
+                            onClick={() => openHistory(p)}
+                            title="Historial de stock"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          >
+                            <History size={16} />
+                          </button>
+                          <button
+                            onClick={() => openEdit(p)}
+                            title="Editar"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() => onDelete(p)}
+                            title="Eliminar"
+                            className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {byStore && expanded && (
+                      <tr className="bg-muted/30">
+                        <td colSpan={5} className="px-4 py-3">
+                          <StoreStockChips quantities={byStore} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

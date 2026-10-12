@@ -13,15 +13,18 @@ export function OpenShiftModal({
   onOpenChange,
   onConfirm,
   loading,
+  locationLabel,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onConfirm: (opening: number) => void;
   loading: boolean;
+  // "Centro · Caja 1": dónde se abre el turno (F17 · H90).
+  locationLabel?: string;
 }) {
   const [amount, setAmount] = useState("0");
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Abrir caja">
+    <Modal open={open} onOpenChange={onOpenChange} title="Abrir caja" description={locationLabel || undefined}>
       <div className="space-y-4">
         <Input
           label="Monto inicial"
@@ -48,16 +51,23 @@ export function CloseShiftModal({
   onOpenChange,
   onConfirm,
   loading,
+  locationLabel,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onConfirm: (closing: number, notes: string) => void;
   loading: boolean;
+  locationLabel?: string;
 }) {
   const [amount, setAmount] = useState("0");
   const [notes, setNotes] = useState("");
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Cerrar caja (arqueo)">
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Cerrar caja (arqueo)"
+      description={locationLabel || undefined}
+    >
       <div className="space-y-4">
         <Input
           label="Efectivo contado"

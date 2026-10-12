@@ -30,6 +30,10 @@ const AppearanceSettings = dynamic(
   () => import("@/components/settings/AppearanceSettings").then((m) => m.AppearanceSettings),
   { loading },
 );
+const BranchesManager = dynamic(
+  () => import("@/components/branches/BranchesManager").then((m) => m.BranchesManager),
+  { loading },
+);
 const BrandingCard = dynamic(
   () => import("@/components/dashboard-team/BrandingCard").then((m) => m.BrandingCard),
   { loading },
@@ -138,6 +142,10 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <RubroCard />;
     case "marca":
       return <BrandingCard />;
+    // Sucursales y cajas (F17 · H89/H91): ABM, personal y traslados. La
+    // primera sucursal y caja son BASE; la segunda pide su feature adentro.
+    case "sucursales":
+      return <BranchesManager />;
     // Modelos de ticket (escritura protegida por RLS).
     case "tickets":
       return <TicketTemplatesCard />;

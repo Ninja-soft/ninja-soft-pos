@@ -1185,6 +1185,32 @@ El dueño pidió sumar "Directo, medio de pago de crédito directo": **Crédito 
 
 ---
 
+## ADR-036 — POS por presets y hoja de cobro única
+
+**Fecha:** 2026-10-11 · **Estado:** aceptada (pendiente de migración) · **Hito:** rediseño del POS
+
+> Numerada 036 para no chocar con la ADR-035 de la rama del rediseño de Medios de pago.
+
+### Contexto
+
+El dueño pidió poder elegir entre varios diseños del punto de venta y arreglar los botones de cobro. Había dos caminos de cobro que no se hablaban (PaymentModal con redondeo, división y promo por medio, y seis botones por proveedor que abrían el QR directo sin nada de eso), un solo breakpoint con el carrito debajo del catálogo en el celular y una página de 2700 líneas.
+
+### Decisión
+
+- **Presets** Mostrador, Boutique, Salón y Caja rápida sobre los mismos datos y reglas (la lógica de negocio se movió sin cambios a `modules/pos/screen/*`). `pos_settings.pos_layout` es el diseño del negocio y `users.settings.pos_layout` el override del usuario (sin teclas rápidas). Todo pasa por `lib/pos/layout.ts` (Zod, campo por campo).
+- **Clasificación (CLAUDE.md §6):** diseño, presets y orden/ocultar/fijar medios = **FLAG-OPERATIVO**. **`pos_quick_keys_pro`** = OPTIONAL desde Pro (más de 12 teclas o color por tecla), con trigger `pos_settings_assert_layout`.
+- **Hoja de cobro única** (`CheckoutSheet`) con un **registro de tenders** (`lib/pos/tenders.ts`): medio, proveedor, marca, canal, logo y feature (de `providerFeature`). La UI sólo espeja: ordenar u ocultar nunca habilita un medio; el gating real sigue en `payment_method_plan_key`, `create_sale` y cada Edge.
+- **Pago dividido secuencial**: cada línea se cobra con su medio; los QR y Point quedan como líneas aprobadas (varias referencias de intent en un mismo `create_sale`, ya soportado). Si una línea electrónica cierra el saldo, la venta se registra sola; salir con cobros aprobados pide confirmación.
+- **Promo por medio** sólo si se paga todo con un único medio (como antes en la división). Payway Point y Getnet Point sin integración se registran como tarjeta manual (terminal).
+
+### Consecuencias
+
+- Deploy: migración `20261011190000_pos_layout` antes de guardar diseños (sin la columna, el POS cae al preset Mostrador).
+- Directo ahora puede ir en un pago dividido (cada línea pide su número de operación).
+- Se eliminó `PaymentModal` y `FavoritesGrid`.
+
+---
+
 ## Próximas ADRs (placeholder)
 
 Cuando se tomen decisiones sobre proveedor de pagos concreto por integración, motor de impresión de tickets, estrategia de backups o cualquier otra cosa estructural, se agregan acá siguiendo el template.

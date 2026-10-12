@@ -174,7 +174,7 @@ export function ProductPane({
               title="Venta libre (monto manual)"
             >
               <Banknote size={17} />
-              <span className="hidden sm:inline">Monto libre</span>
+              <span className="hidden xl:inline">Monto libre</span>
             </button>
           )}
         </div>

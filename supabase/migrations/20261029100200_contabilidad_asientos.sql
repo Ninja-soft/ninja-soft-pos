@@ -1070,10 +1070,12 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
+  -- Negocios sin contabilidad: una búsqueda por clave primaria y nada más.
+  if not acc_tenant_active(new.tenant_id) then
+    return null;
+  end if;
   begin
-    if acc_tenant_active(new.tenant_id) then
-      perform acc_sync_safe(new.tenant_id, tg_argv[0], new.id, coalesce(tg_argv[1], '') = 'refresh');
-    end if;
+    perform acc_sync_safe(new.tenant_id, tg_argv[0], new.id, coalesce(tg_argv[1], '') = 'refresh');
   exception when others then
     null;
   end;

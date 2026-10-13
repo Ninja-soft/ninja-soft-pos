@@ -26,7 +26,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
-| **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
+| **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086); recorridos guiados, sugerencias por evento, score de activación y cuentas trabadas desde internal (H70, H74, H71, ADR-089) |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066) |
@@ -914,17 +914,17 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
   - [~] Progreso por usuario, rol, tenant y rubro. *Por usuario y negocio (`school_progress`, RLS); dueño y encargado ven a su equipo. Falta por rubro.*
   - [x] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico. *Curso POS básico con certificado imprimible y auditado.*
 
-- [ ] **H70 — Tours y recorridos guiados configurables.**
-  - [ ] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador.
-  - [ ] Pasos con ancla en UI, tooltip, modal, spotlight, tarea, bloqueo opcional o "hacer ahora".
-  - [ ] Versionado de tours, draft/publicado, A/B test y métricas de finalización.
-  - [ ] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro.
+- [~] **H70 — Tours y recorridos guiados configurables.** — *Corte ADR-089 (`feat/f15-tours`, migraciones `20261108300000` a `20261108300400` sin aplicar): `/internal/onboarding` > Recorridos, motor propio en `components/onboarding/TourHost.tsx`, recorridos "Primer cobro" y "Heladería: favoritos y sabores" sembrados. Feature `tours` BASE.*
+  - [~] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador. *Plan, rubro, rol, features del plan, estado, antigüedad y evento (registro, primer ingreso, sin productos, sin caja abierta, sin primera venta, prueba por vencer, venta fallida, manual). Falta país y flag operativo.*
+  - [x] Pasos con ancla en UI, tooltip, modal, spotlight, tarea, bloqueo opcional o "hacer ahora". *Anclas `data-tour` en POS (caja, buscar, favoritos, cobrar), abrir caja, productos y medios de pago.*
+  - [~] Versionado de tours, draft/publicado, A/B test y métricas de finalización. *Versiones inmutables, borrador, pausa y archivo; inicio, finalización y abandono por paso, conversión a primera venta. Falta A/B test.*
+  - [x] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro. *Recorrido sembrado con audiencia rubro heladería y evento registro; test del criterio.*
 
 - [~] **H71 — Checklist de activación y health de adopción.** — *Parcial (ADR-086): Puesta en marcha dinámica por rubro y plan.*
   - [~] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique. *Todo menos la prueba de impresión (no hay registro de impresión de prueba); suma salón para gastronomía, agenda para servicios y certificar al cajero.*
-  - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
-  - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
-  - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
+  - [~] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente. *ADR-089: puntaje 0 a 100 sobre `onboarding_tenant_signals` (única definición) e `internal_tenant_health`. Falta soporte pendiente (no hay tickets).*
+  - [x] Internal ve cuentas trabadas y puede disparar ayuda específica. *`/internal/onboarding` > Activación: motivos, correctivo sugerido, recorrido o sugerencia con motivo, rol y vigencia, auditado.*
+  - [x] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo. *"Sin primera venta a X días" (X configurable) y "Disparar correctivo", también para soporte.*
 
 - [~] **H72 — Ayuda contextual y base de conocimiento.** — *Primer corte (ADR-086): 29 artículos versionados en `content/help/`, panel Ayuda en el shell, buscador con sinónimos y feedback.*
   - [x] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
@@ -938,15 +938,15 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
   - [ ] Separación visual fuerte entre demo y producción.
   - [ ] *Criterio:* un owner practica una devolución y una comanda sin generar movimientos reales.
 
-- [ ] **H74 — Configuración internal de sugerencias, nudges y comunicaciones de onboarding.**
-  - [ ] Internal crea sugerencias por evento: registro, primer login, sin productos, sin caja abierta, venta fallida, hardware no probado, trial por vencer.
-  - [ ] Audiencia, prioridad, frecuencia, cooldown, expiración, canal, CTA y fallback a soporte.
-  - [ ] No molestar: límite de mensajes por sesión/día y preferencias por tenant.
-  - [ ] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta.
+- [~] **H74 — Configuración internal de sugerencias, nudges y comunicaciones de onboarding.** — *Corte ADR-089: `/internal/onboarding` > Sugerencias, `nudge_next` y tarjeta en el shell. Feature `sugerencias` BASE.*
+  - [~] Internal crea sugerencias por evento: registro, primer login, sin productos, sin caja abierta, venta fallida, hardware no probado, trial por vencer. *Todos menos hardware no probado (no hay registro de prueba de impresión); suma sin primera venta.*
+  - [~] Audiencia, prioridad, frecuencia, cooldown, expiración, canal, CTA y fallback a soporte. *Canal sólo en la app (la campana sigue para anuncios); CTA a ruta interna o a un recorrido; "Pedir ayuda" abre la Ayuda.*
+  - [~] No molestar: límite de mensajes por sesión/día y preferencias por tenant. *Topes por sesión y día configurables y "No mostrar más" por usuario. Faltan preferencias por negocio.*
+  - [x] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta. *Recorridos con audiencia por rubro editables y versionados sin deploy; métricas con conversión a primera venta por recorrido y sugerencia.*
 
 - [ ] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.**
   - [ ] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno.
-  - [ ] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta.
+  - [~] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta. *Tours completados y pasos abandonados por recorrido (ADR-089); tiempo a primera venta en ADR-082.*
   - [ ] Sugerencias automáticas de capacitación según errores reales del tenant.
   - [ ] *Criterio:* internal ve que un tenant falla en cierres de caja y le recomienda curso + tour de arqueo.
 

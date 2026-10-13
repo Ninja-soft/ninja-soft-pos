@@ -129,7 +129,7 @@ revoke all on arca_tickets from anon, authenticated;
 -- la de los negocios). SIN valores por defecto: mientras no haya CUIT y
 -- certificado vigentes del ambiente, el camino "delegar" se muestra como
 -- "Disponible próximamente" y el único activo es el certificado propio. Lo
--- carga el staff interno desde /internal/configuracion (Edge arca_wsfe,
+-- carga el staff interno desde /internal/arca (Edge arca_wsfe,
 -- acciones platform_*). Sólo service_role; la metadata sale por
 -- arca_config_get (CUIT y si está lista) y arca_platform_get (staff).
 create table if not exists arca_platform (

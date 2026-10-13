@@ -97,7 +97,7 @@ Un comprobante en el worker: foto de la venta → importes (`sale_tax_lines`) �
   ```
 
   Hace WSAA (o usa el ticket guardado junto a la clave), FEDummy, `FECompUltimoAutorizado` y una Factura B de $121 en el punto de venta 1, y la consulta. `ARCA_SMOKE_ONLY=dummy` prueba sólo FEDummy. Necesita Node 22.18 o superior (ejecuta TypeScript sin compilar).
-- **Delegación:** cuando NinjaSoft tenga CUIT, el staff la carga en `/internal/configuracion` (CUIT, generar pedido, pegar certificado por ambiente). Recién ahí el camino A se habilita para los clientes.
+- **Delegación:** cuando NinjaSoft tenga CUIT, el staff la carga en `/internal/arca` (CUIT, generar pedido, pegar certificado por ambiente). Recién ahí el camino A se habilita para los clientes.
 
 ## 8. Pendiente
 

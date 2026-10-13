@@ -76,10 +76,13 @@ as $$
                 ), 0)
            end as cat_amount,
            case when p_method is null then 1::numeric
+                -- Ojo: least() ignora NULL; sin cobros en el medio la parte es 0.
                 else coalesce((
-                  select least(1::numeric,
-                               sum(p.amount) filter (where p.method = p_method)
-                               / nullif(sum(p.amount), 0))
+                  select case when coalesce(sum(p.amount), 0) <= 0 then 0::numeric
+                              else least(1::numeric,
+                                         coalesce(sum(p.amount) filter (where p.method = p_method), 0)
+                                         / sum(p.amount))
+                         end
                     from payments p
                    where p.sale_id = b.id
                 ), 0)

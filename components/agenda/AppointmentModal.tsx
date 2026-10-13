@@ -5,7 +5,14 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
-import { useProfessionals, useAppointmentMutations } from "@/modules/agenda/hooks";
+import {
+  useProfessionals,
+  useAppointmentMutations,
+  useAgendaResources,
+  useAppointments,
+} from "@/modules/agenda/hooks";
+import { findConflicts, agendaErrorMessage } from "@/modules/agenda/overlap";
+import { addDays, hhmm, startOfDay } from "@/modules/agenda/dates";
 import type { Appointment } from "@/modules/agenda/api";
 import { toDatetimeLocalValue } from "@/modules/agenda/dates";
 import { useProducts } from "@/modules/products/hooks";
@@ -21,11 +28,14 @@ export function AppointmentModal({
   appointment,
   // Valores iniciales al crear desde un slot del calendario (día/hora/profesional).
   initial,
+  resourcesEnabled = false,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   appointment: Appointment | null;
-  initial?: { startsAt?: Date; professionalId?: string | null };
+  initial?: { startsAt?: Date; professionalId?: string | null; resourceId?: string | null };
+  // Feature agenda_recursos: muestra el selector de recurso.
+  resourcesEnabled?: boolean;
 }) {
   const { toast } = useToast();
   const { data: professionals } = useProfessionals(true);
@@ -42,7 +52,28 @@ export function AppointmentModal({
   const [customerId, setCustomerId] = useState<string>("");
   const [custSearch, setCustSearch] = useState("");
   const [notes, setNotes] = useState("");
+  const [resourceId, setResourceId] = useState<string>("");
   const { data: customers } = useCustomers(custSearch);
+  const { data: resources } = useAgendaResources(true, open && resourcesEnabled);
+
+  // Turnos del día elegido, para avisar choques de profesional o recurso.
+  const dayRange = useMemo(() => {
+    const base = startsAt ? new Date(startsAt) : new Date();
+    const from = startOfDay(Number.isFinite(base.getTime()) ? base : new Date());
+    return { from, to: addDays(from, 1) };
+  }, [startsAt]);
+  const { data: dayAppointments } = useAppointments(dayRange.from, dayRange.to);
+  const conflicts = useMemo(() => {
+    if (!startsAt || !Number.isFinite(new Date(startsAt).getTime())) return { professional: [], resource: [] };
+    return findConflicts(dayAppointments ?? [], {
+      id: appointment?.id,
+      starts_at: new Date(startsAt).toISOString(),
+      duration_min: Number(duration) || 0,
+      status: appointment?.status ?? "reservado",
+      professional_id: professionalId || null,
+      resource_id: resourceId || null,
+    });
+  }, [dayAppointments, startsAt, duration, professionalId, resourceId, appointment]);
 
   const isEdit = Boolean(appointment);
 
@@ -68,6 +99,7 @@ export function AppointmentModal({
       setStartsAt(toDatetimeLocalValue(new Date(appointment.starts_at)));
       setCustomerId(appointment.customer_id ?? "");
       setNotes(appointment.notes ?? "");
+      setResourceId(appointment.resource_id ?? "");
     } else {
       setProfessionalId(initial?.professionalId ?? "");
       setServiceId("");
@@ -78,6 +110,7 @@ export function AppointmentModal({
       setStartsAt(toDatetimeLocalValue(initial?.startsAt ?? new Date()));
       setCustomerId("");
       setNotes("");
+      setResourceId(initial?.resourceId ?? "");
     }
     setCustSearch("");
   }, [open, appointment, initial]);
@@ -125,7 +158,12 @@ export function AppointmentModal({
       starts_at: new Date(startsAt).toISOString(),
       duration_min: Math.round(dur),
       notes: notes.trim() || null,
+      ...(resourcesEnabled || resourceId ? { resource_id: resourceId || null } : {}),
     };
+    if (conflicts.resource.length > 0) {
+      toast({ title: "Ese recurso ya está ocupado en ese horario", variant: "error" });
+      return;
+    }
     try {
       if (appointment) {
         await update.mutateAsync({ id: appointment.id, patch: payload });
@@ -138,7 +176,7 @@ export function AppointmentModal({
     } catch (e) {
       toast({
         title: "No se pudo guardar el turno",
-        description: e instanceof Error ? e.message : undefined,
+        description: agendaErrorMessage(e instanceof Error ? e.message : (e as { message?: string } | null)?.message),
         variant: "error",
       });
     }
@@ -172,6 +210,27 @@ export function AppointmentModal({
             ))}
           </select>
         </div>
+
+        {/* Recurso (silla, cabina, equipo) */}
+        {resourcesEnabled && (resources ?? []).length > 0 && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+              Recurso
+            </label>
+            <select
+              className={selectClass}
+              value={resourceId}
+              onChange={(e) => setResourceId(e.target.value)}
+            >
+              <option value="">Sin recurso</option>
+              {(resources ?? []).map((r) => (
+                <option key={r.id} value={r.id} className="bg-popover text-popover-foreground">
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Servicio (producto del catálogo) */}
         <div>
@@ -286,6 +345,23 @@ export function AppointmentModal({
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Color usado, preferencias, observaciones…"
         />
+
+        {(conflicts.professional.length > 0 || conflicts.resource.length > 0) && (
+          <div className="rounded-lg border border-border border-t-2 border-t-amber-400 bg-muted/40 p-3 text-sm">
+            {conflicts.resource.length > 0 && (
+              <p className="font-medium text-foreground">
+                El recurso ya tiene un turno a las{" "}
+                {conflicts.resource.map((c) => hhmm(c.starts_at)).join(", ")}. Elegí otro horario o recurso.
+              </p>
+            )}
+            {conflicts.professional.length > 0 && (
+              <p className="text-muted-foreground">
+                Aviso: el profesional ya tiene turno a las{" "}
+                {conflicts.professional.map((c) => hhmm(c.starts_at)).join(", ")}.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

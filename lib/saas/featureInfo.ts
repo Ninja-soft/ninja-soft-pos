@@ -150,6 +150,18 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     // (ver ADR-026).
     minPlan: "Start",
   },
+  agenda_recursos: {
+    desc: "Recursos de agenda: cargá sillas, cabinas, boxes o equipos, asigná cada turno a un recurso, mirá la agenda del día por recurso y evitá dos turnos en el mismo lugar a la misma hora (el sistema lo bloquea).",
+    impact: "Desactivada, la agenda se organiza sólo por profesional y no se controla la doble reserva de sillas o cabinas.",
+    minPlan: "Pro",
+    requires: ["agenda"],
+  },
+  lista_espera: {
+    desc: "Lista de espera: anotá a quien quiere un turno que hoy no tenés libre (servicio, profesional preferido, fecha y franja), avisale por WhatsApp cuando se libera y pasalo a turno con un toque.",
+    impact: "Desactivada, no se puede anotar clientes en espera; los huecos se llenan a mano.",
+    minPlan: "Start",
+    requires: ["agenda"],
+  },
   pos_quick_keys_pro: {
     desc: "Teclas rápidas Pro: hasta 48 botones de un toque en la pantalla de venta, con color por tecla para encontrarlos al instante. El diseño del POS (presets, grilla, carrito, acento) es gratis en todos los planes.",
     impact: "Sin la función se pueden armar hasta 12 teclas rápidas sin color; el resto del diseño del POS sigue disponible.",

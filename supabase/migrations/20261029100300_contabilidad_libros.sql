@@ -260,3 +260,51 @@ end;
 $$;
 revoke all on function acc_vat_purchases(date, date) from public, anon;
 grant execute on function acc_vat_purchases(date, date) to authenticated;
+
+-- Resumen por mes para la pantalla de cierres: estado, asientos, total y
+-- problemas abiertos con fecha en el mes. Incluye los meses con asientos y
+-- los últimos p_months.
+create or replace function acc_periods_overview(p_months int default 18)
+returns table (
+  period date,
+  status text,
+  entries bigint,
+  total numeric,
+  closed_at timestamptz,
+  closed_by uuid,
+  reopened_at timestamptz,
+  reopen_reason text,
+  notes text
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_tenant uuid := acc_assert();
+begin
+  return query
+  with months as (
+    select (date_trunc('month', current_date::timestamp) - make_interval(months => g))::date as p
+      from generate_series(0, greatest(least(coalesce(p_months, 18), 120), 1) - 1) g
+    union
+    select distinct e.period from acc_entries e where e.tenant_id = v_tenant and e.deleted_at is null
+    union
+    select ap.period from acc_periods ap where ap.tenant_id = v_tenant
+  ), agg as (
+    select e.period as p, count(*) as n, coalesce(sum(e.total), 0) as t
+      from acc_entries e
+     where e.tenant_id = v_tenant and e.deleted_at is null
+     group by e.period
+  )
+  select m.p, coalesce(ap.status, 'open'), coalesce(agg.n, 0), coalesce(agg.t, 0)::numeric,
+         ap.closed_at, ap.closed_by, ap.reopened_at, ap.reopen_reason, ap.notes
+    from months m
+    left join agg on agg.p = m.p
+    left join acc_periods ap on ap.tenant_id = v_tenant and ap.period = m.p
+   order by m.p desc;
+end;
+$$;
+revoke all on function acc_periods_overview(int) from public, anon;
+grant execute on function acc_periods_overview(int) to authenticated;

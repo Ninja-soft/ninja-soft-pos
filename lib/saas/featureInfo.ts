@@ -313,6 +313,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
     requires: ["compras"],
   },
+  contabilidad: {
+    desc: "Contabilidad: plan de cuentas con plantilla argentina y centros de costo por sucursal; asientos automáticos desde ventas por medio de cobro, cobranzas de cuenta corriente, devoluciones, cierres de caja, compras, órdenes de pago, tesorería, liquidaciones de procesadores y contracargos, con mapeos configurables; asientos manuales, cierre mensual que bloquea el período, Libro Diario, Mayor, sumas y saldos, estado de resultados, IVA ventas y compras, y export para el estudio (Tango, Holistor, Xubio, Colppy o CSV a medida).",
+    impact: "Desactivado, no se generan asientos ni se puede cargar ni exportar la contabilidad (el servidor lo rechaza). Lo ya generado queda guardado y se ve al volver a activarla.",
+    minPlan: "Business",
+  },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
     impact: "Desactivado, cada combinación debe cargarse como producto separado; no hay matriz de variantes.",

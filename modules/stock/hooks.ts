@@ -107,6 +107,16 @@ export function useTransfers(filters: TransferFilters, enabled = true) {
   });
 }
 
+// Artículos en tránsito (F17 · H95). Cuelga de ["stock-transfers"] para que
+// despachar o recibir lo refresque.
+export function useInTransitLines(enabled = true) {
+  return useQuery({
+    queryKey: ["stock-transfers", "in-transit-lines"],
+    queryFn: () => stockApi.inTransitLines(),
+    enabled,
+  });
+}
+
 export function useTransfer(id: string | null) {
   return useQuery({
     queryKey: ["stock-transfer", id],

@@ -195,6 +195,12 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [ ] Mercado Pago Point (QR + tarjeta).
   - [ ] Modo (transferencia).
   - [ ] Conciliación automática.
+- [~] **Rendimiento de base (escalado):** *Primer corte hecho (2026-10-13, ADR-090, rama `perf/f4-escalado`, migración `20261108500000_perf_f4_indices_rls_initplan` sin aplicar): auditoría reutilizable `scripts/db-audit-perf.mjs` (estática sobre las migraciones y `--catalog` sobre una base en sólo lectura), índices de listas y FKs en `payments`, `sales`, `cash_movements`, `stock_movements`, `table_order_items` y `fiscal_documents`, tres índices redundantes fuera, todas las policies con initplan (`perf_initplan_wrap`) y guardarraíles en CI (`rls_policies_without_initplan`, `perf_fk_without_index`). Script `scripts/prod-indexes-concurrently.sql` para producción con volumen.*
+  - [x] Índices de listas y FKs de las tablas operativas grandes.
+  - [x] Policies sin llamadas por fila (initplan) y guardarraíl en CI.
+  - [ ] `create_sale` con `tenant_id` explícito (hoy el DEFAULT `current_tenant_id()` hace un lookup por fila insertada).
+  - [ ] Medir con volumen real el `exists` sobre `sales` de la policy de `payments` (ADR-080) y la búsqueda de `catalog_products` bajo RLS.
+  - [ ] FKs e índices redundantes del resto del esquema (`db-audit-perf.mjs --all-tables`) cuando crezca el volumen.
 - [ ] **Observabilidad avanzada:**
   - [ ] Sentry para errores frontend.
   - [ ] Logs estructurados centralizados.

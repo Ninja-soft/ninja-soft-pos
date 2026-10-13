@@ -80,7 +80,10 @@ create table if not exists tax_withholdings (
   void_reason        text,
   created_by         uuid default auth.uid(),
   created_at         timestamptz not null default now(),
-  constraint tax_withholdings_certificate check ((amount > 0) = (certificate_number is not null))
+  constraint tax_withholdings_certificate check ((amount > 0) = (certificate_number is not null)),
+  -- Número y texto del certificado van juntos: una retención practicada sin
+  -- texto de certificado saldría en SICORE/ARBA sin identificar.
+  constraint tax_withholdings_certificate_text check ((certificate_number is null) = (certificate is null))
 );
 comment on table tax_withholdings is
   'Retenciones calculadas en órdenes de pago (ADR-079). amount > 0 = practicada, con certificado correlativo por régimen; amount = 0 = cálculo de Ganancias que acumula en el mes sin retener.';

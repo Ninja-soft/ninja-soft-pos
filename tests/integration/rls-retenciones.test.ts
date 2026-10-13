@@ -219,6 +219,7 @@ describe.skipIf(!enabled)("Retenciones como agente · paridad, certificados, gat
             regime_id: gan.id, tax: "ganancias", date: ctx.today, period: ctx.month, concept_code: c.supplier.ganancias_concept,
             payment_base: c.prior.base, amount: c.prior.withheld, reason: "applied",
             certificate_number: c.prior.withheld > 0 ? 1 : null,
+            certificate: c.prior.withheld > 0 ? "GAN-00000001" : null,
           }),
         );
       }
@@ -261,6 +262,17 @@ describe.skipIf(!enabled)("Retenciones como agente · paridad, certificados, gat
     const { admin } = ctx;
     await admin.from("tax_regimes").update({ deleted_at: new Date().toISOString() }).eq("tenant_id", ctx.tenant).is("deleted_at", null);
     await admin.from("suppliers").update({ deleted_at: new Date().toISOString() }).eq("tenant_id", ctx.tenant).is("deleted_at", null);
+    // La matriz de paridad sembró retenciones previas del mes (acumulado de
+    // Ganancias, una de ellas practicada con certificado). Son retenciones
+    // vigentes del período y la exportación las incluiría con razón; se anulan
+    // para que este caso cuente sólo sus propias órdenes de pago.
+    await must(
+      admin
+        .from("tax_withholdings")
+        .update({ status: "voided", voided_at: new Date().toISOString(), void_reason: "aislamiento de test" })
+        .eq("tenant_id", ctx.tenant)
+        .eq("status", "issued"),
+    );
     await must(
       ctx.owner.client.from("tax_regimes").insert([
         { tenant_id: ctx.tenant, tax: "ganancias", role: "retention", jurisdiction: null, name: "Ganancias", padron_source: "none", default_rate: null, base_kind: "net" },

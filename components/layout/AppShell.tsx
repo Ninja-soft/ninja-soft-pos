@@ -80,6 +80,7 @@ import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { usePrefetchPos } from "@/modules/pos/layoutHooks";
 import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
+import { useBranchTabTitle, useCrossContextNotice } from "@/modules/branches/crossContext";
 import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
 import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
 
@@ -126,10 +127,13 @@ function SellQuickAction({
 }) {
   const count = useCartStore((s) => s.lines.length);
   const prefetchPos = usePrefetchPos();
+  // F17 · H90: el panel mira una sucursal y la venta sería en otra.
+  const cross = useCrossContextNotice();
   const href = count > 0 ? "/pos?cobrar=1" : "/pos";
   const label = count > 0 ? "Cobrar" : "Vender";
-  const hint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
-  return (
+  const baseHint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
+  const hint = cross ? `${baseHint}. ${cross.hint}` : baseHint;
+  const link = (
     <Link
       href={href as never}
       onClick={onNavigate}
@@ -156,7 +160,18 @@ function SellQuickAction({
           {SELL_SHORTCUT}
         </kbd>
       )}
+      {compact && cross && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-warning" />}
     </Link>
+  );
+  if (compact || !cross) return link;
+  return (
+    <div>
+      {link}
+      <p role="status" className="mt-1 flex items-start gap-1.5 px-1 text-[11px] leading-snug text-warning">
+        <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+        <span>{cross.message}</span>
+      </p>
+    </div>
   );
 }
 
@@ -468,6 +483,8 @@ export function AppShell({
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
   const canSell = SELL_ROLES.has(shell?.role ?? "");
   const onPos = isPosRoute(pathname);
+  // F17 · H90: la sucursal del chip en el título de la pestaña.
+  useBranchTabTitle();
 
   // Precarga del POS en idle: entrar a Vender ya encuentra el diseño, los
   // overrides y los medios en caché (sin esqueleto ni salto de diseño).

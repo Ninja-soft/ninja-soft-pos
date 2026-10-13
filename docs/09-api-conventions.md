@@ -230,7 +230,11 @@ Cada Edge Function tiene tests que verifican:
 - Idempotencia (si aplica).
 - Auditoría: verifica que se escribió en `audit_logs`.
 
-## 11. API pública (Fase 5) — adelanto
+## 11. API pública (Fase 5)
+
+> **Implementada en v1 (ADR-094).** Guía para el cliente en [`api-publica.md`](api-publica.md) y OpenAPI 3.1 en `public/api/openapi.json`. Diferencias con el adelanto de abajo: base `https://pos.soft.ninja/api/v1` (route handlers de Next, sin dominio propio todavía), límite configurable por credencial (600 por minuto por defecto, hasta 10.000) y webhooks como deuda.
+
+Adelanto original:
 
 Cuando llegue la fase 5:
 - Endpoint base: `https://api.ninjasoft.com.ar/v1/`.

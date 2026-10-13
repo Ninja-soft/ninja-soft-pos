@@ -16,7 +16,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟢 Funcional (billing self-serve + dunning + gating) |
 | **F3** | Integración AFIP y producción | 4–6 semanas | 🟡 En curso (ARCA WSFEv1, cola fiscal y CAEA en ADR-072, sin certificado real; venta offline ADR-077) |
 | **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 En curso (multi-sucursal en F17, hardware en F10/ADR-063, pasarelas en F8; falta observabilidad externa) |
-| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 En progreso (perfiles por rubro hechos, ADR-075; motor de promociones hecho, ADR-074; marketplace, API pública y tema por tenant pendientes) |
+| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 En progreso (perfiles por rubro hechos, ADR-075; motor de promociones hecho, ADR-074; API pública v1 hecha, ADR-094; marketplace, webhooks y tema por tenant pendientes) |
 | **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟢 Funcional (H7–H10b + Tiendita) |
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
@@ -249,13 +249,13 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
     - [x] Límite de uso por plan (mensajes/mes) + medición para facturar el addon. — *Cuota mensual configurable (`ai_usage`), PRs #205/#249.*
     - [~] *Criterio:* un tenant con el addon activo abre el chat, pide "armame un ticket con mi logo y mis colores", la IA genera la plantilla y el dueño la confirma; sin el addon, la burbuja no existe. — *El chat con contexto y el gateo de la burbuja están; la generación/aplicación de la plantilla por la IA queda pendiente.*
   - [ ] WhatsApp Business para notificaciones.
-- [ ] **API pública** con OAuth para clientes Enterprise.
+- [~] **API pública** con OAuth para clientes Enterprise. *v1 hecha (ADR-094): credenciales OAuth2 client_credentials por negocio con alcances, secreto mostrado una vez, rotación, revocación y último uso (Configuración > Integraciones > API, sólo el dueño); `/api/v1` con productos (cursor y upsert por SKU hasta 500 con Idempotency-Key), precios, sucursales y stock por sucursal con motivo, ventas por rango (lectura) y clientes; límite por credencial; OpenAPI 3.1 en `/api/openapi.json` y `docs/api-publica.md`. Feature `api_publica` OPTIONAL sólo Enterprise con gating en el token y en cada RPC. Falta: webhooks salientes, variantes, listas de precios y aplicar las migraciones `20261109400000` a `20261109400300`.*
 - [~] **Tema visual personalizado** por tenant (logo, color de acento dentro de los límites de marca). *Logo y color de acento por negocio en `tenant_branding` (H8, gateado por `personalizacion_marca`) aplicados a tickets, emails y catálogo; falta aplicarlos al tema del panel.*
 
 ### Criterios de cierre
 - [ ] Un cliente textil puede gestionar 500 SKUs con variantes sin pasar por NinjaSoft.
 - [x] Una promoción "Miércoles 30% en bebidas" se configura desde el panel del cliente y aplica automáticamente. *Hecho: porcentaje por categoría con días de la semana, aplicado en `create_sale` (ADR-074).*
-- [ ] La API permite a un cliente Enterprise sincronizar 1000 productos en < 60s.
+- [~] La API permite a un cliente Enterprise sincronizar 1000 productos en < 60s. *Medido en CI contra Supabase local (`tests/integration/rls-api-publica.test.ts`: alta y cambio de precio de 1000 productos en dos lotes de 500); falta validarlo contra producción.*
 
 ---
 
@@ -903,7 +903,7 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] *Criterio:* el owner recibe "te vas a quedar sin café el viernes" con evidencia y orden de compra sugerida.
 
 - [ ] **H68 — API pública, webhooks y app marketplace.**
-  - [ ] API versionada con OAuth/API keys por tenant, scopes, rate limits, logs y rotación de credenciales.
+  - [~] API versionada con OAuth/API keys por tenant, scopes, rate limits, logs y rotación de credenciales. *Hecho en v1 (ADR-094) salvo el log de pedidos por credencial visible para el dueño (hoy: último uso y auditoría por lote).*
   - [ ] Webhooks para venta, pago, stock, cliente, turno, factura, comanda, notificación y cambio de plan.
   - [ ] Marketplace de apps: integración aprobada, permisos visibles, instalación/desinstalación y health por app.
   - [ ] *Criterio:* un partner recibe webhook de venta, consulta detalle por API y queda auditado por tenant.
@@ -1495,7 +1495,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
-| **F5** | 16/38 | 7 | 15 | 42% | 51% |
+| **F5** | 16/38 | 9 | 13 | 42% | 54% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 12/47 | 21 | 14 | 26% | 48% |
@@ -1504,13 +1504,13 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
 | **F13** | 39/74 | 26 | 9 | 53% | 70% |
-| **F14** | 5/61 | 38 | 18 | 8% | 39% |
+| **F14** | 5/61 | 39 | 17 | 8% | 40% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 543/1004 | 297 | 164 | 54% | 69% |
+| **Total** | 543/1004 | 300 | 161 | 54% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

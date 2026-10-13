@@ -171,6 +171,12 @@ const NubceoSettings = dynamic(
   { loading },
 );
 
+// API pública v1 (ADR-094): credenciales del dueño.
+const ApiSettings = dynamic(
+  () => import("@/components/integrations/api/ApiSettings").then((m) => m.ApiSettings),
+  { loading },
+);
+
 // Venta sin conexión (ADR-077): política del dueño.
 const OfflinePolicyCard = dynamic(
   () => import("@/components/config/OfflinePolicyCard").then((m) => m.OfflinePolicyCard),
@@ -401,6 +407,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.
     case "nubceo":
       return <NubceoSettings />;
+    case "api":
+      return <ApiSettings />;
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;

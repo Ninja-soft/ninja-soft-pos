@@ -171,13 +171,7 @@ function SalesCard({ at, compact }: { at: Box; compact: boolean }) {
       className={cn(s.piece, "absolute rounded-lg border border-white/10 bg-ninja-midViolet px-5 pb-3.5 pt-4")}
       style={piece(at, 0, 120)}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] font-medium text-ninja-lavender">Ventas de hoy</span>
-        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ninja-lavender">
-          <span className={cn(s.live, "h-1.5 w-1.5 rounded-full bg-success")} />
-          En vivo
-        </span>
-      </div>
+      <span className="text-[12px] font-medium text-ninja-lavender">Ventas de hoy</span>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="font-price text-[26px] font-bold tabular-nums tracking-tight text-ninja-softWhite">
           $ 1.284.600

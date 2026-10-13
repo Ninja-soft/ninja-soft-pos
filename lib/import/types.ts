@@ -15,7 +15,9 @@ export type ImportEntityKey =
   | "price_lists"
   | "stores"
   | "warranty_plans"
-  | "return_reasons";
+  | "return_reasons"
+  | "warehouses"
+  | "warehouse_stock";
 
 /** Columna importable: spec de parseo + datos para la plantilla. */
 export interface ImportField extends ImportColumn {

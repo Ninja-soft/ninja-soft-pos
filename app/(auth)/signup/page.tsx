@@ -1,17 +1,17 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, type UseFormRegister, type FieldValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createTenant } from "@/modules/tenants/api";
 import { redeemInviteCode } from "@/modules/auth/invite";
 import { applySignupPlan } from "@/modules/auth/plan";
 import { startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
-import { useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
+import { signupTrialDays, trialCopy, useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
 import { activateAiAddon } from "@/modules/saas/aiPublicConfig";
 import {
   SignupAccountSchema,
@@ -25,9 +25,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype, WordmarkPos } from "@/components/brand/Logo";
-import { ValuePanel } from "@/components/auth/ValuePanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { AuthHeading, AuthLink } from "@/components/auth/AuthBits";
 import { SignupStepBusiness } from "@/components/auth/SignupStepBusiness";
 import { SignupStepPlan } from "@/components/auth/SignupStepPlan";
 import type { Vertical } from "@/lib/verticals/config";
@@ -39,50 +39,94 @@ import { appOrigin } from "@/lib/site";
 const ivaSelectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none transition focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20";
 
+const STEPS = [
+  { n: 1, label: "Tu cuenta" },
+  { n: 2, label: "Tu negocio" },
+  { n: 3, label: "Tu plan" },
+] as const;
+
+// Progreso del wizard: tres segmentos con barra arriba (sólida en los pasos
+// hechos y el actual), número o check y nombre del paso. El actual se marca con
+// aria-current="step".
 function Stepper({ step }: { step: 1 | 2 | 3 }) {
-  const items = [
-    { n: 1, label: "Tu cuenta" },
-    { n: 2, label: "Tu negocio" },
-    { n: 3, label: "Tu plan" },
-  ] as const;
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      {items.map((it, i) => {
-        const active = step === it.n;
-        const done = step > it.n;
-        return (
-          <div key={it.n} className="flex items-center gap-2 sm:gap-3">
-            <span className="flex items-center gap-2">
+    <nav aria-label={`Paso ${step} de ${STEPS.length}`}>
+      <ol className="grid grid-cols-3 gap-2 sm:gap-3">
+        {STEPS.map((it) => {
+          const active = step === it.n;
+          const done = step > it.n;
+          return (
+            <li
+              key={it.n}
+              aria-current={active ? "step" : undefined}
+              className="min-w-0"
+            >
               <span
                 className={cn(
-                  "grid h-6 w-6 place-items-center rounded-full text-xs font-bold transition",
-                  active
-                    ? "bg-[var(--pos-solid)] text-white"
-                    : done
-                      ? "bg-ninja-flame/20 text-ninja-flameSoft"
-                      : "bg-white/10 text-ninja-lavender",
+                  "block h-1 rounded-full transition-colors",
+                  active || done ? "bg-[var(--pos-solid)]" : "bg-border",
                 )}
-              >
-                {done ? <Check size={13} /> : it.n}
+                aria-hidden
+              />
+              <span className="mt-2.5 flex items-center gap-2">
+                <span
+                  className={cn(
+                    "grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold transition-colors",
+                    active
+                      ? "bg-[var(--pos-solid)] text-white"
+                      : done
+                        ? "bg-secondary text-foreground"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                  aria-hidden
+                >
+                  {done ? <Check size={13} strokeWidth={3} /> : it.n}
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-sm",
+                    active
+                      ? "font-semibold text-foreground"
+                      : done
+                        ? "font-medium text-foreground"
+                        : "font-medium text-muted-foreground",
+                  )}
+                >
+                  {it.label}
+                  {done && <span className="sr-only"> (completo)</span>}
+                </span>
               </span>
-              <span
-                className={cn(
-                  "whitespace-nowrap text-sm font-medium",
-                  active ? "text-ninja-softWhite" : "hidden text-ninja-lavender sm:inline",
-                )}
-              >
-                {it.label}
-              </span>
-            </span>
-            {i < items.length - 1 && (
-              <span className="h-px w-4 bg-white/15 sm:w-6" aria-hidden />
-            )}
-          </div>
-        );
-      })}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+// Barra de acciones del wizard, igual en los tres pasos: separador arriba,
+// acción secundaria (o texto) a la izquierda y la principal a la derecha. En
+// celular se apilan y la principal queda arriba, a todo el ancho.
+function StepActions({
+  start,
+  children,
+}: {
+  start?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+        {start}
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {children}
+      </div>
     </div>
   );
 }
+
+const ACTION_CLS = "w-full sm:w-auto sm:min-w-[11rem]";
 
 // Campos fiscales + código de invitación, compartidos por ambos flujos.
 // Ambos forms comparten estos nombres de campo (cuit, legalName, ivaCondition,
@@ -94,8 +138,9 @@ function FiscalAndCode({
   register: UseFormRegister<FieldValues>;
   cuitError?: string;
 }) {
+  const ivaId = useId();
   return (
-    <div className="space-y-3">
+    <div className="grid items-start gap-3 sm:grid-cols-2">
       <Disclosure title="Datos fiscales (opcional)">
         <div className="space-y-3 pt-1">
           <Input
@@ -106,12 +151,12 @@ function FiscalAndCode({
             error={cuitError}
             {...register("cuit")}
           />
-          <Input label="Razón social" {...register("legalName")} />
+          <Input label="Razón social" autoComplete="organization" {...register("legalName")} />
           <div className="w-full">
-            <label className="mb-2 block text-sm font-medium text-muted-foreground">
+            <label htmlFor={ivaId} className="mb-2 block text-sm font-medium text-muted-foreground">
               Condición frente al IVA
             </label>
-            <select className={ivaSelectCls} defaultValue="" {...register("ivaCondition")}>
+            <select id={ivaId} className={ivaSelectCls} defaultValue="" {...register("ivaCondition")}>
               <option value="" className="bg-popover text-popover-foreground">
                 Seleccionar…
               </option>
@@ -501,236 +546,250 @@ function SignupWizard() {
   const accountErrors = accountForm.formState.errors;
   const businessErrors = businessForm.formState.errors;
 
+  const planNote = planNeedsContact && (
+    <p className="text-center text-xs text-muted-foreground sm:text-right">
+      Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
+      <button
+        type="button"
+        onClick={contactSales}
+        className="rounded-sm font-medium text-ninja-flameSoft outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        ¿Preferís hablar con ventas?
+      </button>
+    </p>
+  );
+
+  const industryAlert = industryError && (
+    <p role="alert" className="text-sm text-destructive">
+      {industryError}
+    </p>
+  );
+
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-card/70 backdrop-blur-xl">
-      <div className="grid lg:grid-cols-2">
-        <ValuePanel />
+    // El panel de marca y el logo los pone app/(auth)/layout.tsx.
+    <div>
+      <AuthHeading
+        className="mb-6"
+        title="Creá tu cuenta"
+        description={
+          signupTrialDays(signupPlans) > 0
+            ? trialCopy(signupTrialDays(signupPlans))
+            : "Elegí tu plan y empezá a vender."
+        }
+      />
 
-        <div className="p-6 sm:p-8">
-          {/* Header compacto (mobile) */}
-          <div className="mb-6 flex items-center gap-2 lg:hidden">
-            <Isotype className="h-7 w-auto" priority />
-            <WordmarkPos variant="dark" className="h-6 w-auto" priority />
-          </div>
+      {/* En SSO el negocio y el plan van juntos en una sola vista; el
+          stepper sólo aplica al flujo email de 3 pasos. */}
+      {mode === "account" && <Stepper step={step} />}
 
-          {/* En SSO el negocio y el plan van juntos en una sola vista; el
-              stepper sólo aplica al flujo email de 3 pasos. */}
-          {mode === "account" && <Stepper step={step} />}
+      <div className={mode === "account" ? "mt-7" : ""}>
+        {/* ---------- FLUJO EMAIL · paso 1: cuenta ---------- */}
+        {mode === "account" && step === 1 && (
+          <div className="space-y-5">
+            <GoogleButton onClick={onGoogle} loading={googleLoading} />
 
-          <div className={mode === "account" ? "mt-6" : ""}>
-            {/* ---------- FLUJO EMAIL ---------- */}
-            {mode === "account" && step === 1 && (
-              <div className="space-y-5">
-                <GoogleButton onClick={onGoogle} loading={googleLoading} />
+            <div className="flex items-center gap-3" role="separator" aria-label="o con tu email">
+              <span className="h-px flex-1 bg-border" aria-hidden />
+              <span className="text-xs text-muted-foreground" aria-hidden>
+                o con tu email
+              </span>
+              <span className="h-px flex-1 bg-border" aria-hidden />
+            </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="h-px flex-1 bg-white/10" />
-                  <span className="text-xs uppercase tracking-wider text-ninja-lavender">
-                    o con email
-                  </span>
-                  <span className="h-px flex-1 bg-white/10" />
-                </div>
-
-                <form
-                  className="space-y-4"
-                  noValidate
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    goToBusiness();
-                  }}
-                >
-                  <Input
-                    label="Nombre del negocio"
-                    placeholder="Kiosco La Esquina"
-                    error={accountErrors.businessName?.message}
-                    {...accountForm.register("businessName")}
-                  />
-                  <Input
-                    label="Tu nombre"
-                    autoComplete="name"
-                    error={accountErrors.fullName?.message}
-                    {...accountForm.register("fullName")}
-                  />
-                  <Input
-                    label="Email"
-                    type="email"
-                    autoComplete="email"
-                    error={accountErrors.email?.message}
-                    {...accountForm.register("email")}
-                  />
-                  <Input
-                    label="Contraseña"
-                    type="password"
-                    autoComplete="new-password"
-                    hint="Mínimo 10 caracteres, con mayúscula, minúscula y número."
-                    error={accountErrors.password?.message}
-                    {...accountForm.register("password")}
-                  />
-
-                  <FiscalAndCode
-                    register={accountForm.register as unknown as UseFormRegister<FieldValues>}
-                    cuitError={accountErrors.cuit?.message}
-                  />
-
-                  <p className="text-xs text-ninja-lavender">
-                    Al continuar aceptás los términos y la política de
-                    privacidad de NinjaSoft.
-                  </p>
-
-                  <Button type="submit" className="w-full">
-                    Continuar
-                  </Button>
-                </form>
-
-                <p className="text-center text-sm text-ninja-lavender">
-                  ¿Ya tenés cuenta?{" "}
-                  <Link href="/login" className="text-ninja-flameSoft hover:underline">
-                    Ingresá
-                  </Link>
-                </p>
-              </div>
-            )}
-
-            {mode === "account" && step === 2 && (
-              <div className="space-y-6">
-                <SignupStepBusiness
-                  value={industry}
-                  onChange={(v) => {
-                    setIndustry(v);
-                    setIndustryError(null);
-                  }}
+            <form
+              className="space-y-5"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                goToBusiness();
+              }}
+            >
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <Input
+                  label="Nombre del negocio"
+                  placeholder="Kiosco La Esquina"
+                  autoComplete="organization"
+                  error={accountErrors.businessName?.message}
+                  {...accountForm.register("businessName")}
                 />
-                {industryError && (
-                  <p className="text-sm text-destructive">{industryError}</p>
-                )}
-                <div className="flex gap-3">
+                <Input
+                  label="Tu nombre"
+                  autoComplete="name"
+                  error={accountErrors.fullName?.message}
+                  {...accountForm.register("fullName")}
+                />
+                <Input
+                  label="Email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  error={accountErrors.email?.message}
+                  {...accountForm.register("email")}
+                />
+                <PasswordInput
+                  label="Contraseña"
+                  autoComplete="new-password"
+                  hint="Mínimo 10 caracteres, con mayúscula, minúscula y número."
+                  error={accountErrors.password?.message}
+                  {...accountForm.register("password")}
+                />
+              </div>
+
+              <FiscalAndCode
+                register={accountForm.register as unknown as UseFormRegister<FieldValues>}
+                cuitError={accountErrors.cuit?.message}
+              />
+
+              <p className="text-xs text-muted-foreground">
+                Al continuar aceptás los términos y la política de privacidad
+                de NinjaSoft.
+              </p>
+
+              <StepActions
+                start={
+                  <p className="text-center text-sm text-muted-foreground sm:text-left">
+                    ¿Ya tenés cuenta? <AuthLink href="/login">Iniciar sesión</AuthLink>
+                  </p>
+                }
+              >
+                <Button type="submit" className={ACTION_CLS}>
+                  Continuar
+                  <ArrowRight size={16} aria-hidden />
+                </Button>
+              </StepActions>
+            </form>
+          </div>
+        )}
+
+        {/* ---------- FLUJO EMAIL · paso 2: rubro ---------- */}
+        {mode === "account" && step === 2 && (
+          <div className="space-y-6">
+            <SignupStepBusiness
+              value={industry}
+              onChange={(v) => {
+                setIndustry(v);
+                setIndustryError(null);
+              }}
+            />
+            {industryAlert}
+            <StepActions
+              start={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className={ACTION_CLS}
+                  onClick={() => setStep(1)}
+                >
+                  <ArrowLeft size={16} aria-hidden />
+                  Volver
+                </Button>
+              }
+            >
+              <Button type="button" className={ACTION_CLS} onClick={goToPlan}>
+                Continuar
+                <ArrowRight size={16} aria-hidden />
+              </Button>
+            </StepActions>
+          </div>
+        )}
+
+        {/* ---------- FLUJO EMAIL · paso 3: elegir plan ---------- */}
+        {mode === "account" && step === 3 && (
+          <div className="space-y-6">
+            <SignupStepPlan
+              value={selectedPlan}
+              onChange={setSelectedPlan}
+              addonAi={addonAi}
+              onAddonAiChange={setAddonAi}
+            />
+            <div className="space-y-3">
+              <StepActions
+                start={
                   <Button
                     type="button"
                     variant="secondary"
-                    className="flex-1"
-                    onClick={() => setStep(1)}
+                    className={ACTION_CLS}
+                    disabled={submitting}
+                    onClick={() => setStep(2)}
                   >
-                    Atrás
+                    <ArrowLeft size={16} aria-hidden />
+                    Volver
                   </Button>
-                  <Button type="button" className="flex-1" onClick={goToPlan}>
-                    Continuar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* ---------- FLUJO EMAIL · paso 3: elegir plan ---------- */}
-            {mode === "account" && step === 3 && (
-              <div className="space-y-6">
-                <SignupStepPlan
-                  value={selectedPlan}
-                  onChange={setSelectedPlan}
-                  addonAi={addonAi}
-                  onAddonAiChange={setAddonAi}
-                />
-                <div className="space-y-3">
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="flex-1"
-                      disabled={submitting}
-                      onClick={() => setStep(2)}
-                    >
-                      Atrás
-                    </Button>
-                    <Button
-                      type="button"
-                      className="flex-1"
-                      loading={submitting}
-                      onClick={submitAccount}
-                    >
-                      {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
-                    </Button>
-                  </div>
-                  {planNeedsContact && (
-                    <p className="text-center text-xs text-ninja-lavender">
-                      Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
-                      <button
-                        type="button"
-                        onClick={contactSales}
-                        className="text-ninja-flameSoft hover:underline"
-                      >
-                        ¿Preferís hablar con ventas?
-                      </button>
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ---------- FLUJO SSO (Google sin tenant) ---------- */}
-            {mode === "sso" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-sans text-xl font-bold tracking-[-0.01em] text-ninja-softWhite">
-                    Contanos de tu negocio
-                  </h3>
-                  <p className="mt-1 text-sm text-ninja-lavender">
-                    Ya entraste con Google. Solo falta crear tu negocio.
-                  </p>
-                </div>
-
-                <form className="space-y-4" noValidate>
-                  <Input
-                    label="Nombre del negocio"
-                    placeholder="Kiosco La Esquina"
-                    error={businessErrors.businessName?.message}
-                    {...businessForm.register("businessName")}
-                  />
-                  <FiscalAndCode
-                    register={businessForm.register as unknown as UseFormRegister<FieldValues>}
-                    cuitError={businessErrors.cuit?.message}
-                  />
-                </form>
-
-                <SignupStepBusiness
-                  value={industry}
-                  onChange={(v) => {
-                    setIndustry(v);
-                    setIndustryError(null);
-                  }}
-                />
-                {industryError && (
-                  <p className="text-sm text-destructive">{industryError}</p>
-                )}
-
-                <SignupStepPlan
-                  value={selectedPlan}
-                  onChange={setSelectedPlan}
-                  addonAi={addonAi}
-                  onAddonAiChange={setAddonAi}
-                />
-
+                }
+              >
                 <Button
                   type="button"
-                  className="w-full"
+                  className={ACTION_CLS}
+                  loading={submitting}
+                  onClick={submitAccount}
+                >
+                  {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
+                </Button>
+              </StepActions>
+              {planNote}
+            </div>
+          </div>
+        )}
+
+        {/* ---------- FLUJO SSO (Google sin tenant) ---------- */}
+        {mode === "sso" && (
+          <div className="space-y-8">
+            <div>
+              <h3 className="font-sans text-xl font-bold tracking-[-0.01em] text-foreground">
+                Contanos de tu negocio
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Ya entraste con Google. Solo falta crear tu negocio.
+              </p>
+
+              <form className="mt-5 space-y-4" noValidate>
+                <Input
+                  label="Nombre del negocio"
+                  placeholder="Kiosco La Esquina"
+                  autoComplete="organization"
+                  error={businessErrors.businessName?.message}
+                  {...businessForm.register("businessName")}
+                />
+                <FiscalAndCode
+                  register={businessForm.register as unknown as UseFormRegister<FieldValues>}
+                  cuitError={businessErrors.cuit?.message}
+                />
+              </form>
+            </div>
+
+            <div className="space-y-3">
+              <SignupStepBusiness
+                value={industry}
+                onChange={(v) => {
+                  setIndustry(v);
+                  setIndustryError(null);
+                }}
+              />
+              {industryAlert}
+            </div>
+
+            <SignupStepPlan
+              value={selectedPlan}
+              onChange={setSelectedPlan}
+              addonAi={addonAi}
+              onAddonAiChange={setAddonAi}
+            />
+
+            <div className="space-y-3">
+              <StepActions>
+                <Button
+                  type="button"
+                  className={ACTION_CLS}
                   loading={submitting}
                   onClick={submitBusiness}
                 >
                   {planNeedsContact ? "Pagar y activar" : "Crear cuenta"}
                 </Button>
-                {planNeedsContact && (
-                  <p className="text-center text-xs text-ninja-lavender">
-                    Pagás con Mercado Pago y tu plan queda activo al instante.{" "}
-                    <button
-                      type="button"
-                      onClick={contactSales}
-                      className="text-ninja-flameSoft hover:underline"
-                    >
-                      ¿Preferís hablar con ventas?
-                    </button>
-                  </p>
-                )}
-              </div>
-            )}
+              </StepActions>
+              {planNote}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

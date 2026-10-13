@@ -251,7 +251,7 @@ export const TENDERS: TenderDef[] = [
     featureKey: null,
     logo: null,
     flow: "card",
-    hint: "Terminal no integrada: cargás los datos del cupón",
+    hint: "Posnet sin integrar: cargás el cupón",
   },
   qr("mercadopago", "Mercado Pago", "mercadopago", "qr", "Billeteras y tarjetas"),
   qr("mercadopago", "Mercado Pago", "mercadopago", "link", "Para mandar por mensaje"),

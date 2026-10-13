@@ -22,7 +22,7 @@ import {
 } from "@/lib/pos/layout";
 import { TENDER_GROUPS, type ResolvedTender } from "@/lib/pos/tenders";
 import { cn } from "@/lib/utils/cn";
-import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
+import { TenderLogo, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { QUICK_KEY_FILL, accentVars, money } from "../ui/posStyles";
 import { CheckoutThumb, PresetThumb } from "../screen/PresetThumb";
 
@@ -364,7 +364,14 @@ export function PosLayoutEditor({
               return (
                 <li key={t.id} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-card p-2.5", hidden && "opacity-50")}>
                   <div className="flex items-center gap-2.5">
-                    <TenderLogo source={t} alt={t.brandLabel} size={28} fallback={tenderFallback(t)} />
+                    <TenderLogo
+                      source={t}
+                      alt={t.brandLabel}
+                      size={32}
+                      fallback={tenderFallback(t)}
+                      glyph={tenderGlyph(t)}
+                      framed
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block text-[13px] font-bold leading-tight">
                         {t.group === "cash" || t.group === "transfer" ? t.label : `${t.brandLabel} · ${t.label}`}

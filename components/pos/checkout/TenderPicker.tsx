@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { Check, ChevronRight, CreditCard, Link2, QrCode, Smartphone } from "lucide-react";
 import { brandRuns, type CheckoutSection, type ResolvedTender } from "@/lib/pos/tenders";
 import { cn } from "@/lib/utils/cn";
-import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
+import { TenderLogo, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { money } from "../ui/posStyles";
 
 // Selector de medios de cobro de la hoja de cobro, agrupado por medio, marca y
@@ -14,8 +14,12 @@ import { money } from "../ui/posStyles";
 // oficiales transparentes con variante oscura (TenderLogo → ThemedLogo).
 //
 // Lenguaje visual del POS: superficies neutras con borde sutil, esquinas de
-// 8px, selección con relleno neutro + insignia de check (choice-on /
-// choice-check), nunca borde de color ni degradado.
+// 8px, selección con borde neutro fuerte + relleno (--choice-fill) + tilde,
+// sin sombras, nunca borde de color ni degradado. Cada medio lleva su ícono en
+// un contenedor cuadrado del mismo tamaño: logo oficial de la marca o, para
+// los genéricos (efectivo, transferencia, posnet, vale, cuenta corriente), el
+// set propio Phosphor duotone (TenderLogo → tenderGlyph). El título usa hasta
+// dos líneas y la bajada completa queda en el tooltip (title).
 //
 // Variantes:
 //   tiles   → grilla de tiles (Dos columnas)
@@ -37,7 +41,6 @@ const CHANNEL_ICON = {
 
 const SURFACE = "border border-border bg-card";
 const SURFACE_HOVER = "hover:bg-muted/60";
-const SELECTED = "choice-on";
 
 // Medios "simples" (un solo botón por grupo: efectivo, transferencia, tarjeta,
 // cuenta del cliente, o una marca con un único canal) van juntos en una grilla
@@ -147,7 +150,7 @@ export function TenderPicker({
       className={cn(
         "grid",
         variant === "list" ? "gap-1.5" : "gap-2",
-        variant === "tiles" && "grid-cols-[repeat(auto-fill,minmax(168px,1fr))]",
+        variant === "tiles" && "grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]",
         variant === "big" && "grid-cols-[repeat(auto-fill,minmax(176px,1fr))]",
         variant === "compact" && "grid-cols-2",
         variant === "list" && "grid-cols-1",
@@ -240,23 +243,40 @@ function Tile({
 }) {
   const big = variant === "big";
   const list = variant === "list";
-  const logo = big ? 40 : variant === "compact" ? 24 : 30;
+  const compact = variant === "compact";
+  const tiles = variant === "tiles";
+  // Contenedor del ícono: mismo tamaño para logos de marca e íconos propios.
+  const logo = big ? 44 : compact ? 32 : list ? 36 : 40;
+  const promoTag =
+    promo > 0 ? (
+      <span className="shrink-0 rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-success">
+        -{money(promo)}
+      </span>
+    ) : null;
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onPick(t)}
       aria-pressed={on}
+      title={sub ? `${title}: ${sub}` : title}
       className={cn(
-        "relative flex w-full items-center text-left transition active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-        "rounded-lg",
+        "relative flex w-full min-w-0 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        "rounded-lg border",
         attached && "rounded-b-none",
-        on ? cn(SELECTED, !list && "choice-check", "border border-transparent") : cn(SURFACE, SURFACE_HOVER),
+        // Seleccionado: borde fuerte neutro + relleno + tilde. Sin sombras.
+        on ? "border-foreground/60 bg-[var(--choice-fill)]" : cn(SURFACE, SURFACE_HOVER),
         big
-          ? cn("flex-col items-start gap-2.5 p-3.5 pr-8", dense ? "min-h-[96px]" : "min-h-[116px]")
-          : variant === "compact"
-            ? cn("gap-2 px-2.5 pr-7", dense ? "min-h-[44px]" : "min-h-[52px]")
-            : cn("gap-3 px-3", list ? "pr-3" : "pr-8", dense ? "min-h-[48px] py-1.5" : "min-h-[60px] py-2"),
+          ? cn("flex-col items-start gap-2.5 p-3.5 pr-9", dense ? "min-h-[104px]" : "min-h-[124px]")
+          : compact
+            ? cn("items-center gap-2.5 py-1.5 pl-2 pr-7", dense ? "min-h-[48px]" : "min-h-[56px]")
+            : list
+              ? cn("items-center gap-3 px-3", dense ? "min-h-[52px] py-1.5" : "min-h-[60px] py-2")
+              : cn(
+                  // Tiles: en celular ícono arriba (dos columnas); desde sm, en fila.
+                  "flex-col items-start gap-2 p-3 pr-9 sm:flex-row sm:items-center sm:gap-3",
+                  dense ? "min-h-[64px]" : "min-h-[72px]",
+                ),
       )}
     >
       <TenderLogo
@@ -264,39 +284,46 @@ function Tile({
         alt={t.brandLabel}
         size={logo}
         fallback={tenderFallback(t)}
+        glyph={tenderGlyph(t)}
+        framed
       />
-      <span className={cn("min-w-0 flex-1", big && "w-full flex-none")}>
+      <span className={cn("min-w-0 flex-1", (big || tiles) && "w-full")}>
         <span
           className={cn(
-            "block font-semibold leading-snug text-foreground",
+            "block font-semibold leading-tight text-foreground [overflow-wrap:anywhere]",
             list ? "truncate" : "line-clamp-2",
-            big ? "text-base" : variant === "compact" ? "text-[13px]" : "text-sm",
+            big ? "text-base" : compact ? "text-[13px]" : "text-sm",
           )}
         >
           {title}
         </span>
-        {sub && variant !== "compact" && (
-          <span className={cn("block truncate text-muted-foreground", big ? "text-xs" : "text-[11px]")}>{sub}</span>
+        {sub && !compact && (
+          <span
+            className={cn(
+              "mt-0.5 block leading-snug text-muted-foreground",
+              list ? "truncate" : "line-clamp-2",
+              big ? "text-xs" : "text-[11px]",
+            )}
+          >
+            {sub}
+          </span>
         )}
+        {promoTag && !list && <span className="mt-1.5 flex">{promoTag}</span>}
       </span>
-      {promo > 0 && (
+      {list && promoTag}
+      {on ? (
         <span
+          aria-hidden
           className={cn(
-            "shrink-0 rounded-md bg-success/15 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-success",
-            big && "absolute bottom-3 right-3",
+            "grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--pos-solid)] text-white",
+            !list && "absolute right-2 top-2",
           )}
         >
-          -{money(promo)}
+          <Check size={12} strokeWidth={3.5} />
         </span>
+      ) : (
+        list && <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
       )}
-      {list &&
-        (on ? (
-          <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-[var(--pos-solid)] text-white">
-            <Check size={11} strokeWidth={3.5} />
-          </span>
-        ) : (
-          <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
-        ))}
     </button>
   );
 }
@@ -331,11 +358,11 @@ function BrandRow({
         "flex gap-3 rounded-lg p-2 transition",
         attached && "rounded-b-none",
         stacked ? "flex-col items-stretch" : "flex-wrap items-center sm:flex-nowrap",
-        brandActive ? cn(SELECTED, "border border-transparent") : SURFACE,
+        brandActive ? "border border-foreground/60 bg-[var(--choice-fill)]" : SURFACE,
       )}
     >
       <span className={cn("flex min-w-0 items-center gap-2.5", !stacked && "flex-1 pl-1")}>
-        <TenderLogo source={first} alt={first.brandLabel} size={big ? 36 : variant === "compact" ? 22 : 28} />
+        <TenderLogo source={first} alt={first.brandLabel} size={big ? 44 : variant === "compact" ? 32 : 40} framed />
         <span className={cn("truncate font-semibold text-foreground", big ? "text-base" : "text-sm")}>
           {first.brandLabel}
         </span>

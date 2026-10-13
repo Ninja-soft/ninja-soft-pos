@@ -54,7 +54,7 @@ import {
 } from "@/lib/pos/cardBrands";
 import { Keypad, applyKey, keypadNumber, type KeypadKey } from "../ui/Keypad";
 import { PosSheet } from "../ui/PosSheet";
-import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
+import { TenderLogo, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
@@ -1113,7 +1113,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       <ul className="mt-4 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card" aria-label="Pagos">
         {lines.map((l) => (
           <li key={l.key} className="flex items-center gap-2.5 px-3 py-2">
-            <TenderLogo source={l} alt={l.title} size={24} />
+            <TenderLogo source={l} alt={l.title} size={28} glyph={tenderGlyph(l)} framed />
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1 truncate text-[13px] font-semibold">
                 {l.title}
@@ -1160,8 +1160,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       <TenderLogo
         source={active}
         alt={active.brandLabel}
-        size={30}
+        size={36}
         fallback={tenderFallback(active)}
+        glyph={tenderGlyph(active)}
+        framed
       />
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold">
@@ -1698,7 +1700,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             {showEditor && active && (
               <div className="mt-4 space-y-3">
                 <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
-                  <TenderLogo source={active} alt={active.brandLabel} size={18} fallback={tenderFallback(active)} />
+                  <TenderLogo
+                    source={active}
+                    alt={active.brandLabel}
+                    size={18}
+                    fallback={tenderFallback(active)}
+                    glyph={tenderGlyph(active)}
+                  />
                   {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
                     ? active.label
                     : `${active.brandLabel} ${active.label}`}

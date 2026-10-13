@@ -33,6 +33,7 @@ import {
   AI_ASSISTANT_ADDON_KEY,
 } from "@/modules/internal/hooks";
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
+import { TenantProfileCard } from "@/components/internal/TenantProfileCard";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
 import { appOrigin } from "@/lib/site";
 
@@ -244,6 +245,7 @@ export default function InternalTenantDetail({
             </select>
           </CardContent>
         </Card>
+        <TenantProfileCard tenantId={params.id} />
       </div>
 
       <Heading className="mt-8" as="h2">

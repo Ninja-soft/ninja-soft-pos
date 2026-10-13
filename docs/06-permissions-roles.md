@@ -388,6 +388,26 @@ Reglas:
 - [ ] Cambios de mesa, transferencia de mozo, reimpresión y cancelación de comanda quedan auditados.
 - [ ] El manager puede configurar estaciones e impresoras/KDS, pero no cambiar plan del tenant.
 
+## 9.4 Rol de integración: API pública (ADR-094)
+
+La API pública no usa una sesión de persona: actúa con una **credencial del negocio** (OAuth2 client_credentials) que crea el dueño. Equivale a un encargado recortado por los alcances de la credencial:
+
+| Área | Qué puede |
+|---|---|
+| Productos | Leer (`products:read`); crear y editar por SKU (`products:write`). |
+| Precios | Cambiar precio y costo por SKU (`prices:write`). |
+| Stock | Leer sucursales y stock (`stock:read`); ajustar y contar con motivo (`stock:write`). |
+| Ventas | Sólo lectura por rango (`sales:read`). |
+| Clientes | Leer (`customers:read`); crear y editar datos de contacto y fiscales (`customers:write`). |
+| Nunca | Caja, cobros, anulaciones, devoluciones, personal, permisos, plan, cuenta corriente del cliente. |
+
+Reglas:
+
+- [x] Crear, editar, rotar y revocar credenciales: **sólo el dueño**, auditado (`api_client_*`).
+- [x] El negocio sale de la credencial, nunca del pedido; cada operación es una RPC SECURITY DEFINER que filtra por ese negocio.
+- [x] Alcance insuficiente, credencial revocada o rotada y plan sin `api_publica` se rechazan en la base.
+- [x] Cada lote queda en `audit_logs` con el id de la credencial (`entity_type = 'api_client'`); las filas tocadas, por los triggers de cada tabla.
+
 ## 10. Anti-patrones
 
 ❌ Hardcodear el chequeo del rol en lugar de usar `can()`:

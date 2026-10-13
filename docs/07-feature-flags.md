@@ -63,7 +63,7 @@ Lista canónica vive en `lib/feature-flags/catalog.ts` y se siembra vía migraci
 | `whatsapp_notifications` | `false` | `per_plan` | Notificaciones por WhatsApp (Business+). |
 | `customer_credit` | `false` | `per_plan` | Cuenta corriente de clientes (Pro+). |
 | `customer_loyalty` | `false` | `per_plan` | Programa de fidelidad (Business+). |
-| `api_access` | `false` | `per_plan` | API pública (Enterprise). |
+| `api_access` | `false` | `per_plan` | API pública (Enterprise). Hoy se gatea con la feature de plan `api_publica` (ADR-094), no con este flag. |
 | `pin_for_voids` | `true` | `all` | Pedir PIN de manager para anulaciones. |
 | `auto_print_ticket` | `true` | `per_tenant` | Imprimir ticket automáticamente al cerrar venta. |
 | `negative_stock_warning` | `true` | `all` | Avisar al vender producto sin stock. |

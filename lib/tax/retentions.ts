@@ -109,6 +109,11 @@ export interface RetContext {
   padronRates: Record<string, number | null>;
   /** % de exclusión vigente: clave `tax` (todas las jurisdicciones) o `iibb:902`. */
   exemptions: Record<string, number>;
+  /**
+   * Proveedor sin condición en Ganancias cargada (ADR-101, parámetro del
+   * negocio gan_unknown_as_unregistered): inscripto (plantilla) o no inscripto.
+   */
+  unknownCondition?: "inscripto" | "no_inscripto";
 }
 
 export type RetReason =
@@ -197,9 +202,12 @@ export function scaleAmount(subject: number, scale: ScaleBracket[]): number {
 }
 
 /** Condición en Ganancias efectiva: monotributo y vacío resueltos. */
-export function effectiveGananciasCondition(s: RetSupplier): GananciasCondition | "monotributo" {
+export function effectiveGananciasCondition(
+  s: RetSupplier,
+  unknown: "inscripto" | "no_inscripto" = "inscripto",
+): GananciasCondition | "monotributo" {
   if (s.iva_condition === "monotributo" || s.iva_condition === "monotributo_social") return "monotributo";
-  return s.ganancias_condition ?? "inscripto";
+  return s.ganancias_condition ?? unknown;
 }
 
 function baseOf(kind: RetBaseKind, b: RetBases): number {
@@ -251,7 +259,7 @@ export function exemptionKey(tax: RetTax, jurisdiction: string | null): string {
 function ganancias(r: RetRegime, ctx: RetContext): RetLine {
   const base = ctx.bases.net;
   const l = emptyLine(r, base);
-  const cond = effectiveGananciasCondition(ctx.supplier);
+  const cond = effectiveGananciasCondition(ctx.supplier, ctx.unknownCondition ?? "inscripto");
   l.condition = cond === "monotributo" ? null : cond;
   if (cond === "monotributo") return { ...l, reason: "monotributo" };
   if (cond === "exento" || cond === "no_alcanzado") return { ...l, reason: "gan_not_subject" };

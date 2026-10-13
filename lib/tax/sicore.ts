@@ -55,6 +55,17 @@ export interface ExportIssue {
 
 export class SicoreFormatError extends Error {}
 
+/**
+ * Valores de los archivos que el negocio puede ajustar (ADR-101, parámetros
+ * sicore_cbte_code, arba_branch y arba_activity). Sin valor = plantilla de
+ * NinjaSoft (06, 0001 y 6).
+ */
+export interface ExportOptions {
+  sicoreCbteCode?: number | null;
+  arbaBranch?: number | null;
+  arbaActivity?: number | null;
+}
+
 // ---------------------------------------------------------------------------
 // Diseños de registro
 // ---------------------------------------------------------------------------
@@ -162,9 +173,9 @@ export function sicoreCondition(r: WithholdingExportRow): string {
   return r.tax === "ganancias" && r.condition === "no_inscripto" ? "02" : "01";
 }
 
-export function sicoreLine(r: WithholdingExportRow): string {
+export function sicoreLine(r: WithholdingExportRow, opts: ExportOptions = {}): string {
   return assemble(SICORE_FIELDS, {
-    cbteCode: SICORE_CBTE_ORDEN_PAGO,
+    cbteCode: opts.sicoreCbteCode != null ? fmtNum(opts.sicoreCbteCode, 2) : SICORE_CBTE_ORDEN_PAGO,
     cbteDate: fmtDateAr(r.date),
     cbteNumber: fmtNum(r.payment_number, 16),
     cbteAmount: fmtDecimal(r.payment_total, 16),
@@ -184,11 +195,11 @@ export function sicoreLine(r: WithholdingExportRow): string {
   });
 }
 
-export function arbaLine(r: WithholdingExportRow): string {
+export function arbaLine(r: WithholdingExportRow, opts: ExportOptions = {}): string {
   return assemble(ARBA_FIELDS, {
     cuit: fmtCuitDashed(r.subject_snapshot.cuit ?? ""),
     date: fmtDateAr(r.date),
-    branch: fmtNum(1, 4),
+    branch: fmtNum(opts.arbaBranch ?? 1, 4),
     emission: fmtNum(r.certificate_number ?? 0, 8),
     amount: fmtDecimal(r.amount, 11, "."),
     operation: "A",
@@ -241,9 +252,16 @@ export interface ExportFile {
   total: number;
 }
 
-export function exportFileName(format: "sicore" | "arba", agentCuit: string | null, period: string): string {
+export function exportFileName(
+  format: "sicore" | "arba",
+  agentCuit: string | null,
+  period: string,
+  opts: ExportOptions = {},
+): string {
   const ym = period.slice(0, 7).replace("-", "");
-  if (format === "arba") return `AR-${String(agentCuit ?? "").replace(/\D/g, "")}-${ym}0-6-LOTE1.txt`;
+  if (format === "arba") {
+    return `AR-${String(agentCuit ?? "").replace(/\D/g, "")}-${ym}0-${opts.arbaActivity ?? 6}-LOTE1.txt`;
+  }
   return `SICORE_RETENCIONES_${ym}.txt`;
 }
 
@@ -253,13 +271,13 @@ export function buildExport(
   agent: ExportAgent,
   period: string,
   rows: WithholdingExportRow[],
+  opts: ExportOptions = {},
 ): ExportFile {
   const errors = validateExport(format, agent, rows).filter((i) => i.level === "error");
   if (errors.length > 0) throw new SicoreFormatError(errors.map((e) => e.message).join(" "));
-  const line = format === "sicore" ? sicoreLine : arbaLine;
-  const lines = rows.map(line);
+  const lines = rows.map((r) => (format === "sicore" ? sicoreLine(r, opts) : arbaLine(r, opts)));
   return {
-    name: exportFileName(format, agent.cuit, period),
+    name: exportFileName(format, agent.cuit, period, opts),
     content: lines.map((l) => l + "\r\n").join(""),
     records: lines.length,
     total: Math.round(rows.reduce((t, r) => t + r.amount, 0) * 100) / 100,

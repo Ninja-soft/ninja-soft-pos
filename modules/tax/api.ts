@@ -49,6 +49,14 @@ export interface TaxSettings {
   /** Es agente de percepción con algún régimen activo. */
   agent: boolean;
   cf_id_threshold: number | null;
+  /** Parámetros efectivos del negocio (ADR-101). Sin la migración, ausente. */
+  params?: {
+    gan_unknown_as_unregistered: number | null;
+    sicore_iva_tax_code: number | null;
+    sicore_cbte_code: number | null;
+    arba_branch: number | null;
+    arba_activity: number | null;
+  };
 }
 
 export type RegimeTax = "iva" | "iibb" | "ganancias" | "suss";
@@ -73,6 +81,9 @@ export interface TaxRegime {
   min_amount: number;
   applies_to: string[];
   notes: string | null;
+  /** Vigencia del régimen (ADR-101): null = sin límite. */
+  valid_from?: string | null;
+  valid_to?: string | null;
 }
 
 export type TaxRegimeInput = Omit<TaxRegime, "id">;
@@ -80,7 +91,7 @@ export type TaxRegimeInput = Omit<TaxRegime, "id">;
 export interface PadronImport {
   id: string;
   jurisdiction: string;
-  format: PadronFormat;
+  format: PadronFormat | "profile" | "manual";
   kind: "perception" | "retention" | "both";
   file_name: string | null;
   only_known: boolean;
@@ -185,6 +196,10 @@ export interface RetConceptEff {
   sicore_regime_code: string | null;
   is_active: boolean;
   overridden: boolean;
+  /** Concepto propio del negocio (ADR-101). */
+  custom?: boolean;
+  /** Valores de la plantilla de NinjaSoft (null en los propios). */
+  template?: Record<string, unknown> | null;
   source: string;
   verify: boolean;
   notes: string | null;
@@ -307,7 +322,7 @@ function normRegime(r: Record<string, unknown>): TaxRegime {
 }
 
 const REGIME_COLS =
-  "id, tax, role, jurisdiction, name, is_active, agent_number, regime_code, padron_source, default_rate, rates_by_condition, base_kind, min_base, min_amount, applies_to, notes";
+  "id, tax, role, jurisdiction, name, is_active, agent_number, regime_code, padron_source, default_rate, rates_by_condition, base_kind, min_base, min_amount, applies_to, notes, valid_from, valid_to";
 
 export const taxApi = {
   settings: async (): Promise<TaxSettings> => {
@@ -364,7 +379,8 @@ export const taxApi = {
 
   padronStart: async (p: {
     jurisdiction: string;
-    format: PadronFormat;
+    format: PadronFormat | "profile";
+    profile_id?: string;
     kind: PadronImport["kind"];
     file_name: string;
     only_known: boolean;

@@ -13,9 +13,10 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatCurrency } from "@/lib/utils/format";
 import { jurisdictionName } from "@/lib/tax/catalog";
-import { parseSufferedFile, SUFFERED_TAX_LABEL, type SufferedParseResult } from "@/lib/tax/suffered";
+import { parseSufferedFile, SUFFERED_TAX_LABEL, type SufferedParseResult, type SufferedRule } from "@/lib/tax/suffered";
 import { taxErrorMessage } from "@/modules/tax/api";
 import { useSufferedMutations } from "@/modules/tax/subjectHooks";
+import { useCustomValues } from "@/modules/tax/customHooks";
 
 type Source = "mis_retenciones" | "sircreb" | "sirtac" | "planilla";
 
@@ -29,6 +30,8 @@ export function SufferedImportModal({
   defaultJurisdiction: string | null;
 }) {
   const m = useSufferedMutations();
+  // Reglas propias del negocio (ADR-101, Configuración > Impuestos > Retenciones).
+  const custom = useCustomValues(open);
   const [source, setSource] = useState<Source>("mis_retenciones");
   const [parsed, setParsed] = useState<SufferedParseResult | null>(null);
   const [fileName, setFileName] = useState("");
@@ -51,7 +54,11 @@ export function SufferedImportModal({
     let text = new TextDecoder("utf-8").decode(buf);
     if (text.includes("�")) text = new TextDecoder("windows-1252").decode(buf);
     const hint = source === "sircreb" || source === "sirtac" ? source : null;
-    setParsed(parseSufferedFile(text, defaultJurisdiction, hint));
+    const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+    const rules: SufferedRule[] = (custom.data ?? [])
+      .filter((v) => v.catalog === "suffered_rule" && v.is_active && v.valid_from <= today && (!v.valid_to || v.valid_to >= today))
+      .map((v) => ({ pattern: v.item_key, ...(v.data as Omit<SufferedRule, "pattern">) }));
+    setParsed(parseSufferedFile(text, defaultJurisdiction, hint, rules));
   }
 
   async function confirm() {

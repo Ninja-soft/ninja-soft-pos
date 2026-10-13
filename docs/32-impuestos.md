@@ -1,8 +1,8 @@
 # Impuestos: IVA, internos, condición fiscal, percepciones, retenciones y padrones
 
-Decisión: [ADR-068](./17-decision-log.md), [ADR-079](./17-decision-log.md) (retenciones como agente) y [ADR-095](./17-decision-log.md) (como sujeto e IIBB) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
+Decisión: [ADR-068](./17-decision-log.md), [ADR-079](./17-decision-log.md) (retenciones como agente), [ADR-095](./17-decision-log.md) (como sujeto e IIBB) y [ADR-101](./17-decision-log.md) (todo personalizable por el negocio) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
 
-> **Aviso normativo.** Alícuotas, topes, mínimos, códigos de ARCA y diseños de padrón son **orientativos**. Se modelan como datos (catálogos, `tax_parameters`, regímenes cargados por el negocio), nunca como constantes del código, y hay que validarlos con el contador del negocio y la norma vigente.
+> **Aviso normativo.** Alícuotas, topes, mínimos, códigos de ARCA y diseños de padrón son **orientativos**. Se modelan como datos (catálogos, `tax_parameters`, regímenes cargados por el negocio), nunca como constantes del código, y hay que validarlos con el contador del negocio y la norma vigente. Desde ADR-101 cada uno es una plantilla que el negocio puede pisar con vigencia (ver § 1.1).
 
 ## 1. Qué hace
 
@@ -22,6 +22,34 @@ Decisión: [ADR-068](./17-decision-log.md), [ADR-079](./17-decision-log.md) (ret
 | Retenciones practicadas del mes, certificados, archivos SICORE y ARBA | Compras > Retenciones practicadas | `percepciones_retenciones` |
 | Retenciones y percepciones sufridas (procesadores, SIRCREB, SIRTAC, clientes, Mis Retenciones) con asiento | Contabilidad > Retenciones sufridas | `percepciones_retenciones` |
 | Liquidación mensual de Ingresos Brutos por jurisdicción (actividades, Convenio Multilateral, saldo a favor) | Contabilidad > Ingresos Brutos | `percepciones_retenciones` |
+
+## 1.1 Qué es personalizable y dónde (ADR-101)
+
+Requisito del dueño: **la configuración impositiva es 100 % del negocio**. Todo valor que NinjaSoft siembra es una **plantilla orientativa**: el negocio la usa tal cual, la pisa con una **versión con vigencia** (desde, y opcionalmente hasta), la **desactiva** en un período, suma **valores propios** o **vuelve a la plantilla** (se quitan sus versiones; lo ya calculado no cambia). El cálculo del servidor lee siempre el **valor efectivo** (versión que cubre la fecha > plantilla). Cada pantalla marca "Plantilla NinjaSoft", "Personalizado", "Propio" o "Desactivado" y tiene historial (audit_logs). Edita el dueño o el encargado (docs/06).
+
+| Valor | Plantilla de NinjaSoft | Dónde se cambia (Configuración > Impuestos) | Qué puede hacer el negocio | Lo lee (servidor) | Feature |
+|---|---|---|---|---|---|
+| Alícuotas de IVA (21, 10,5, 27, 5, 2,5, 0) | `tax_iva_rates` | IVA > Alícuotas de IVA | Alícuota y nombre con vigencia; exento y no gravado sólo el nombre. El código y el id de ARCA los fija ARCA | `_sale_tax_compute`, `_tax_price_to_final`, `price_context_snapshot` (`tax.rates` para el resolver del POS) | `impuestos_iva` |
+| Alícuota de cada producto, variante e ítems sin producto | 21 % | Ficha del producto; Datos fiscales | Del negocio desde ADR-068 | `create_sale` | `impuestos_iva` |
+| Impuestos internos | Ninguna | Ficha del producto | Del negocio desde ADR-068 (fijo, % sobre precio o costo) | `_sale_tax_compute` | `impuestos_internos` |
+| Tope para vender a consumidor final sin identificarlo | `tax_parameters.cf_id_threshold` | IVA > Valores de IVA | Monto con vigencia o desactivado (sin aviso) | `_sale_tax_compute`, `tax_settings_get` | `impuestos_iva` |
+| Regímenes de percepción: jurisdicción, padrón, alícuota general, alícuota por condición, base, mínimos de base y de importe, condiciones alcanzadas, n° de agente, código | Plantillas de arranque en la pantalla | Percepciones | Todo editable; vigencia del régimen (`valid_from`, `valid_to`); cambios de alícuota y mínimos con vigencia sin cambiar de régimen (`regime_values`) | `_sale_tax_compute` | `percepciones_retenciones` |
+| Regímenes de retención (IVA, IIBB, Ganancias, SUSS) | Plantillas de arranque | Retenciones > Regímenes | Igual que percepción; la numeración de certificados sigue por régimen | `_tax_retention_compute` | `percepciones_retenciones` |
+| Padrones: diseño del archivo | Perfiles ARBA, AGIP y genérico (`BUILTIN_PROFILES`) | Padrones > Mis perfiles | Perfiles propios: CSV o ancho fijo, separador, columnas o posiciones, formato de fecha, decimales, escala de la alícuota, columna de régimen; vista previa con errores por fila antes de aplicar | `tax_padron_import_*` | `percepciones_retenciones` |
+| Padrones: alícuota y vigencia por CUIT | El archivo del organismo | Padrones | Import por período; **alícuota a mano por CUIT** con vigencia que manda sobre los archivos | `_tax_padron_rate` | `percepciones_retenciones` |
+| Exclusiones (certificados) | Ninguna | Ficha del cliente o del proveedor | Porcentaje y vigencia | `_tax_exemption_pct` | `percepciones_retenciones` |
+| Conceptos de Ganancias RG 830: mínimo no sujeto, alícuota inscripto y no inscripto, escala sí o no, retención mínima, códigos de SICORE | `tax_ret_concepts` (RG 5423/2023) | Retenciones > Conceptos de retención | Versión con vigencia, desactivar, **conceptos propios** | `tax_ret_concept_eff` → `_tax_retention_compute` | `percepciones_retenciones` |
+| Actividades de SUSS: alícuota, pago y retención mínimos, código de SICORE | `tax_ret_concepts` (RG 4052, 1556, 1769, 3983) | Retenciones > Conceptos de retención | Igual que Ganancias | `_tax_retention_compute` | `percepciones_retenciones` |
+| Escala del Anexo VIII | `tax_ret_scales` | Retenciones > Escalas | Tramos con vigencia; **escalas propias** para conceptos propios | `_tax_ret_scale_amount_for` | `percepciones_retenciones` |
+| Criterio para el proveedor sin constancia de Ganancias | Inscripto con aviso (`gan_unknown_as_unregistered = 0`) | Retenciones > Criterios de retención | Inscripto o no inscripto, con vigencia | `_tax_retention_compute` | `percepciones_retenciones` |
+| Código de impuesto de IVA en SICORE | 767 (`sicore_iva_tax_code`) | Exportaciones | Con vigencia (queda en la foto de cada retención) | `_tax_retention_compute` | `percepciones_retenciones` |
+| Código de comprobante de SICORE, sucursal y actividad de ARBA | 06, 0001 y 6 | Exportaciones | Con vigencia | `lib/tax/sicore.ts` (`buildExport` con `ExportOptions`) | `percepciones_retenciones` |
+| Alícuota e impuesto mínimo de IIBB por actividad y jurisdicción | `iibb_activity_templates` (CABA 3 %, Provincia de Buenos Aires 3,5 %) | IIBB (cambios con vigencia y volver a la plantilla); altas en Contabilidad > Ingresos Brutos | Actividades propias; cambios con vigencia (rige el vigente el primer día del mes) | `_iibb_compute` | `percepciones_retenciones` |
+| Coeficientes de Convenio Multilateral | Ninguna (lo calcula el contador) | Contabilidad > Ingresos Brutos > Convenio Multilateral | Por jurisdicción y vigencia (ADR-095) | `_iibb_compute` | `percepciones_retenciones` |
+| Clasificación de retenciones sufridas por texto o código | Palabras clave de `_tax_suffered_classify` | Retenciones > Cómo clasificar las retenciones que te hacen | **Reglas propias** con vigencia (ignorar, impuesto, tipo, régimen, jurisdicción); gana el patrón más largo | `_tax_suffered_classify_for` (procesadores), `parseSufferedFile` (archivos) | `percepciones_retenciones` |
+| Jurisdicciones (901 a 924) e ids de ARCA (AlicIva, condiciones, documentos, tributos) | `tax_jurisdictions` y catálogos de ARCA | No se editan | Son códigos oficiales: un valor distinto rompería WSFE, el Libro IVA y SICORE | | |
+
+Gating real en el servidor: `tax_custom_save`, `tax_custom_delete` y `tax_custom_reset` exigen dueño o encargado y la feature del catálogo (`impuestos_iva` para IVA y el tope del consumidor final; `percepciones_retenciones` para el resto); los perfiles de padrón, `tax_can_write('percepciones_retenciones')` en la policy. Sin la feature, el valor efectivo sigue siendo la plantilla.
 
 ## 2. Cálculo
 
@@ -87,6 +115,8 @@ Texto plano, una línea por CUIT, separador `;`, decimales con coma. Se leen en 
 
 **Genérico** (cualquier jurisdicción): `CUIT;percepción;retención;desde;hasta`, separador `;` o `,`, fechas `dd/mm/aaaa`, `ddmmaaaa` o `aaaa-mm-dd`, encabezado opcional.
 
+**Perfiles del negocio (ADR-101).** Los tres diseños de arriba son perfiles de plantilla (`lib/tax/padronProfile.ts`, `BUILTIN_PROFILES`, misma lectura que `parsePadronLine`). Para otro diseño el negocio arma un perfil (`tax_padron_profiles`): CSV con separador (`;`, `,`, `|`, tabulador o detectar) o texto de ancho fijo; columna (1 = primera) o posición y largo (1 = primer carácter) de CUIT, alícuota de percepción, de retención o una sola alícuota con columna de régimen (valores P y R configurables), vigencia desde y hasta (o el período elegido al importar), grupo y razón social; formato de fecha (ddmmaaaa, dd/mm/aaaa, aaaa-mm-dd, aaaammdd o detectar), separador decimal, escala de la alícuota (150 = 1,50 %), encabezado y líneas a saltear. Antes de aplicar se ve una **vista previa** (primeras filas leídas y hasta 50 filas con error con su número de línea, motivo y texto). El import guarda `profile_id`. La **alícuota a mano por CUIT** (`tax_padron_manual_set`, formato `manual`) manda sobre los archivos mientras esté vigente y no se reemplaza al importar el mes.
+
 Líneas con CUIT inválido, fechas al revés o alícuota ilegible se informan (las primeras 50) y no se cargan. Al cerrar el import se reemplazan los del mismo período y jurisdicción; los de otros meses quedan para ventas con fecha vieja. Fixtures en `tests/fixtures/padron/`.
 
 ## 5. Datos
@@ -101,9 +131,13 @@ RPC: `tax_settings_get`, `tax_settings_save`, `sale_tax_preview`, `tax_padron_im
 
 Retenciones como agente (ADR-079): `tax_ret_concepts` y `tax_ret_scales` (globales, sólo lectura), `tax_ret_concept_settings` y `supplier_tax_profiles` (por negocio), `tax_withholdings` (registro); RPC `tax_retention_preview`, `tax_ret_concepts_list`, `tax_withholdings_list`, `tax_withholdings_export`; `supplier_payment_order_create` recreada.
 
+Personalización (ADR-101): `tax_custom_values` (versiones del negocio con vigencia por catálogo: `iva_rate`, `parameter`, `ret_concept`, `ret_scale`, `regime_values`, `iibb_activity`, `suffered_rule`), `tax_padron_profiles`, `tax_regimes.valid_from` / `valid_to`, `tax_padron_imports.profile_id`. Resolución: `_tax_custom_at`, `tax_param_for`, `_tax_iva_rate_eff`, `_tax_regime_eff`, `_tax_ret_scale_amount_for`, `tax_ret_concept_eff` (recreada), `_tax_suffered_classify_for`. RPC `tax_custom_save`, `tax_custom_delete`, `tax_custom_reset`, `tax_custom_history`, `tax_ret_scale_get`, `tax_padron_manual_set`. Espejo puro en `lib/tax/custom.ts` (`versionAt`, `resolveCustom`).
+
 ## 6. Deploy
 
 Migraciones `20261028100000` a `20261028100300` en orden, **antes del front** (el front escribe columnas nuevas). Sin Edges ni crons. Recrean `_resolve_unit_price`, `price_context_snapshot` y `create_sale`.
+
+ADR-101: `20261110100000_impuestos_personalizables` y `20261110100100_impuestos_personalizables_calculo`, en orden y **antes del front** (el front lee `tax_regimes.valid_from` y las tablas nuevas). Recrean `_tax_price_to_final`, `price_context_snapshot`, `_sale_tax_compute`, `tax_settings_get`, `tax_ret_concept_eff`, `tax_ret_concepts_list`, `_tax_retention_compute`, `_iibb_compute`, `_tax_suffered_from_settlement`, `_tax_padron_rate`, `tax_padron_import_start` y `tax_padron_import_finish` desde su última definición: cualquier rama que los toque tiene que partir de acá. **No recrean `create_sale`.** Sin Edges ni crons.
 
 ## 7. Pendiente
 
@@ -135,8 +169,8 @@ Al registrar la orden de pago con `agent_retentions = true` el servidor **vuelve
 
 | Dato | Dónde vive | Fuente sembrada | Cómo se actualiza |
 |---|---|---|---|
-| Conceptos de Ganancias (mínimo no sujeto mensual, alícuotas, retención mínima, códigos de SICORE 217 / 078, 094, 116, 031, 095) | `tax_ret_concepts` (`verify = true`) | RG 830 Anexo VIII con montos de la RG 5423/2023, vigencia 01/07/2023 | Migración nueva que **agrega una fila** con la nueva `valid_from` (nunca se pisa la anterior: los pagos se calculan con lo vigente a su fecha). Mientras tanto, el negocio lo ajusta en Configuración > Impuestos > Valores de retención (`tax_ret_concept_settings`). |
-| Escala del Anexo VIII | `tax_ret_scales` | RG 830 Anexo VIII (tramos de 0 a 96.000) | Migración con filas nuevas para la nueva `valid_from`. |
+| Conceptos de Ganancias (mínimo no sujeto mensual, alícuotas, retención mínima, códigos de SICORE 217 / 078, 094, 116, 031, 095) | `tax_ret_concepts` (`verify = true`) | RG 830 Anexo VIII con montos de la RG 5423/2023, vigencia 01/07/2023 | Migración nueva que **agrega una fila** con la nueva `valid_from` (nunca se pisa la anterior: los pagos se calculan con lo vigente a su fecha). El negocio no espera: carga su versión con vigencia en Configuración > Impuestos > Retenciones (`tax_custom_values`, ADR-101; el ajuste viejo sin vigencia `tax_ret_concept_settings` sigue valiendo debajo). |
+| Escala del Anexo VIII | `tax_ret_scales` | RG 830 Anexo VIII (tramos de 0 a 96.000) | Migración con filas nuevas para la nueva `valid_from`, o el negocio carga sus tramos con vigencia (Retenciones > Escalas, ADR-101). |
 | Actividades de SUSS (alícuota, retención mínima) | `tax_ret_concepts` con `tax = 'suss'` | RG 4052 (construcción 1,2 %), RG 1556 (limpieza 6 %), RG 1769 (seguridad 6 %), RG 3983 (eventuales 8 %); retención mínima $ 400; código de régimen de SICORE **vacío** | Igual que Ganancias; el código de régimen de SICORE lo carga el negocio con su contador. |
 | Regímenes del negocio (alícuota general, padrón, n° de agente, código de régimen de IVA) | `tax_regimes` | Plantillas orientativas en la pantalla | El negocio. |
 

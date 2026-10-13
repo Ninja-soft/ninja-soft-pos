@@ -21,7 +21,7 @@ import { RET_TAX_LABEL, type RetTax } from "@/lib/tax/retentions";
 import { buildExport, validateExport, type ExportIssue } from "@/lib/tax/sicore";
 import { formatPaymentNumber } from "@/lib/purchases/orders";
 import { taxApi, taxErrorMessage } from "@/modules/tax/api";
-import { useWithholdings } from "@/modules/tax/hooks";
+import { useTaxSettings, useWithholdings } from "@/modules/tax/hooks";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { CertificateButtons } from "./RetentionCertificates";
@@ -61,6 +61,8 @@ export function RetencionesPracticadas() {
   const [issues, setIssues] = useState<ExportIssue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
+  // Valores de los archivos del negocio (ADR-101): Configuración > Impuestos > Exportaciones.
+  const settings = useTaxSettings(feature === true);
 
   useEffect(() => setMonth(thisMonth()), []);
 
@@ -89,7 +91,12 @@ export function RetencionesPracticadas() {
       const found = validateExport(format, data.agent, data.rows);
       setIssues(found);
       if (found.some((i) => i.level === "error")) return;
-      const f = buildExport(format, data.agent, range.from, data.rows);
+      const p = settings.data?.params;
+      const f = buildExport(format, data.agent, range.from, data.rows, {
+        sicoreCbteCode: p?.sicore_cbte_code ?? null,
+        arbaBranch: p?.arba_branch ?? null,
+        arbaActivity: p?.arba_activity ?? null,
+      });
       if (f.records > 0) downloadText(f.name, f.content);
     } catch (e) {
       setError(taxErrorMessage(e));

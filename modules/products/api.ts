@@ -206,6 +206,33 @@ export const productsApi = {
     return { product: data as unknown as Product };
   },
 
+  // Producto de una etiqueta de balanza (ADR-063): el código embebido se
+  // busca como PLU (tal cual, sin ceros o a 6 dígitos) o como SKU.
+  findByScaleCode: async (candidates: string[]): Promise<Product | null> => {
+    const codes = candidates.filter((c) => /^\d{1,6}$/.test(c));
+    if (codes.length === 0) return null;
+    const supabase = createClient();
+    const list = codes.join(",");
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .or(`plu.in.(${list}),sku.in.(${list})`)
+      .limit(5);
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as (Product & { plu?: string | null })[];
+    // Preferencia: PLU exacto en el orden de los candidatos, después SKU.
+    for (const c of codes) {
+      const byPlu = rows.find((p) => p.plu === c);
+      if (byPlu) return byPlu;
+    }
+    for (const c of codes) {
+      const bySku = rows.find((p) => p.sku === c);
+      if (bySku) return bySku;
+    }
+    return null;
+  },
+
   // Productos más vendidos (frecuentes) para la venta rápida del kiosco.
   top: async (limit = 12): Promise<Product[]> => {
     const supabase = createClient();

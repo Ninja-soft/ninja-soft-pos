@@ -146,12 +146,15 @@ export function WeighDialog({
   onGrams,
   onClose,
   onConfirm,
+  scaleSlot,
 }: {
   product: { name: string; price: number } | null;
   grams: string;
   onGrams: (v: string) => void;
   onClose: () => void;
   onConfirm: () => void;
+  // Peso en vivo de la balanza de la caja (ADR-063). Sin balanza, nada.
+  scaleSlot?: React.ReactNode;
 }) {
   const g = Number(grams);
   return (
@@ -161,6 +164,7 @@ export function WeighDialog({
       title={product ? `Peso de ${product.name}` : "Peso"}
     >
       <div className="space-y-4">
+        {scaleSlot}
         <Input
           label="Peso en gramos"
           type="number"

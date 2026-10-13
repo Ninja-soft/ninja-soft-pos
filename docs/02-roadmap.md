@@ -478,28 +478,29 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [~] Perfiles de impresión por **tenant / sucursal / caja**: ticket 58mm, ticket 80mm, A4, etiqueta, cocina/comanda, comprobante interno. — *Por **tenant** hecho (formato 58/80/A4 por tipo, según aplique). **Sucursal/caja → F4**; comanda de cocina → F13 (gastronomía).*
   - [x] Selector de destino por tipo de documento: ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, comanda, devolución, nota de crédito futura. — *5 tipos configurables (ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, devolución/NC) en `pos_settings.print_profiles` (migración `20260608470000_print_profiles`). Comanda → F13.*
   - [~] Plantillas con variables: logo, datos fiscales, QR, leyendas legales, redes, promociones, cajero, caja, sucursal, medios de pago. — *Ya resuelto por el editor de plantillas de H9b (`ticket_templates`, modos bloques/canvas/HTML con variables). H22 elige formato/copias/auto sobre esa plantilla activa, sin duplicarla.*
-  - [~] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual. — *Copias (1..20), impresión automática vs manual, y ajustes básicos de **fuente y margen** por tipo. Densidad, corte de papel y apertura de cajón requieren ESC/POS → F4.*
+  - [~] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual. — *Copias (1..20), impresión automática vs manual, y ajustes básicos de **fuente y margen** por tipo. Densidad y corte de papel requieren ESC/POS → F4. Apertura de cajón por pulso ESC/POS directo a la térmica: ADR-063.*
   - [x] Web print nativo: `window.print()` para navegador, A4 y fallback universal. — *La impresión es web; las copias se imprimen llamando a `window.print()` N veces (`lib/print/webPrint.ts`).*
   - [ ] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza. — *F4 (documentado en la UI de Impresión y en `lib/print/profiles.ts`).*
   - [ ] QZ Tray / WebUSB / WebSerial evaluados por compatibilidad. — *F4.*
   - [ ] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar. — *F4 (documentado como límite del web print).*
   - [~] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto. — *Cumplido a nivel **tenant** (formato + copias + auto/manual por tipo, aplicado en venta/Z/devolución). "Por caja" queda para F4.*
 
-- [~] **H23 — Scanners y captura de códigos PRO.** — *Base (PR #80) + perfil/beep/anti-dup/diagnóstico (2026-06-07). Quedan: QR de pago/fidelización y etiquetas de balanza.*
+- [~] **H23 — Scanners y captura de códigos PRO.** — *Base (PR #80) + perfil/beep/anti-dup/diagnóstico (2026-06-07) + etiquetas de balanza (ADR-063, `feat/balanza-cajon`). Quedan: QR de pago/fidelización.*
   - [x] Soporte para lector USB HID tipo teclado y Bluetooth (`useScanner`: captura global de teclado por velocidad de tipeo + Enter, sin foco previo), cámara (`BarcodeDetector`) y entrada manual (búsqueda).
   - [~] Perfiles de scanner por caja: prefijo/sufijo, Enter automático, delay entre caracteres, normalización de EAN/UPC/Code128/QR. — *Perfil por tenant hecho (prefijo/sufijo/anti-dup en Configuración → Escáner); por caja → F4. Formato inferido EAN/UPC/QR en diagnóstico.*
   - [x] Modo continuo en POS: lectura sin tocar mouse (escaneo en cualquier parte agrega al carrito), **beep de confirmación** y **anti-duplicado** configurable. — *useScanner v2 (2026-06-07).*
   - [x] Producto por SKU/barcode (`productsApi.findByCode`).
   - [ ] QR de pago.
   - [ ] QR de cliente/fidelización.
-  - [ ] Etiquetas internas de balanza/precio-peso.
+  - [x] Etiquetas internas de balanza/precio-peso. · *ADR-063: `lib/barcode/scaleLabel.ts` decodifica EAN-13 con prefijo 20-29, código de 4 a 6 dígitos, precio o peso embebido, decimales, DV del EAN y DV del valor (GS1); formato por negocio o sucursal (`pos_settings.scale_label`, heredable). El escáner del POS lo intercepta antes de la búsqueda común y agrega la línea pesada (PLU o SKU). Tests `tests/unit/scaleLabel.test.ts`.*
   - [x] Diagnóstico de scanner: pantalla de prueba que muestra caracteres recibidos, tiempos y formato detectado. — *Configuración → Escáner: últimas 10 capturas con código/crudo/largo/duración/gap/formato/duplicado (2026-06-07).*
   - [ ] *Criterio:* un lector USB escanea 100 productos seguidos sin perder foco ni duplicar lecturas; un móvil usa cámara como fallback.
 
-- [~] **H24 — Etiquetas, códigos y balanzas.** — *Generador + impresión por lote hechos (PR #79). Balanza (parsing/WebSerial) pendiente.*
+- [~] **H24 — Etiquetas, códigos y balanzas.** — *Generador + impresión por lote hechos (PR #79). Balanza: etiquetas y lectura en vivo por Web Serial o puente local (ADR-063, `feat/balanza-cajon`); presets de marca sin validar con el equipo.*
   - [x] Generador de etiquetas de producto con nombre, precio y código de barras (Code 39 sin dependencias, SVG). Variantes pendientes (cruza con F6/H10).
   - [x] Impresión por lote: selección de productos + cantidad de copias por producto, vista previa y `window.print()` (página `/etiquetas`, hoja `ticket-print`). Hasta 200 copias por producto.
-  - [ ] Soporte para etiquetas de balanza: parsing configurable de código con precio o peso embebido.
+  - [x] Soporte para etiquetas de balanza: parsing configurable de código con precio o peso embebido. · *ADR-063 (ver H23).*
+  - [~] Lectura de balanza en vivo (Web Serial o puente local) con peso estable, tara y simulador. · *ADR-063: `lib/hardware/scale/*` + `lib/hardware/devices.ts` (`ScaleReader`, `ScaleSimulatorTransport`), balanza por caja en `register_hardware`, peso en vivo en el editor de peso del POS (completa los gramos con el peso estable). Presets Systel, Kretz y Moretti marcados "sin validar": falta probarlos con equipos reales.*
   - [ ] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza.
   - [x] *Criterio (impresión):* el negocio selecciona productos e imprime un lote de etiquetas con nombre/precio/código sin tocar código. *(Balanza queda pendiente.)*
 
@@ -519,7 +520,7 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
 
 - [x] **H26 — Centro de diagnóstico de hardware.** — *Completo (2026-06-08, PR #261): sección "Diagnóstico de hardware" en Configuración (+ ruta directa `/configuracion/hardware`) con tarjeta por periférico, estado claro (ok / no disponible / requiere conector / advertencia) con íconos, pruebas guiadas, log local y export. 100% client-side (detección + pruebas; persistencia en localStorage, sin migración). Honestidad total sobre los límites del navegador.*
   - [x] Pantalla `/configuracion/hardware` con estado de impresoras, scanners, pantalla cliente, cajón y balanza. — *`HardwareCard` (`components/dashboard-team/HardwareCard.tsx`); ruta `app/(app)/configuracion/hardware/page.tsx` redirige a la sección. Una tarjeta por periférico con badge de estado.*
-  - [x] Pruebas guiadas: imprimir ticket de prueba, abrir cajón, probar scanner, probar display cliente, probar balanza. — *Impresora: render oculto del ticket de muestra + `window.print()` (web print, reusa `TicketRenderer`/`ticket-print`). Escáner: captura en vivo con `useScanner` (mismo motor del POS, últimas lecturas con código/largo/ms/formato/duplicado). Pantalla cliente: "Abrir pantalla de prueba" (`window.open('/customer-display')`) + "Probar sincronización" (round-trip real de `BroadcastChannel`). Cajón: documenta la limitación (se abre por pulso ESC/POS de la térmica vía conector local; no disponible en navegador). Balanza: placeholder honesto (requiere WebSerial, H24).*
+  - [x] Pruebas guiadas: imprimir ticket de prueba, abrir cajón, probar scanner, probar display cliente, probar balanza. — *Impresora: render oculto del ticket de muestra + `window.print()` (web print, reusa `TicketRenderer`/`ticket-print`). Escáner: captura en vivo con `useScanner` (mismo motor del POS, últimas lecturas con código/largo/ms/formato/duplicado). Pantalla cliente: "Abrir pantalla de prueba" (`window.open('/customer-display')`) + "Probar sincronización" (round-trip real de `BroadcastChannel`). Cajón y balanza: pruebas por caja con su configuración efectiva (ADR-063): "Abrir cajón de prueba" pasa por el servidor y manda el pulso ESC/POS; "Probar balanza" muestra peso, estabilidad, tara y la trama cruda.*
   - [x] Logs locales de hardware y errores legibles para soporte. — *`lib/hardware/diagnosticsLog.ts`: cada prueba registra qué/cuándo/resultado/detalle en `localStorage` (máx 100), listado legible con color por resultado. Sin datos sensibles.*
   - [x] Export de diagnóstico para NinjaSoft. — *`lib/hardware/export.ts`: "Exportar diagnóstico" baja XLSX (reusa `exportXlsx`: hojas Resumen/Capacidades/Entorno/Pruebas) o JSON, con tenant/caja, capacidades reales del navegador (BroadcastChannel, WebUSB, WebSerial, Web Bluetooth, BarcodeDetector, web print), entorno (userAgent, pantalla/resolución, origen seguro, etc.) y el log. **Sin tokens ni datos de clientes** (test lo verifica).*
   - [x] *Criterio:* soporte puede pedir “Exportar diagnóstico” y ver qué periférico falla sin conectarse a la máquina del cliente. ✓ — *Tests en `tests/unit/hardwareDiagnostics.test.ts`.*
@@ -1164,7 +1165,8 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [ ] Cambio de precio en la línea con precio resuelto en el servidor (hoy `create_sale` confía en `unit_price`).
   - [ ] Borrar ítem después de un cobro parcial y cancelar cobros en espera (coordinar con `feat/cobros-en-espera`).
   - [ ] Reapertura de turno cerrado (hoy no existe) con PIN y motivo.
-  - [ ] Abrir el cajón sin venta y reimpresión de tickets con PIN opcional.
+  - [x] Abrir el cajón sin venta con PIN opcional. · *ADR-063: política por negocio o sucursal (`drawer_no_sale`: permitido, con PIN o prohibido), acción de PIN `abrir_cajon`, RPC `cash_drawer_open` que decide, registra en `cash_drawer_events` y audita; botón Abrir cajón en el POS y apertura al cobrar en efectivo.*
+  - [ ] Reimpresión de tickets con PIN opcional.
   - [ ] Descuento por línea sobre el tope (hoy el trigger mira el descuento general de la venta).
 
 > **Orden sugerido dentro de F17:** fix de sucursal en `create_sale` (H90, ya) → H89 + H90 → H91 → H92 + H93 → H94 + H95 → H96 + H97 → H98 (con F3) → H99. Corte de control: cada hito con tests RLS por rol y sucursal y un escenario de 2 sucursales con turnos simultáneos.

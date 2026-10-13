@@ -107,6 +107,28 @@ export const CONFIG_FIELDS: Record<ConfigDomain, FieldDef[]> = {
     // ADR-054: reglas del cupón del posnet (se pisan por clave: acquirers,
     // fields, by_acquirer). También por caja: el posnet es de la caja.
     { key: "card_voucher_rules", type: "map_any", label: "Datos del cupón del posnet", scopes: ALL },
+    // ADR-063: balanza y cajón. Reglas del negocio: por grupo o sucursal,
+    // nunca por caja (lo enchufado en cada caja vive en register_hardware).
+    {
+      key: "scale_enabled",
+      type: "bool",
+      label: "Vende productos pesables con balanza",
+      scopes: GS,
+      hint: "Lee las etiquetas de balanza y el peso en vivo en las cajas que tienen balanza.",
+    },
+    { key: "scale_label", type: "map_any", label: "Formato de la etiqueta de balanza", scopes: GS, customEditor: true },
+    { key: "drawer_open_on_cash", type: "bool", label: "Abrir el cajón al cobrar en efectivo", scopes: GS },
+    {
+      key: "drawer_no_sale",
+      type: "text",
+      label: "Abrir el cajón sin venta",
+      scopes: GS,
+      options: [
+        { value: "allow", label: "Permitido" },
+        { value: "pin", label: "Con PIN de supervisor" },
+        { value: "deny", label: "Prohibido" },
+      ],
+    },
   ],
   ticket: [
     {
@@ -412,6 +434,8 @@ export function configErrorMessage(err: unknown): string {
     return "Elegir cuentas de transferencia por sucursal requiere un plan con varias cuentas.";
   }
   if (msg.includes("feature_not_in_plan: multi_caja")) return "Configurar por caja requiere un plan con varias cajas.";
+  if (msg.includes("feature_not_in_plan: balanza")) return "Tu plan no incluye balanza y códigos pesables.";
+  if (msg.includes("feature_not_in_plan: cajon_dinero")) return "Tu plan no incluye el cajón de dinero.";
   if (msg.includes("feature_not_in_plan")) return "Configurar por sucursal requiere un plan con varias sucursales.";
   if (msg.includes("payment_method_not_allowed")) return "Ese medio no está incluido en tu plan.";
   if (msg.includes("invalid_merchant_number")) return "El n° de comercio sólo admite letras y números (hasta 20).";

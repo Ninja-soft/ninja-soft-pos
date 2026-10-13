@@ -132,7 +132,8 @@ export function usePosSale(ctx: {
   appointmentId: string | null;
   salePromo: (p?: Promo | null) => Promo | null;
   couponId: string | null;
-  onSuccess: (r: { saleId: string; change: number }) => void;
+  /** hadCash: la venta tuvo un cobro en efectivo (cajón, ADR-063). */
+  onSuccess: (r: { saleId: string; change: number; hadCash: boolean }) => void;
 }) {
   const { toast } = useToast();
   const { sale } = usePosMutations();
@@ -177,7 +178,11 @@ export function usePosSale(ctx: {
         description: `Total ${formatCurrency(res.total)}`,
         variant: "success",
       });
-      ctx.onSuccess({ saleId: res.sale_id, change: change ?? 0 });
+      ctx.onSuccess({
+        saleId: res.sale_id,
+        change: change ?? 0,
+        hadCash: payments.some((p) => p.method === "cash" && p.amount > 0),
+      });
     } catch (e) {
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;

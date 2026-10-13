@@ -20,6 +20,8 @@ export interface InternalTenant {
   logoUrl: string | null;
   cuit: string | null;
   phone: string | null;
+  /** Baja lógica desde el panel interno (ADR-073). */
+  deletedAt: string | null;
 }
 
 export interface FeatureFlagCatalogItem {
@@ -99,6 +101,17 @@ export interface AuditFilters {
   action?: string | null;
   from?: string | null; // ISO date
   to?: string | null; // ISO date
+  limit?: number; // default 200
+}
+
+export interface CreateTenantPayload {
+  name: string;
+  industry: string;
+  owner_email: string;
+  owner_name?: string | null;
+  plan_key: string;
+  trial_days: number;
+  reason?: string | null;
 }
 
 export interface AuditEntry {
@@ -316,7 +329,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, trial_ends_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url, cuit, phone)",
+        "id, name, slug, status, industry, created_at, trial_ends_at, deleted_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url, cuit, phone)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -328,6 +341,7 @@ export const internalApi = {
       industry: string | null;
       created_at: string;
       trial_ends_at: string | null;
+      deleted_at: string | null;
       subscriptions: {
         status: string;
         plans: { key: string; name: string } | null;
@@ -364,6 +378,7 @@ export const internalApi = {
         logoUrl: brand?.logo_url ?? null,
         cuit: brand?.cuit ?? null,
         phone: brand?.phone ?? null,
+        deletedAt: t.deleted_at ?? null,
       };
     });
   },
@@ -586,7 +601,7 @@ export const internalApi = {
         "id, tenant_id, actor_user_id, entity_type, entity_id, action, before_data, after_data, reason, created_at",
       )
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(filters.limit ?? 200);
     if (filters.tenantId) q = q.eq("tenant_id", filters.tenantId);
     if (filters.entityType) q = q.eq("entity_type", filters.entityType);
     if (filters.action) q = q.ilike("action", `%${filters.action}%`);
@@ -680,11 +695,12 @@ export const internalApi = {
 
   generateImpersonateLink: async (
     tenantId: string,
+    reason: string,
   ): Promise<{ actionLink: string; ownerEmail: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke(
       "internal_impersonate",
-      { body: { tenant_id: tenantId } },
+      { body: { tenant_id: tenantId, reason } },
     );
     if (error) throw error;
     const res = data as {
@@ -696,6 +712,55 @@ export const internalApi = {
     if (!res?.ok || !res.action_link)
       throw new Error(res?.error ?? "link_failed");
     return { actionLink: res.action_link, ownerEmail: res.owner_email ?? "" };
+  },
+
+  // ── H11c: ciclo de vida y alta manual (ADR-073) ─────────────────────────
+
+  // Suspender / reactivar / dar de baja (lógica) con motivo obligatorio.
+  tenantLifecycle: async (
+    tenantId: string,
+    action: "suspend" | "reactivate" | "delete",
+    reason: string,
+  ): Promise<void> => {
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc("internal_tenant_lifecycle", {
+      p_tenant_id: tenantId,
+      p_action: action,
+      p_reason: reason,
+    });
+    if (error) throw error;
+  },
+
+  // Alta manual: la Edge invita al dueño y crea todo en una transacción.
+  createTenant: async (
+    payload: CreateTenantPayload,
+  ): Promise<{ tenantId: string; slug: string; ownerInvited: boolean }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("internal_create_tenant", {
+      body: payload,
+    });
+    const res = (data ?? null) as {
+      ok?: boolean;
+      tenant_id?: string;
+      slug?: string;
+      owner_invited?: boolean;
+      error?: string;
+    } | null;
+    if (error || !res?.ok || !res.tenant_id) {
+      // FunctionsHttpError trae el cuerpo en context: se lee el código de error.
+      let code = res?.error ?? null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (!code && ctx && typeof ctx.json === "function") {
+        try {
+          code = ((await ctx.json()) as { error?: string }).error ?? null;
+        } catch {
+          /* cuerpo no JSON */
+        }
+      }
+      throw new Error(code ?? error?.message ?? "tenant_create_failed");
+    }
+    return { tenantId: res.tenant_id, slug: res.slug ?? "", ownerInvited: Boolean(res.owner_invited) };
   },
 
   // Fija la fecha exacta de fin del trial (acortar / terminar ya / extender).

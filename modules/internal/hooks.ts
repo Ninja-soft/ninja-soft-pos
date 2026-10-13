@@ -9,6 +9,7 @@ import {
   internalApi,
   type AuditFilters,
   type BillingRecordInput,
+  type CreateTenantPayload,
   type DiscountInput,
   type GrantAccessInput,
   type InviteCodeInput,
@@ -16,6 +17,7 @@ import {
   type SavePlanInput,
   type SendNotificationInput,
 } from "./api";
+import { createClient } from "@/lib/supabase/client";
 
 export function useInternalTenants() {
   return useQuery({
@@ -122,7 +124,10 @@ export function useInternalMutations(tenantId: string) {
     }),
     setStatus: useMutation({
       mutationFn: (status: string) => internalApi.setStatus(tenantId, status),
-      onSuccess: invalidate,
+      onSuccess: () => {
+        invalidate();
+        qc.invalidateQueries({ queryKey: ["internal", "audit"] });
+      },
     }),
     setFlag: useMutation({
       mutationFn: (vars: { flagKey: string; enabled: boolean }) =>
@@ -140,9 +145,36 @@ export function useInternalMutations(tenantId: string) {
 // ── H11c — Impersonation ──────────────────────────────────────────────────
 
 export function useImpersonateTenant() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (tenantId: string) =>
-      internalApi.generateImpersonateLink(tenantId),
+    mutationFn: (vars: { tenantId: string; reason: string }) =>
+      internalApi.generateImpersonateLink(vars.tenantId, vars.reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["internal", "audit"] }),
+  });
+}
+
+// ── H11c: ciclo de vida y alta manual (ADR-073) ───────────────────────────
+
+export function useTenantLifecycle(tenantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { action: "suspend" | "reactivate" | "delete"; reason: string }) =>
+      internalApi.tenantLifecycle(tenantId, vars.action, vars.reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "tenants"] });
+      qc.invalidateQueries({ queryKey: ["internal", "audit"] });
+    },
+  });
+}
+
+export function useCreateTenant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateTenantPayload) => internalApi.createTenant(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "tenants"] });
+      qc.invalidateQueries({ queryKey: ["internal", "audit"] });
+    },
   });
 }
 
@@ -441,4 +473,19 @@ export function useDiscountMutations(tenantId: string) {
       onSuccess: inv,
     }),
   };
+}
+
+// Nivel del staff logueado (app_metadata.internal_level). null = interno
+// legacy sin nivel (las RPC lo tratan como admin).
+export function useMyStaffLevel() {
+  const { data } = useQuery({
+    queryKey: ["my-user"],
+    queryFn: () => createClient().auth.getUser().then((r) => r.data.user),
+    staleTime: 5 * 60 * 1000,
+  });
+  const lv = (data?.app_metadata as { internal_level?: string } | undefined)
+    ?.internal_level;
+  const level: "super_admin" | "admin" | "support" | null =
+    lv === "super_admin" || lv === "admin" || lv === "support" ? lv : null;
+  return { loaded: data !== undefined, level };
 }

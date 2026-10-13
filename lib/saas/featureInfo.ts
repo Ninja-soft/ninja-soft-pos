@@ -521,6 +521,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin esto el dueño no tiene su panel dedicado de gestión y métricas.",
     minPlan: "Pro",
   },
+  escuela: {
+    desc: "Escuela NinjaSoft: cursos cortos por rol (POS básico, caja y arqueo, primeros pasos, facturación ARCA) con lecciones, checklist, prueba corta y certificado. El dueño ve el avance de su equipo.",
+    impact: "Desactivada, el equipo sigue teniendo la ayuda de cada pantalla pero no puede hacer cursos ni certificarse.",
+    minPlan: "Start",
+  },
 };
 
 // Dependencias directas de plan de una feature (vacío si no depende de otra).

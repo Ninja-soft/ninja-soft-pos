@@ -1,0 +1,65 @@
+[
+  {
+    "id": "clientes-alta",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cargar y buscar clientes",
+    "summary": "Alta de clientes con documento, condición de IVA y contacto, búsqueda y ficha completa del cliente.",
+    "module": "clientes",
+    "routes": ["/clientes", "/pos"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["nuevo cliente", "cargar cliente", "buscar cliente", "ficha del cliente", "escanear dni"],
+    "tags": ["clientes", "crm"],
+    "steps": [
+      "Entrá a Clientes y tocá \"Nuevo cliente\" (o, en el POS, \"Elegir\" al lado de \"Consumidor final\").",
+      "Con \"Escanear DNI\" el formulario se completa solo desde el código del DNI.",
+      "Completá \"Nombre / Razón social\", documento y \"Condición IVA\". Los campos con asterisco son obligatorios según tu negocio.",
+      "Si querés, sumá email, teléfono, dirección, fecha de nacimiento, grupo (por ejemplo, Mayorista) y notas.",
+      "Tocá \"Crear\". Para buscar, usá \"Buscar por nombre o documento\".",
+      "Con \"Ficha completa\" ves lo que compra, cómo paga, su deuda, saldo a favor y la línea de tiempo (plan Pro)."
+    ],
+    "roleNotes": {
+      "cashier": "Podés crear y editar clientes. Eliminar un cliente lo hace el dueño o el encargado.",
+      "viewer": "Podés buscar y consultar, no modificar.",
+      "owner": "En Configuración, Datos del cliente definís qué campos son obligatorios."
+    },
+    "errors": [
+      { "problem": "\"Completá los campos obligatorios\"", "fix": "Revisá los campos con asterisco." }
+    ],
+    "tips": ["\"Cumpleaños\" te lista los clientes que cumplen años para saludarlos."],
+    "feature": "clientes",
+    "related": ["clientes-cuenta-corriente", "pos-cobrar-venta"]
+  },
+  {
+    "id": "clientes-cuenta-corriente",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cuenta corriente: vender fiado y cobrar la deuda",
+    "summary": "Vendé a cuenta a un cliente con límite de crédito, registrá los cobros y mandale el estado de cuenta.",
+    "module": "clientes",
+    "routes": ["/clientes", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["cuenta corriente", "fiado", "vender a cuenta", "cobrar deuda", "estado de cuenta", "limite de credito"],
+    "tags": ["deuda", "cobranza"],
+    "steps": [
+      "Para vender a cuenta: en el POS elegí el cliente, tocá \"Cobrar\" y elegí \"Cuenta corriente\" (en \"Cuenta del cliente\"). Vas a ver saldo, disponible y vencido.",
+      "Para cobrar una deuda: entrá a Clientes, \"Cuentas corrientes\", abrí el cliente y tocá \"Cobrar\". Cargá monto y medio, y tocá \"Registrar cobro\". Se imprime un recibo.",
+      "El cobro se imputa a lo más viejo primero; con \"Elegir qué cancelar\" lo imputás a mano.",
+      "En \"Estado de cuenta\" filtrás por fechas y bajás PDF o XLSX. En \"Cobranza\" podés enviarlo por email.",
+      "El límite se fija en el cliente (\"Límite de cuenta corriente\", 0 es sin límite) o en la pestaña \"Condiciones\"."
+    ],
+    "roleNotes": {
+      "cashier": "Si la cuenta está bloqueada o supera el límite, la venta necesita el PIN de un supervisor y un motivo. Para registrar un cobro tenés que tener la caja abierta.",
+      "manager": "Podés autorizar ventas que superan el límite (\"Autorizar igual\" con motivo) y cambiar las condiciones del cliente.",
+      "owner": "En Configuración, Cuenta corriente definís plazos, cuotas, punitorios, bloqueo por deuda vencida y recordatorios. Es del plan Business."
+    },
+    "errors": [
+      { "problem": "\"Esta venta supera el límite de crédito del cliente.\"", "fix": "Cobrá una parte con otro medio o pedí autorización de un supervisor." },
+      { "problem": "\"La cuenta del cliente está bloqueada.\"", "fix": "El cliente tiene que regularizar la deuda o un encargado autorizar la venta." },
+      { "problem": "\"Abrí la caja para registrar el cobro\"", "fix": "Abrí tu caja en el punto de venta." }
+    ],
+    "tips": ["Si el cliente paga de más, el sobrante queda a su favor."],
+    "feature": "cuenta_corriente",
+    "related": ["clientes-alta", "pos-medios-de-pago"]
+  }
+]

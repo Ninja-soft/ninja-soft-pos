@@ -51,6 +51,7 @@ import {
   ListTree,
   FileSpreadsheet,
   Stamp,
+  GraduationCap,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -88,6 +89,7 @@ import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
 import { useBranchTabTitle, useCrossContextNotice } from "@/modules/branches/crossContext";
 import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
 import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
+import { HelpButton } from "@/components/help/HelpPanel";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
@@ -213,6 +215,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
   top: [
     { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
     { href: "/dashboard-team", label: "Panel del dueño", icon: Building2 },
+    // F15 · H69 (ADR-086): Escuela NinjaSoft, BASE con key `escuela`.
+    { href: "/escuela", label: "Escuela", icon: GraduationCap, feature: "escuela" },
   ],
   groups: [
     {
@@ -570,7 +574,9 @@ export function AppShell({
         </Link>
         {/* Campana en la barra lateral (desktop): flotando sobre el contenido
             tapaba botones de la pantalla de cobro. En mobile vive en el header. */}
-        <div className="hidden lg:block">
+        <div className="hidden items-center gap-1 lg:flex">
+          {/* Ayuda contextual (F15 · H72): artículos de la pantalla y el rol. */}
+          <HelpButton role={shell?.role ?? null} />
           <NotificationBell align="start" />
         </div>
       </div>
@@ -594,7 +600,7 @@ export function AppShell({
             <NavLink
               key={it.href}
               item={it}
-              active={pathname === it.href}
+              active={pathname === it.href || (it.href === "/escuela" && pathname.startsWith("/escuela/"))}
               onNavigate={() => setDrawer(false)}
             />
           ))}
@@ -714,6 +720,7 @@ export function AppShell({
           <BranchSwitcher compact />
           <div className="ml-auto flex items-center gap-2">
             {canSell && !onPos && <SellQuickAction compact />}
+            <HelpButton role={shell?.role ?? null} />
             <NotificationBell />
           </div>
         </header>

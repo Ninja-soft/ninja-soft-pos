@@ -1,0 +1,67 @@
+[
+  {
+    "id": "sucursales",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Sucursales y cajas",
+    "summary": "Creá sucursales y cajas, elegí en qué sucursal y caja vende cada dispositivo y mirá todo el negocio o una sucursal.",
+    "module": "sucursales",
+    "routes": ["/configuracion", "/pos", "/dashboard-team"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["nueva sucursal", "agregar caja", "cambiar de sucursal", "elegir caja", "otro local"],
+    "tags": ["multi sucursal", "cajas"],
+    "steps": [
+      "Entrá a Configuración, Sucursales y cajas, y tocá \"Nueva sucursal\".",
+      "Cargá \"Nombre\", \"Nombre corto\" (se ve en el POS), código, dirección y, si facturás, el punto de venta fiscal. Podés copiar la configuración de otra sucursal.",
+      "En la pestaña \"Cajas\" de la sucursal tocá \"Agregar caja\": nombre, código, tipo (Fija, Móvil o Autoservicio), dispositivo e impresora.",
+      "En el POS, el chip de ubicación (\"Sucursal y caja de este dispositivo\") elige dónde vendés. Cada dispositivo recuerda su caja.",
+      "Arriba, \"Cambiar de sucursal\" te deja ver una sucursal o \"Todas las sucursales\"."
+    ],
+    "roleNotes": {
+      "cashier": "Ves y vendés en las sucursales que te asignaron (si no tenés asignación, en la principal).",
+      "manager": "Podés crear y editar sucursales y cajas. Sin asignación ves todas.",
+      "owner": "Más de una sucursal es del plan Business y más de una caja por sucursal del plan Pro. Para archivar la sucursal principal, primero elegí otra como principal."
+    },
+    "errors": [
+      { "problem": "\"Tu plan no incluye más de una sucursal\"", "fix": "Pasá a un plan con Multi-sucursal." },
+      { "problem": "\"La sucursal tiene una caja abierta: cerrala antes\"", "fix": "Cerrá el turno antes de archivar o pausar." },
+      { "problem": "\"No tenés acceso a esa sucursal\"", "fix": "Pedile al dueño que te asigne esa sucursal." }
+    ],
+    "tips": ["\"Guardar como plantilla\" te deja abrir sucursales nuevas con la misma configuración."],
+    "feature": "multi_sucursal",
+    "related": ["caja-abrir", "stock-traslados", "usuarios-permisos"]
+  },
+  {
+    "id": "usuarios-permisos",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Usuarios y permisos por rol",
+    "summary": "Invitá a tu equipo con su propio usuario y elegí el rol: dueño, encargado, cajero o solo lectura. Qué puede hacer cada uno.",
+    "module": "equipo",
+    "routes": ["/dashboard-team", "/configuracion", "/dashboard"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["invitar usuario", "agregar cajero", "permisos", "roles", "que puede hacer el cajero", "solo lectura"],
+    "tags": ["equipo", "seguridad"],
+    "steps": [
+      "Entrá a Panel del dueño y tocá \"Invitar usuario\" (en el tablero Equipo).",
+      "Cargá email y nombre, y elegí el rol. Con varias sucursales, elegí en cuáles opera.",
+      "Tocá \"Enviar invitación\". Le llega un email para definir su contraseña. Si ya tenía cuenta, queda agregado al equipo.",
+      "Roles: Encargado opera todo (ventas, caja, stock, catálogo) pero no cambia el plan ni la configuración del POS. Cajero vende y cobra en su propia caja. Solo lectura ve reportes y comprobantes, no modifica nada.",
+      "Para alguien sin email usá \"Perfil sin cuenta\" con un PIN para fichar en el POS."
+    ],
+    "roleNotes": {
+      "cashier": "Como cajero: vendés en tu caja, cargás y editás clientes, hacés devoluciones y anulás ventas del día. No podés cambiar productos, precios ni stock, ni anular ventas de otros días.",
+      "viewer": "Tu usuario es de solo lectura: podés consultar todo lo que ves, pero el sistema rechaza cualquier cambio.",
+      "manager": "Podés invitar cajeros y usuarios de solo lectura. Sumar encargados lo hace sólo el dueño.",
+      "owner": "Sos el único que puede sumar encargados, cambiar la configuración del POS, las reglas de PIN de supervisor y el plan."
+    },
+    "errors": [
+      { "problem": "\"Llegaste al máximo de usuarios de tu plan.\"", "fix": "Dá de baja a alguien o pasá de plan." },
+      { "problem": "\"Sólo el dueño puede sumar encargados.\"", "fix": "Pedile al dueño que lo invite." },
+      { "problem": "\"Esa persona está de baja: usá Reingreso desde su ficha.\"", "fix": "Abrí su ficha en Equipo y usá Reingreso." },
+      { "problem": "\"Requiere encargado o dueño\"", "fix": "La acción no es de tu rol. Pedila a un encargado." }
+    ],
+    "tips": ["Los permisos los controla el servidor: aunque un botón se vea, el sistema rechaza lo que tu rol no puede hacer."],
+    "related": ["sucursales", "pos-anular-venta"]
+  }
+]

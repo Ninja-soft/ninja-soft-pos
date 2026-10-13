@@ -1,0 +1,200 @@
+[
+  {
+    "id": "pos-cobrar-venta",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cobrar una venta",
+    "summary": "Buscá o escaneá los productos, revisá el carrito y cobrá con F12. El ticket se imprime si está activo.",
+    "module": "pos",
+    "routes": ["/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["cobrar", "vender", "hacer una venta", "escanear codigo", "cargar producto al carrito", "atajos de teclado"],
+    "tags": ["carrito", "ticket", "scanner"],
+    "steps": [
+      "Abrí la caja si todavía no lo hiciste: sin caja abierta el botón dice \"Abrí la caja para vender\".",
+      "Buscá el producto en \"Buscar por nombre, PLU, SKU o código\" (F2 te lleva al buscador) o escanealo con el lector. Con el celular usá \"Escanear código\".",
+      "Ajustá cantidades con los botones menos y más de cada línea. Para cobrar un monto sin producto usá \"Monto libre\".",
+      "Si la venta es a un cliente, tocá \"Elegir\" al lado de \"Consumidor final\".",
+      "Tocá \"Cobrar\" o apretá F12. Elegí el medio de pago y confirmá con \"Confirmar venta\".",
+      "Vas a ver el vuelto y el ticket con \"Imprimir\", \"Descargar A4\" o envío por email."
+    ],
+    "roleNotes": {
+      "cashier": "Cobrás en tu propia caja. Cambiar el precio de una línea (\"Cambiar precio\") pide motivo y, por defecto, el PIN de un supervisor.",
+      "manager": "Sos supervisor: tu PIN autoriza cambios de precio y descuentos sobre el tope de los cajeros.",
+      "owner": "Los topes de descuento por rol y las reglas de PIN se configuran en Configuración (Operación y productos, Seguridad y auditoría)."
+    },
+    "errors": [
+      { "problem": "\"No tenés una caja abierta: abrí la tuya para cobrar\"", "fix": "Abrí tu caja desde el botón de estado de arriba." },
+      { "problem": "\"Los precios cambiaron: revisá el carrito\"", "fix": "Alguien actualizó precios mientras vendías. Revisá el carrito y cobrá de nuevo." },
+      { "problem": "\"No hay stock suficiente en esta sucursal\"", "fix": "Bajá la cantidad o pedile al encargado que ajuste el stock." },
+      { "problem": "\"Ese medio de pago está apagado en esta sucursal o caja\"", "fix": "Elegí otro medio o pedile al dueño que lo habilite para tu caja." }
+    ],
+    "tips": [
+      "F2 busca y F12 cobra. Enter confirma dentro del cobro.",
+      "Con un lector USB o Bluetooth no hace falta configurar nada: escaneás y el producto entra al carrito.",
+      "El descuento manual y los cupones están en \"Subtotal\": tocalo para desplegarlo."
+    ],
+    "feature": "pos",
+    "related": ["pos-medios-de-pago", "caja-abrir", "pos-anular-venta"]
+  },
+  {
+    "id": "pos-medios-de-pago",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Medios de pago: efectivo, tarjeta, QR, transferencia y pago dividido",
+    "summary": "Cómo cobrar con cada medio, cómo dividir el pago entre varios y dónde se configuran los medios y recargos.",
+    "module": "pos",
+    "routes": ["/pos", "/configuracion"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["medio de pago", "cobrar con tarjeta", "cobrar con qr", "mercado pago", "transferencia", "pago dividido", "recargo"],
+    "tags": ["cobro", "posnet", "cuotas"],
+    "steps": [
+      "En el cobro elegí el medio. Los favoritos aparecen primero.",
+      "Efectivo: cargá lo que te dio en \"Recibido\" y el sistema muestra el vuelto.",
+      "Transferencia: mostrale la cuenta (alias o CBU), cargá el \"Número de operación\" y tocá \"Ya transfirió\".",
+      "Tarjeta en posnet: elegí terminal, entidad, débito o crédito, cuotas y cargá los datos del voucher. Después \"Registrar cobro con tarjeta\".",
+      "QR o link: tocá \"Generar QR\". El cliente paga con su app y la venta se cierra sola al acreditarse.",
+      "Para dividir el pago, en \"Monto con este medio\" cargá una parte (o usá ½, ⅓, ¼) y después elegí otro medio para lo que resta."
+    ],
+    "roleNotes": {
+      "cashier": "Si un medio no aparece, está apagado para tu caja o no está conectado. Avisale al encargado.",
+      "manager": "Podés administrar medios de pago y cuentas de transferencia en Configuración, Medios de pago.",
+      "owner": "En Configuración, Medios de pago conectás Mercado Pago (\"Conectar con Mercado Pago\"), definís recargos y planes de cuotas. Tarjeta en posnet y Terminales de cobro tienen su propia sección."
+    },
+    "errors": [
+      { "problem": "\"No hay medios de cobro habilitados\"", "fix": "Activalos en Configuración, Medios de pago." },
+      { "problem": "\"No se pudo generar el cobro\" con QR", "fix": "Revisá la conexión del medio en Configuración, Medios de pago, o cobrá con otro medio." },
+      { "problem": "El cliente no completó el pago con QR", "fix": "Cerrá la ventana y cobrá de nuevo con ese u otro medio." }
+    ],
+    "tips": ["La cuenta corriente aparece como \"Cuenta del cliente\" y necesita que elijas un cliente."],
+    "feature": "pos",
+    "related": ["pos-cobrar-venta", "clientes-cuenta-corriente", "pos-cobros-en-espera"]
+  },
+  {
+    "id": "pos-anular-venta",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Anular una venta",
+    "summary": "Desde Ventas anulás una venta completada con un motivo. Se repone el stock y queda auditado. El cajero sólo anula ventas del día.",
+    "module": "pos",
+    "routes": ["/ventas", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["anular venta", "cancelar venta", "me equivoque en la venta", "anular ticket", "borrar venta"],
+    "tags": ["anulacion", "ventas"],
+    "steps": [
+      "Entrá a Ventas y buscá la venta (sólo se anulan las \"Completada\").",
+      "Tocá el ícono \"Anular\" de esa fila.",
+      "Escribí el \"Motivo de anulación\" (es obligatorio, por ejemplo \"error de carga\").",
+      "Tocá \"Anular venta\". Vas a ver \"Venta #N anulada\"."
+    ],
+    "roleNotes": {
+      "cashier": "Podés anular sólo ventas del día (hora de Argentina). Para una venta de otro día pedíselo al encargado o al dueño. Si el negocio activó la regla \"Anular una venta\", te va a pedir el PIN de un supervisor.",
+      "manager": "Podés anular ventas de cualquier día. Si un cajero te pide anular una venta vieja, hacelo vos desde Ventas.",
+      "owner": "Podés anular cualquier venta. En Seguridad y auditoría podés exigir PIN de supervisor para anular desde cierto monto."
+    },
+    "errors": [
+      { "problem": "\"Como cajero sólo podés anular ventas del día\"", "fix": "Pedile a un encargado o al dueño que la anule." },
+      { "problem": "El botón Anular está deshabilitado", "fix": "Escribí el motivo: sin motivo no se habilita." },
+      { "problem": "Quiero devolver sólo un producto", "fix": "No anules: usá Devoluciones. Una venta anulada ya no se puede devolver." }
+    ],
+    "tips": [
+      "Al anular se repone el stock y, si la venta era de un turno, se registra el movimiento contrario en esa caja.",
+      "Un cobro por Mercado Pago no se devuelve solo al anular: para devolver la plata usá Devoluciones con reintegro por Mercado Pago."
+    ],
+    "feature": "pos",
+    "related": ["pos-devoluciones", "pos-cobrar-venta", "usuarios-permisos"]
+  },
+  {
+    "id": "pos-devoluciones",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Devoluciones y cambios",
+    "summary": "Buscá la venta por número de ticket, elegí los ítems y el motivo, y reintegrá en efectivo, con vale o por Mercado Pago. El cambio cobra o devuelve la diferencia.",
+    "module": "pos",
+    "routes": ["/devoluciones", "/ventas"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["devolucion", "cambio de producto", "devolver plata", "vale", "reintegro", "nota de credito"],
+    "tags": ["devoluciones", "vale"],
+    "steps": [
+      "Entrá a Devoluciones y buscá por \"N° de comprobante o ticket\" (o tocá \"Devolución / cambio\" en la fila de Ventas). Tocá \"Devolver\".",
+      "Elegí \"Devolución\" o \"Cambio\".",
+      "Devolución: elegí los ítems, el motivo y cómo se reintegra: \"Efectivo\" (reintegro por caja) o \"Vale\" (saldo a favor del cliente). El vale necesita un cliente.",
+      "Tocá \"Registrar devolución\" o \"Emitir vale\". Vas a ver \"Devolución #N registrada\" y podés imprimir el comprobante.",
+      "Cambio: elegí lo que devuelve, el motivo, lo que se lleva, y cobrá o devolvé la diferencia. El cambio necesita un cliente."
+    ],
+    "roleNotes": {
+      "cashier": "Para reintegrar en efectivo tenés que tener tu caja abierta. Reintegrar por Mercado Pago siempre te pide el PIN de un supervisor.",
+      "manager": "Sos supervisor: autorizás con tu PIN los reintegros por Mercado Pago de los cajeros.",
+      "owner": "En Configuración, Devoluciones elegís la política (el cajero elige, siempre vale o siempre efectivo) y el vencimiento de los vales. El reintegro por Mercado Pago se habilita en Medios de pago, Mercado Pago."
+    },
+    "errors": [
+      { "problem": "\"Abrí la caja para reintegrar en efectivo\"", "fix": "Abrí tu caja en el punto de venta y volvé." },
+      { "problem": "\"El vale necesita un cliente\"", "fix": "Elegí o creá el cliente en el último paso." },
+      { "problem": "\"Mercado Pago ya no permite devolver ese cobro: pasó el plazo.\"", "fix": "Reintegrá en efectivo o con vale." },
+      { "problem": "\"La venta ya no es devolvible (fue anulada)\"", "fix": "Una venta anulada ya repuso el stock: no hace falta devolverla." }
+    ],
+    "tips": ["Cada motivo de devolución define a dónde va el stock: vuelve a la venta, a depósito, a pérdida o a revisión (botón \"Motivos\")."],
+    "feature": "devoluciones",
+    "related": ["pos-anular-venta", "clientes-alta"]
+  },
+  {
+    "id": "pos-cobros-en-espera",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cobros en espera (QR o link que el cliente paga después)",
+    "summary": "Dejá un cobro por QR o link esperando el pago y seguí vendiendo. La venta se registra sola cuando el cliente paga.",
+    "module": "pos",
+    "routes": ["/cobros-en-espera", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["cobro en espera", "link de pago", "cobrar despues", "pago pendiente"],
+    "tags": ["qr", "link"],
+    "steps": [
+      "En el cobro, generá el QR o link por el total y tocá \"Dejar en espera\". Elegí cuándo vence el link (24 horas por defecto).",
+      "Compartilo por WhatsApp, email, SMS o copialo.",
+      "Cuando el cliente paga, la venta se registra sola y te avisamos para imprimir el ticket.",
+      "En Cobros en espera ves \"Esperando pago\", \"Pagados sin venta\" y \"Para revisar\". Desde el detalle podés extender, regenerar el link o cancelar con motivo."
+    ],
+    "roleNotes": {
+      "cashier": "Necesitás la caja abierta. Al cerrarla te va a pedir qué hacer con los cobros en espera.",
+      "manager": "Si un cobro quedó \"Pagado sin venta\", podés usar \"Registrar la venta igual\".",
+      "owner": "Requiere plan Pro y un medio de QR o link conectado."
+    },
+    "errors": [
+      { "problem": "\"Sólo se puede dejar en espera un cobro con un único medio de pago.\"", "fix": "Cobrá todo con el QR o link, sin dividir." },
+      { "problem": "\"Las mesas y los pedidos de delivery se cobran en el momento.\"", "fix": "No se pueden dejar en espera mesas, delivery ni turnos de agenda." }
+    ],
+    "tips": [],
+    "feature": "cobros_en_espera",
+    "related": ["pos-medios-de-pago", "caja-cerrar"]
+  },
+  {
+    "id": "pos-venta-offline",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Vender sin internet (venta offline)",
+    "summary": "Si se corta la conexión con la caja abierta, podés seguir vendiendo en efectivo, transferencia o tarjeta en posnet. Las ventas se envían solas al volver.",
+    "module": "pos",
+    "routes": ["/pos", "/ventas-offline"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["sin internet", "se corto internet", "venta offline", "sin conexion", "ticket provisorio"],
+    "tags": ["offline", "conexion"],
+    "steps": [
+      "Si se corta internet vas a ver el aviso \"Sin conexión: vendiendo offline\" con las ventas por sincronizar.",
+      "Seguí cobrando sólo en efectivo, transferencia o tarjeta en posnet.",
+      "Se imprime un \"Ticket provisorio\": no es válido como factura. El número de venta y la factura se asignan al sincronizar.",
+      "Cuando vuelve la conexión, las ventas se envían solas. No cierres la caja hasta que terminen de enviarse."
+    ],
+    "roleNotes": {
+      "cashier": "Tenés que haber iniciado sesión y abierto la caja con conexión. Hay un monto máximo por venta y un máximo de ventas por turno.",
+      "manager": "En Ventas offline revisás las ventas con problemas (precio cambiado, stock negativo, fuera de plazo) y elegís \"Registrar en mi caja\", \"Marcar resuelta\" o \"Descartar\".",
+      "owner": "En Configuración, Operación, tarjeta \"Venta sin conexión\": se prende o apaga y se fijan monto máximo (50.000 pesos por defecto), ventas por turno (20) y plazo para enviarlas (48 horas). Es gratis en todos los planes."
+    },
+    "errors": [
+      { "problem": "\"Sin conexión sólo se vende con la caja ya abierta\"", "fix": "Esperá la conexión para abrir la caja." },
+      { "problem": "\"Sin conexión sólo se cobra en efectivo, transferencia o tarjeta en posnet\"", "fix": "QR, vale, cuenta corriente, cupones, mesas y turnos necesitan conexión." },
+      { "problem": "\"La venta sin conexión está apagada en este negocio\"", "fix": "El dueño la puede prender en Configuración, Operación." }
+    ],
+    "tips": [],
+    "related": ["pos-cobrar-venta", "caja-cerrar"]
+  }
+]

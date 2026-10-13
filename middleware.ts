@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { legacyHostRedirect } from "@/lib/site";
 import { webhookTarget } from "@/lib/hooks";
+import { isPublicApiPath } from "@/lib/api-publica/paths";
 
 export async function middleware(request: NextRequest) {
   // Webhooks con dominio propio → proxy a la Edge Function (sin sesión).
@@ -20,6 +21,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname + request.nextUrl.search,
   );
   if (target) return NextResponse.redirect(target, 308);
+  // API pública (ADR-094): sin sesión ni cookies; la credencial es el token.
+  if (isPublicApiPath(request.nextUrl.pathname)) return NextResponse.next();
   return updateSession(request);
 }
 

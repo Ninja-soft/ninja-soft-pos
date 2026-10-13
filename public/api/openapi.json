@@ -1,0 +1,1608 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NinjaSoft POS · API pública",
+    "version": "1.0.0",
+    "summary": "API REST para integrar tienda online, ERP y planillas con NinjaSoft POS (plan Enterprise).",
+    "description": "Autenticación OAuth2 client_credentials: con el client_id y el secreto de una credencial (Configuración > Integraciones > API, sólo el dueño) se pide un token Bearer de 1 hora. El negocio sale siempre de la credencial: ningún parámetro lo elige. Errores con forma {error: {code, message, details?}}. Límite de pedidos por minuto por credencial (headers RateLimit-*, 429 con Retry-After). Escrituras en lote de hasta 500 ítems con Idempotency-Key opcional (24 h). Ver docs/api-publica.md."
+  },
+  "servers": [
+    {
+      "url": "https://pos.soft.ninja/api/v1",
+      "description": "Producción"
+    }
+  ],
+  "security": [
+    {
+      "oauth2": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth"
+    },
+    {
+      "name": "productos"
+    },
+    {
+      "name": "precios"
+    },
+    {
+      "name": "stock"
+    },
+    {
+      "name": "ventas"
+    },
+    {
+      "name": "clientes"
+    }
+  ],
+  "paths": {
+    "/oauth/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "issueToken",
+        "summary": "Pedir un token (client_credentials)",
+        "description": "Credenciales por header Basic (client_id:client_secret) o en el cuerpo. Sin scope, el token lleva todos los alcances de la credencial. Errores con el formato de OAuth 2.0 (RFC 6749 §5.2).",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token emitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/OAuthError"
+          },
+          "401": {
+            "$ref": "#/components/responses/OAuthError"
+          },
+          "403": {
+            "$ref": "#/components/responses/OAuthError"
+          },
+          "429": {
+            "$ref": "#/components/responses/OAuthError"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "tags": [
+          "productos"
+        ],
+        "operationId": "listProducts",
+        "summary": "Listar productos (cursor por fecha de modificación)",
+        "description": "Orden por updated_at e id. Para sincronizar cambios, guardá el next_cursor o usá updated_since. Un producto modificado mientras paginás vuelve a aparecer al final (nunca se pierde). Alcance products:read.",
+        "security": [
+          {
+            "oauth2": [
+              "products:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit500"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "sku",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de productos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "next_cursor"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Product"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimit-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/products/batch": {
+      "post": {
+        "tags": [
+          "productos"
+        ],
+        "operationId": "upsertProducts",
+        "summary": "Crear o editar productos por SKU (hasta 500)",
+        "description": "Un campo ausente no se toca (en un alta toma el valor por defecto). Resultado por ítem: created, updated, unchanged o error (barcode_in_use, name_required). El stock no se carga acá: usá /stock/adjustments. Alcance products:write.",
+        "security": [
+          {
+            "oauth2": [
+              "products:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "items": {
+                      "$ref": "#/components/schemas/ProductInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/BatchResult"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/prices/batch": {
+      "post": {
+        "tags": [
+          "precios"
+        ],
+        "operationId": "updatePrices",
+        "summary": "Cambiar precio (y costo) por SKU (hasta 500)",
+        "description": "Queda en el historial de precios como importación. Resultado por ítem: updated, unchanged o error (product_not_found). Alcance prices:write.",
+        "security": [
+          {
+            "oauth2": [
+              "prices:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "sku",
+                        "price"
+                      ],
+                      "properties": {
+                        "sku": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "price": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "cost": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/BatchResult"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/stores": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "operationId": "listStores",
+        "summary": "Sucursales del negocio",
+        "security": [
+          {
+            "oauth2": [
+              "stock:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucursales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "is_default": {
+                            "type": "boolean"
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/stock": {
+      "get": {
+        "tags": [
+          "stock"
+        ],
+        "operationId": "listStock",
+        "summary": "Stock por sucursal",
+        "description": "Productos sin variantes. Un producto sin fila en una sucursal tiene 0 ahí. Alcance stock:read.",
+        "security": [
+          {
+            "oauth2": [
+              "stock:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "sku",
+            "in": "query",
+            "description": "SKU separados por coma (hasta 500).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit500"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de saldos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/StockRow"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/stock/adjustments": {
+      "post": {
+        "tags": [
+          "stock"
+        ],
+        "operationId": "adjustStock",
+        "summary": "Ajustar o contar stock por sucursal con motivo (hasta 500)",
+        "description": "mode delta suma o resta qty; mode set fija el saldo (conteo, motivo count). Sin store_id va a la sucursal principal; otra sucursal pide stock por sucursal en el plan. Cada ajuste deja su movimiento y queda auditado. Resultado por ítem: adjusted, unchanged o error (product_not_found, store_not_found, variants_not_supported, feature_not_in_plan). Alcance stock:write.",
+        "security": [
+          {
+            "oauth2": [
+              "stock:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "items": {
+                      "$ref": "#/components/schemas/StockAdjustment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/BatchResult"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/sales": {
+      "get": {
+        "tags": [
+          "ventas"
+        ],
+        "operationId": "listSales",
+        "summary": "Ventas por rango (sólo lectura)",
+        "description": "Rango [from, to) de hasta 93 días, orden por fecha de creación. Incluye ítems y cobros. Las anuladas vienen con status voided. Alcance sales:read.",
+        "security": [
+          {
+            "oauth2": [
+              "sales:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de ventas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Sale"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/customers": {
+      "get": {
+        "tags": [
+          "clientes"
+        ],
+        "operationId": "listCustomers",
+        "summary": "Listar clientes (cursor por fecha de modificación)",
+        "security": [
+          {
+            "oauth2": [
+              "customers:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit500"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "external_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "include_deleted",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de clientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Customer"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/customers/batch": {
+      "post": {
+        "tags": [
+          "clientes"
+        ],
+        "operationId": "upsertCustomers",
+        "summary": "Crear o editar clientes por id o external_id (hasta 500)",
+        "description": "Cada ítem trae id (cliente existente) o external_id (clave del sistema externo, única por negocio). No toca la cuenta corriente. Resultado por ítem: created, updated, unchanged o error (customer_not_found, external_id_in_use, name_required). Alcance customers:write.",
+        "security": [
+          {
+            "oauth2": [
+              "customers:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "items": {
+                      "$ref": "#/components/schemas/CustomerInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/BatchResult"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "/api/v1/oauth/token",
+            "scopes": {
+              "products:read": "Leer productos",
+              "products:write": "Crear y editar productos",
+              "stock:read": "Leer sucursales y stock",
+              "stock:write": "Ajustar stock",
+              "prices:write": "Cambiar precios",
+              "sales:read": "Leer ventas",
+              "customers:read": "Leer clientes",
+              "customers:write": "Crear y editar clientes"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "Limit500": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 100
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "description": "next_cursor de la página anterior (opaco).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "description": "Clave única por pedido (8 a 128 caracteres: letras, números, . _ : -). Repetirla con el mismo cuerpo devuelve la misma respuesta (header Idempotent-Replayed: true) sin volver a aplicar; con otro cuerpo, 409.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "OAuthError": {
+        "description": "Error de OAuth 2.0",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "examples": [
+                    "invalid_client",
+                    "invalid_scope",
+                    "unsupported_grant_type",
+                    "feature_not_in_plan",
+                    "rate_limited"
+                  ]
+                },
+                "error_description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BatchResult": {
+        "description": "Resultado por ítem",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "summary",
+                "results"
+              ],
+              "properties": {
+                "summary": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  }
+                },
+                "results": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "status"
+                    ],
+                    "properties": {
+                      "index": {
+                        "type": "integer"
+                      },
+                      "sku": {
+                        "type": "string"
+                      },
+                      "external_id": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "created",
+                          "updated",
+                          "unchanged",
+                          "adjusted",
+                          "error"
+                        ]
+                      },
+                      "error": {
+                        "type": "string"
+                      },
+                      "qty": {
+                        "type": "number"
+                      },
+                      "delta": {
+                        "type": "number"
+                      },
+                      "store_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "examples": [
+                  "invalid_token",
+                  "insufficient_scope",
+                  "feature_not_in_plan",
+                  "tenant_inactive",
+                  "rate_limited",
+                  "validation_error",
+                  "invalid_cursor",
+                  "store_not_found",
+                  "idempotency_conflict",
+                  "idempotency_in_progress",
+                  "payload_too_large",
+                  "conflict",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {}
+            }
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "required": [
+          "grant_type"
+        ],
+        "properties": {
+          "grant_type": {
+            "const": "client_credentials"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Alcances separados por espacio (subconjunto de los de la credencial)."
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "scope"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "token_type": {
+            "const": "Bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "examples": [
+              3600
+            ]
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "type": "number"
+          },
+          "cost": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "track_stock": {
+            "type": "boolean"
+          },
+          "stock": {
+            "type": "number",
+            "description": "Consolidado de todas las sucursales."
+          },
+          "stock_min": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "has_variants": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ProductInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sku"
+        ],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Obligatorio en un alta."
+          },
+          "barcode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cost": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10,
+            "default": "un"
+          },
+          "is_active": {
+            "type": "boolean",
+            "default": true
+          },
+          "track_stock": {
+            "type": "boolean",
+            "default": true
+          },
+          "stock_min": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "StockRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qty": {
+            "type": "number"
+          },
+          "min_qty": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StockAdjustment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sku",
+          "qty",
+          "reason"
+        ],
+        "properties": {
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "store_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "delta",
+              "set"
+            ],
+            "default": "delta"
+          },
+          "qty": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "purchase",
+              "adjustment",
+              "loss",
+              "return",
+              "count",
+              "production"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 300
+          }
+        }
+      },
+      "Sale": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "discount_total": {
+            "type": "number"
+          },
+          "tax_total": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "voided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "product_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid"
+                },
+                "variant_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid"
+                },
+                "sku": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "unit_price": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                },
+                "subtotal": {
+                  "type": "number"
+                },
+                "returned_qty": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "iva_condition": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "CustomerInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Trae id o external_id.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "external_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Obligatorio en un alta."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 50
+          },
+          "document_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "cuit",
+              "dni",
+              "cuil",
+              "passport",
+              "other",
+              null
+            ]
+          },
+          "document_number": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 20
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 300
+          },
+          "iva_condition": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "consumidor_final",
+              "responsable_inscripto",
+              "monotributo",
+              "monotributo_social",
+              "exento",
+              "no_responsable",
+              "no_categorizado",
+              "no_alcanzado",
+              "iva_liberado",
+              "exterior",
+              null
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000
+          },
+          "is_active": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "headers": {
+      "RateLimit-Limit": {
+        "description": "Pedidos por minuto de la credencial.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimit-Remaining": {
+        "description": "Pedidos que quedan en la ventana.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimit-Reset": {
+        "description": "Segundos hasta que cierra la ventana actual.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Retry-After": {
+        "description": "Con 429: segundos a esperar.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

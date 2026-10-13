@@ -20,6 +20,7 @@ import {
   Landmark,
   ShieldCheck,
   SlidersHorizontal,
+  KeyRound,
   Store,
   Tag,
   Users,
@@ -64,6 +65,7 @@ export type SettingsSectionKey =
   | "impuestos"
   | "promociones"
   | "nubceo"
+  | "api"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -383,6 +385,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "integracion_nubceo",
         keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
       },
+      // API pública v1 (ADR-094): credenciales OAuth2 por negocio, sólo el dueño.
+      {
+        key: "api",
+        label: "API",
+        title: "API pública",
+        description:
+          "Credenciales para conectar tu tienda online, ERP o planillas: productos, stock, precios, ventas y clientes por API.",
+        icon: KeyRound,
+        feature: "api_publica",
+        keywords: "api rest oauth token credencial client id secret integracion erp ecommerce tienda sincronizar webhook desarrollador",
+      },
     ],
   },
   {
@@ -442,6 +455,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   pin: "seguridad",
   supervisor: "seguridad",
   integraciones: "nubceo",
+  "api-publica": "api",
+  credenciales: "api",
   conciliacion: "nubceo",
   fiscal: "impuestos",
   iva: "impuestos",

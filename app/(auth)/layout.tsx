@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoNinjaPos, LogoNinjaSoft } from "@/components/brand/Logo";
 import { ValuePanel } from "@/components/auth/ValuePanel";
+import { RememberedBusinessChip } from "@/components/auth/RememberedBusinessChip";
 import { cn } from "@/lib/utils/cn";
+import { LAST_BUSINESS_KEY } from "@/lib/auth/rememberedBusiness";
 
 // Layout de auth (login, signup, recuperar, blanquear, login interno).
 // Desktop (lg+): dos columnas, panel de marca fijo a la izquierda y el
@@ -14,6 +16,10 @@ import { cn } from "@/lib/utils/cn";
 // logo arriba.
 // Sigue el tema del usuario (ninja-dark por defecto, ver ThemeProvider): el
 // fondo es el plano del tema, sin manchas ni degradados.
+const LAST_BUSINESS_SCRIPT = `try{var v=JSON.parse(localStorage.getItem(${JSON.stringify(
+  LAST_BUSINESS_KEY,
+)})||"null");var d=document.documentElement;if(location.pathname==="/login"&&v&&typeof v.name==="string"&&v.name.trim()&&typeof v.logoUrl==="string"&&/^(https?:|data:image\\/)/i.test(v.logoUrl)){d.setAttribute("data-last-business","")}else{d.removeAttribute("data-last-business")}}catch(e){}`;
+
 export default function AuthLayout({
   children,
 }: {
@@ -21,6 +27,7 @@ export default function AuthLayout({
 }) {
   const pathname = usePathname();
   const isSignup = pathname === "/signup";
+  const isLogin = pathname === "/login";
   const width = isSignup ? "max-w-[420px] sm:max-w-[720px]" : "max-w-[420px]";
 
   return (
@@ -32,6 +39,12 @@ export default function AuthLayout({
           : "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]",
       )}
     >
+      {/* Antes de pintar (y de hidratar): marca <html data-last-business> si
+          este dispositivo recuerda un negocio, para que el panel de /login
+          muestre desde el primer cuadro el skeleton y el titular correctos.
+          Sólo lee localStorage; la validación real está en
+          lib/auth/rememberedBusiness.ts. */}
+      <script dangerouslySetInnerHTML={{ __html: LAST_BUSINESS_SCRIPT }} />
       <ValuePanel />
 
       <div className={cn("flex min-h-screen flex-col px-4 sm:px-8", isSignup && "xl:px-12")}>
@@ -49,6 +62,8 @@ export default function AuthLayout({
             >
               <LogoNinjaPos className="h-8 w-auto" priority />
             </Link>
+            {/* Celular: el panel de marca no se ve; el negocio recordado va acá. */}
+            {isLogin && <RememberedBusinessChip className="-mt-4 mb-8 lg:hidden" />}
             {children}
           </div>
         </main>

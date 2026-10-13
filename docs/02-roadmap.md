@@ -12,7 +12,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 |---|---|---|---|
 | **F0** | Fundación técnica | 2 semanas | 🟢 Funcional |
 | **F1** | MVP vendible (POS + Admin) | 10–12 semanas | 🟢 Funcional (base H0–H6) |
-| **F1.5** | Hardening pre-piloto | 2–3 semanas | 🟡 Prioridad inmediata |
+| **F1.5** | Hardening pre-piloto | 2–3 semanas | 🟡 En curso (ADR-098: checklist de deploy verificable, errores globales del front, healthcheck profundo, smoke de piloto e idempotencia documentada; faltan la primera prueba de restore, el seed demo y correr el smoke contra producción) |
 | **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟢 Funcional (billing self-serve + dunning + gating) |
 | **F3** | Integración AFIP y producción | 4–6 semanas | 🟡 En curso (ARCA WSFEv1, cola fiscal y CAEA en ADR-072, sin certificado real; venta offline ADR-077) |
 | **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 En curso (multi-sucursal en F17, hardware en F10/ADR-063, pasarelas en F8; falta observabilidad externa) |
@@ -54,7 +54,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 ### Criterios de cierre
 - [~] Un dev nuevo puede clonar, instalar y levantar el proyecto en < 30 min siguiendo `00-getting-started.md`. *La guía existe; falta validarla con un dev real.*
 - [x] El PM puede invocar a cualquier agente y este encuentra su archivo en `.claude/agents/`.
-- [~] `pnpm test` pasa con al menos un test por capa (component, hook, edge function). *Componentes (`tests/components/`), dominio y Edge Functions (`tests/unit/arcaWsfe.test.ts` y otros importan `supabase/functions/_shared`); falta un test de hooks de React.*
+- [x] `pnpm test` pasa con al menos un test por capa (component, hook, edge function). *Componentes (`tests/components/`), hooks de React (`tests/unit/useDebouncedValue.test.tsx`, ADR-098), dominio y Edge Functions (`tests/unit/arcaWsfe.test.ts`, `tests/unit/requestGuard.test.ts` y otros importan `supabase/functions/_shared`).*
 
 ---
 
@@ -89,17 +89,20 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [x] Suite de aislamiento multi-tenant con dos tenants y datos cruzados conocidos. — *`tests/integration/rls.test.ts`: crea tenant A/B + owner/cashier, productos y clientes cruzados; corre contra Supabase local (job `rls` de CI con `supabase start` + migraciones reales). Sin las env de test, la suite se salta.*
 - [x] Tests de RLS para tablas críticas: productos, ventas, caja, clientes, audit logs. — *Lectura y escritura cross-tenant bloqueadas; además `payment_secrets` (deny-all) y `tenant_notes` (solo staff).*
 - [x] Tests de permisos por rol: owner, manager, cashier, viewer. *Hecho: `tests/integration/roles.test.ts` cubre owner, manager, cashier y viewer (ADR-071).*
-- [~] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte. *`tests/e2e/pos.spec.ts` cubre login, abrir caja y vender; faltan ticket, anulación, cierre de caja y reporte en un mismo flujo.*
-- [~] Idempotencia documentada para venta/anulación antes de integrar pagos externos. *Venta offline documentada (`client_sale_id` único, `docs/34-venta-offline.md`, ADR-077) y cobro en espera idempotente (`_pc_complete`, ADR-048); falta documentar la venta online del POS y la anulación.*
-- [~] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *Endpoint listo (`GET /api/health` → status/version/env/time, sin DB ni secretos). Falta el checklist de monitoreo.*
+- [~] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte. *`tests/e2e/smoke-piloto.spec.ts` (`pnpm test:smoke`, ADR-098) recorre todo en un solo flujo en el tenant QA, más el healthcheck sin sesión (verde en modo público contra un build local). Falta la primera corrida verde con sesión QA contra producción (docs/13-deployment.md §11.2).*
+- [x] Idempotencia documentada para venta/anulación antes de integrar pagos externos. *`docs/35-idempotencia-ventas.md` (ADR-098): venta online, offline, cobro en espera, anulación (idempotente por estado), devolución, pagos externos y API. El POS corta el doble "Cobrar" en vuelo (`modules/pos/screen/usePosSale.ts`). Deuda documentada: clave de idempotencia en `create_sale` en su próxima recreación.*
+- [x] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *`GET /api/health` (liveness con env y commit) y `?deep=1` (Supabase Auth y base, 503 si falla), público sin redirect a login (`middleware.ts`), `lib/health.ts`, `tests/unit/health.test.ts`. Checklist en `docs/14-observability.md` §9.2 (ADR-098).*
 - [x] **Gating server-side real + hardening de seguridad SaaS** *(2026-06-08)*: enforcement backend de **medios de pago por plan** (trigger en `payments`, PRs #215/#240) y de **features de escritura** (descuentos/garantías/cuenta corriente/listas en `create_sale`/escrituras, con advisory lock en el correlativo, PR #250); hardening (policy de planes cerrada a `anon`, guards en RPCs, revokes defensivos, índices/policies de performance, PR #248); **auditoría SaaS exhaustiva** (seguridad/RLS/pagos/funcional/IA/emails) — base sólida, sin fugas, fixes aplicados. *La UI nunca es la única barrera (ver convención de features de plan en `CLAUDE.md`).*
-- [ ] Backup/restore de Supabase probado en staging o entorno descartable.
-- [ ] Seed/demo reproducible para ventas, productos, clientes y caja.
+- [~] Backup/restore de Supabase probado en staging o entorno descartable. *Procedimiento escrito y verificable en `docs/security-reviews/disaster-recovery.md` §Backup y restore (dump lógico, restore en proyecto descartable, `deploy-check --remote`, conteos, `test:rls` y smoke; ADR-098). Falta ejecutarlo una vez (necesita un proyecto descartable o Docker) y confirmar plan, retención y PITR del proyecto.*
+- [ ] Seed/demo reproducible para ventas, productos, clientes y caja. *Pendiente: `supabase/seed.sql` sólo carga planes y flags; un seed demo necesita Supabase local (Docker) para validarlo.*
+- [x] **Checklist de deploy y rollback verificable** *(ADR-098)*: `scripts/deploy-check.mjs` (`pnpm deploy:check`, en CI con `--base`) valida nombres y timestamps únicos de migraciones, que las existentes no se toquen, migraciones nuevas fuera de orden, y que las Edge con `verify_jwt = false` sean exactamente la lista pública (`[functions.*]` de `supabase/config.toml`, que ahora usa `supabase functions deploy`); con `--remote` o `--applied` imprime la última aplicada y las pendientes en orden, huecos y destructivas, y compara el `verify_jwt` desplegado. `docs/13-deployment.md` §7 y §11 al día con el flujo real. Tests `tests/unit/deployCheck.test.ts`.
+- [x] **Errores globales del front con mensaje humano y reporte** *(ADR-098)*: error boundaries `app/error.tsx`, `app/(app)/error.tsx`, `app/internal/error.tsx`, `app/global-error.tsx` y `app/not-found.tsx` con `components/errors/ErrorScreen.tsx`; reporte a `POST /api/client-error` (logs de Vercel, datos sensibles tachados). Tests `tests/unit/clientError.test.ts` y `tests/components/ErrorScreen.test.tsx`.
+- [x] **Límites de tamaño y ráfaga en endpoints públicos** *(ADR-098)*: las 16 Edge públicas leen el cuerpo con tope de 64 KB (`_shared/requestGuard.ts`); `payway_checkout`, `getnet_checkout` y `send_password_recovery` suman un tope por IP. La API v1 ya tenía límite por credencial y 1 MB (ADR-094). Tests `tests/unit/requestGuard.test.ts`. *Requiere redesplegar esas 16 Edge.*
 
 ### Criterios de cierre
 - [x] El gate automático pasa completo: lint, typecheck, test y build. — *Job `quality` de CI.*
 - [x] Dos tenants operan en paralelo sin fuga de datos validada por test. — *Job `rls` de CI.*
-- [ ] Una demo de piloto corre de punta a punta sin tocar SQL manualmente.
+- [~] Una demo de piloto corre de punta a punta sin tocar SQL manualmente. *El smoke de piloto la automatiza (`pnpm test:smoke`); falta correrla con el negocio piloto.*
 
 ---
 
@@ -1490,8 +1493,8 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 <!-- roadmap-progress:start -->
 | Fase | Hechos/total | Parciales | Pendientes | % hecho | % con parciales a la mitad |
 |---|---|---|---|---|---|
-| **F0** | 7/10 | 3 | 0 | 70% | 85% |
-| **F1.5** | 8/14 | 3 | 3 | 57% | 68% |
+| **F0** | 8/10 | 2 | 0 | 80% | 90% |
+| **F1.5** | 13/17 | 3 | 1 | 76% | 85% |
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
@@ -1510,7 +1513,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 545/1004 | 298 | 161 | 54% | 69% |
+| **Total** | 551/1007 | 297 | 159 | 55% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

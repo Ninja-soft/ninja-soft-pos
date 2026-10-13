@@ -33,13 +33,27 @@ describe("parseProductsXlsx", () => {
     expect(ok[0]!.price).toBe(800);
   });
 
-  it("respeta defaults de unidad, stock, IVA y track_stock", async () => {
+  it("deja vacíos los opcionales (el servidor aplica los defaults al crear y no los pisa al actualizar)", async () => {
     const buf = await xlsxBuffer([{ name: "Item", price: 50 }]);
     const ok = validRows(await parseProductsXlsx(buf));
-    expect(ok[0]!.unit).toBe("un");
-    expect(ok[0]!.stock).toBe(0);
-    expect(ok[0]!.tax_rate).toBe(21);
-    expect(ok[0]!.track_stock).toBe(true);
+    expect(ok[0]!.unit).toBeNull();
+    expect(ok[0]!.stock).toBeNull();
+    expect(ok[0]!.tax_rate).toBeNull();
+    expect(ok[0]!.track_stock).toBeNull();
+  });
+
+  it("acepta los encabezados nuevos en castellano con acentos y asterisco", async () => {
+    const buf = await xlsxBuffer(
+      [{ n: "Yerba", p: "1500,50", c: "Almacén", t: "No" }],
+      [
+        { header: "Nombre *", key: "n" },
+        { header: "PRECIO *", key: "p" },
+        { header: "categoria", key: "c" },
+        { header: "Controla_stock", key: "t" },
+      ],
+    );
+    const ok = validRows(await parseProductsXlsx(buf));
+    expect(ok[0]).toMatchObject({ name: "Yerba", price: 1500.5, category: "Almacén", track_stock: false });
   });
 
   it("parsea marca, IVA y track_stock cuando vienen", async () => {

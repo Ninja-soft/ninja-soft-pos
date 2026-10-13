@@ -372,8 +372,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
   importacion_excel: {
-    desc: "Importación desde Excel: carga masiva de productos y precios a partir de una planilla.",
-    impact: "Sin esto la carga de productos es sólo manual, uno por uno.",
+    desc: "Importación desde Excel: carga y actualización masiva de productos, clientes, stock por sucursal, listas de precios, sucursales, garantías y motivos de devolución con plantilla, revisión previa (qué se crea, qué se actualiza y qué filas tienen errores), confirmación y auditoría. Lo que cada importación escribe sigue pidiendo su propia función del plan.",
+    impact: "Sin esto la carga de productos, clientes, stock y precios es sólo manual, uno por uno.",
     minPlan: "Pro",
   },
 

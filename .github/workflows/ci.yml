@@ -17,6 +17,9 @@ jobs:
       APP_ENV: preview
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historia completa: deploy-check compara las migraciones con la rama base.
+          fetch-depth: 0
 
       # Versión de pnpm tomada de "packageManager" en package.json.
       - uses: pnpm/action-setup@v4
@@ -34,6 +37,16 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      # Orden y nombres de migraciones, migraciones aplicadas sin tocar y lista
+      # exacta de Edge Functions públicas (verify_jwt = false). ADR-098.
+      - name: Deploy check
+        run: |
+          if [ -n "${{ github.base_ref }}" ]; then
+            node scripts/deploy-check.mjs --base=origin/${{ github.base_ref }}
+          else
+            node scripts/deploy-check.mjs
+          fi
 
       - name: Test
         run: pnpm test

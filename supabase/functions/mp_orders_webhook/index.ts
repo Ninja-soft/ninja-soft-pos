@@ -13,6 +13,7 @@
 //   * Responde 200 enseguida (MP corta a los 22 s y reintenta): el trabajo
 //     corre en segundo plano con EdgeRuntime.waitUntil cuando está disponible.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { runInBackground, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
@@ -73,7 +74,7 @@ Deno.serve(withWebhookLog("mercadopago_orders", "mp_orders_webhook", async (req:
     let body: unknown = null;
     if (req.method === "POST") {
       try {
-        body = await req.json();
+        body = await readJsonLimited(req);
       } catch {
         body = null;
       }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/Toast";
 import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/checkout/types";
@@ -171,8 +172,28 @@ export function usePosSale(ctx: {
   const qc = useQueryClient();
   const { sale } = usePosMutations();
   const handlePriceMismatch = usePriceRefresh();
+  // Idempotencia del lado del POS (docs/35-idempotencia-ventas.md): create_sale
+  // no tiene clave de idempotencia online, así que un segundo "Cobrar" mientras
+  // el primero está en vuelo se descarta acá. `sale.isPending` deshabilita el
+  // botón recién en el próximo render; el ref corta el doble toque del mismo frame.
+  const inFlight = useRef(false);
 
   async function handleSale(
+    payments: CheckoutPayment[],
+    extras?: PaymentExtra[],
+    change?: number,
+    appliedPromo?: Promo | null,
+  ) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      await runSale(payments, extras, change, appliedPromo);
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
+  async function runSale(
     payments: CheckoutPayment[],
     extras?: PaymentExtra[],
     change?: number,

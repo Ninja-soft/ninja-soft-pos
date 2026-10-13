@@ -12,6 +12,7 @@
 // • El origen del link sólo puede ser un dominio propio (evita phishing con
 //   links de recuperación válidos apuntando a otro sitio).
 // =============================================================================
+import { clientIp, createIpLimiter, readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { sendWithChain } from "../_shared/mailer.ts";
 
@@ -51,13 +52,19 @@ function render(tpl: string, vars: Record<string, string>): string {
   return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => vars[k] ?? "");
 }
 
+// Además del límite por email (en la base), un tope por IP (best-effort por
+// isolate, ADR-098) frena el barrido de muchos emails desde un mismo origen.
+// Responde ok igual: no revela que se cortó.
+const ipLimiter = createIpLimiter(10, 10 * 60_000);
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  if (!ipLimiter.hit(clientIp(req))) return json({ ok: true });
 
   let b: { email?: string; origin?: string };
   try {
-    b = await req.json();
+    b = await readJsonLimited(req);
   } catch {
     return json({ error: "invalid_json" }, 400);
   }

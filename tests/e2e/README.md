@@ -6,6 +6,7 @@ de pago, reportes, Tiendita, asistente IA y chequeo visual.
 ```bash
 pnpm test:e2e                      # todo (o modo smoke si no hay sesión)
 pnpm test:e2e tests/e2e/pos.spec.ts --no-deps   # un spec, sin el teardown de logout
+pnpm test:smoke                    # smoke de piloto post-deploy (docs/13-deployment.md §11.2)
 pnpm exec playwright show-report   # reporte HTML (playwright-report/)
 ```
 

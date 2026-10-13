@@ -19,6 +19,7 @@
 // rechaza. Si no se puede verificar, NO se acredita. Siempre responde 200.
 // Lógica pura en _shared/mobbex.ts (tests/unit/mobbexSandbox.test.ts).
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   type MobbexPayment,
@@ -50,7 +51,7 @@ Deno.serve(withWebhookLog("mobbex", "mobbex_webhook", async (req: Request, wh) =
     // El body sólo se usa como PISTA (id de la operación y tipo de webhook).
     let body: unknown;
     try {
-      body = await req.json();
+      body = await readJsonLimited(req);
     } catch {
       return ok();
     }

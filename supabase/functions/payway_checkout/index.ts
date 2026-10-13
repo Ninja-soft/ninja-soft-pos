@@ -32,6 +32,7 @@
 // Dialecto del SDK oficial payway-ar/sdk-node-ventaonline (tokens/payments v2,
 // amount entero en centavos, payment_type single).
 // =============================================================================
+import { clientIp, createIpLimiter, readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   PAYWAY_BRANDS,
@@ -58,9 +59,14 @@ const json = (b: unknown, s = 200) =>
     headers: { ...cors, "Content-Type": "application/json" },
   });
 
+// Ráfagas desde una misma IP (best-effort por isolate, ADR-098): la página
+// pública pide `info` una vez y `pay` por intento; 120/min sobra.
+const ipLimiter = createIpLimiter(120, 60_000);
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  if (!ipLimiter.hit(clientIp(req))) return json({ error: "rate_limited" }, 429);
 
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -68,7 +74,7 @@ Deno.serve(async (req: Request) => {
 
   let b: Record<string, unknown>;
   try {
-    b = await req.json();
+    b = await readJsonLimited(req);
   } catch {
     return json({ error: "invalid_json" }, 400);
   }

@@ -14,6 +14,7 @@
 //     Idempotente (updates condicionales; un intent approved no se toca).
 //     Siempre 200 para que Directo no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractNotificationId } from "../_shared/directo.ts";
 import { INTENT_COLS, loadCreds, syncIntent, type IntentRow } from "../_shared/directo_server.ts";
@@ -49,7 +50,7 @@ Deno.serve(withWebhookLog("directo", "directo_webhook", async (req: Request, wh)
 
     let notificationId: string | null = null;
     try {
-      notificationId = extractNotificationId(await req.json());
+      notificationId = extractNotificationId(await readJsonLimited(req));
     } catch {
       /* cuerpo no-JSON: sin id no hay nada que re-consultar */
     }

@@ -18,6 +18,7 @@
 // Siempre 200 (salvo auth inválida: 401) para que Clover no desactive la URL;
 // el poll del POS sigue siendo el respaldo.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { parseCloverWebhook, safeEqual } from "../_shared/clover.ts";
 import {
@@ -41,7 +42,7 @@ Deno.serve(withWebhookLog("clover", "clover_webhook", async (req: Request, wh) =
 
   let raw: unknown = null;
   try {
-    raw = await req.json();
+    raw = await readJsonLimited(req);
   } catch {
     return ok();
   }

@@ -13,6 +13,7 @@
 //     Idempotente (updates condicionales; un intent approved no se toca).
 //     Siempre 200 para que GO Cuotas no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractWebhookHint } from "../_shared/gocuotas.ts";
 import { INTENT_COLS, loadApiKey, syncIntent, type IntentRow } from "../_shared/gocuotas_server.ts";
@@ -48,7 +49,7 @@ Deno.serve(withWebhookLog("gocuotas", "gocuotas_webhook", async (req: Request, w
 
     let hint = { orderId: null as string | null, reference: null as string | null };
     try {
-      hint = extractWebhookHint(await req.json());
+      hint = extractWebhookHint(await readJsonLimited(req));
     } catch {
       /* cuerpo no-JSON: se ignora (igual re-consultamos) */
     }

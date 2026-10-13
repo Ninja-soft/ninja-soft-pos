@@ -16,6 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:rls": "vitest run tests/integration",
+    "test:smoke": "playwright test tests/e2e/smoke-piloto.spec.ts --no-deps",
+    "deploy:check": "node scripts/deploy-check.mjs",
     "format": "prettier --write .",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

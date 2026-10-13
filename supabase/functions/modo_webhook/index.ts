@@ -28,6 +28,7 @@
 // estado "approved" sólo se setea si la re-consulta lo confirma con el monto
 // correcto; de lo contrario el intent permanece pending.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 import { withWebhookLog } from "../_shared/webhookLog.ts";
@@ -112,7 +113,7 @@ Deno.serve(withWebhookLog("modo", "modo_webhook", async (req: Request, wh) => {
       };
     };
     try {
-      body = await req.json();
+      body = await readJsonLimited(req);
     } catch {
       return ok();
     }

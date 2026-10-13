@@ -4,6 +4,8 @@ import { legacyHostRedirect } from "@/lib/site";
 import { webhookTarget } from "@/lib/hooks";
 import { isPublicApiPath } from "@/lib/api-publica/paths";
 
+const OPEN_ROUTES = new Set(["/api/health", "/api/client-error"]);
+
 export async function middleware(request: NextRequest) {
   // Webhooks con dominio propio → proxy a la Edge Function (sin sesión).
   const hook = webhookTarget(
@@ -23,6 +25,9 @@ export async function middleware(request: NextRequest) {
   if (target) return NextResponse.redirect(target, 308);
   // API pública (ADR-094): sin sesión ni cookies; la credencial es el token.
   if (isPublicApiPath(request.nextUrl.pathname)) return NextResponse.next();
+  // Healthcheck y reporte de errores del front (ADR-098): públicos, sin sesión.
+  // Sin esto un monitor sin cookies recibía el redirect a /login.
+  if (OPEN_ROUTES.has(request.nextUrl.pathname)) return NextResponse.next();
   return updateSession(request);
 }
 

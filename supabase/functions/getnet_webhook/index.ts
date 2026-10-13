@@ -16,6 +16,7 @@
 //   approved si Getnet lo confirma (queda en la conciliación como cobro sin
 //   venta). Siempre responde 200 para que Getnet no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   decideFor,
@@ -57,7 +58,7 @@ Deno.serve(withWebhookLog("getnet", "getnet_webhook", async (req: Request, wh) =
   try {
     let body: unknown = null;
     try {
-      body = await req.json();
+      body = await readJsonLimited(req);
     } catch {
       /* cuerpo no-JSON: se ignora (igual re-consultamos) */
     }

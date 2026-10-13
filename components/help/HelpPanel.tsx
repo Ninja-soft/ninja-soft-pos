@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, CircleHelp, GraduationCap, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, CircleHelp, GraduationCap, Route as RouteIcon, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { SearchField } from "@/components/ui/SearchField";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
@@ -16,6 +16,7 @@ import { MODULE_LABELS, type HelpArticle, type HelpRole } from "@/lib/help/types
 import { normalizeRole } from "@/lib/permissions/roles";
 import { useArticleVote, useVoteArticle } from "@/modules/help/hooks";
 import { HelpArticleView } from "./HelpArticleView";
+import { HELP_OPEN_EVENT, requestTour, useToursForMe } from "@/modules/onboarding/guidance";
 
 // Ayuda contextual (F15 · H72 · ADR-086). Botón "?" en el shell que abre un
 // panel lateral (pantalla completa en el celular) con los artículos de la
@@ -28,9 +29,20 @@ function loadContent() {
 
 export function HelpButton({ role, className }: { role: string | null; className?: string }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // Una sugerencia puede pedir el panel ("Pedir ayuda"). El shell monta dos
+  // botones (barra lateral y header del celular): abre el que está a la vista.
+  useEffect(() => {
+    const onOpen = () => {
+      if (btnRef.current?.offsetParent) setOpen(true);
+    };
+    window.addEventListener(HELP_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(HELP_OPEN_EVENT, onOpen);
+  }, []);
   return (
     <>
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Ayuda"
@@ -162,6 +174,8 @@ function HelpPanel({ role, onClose }: { role: HelpRole | null; onClose: () => vo
                 </section>
               )}
 
+              <ToursSection role={role} onClose={onClose} />
+
               <Link
                 href={"/escuela" as Route}
                 onClick={onClose}
@@ -179,6 +193,40 @@ function HelpPanel({ role, onClose }: { role: HelpRole | null; onClose: () => vo
         </div>
       </aside>
     </div>
+  );
+}
+
+// Recorridos guiados disponibles para el usuario (F15 · H70 · ADR-089).
+function ToursSection({ role, onClose }: { role: HelpRole | null; onClose: () => void }) {
+  const { data: tours } = useToursForMe(Boolean(role));
+  if (!tours?.length) return null;
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recorridos guiados</h3>
+      <ul className="divide-y divide-border rounded-md border border-border">
+        {tours.map((t) => (
+          <li key={t.tour_id}>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                requestTour(t.key);
+              }}
+              className="flex w-full items-start gap-3 px-3 py-2.5 text-left transition hover:bg-muted"
+            >
+              <RouteIcon size={16} className="mt-0.5 shrink-0 text-ninja-flameSoft" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-foreground">{t.title}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {t.completed ? "Hecho. Tocá para repasarlo." : `${t.steps.length} pasos`}
+                </span>
+              </span>
+              <ChevronRight size={16} className="mt-0.5 text-muted-foreground" aria-hidden />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

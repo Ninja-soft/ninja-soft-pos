@@ -99,6 +99,17 @@ const AssistantBubble = dynamic(
   { ssr: false },
 );
 
+// Recorridos guiados y sugerencias (F15 · H70, H74 · ADR-089): chunks aparte,
+// sin SSR (miden el DOM y usan sessionStorage).
+const TourHost = dynamic(
+  () => import("@/components/onboarding/TourHost").then((m) => m.TourHost),
+  { ssr: false },
+);
+const NudgeHost = dynamic(
+  () => import("@/components/onboarding/NudgeHost").then((m) => m.NudgeHost),
+  { ssr: false },
+);
+
 // Modales del menú de usuario: chunks aparte y montados recién al abrirlos
 // (el de perfil arrastra el recortador de avatar; el de contraseña consultaba
 // el proveedor de auth en cada carga del panel aunque nunca se abriera).
@@ -752,6 +763,8 @@ export function AppShell({
         <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
       </MountWhenOpened>
       {!onPos && <AssistantBubble />}
+      {shell?.role && <TourHost role={shell.role} />}
+      {shell?.role && <NudgeHost role={shell.role} />}
     </div>
   );
 }

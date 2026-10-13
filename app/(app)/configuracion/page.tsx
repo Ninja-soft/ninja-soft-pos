@@ -271,9 +271,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "pagos":
       return (
         <Suspense fallback={null}>
-          <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
-            <PaymentMethodsCard />
-          </ScopedSection>
+          <div data-tour="config-medios-pago">
+            <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
+              <PaymentMethodsCard />
+            </ScopedSection>
+          </div>
         </Suspense>
       );
     // ADR-054: terminales y datos del cupón del posnet offline (heredables).

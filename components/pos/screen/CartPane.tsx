@@ -511,6 +511,7 @@ export function CartSummary(p: CartSummaryProps) {
             type="button"
             disabled={!p.canCheckout || p.checkingOut}
             onClick={() => p.onCheckout()}
+            data-tour="pos-cobrar"
             className={cn("flex h-14 w-full items-center justify-between rounded-lg px-4 text-[17px] font-semibold", POS_CTA)}
           >
             <span className="flex items-center gap-2">

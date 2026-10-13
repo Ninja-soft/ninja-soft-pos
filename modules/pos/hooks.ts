@@ -17,6 +17,7 @@ import {
   type SaleExtraInput,
 } from "./api";
 import { useCurrentRegister } from "@/modules/branches/hooks";
+import { emitOnboardingEvent } from "@/modules/onboarding/guidance";
 import { resolveEffective } from "@/lib/config/inheritance";
 import { useConfigOverrides, useInheritanceFlags, usePosResolveTarget } from "@/modules/config/hooks";
 import { useBranchStore } from "@/modules/branches/store";
@@ -288,6 +289,8 @@ export function usePosMutations() {
         qc.invalidateQueries({ queryKey: ["customers"] });
         qc.invalidateQueries({ queryKey: ["sales"] });
       },
+      // Sugerencia "¿No salió el cobro?" (F15 · H74 · ADR-089).
+      onError: () => emitOnboardingEvent("venta_fallida"),
     }),
   };
 }

@@ -325,7 +325,7 @@ export default function ProductosPage() {
             >
               <ShieldCheck size={16} /> Garantías
             </GatedButton>
-            <RoleButton denied={deniedCatalog} className="shrink-0" onClick={openNew}>
+            <RoleButton denied={deniedCatalog} className="shrink-0" onClick={openNew} data-tour="productos-nuevo">
               <Plus size={16} /> Nuevo producto
             </RoleButton>
           </div>

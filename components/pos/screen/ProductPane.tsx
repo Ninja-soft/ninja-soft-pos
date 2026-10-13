@@ -184,7 +184,7 @@ export function ProductPane({
     <div className="space-y-5">
       {!hideSearch && (
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1" data-tour="pos-buscar">
             <PosSearch ref={searchRef} value={search} onChange={onSearch} onScan={onScan} />
           </div>
           {canFreeSale && (
@@ -210,14 +210,16 @@ export function ProductPane({
         </div>
       )}
       {showQuick && (
-        <QuickKeysGrid
-          keys={quickKeys}
-          title={quickKeysTitle}
-          minWidth={Math.max(130, min + 10)}
-          onTap={onPickProduct}
-          onQuickUnits={onQuickUnits}
-          onQuickWeight={onQuickWeight}
-        />
+        <div data-tour="pos-favoritos">
+          <QuickKeysGrid
+            keys={quickKeys}
+            title={quickKeysTitle}
+            minWidth={Math.max(130, min + 10)}
+            onTap={onPickProduct}
+            onQuickUnits={onQuickUnits}
+            onQuickWeight={onQuickWeight}
+          />
+        </div>
       )}
       {showFrequent && (
         <section aria-label="Frecuentes">

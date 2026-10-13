@@ -9,6 +9,7 @@ import {
   Package,
   Pencil,
   Plus,
+  RefreshCw,
   Store,
   UploadCloud,
   FileSpreadsheet,
@@ -30,6 +31,8 @@ import {
 import { CATALOG_ASSETS_BUCKET, type Catalog } from "@/modules/internal/catalogs";
 import { CatalogEditorModal } from "./CatalogEditorModal";
 import { CatalogGrantsModal } from "./CatalogGrantsModal";
+import { CatalogSyncCard } from "./CatalogSyncCard";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 
 const CATALOG_IMPORTS_BUCKET = "catalog-imports";
@@ -143,7 +146,7 @@ export function CatalogsManager() {
           <Store size={18} /> Tiendas de origen
         </Heading>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Cada hoja del Excel que sube NinjaSoft es una tienda. Los catálogos
+          Las tiendas llegan solas con la sincronización. Los catálogos
           vendibles se arman agrupando estas tiendas.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -306,15 +309,27 @@ export function CatalogsManager() {
         </div>
       </section>
 
-      {/* Importar Excel */}
+      {/* Sincronización con el catálogo (ADR-106) */}
       <section>
         <Heading as="h2" className="flex items-center gap-2 text-base">
-          <FileSpreadsheet size={18} /> Importar Excel de productos
+          <RefreshCw size={18} /> Sincronización con el catálogo
         </Heading>
-        <Card className="mt-3">
-          <CardContent className="space-y-4 p-5">
+        <CatalogSyncCard />
+
+        {/* Plan B si el feed está caído: Excel a mano por script */}
+        <Disclosure
+          className="mt-3"
+          icon={<FileSpreadsheet size={15} />}
+          title="Importar Excel manualmente"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Sólo si la sincronización no anda (por ejemplo, el scraper está
+              caído). Lo normal es no usarlo.
+            </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
+                variant="secondary"
                 loading={uploading}
                 onClick={() => fileRef.current?.click()}
               >
@@ -359,13 +374,12 @@ export function CatalogsManager() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   Hace UPSERT batcheado en <code>catalog_products</code> por
                   (tienda, EAN), actualiza el conteo por tienda y notifica a los
-                  negocios que compraron cada catálogo. El sample inicial ya está
-                  cargado para la demo.
+                  negocios que compraron cada catálogo.
                 </p>
               </div>
             </details>
-          </CardContent>
-        </Card>
+          </div>
+        </Disclosure>
       </section>
 
       <CatalogEditorModal

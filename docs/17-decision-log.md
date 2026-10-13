@@ -3793,3 +3793,38 @@ El dueño pidió que los pedidos de PedidosYa, Rappi y Uber Eats entren solos, c
 - Riesgos: el trigger del KDS corre en cada cambio de estado de cocina de un ítem de delivery (búsqueda por índice único); la anulación de una venta facturada desde la app no pide PIN (lo pide la plataforma, no una persona) y queda auditada; un pedido con ítems sin mapear no descuenta stock de esos ítems; la facturación automática de lo marcado por la app depende de que haya un tablero abierto en una caja de la sucursal.
 - **Pendiente:** adaptadores reales con payloads de staging (PedidosYa indirecto, Rappi, Uber Eats, MP Delivery), sync de menú y disponibilidad, pausar el local, liquidaciones reales y reporte de comisión efectiva, marca en el KDS, validar con el contador el tratamiento fiscal.
 - Tests: `tests/unit/deliveryChannels.test.ts` (firma, simulador, máquina de estados contra el SQL, backoff, reconciliación con ids estables, cola saliente, esqueletos, sugerencias de mapeo, migraciones); RLS `tests/integration/rls-canales-delivery.test.ts` (webhook duplicado sin duplicar pedido ni comanda, aceptar con comanda, lease y backoff, cobro en el turno del cajero con `plataforma` y sin caja, cancelación que anula la venta, auto-aceptar con anulación de comanda, cajero sin eventos crudos, otro negocio aislado y sin la feature). Cadena completa de migraciones sobre PGlite con humo de todo el flujo (incluida la nota de crédito encolada al cancelar un pedido facturado).
+
+---
+
+## ADR-106: Catálogo Tiendita sincronizado desde el feed del scraper en Railway (reemplaza el import por Excel)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-sync-railway`; migración `20261110500000_catalogo_sync_railway` sin aplicar; Edge `catalog_sync` sin desplegar; secrets sin setear) · **Base:** ADR-052 (`internal_scope()`), ADR-062 (patrón de cron interno con `X-Cron-Secret`), ADR-083 (`audit_logs`), ADR-090 (auditoría de rendimiento), ADR-093 (`catalog_search` sobre `catalog_products`).
+
+### Contexto
+
+El catálogo precargado se cargaba con un Excel gigante que el dueño bajaba del scraper y corría a mano con `scripts/import_catalog.cjs` (service key en su PC). El scraper ya corre en Railway todos los viernes y va sumando tiendas: el Excel era un paso manual, lento y fácil de olvidar, y las tiendas nuevas había que darlas de alta a mano.
+
+### Decisión
+
+1. **Feed de sólo lectura en el scraper** (`GET /api/feed/stores`, `GET /api/feed/products?super&since&cursor&limit`), con `Authorization: Bearer FEED_TOKEN` (sin la variable el feed no existe: 404), comparación en tiempo constante y montado antes del middleware de sesión. Paginación por keyset `(updated_at, key)` con cursor opaco: sin duplicados ni huecos aunque el scraper esté escribiendo. `products.updated_at` nueva en el SQLite del scraper, mantenida por triggers que sólo la mueven cuando cambia un campo publicado (cubre upsert, faltantes y "solo precios"). Contrato en el README del scraper.
+2. **Edge `catalog_sync` con tandas de ~100 s y continuación por cron**, no por auto-invocación: cada invocación toma la corrida con lease (170 s), responde 202 y trabaja en segundo plano, guarda el cursor por tienda en `catalog_sync_runs` después de cada página y al quedarse sin tiempo suelta el lease. El job `catalog-sync-continue` (cada minuto, sólo si `catalog_sync_any_due()`) la retoma. Si la invocación muere, el lease vence y se retoma igual: no hay una cadena de HTTP que se pueda perder. El job semanal (`0 9 * * 6`, sábado 06:00 AR) abre la corrida **en la base** antes del POST, así un POST perdido se recupera al minuto.
+3. **Misma semántica que el import por Excel**: upsert por `(store_key, ean)`, sin EAN o sin título no entra, `CATEGORIA` → `categoria_path`, `DISPONIBLE` → booleano, `estado`, `id_origen`; además `descripcion` y `atributos` (`"k: v | ..."` → `[{key, value}]`) y la mejor foto (Firebase si hay, si no la de la tienda). Las publicaciones de otros vendedores (`oferta_principal = false`) no entran. Varias publicaciones del mismo EAN: dentro de una corrida gana la misma publicación, la disponible o la más barata (determinístico).
+4. **Faltantes sin borrar**: lo que el feed manda como faltante queda no disponible; en una lectura **completa** de una tienda, lo que no vino (`feed_seen_at` anterior al inicio de la corrida) pasa a no disponible con `estado = FALTANTE_EN_FEED`.
+5. **Completa la primera vez, incremental después**: `since` por tienda = inicio de la última corrida terminada en la que esa tienda se leyó sin error, menos 1 h de margen por reloj. Una tienda nueva del feed se crea sola en `catalog_stores` (nombre y logo; no pisa el logo que subió el staff) y se lee completa.
+6. **Seguridad**: `catalog_sync_runs` sólo lectura para staff interno en el panel interno (`(select internal_scope())`, initplan, nunca `OR is_internal()`); sin escritura por REST. Las RPC de la sync son sólo de `service_role` (la Edge). El disparo manual exige JWT interno de nivel admin o super_admin y queda en `audit_logs` (dentro de `catalog_sync_enqueue`) antes de responder. El cron se autentica con `X-Cron-Secret`. `service_role` nunca llega al navegador. `notify_catalog_update` acepta llamadas server-side sin sesión, como `catalog_recount_products` (antes el import por script no podía avisar).
+7. **No es una función de plan** (el checklist de CLAUDE.md §6 no aplica): es operación de plataforma sobre datos globales; el acceso de cada negocio al catálogo sigue gateado por la compra (`tenant_catalog_purchases`).
+8. **Panel interno**: "Sincronización con el catálogo" reemplaza a "Importar Excel de productos" (estado de la última corrida por tienda, próxima automática, Sincronizar ahora con progreso por polling cada 4 s). El Excel queda plegado como plan B.
+
+### Alternativas descartadas
+
+- **Que la Edge se re-invoque sola al quedarse sin tiempo:** si ese POST falla la corrida queda colgada hasta que alguien la mire; el cron por minuto es el mismo patrón que NubCeo, ARCA y delivery.
+- **Paginación por offset del `/api/products` del panel del scraper:** inestable con el scraper escribiendo (saltea o repite filas) y requiere sesión de usuario.
+- **Usar `last_seen_at` del scraper como fecha de cambio:** cambia en cada corrida aunque nada cambie; la sync incremental bajaría todo cada semana.
+- **Que el scraper escriba directo en Supabase:** pondría una clave de servicio del POS en otro sistema y otro repo.
+
+### Consecuencias
+
+- Deploy: migración `20261110500000_catalogo_sync_railway` (después de `20261110400300`); Edge `catalog_sync` (verify_jwt = true, declarada en `config.toml`); secrets `CATALOG_FEED_URL` y `CATALOG_FEED_TOKEN`; en Railway, `FEED_TOKEN` y deploy del scraper con el feed. Guía: `docs/39-catalogo-sync.md`.
+- Volumen: una corrida completa de ~360k productos son ~360 páginas; a ~30 páginas por tanda, unas 12 tandas (~25 min). Las incrementales son mucho menores.
+- Riesgos: el reloj del scraper y el de Supabase se comparan en `since` (margen de 1 h); una publicación distinta del mismo EAN que cambia en una incremental puede no reemplazar a la anterior si es peor (se corrige con una corrida completa: `{ action: "start", full: true }`, sin botón todavía).
+- Tests: `tests/unit/catalogSync.test.ts` (mapeo feed a fila, dedupe por EAN, since por tienda, cursor, errores y presupuesto, próxima sync); RLS `tests/integration/rls-catalog-sync.test.ts`. En el scraper, `tests/feed.test.js` (auth, paginación sin duplicados ni huecos, `since`, backfill). Migración probada sobre PGlite con stubs del esquema (upsert, faltantes, finalize con aviso, lease, timeout).

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { catalogsApi, type CatalogInput } from "./catalogs";
+import { catalogSyncApi } from "./catalogSync";
 
 export function useCatalogStores() {
   return useQuery({
@@ -67,6 +68,27 @@ export function useRevokeCatalog() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["internal", "catalog-grants", v.catalogId] });
       qc.invalidateQueries({ queryKey: ["internal", "catalogs"] });
+    },
+  });
+}
+
+// Sincronización con el feed (ADR-106): mientras haya una corrida abierta se
+// consulta cada 4 s para mostrar el progreso.
+export function useCatalogSyncRuns() {
+  return useQuery({
+    queryKey: ["internal", "catalog-sync-runs"],
+    queryFn: () => catalogSyncApi.listRuns(5),
+    refetchInterval: (query) =>
+      query.state.data?.[0]?.status === "running" ? 4000 : false,
+  });
+}
+
+export function useStartCatalogSync() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (full: boolean) => catalogSyncApi.start(full),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "catalog-sync-runs"] });
     },
   });
 }

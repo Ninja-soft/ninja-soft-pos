@@ -101,3 +101,55 @@ describe("branchAlerts", () => {
     expect(branchAlerts(quiet, NOW, { noSaleMinutes: 60 }).map((x) => x.kind)).toEqual(["no_sales_in_hours"]);
   });
 });
+
+describe("H99: señal de las cajas y último cobro de las terminales (ADR-080)", () => {
+  const reg = (p: Record<string, unknown> = {}) => ({
+    id: "r1",
+    name: "Caja 2",
+    last_ping_at: ago(1) as string | null,
+    app_version: null,
+    info: null,
+    user_name: "Ana",
+    shift_open: true,
+    ...p,
+  });
+
+  it("caja abierta sin señal hace más del umbral avisa", () => {
+    const r = row({ registers: [reg({ last_ping_at: ago(12) })] });
+    const kinds = branchAlerts(r, NOW).map((x) => x.kind);
+    expect(kinds).toContain("register_silent");
+    expect(branchAlerts(r, NOW).find((x) => x.kind === "register_silent")?.message).toMatch(/Caja 2/);
+    expect(branchAlerts(r, NOW, { registerStaleMinutes: 30 }).map((x) => x.kind)).not.toContain("register_silent");
+  });
+
+  it("no avisa con señal reciente, caja cerrada o caja que nunca mandó señal", () => {
+    for (const p of [{ last_ping_at: ago(2) }, { shift_open: false, last_ping_at: ago(60) }, { last_ping_at: null }]) {
+      expect(branchAlerts(row({ registers: [reg(p)] }), NOW).map((x) => x.kind)).not.toContain("register_silent");
+    }
+  });
+
+  it("base vieja sin registers no rompe", () => {
+    const r = row();
+    delete (r as { registers?: unknown }).registers;
+    expect(branchAlerts(r, NOW)).toEqual([]);
+  });
+
+  it("último cobro rechazado en la última hora avisa", () => {
+    const t = (status: string, min: number) => ({
+      id: "t1",
+      label: "Point Centro",
+      provider_key: "mercadopago",
+      kind: "point",
+      last_seen_at: ago(1),
+      register_id: null,
+      last_charge: { at: ago(min), status, amount: 100 },
+    });
+    expect(branchAlerts(row({ terminals: [t("rejected", 10)] }), NOW).map((x) => x.kind)).toContain("terminal_rejected");
+    expect(branchAlerts(row({ terminals: [t("rejected", 90)] }), NOW).map((x) => x.kind)).not.toContain(
+      "terminal_rejected",
+    );
+    expect(branchAlerts(row({ terminals: [t("approved", 5)] }), NOW).map((x) => x.kind)).not.toContain(
+      "terminal_rejected",
+    );
+  });
+});

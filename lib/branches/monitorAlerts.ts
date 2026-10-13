@@ -7,12 +7,16 @@
 // evalúa en la hora de Argentina, no en la del navegador.
 // =============================================================================
 
+import { registerSignal, type HeartbeatInfo } from "./heartbeat";
+
 export type WeekDayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 export type OpeningHoursMap = Partial<Record<WeekDayKey, { from: string; to: string }[]>>;
 
 export interface OverviewShift {
   shift_id: string;
   register_name: string;
+  /** Caja del turno (desde 20261105100200; antes no venía). */
+  register_id?: string | null;
   opened_at: string;
   opened_by_name: string;
 }
@@ -24,6 +28,21 @@ export interface OverviewTerminal {
   kind: string;
   last_seen_at: string | null;
   register_id: string | null;
+  /** Último cobro aprobado o rechazado (H99 · ADR-080). */
+  last_charge?: { at: string; status: "approved" | "rejected" | string; amount: number | null } | null;
+}
+
+/** Caja viva con su última señal (H99 · ADR-080). */
+export interface OverviewRegister {
+  id: string;
+  name: string;
+  last_ping_at: string | null;
+  app_version: string | null;
+  info: HeartbeatInfo | null;
+  user_name: string | null;
+  shift_open: boolean;
+  /** Última venta de hoy en esa caja. */
+  last_sale_at?: string | null;
 }
 
 export interface BranchOverview {
@@ -47,7 +66,9 @@ export interface BranchOverview {
   pending_waiting_amount: number;
   pending_paid_unsold: number;
   terminals: OverviewTerminal[];
-  last_z: { closed_at: string; difference: number; z_number: number } | null;
+  /** Cajas con su señal (desde 20261105100200; una base vieja no lo manda). */
+  registers?: OverviewRegister[];
+  last_z: { closed_at: string; difference: number; z_number: number; store_z_number?: number | null } | null;
   close_tolerance: number;
 }
 
@@ -57,6 +78,8 @@ export type AlertKind =
   | "closed_in_hours"
   | "paid_unsold"
   | "terminal_stale"
+  | "register_silent"
+  | "terminal_rejected"
   | "z_difference"
   | "no_sales_in_hours"
   | "low_stock";
@@ -74,12 +97,15 @@ export interface MonitorThresholds {
   terminalStaleMinutes: number;
   /** Sin ventas hace más de N minutos estando en horario y con caja abierta (0 = no avisar). */
   noSaleMinutes: number;
+  /** Caja con turno abierto sin señal hace más de N minutos (H99). */
+  registerStaleMinutes: number;
 }
 
 export const DEFAULT_THRESHOLDS: MonitorThresholds = {
   longShiftHours: 12,
   terminalStaleMinutes: 30,
   noSaleMinutes: 0,
+  registerStaleMinutes: 5,
 };
 
 const DAY_KEYS: WeekDayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -161,6 +187,34 @@ export function branchAlerts(
           .join(", ")}`,
       });
     }
+  }
+
+  // H99: una caja con turno abierto que dejó de mandar señal (equipo apagado,
+  // sin internet o la pestaña del POS cerrada). Sólo cajas que alguna vez
+  // mandaron señal: una base o un POS viejos no generan falsas alarmas.
+  const silent = (row.registers ?? []).filter(
+    (r) => r.shift_open && r.last_ping_at && registerSignal(r.last_ping_at, now, t.registerStaleMinutes) === "stale",
+  );
+  if (silent.length > 0) {
+    out.push({
+      kind: "register_silent",
+      severity: "warning",
+      message: `${silent.length === 1 ? "Caja abierta" : "Cajas abiertas"} sin señal hace más de ${t.registerStaleMinutes} min: ${silent
+        .map((r) => r.name)
+        .join(", ")}`,
+    });
+  }
+
+  // H99: el último cobro de la terminal fue rechazado (en la última hora).
+  const rejected = row.terminals.filter(
+    (x) => x.last_charge?.status === "rejected" && minutesSince(x.last_charge.at, now) <= 60,
+  );
+  if (rejected.length > 0) {
+    out.push({
+      kind: "terminal_rejected",
+      severity: "info",
+      message: `Último cobro rechazado en: ${rejected.map((x) => x.label).join(", ")}`,
+    });
   }
 
   if (row.last_z && Math.abs(Number(row.last_z.difference) || 0) > Math.max(0, Number(row.close_tolerance) || 0)) {

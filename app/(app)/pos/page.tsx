@@ -31,6 +31,7 @@ import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, othe
 import { formatQty } from "@/lib/utils/format";
 import { branchErrorMessage, liveRegisters, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
+import { useRegisterHeartbeat } from "@/modules/branches/heartbeat";
 import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
 import {
   usePosBootSnapshot,
@@ -301,6 +302,8 @@ function PosPageInner() {
   }, [categories, categoryFilter]);
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
+  // F17 · H99: señal de esta caja para el monitor de sucursales.
+  useRegisterHeartbeat(register?.id ?? null, shift?.id ?? null);
   const { open, close } = usePosMutations();
   const { data: myTenant, isFetched: myTenantFetched } = useMyTenant();
   // Rubro y rol cambian piezas visibles (frecuentes, venta libre): hasta que

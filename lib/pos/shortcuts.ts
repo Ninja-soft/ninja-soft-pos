@@ -11,12 +11,17 @@
 //   * "?" abre la ayuda sólo si el foco NO está en un campo de texto (si no,
 //     escribir "?" en una búsqueda la abriría).
 //   * Un lector USB tipea dígitos y Enter: ningún atajo usa esas teclas.
+//   * ADR-106: Pausar venta = Shift + F8 (al lado de F8, cobros en espera) o
+//     la tecla Pausa; Limpiar = Shift + F4. Shift no lo usa el navegador con
+//     esas teclas. Shift con cualquier otra tecla de función no dispara nada.
 
 export type PosShortcutAction =
   | "search"
   | "checkout"
   | "customer"
   | "pending"
+  | "pause"
+  | "clear"
   | "help";
 
 export interface PosShortcut {
@@ -43,6 +48,18 @@ export const POS_SHORTCUTS: PosShortcut[] = [
     hint: "Si tu plan los incluye.",
   },
   {
+    action: "pause",
+    keys: ["Shift + F8", "Pausa"],
+    label: "Pausar la venta",
+    hint: "Guarda la venta con sus pagos y deja el POS libre. También desde la hoja de cobro.",
+  },
+  {
+    action: "clear",
+    keys: ["Shift + F4"],
+    label: "Limpiar la venta",
+    hint: "Pide confirmación (otra vez Shift + F4 o Enter) y se puede deshacer unos segundos.",
+  },
+  {
     action: "checkout",
     keys: ["F9", "F12"],
     label: "Cobrar",
@@ -63,6 +80,11 @@ export const POS_PASSIVE_SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ["Tab", "Shift + Tab"], label: "Moverse entre botones y campos" },
 ];
 
+const SHIFT_KEYS: Record<string, PosShortcutAction> = {
+  F8: "pause",
+  F4: "clear",
+};
+
 const F_KEYS: Record<string, PosShortcutAction> = {
   F2: "search",
   F4: "customer",
@@ -73,6 +95,7 @@ const F_KEYS: Record<string, PosShortcutAction> = {
 
 export interface KeyLike {
   key: string;
+  shiftKey?: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
   altKey?: boolean;
@@ -115,8 +138,17 @@ export function matchPosShortcut(
   target?: TargetLike | null,
 ): PosShortcutAction | null {
   if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return null;
+  if (e.key === "Pause") return "pause";
+  if (e.shiftKey) return SHIFT_KEYS[e.key] ?? null;
   const f = F_KEYS[e.key];
   if (f) return f;
   if (e.key === "?" && !isTypingTarget(target)) return "help";
   return null;
+}
+
+/** Tecla del catálogo ("Shift + F8", "Pausa", "F9") como evento de teclado. */
+export function shortcutLabelToKey(label: string): KeyLike {
+  const shift = /^shift\s*\+\s*/i.test(label);
+  const key = label.replace(/^shift\s*\+\s*/i, "").trim();
+  return { key: key === "Pausa" ? "Pause" : key, shiftKey: shift };
 }

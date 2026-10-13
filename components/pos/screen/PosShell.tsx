@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronUp, LayoutGrid, ShoppingBag, Trash2, Utensils } from "lucide-react";
+import { ChevronUp, LayoutGrid, ShoppingBag, Utensils } from "lucide-react";
 import type { PosLayout } from "@/lib/pos/layout";
 import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
@@ -33,7 +33,6 @@ export interface PosShellProps {
   total: number;
   canCheckout: boolean;
   onCheckout: () => void;
-  onClear: () => void;
   /** Caja rápida: el ticket va al centro y la columna derecha es el cobro. */
   linesInCenter?: boolean;
   /** Teclado (Caja rápida). */
@@ -47,50 +46,15 @@ export function PosShell(p: PosShellProps) {
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"products" | "cart">("products");
   const [salonTab, setSalonTab] = useState<"carta" | "mesas">("carta");
-  const [confirmClear, setConfirmClear] = useState(false);
   const tabs = layout.mobileCart === "tabs";
   const left = layout.cartSide === "left";
   useEffect(() => {
     if (p.checkoutOpen) setCartOpen(false);
   }, [p.checkoutOpen]);
-
-  // Vaciar con confirmación en línea (sin confirm del navegador).
-  const clearBlock = p.itemCount > 0 && (
-    <div className="relative">
-      {confirmClear ? (
-        <div className="flex items-center gap-1">
-          <span className="pr-1 text-xs font-medium text-muted-foreground">¿Vaciar?</span>
-          <button
-            type="button"
-            onClick={() => setConfirmClear(false)}
-            className="h-8 rounded-md bg-fg-6 px-2.5 text-xs font-semibold transition-colors hover:bg-fg-10"
-          >
-            No
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmClear(false);
-              p.onClear();
-            }}
-            className="h-8 rounded-md bg-danger/15 px-2.5 text-xs font-semibold text-danger transition-colors hover:bg-danger/20"
-          >
-            Vaciar
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirmClear(true)}
-          className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-danger/15 hover:text-danger"
-          aria-label="Vaciar carrito"
-          title="Vaciar carrito"
-        >
-          <Trash2 size={16} aria-hidden />
-        </button>
-      )}
-    </div>
-  );
+  // Venta pausada o limpiada (ADR-106): el POS queda listo para el siguiente.
+  useEffect(() => {
+    if (p.itemCount === 0) setCartOpen(false);
+  }, [p.itemCount]);
 
   const cartHeader = (
     <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
@@ -102,7 +66,6 @@ export function PosShell(p: PosShellProps) {
           </span>
         )}
       </p>
-      {clearBlock}
     </div>
   );
 

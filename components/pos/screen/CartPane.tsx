@@ -287,6 +287,8 @@ export interface CartSummaryProps {
   warrantySlot?: React.ReactNode;
   /** Lista y condición de pago (ADR-058). */
   priceSlot?: React.ReactNode;
+  /** Pausar y Limpiar la venta en curso (ADR-106). */
+  actionsSlot?: React.ReactNode;
   compact?: boolean;
 }
 
@@ -476,6 +478,8 @@ export function CartSummary(p: CartSummaryProps) {
           </span>
         </div>
       </div>
+
+      {p.actionsSlot}
 
       {/* Cobro */}
       {p.hasShift ? (

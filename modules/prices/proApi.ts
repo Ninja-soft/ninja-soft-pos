@@ -79,6 +79,8 @@ export type ProListInput = {
   valid_from?: string | null;
   valid_to?: string | null;
   pos_selectable?: boolean;
+  /** ADR-068: false = precios netos (sin IVA). */
+  prices_include_tax?: boolean;
   notes?: string | null;
 };
 

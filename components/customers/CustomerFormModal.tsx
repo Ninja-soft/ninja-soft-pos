@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { DniScanModal } from "@/components/customers/DniScanModal";
 import { CustomerPricingFields } from "@/components/customers/CustomerPricingFields";
+import { CustomerFiscalFields } from "@/components/customers/CustomerFiscalFields";
 import type { ParsedDni } from "@/lib/customers/dniParse";
 import {
   CustomerSchema,
@@ -54,6 +55,7 @@ export function CustomerFormModal({
     handleSubmit,
     reset,
     setValue,
+    watch,
     setError,
     formState: { errors },
   } = useForm<CustomerInput>({ resolver: zodResolver(CustomerSchema) });
@@ -96,6 +98,9 @@ export function CustomerFormModal({
         document_type: (customer?.document_type as CustomerInput["document_type"]) ?? undefined,
         document_number: customer?.document_number ?? "",
         iva_condition: (customer?.iva_condition as CustomerInput["iva_condition"]) ?? undefined,
+        // ADR-068: aún no está en el tipo Customer (no se regeneran tipos).
+        iibb_jurisdiction:
+          (customer as unknown as { iibb_jurisdiction?: string | null } | null)?.iibb_jurisdiction ?? "",
         email: customer?.email ?? "",
         phone: customer?.phone ?? "",
         address: customer?.address ?? "",
@@ -223,6 +228,15 @@ export function CustomerFormModal({
             ))}
           </select>
         </div>
+        <CustomerFiscalFields
+          customerId={customer?.id ?? null}
+          docType={watch("document_type")}
+          docNumber={watch("document_number")}
+          ivaCondition={watch("iva_condition")}
+          jurisdiction={watch("iibb_jurisdiction")}
+          onJurisdiction={(v) => setValue("iibb_jurisdiction", v, { shouldDirty: true })}
+          selectCls={selectCls}
+        />
         <div className="grid grid-cols-2 gap-3">
           <Input
             label={`Email${star("email")}`}

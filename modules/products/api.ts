@@ -205,6 +205,54 @@ export const productsApi = {
     return { product: data as unknown as Product };
   },
 
+  // Todas las coincidencias EXACTAS de un código (variantes por barcode/sku y
+  // productos por barcode/sku/PLU). La usa el buscador reutilizable
+  // (ProductSearchCombobox): una sola coincidencia se agrega directo; varias se
+  // muestran en la lista para elegir. findByCode sigue devolviendo la primera.
+  findAllByCode: async (
+    code: string,
+    limit = 10,
+  ): Promise<{ product: Product; variant?: ProductVariant }[]> => {
+    const c = code.trim();
+    if (!/^[A-Za-z0-9._\-]+$/.test(c)) return [];
+    const supabase = createClient();
+    const out: { product: Product; variant?: ProductVariant }[] = [];
+
+    const { data: variants, error: vErr } = await supabase
+      .from("product_variants")
+      .select("*")
+      .is("deleted_at", null)
+      .or(`barcode.eq.${c},sku.eq.${c}`)
+      .limit(limit);
+    if (vErr) throw vErr;
+    const vRows = (variants ?? []) as unknown as ProductVariant[];
+    if (vRows.length > 0) {
+      const { data: parents, error: pErr } = await supabase
+        .from("products")
+        .select("*, categories(name)")
+        .is("deleted_at", null)
+        .in("id", [...new Set(vRows.map((v) => v.product_id))]);
+      if (pErr) throw pErr;
+      const byId = new Map(((parents ?? []) as unknown as Product[]).map((p) => [p.id, p]));
+      for (const v of vRows) {
+        const p = byId.get(v.product_id);
+        if (p) out.push({ product: p, variant: v });
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, categories(name)")
+      .is("deleted_at", null)
+      .or(`barcode.eq.${c},sku.eq.${c},plu.eq.${c}`)
+      .limit(limit);
+    if (error) throw error;
+    for (const p of (data ?? []) as unknown as Product[]) {
+      if (!out.some((r) => r.product.id === p.id && !r.variant)) out.push({ product: p });
+    }
+    return out;
+  },
+
   // Producto de una etiqueta de balanza (ADR-063): el código embebido se
   // busca como PLU (tal cual, sin ceros o a 6 dígitos) o como SKU.
   findByScaleCode: async (candidates: string[]): Promise<Product | null> => {

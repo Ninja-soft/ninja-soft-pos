@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ProductSearchCombobox } from "@/components/products/ProductSearchCombobox";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
@@ -19,10 +20,12 @@ import {
   type WarehouseMoveReason,
   type WarehouseOverviewRow,
 } from "@/lib/stock/warehouses";
-import { variantsApi, variantLabel, type Product, type ProductVariant } from "@/modules/products/api";
-import { useProducts } from "@/modules/products/hooks";
+import { variantLabel, type Product, type ProductVariant } from "@/modules/products/api";
 import { useWarehouseMutations } from "@/modules/stock/warehouses";
 import { selectCls } from "@/components/stock/transfers/shared";
+
+// Se mueven productos con stock controlado y que no son kits.
+const movable = (p: Product) => p.track_stock !== false && !p.is_kit;
 
 export interface MoveLine {
   key: string;
@@ -64,8 +67,6 @@ export function WarehouseMoveModal({
   const [notes, setNotes] = useState("");
   const [receiveNow, setReceiveNow] = useState(true);
   const [lines, setLines] = useState<MoveLine[]>([]);
-  const [search, setSearch] = useState("");
-  const [variantsOf, setVariantsOf] = useState<{ product: Product; variants: ProductVariant[] } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -77,15 +78,7 @@ export function WarehouseMoveModal({
     setReceiveNow(initial?.receiveNow ?? true);
     setLines(initial?.lines ?? []);
     setNotes("");
-    setSearch("");
-    setVariantsOf(null);
   }, [open, initial, warehouses]);
-
-  const { data: found = [] } = useProducts(open ? search : "");
-  const results = useMemo(
-    () => (search.trim().length >= 2 ? found.filter((p) => p.track_stock !== false && !p.is_kit).slice(0, 8) : []),
-    [found, search],
-  );
 
   const originWh = warehouses.find((w) => w.id === origin);
   const available = (l: MoveLine) => {
@@ -107,15 +100,6 @@ export function WarehouseMoveModal({
         { key, product_id: p.id, variant_id: v?.id ?? null, name: v ? `${p.name} (${variantLabel(v)})` : p.name, qty: 1 },
       ];
     });
-  }
-
-  async function pick(p: Product) {
-    if (p.has_variants) {
-      setVariantsOf({ product: p, variants: await variantsApi.list(p.id) });
-      return;
-    }
-    addLine(p);
-    setSearch("");
   }
 
   function setQty(key: string, qty: number) {
@@ -207,55 +191,14 @@ export function WarehouseMoveModal({
           </span>
         </label>
 
-        <div>
-          <div className="relative">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar producto por nombre, SKU o código"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          {variantsOf ? (
-            <div className="mt-2 space-y-1">
-              <p className="text-xs text-muted-foreground">Elegí la variante de {variantsOf.product.name}</p>
-              <div className="flex flex-wrap gap-2">
-                {variantsOf.variants.map((v) => (
-                  <Button
-                    key={v.id}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      addLine(variantsOf.product, v);
-                      setVariantsOf(null);
-                      setSearch("");
-                    }}
-                  >
-                    {variantLabel(v)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            results.length > 0 && (
-              <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-                {results.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => void pick(p)}
-                      className="flex min-h-11 w-full items-center justify-between px-3 text-left text-sm hover:bg-muted/50"
-                    >
-                      <span className="truncate">{p.name}</span>
-                      <span className="text-xs text-muted-foreground">{p.sku}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )
-          )}
-        </div>
+        <ProductSearchCombobox
+          enabled={open}
+          filter={movable}
+          rejectMessage={(p) => `${p.name} no se mueve entre depósitos (kit o sin control de stock)`}
+          emptyHint="Los kits y los productos sin control de stock no se mueven."
+          placeholder="Buscar producto por nombre, SKU, EAN o PLU"
+          onPick={(p, v) => addLine(p, v)}
+        />
 
         {lines.length > 0 && (
           <ul className="divide-y divide-border">

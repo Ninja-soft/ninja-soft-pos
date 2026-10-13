@@ -1,0 +1,190 @@
+[
+  {
+    "id": "productos-alta",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cargar y editar productos",
+    "summary": "Alta de productos con precio, costo, stock y códigos desde Productos. Sólo el dueño o un encargado.",
+    "module": "catalogo",
+    "routes": ["/productos"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["nuevo producto", "cargar producto", "editar precio", "codigo de barras", "dar de baja un producto"],
+    "tags": ["catalogo", "precio", "variantes"],
+    "steps": [
+      "Entrá a Productos y tocá \"Nuevo producto\".",
+      "En General cargá el Nombre y, si querés, marca y categoría (podés crear una nueva ahí mismo).",
+      "En Precios cargá \"Costo\" y \"Precio de venta\" (final, con IVA). Si escribís un \"Margen %\", el precio se recalcula.",
+      "En Stock elegí si \"Controla stock\", el \"Stock inicial\" y el \"Stock mínimo\".",
+      "En Códigos cargá el SKU y el \"Código de barras (EAN)\" para venderlo con el lector.",
+      "Tocá \"Crear producto\". Después podés subir fotos en la pestaña Fotos.",
+      "Para editar, buscalo por nombre, SKU o código y tocá \"Editar\". Para darlo de baja, \"Eliminar\" (es una baja lógica y se puede recuperar)."
+    ],
+    "roleNotes": {
+      "cashier": "Podés buscar y consultar productos, pero cargarlos o cambiar precios lo hace el dueño o un encargado.",
+      "viewer": "Tu usuario es de solo lectura: podés consultar, no modificar.",
+      "owner": "Talles y colores: en la pestaña Más activá \"Tiene variantes (talle / color)\" (plan Pro). El producto tiene que estar guardado antes."
+    },
+    "errors": [
+      { "problem": "\"Requiere encargado o dueño\"", "fix": "Tu rol no puede cambiar el catálogo. Pedíselo al encargado." },
+      { "problem": "\"Revisá los datos marcados\"", "fix": "Hay campos obligatorios vacíos o con formato inválido, marcados en rojo." }
+    ],
+    "tips": [
+      "La estrella marca el producto como favorito: queda como botón rápido en el POS.",
+      "Si tenés muchos productos, importalos desde Excel."
+    ],
+    "feature": "productos",
+    "related": ["productos-importar-excel", "stock-ajustes", "precios-listas"]
+  },
+  {
+    "id": "productos-importar-excel",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Importar productos desde Excel",
+    "summary": "Subí una planilla XLSX, revisá qué se crea y qué se actualiza antes de guardar, y confirmá.",
+    "module": "catalogo",
+    "routes": ["/productos", "/importaciones"],
+    "roles": ["owner", "manager"],
+    "keywords": ["importar excel", "carga masiva", "subir planilla", "plantilla xlsx", "actualizar precios desde excel"],
+    "tags": ["xlsx", "importacion"],
+    "steps": [
+      "Entrá a Productos y tocá \"Importar XLSX\" (o a Importar y exportar, Productos, \"Importar\").",
+      "Tocá \"Descargar plantilla XLSX\" y completala. Obligatorias: Nombre y Precio. Opcionales: código de barras, SKU, costo, categoría, marca, IVA %, unidad, stock, stock mínimo, controla stock.",
+      "Subí el archivo en \"Elegí tu archivo .xlsx\".",
+      "En Revisar vas a ver cada fila como Crear, Actualizar, Omitir o Error. Todavía no se guardó nada. Podés \"Descargar errores (XLSX)\" para corregirlos.",
+      "Tocá \"Continuar\" y después \"Importar N filas\"."
+    ],
+    "roleNotes": {
+      "manager": "La importación queda en la auditoría con tu usuario y el nombre del archivo.",
+      "owner": "Requiere la función Importación Excel (plan Pro)."
+    },
+    "errors": [
+      { "problem": "Una fila sale con error", "fix": "Las demás filas se importan igual. Corregí las de error en el archivo descargado y subilo de nuevo." },
+      { "problem": "El stock no cambió en productos existentes", "fix": "Es a propósito: la columna Stock sólo se usa al crear. Para corregir stock usá Ajustar stock." }
+    ],
+    "tips": [
+      "Si el SKU (o el código de barras) ya existe, se actualiza ese producto; si no, se crea uno nuevo.",
+      "Las categorías y marcas que no existen se crean solas."
+    ],
+    "feature": "importacion_excel",
+    "related": ["productos-alta", "stock-ajustes"]
+  },
+  {
+    "id": "stock-ajustes",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Ajustar stock y registrar merma",
+    "summary": "Corregí el stock de un producto con un motivo o registrá lo que se perdió (vencido, roto). Dueño o encargado.",
+    "module": "stock",
+    "routes": ["/productos"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["ajustar stock", "corregir stock", "merma", "producto vencido", "conteo de inventario"],
+    "tags": ["inventario"],
+    "steps": [
+      "En Productos, buscá el producto y tocá \"Ajustar stock\".",
+      "Cargá la cantidad (positiva si entra, negativa si sale) y elegí el motivo: Compra, Ajuste manual, Merma, Devolución o Transferencia. Con varias sucursales elegí la sucursal y si es \"Ingreso o egreso\" o \"Conteo (dejar en)\".",
+      "Tocá \"Ajustar\". Vas a ver \"Stock ajustado\" con el stock nuevo.",
+      "Para pérdidas usá \"Registrar merma\": cantidad perdida y motivo (Vencido, Roto / dañado, Preparación fallida, Devolución (descarte), Otro).",
+      "En \"Historial de stock\" ves cada movimiento con su motivo."
+    ],
+    "roleNotes": {
+      "cashier": "Ajustar stock y registrar merma es del dueño o del encargado. Si ves una diferencia, avisales.",
+      "viewer": "Podés ver el historial, no ajustar."
+    },
+    "errors": [
+      { "problem": "\"Requiere encargado o dueño\"", "fix": "Tu rol no puede ajustar stock." }
+    ],
+    "tips": ["El modo \"Conteo (dejar en)\" sirve después de contar la góndola: deja el stock en el número que contaste."],
+    "feature": "stock",
+    "related": ["stock-traslados", "productos-alta"]
+  },
+  {
+    "id": "stock-traslados",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Traslados de mercadería entre sucursales",
+    "summary": "Armá un traslado, despachalo (sale del stock de origen y queda en camino) y recibilo en destino con las diferencias.",
+    "module": "stock",
+    "routes": ["/traslados"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["traslado", "transferir stock", "mandar mercaderia a otra sucursal", "recibir traslado", "en transito"],
+    "tags": ["sucursales", "inventario"],
+    "steps": [
+      "Entrá a Traslados y tocá \"Nuevo traslado\".",
+      "Ruta: elegí \"Sale de\" y \"Llega a\", y cuándo sale (\"Ahora\" o \"Programar fecha\").",
+      "Productos: sumá los productos y cantidades. Revisar: controlá y tocá \"Confirmar y despachar\" (o \"Guardar borrador\" o \"Enviar a aprobación\" si el negocio pide aprobación).",
+      "Al despachar, el stock se descuenta del origen y el traslado queda \"En tránsito\".",
+      "En destino, abrí el traslado y tocá \"Recibir\": cargá lo que llegó y, si falta o sobra, el motivo (Faltante, Dañado, Vencido, Error de despacho, Sobrante, Otro). Después \"Registrar recepción\"."
+    ],
+    "roleNotes": {
+      "cashier": "Podés recibir traslados si el negocio lo permite (viene permitido). Despachar sólo si el dueño activó \"El cajero puede despachar\".",
+      "manager": "Armás, confirmás y despachás. Un traslado que pide aprobación lo aprueba el dueño u otro encargado distinto de quien lo armó.",
+      "owner": "En \"Configuración\" de traslados definís aprobación por unidades o valor, motivo obligatorio en diferencias y si se puede despachar sin stock. Requiere plan Business y al menos dos sucursales.",
+      "viewer": "Podés ver traslados y el reporte En tránsito."
+    },
+    "errors": [
+      { "problem": "\"No hay stock suficiente en el origen para despachar.\"", "fix": "Ajustá las cantidades o cargá el stock en la sucursal de origen." },
+      { "problem": "\"Indicá el motivo de cada diferencia.\"", "fix": "Cada línea recibida con una cantidad distinta necesita motivo." },
+      { "problem": "\"Los kits no se trasladan: trasladá sus componentes.\"", "fix": "Sumá los productos que forman el kit." }
+    ],
+    "tips": ["Si cancelás un traslado en tránsito, el stock vuelve al origen."],
+    "feature": "traslados",
+    "related": ["stock-ajustes", "sucursales"]
+  },
+  {
+    "id": "precios-listas",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Listas de precios (mayorista, por sucursal, por cliente)",
+    "summary": "Creá listas con un ajuste sobre el precio de venta y usalas por cliente, sucursal o eligiéndolas en el POS.",
+    "module": "precios",
+    "routes": ["/configuracion", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["lista de precios", "precio mayorista", "precio por cliente", "precio por sucursal"],
+    "tags": ["precios"],
+    "steps": [
+      "Entrá a Configuración, Listas de precios y tocá \"Nueva lista\".",
+      "Poné el nombre, el canal (Mostrador, Catálogo público, Mayorista o Personalizada) y el \"Ajuste % sobre el precio de venta\".",
+      "Si querés, vigencia (\"Vigente desde\" y \"Vigente hasta\") y dónde se usa: por grupo de clientes y por sucursal.",
+      "Activá \"Elegible en el POS\" para que el cajero pueda cobrar con esa lista.",
+      "En el POS aparece el chip \"Lista de precios\": \"Automática\" usa el orden lista elegida, cliente, grupo, sucursal, mostrador."
+    ],
+    "roleNotes": {
+      "cashier": "Sólo podés elegir en el carrito las listas marcadas como \"Elegible en el POS\". Crear o cambiar listas es del dueño o el encargado.",
+      "owner": "Listas de precios es del plan Business. El modo Profesional suma listas derivadas, sobre costo, en moneda extranjera, redondeo y aprobación de cambios masivos."
+    },
+    "errors": [],
+    "tips": ["\"Precios por producto\" en cada lista te deja fijar precios puntuales."],
+    "feature": "listas_precios",
+    "related": ["promociones", "productos-alta"]
+  },
+  {
+    "id": "promociones",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Promociones: 2x1, segunda unidad, combos y descuentos",
+    "summary": "Creá promociones que el POS aplica solo al cobrar, con vigencia, días, horario y medio de pago.",
+    "module": "precios",
+    "routes": ["/configuracion", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["crear promocion", "2x1", "segunda unidad", "combo", "descuento con tarjeta", "promo bancaria"],
+    "tags": ["descuentos", "ofertas"],
+    "steps": [
+      "Entrá a Configuración, Promociones y cupones, y tocá \"Nueva promoción\".",
+      "Paso 1: elegí el tipo (porcentaje, lleva y paga menos, segunda unidad con descuento, por cantidad, combo a precio fijo, por medio de pago o banco, monto fijo, precio fijo por el total o regalo por compra).",
+      "Paso 2: qué descuenta y sobre qué (toda la compra, categorías, productos o marcas).",
+      "Paso 3: cuándo y cómo se paga: vigencia, días, horario, compra mínima, medio de pago, tarjetas, bancos y sucursales.",
+      "Paso 4: nombre, \"Texto en el ticket\", prioridad, topes y si es combinable. Guardá.",
+      "Usá \"Simular\" para probarla antes. Con el switch la pausás o activás."
+    ],
+    "roleNotes": {
+      "cashier": "No tenés que hacer nada: el POS aplica las promociones solo y cada una aparece en su línea y en el ticket. Si la promo depende del banco, el cobro te lo pregunta.",
+      "owner": "Promociones es del plan Pro. \"No, es excluyente\" compite con las demás y queda la mejor para el cliente; \"Sí, es acumulable\" se suma a otras acumulables."
+    },
+    "errors": [
+      { "problem": "\"No tenés permiso para guardar esta promoción\"", "fix": "Un encargado sólo maneja promociones de sus sucursales. Pedile al dueño que la cree." }
+    ],
+    "tips": ["El servidor recalcula las promociones al cobrar: lo que ves en el carrito es lo que se cobra."],
+    "feature": "promociones",
+    "related": ["precios-listas", "pos-cobrar-venta"]
+  }
+]

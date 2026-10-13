@@ -1,0 +1,142 @@
+[
+  {
+    "id": "mesas-comandas",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Mesas y comandas",
+    "summary": "Abrí una mesa, cargá el pedido, mandá la comanda a cocina, mové o uní mesas y cobrá desde el salón.",
+    "module": "gastronomia",
+    "routes": ["/salon", "/reservas", "/kds"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["abrir mesa", "comanda", "mandar a cocina", "mover mesa", "unir mesas", "cobrar mesa", "kds"],
+    "tags": ["salon", "cocina", "mozo"],
+    "steps": [
+      "Entrá a Salón y tocá una mesa libre (\"Tocá para abrir\").",
+      "Tocá \"Agregar ítem\" para cargar el pedido y elegí el mozo.",
+      "Tocá \"Imprimir comanda\" (\"Sólo lo nuevo\" o \"Reimprimir todo\") o \"Disparar todo a cocina\". La cocina lo ve en \"Cocina (KDS)\".",
+      "Para cambiar de mesa o juntar cuentas usá \"Mover / unir\": toda la mesa o algunos ítems.",
+      "Cuando piden la cuenta, marcá \"Cuenta pedida\" y después \"Cobrar mesa\": te lleva al POS con el pedido cargado."
+    ],
+    "roleNotes": {
+      "cashier": "Un ítem que ya está en cocina no se borra: se anula con un motivo (\"Anular ítem enviado\").",
+      "owner": "El modo gastronómico se activa en Configuración, Operación y productos, \"Activar modo gastronómico (salones y mesas)\". Es gratis. Las mesas se cargan en Salones y mesas."
+    },
+    "errors": [
+      { "problem": "\"El ítem ya está en cocina: anulalo con un motivo\"", "fix": "Usá \"Anular ítem enviado\" y escribí el motivo." },
+      { "problem": "\"La mesa destino está reservada\" o \"bloqueada\"", "fix": "Elegí otra mesa. Las reservas se sientan desde Reservas." },
+      { "problem": "\"La mesa no tiene ítems para cobrar\"", "fix": "Cargá el pedido o cancelá la mesa." }
+    ],
+    "tips": ["En el KDS cada ítem pasa por Preparar, Listo y Entregar."],
+    "related": ["pos-cobrar-venta", "reportes"]
+  },
+  {
+    "id": "agenda-turnos",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Agenda: profesionales, turnos y cobro",
+    "summary": "Cargá profesionales, agendá turnos, cambiá su estado y cobralos en el POS.",
+    "module": "agenda",
+    "routes": ["/agenda"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["nuevo turno", "agendar", "reservar turno", "profesional", "cobrar turno", "walk-in"],
+    "tags": ["servicios", "peluqueria"],
+    "steps": [
+      "Entrá a Agenda. Si no hay profesionales, tocá \"Profesionales\", \"Agregar\" y cargá nombre, color y comisión.",
+      "Tocá \"Nuevo turno\" o un hueco libre: elegí profesional, servicio, fecha y hora, duración, precio y cliente. Tocá para guardar y vas a ver \"Turno agendado\".",
+      "Tocá un turno para cambiar el estado: \"Confirmar\", \"Iniciar\", \"Marcar realizado\", \"No vino\" o \"Cancelar\".",
+      "Con el turno en curso o realizado, tocá \"Cobrar este turno\": se abre el POS con el servicio cargado.",
+      "\"Walk-in\" es para quien llega sin turno."
+    ],
+    "roleNotes": {
+      "cashier": "Podés agendar, cambiar estados, cobrar turnos y usar la lista de espera.",
+      "viewer": "Podés ver la agenda, no modificarla.",
+      "owner": "\"Cargar datos de ejemplo\" llena la agenda para practicar y \"Quitar datos de ejemplo\" la limpia. Recursos (sillas, cabinas) es del plan Pro."
+    },
+    "errors": [
+      { "problem": "\"Ese recurso ya está ocupado en ese horario\"", "fix": "Elegí otro recurso u otro horario." },
+      { "problem": "\"Elegí o escribí el servicio\"", "fix": "El turno necesita un servicio." }
+    ],
+    "tips": [],
+    "feature": "agenda",
+    "related": ["agenda-lista-espera", "pos-cobrar-venta"]
+  },
+  {
+    "id": "agenda-lista-espera",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Lista de espera de la agenda",
+    "summary": "Anotá a quien quiere un turno que no tenés libre y pasalo a turno cuando se libera un hueco.",
+    "module": "agenda",
+    "routes": ["/agenda"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["lista de espera", "anotar cliente", "avisar por whatsapp", "pasar a turno"],
+    "tags": ["servicios"],
+    "steps": [
+      "En Agenda tocá \"Espera\" y después \"Anotar\".",
+      "Cargá cliente o nombre y teléfono, servicio, profesional preferido, fecha y franja.",
+      "Cuando se libera un hueco, tocá \"Avisar por WhatsApp\" y después \"Agendar\" para pasarlo a turno.",
+      "Si ya no hace falta, \"Quitar de la lista\"."
+    ],
+    "roleNotes": {
+      "viewer": "Podés ver la lista, no anotar ni agendar."
+    },
+    "errors": [],
+    "tips": [],
+    "feature": "lista_espera",
+    "related": ["agenda-turnos"]
+  },
+  {
+    "id": "reportes",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Reportes de ventas, caja y productos",
+    "summary": "Ventas por día y hora, medios de pago, categorías, cajeros, productos, clientes y flujo de caja, con filtros por fecha y sucursal.",
+    "module": "reportes",
+    "routes": ["/reportes", "/dashboard"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["reporte de ventas", "ventas del dia", "productos mas vendidos", "exportar excel", "ventas por cajero"],
+    "tags": ["estadisticas", "xlsx"],
+    "steps": [
+      "Entrá a Reportes y elegí el rango: \"Hoy\", \"7 días\", \"30 días\", \"Mes\" o fechas a mano.",
+      "Activá \"Comparar con el período anterior\" para ver cómo vas.",
+      "Con varias sucursales elegí \"Consolidado\", \"Por sucursal\" o \"Comparar sucursales\".",
+      "Con \"Personalizar\" elegís qué reportes ver.",
+      "\"Exportar XLSX\" baja todo a Excel (plan Pro)."
+    ],
+    "roleNotes": {
+      "cashier": "Ves los datos de las sucursales a las que tenés acceso.",
+      "owner": "Si activás que el personal vea sólo lo suyo, la productividad muestra a cada uno sus propios números."
+    },
+    "errors": [],
+    "tips": ["Los cierres Z de cada caja están en Caja, no en Reportes."],
+    "feature": "reportes",
+    "related": ["caja-cierre-z"]
+  },
+  {
+    "id": "escuela-como-funciona",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cómo funciona la Escuela NinjaSoft",
+    "summary": "Cursos cortos por rol: leés las lecciones, marcás el checklist, hacés una prueba de 3 a 5 preguntas y, si aprobás, te llevás el certificado.",
+    "module": "escuela",
+    "routes": ["/escuela", "/dashboard"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["escuela", "curso", "capacitacion", "certificado", "aprender a usar el sistema"],
+    "tags": ["onboarding"],
+    "steps": [
+      "Entrá a Escuela desde el menú. Arriba están los cursos recomendados para tu rol.",
+      "Abrí un curso y leé cada lección. Al terminarla, tocá \"Marcar como hecha\".",
+      "Con todas las lecciones hechas se habilita la prueba corta.",
+      "Respondé y tocá \"Enviar respuestas\". Si llegás al puntaje mínimo, aprobás y, si el curso da certificado, lo ves e imprimís.",
+      "Si no aprobás, revisá las lecciones que te marca y probá de nuevo."
+    ],
+    "roleNotes": {
+      "cashier": "Empezá por \"POS básico\": al aprobarlo quedás certificado para operar el punto de venta.",
+      "owner": "Ves el progreso y los certificados de tu equipo en la Escuela."
+    },
+    "errors": [],
+    "tips": ["La ayuda (botón de signo de pregunta) muestra los artículos de la pantalla en la que estás."],
+    "feature": "escuela",
+    "related": ["pos-cobrar-venta"]
+  }
+]

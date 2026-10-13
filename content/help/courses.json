@@ -1,0 +1,189 @@
+[
+  {
+    "key": "pos-basico",
+    "version": 1,
+    "title": "POS básico",
+    "summary": "Todo lo que un cajero necesita para su turno: abrir la caja, cobrar con cada medio, anular, devolver y cerrar.",
+    "roles": ["cashier", "manager", "owner"],
+    "minutes": 20,
+    "lessons": ["caja-abrir", "pos-cobrar-venta", "pos-medios-de-pago", "pos-anular-venta", "pos-devoluciones", "caja-cerrar"],
+    "checklist": [
+      "Abrí la caja con el monto inicial.",
+      "Cobré una venta de prueba con F12.",
+      "Probé un pago dividido entre dos medios.",
+      "Sé dónde se anula una venta y quién puede anular ventas de días anteriores.",
+      "Cerré la caja contando el efectivo."
+    ],
+    "passPct": 80,
+    "certificate": "POS básico",
+    "quiz": [
+      {
+        "id": "q1",
+        "question": "¿Dónde se abre la caja?",
+        "options": ["En Reportes", "Desde el punto de venta, con el botón de estado de la caja", "En Productos", "La abre el sistema solo a la mañana"],
+        "answer": 1,
+        "explain": "La caja se abre desde el punto de venta. En Caja, si no hay turno, el botón \"Ir al punto de venta\" te lleva ahí."
+      },
+      {
+        "id": "q2",
+        "question": "¿Qué tecla abre el cobro en el punto de venta?",
+        "options": ["F2", "F12", "Esc", "Tab"],
+        "answer": 1,
+        "explain": "F12 abre el cobro. F2 te lleva al buscador de productos."
+      },
+      {
+        "id": "q3",
+        "question": "Sos cajero y un cliente vuelve hoy con un ticket de ayer para anularlo. ¿Qué hacés?",
+        "options": ["Lo anulo desde Ventas con un motivo", "Le pido a un encargado o al dueño que la anule", "La borro desde Productos", "No se puede anular nunca"],
+        "answer": 1,
+        "explain": "Como cajero sólo podés anular ventas del día. Las de días anteriores las anula un encargado o el dueño."
+      },
+      {
+        "id": "q4",
+        "question": "Para reintegrar en efectivo una devolución necesitás:",
+        "options": ["Tener tu caja abierta", "Plan Business", "La factura de ARCA", "Nada"],
+        "answer": 0,
+        "explain": "El reintegro en efectivo sale de tu caja: tiene que estar abierta."
+      },
+      {
+        "id": "q5",
+        "question": "Al cerrar la caja, ¿qué cargás en \"Efectivo contado\"?",
+        "options": ["El total vendido del día", "Lo cobrado con tarjeta", "El efectivo que contaste en el cajón", "El monto inicial"],
+        "answer": 2,
+        "explain": "Cargás lo que contaste. El sistema lo compara con el efectivo esperado y muestra la diferencia."
+      }
+    ]
+  },
+  {
+    "key": "caja-y-arqueo",
+    "version": 1,
+    "title": "Caja, arqueo y cierre Z",
+    "summary": "Controlá el efectivo del turno: movimientos, arqueo, diferencias, cierre forzado y cierres Z.",
+    "roles": ["manager", "owner"],
+    "minutes": 15,
+    "lessons": ["caja-abrir", "caja-movimientos", "caja-arqueo", "caja-cerrar", "caja-cierre-z"],
+    "checklist": [
+      "Registré un egreso con motivo.",
+      "Revisé el efectivo esperado antes de cerrar.",
+      "Encontré un cierre Z y lo exporté a XLSX."
+    ],
+    "passPct": 75,
+    "certificate": null,
+    "quiz": [
+      {
+        "id": "q1",
+        "question": "Te equivocaste al registrar un egreso. ¿Cómo lo corregís?",
+        "options": ["Lo edito", "Lo borro", "Registro el movimiento contrario con un motivo claro", "Cierro la caja y la vuelvo a abrir"],
+        "answer": 2,
+        "explain": "Los movimientos de caja no se editan ni se borran: se compensan con el movimiento contrario."
+      },
+      {
+        "id": "q2",
+        "question": "La diferencia del arqueo es:",
+        "options": ["Efectivo contado menos efectivo esperado", "Ventas menos costos", "Monto inicial menos egresos", "Lo cobrado con tarjeta"],
+        "answer": 0,
+        "explain": "Negativa es faltante y positiva es sobrante."
+      },
+      {
+        "id": "q3",
+        "question": "Un cajero se fue sin cerrar su caja. ¿Qué hacés?",
+        "options": ["Nada, se cierra sola", "Cierre forzado desde Cajas abiertas, con el efectivo contado y un motivo", "Borro el turno", "Le cambio la contraseña"],
+        "answer": 1,
+        "explain": "El cierre forzado genera el Z con lo que contás y queda en la auditoría con el motivo."
+      },
+      {
+        "id": "q4",
+        "question": "¿Se puede editar un cierre Z?",
+        "options": ["Sí, el dueño", "Sí, el encargado", "No, es inmutable", "Sólo el mismo día"],
+        "answer": 2,
+        "explain": "El cierre Z es un registro contable que no se edita ni se borra."
+      }
+    ]
+  },
+  {
+    "key": "primeros-pasos",
+    "version": 1,
+    "title": "Primeros pasos del dueño",
+    "summary": "Dejá el negocio listo: productos, medios de pago, sucursales y cajas, y tu equipo con sus permisos.",
+    "roles": ["owner", "manager"],
+    "minutes": 20,
+    "lessons": ["productos-alta", "productos-importar-excel", "pos-medios-de-pago", "sucursales", "usuarios-permisos"],
+    "checklist": [
+      "Cargué o importé mis productos.",
+      "Configuré los medios de pago que uso.",
+      "Revisé mis sucursales y cajas.",
+      "Invité a mi cajero con su propio usuario."
+    ],
+    "passPct": 75,
+    "certificate": null,
+    "quiz": [
+      {
+        "id": "q1",
+        "question": "Importás productos desde Excel y el SKU ya existe. ¿Qué pasa?",
+        "options": ["Se crea un producto duplicado", "Se actualiza ese producto", "La fila da error", "Se borra el producto viejo"],
+        "answer": 1,
+        "explain": "Si el SKU (o el código de barras) ya existe se actualiza; si no, se crea uno nuevo."
+      },
+      {
+        "id": "q2",
+        "question": "¿Qué rol le das a quien sólo tiene que vender y cobrar en su caja?",
+        "options": ["Dueño", "Encargado", "Cajero", "Solo lectura"],
+        "answer": 2,
+        "explain": "El cajero vende y cobra con su propia caja, sin tocar catálogo ni precios."
+      },
+      {
+        "id": "q3",
+        "question": "¿Quién puede sumar un encargado al equipo?",
+        "options": ["Cualquier encargado", "Sólo el dueño", "El cajero", "Nadie"],
+        "answer": 1,
+        "explain": "Sumar encargados lo hace sólo el dueño."
+      },
+      {
+        "id": "q4",
+        "question": "¿Dónde se conecta Mercado Pago para cobrar con QR?",
+        "options": ["Configuración, Medios de pago", "Productos", "Reportes", "Clientes"],
+        "answer": 0,
+        "explain": "En Configuración, Medios de pago, con \"Conectar con Mercado Pago\"."
+      }
+    ]
+  },
+  {
+    "key": "facturacion-arca",
+    "version": 1,
+    "title": "Facturación electrónica ARCA",
+    "summary": "El asistente de ARCA de punta a punta: certificado, punto de venta, homologación, producción y contingencia CAEA.",
+    "roles": ["owner", "manager"],
+    "minutes": 25,
+    "lessons": ["arca-facturacion", "arca-homologacion-produccion", "arca-caea"],
+    "checklist": [
+      "Tengo clave fiscal nivel 3.",
+      "Generé el pedido de certificado y lo validé.",
+      "Aprobé las facturas de prueba en homologación."
+    ],
+    "passPct": 66,
+    "certificate": null,
+    "quiz": [
+      {
+        "id": "q1",
+        "question": "En homologación (modo prueba), las facturas:",
+        "options": ["Tienen validez fiscal", "No tienen validez fiscal", "No se emiten", "Se mandan por email al cliente"],
+        "answer": 1,
+        "explain": "Homologación sirve para probar: las facturas no tienen validez fiscal."
+      },
+      {
+        "id": "q2",
+        "question": "¿Quién puede pasar a facturar en real?",
+        "options": ["El dueño", "Cualquier encargado", "El cajero", "Soporte de NinjaSoft"],
+        "answer": 0,
+        "explain": "Sólo el dueño confirma el paso a producción."
+      },
+      {
+        "id": "q3",
+        "question": "Para la contingencia CAEA necesitás:",
+        "options": ["El mismo punto de venta de siempre", "Un punto de venta propio, distinto del de CAE", "Internet en la caja", "Plan Enterprise"],
+        "answer": 1,
+        "explain": "ARCA exige un punto de venta CAEA distinto del que usás con CAE."
+      }
+    ]
+  }
+]

@@ -255,12 +255,19 @@ begin
     end if;
     raise exception 'acc_entry_immutable';
   end if;
-  -- UPDATE: sólo baja lógica, numeración oficial y vínculo de reversión.
+  -- UPDATE: sólo baja lógica, numeración oficial y vínculo de reversión. Los
+  -- "on delete set null" (sucursal o asiento borrado en la baja del negocio)
+  -- pueden dejar en null la sucursal y los vínculos.
+  if acc_tenant_gone(old.tenant_id) then
+    return new;
+  end if;
   if (new.tenant_id, new.number, new.entry_date, new.kind, new.source_type, new.source_id,
-      new.source_event, new.description, new.store_id, new.reversal_of, new.total, new.created_at)
+      new.source_event, new.description, new.total, new.created_at)
      is distinct from
      (old.tenant_id, old.number, old.entry_date, old.kind, old.source_type, old.source_id,
-      old.source_event, old.description, old.store_id, old.reversal_of, old.total, old.created_at) then
+      old.source_event, old.description, old.total, old.created_at)
+     or (new.store_id is not null and new.store_id is distinct from old.store_id)
+     or (new.reversal_of is not null and new.reversal_of is distinct from old.reversal_of) then
     raise exception 'acc_entry_immutable';
   end if;
   if old.deleted_at is not null and new.deleted_at is null then

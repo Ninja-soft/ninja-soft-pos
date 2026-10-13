@@ -60,6 +60,11 @@ log.info({
 
 ## 4. Errores en frontend
 
+### 4.0 Hoy (F1.5, ADR-098)
+
+- Error boundaries de Next: `app/error.tsx` (raíz), `app/(app)/error.tsx` (panel, el menú queda en pie), `app/internal/error.tsx` y `app/global-error.tsx` (si falla el layout raíz). Todos usan `components/errors/ErrorScreen.tsx`: mensaje humano según el tipo (versión nueva tras un deploy, sin conexión, genérico), "Probar de nuevo" o "Recargar" y el código (`digest`) para soporte. `app/not-found.tsx` para el 404.
+- Reporte: `lib/errors/clientError.ts` manda por `sendBeacon` a `POST /api/client-error` (mismo origen, 8 KB, esquema cerrado, 20 por minuto por IP, una vez por error y 5 por carga de página). El servidor lo escribe como una línea JSON `event: "client_error"` en los logs de Vercel con boundary, tipo, mensaje, `digest`, path **sin query** y commit. Emails, JWT, tokens, CUIT y documentos se tachan en el cliente y otra vez en el servidor. No se guarda en la base.
+
 ### 4.1 Sentry setup (Fase 4)
 
 ```typescript
@@ -181,27 +186,31 @@ Para investigar un incidente:
 
 ## 9. Health checks
 
-### 9.1 Endpoint público
-`GET /api/health` retorna:
+### 9.1 Endpoint público (implementado, ADR-098)
+`GET /api/health` (sin sesión; el middleware no lo redirige) responde liveness:
 
 ```json
-{
-  "ok": true,
-  "version": "1.2.3",
-  "environment": "production",
-  "checks": {
-    "database": "ok",
-    "auth": "ok",
-    "storage": "ok"
-  },
-  "uptime_seconds": 12345
-}
+{ "status": "ok", "service": "ninja-soft-pos", "version": "0.1.0", "env": "production", "commit": "abc1234", "time": "..." }
 ```
 
-UptimeRobot pinguea cada 5 minutos.
+`GET /api/health?deep=1` suma `checks.supabase_auth` y `checks.supabase_db` (Auth y una lectura anónima por PostgREST, con la anon key y 3 s de timeout; el resultado se reutiliza 10 s por instancia). Si alguno falla responde **503** con `"status": "degraded"`. Es el que tiene que mirar el monitor de uptime. No expone secretos ni datos de negocio.
 
-### 9.2 Endpoint detallado (interno)
-`GET /api/health/detailed` con auth interna retorna métricas más profundas.
+### 9.2 Checklist de monitoreo del piloto (manual hasta tener alertas)
+
+**Configuración, una vez:**
+- [ ] Monitor de uptime externo (UptimeRobot o similar, plan gratis) contra `https://pos.soft.ninja/api/health?deep=1` cada 5 minutos, alerta por email/WhatsApp al responsable si no es 200 dos veces seguidas.
+- [ ] Segundo monitor contra `https://pos.soft.ninja/login` (el front sirve aunque la API falle).
+- [ ] En Vercel, guardar la búsqueda de logs `client_error` (errores del front reportados por los error boundaries).
+
+**Todos los días del piloto (5 minutos):**
+- [ ] Monitor de uptime sin caídas en las últimas 24 h.
+- [ ] Logs de Vercel: `client_error` nuevos (agrupar por `path` y `digest`); 5xx de `/api/*`.
+- [ ] Supabase → Edge Functions: errores de las funciones de cobro (`mp_*`, `getnet*`, `payway*`, `modo_webhook`, `nave_webhook`) y de `arca_wsfe`.
+- [ ] Panel interno → Webhooks: eventos con error o sin procesar.
+- [ ] Panel interno → Onboarding / ficha 360 del negocio piloto: errores recientes y salud.
+- [ ] Ventas offline trabadas (Ventas sin conexión) y cobros en espera vencidos del negocio piloto.
+
+**Después de cada deploy:** [`13-deployment.md`](./13-deployment.md) §11.2.
 
 ## 10. Performance budgets
 

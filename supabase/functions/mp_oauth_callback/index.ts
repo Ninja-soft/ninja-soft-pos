@@ -4,6 +4,7 @@
 // mp_oauth_start + el intercambio del `code` contra MP. Intercambia el code por
 // tokens, los guarda en payment_secrets del tenant y marca el medio conectado.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   loadProviderSecret,
@@ -33,7 +34,7 @@ Deno.serve(async (req: Request) => {
 
   let b: Record<string, unknown>;
   try {
-    b = await req.json();
+    b = await readJsonLimited(req);
   } catch {
     return json({ error: "invalid_json" }, 400);
   }

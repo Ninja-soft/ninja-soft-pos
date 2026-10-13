@@ -13,6 +13,7 @@
 //     privada del tenant (approved + monto EXACTO en centavos +
 //     site_transaction_id == intent). Lógica en _shared/payway.ts.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
@@ -94,7 +95,7 @@ Deno.serve(withWebhookLog("payway", "payway_webhook", async (req: Request, wh) =
   // re-verifica). Se aceptan las formas conocidas; sin id no se acredita.
   let notifiedId: string | null = null;
   try {
-    const body = (await req.json()) as Record<string, unknown>;
+    const body = (await readJsonLimited(req)) as Record<string, unknown>;
     const cand =
       body.payment_id ??
       body.id ??

@@ -2,47 +2,48 @@
 
 Cómo se despliega el sistema, qué entornos existen, cómo se promociona código a producción y cómo se hace rollback.
 
+> **Estado real (2026-10-13, ADR-098).** Hoy no hay staging: hay local, previews de Vercel y producción. Las migraciones se aplican a mano (MCP de Supabase o CLI) y las Edge Functions con la CLI. Lo que sigue describe ese flujo y el checklist verificable que lo protege (§11). El staging de §1 queda como objetivo (depende de contratar un segundo proyecto Supabase).
+
 ## 1. Entornos
 
 | Entorno | URL | Branch | Supabase | Datos |
 |---|---|---|---|---|
-| **Local** | `localhost:3000` | feature/* | Local (Docker) | Seed dev. |
-| **Preview** | `https://<branch>.ninjasoft-pos.vercel.app` | feature/* (auto) | Staging compartido | Datos de testing aislados. |
-| **Staging** | `https://staging.ninjasoft.com.ar` | `develop` (auto) | Proyecto staging | Datos reales anonimizados (Fase 2+). |
-| **Production** | `https://app.ninjasoft.com.ar` | `main` (auto) | Proyecto production | Datos reales de clientes. |
+| **Local** | `localhost:3000` | feature/* | Local (Docker, `pnpm db:start`) | Seed dev. |
+| **Preview** | URL de Vercel por rama | cualquier rama (auto) | **Producción** (no hay staging) | Reales: probar sólo en el tenant QA. |
+| **Production** | `https://pos.soft.ninja` | `main` (auto) | Proyecto `hrkditzrsavehnhngakb` | Datos reales de clientes. |
+| **Staging** *(objetivo)* | `staging.*` | `develop` | Proyecto staging | Datos anonimizados. |
+
+**Regla mientras no haya staging:** un preview pega contra la base de producción. Todo lo que se pruebe a mano o con E2E va en el **tenant QA** (el suite E2E aborta si la sesión es de otro negocio). Una migración nunca se prueba "en el preview": se valida con la suite RLS de CI (Supabase local con todas las migraciones) antes de aplicarla.
 
 ## 2. Pipeline
 
 ```
-feature/* push
+rama → PR
    │
    ▼
-[CI] lint + typecheck + tests
+[CI] quality: lint + typecheck + deploy-check + test + build
+[CI] rls: Supabase local con TODAS las migraciones + suite de aislamiento
    │  ✅
    ▼
-[Vercel] crea preview deploy → URL única por PR
+[Vercel] preview por PR (contra producción: sólo tenant QA)
    │
    ▼
-[Code review] aprobación + smoke test manual en preview
-   │  ✅
-   ▼
-Merge a develop
+[Review] aprobación
    │
    ▼
-[Vercel] deploy a staging automático
+Merge a main
    │
    ▼
-[QA] testing manual + automated en staging
-   │  ✅
-   ▼
-Merge a main (PR develop → main)
+Deploy de BASE (manual, §4): migraciones en orden → Edge Functions
    │
    ▼
-[Vercel] deploy a production automático
+[Vercel] deploy del front a producción (automático al mergear)
    │
    ▼
-[Monitor] alertas activas primeras 2hs
+Post-deploy (§11.2): healthcheck profundo + smoke de piloto en el tenant QA
 ```
+
+**Orden obligatorio:** migraciones → Edge Functions → front. Cada ADR dice si el front tolera la base vieja; si no la tolera, la migración se aplica **antes** del merge.
 
 ## 3. Vercel: configuración
 
@@ -61,207 +62,92 @@ Merge a main (PR develop → main)
 
 ### 3.3 Environment variables
 
-| Variable | Production | Staging | Preview |
-|---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | prod URL | staging URL | staging URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | prod anon | staging anon | staging anon |
-| `SUPABASE_SERVICE_ROLE_KEY` | prod (server only) | staging (server only) | staging (server only) |
-| `APP_ENV` | `production` | `staging` | `preview` |
-| `SENTRY_DSN` | prod project | staging project | staging project |
-| `RESEND_API_KEY` | prod | staging | staging |
-| `AFIP_ENVIRONMENT` | `production` | `homologation` | `homologation` |
+| Variable | Production | Preview |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | prod URL | prod URL (no hay staging) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | prod anon | prod anon |
+| `SUPABASE_SERVICE_ROLE_KEY` | prod (server only) | prod (server only) |
+| `APP_ENV` | `production` | `preview` |
+| `RESEND_API_KEY` | prod | prod |
 
-**Regla:** previews y staging **nunca** apuntan a Supabase production. Bug de un preview no puede afectar datos reales.
+`VERCEL_ENV` y `VERCEL_GIT_COMMIT_SHA` los pone Vercel: `/api/health` los informa (env y commit corto) para saber qué versión está viva.
 
 ### 3.4 Domains
-- `app.ninjasoft.com.ar` → production.
-- `staging.ninjasoft.com.ar` → staging.
-- `ninjasoft.com.ar` → landing.
+- `pos.soft.ninja` → production (canónico; el alias `ninja-soft-pos.vercel.app` redirige con 308).
+- `hooks.soft.ninja` → proxy de webhooks a las Edge Functions (`lib/hooks.ts`).
 
-## 4. Supabase: gestión de entornos
+## 4. Supabase: base y Edge Functions
 
 ### 4.1 Proyectos
 
 | Entorno | Proyecto Supabase |
 |---|---|
 | Local | Docker (`supabase start`) |
-| Staging | `ninjasoft-pos-staging` |
-| Production | `ninjasoft-pos-prod` |
-
-No usamos branches de Supabase para preview (cada PR no necesita BD propia). Si una feature necesita schema nuevo, se aplica primero a staging y se valida ahí.
+| Production | `hrkditzrsavehnhngakb` |
 
 ### 4.2 Migraciones
 
-Flujo:
-
-```bash
-# 1. Crear migración local
-supabase migration new add_loyalty_table
-
-# 2. Editar el SQL generado
-# (archivo en supabase/migrations/)
-
-# 3. Aplicar localmente
-supabase db reset
-
-# 4. Test local
-pnpm test
-
-# 5. Commit + PR
-git add supabase/migrations/
-git commit -m "feat(db): add loyalty table"
-
-# 6. Después de merge a develop:
-#    CI aplica a staging automáticamente
-supabase db push --linked  # staging
-
-# 7. Después de merge a main:
-#    Manual o CI con aprobación
-supabase db push --linked  # production
-```
-
-**Regla:** migraciones en `main` **solo** después de validar en staging.
+- Viven en `supabase/migrations/`, nombre `<14 dígitos>_<snake_case>.sql`. **Son inmutables una vez aplicadas:** un error se corrige con una migración nueva.
+- Se aplican **en orden de timestamp**, no en orden de merge. Ramas paralelas generan migraciones con timestamp menor que otras ya mergeadas (CI lo avisa como `M5`): se aplican igual en orden de timestamp, después de verificar que no dependen de algo más nuevo.
+- Se aplican a mano con el MCP de Supabase (`apply_migration`, nombre = nombre del archivo sin `.sql`) o con `supabase db push --linked` (si hay huecos, `--include-all`). El MCP guarda la hora de aplicación como versión: `deploy-check` empareja por versión **o por nombre**.
+- Antes de aplicar: `node --env-file=.env.local scripts/deploy-check.mjs --remote` (o `--applied=<archivo>` con la salida de `list_migrations`) imprime **la última aplicada y todas las pendientes en orden**, marca huecos (`M3`) y sentencias destructivas (`W1`). Ver §11.
 
 ### 4.3 Edge Functions
 
 ```bash
-# Deploy de una función
-supabase functions deploy create_sale --project-ref <ref>
-
-# Deploy de todas
-supabase functions deploy --project-ref <ref>
+# Una función (el verify_jwt sale de supabase/config.toml)
+npx supabase functions deploy <nombre> --project-ref hrkditzrsavehnhngakb
 ```
 
-CI hace esto automáticamente en cada deploy.
+- **Públicas (`verify_jwt = false`)**: exactamente las 16 de `[functions.*]` en `supabase/config.toml` (webhooks de procesadores, checkouts propios, `mp_oauth_callback`, `send_password_recovery`). `supabase functions deploy` lee esa sección, así que **no hace falta `--no-verify-jwt`** y un deploy de todas no deja un webhook pidiendo JWT. CI valida que la lista del config, la de `scripts/deploy-check.mjs` y el encabezado de cada función coincidan; `--remote` compara además con lo desplegado (`R1`, `R2`).
+- Las públicas leen el cuerpo con `readJsonLimited` (64 KB) de `_shared/requestGuard.ts`; los checkouts y el recupero de contraseña tienen además un tope por IP (best-effort por isolate).
+- Una función que cambia `_shared/` obliga a redesplegar todas las que lo importan (cada ADR lo lista).
 
 ## 5. Scripts en `package.json`
 
-### 5.1 Scripts actuales
-
-```json
-{
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "format": "prettier --write .",
-    "db:types": "supabase gen types typescript --project-id hrkditzrsavehnhngakb > types/database.ts"
-  }
-}
-```
-
-### 5.2 Scripts objetivo
-
-Agregar cuando existan los flujos correspondientes:
-
-```json
-{
-  "scripts": {
-    "test:e2e": "playwright test",
-    "test:coverage": "vitest run --coverage",
-    "db:reset": "supabase db reset",
-    "db:diff": "supabase db diff",
-    "fn:serve": "supabase functions serve",
-    "fn:deploy:staging": "supabase functions deploy --project-ref $STAGING_REF",
-    "fn:deploy:prod": "supabase functions deploy --project-ref $PROD_REF"
-  }
-}
-```
+| Script | Qué hace |
+|---|---|
+| `pnpm lint` / `typecheck` / `test` / `build` | Gate automático (CI `quality`). |
+| `pnpm test:rls` | Suite de aislamiento multi-tenant (CI `rls`, Supabase local). |
+| `pnpm test:e2e` | Playwright completo (ver `tests/e2e/README.md`). |
+| `pnpm test:smoke` | Smoke de piloto: sesión, caja, venta en efectivo, ticket, anulación, cierre y reporte (§11.2). |
+| `pnpm deploy:check` | Chequeo estático de migraciones y Edge públicas (§11.1). |
+| `pnpm db:start` / `db:reset` / `db:types` | Supabase local y tipos. |
 
 ## 6. CI/CD: GitHub Actions
 
-### 6.1 `.github/workflows/ci.yml`
-Corre en cada PR.
+`.github/workflows/ci.yml`, en cada PR y push a `main`:
 
-```yaml
-name: CI
-on: [pull_request]
+- **quality:** install → lint → typecheck → **deploy check** (`scripts/deploy-check.mjs --base=origin/<rama base>`: nombres y timestamps de migraciones, migraciones existentes sin tocar, lista exacta de Edge públicas) → test → build.
+- **rls:** `supabase start` aplica todas las migraciones en orden y corre `pnpm test:rls`. Si falla, hay fuga entre tenants, una policy rota o una migración que no aplica desde cero: no mergear.
 
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-```
-
-Objetivo siguiente: sumar Supabase local, tests multi-tenant y Playwright cuando existan los scripts y fixtures.
-
-### 6.2 `.github/workflows/deploy-staging.yml`
-Corre al mergear a `develop`.
-
-```yaml
-name: Deploy Staging
-on:
-  push:
-    branches: [develop]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-      - run: supabase db push --project-ref ${{ secrets.STAGING_REF }}
-      - run: supabase functions deploy --project-ref ${{ secrets.STAGING_REF }}
-      # Vercel deploy ocurre automáticamente por integración git
-```
-
-### 6.3 `.github/workflows/deploy-prod.yml`
-Corre al mergear a `main`. **Requiere aprobación manual.**
-
-```yaml
-name: Deploy Production
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: production  # requiere approval
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-      - run: supabase db push --project-ref ${{ secrets.PROD_REF }}
-      - run: supabase functions deploy --project-ref ${{ secrets.PROD_REF }}
-```
+No hay deploy automático de base ni de Edge Functions: se hace a mano (§4) con el checklist de §11.
 
 ## 7. Rollback
 
 ### 7.1 Frontend (Vercel)
 - Cada deploy queda guardado.
-- Rollback: `Vercel dashboard → Deployments → <deploy anterior> → Promote to Production`.
+- Rollback: `Vercel dashboard → Deployments → <deploy anterior> → Promote to Production` (o `vercel rollback`).
 - Tiempo: < 30 segundos.
+- **Verificar:** `curl https://pos.soft.ninja/api/health` devuelve el `commit` del deploy promovido.
 
 ### 7.2 Edge Functions
-- Funciones no tienen rollback automático.
-- Patrón: cherry-pick del commit anterior + redeploy.
+- No tienen rollback automático.
+- Patrón: `git checkout <sha anterior> -- supabase/functions/<fn> supabase/functions/_shared` y redeploy de esa función (el `verify_jwt` sale del config, no hay que recordarlo).
+- **Verificar:** `deploy-check --remote` sin `R1`/`R2`, y el flujo afectado en el tenant QA.
 - Tiempo: 2-5 minutos.
 
 ### 7.3 Migraciones de BD
 - **Nunca rollback automático.** Las migraciones son append-only.
 - Si una migración rompe algo:
-  - Si es aditiva (nueva columna): hotfix que la haga opcional.
-  - Si es destructiva: nueva migración de "compensación".
-- Por eso las migraciones destructivas requieren plan documentado.
+  - Si es aditiva (tabla, columna, función nueva): el front anterior la ignora; se hace rollback del front y se corrige con una migración nueva.
+  - Si recrea una función: migración de compensación que copia la definición **anterior** (la del archivo previo que la definía) y se aplica.
+  - Si es destructiva: necesita plan de datos escrito en el ADR **antes** de aplicarla (`deploy-check` la marca `W1`).
+- **Verificar:** `deploy-check --remote` sin `M3` y `pnpm test:smoke` en el tenant QA.
 
 ### 7.4 Datos
-- Restore desde snapshot: solo desde Supabase dashboard.
-- **No es trivial.** Implica downtime potencial.
+- Restore desde backup: ver [`security-reviews/disaster-recovery.md`](./security-reviews/disaster-recovery.md) §Backup y restore.
+- **No es trivial.** Implica downtime y pérdida de lo escrito después del backup.
 - Solo en caso de corrupción de datos confirmada.
 
 ## 8. Releases y versionado
@@ -275,33 +161,51 @@ jobs:
 
 ## 9. Monitoreo post-deploy
 
-Ver [`14-observability.md`](./14-observability.md). Resumen:
-
-Después de cada deploy a producción:
-- Sentry: alerta si rate de errores sube > 50% vs baseline en 30 min.
-- Vercel Analytics: monitorear Core Web Vitals.
-- Logs de Supabase: revisar errores en Edge Functions.
-- Manual: hacer una venta de prueba en producción.
+Ver [`14-observability.md`](./14-observability.md) §Checklist de monitoreo del piloto. Resumen: `/api/health?deep=1` en un monitor de uptime, errores del front en los logs de Vercel (`event: "client_error"`), logs de Edge Functions en Supabase y una venta de prueba en el tenant QA.
 
 ## 10. Maintenance windows
 
 - Planificadas: domingos 04:00-06:00 ART. Comunicar a clientes 7 días antes.
 - Emergencia: lo más rápido posible. Comunicar inmediatamente.
 
-## 11. Checklist pre-deploy a producción
+## 11. Checklist de deploy (verificable)
 
-- [ ] Todos los tests pasan en CI.
-- [ ] Cambio validado en staging por al menos 24hs sin issues.
-- [ ] Migraciones revisadas (sin DROP, sin ALTER destructivo sin plan).
-- [ ] Variables de entorno nuevas configuradas en Vercel.
-- [ ] Edge Functions nuevas deployed.
+Copiar en el PR o en el hilo del deploy y tildar con la salida de cada comando.
+
+### 11.1 Antes de aplicar
+
+- [ ] CI verde en el PR (`quality` y `rls`).
+- [ ] `node scripts/deploy-check.mjs --base=origin/main` sin errores; los `M5` revisados (no dependen de algo más nuevo).
+- [ ] `node --env-file=.env.local scripts/deploy-check.mjs --remote` (necesita `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF`): sin `M3`, `R1` ni `R2`. Pegar la lista de **pendientes en orden**: es exactamente lo que se aplica.
+- [ ] Cada `W1` (destructiva) tiene su plan de datos en el ADR.
+- [ ] Backup reciente visible en el dashboard de Supabase (Database → Backups) o dump lógico del día si la migración toca datos (§Backup y restore del DR).
+- [ ] Variables de entorno y secrets nuevos cargados (Vercel y `supabase secrets`), según el ADR.
 - [ ] `CHANGELOG.md` actualizado.
-- [ ] PM informado del deploy.
-- [ ] Smoke test plan listo.
+
+### 11.2 Aplicar y verificar
+
+- [ ] Migraciones pendientes aplicadas **en el orden impreso**. Repetir `deploy-check --remote`: 0 pendientes.
+- [ ] Edge Functions del ADR desplegadas. `deploy-check --remote` sin `R1`/`R2`.
+- [ ] Front en producción: `curl https://pos.soft.ninja/api/health` muestra el `commit` del merge.
+- [ ] `curl https://pos.soft.ninja/api/health?deep=1` → `200` y `"status":"ok"` (Auth y base responden).
+- [ ] Smoke de piloto en el tenant QA (sesión QA, ver `tests/e2e/README.md`):
+  ```bash
+  E2E_EMAIL=<owner QA> node --env-file=.env.local scripts/e2e-session.mjs
+  source "${TMPDIR:-/tmp}/ninjapos-e2e-session.env"
+  BASE_URL=https://pos.soft.ninja pnpm test:smoke
+  ```
+  Cubre: sesión → abrir caja → venta en efectivo → ticket → anulación → cierre con arqueo → reporte.
+- [ ] 30 minutos después: sin `client_error` nuevos en los logs de Vercel ni 5xx nuevos en las Edge del ADR.
+
+### 11.3 Si algo falla
+
+- Front: §7.1 (promote del deploy anterior) y avisar.
+- Edge: §7.2.
+- Base: §7.3. Nunca editar una migración aplicada.
 
 ## 12. Disaster recovery
 
 - **RTO** (Recovery Time Objective): 4 horas.
-- **RPO** (Recovery Point Objective): 1 hora (max data loss).
-- Plan documentado en [`docs/security-reviews/disaster-recovery.md`](./security-reviews/disaster-recovery.md) (base creada; se completa en Fase 3).
-- Test de DR cada 6 meses.
+- **RPO** (Recovery Point Objective): 1 hora con PITR; **24 horas** si el proyecto sólo tiene backups diarios (verificar el plan contratado).
+- Plan y procedimiento de backup/restore en [`docs/security-reviews/disaster-recovery.md`](./security-reviews/disaster-recovery.md).
+- Test de restore cada 6 meses (y antes de salir a piloto).

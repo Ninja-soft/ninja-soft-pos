@@ -41,6 +41,7 @@
 // resuelven de system_email_templates (editable en /internal/emails); si la
 // plantilla no existe, cae a emailHtml() inline (defensivo).
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
 // preapproval.status -> subscriptions.status
@@ -119,7 +120,7 @@ Deno.serve(async (req: Request) => {
     let action = reqUrl.searchParams.get("action") || "";
     if (req.method === "POST") {
       try {
-        const body = (await req.json()) as {
+        const body = (await readJsonLimited(req)) as {
           id?: string | number;
           type?: string;
           topic?: string;

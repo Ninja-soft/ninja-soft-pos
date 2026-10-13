@@ -20,6 +20,7 @@
 // (payload inválido / intent ajeno); 5xx ante fallas transitorias de Nave para
 // que Nave reintente (10 s, 70 s, 490 s, …).
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { parseNotification, resolvePaymentCheckUrl } from "../_shared/nave.ts";
 import {
@@ -53,7 +54,7 @@ Deno.serve(withWebhookLog("nave", "nave_webhook", async (req: Request, wh) => {
 
   let raw: unknown = null;
   try {
-    raw = await req.json();
+    raw = await readJsonLimited(req);
   } catch {
     return ok();
   }

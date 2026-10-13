@@ -15,6 +15,7 @@
 // con la credencial del negocio y guarda con _payment_disputes_upsert. Los
 // avisos de pagos con ?intent siguen igual.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
@@ -126,7 +127,7 @@ Deno.serve(withWebhookLog("mercadopago", "mp_webhook", async (req: Request, wh) 
     let hintPaymentId = "";
     if (req.method === "POST") {
       try {
-        const body = (await req.json()) as {
+        const body = (await readJsonLimited(req)) as {
           type?: string;
           topic?: string;
           user_id?: string | number;

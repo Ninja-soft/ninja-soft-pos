@@ -1,6 +1,7 @@
 # Config del stack local de Supabase (supabase start). Usado por dev local y
 # por el job "rls" de CI para correr la suite de aislamiento multi-tenant.
-# El proyecto remoto NO usa este archivo.
+# El proyecto remoto NO usa este archivo, salvo la sección [functions.*] del
+# final (la lee `supabase functions deploy`).
 project_id = "ninja-soft-pos"
 
 [api]
@@ -51,3 +52,60 @@ enabled = false
 
 [edge_runtime]
 enabled = false
+
+# -----------------------------------------------------------------------------
+# Edge Functions públicas (verify_jwt = false). ESTA SECCIÓN SÍ AFECTA EL
+# DEPLOY REMOTO: `supabase functions deploy` lee verify_jwt de acá, así que un
+# deploy de todas las funciones no deja a un webhook pidiendo JWT (el proveedor
+# recibiría 401 y el cobro no se acreditaría). Cualquier otra Edge exige JWT.
+# La lista tiene que coincidir con PUBLIC_FUNCTIONS de scripts/deploy-check.mjs
+# (lo valida CI). Cada una valida por su cuenta: re-consulta al proveedor,
+# `state` de un solo uso o token del link de pago. ADR-098.
+# -----------------------------------------------------------------------------
+[functions.catalog_purchase_webhook]
+verify_jwt = false
+
+[functions.clover_webhook]
+verify_jwt = false
+
+[functions.directo_webhook]
+verify_jwt = false
+
+[functions.getnet_checkout]
+verify_jwt = false
+
+[functions.getnet_webhook]
+verify_jwt = false
+
+[functions.gocuotas_webhook]
+verify_jwt = false
+
+[functions.mobbex_webhook]
+verify_jwt = false
+
+[functions.modo_webhook]
+verify_jwt = false
+
+[functions.mp_billing_webhook]
+verify_jwt = false
+
+[functions.mp_oauth_callback]
+verify_jwt = false
+
+[functions.mp_orders_webhook]
+verify_jwt = false
+
+[functions.mp_webhook]
+verify_jwt = false
+
+[functions.nave_webhook]
+verify_jwt = false
+
+[functions.payway_checkout]
+verify_jwt = false
+
+[functions.payway_webhook]
+verify_jwt = false
+
+[functions.send_password_recovery]
+verify_jwt = false

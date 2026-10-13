@@ -14,9 +14,9 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F1** | MVP vendible (POS + Admin) | 10–12 semanas | 🟢 Funcional (base H0–H6) |
 | **F1.5** | Hardening pre-piloto | 2–3 semanas | 🟡 Prioridad inmediata |
 | **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟢 Funcional (billing self-serve + dunning + gating) |
-| **F3** | Integración AFIP y producción | 4–6 semanas | 🔴 No iniciado |
-| **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 Planificación |
-| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 En progreso (perfiles por rubro hechos, ADR-075; promociones y marketplace pendientes) |
+| **F3** | Integración AFIP y producción | 4–6 semanas | 🟡 En curso (ARCA WSFEv1, cola fiscal y CAEA en ADR-072, sin certificado real; venta offline ADR-077) |
+| **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 En curso (multi-sucursal en F17, hardware en F10/ADR-063, pasarelas en F8; falta observabilidad externa) |
+| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 En progreso (perfiles por rubro hechos, ADR-075; motor de promociones hecho, ADR-074; marketplace, API pública y tema por tenant pendientes) |
 | **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟢 Funcional (H7–H10b + Tiendita) |
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
@@ -25,14 +25,12 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (falta H32 y parte de H31b) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081) |
-| **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
+| **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación (parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
-| **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
+| **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación (parciales por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066) |
-
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; base fiscal ADR-068) |
-| **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079) |
+| **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
 
@@ -56,7 +54,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 ### Criterios de cierre
 - [~] Un dev nuevo puede clonar, instalar y levantar el proyecto en < 30 min siguiendo `00-getting-started.md`. *La guía existe; falta validarla con un dev real.*
 - [x] El PM puede invocar a cualquier agente y este encuentra su archivo en `.claude/agents/`.
-- [~] `pnpm test` pasa con al menos un test por capa (component, hook, edge function). *15 archivos: 2 de componentes + 13 unit/dominio; faltan tests de hooks y de Edge Functions.*
+- [~] `pnpm test` pasa con al menos un test por capa (component, hook, edge function). *Componentes (`tests/components/`), dominio y Edge Functions (`tests/unit/arcaWsfe.test.ts` y otros importan `supabase/functions/_shared`); falta un test de hooks de React.*
 
 ---
 
@@ -90,9 +88,9 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [x] Scripts documentados y alineados con `package.json`. — *`db:start`, `db:reset`, `test:rls` agregados; coinciden con los comandos de bolsillo de CLAUDE.md.*
 - [x] Suite de aislamiento multi-tenant con dos tenants y datos cruzados conocidos. — *`tests/integration/rls.test.ts`: crea tenant A/B + owner/cashier, productos y clientes cruzados; corre contra Supabase local (job `rls` de CI con `supabase start` + migraciones reales). Sin las env de test, la suite se salta.*
 - [x] Tests de RLS para tablas críticas: productos, ventas, caja, clientes, audit logs. — *Lectura y escritura cross-tenant bloqueadas; además `payment_secrets` (deny-all) y `tenant_notes` (solo staff).*
-- [~] Tests de permisos por rol: owner, manager, cashier, viewer. *Owner vs cashier cubierto (payment_plans, pos_settings); manager y viewer pendientes.*
-- [ ] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte.
-- [ ] Idempotencia documentada para venta/anulación antes de integrar pagos externos.
+- [x] Tests de permisos por rol: owner, manager, cashier, viewer. *Hecho: `tests/integration/roles.test.ts` cubre owner, manager, cashier y viewer (ADR-071).*
+- [~] Smoke E2E mínimo: login → abrir caja → vender → ticket → anular → cerrar caja → reporte. *`tests/e2e/pos.spec.ts` cubre login, abrir caja y vender; faltan ticket, anulación, cierre de caja y reporte en un mismo flujo.*
+- [~] Idempotencia documentada para venta/anulación antes de integrar pagos externos. *Venta offline documentada (`client_sale_id` único, `docs/34-venta-offline.md`, ADR-077) y cobro en espera idempotente (`_pc_complete`, ADR-048); falta documentar la venta online del POS y la anulación.*
 - [~] Health endpoint básico (`/api/health`) y checklist de monitoreo manual. *Endpoint listo (`GET /api/health` → status/version/env/time, sin DB ni secretos). Falta el checklist de monitoreo.*
 - [x] **Gating server-side real + hardening de seguridad SaaS** *(2026-06-08)*: enforcement backend de **medios de pago por plan** (trigger en `payments`, PRs #215/#240) y de **features de escritura** (descuentos/garantías/cuenta corriente/listas en `create_sale`/escrituras, con advisory lock en el correlativo, PR #250); hardening (policy de planes cerrada a `anon`, guards en RPCs, revokes defensivos, índices/policies de performance, PR #248); **auditoría SaaS exhaustiva** (seguridad/RLS/pagos/funcional/IA/emails) — base sólida, sin fugas, fixes aplicados. *La UI nunca es la única barrera (ver convención de features de plan en `CLAUDE.md`).*
 - [ ] Backup/restore de Supabase probado en staging o entorno descartable.
@@ -110,9 +108,9 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 **Duración:** 4–6 semanas. **Objetivo:** NinjaSoft puede operar el SaaS sin tocar SQL: alta de clientes, cambios de plan, activación de features.
 
 ### Entregables
-- [~] **Panel interno** (rutas protegidas para staff NinjaSoft): — *Base hecha: `/internal/tenants` + detalle, `/internal/staff`, `/internal/pagos`, `/internal/emails`. Guard `is_internal`.*
+- [x] **Panel interno** (rutas protegidas para staff NinjaSoft): — *Base hecha: `/internal/tenants` + detalle, `/internal/staff`, `/internal/pagos`, `/internal/emails`. Guard `is_internal`.* *Completo: alta y baja manual de negocios (ADR-073), miembros y ficha 360 (ADR-084).*
   - [x] Listado de tenants con filtros (estado, plan, última actividad). — *Búsqueda (nombre/slug/dueño), filtros por estado de suscripción y plan, y columna "Últ. actividad" (último login o última venta, vía `internal_tenant_health()`).*
-  - [ ] Alta y baja de tenants. *(el alta hoy es self-service vía onboarding; falta alta/baja desde internal)*
+  - [x] Alta y baja de tenants. *Hecho: "Nuevo negocio" con Edge `internal_create_tenant` y baja lógica con motivo por `internal_tenant_lifecycle` (ADR-073).*
   - [x] Cambio de plan en caliente. — *Detalle del tenant: select de plan → RPC `internal_set_plan`.*
   - [x] Activación / desactivación de feature flags por tenant. — *Toggles en el detalle del tenant → RPC `internal_set_flag`.*
   - [x] Vista de auditoría administrativa. — *`/internal/audit`: últimos 200 registros de `audit_logs` con filtros (negocio, entidad, acción, rango de fechas) y detalle expandible (motivo + before/after JSON). Solo lectura, guard `is_internal` por RLS.*
@@ -120,14 +118,14 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Estados: `trial`, `active`, `past_due`, `suspended`, `cancelled` (migración `saas_catalog`).
   - [x] Trial automático de 14 días al alta (Edge Function `create_tenant` setea `trial_ends_at`).
   - [x] Suspensión por falta de pago (manual + **automática**). — *Staff cambia el estado a `suspended` desde el detalle (RPC `internal_set_subscription_status`); además **motor de dunning de 3 días** que pasa a `suspended` y **reactiva reanclando el período** al vencimiento anterior (migración `dunning_3day_grace_reanchor`, PR #237). El cliente suspendido ve un bloqueo de cuenta (`SuspendedGate`, PR #236).*
-- [~] **Sistema de soporte interno:**
+- [x] **Sistema de soporte interno:** *Hecho: notas internas y salud con errores (ADR-084).*
   - [x] Notas internas por tenant. — *Tabla `tenant_notes` (RLS solo `is_internal`, baja lógica) + card "Notas internas" en el detalle del tenant: agregar, listar con autor y fecha relativa, eliminar. Invisibles para los usuarios del tenant.*
-  - [~] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores). *KPIs en el detalle del tenant: último login, última venta, ventas 7 días (cantidad + total) y usuarios activos — RPC `internal_tenant_health()` (SECURITY DEFINER, guard `is_internal`, devuelve solo agregados). Errores quedan para observabilidad (F4/Sentry).*
+  - [x] Vista rápida de salud operativa (último login, ventas últimos 7 días, errores). *KPIs en el detalle del tenant: último login, última venta, ventas 7 días (cantidad + total) y usuarios activos — RPC `internal_tenant_health()` (SECURITY DEFINER, guard `is_internal`, devuelve solo agregados).* *Errores: la ficha 360 (`internal_tenant_360`) muestra los últimos de webhooks, comprobantes fiscales y emails, con puntaje de salud en `lib/internal/tenantHealth.ts` (ADR-084).*
 
 ### Criterios de cierre
-- [ ] NinjaSoft puede dar de alta un cliente nuevo en < 5 minutos sin tocar SQL. *(el alta es self-service; falta el flujo desde internal)*
+- [x] NinjaSoft puede dar de alta un cliente nuevo en < 5 minutos sin tocar SQL. *Hecho: botón "Nuevo negocio" en `/internal/tenants` (Edge `internal_create_tenant`, ADR-073).*
 - [x] Cambiar un cliente de Start a Pro toma una sola acción y aplica de inmediato.
-- [ ] Toda acción administrativa queda en `audit_logs`.
+- [x] Toda acción administrativa queda en `audit_logs`. *Hecho: todas las RPC `internal_*` de escritura y las Edges de staff (`staff_admin`, `set_platform_secret`, `internal_tenant_members`, `internal_impersonate`) escriben `audit_logs` (ADR-073, ADR-084).*
 
 ---
 
@@ -145,7 +143,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Cola fiscal robusta: pendientes, reintentos, bloqueados, rechazados, dead-letter y reproceso manual.
   - [x] Idempotencia fiscal por venta/tipo de comprobante/punto de venta. *(más recuperación con FECompConsultar ante un resultado incierto)*
   - [x] Conciliación contra AFIP (`FECompUltimoAutorizado`) para detectar drift de numeración.
-- [ ] **Prerrequisitos fiscales (2026-10-12, ADR-043):** alícuotas IVA con exento y no gravado e impuestos internos (F18/H103), condición fiscal del receptor y padrones (F18/H104), punto de venta por sucursal (F17/H98). Comprobantes completos (tributos, M, FCE MiPyME, E, Transparencia Fiscal) en F18/H107.
+- [~] **Prerrequisitos fiscales (2026-10-12, ADR-043):** alícuotas IVA con exento y no gravado e impuestos internos (F18/H103), condición fiscal del receptor y padrones (F18/H104), punto de venta por sucursal (F17/H98). Comprobantes completos (tributos, M, FCE MiPyME, E, Transparencia Fiscal) en F18/H107. *Base fiscal hecha (ADR-068: alícuotas con exento y no gravado, internos, condición fiscal y padrones) y punto de venta por sucursal `stores.afip_pos_number` (ADR-072); faltan razón social y CUIT por sucursal (H98) y comprobantes completos (H107).*
 - [x] Gestión de certificados AFIP por tenant (almacenados encriptados). *(clave y CSR generados en la Edge, AES-256-GCM con `ARCA_KEY_ENC`; el front sólo ve metadata; delegación en NinjaSoft modelada y apagada hasta tener CUIT)*
 - [x] Panel de monitoreo de facturación electrónica:
   - [x] Comprobantes pendientes.
@@ -157,18 +155,18 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] ARCA caído no bloquea la venta. *(ARCA caído: cola y contingencia CAEA; sin internet en el POS depende de la venta offline del POS)*
   - [x] Se emite ticket provisorio (`OFF-XXXXXXXX`, no válido como factura) y la venta queda en una cola local (IndexedDB) con `client_sale_id` idempotente, asociada a usuario y turno.
   - [x] Se emite comprobante interno/provisorio y la factura queda en cola fiscal. *(ticket "Comprobante pendiente de autorización ARCA")*
-  - [~] Al reconectar, el POS sincroniza solo (`sync_offline_sale`, wrapper de `create_sale`, idempotente): precio cambiado se respeta y se audita, stock negativo se permite y se marca, lo inválido queda en **Ventas offline** para el dueño. *Pedir el CAE con la fecha real de la venta y actualizar el ticket: rama ARCA.*
-  - [ ] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *(ARCA: sí, la cola reintenta y el ticket muestra el CAE; falta la venta offline del POS sin conexión a NinjaSoft)*
+  - [~] Al reconectar, el POS sincroniza solo (`sync_offline_sale`, wrapper de `create_sale`, idempotente): precio cambiado se respeta y se audita, stock negativo se permite y se marca, lo inválido queda en **Ventas offline** para el dueño. *La venta sincronizada entra a la cola fiscal por el trigger `arca_sales_enqueue` (ADR-072). Falta usar `sales.offline_sold_at` como fecha del comprobante y reimprimir el ticket con CAE.*
+  - [~] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *Sincronización (`sync_offline_sale`, ADR-077) y CAE por la cola fiscal (`arca_sales_enqueue`, ADR-072) integrados; falta la fecha real del comprobante (`offline_sold_at`) y actualizar el ticket ya impreso.*
   - [x] El POS muestra estado fiscal claro: `pendiente`, `enviando`, `aprobado`, `rechazado`, `requiere acción`. *(detalle de la venta, ticket e indicador de contingencia)*
 - [x] Numeración de comprobantes por punto de venta. *(caja o sucursal; serie CAEA propia)*
 - [x] **Contingencia CAEA** (pedido del dueño): CAEA por quincena, emisión al instante si ARCA falla de forma cierta, informe posterior y sin movimiento. *(ADR-072, `feat/arca-wsfe`)*
 
 ### Criterios de cierre
 - [ ] 100 comprobantes consecutivos en homologación sin error de integración.
-- [ ] Recuperación automática si AFIP devuelve error transitorio.
-- [ ] El cashier nunca ve un error de AFIP que lo bloquee — la venta se completa, la factura se reintenta en segundo plano.
-- [~] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable. *(Registro local y sincronización hechos, ADR-077; CAE con la rama ARCA.)*
-- [ ] El cambio de homologación a producción solo se habilita después de certificados válidos, numeración verificada y prueba exitosa.
+- [~] Recuperación automática si AFIP devuelve error transitorio. *Código: reintentos con backoff, clasificación de errores y dead-letter (ADR-072, `tests/unit/arcaWorker.test.ts`); falta validarlo contra ARCA con certificado real.*
+- [~] El cashier nunca ve un error de AFIP que lo bloquee — la venta se completa, la factura se reintenta en segundo plano. *Código: la factura se encola por trigger después de la venta (`arca_sales_enqueue`, ADR-072) y nunca la bloquea; falta validarlo en producción.*
+- [~] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable. *(Registro local y sincronización hechos, ADR-077; la venta sincronizada se encola en ARCA, ADR-072. Falta la fecha real del comprobante.)*
+- [x] El cambio de homologación a producción solo se habilita después de certificados válidos, numeración verificada y prueba exitosa. *Hecho: `_arca_checklist` (datos fiscales, certificado, homologación aprobada, prueba de conexión en producción, puntos de venta) y `arca_set_environment` rechaza con `checklist_incomplete` (ADR-072).*
 
 ---
 
@@ -179,31 +177,31 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 > **Actualización 2026-10-12 (ADR-043):** el bloque multi-sucursal y multi-caja de F4 se detalla y se ejecuta en **[F17](#f17--multi-sucursal-real)** (H89 a H99), a partir de la auditoría [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md). Los ítems de abajo quedan como resumen y apuntan al hito que los cubre.
 
 ### Entregables
-- [ ] **Multi-sucursal:** *(ver F17)*
-  - [ ] Stock por sucursal con transferencias. *(F17/H94 y H95)*
-  - [ ] Reportes consolidados. *(F17/H97)*
-  - [ ] Permisos por sucursal. *(F17/H91)*
-- [ ] **Multi-caja por sucursal:** *(ver F17)*
-  - [ ] Asignación de cajero a caja específica. *(F17/H90 y H91)*
-  - [ ] Reportes por caja. *(F17/H97)*
-- [ ] **Integraciones de hardware:**
-  - [ ] Impresoras térmicas (ESC/POS via plugin de impresión web).
-  - [ ] Cajón de dinero.
-  - [ ] Lectores de código de barras (USB HID, sin driver).
-  - [ ] Balanzas (opcional, vía puerto serie).
-- [ ] **Pasarelas de pago:**
-  - [ ] Mercado Pago Point (QR + tarjeta).
-  - [ ] Modo (transferencia).
-  - [ ] Conciliación automática.
-- [ ] **Observabilidad avanzada:**
+- [~] **Multi-sucursal:** *(ver F17)* *Ver detalle en F17.*
+  - [x] Stock por sucursal con transferencias. *(F17/H94 y H95)* *Hecho: ADR-046 y ADR-080.*
+  - [x] Reportes consolidados. *(F17/H97)* *Hecho: vista consolidada y comparativo con XLSX por sucursal (ADR-057).*
+  - [x] Permisos por sucursal. *(F17/H91)* *Hecho: personal por sucursal y RLS de lectura (ADR-045, `tests/integration/rls-sucursales.test.ts`).*
+- [~] **Multi-caja por sucursal:** *(ver F17)* *Ver detalle en F17.*
+  - [~] Asignación de cajero a caja específica. *(F17/H90 y H91)* *El cajero opera sólo en sus sucursales y la caja es de quien abre el turno (ADR-045, ADR-051); falta asignar un cajero a una caja fija.*
+  - [~] Reportes por caja. *(F17/H97)* *Cierres Z por caja con filtro por caja (ADR-080); falta el filtro por caja en el resto de los reportes.*
+- [~] **Integraciones de hardware:** *Ver F10 (H22 a H26) y ADR-063.*
+  - [~] Impresoras térmicas (ESC/POS via plugin de impresión web). *Impresión a térmicas 58/80 mm por web print (`lib/print/webPrint.ts`, H22); falta ESC/POS directo por conector local.*
+  - [x] Cajón de dinero. *Hecho: pulso ESC/POS por Web Serial, WebUSB o puente local, apertura auditada con `cash_drawer_open` (ADR-063, `lib/hardware/drawer.ts`).*
+  - [x] Lectores de código de barras (USB HID, sin driver). *Hecho: `useScanner` (H23).*
+  - [x] Balanzas (opcional, vía puerto serie). *Hecho: lectura por Web Serial o puente local y etiquetas de balanza (ADR-063, `lib/hardware/scale/`); presets de marca sin validar con equipos.*
+- [x] **Pasarelas de pago:** *Ver F8.*
+  - [x] Mercado Pago Point (QR + tarjeta). *Hecho: QR dinámico y Point sobre la Orders API (ADR-027, ADR-032); falta el primer cobro en vivo.*
+  - [x] Modo (transferencia). *Hecho: Edges `modo_create_qr` y `modo_webhook`.*
+  - [x] Conciliación automática. *Hecho: conciliación de procesadores, Mercado Pago automático (ADR-061) y tarjetas (ADR-044).*
+- [~] **Observabilidad avanzada:** *Webhooks de cobro con log propio (ADR-070); sin Sentry por decisión de ADR-070.*
   - [ ] Sentry para errores frontend.
-  - [ ] Logs estructurados centralizados.
+  - [~] Logs estructurados centralizados. *`webhook_events` y log JSON en las Edge de cobro (ADR-070); faltan los crons y el resto de la app.*
   - [ ] Alertas en Slack/email para errores críticos.
 
 ### Criterios de cierre
 - [ ] Un cliente con 3 sucursales puede operar simultáneamente sin latencia perceptible.
 - [ ] Una impresora térmica imprime un ticket en < 2s después de cobrar.
-- [ ] Mercado Pago se acredita en la venta sin intervención del cashier.
+- [~] Mercado Pago se acredita en la venta sin intervención del cashier. *Código: el webhook `mp_orders_webhook` acredita y el cobro en espera crea la venta del lado del servidor (ADR-032, ADR-048); falta validarlo en vivo.*
 
 ---
 
@@ -215,16 +213,16 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [x] **Perfiles de rubro** activables por tenant. *Hecho (2026-10-13, ADR-075, rama `feat/perfiles-rubro`, migración `20261102200000_perfiles_rubro` sin aplicar): 11 perfiles versionados (kiosco, almacén, textil, ferretería, farmacia/perfumería, gastronomía, cafetería, verdulería/carnicería, librería, servicios, otro) que prenden flags operativos de `pos_settings`, ajustan el diseño del POS, crean categorías sugeridas y sugieren unidades, medios de cobro y features de plan ("disponible en plan X", nunca se activan). RPC `apply_business_profile` (sólo dueño, auditada), "Cambiar rubro" con vista previa en Configuración, paso en Puesta en marcha y lectura en el panel interno.*
   - [x] **Kiosco:** venta ultrarrápida, atajos de teclado optimizados, gestión de cigarrillos / bebidas.
   - [x] **Textil:** variantes (talle/color), control de prendas por SKU compuesto. *Perfil textil con diseño Boutique; variantes se sugiere (feature de plan, desde Pro).*
-  - [ ] **Retail:** promociones complejas (2x1, descuentos por volumen).
+  - [x] **Retail:** promociones complejas (2x1, descuentos por volumen). *Hecho: NxM, segunda unidad y escalas por cantidad en el motor de promociones (ADR-074).*
   - [x] **Restaurante / resto-bar:** mesas, salones, comandas, cocina/KDS, cursos, división de cuenta y propina.
   - [x] **Cafetería / take away:** mostrador rápido, nombre del cliente, comandas de barra/cocina, combos y modificadores.
   - [~] **Heladería:** productos por botón, tamaños, sabores/modificadores, balanza opcional y comanda de preparación. *Usa el perfil cafetería; perfil propio pendiente.*
   - [~] **Peluquería / estética:** servicios, agenda, profesional, comisión y venta de productos complementarios. *Usa el perfil servicios (agenda y packs sugeridos); perfil propio pendiente.*
   - [~] **Pyme genérica:** módulo de cuenta corriente de clientes. *Perfil otro; la cuenta corriente se sugiere en almacén y ferretería.*
-- [ ] **Motor de promociones** configurable:
-  - [ ] Reglas declarativas (no código).
-  - [ ] Vigencia por fecha/horario.
-  - [ ] Combinables o exclusivas.
+- [x] **Motor de promociones** configurable: *Hecho: ADR-074 (`lib/promotions/engine.ts` y `_promo_eval_core`).*
+  - [x] Reglas declarativas (no código). *Hecho: tipos, alcance y condiciones como columnas validadas (ADR-074).*
+  - [x] Vigencia por fecha/horario. *Hecho: vigencia, días y franja horaria (ADR-074).*
+  - [x] Combinables o exclusivas. *Hecho: excluyentes o acumulables (`stackable`, ADR-074).*
 - [ ] **Marketplace de integraciones:**
   - [ ] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06)*
     - [ ] **Conexión por tenant**: OAuth "Conectar con Mercado Libre" (un click, mismo patrón que MP en H15); tokens y refresh en tabla de secretos con RLS deny-all (solo Edge Functions), renovación automática.
@@ -246,11 +244,11 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
     - [~] *Criterio:* un tenant con el addon activo abre el chat, pide "armame un ticket con mi logo y mis colores", la IA genera la plantilla y el dueño la confirma; sin el addon, la burbuja no existe. — *El chat con contexto y el gateo de la burbuja están; la generación/aplicación de la plantilla por la IA queda pendiente.*
   - [ ] WhatsApp Business para notificaciones.
 - [ ] **API pública** con OAuth para clientes Enterprise.
-- [ ] **Tema visual personalizado** por tenant (logo, color de acento dentro de los límites de marca).
+- [~] **Tema visual personalizado** por tenant (logo, color de acento dentro de los límites de marca). *Logo y color de acento por negocio en `tenant_branding` (H8, gateado por `personalizacion_marca`) aplicados a tickets, emails y catálogo; falta aplicarlos al tema del panel.*
 
 ### Criterios de cierre
 - [ ] Un cliente textil puede gestionar 500 SKUs con variantes sin pasar por NinjaSoft.
-- [ ] Una promoción "Miércoles 30% en bebidas" se configura desde el panel del cliente y aplica automáticamente.
+- [x] Una promoción "Miércoles 30% en bebidas" se configura desde el panel del cliente y aplica automáticamente. *Hecho: porcentaje por categoría con días de la semana, aplicado en `create_sale` (ADR-074).*
 - [ ] La API permite a un cliente Enterprise sincronizar 1000 productos en < 60s.
 
 ---
@@ -325,7 +323,7 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
   - [x] **Permite venta en cero/negativo (override por producto)** del setting global (gancha con H30). — *`products.allow_negative` (hereda/sí/no en el form); `create_sale` lo aplica.*
   - [x] **Producto serializado (IMEI/N° de serie):** cada unidad tiene serie única; al vender, el cajero elige el serial que sale. — *`product_serials` + `SerialsEditor` en el form + picker de serial en el POS; `create_sale` marca el serial vendido. Base avanzada queda en F14/H64.*
   - [x] **Kit / combo (BOM de retail):** un kit no tiene stock propio; al venderse descuenta el stock de sus **componentes** según cantidades configuradas. — *`product_kits` + `KitComponentsEditor`; `create_sale` descuenta componentes (respetando `track_stock`/`allow_negative` de cada uno).*
-  - [ ] **Stock inicial por depósito** desde el alta (gancha con F11/H33) y **variantes talle/color** (gancha con F6/H10) cuando el producto las tenga. — *Pendiente: depende de multi-depósito (H33) y variantes (H10), que no existen aún.*
+  - [~] **Stock inicial por depósito** desde el alta (gancha con F11/H33) y **variantes talle/color** (gancha con F6/H10) cuando el producto las tenga. *Variantes en el alta (`VariantsEditor`, H10) y depósitos con stock inicial por importación (`import_warehouse_stock`, ADR-085); falta elegir el depósito en el alta.*
   - [x] *Criterio:* el dueño crea un producto con marca, IVA, foto WebP, tags y garantía en una sola pantalla; arma una categoría de 2 niveles; marca un servicio como "no controla stock"; define un kit que descuenta sus componentes; y un electro como serializado que pide el N° de serie al vender. ✓
 
 - [~] **H10c — Tiendita / Catálogos precargados (storefront de catálogos).** *(feature nueva, agregada 2026-06-08 — no estaba en el roadmap original)* Un catálogo precargado por NinjaSoft (ej. kiosco/almacén con miles de productos) que el dueño **compra una vez** y carga a su negocio sin cargar productos a mano. Doble plano: **gestión interna** de los catálogos y **storefront** para el dueño. — *Base completa (PRs #245/#246/#247); falta gobierno fino del addon (versionado/actualización del catálogo comprado) y métricas de adopción.*
@@ -377,7 +375,7 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
 
 - [~] **H12 — Suscripciones, billing manual y lifecycle comercial.** — *Base (2026-06-04) + lifecycle del trial y cobranza (2026-06-05) + plan custom/overrides/descuentos (2026-06-07) + **billing self-serve, panel del dueño y dunning automático** (2026-06-08). Cobro real por MP cableado (checkout owner-callable + webhook); el cobro en vivo queda por validar en producción. Quedan historial completo de cambios y automatizaciones avanzadas.*
   - [~] Upgrade/downgrade de plan, cambio de estado (`trial`/`active`/`past_due`/`suspended`/`cancelled`), fechas de período. — *Upgrade desde el panel del dueño (PR #226); estados conciliados por el dunning de 3 días con reanclaje de período (PR #237). Downgrade self-serve fino pendiente.*
-  - [ ] Aumentar/limitar módulos y feature flags por tenant desde una sola consola.
+  - [~] Aumentar/limitar módulos y feature flags por tenant desde una sola consola. *Auditoría 2026-10-13: en el detalle del negocio (`app/internal/tenants/[id]/page.tsx`) están los feature flags del negocio (`useTenantFlags`) y los overrides de límites (`PlanCard`); los módulos se tocan con el plan custom en el editor de planes. Falta un único panel de módulos por negocio.*
   - [x] **Plan específico por cliente:** clonar un plan base, cambiar nombre comercial, límites, módulos, soporte, precio y condiciones sin afectar a otros tenants. — *RPCs `internal_clone_plan` / `internal_update_custom_plan` + `PlanCard` en el detalle del tenant (2026-06-07).*
   - [~] **Overrides de cuota/límites por cliente:** usuarios, sucursales, cajas, productos, ventas mensuales, almacenamiento, módulos, soporte y límites fiscales. — *Base hecha (2026-06-07): `subscriptions.limit_overrides` + RPC auditado + editor por límite (efectivo = override ?? plan). Cajas/almacenamiento/fiscales cuando existan esos límites.*
   - [ ] **Aumento de cuota/precio a un cliente:** cambio inmediato o programado con fecha efectiva, motivo, aviso previo, aceptación opcional y registro de antes/después.
@@ -428,19 +426,19 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [~] **H15** — Mercado Pago. **Conexión por Access Token + QR de cobro (Checkout Pro) + OAuth "Conectar con MP" hechos**: Edge Functions `set_payment_secret`, `mp_create_qr`, `mp_webhook`, `mp_oauth_start`, `mp_oauth_callback` (`state` anti-CSRF, refresh de token); botón "Conectar con Mercado Pago" (un click) y "Cobrar con QR" en el POS; tabla `mp_payment_intents`. **Billing de suscripciones**: credenciales de plataforma en `platform_secrets` editables desde `/internal/pagos` (`set_platform_secret`), `mp_subscription_checkout` (preapproval) + `mp_billing_webhook`; "Generar link de cobro" en el detalle del tenant. **Conciliación básica hecha** (modal "Cobros QR" en /ventas: intents cruzados con sus ventas, alerta de "aprobado sin venta", filtros + export XLSX). **Mercado Point (tarjeta presencial) hecho** (2026-07-10, ADR-027): Edge `mp_point` (devices/pdv/create/status/cancel) reutilizando la conexión MP del tenant, `PointCheckoutModal` en el POS (elegir lector → cobro en el Point → venta como débito/crédito real), verificación independiente contra `/v1/payments` antes de acreditar, conciliación compartida en "Cobros QR". *Pendiente: validar con lector físico (primer cobro en vivo).* **Migración a la Orders API unificada** (2026-10-11, ADR-032): QR dinámico en la caja del local (Edge `mp_qr`: alta única de sucursal + caja desde Medios de pago, `POST /v1/orders` type `qr` con `X-Idempotency-Key`, QR dibujado local sin servicios externos, status/cancel), "Enviar link" de Checkout Pro desde el mismo modal (fallback automático si no hay caja), Point sobre `POST /v1/orders` type `point` (terminales `/terminals/v1/list`, PDV, cuotas preseleccionables, cancel con `at_terminal`) con compatibilidad para intents legacy, webhook topic `order` (`mp_orders_webhook`, re-lee la order con el token del tenant) y switch Sandbox de MP (token de prueba). *Pendiente: aplicar migración `20261011170000_mp_orders_api`, desplegar Edges, configurar el webhook `order` en la app de MP y validar QR + Point en sandbox y en vivo.*
   - [~] **H16** — **MODO** vía QR interoperable. — *Transaccionable en el POS (2026-06-08, PRs #227/#229): Edge Functions `modo_create_qr` + `modo_webhook`, **gating real** por plan, sin botón de cuotas y **conexión de credenciales** desde Medios de pago. **Dialecto REAL implementado y verificado estructuralmente** (2026-07-10): token `POST {base}/middleman/token {username,password}` → `accessToken`, intención `POST {base}/ecommerce/payment-intention`, estado por GET — confirmado contra el SDK del plugin oficial de WooCommerce ("paga-con-modo"); preprod/producción por el switch Sandbox (`merchants[.preprod].playdigital.com.ar/merchants`). Polling server-side (action `status`) en lugar del webhook por intención (MODO usa webhook account-level, mejora futura). Form de conexión con las credenciales reales (Username/Password + Store ID y Processor code opcionales). **Bloqueado en la última milla:** las credenciales QA de NOVOGAR (email de MODO) devuelven 401 en `/middleman/token` de preprod — requiere activación/whitelisting del lado de MODO (comercios@modo.com.ar); con credenciales válidas el cobro corre sin tocar código.*
   - [~] **H17** — **Payway / Prisma**. — *Transaccionable por Formulario de pago hosted (2026-07-10, ADR-029): Edge `payway` (create → `checkout-payment-button/link`, status → `GET /api/v2/payments/{id}` con verificación de monto en centavos) + `payway_webhook` (re-verifica contra la API, nunca acredita a ciegas; GET sirve la pantalla de retorno del cliente). Botón "Cobrar con link · Payway" en el POS, conexión por API Key pública/privada + Nº de comercio, **sandbox público de Payway/Decidir** vía el switch Sandbox. Dialecto del SDK oficial `payway-ar/sdk-node-ventaonline`. **Validado E2E contra PRODUCCIÓN con credenciales reales del comercio (2026-07-10):** el create devuelve `payment_link` (`live.decidir.com/web/checkout/{hash}`); quirks del validador documentados en la Edge (URLs ≤ ~100 chars y de UN solo query param → correlación por prefijo corto `?i=`); la confirmación llega por webhook re-verificado + poll. **H17b — Checkout PROPIO de la tienda (2026-07-10):** el QR de Payway abre `/pagar/{intent}` de la app — página pública con la marca del negocio (logo/acento de `tenant_branding`), selección de tarjeta y cuotas de los Planes del negocio (recargo en vivo) y form de tarjeta; el PAN viaja del navegador directo a Payway (tokens con API Key pública) y el cobro corre server-side con monto RECALCULADO (Edge `payway_checkout`, centavos, `payment_method_id` por marca). La venta se registra por el total final (recargo como extra). Rechazos del emisor dejan reintentar con otra tarjeta. Primer cobro pagado E2E pendiente de una tarjeta real.*
-  - [~] **H18** — **Getnet**. — *Canal QR + link implementado (2026-10-11, ADR-031): Edge `getnet` (create → orden `POST /api/v2/orders` del Checkout de Geopagos con token OAuth2 `client_credentials`, status → `GET /api/v2/orders/{uuid}`) + `getnet_webhook` (verify_jwt false; re-consulta la orden con el token del tenant, acredita sólo APPROVED/PROCESSED/SUCCESS con monto exacto, idempotente). Checkout hosted como QR + link en `QrCheckoutModal` (provider `getnet`), conexión por Client ID + Client Secret. Dialecto del plugin oficial de WooCommerce de Getnet AR. **Sin sandbox AR:** falta el primer cobro real chico para confirmar los campos inferidos (uuid y monto en el GET, estados de rechazo). Falta cablear el tender en el POS (rediseño). **Getnet Point** sigue "Próximamente" (integración de terminales probablemente sólo para partners). **2026-10-12 (ADR-069):** dos juegos de credenciales (Web Checkout para QR y link, Checkout API para el checkout propio) con prueba por slot y aviso de credencial en el lugar equivocado; checkout propio `/pagar?p=getnet` con la Checkout API y Edge `getnet_checkout`, tender "Link (checkout propio)" y feature `getnet_checkout_propio`. **Bloqueado por PCI:** Getnet no tokeniza desde el navegador; el cobro queda apagado hasta la validación PCI DSS o hasta pasar a iframe de Web Checkout.*
-  - [ ] **H19** — **Fiserv / Posnet / Clover**.
+  - [~] **H18** — **Getnet**. — *Canal QR + link implementado (2026-10-11, ADR-031): Edge `getnet` (create → orden `POST /api/v2/orders` del Checkout de Geopagos con token OAuth2 `client_credentials`, status → `GET /api/v2/orders/{uuid}`) + `getnet_webhook` (verify_jwt false; re-consulta la orden con el token del tenant, acredita sólo APPROVED/PROCESSED/SUCCESS con monto exacto, idempotente). Checkout hosted como QR + link en `QrCheckoutModal` (provider `getnet`), conexión por Client ID + Client Secret. Dialecto del plugin oficial de WooCommerce de Getnet AR. **Sin sandbox AR:** falta el primer cobro real chico para confirmar los campos inferidos (uuid y monto en el GET, estados de rechazo). Tender cableado en el POS (`lib/pos/tenders.ts`: QR, link y checkout propio). **Getnet Point** sigue "Próximamente" (integración de terminales probablemente sólo para partners). **2026-10-12 (ADR-069):** dos juegos de credenciales (Web Checkout para QR y link, Checkout API para el checkout propio) con prueba por slot y aviso de credencial en el lugar equivocado; checkout propio `/pagar?p=getnet` con la Checkout API y Edge `getnet_checkout`, tender "Link (checkout propio)" y feature `getnet_checkout_propio`. **Bloqueado por PCI:** Getnet no tokeniza desde el navegador; el cobro queda apagado hasta la validación PCI DSS o hasta pasar a iframe de Web Checkout.*
+  - [~] **H19** — **Fiserv / Posnet / Clover**. *Clover Point integrado en código (ADR-047, Edges `clover_point` y `clover_webhook`) y base de terminal integrada con adaptador Fiserv (ADR-053, `lib/payments/terminal/adapters/fiserv.ts`). Falta Posnet integrado (H19e) y el primer cobro real.*
   - [~] **H20** — **Mobbex** como **orquestador** (abstrae varios proveedores; opcional según convenga). — *Cobro por QR funcionando con cuenta real (validado 2026-06-04): conexión por API Key + Access Token, checkout hosted → QR, planes del grid (cuotas + interés) aplicados en el checkout de Mobbex (`installments`), webhook actualiza el intent y la venta se registra. Edge Functions `mobbex_create_qr` + `mobbex_webhook`. Conciliación básica en el modal "Cobros QR" de /ventas.*
   - [~] **H21** — **Pagos360** (links de pago / cobranzas). — *Transaccionable (2026-07-10, ADR-028): Edge `pagos360` (create/status), botón "Cobrar con link · Pagos360" en el POS, checkout hosted como QR + link, conexión por API Key, soporte de **sandbox de Pagos360** vía el switch Sandbox del medio, conciliación compartida en "Cobros QR". Sin webhook: el POS sondea y la Edge sincroniza contra la API (sólo acredita con `state=paid` + monto exacto). Falta validar con cuenta real/sandbox propia (patrón H16).*
-  - [~] **H21c** — **Nave (Banco Galicia)** (QR interoperable + link y Nave Point). — *Integrado en código (2026-10-11, ADR-030): Edge `nave` (payment_request ecommerce → `qr_data` + `checkout_url`, status de respaldo, cancel), Edge `nave_point` (smart_pos a la terminal del `pos_id`, devices/status/cancel) y `nave_webhook` (valida host Nave anti-SSRF, re-consulta el pago con el token del tenant, acredita sólo APPROVED + monto exacto, idempotente). Auth client_credentials (apinaranja) con 401 → re-auth. Conexión única en Medios de pago (Client ID/Secret, punto de venta, terminales Point, Producción/Prueba, URL de notificaciones para Nave); Nave Point la reutiliza. `QrCheckoutModal`/`PointCheckoutModal` soportan `nave`/`nave_point`; los botones del POS quedan para el rediseño de tenders. Gating server-side `nave`/`nave_point`. Falta: deploy de las Edge y validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave).*
-  - [~] **H21d** — **GO Cuotas** (cuotas sin interés con débito, QR + link). — *Integrado en código (2026-10-11, ADR-033): Edge `gocuotas` (create → `POST /api_redirect/v1/checkouts` con `order_reference_id` = intent y `webhook_url` por intent, `url_init` como QR + link; status re-consulta la orden; cancel = baja local) y `gocuotas_webhook` (verify_jwt false; nunca confía en el cuerpo: re-consulta con la API Key del tenant, acredita sólo approved + referencia propia + monto exacto en centavos, idempotente; GET = pantalla neutra de retorno). Auth con la API Key de la sucursal como Bearer; sandbox/producción por el switch del medio (`mp_env` en el intent). Mínimo $1.500 con copy claro. `QrCheckoutModal` soporta `gocuotas`; form standalone `GoCuotasConnectForm`. Feature `gocuotas` desde Pro, gating server-side. Falta: aplicar la migración `20261011180000_gocuotas_directo`, deploy de las Edge, cablear el botón en el POS y la conexión en Medios de pago, y validar con API Key de prueba de una sucursal real.*
-  - [~] **H21e** — **Directo** (Crédito Directo S.A.) como **tender manual**. — *Implementado (2026-10-11, ADR-034): sin API pública; el cajero cobra en el portal de comercios de Directo (QR o link) y en el POS elige "Directo (crédito)" y carga el número de operación (obligatorio). `payments.method = 'directo'` con `reference` = Nº de operación (constraint), gating coarse por `payment_method_plan_key('directo')`. Feature `directo` desde Pro. Bloque informativo `DirectoInfo` para Medios de pago. Falta: aplicar la migración y cablear `DirectoInfo` en Medios de pago. Integración automática sólo si Directo abre una API.*
+  - [~] **H21c** — **Nave (Banco Galicia)** (QR interoperable + link y Nave Point). — *Integrado en código (2026-10-11, ADR-030): Edge `nave` (payment_request ecommerce → `qr_data` + `checkout_url`, status de respaldo, cancel), Edge `nave_point` (smart_pos a la terminal del `pos_id`, devices/status/cancel) y `nave_webhook` (valida host Nave anti-SSRF, re-consulta el pago con el token del tenant, acredita sólo APPROVED + monto exacto, idempotente). Auth client_credentials (apinaranja) con 401 → re-auth. Conexión única en Medios de pago (Client ID/Secret, punto de venta, terminales Point, Producción/Prueba, URL de notificaciones para Nave); Nave Point la reutiliza. `QrCheckoutModal`/`PointCheckoutModal` soportan `nave`/`nave_point`; tenders QR, link y Point cableados en el POS (`lib/pos/tenders.ts`). Gating server-side `nave`/`nave_point`. Falta: deploy de las Edge y validar con credenciales sandbox del comercio (pos_id de prueba + URL de notificaciones registrada por Nave).*
+  - [~] **H21d** — **GO Cuotas** (cuotas sin interés con débito, QR + link). — *Integrado en código (2026-10-11, ADR-033): Edge `gocuotas` (create → `POST /api_redirect/v1/checkouts` con `order_reference_id` = intent y `webhook_url` por intent, `url_init` como QR + link; status re-consulta la orden; cancel = baja local) y `gocuotas_webhook` (verify_jwt false; nunca confía en el cuerpo: re-consulta con la API Key del tenant, acredita sólo approved + referencia propia + monto exacto en centavos, idempotente; GET = pantalla neutra de retorno). Auth con la API Key de la sucursal como Bearer; sandbox/producción por el switch del medio (`mp_env` en el intent). Mínimo $1.500 con copy claro. `QrCheckoutModal` soporta `gocuotas`; form standalone `GoCuotasConnectForm`. Feature `gocuotas` desde Pro, gating server-side. Tender QR y link cableado en el POS (`lib/pos/tenders.ts`) y conexión en Medios de pago (`ConnectProviderModal`). Falta: aplicar la migración `20261011180000_gocuotas_directo`, deploy de las Edge y validar con API Key de prueba de una sucursal real.*
+  - [~] **H21e** — **Directo** (Crédito Directo S.A.) como **tender manual**. — *Implementado (2026-10-11, ADR-034): sin API pública; el cajero cobra en el portal de comercios de Directo (QR o link) y en el POS elige "Directo (crédito)" y carga el número de operación (obligatorio). `payments.method = 'directo'` con `reference` = Nº de operación (constraint), gating coarse por `payment_method_plan_key('directo')`. Feature `directo` desde Pro. Bloque informativo `DirectoInfo` para Medios de pago. `DirectoInfo` cableado en Medios de pago (`PaymentMethodsCard`). Directo sí tiene API: canal QR y link con respaldo manual (ADR-041, Edges `directo` y `directo_webhook`). Falta: aplicar las migraciones y validar en QA.*
   - [ ] *Criterio por proveedor:* cobro real en sandbox + conciliación + manejo de error sin bloquear la venta.
 
-- [ ] **H21b — Orquestador de pagos estilo VTOL.**
+- [~] **H21b — Orquestador de pagos estilo VTOL.** *Sólo la conciliación tiene base (ver abajo); router, estado central y monitoreo pendientes.*
   - [ ] Router de pagos por proveedor/adquirente/terminal/canal con prioridad, fallback y reglas de ruteo.
   - [ ] Estado central de transacciones: iniciada, autorizada, capturada, rechazada, reversada, anulada, conciliada, en disputa.
-  - [ ] Conciliación automática por lote, cupón, autorización, terminal, adquirente y liquidación.
+  - [~] Conciliación automática por lote, cupón, autorización, terminal, adquirente y liquidación. *Base: conciliación de tarjetas por día, n° de comercio y lote (ADR-044, `/reportes/conciliacion`) y de procesadores, automática con Mercado Pago y por archivo para adquirentes (ADR-061, Edge `settlements`). Falta liquidación automática para el resto de los adquirentes.*
   - [ ] Monitoreo de terminales, alarmas de caída, reintentos seguros y recuperación automática.
   - [ ] Trazabilidad por transacción y auditoría completa sin guardar datos sensibles de tarjeta.
   - [ ] *Criterio:* si un proveedor falla, el POS ofrece fallback autorizado y la operación queda conciliable sin duplicar cobro.
@@ -459,7 +457,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 > Relevamiento: [`docs/payments/terminal-integrada-payway.md`](payments/terminal-integrada-payway.md) y [`terminal-integrada-getnet.md`](payments/terminal-integrada-getnet.md).
 
 - [~] **H19b · Base de terminal integrada.** *En código (2026-10-12, `feat/terminal-integrada-payway`):* Web Serial, WebUSB y puente local (`tools/bridge`), simulador, máquina de estados, kinds `posnet_integrado` / `pinpad` por caja, Conectar y venta de prueba, "Tarjeta en terminal" en el cobro, bitácora `terminal_transactions` y validación del cupón en `payments`. Feature `terminal_integrada` (Pro+). **Paso:** aplicar `20261018100000_terminal_integrada`.
-- [ ] **H19c · Payway posnet integrado y pinpad.** Adaptador VPI implementado según fuentes públicas no oficiales (`unverified`). **Bloqueo:** especificación oficial, modelos y VID/PID, tabla de códigos de tarjeta, protocolo del Lane/3000 y homologación. **Paso:** pedirlo a Payway con la lista del relevamiento §7 y probar con una Classic en modo integrado.
+- [~] **H19c · Payway posnet integrado y pinpad.** Adaptador VPI implementado según fuentes públicas no oficiales (`unverified`). **Bloqueo:** especificación oficial, modelos y VID/PID, tabla de códigos de tarjeta, protocolo del Lane/3000 y homologación. **Paso:** pedirlo a Payway con la lista del relevamiento §7 y probar con una Classic en modo integrado. *Código: `lib/payments/terminal/adapters/payway.ts` sobre la base de ADR-053, sin validar con equipo real.*
 - [ ] **H19d · Getnet integrado.** Placeholder. **Bloqueo:** protocolo de la librería (USB / HTTP) o API de Cloud2Cloud. **Paso:** lista "Qué pedirle a Getnet".
 - [ ] **H19e · Fiserv Posnet integrado.** Placeholder. **Bloqueo:** especificación de la aplicación TRANSACT.
 - [ ] **H19f · Operaciones desde Ventas y Caja:** anulación y devolución con la terminal, cierre de lote con totales y conciliación automática (ADR-044) con la bitácora. Requiere H19c.
@@ -486,16 +484,16 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 
 Objetivo: que el POS opere como sistema de mostrador profesional: impresoras configurables, scanners confiables, periféricos por caja/sucursal y segunda pantalla para el cliente. Todo debe ser configurable por tenant, sucursal, caja y perfil de dispositivo.
 
-- [~] **H22 — Configuración avanzada de impresión.** — *Buildable por tenant hecho (2026-06-08, PR #262): config por TIPO DE DOCUMENTO (formato, copias, auto/manual) en Configuración → Impresión, respetada por el POS al cobrar, en Caja (Z) y en Devoluciones. Per-sucursal/caja, ESC/POS y cola → F4.*
-  - [~] Perfiles de impresión por **tenant / sucursal / caja**: ticket 58mm, ticket 80mm, A4, etiqueta, cocina/comanda, comprobante interno. — *Por **tenant** hecho (formato 58/80/A4 por tipo, según aplique). **Sucursal/caja → F4**; comanda de cocina → F13 (gastronomía).*
+- [~] **H22 — Configuración avanzada de impresión.** — *Buildable por tenant hecho (2026-06-08, PR #262): config por TIPO DE DOCUMENTO (formato, copias, auto/manual) en Configuración → Impresión, respetada por el POS al cobrar, en Caja (Z) y en Devoluciones. Perfiles por sucursal y caja con impresora asignada hechos (ADR-049, `lib/print/printers.ts`). Faltan ESC/POS directo y cola.*
+  - [x] Perfiles de impresión por **tenant / sucursal / caja**: ticket 58mm, ticket 80mm, A4, etiqueta, cocina/comanda, comprobante interno. — *Por **tenant** hecho (formato 58/80/A4 por tipo, según aplique). Sucursal y caja: `print_profiles` heredable por `config_overrides` con impresora y respaldo por documento, incluidos comanda y remito (ADR-049, `lib/print/profiles.ts`).*
   - [x] Selector de destino por tipo de documento: ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, comanda, devolución, nota de crédito futura. — *5 tipos configurables (ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, devolución/NC) en `pos_settings.print_profiles` (migración `20260608470000_print_profiles`). Comanda → F13.*
   - [~] Plantillas con variables: logo, datos fiscales, QR, leyendas legales, redes, promociones, cajero, caja, sucursal, medios de pago. — *Ya resuelto por el editor de plantillas de H9b (`ticket_templates`, modos bloques/canvas/HTML con variables). H22 elige formato/copias/auto sobre esa plantilla activa, sin duplicarla.*
   - [~] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual. — *Copias (1..20), impresión automática vs manual, y ajustes básicos de **fuente y margen** por tipo. Densidad y corte de papel requieren ESC/POS → F4. Apertura de cajón por pulso ESC/POS directo a la térmica: ADR-063.*
   - [x] Web print nativo: `window.print()` para navegador, A4 y fallback universal. — *La impresión es web; las copias se imprimen llamando a `window.print()` N veces (`lib/print/webPrint.ts`).*
-  - [ ] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza. — *F4 (documentado en la UI de Impresión y en `lib/print/profiles.ts`).*
-  - [ ] QZ Tray / WebUSB / WebSerial evaluados por compatibilidad. — *F4.*
+  - [~] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza. — *F4 (documentado en la UI de Impresión y en `lib/print/profiles.ts`).* *Conector local `tools/bridge` (ADR-053) ya manda ESC/POS para el pulso del cajón por serie o red 9100 (ADR-063, `lib/hardware/devices.ts`). Falta imprimir tickets por ESC/POS.*
+  - [~] QZ Tray / WebUSB / WebSerial evaluados por compatibilidad. — *F4.* *WebUSB y WebSerial evaluados y en uso para terminal integrada, balanza y cajón (ADR-053, ADR-063, `lib/hardware/capabilities.ts`). QZ Tray sin evaluar.*
   - [ ] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar. — *F4 (documentado como límite del web print).*
-  - [~] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto. — *Cumplido a nivel **tenant** (formato + copias + auto/manual por tipo, aplicado en venta/Z/devolución). "Por caja" queda para F4.*
+  - [~] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto. — *Cumplido a nivel **tenant** (formato + copias + auto/manual por tipo, aplicado en venta/Z/devolución). "Por caja" queda para F4.* *Por caja: impresora y perfil por documento heredables (ADR-049); la salida sigue siendo web print, falta que salga sola a la impresora.*
 
 - [~] **H23 — Scanners y captura de códigos PRO.** — *Base (PR #80) + perfil/beep/anti-dup/diagnóstico (2026-06-07) + etiquetas de balanza (ADR-063, `feat/balanza-cajon`). Quedan: QR de pago/fidelización.*
   - [x] Soporte para lector USB HID tipo teclado y Bluetooth (`useScanner`: captura global de teclado por velocidad de tipeo + Enter, sin foco previo), cámara (`BarcodeDetector`) y entrada manual (búsqueda).
@@ -513,7 +511,7 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [x] Impresión por lote: selección de productos + cantidad de copias por producto, vista previa y `window.print()` (página `/etiquetas`, hoja `ticket-print`). Hasta 200 copias por producto.
   - [x] Soporte para etiquetas de balanza: parsing configurable de código con precio o peso embebido. · *ADR-063 (ver H23).*
   - [~] Lectura de balanza en vivo (Web Serial o puente local) con peso estable, tara y simulador. · *ADR-063: `lib/hardware/scale/*` + `lib/hardware/devices.ts` (`ScaleReader`, `ScaleSimulatorTransport`), balanza por caja en `register_hardware`, peso en vivo en el editor de peso del POS (completa los gramos con el peso estable). Presets Systel, Kretz y Moretti marcados "sin validar": falta probarlos con equipos reales.*
-  - [ ] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza.
+  - [x] WebSerial para balanzas compatibles cuando aplique; fallback por código de barra de balanza. *ADR-063: Web Serial o puente local (`lib/hardware/scale/protocols.ts`, `lib/hardware/devices.ts`) y fallback por etiqueta de balanza (`lib/barcode/scaleLabel.ts`).*
   - [x] *Criterio (impresión):* el negocio selecciona productos e imprime un lote de etiquetas con nombre/precio/código sin tocar código. *(Balanza queda pendiente.)*
 
 - [~] **H25 — Doble pantalla / display cliente.** — *Pantalla web del cliente sincronizada en tiempo real hecha (PR #260). Falta solo el modo hardware (display serial/USB de 2 líneas) y el branding por sucursal (multi-store → F4).*
@@ -666,20 +664,20 @@ Objetivo: que negocios con pocos productos o servicios puedan vender en minutos 
   - [x] Cobro express: efectivo exacto, efectivo con vuelto, QR, tarjeta, transferencia. — *Reusa `PaymentModal`/QR existentes (no se duplicó).*
   - [ ] *Criterio:* una venta típica de 3 ítems se carga y cobra en menos de 15 segundos en pantalla táctil.
 
-- [~] **H37 — Modificadores simples para heladería/cafetería.** — *Core hecho (PR #268, 2026-06-08): grupos de modificadores por producto (Tamaño/Sabores/Toppings) con min/max, obligatorio y orden; opciones con +precio; selector en el POS al agregar; precio = base + deltas; persistencia del snapshot en `sale_items.modifiers`. **Combos** (café + medialuna) → F9; **comanda de cocina/producción** → F13.*
+- [x] **H37 — Modificadores simples para heladería/cafetería.** — *Core hecho (PR #268, 2026-06-08): grupos de modificadores por producto (Tamaño/Sabores/Toppings) con min/max, obligatorio y orden; opciones con +precio; selector en el POS al agregar; precio = base + deltas; persistencia del snapshot en `sale_items.modifiers`. **Combos** (café + medialuna) → F9; **comanda de cocina/producción** → F13.* *Auditoría 2026-10-13: hito completo; combos con el motor de promociones (ADR-074) y comanda impresa del pedido de mostrador (H48, `components/dining/ComandaModal.tsx`).*
   - [x] Tamaños: vasito, cucurucho, 1/4 kg, 1/2 kg, 1 kg, café chico/mediano/grande. — *Modelados como un grupo "Tamaño" (radio, min1/max1) con opciones libres por tenant; no hay lista fija, el dueño carga las suyas.*
   - [x] Sabores/toppings como modificadores, con límite configurable por tamaño. — *Grupos multi con `max_select` configurable (ej. Sabores hasta 3) y opciones con `price_delta` (ej. Crema +200). El POS valida el tope al elegir.*
   - [x] Modificadores obligatorios/opcionales y ordenados para que no frenen al cajero. — *`required` + `min_select`/`max_select` + `sort`; en el selector del POS los obligatorios van primero y se valida min/max antes de confirmar.*
-  - [ ] Combos simples: café + medialuna, kilo + cucuruchos, docena, promo familiar. — *Follow-up: se trata a fondo en [F9 — Motor de promociones PRO](#f9--motor-de-promociones-pro).*
-  - [ ] Impresión opcional de comanda/producción para preparación. — *Follow-up: comanda de cocina/KDS va con [F13 — Gastronomía PRO](#f13--gastronomía-pro). El snapshot ya queda en `sale_items.modifiers` para alimentarla.*
+  - [x] Combos simples: café + medialuna, kilo + cucuruchos, docena, promo familiar. *Hecho con el motor de promociones: combo a precio fijo por juego completo (`bundle_items`), NxM y escalas por cantidad (ADR-074, `20261102100200_promociones_motor`).*
+  - [x] Impresión opcional de comanda/producción para preparación. *Hecho: pedido de mostrador (H48) con KDS y "Imprimir comanda" por estación (`DeliveryAccountModal` + `ComandaModal`, H45/H49).*
   - [x] *Criterio:* el cajero vende "1/2 kg, 3 sabores" sin crear 200 productos distintos. — *Verificado: schema `product_modifier_groups`/`product_modifier_options` (migración `product_modifiers`, RLS por tenant), editor plegable en `ProductFormModal`, `ModifierPickerModal` en el POS (radio/multi con límite + precio en vivo), `create_sale` persiste `sale_items.modifiers` con el precio ajustado (probado por SQL).* 
 
-- [~] **H38 — Agenda y servicios para peluquería/estética.** — *Core entregado (local, pendiente de push — migración `20260608540000_agenda.sql` aplicada en remoto vía MCP y validada por SQL): servicios + profesionales + agenda día/semana + cobro desde el turno. **Follow-up (NO en este hito):** liquidación de comisiones (H39), seña/pago de reserva, propinas y lista de espera avanzada.*
+- [x] **H38 — Agenda y servicios para peluquería/estética.** — *Core entregado (local, pendiente de push — migración `20260608540000_agenda.sql` aplicada en remoto vía MCP y validada por SQL): servicios + profesionales + agenda día/semana + cobro desde el turno. **Follow-up (NO en este hito):** liquidación de comisiones (H39), seña/pago de reserva, propinas y lista de espera avanzada.* *Auditoría 2026-10-13: hito completo; la seña de reserva quedó hecha en ADR-088 y la lista de espera en ADR-082.*
   - [x] Servicios con duración, precio, profesional asignable y comisión. — *Un servicio es un `products` con `track_stock=false` + dos campos nuevos `products.service_duration_min` y `products.commission_pct` (sección “Servicio para agenda” en el form de producto). Reusa categorías/precio/favoritos/listas. El profesional se asigna por turno (no es un atributo fijo del servicio).*
   - [x] Agenda diaria/semanal por profesional, silla/cabina o recurso. *Recursos hechos (2026-10-13, ADR-082, `20261106100100_agenda_recursos`, sin aplicar): `agenda_resources` (silla, cabina, box, equipo) + `appointments.resource_id`, vista del día por recurso (`AgendaBoard` con `groupBy`), selector en el turno, y el servidor bloquea la doble reserva del mismo recurso (`resource_busy`); el choque de profesional es aviso. Feature `agenda_recursos` desde Pro.* — *Vista **día** (columnas por profesional + “Sin asignar”) y **semana** (columnas por día, filtrable por profesional), grid horario 8–21h con bloques coloreados por profesional, click en hueco = agendar (`AgendaBoard`). Silla/cabina/recurso genérico queda como extensión (hoy el recurso es el profesional).*
   - [x] Turnos, walk-ins y lista de espera. *Lista de espera hecha (2026-10-13, ADR-082, `20261106100200_agenda_lista_espera`, sin aplicar): `agenda_waitlist` con servicio, profesional preferido, fecha y franja, aviso por WhatsApp manual y "Agendar" con la RPC atómica `agenda_waitlist_schedule` (`WaitlistPanel`). Feature `lista_espera` BASE.* — *Turnos (`appointments`: snapshot servicio + estado + `sale_id`), **walk-in** (turno ahora, `is_walk_in`, en_curso) hechos. **Lista de espera** queda como follow-up.*
   - [x] Cobro desde turno: servicio realizado → agregar productos extra → cobrar. — *Botón “Cobrar este turno” → `/pos?appointment=<id>`: el POS carga el servicio en el carrito (permite agregar productos extra) y cobra con el flujo existente (`create_sale` intacto); al confirmar, `link_appointment_sale()` enlaza la venta y marca el turno `realizado`.*
-  - [~] Señas, cancelaciones, no-show y reprogramación. — *Cancelación con motivo, **no-show**, reprogramación (editar fecha/hora) y todos los estados (reservado/confirmado/en_curso/realizado/cancelado/no_show) hechos. **Seña/pago de reserva** queda como follow-up (H39/pagos). *Auditoría 2026-10-13: sigue abierta; descontar la seña al cobrar el turno requiere tocar `create_sale` o un medio de pago "seña" (deuda en ADR-082). **Hecho en `feat/create-sale-deudas` (ADR-088, `20261108200000` sin aplicar):** `appointment_deposits`, seña cobrada en la caja propia al reservar (feature `agenda_senas`, Pro+), descontada en `create_sale` como pago `sena` exacto con el turno enlazado en la misma transacción, liberada si la venta se anula y devolución del sobrante con motivo.*
+  - [x] Señas, cancelaciones, no-show y reprogramación. — *Cancelación con motivo, **no-show**, reprogramación (editar fecha/hora) y todos los estados (reservado/confirmado/en_curso/realizado/cancelado/no_show) hechos. **Seña/pago de reserva** queda como follow-up (H39/pagos). *Auditoría 2026-10-13: sigue abierta; descontar la seña al cobrar el turno requiere tocar `create_sale` o un medio de pago "seña" (deuda en ADR-082). **Hecho en `feat/create-sale-deudas` (ADR-088, `20261108200000` sin aplicar):** `appointment_deposits`, seña cobrada en la caja propia al reservar (feature `agenda_senas`, Pro+), descontada en `create_sale` como pago `sena` exacto con el turno enlazado en la misma transacción, liberada si la venta se anula y devolución del sobrante con motivo.*
   - [x] *Criterio:* una peluquería agenda corte + color con profesional, cobra el turno y calcula comisión. — *Cumplido a nivel core (validado por SQL: profesional + servicio + turno → cambio de estado → venta enlazada; la comisión se calcula y muestra en el detalle del turno). La **liquidación** de comisiones es H39.*
 
 - [x] **H39 — Comisiones, propinas y productividad del staff.** *(Auditoría 2026-10-13: todos los ítems y el criterio están hechos; el reparto de propina entre varios profesionales es mejora futura, no ítem del hito.)* — *Core hecho (migración `20260608550000_commissions_tips`, aplicada en remoto; **local, pendiente de push**). Propinas al cobrar (monto + medio efectivo/tarjeta/QR) en `sales.tip_amount`/`tip_method`, aparte del total de productos. Atribución de vendedor/profesional a la venta (`sales.professional_id`, selector en el PaymentModal) y comisión por línea `coalesce(products.commission_pct, professional.commission_pct, 0)% × subtotal`. Reporte de productividad por profesional en Reportes (servicios, productos, facturado, comisión, propinas, ticket prom. + export XLSX) vía RPC `staff_productivity` SECURITY DEFINER tenant-scoped. Flag `pos_settings.staff_sees_own_only` (toggle en Configuración → Operación) con RLS de lectura sólo-propia en la agenda y filtro en el reporte. Probado por SQL (rollback). **Reparto de propina entre varios profesionales** → futuro (hoy la propina va al profesional de la venta).*
@@ -754,7 +752,7 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [x] Cursos/platos: entrada, principal, postre, bebida; enviar todo o "fire course" por etapa. — *Cursos / despacho por tiempos hecho (local, pendiente de push). Cada ítem del pedido lleva un **tiempo (`table_order_items.course`** smallint, 1=entrada/2=principal/3=postre…) y un **`fired_at`** (cuándo se disparó a cocina; null = "en espera"). Al cargar un ítem (`add_table_order_item` + params opcionales `p_course`/`p_hold`) se elige el tiempo y si va a cocina al toque (default, = flujo actual) o **en espera**. Disparar por etapa: **`fire_table_order_course(p_order_id, p_course)`** sella `fired_at` de los ítems en espera de ese tiempo (o de todos si `p_course` null = "disparar todo"); audita en `audit_logs` (`fire_course`). **Sólo lo disparado llega a cocina**: `kds_tickets` y `comanda_items` filtran `fired_at is not null` (lo en espera NO aparece en KDS/comanda). En la cuenta de la mesa (`TableAccountModal`) los ítems van **agrupados por tiempo** con selector para cambiar el tiempo de un ítem (`set_table_order_item_course`), badge "En espera · Tiempo N" y botón **"Disparar Tiempo N"** (+ "Disparar todo"); el picker permite elegir tiempo y hold. El **KDS y la comanda muestran el Tiempo N** en cada tarjeta/línea para la secuencia. Migración `20260608680000_dining_courses`; **backfill** `fired_at = created_at` de lo existente (lo ya cargado cuenta como ya disparado, nada se rompe). **Follow-up (NO en este PR):** tiempos automáticos por timer, sugerencia de curso por categoría de producto, "llamar postre" como notificación push, coordinación multi-estación del mismo curso.*
   - [~] Notas por ítem y notas generales de pedido. — *Nota por ítem hecha (local): el picker de mesa (`TableProductPicker`) y de delivery (`DeliveryProductPicker`) cargan una **nota libre** por ítem (se aplica al ítem que se agrega y se limpia después); ya viajaba en `add_*_order_item(p_notes)` y se ve en KDS, comanda y la cuenta. **Nota general del pedido** ya existe en DB (`table_orders.notes` / `delivery_orders.notes`, esta última editable en el alta del delivery); editor dedicado de la nota general de mesa → follow-up.*
   - [x] Alergias/intolerancias destacadas en comanda y KDS. — *Hecho (local). Campo estructurado `allergens` (texto libre corto) por ítem de mesa y de delivery (migración `20260609140000_dining_item_allergens`, aplicada en remoto): columnas nuevas + `add_table_order_item`/`add_delivery_order_item` ganaron `p_allergens` (OPCIONAL, al final; se elimina el overload viejo) + `kds_tickets`/`comanda_items`/`delivery_comanda_items` devuelven `allergens`. Se carga en los dos pickers (campo aparte de la nota). **DESTACADA**: en el KDS, recuadro **rojo** con ⚠ y MAYÚSCULAS arriba de la nota; en la **comanda impresa** (térmica B/N), recuadro de borde grueso + ⚠ + negrita; en la cuenta de mesa/delivery, chip rojo. Es seguridad alimentaria, no una nota más. **Follow-up:** editar la alergia de un ítem ya cargado (hoy se setea al agregar), catálogo de alérgenos predefinidos y marca de alérgenos a nivel producto.*
-  - [ ] Combos y menús cerrados sin obligar al cajero a tocar 20 botones.
+  - [~] Combos y menús cerrados sin obligar al cajero a tocar 20 botones. *Combo a precio fijo por juego completo con el motor de promociones (ADR-074). Falta el flujo guiado de menú cerrado (elegir entrada, principal y bebida en un paso).*
   - [ ] *Criterio:* "menú ejecutivo entrada + principal + bebida" se carga en un flujo guiado y cocina recibe cada curso correcto.
 
 - [~] **H48 — Cafetería, heladería y mostrador híbrido.** — *Base hecha (local): tipo de pedido **mostrador** reutilizando la infra de delivery (sin dirección/cadete/envío). Falta el "cobrar antes" (que mantiene el pedido en el KDS tras cobrar → requiere tocar `create_sale`) y el pager.*
@@ -813,11 +811,11 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
   - [x] **Cupones / códigos** (únicos o multiuso, con límite de usos, por cliente o global). — *Hecho. Tablas `coupons` + `coupon_redemptions` (% o monto fijo, monto mínimo, vigencia, tope total + tope por cliente). Admin en **Configuración → "Cupones"** (`CouponsManager`). POS: el cajero ingresa el código → `validate_coupon` (preview read-only) → descuento en vivo; **excluyente** con la promo de descuento (los regalos conviven). **Límite de uso ATÓMICO** en `create_sale` (lock `FOR UPDATE` + cómputo autoritativo + registro de canje en la misma transacción → no se puede reusar de más; verificado end-to-end). Migraciones `20260609310000_coupons` + `20260609320000_create_sale_coupon`, aplicadas en remoto.*
   - [x] *Criterio:* cada tipo tiene su preset configurable y un ejemplo de demo. — *ADR-074: asistente de Configuración → Promociones con 9 tipos, cada uno con su ejemplo en lenguaje simple y valores por defecto, y vista previa "así se ve en el ticket" calculada con el mismo motor.*
 
-- [ ] **H55 — Segmentación y fidelización.**
-  - [ ] Reglas por **segmento de cliente** (nuevos, frecuentes, cumpleaños, lista mayorista).
+- [~] **H55 — Segmentación y fidelización.** *Parcial: saldo a favor y lista de precios por cliente; faltan reglas por segmento, fidelización y gift cards.*
+  - [~] Reglas por **segmento de cliente** (nuevos, frecuentes, cumpleaños, lista mayorista). *Parcial: grupos de clientes (`20260601100000_customer_groups`) y lista de precios por cliente (`components/customers/CustomerPricingFields.tsx`); faltan reglas de promo por segmento (nuevos, frecuentes, cumpleaños).*
   - [ ] Base para **fidelización**: puntos, niveles, recompensas canjeables (gancha con cuenta corriente de clientes).
-  - [ ] **Gift cards** y saldo a favor.
-  - [ ] *Criterio:* un cliente "VIP" recibe automáticamente un precio/beneficio distinto en el POS.
+  - [~] **Gift cards** y saldo a favor. *Parcial: saldo a favor (vale) como medio de pago validado en `create_sale` (`20260531280000_store_credit_payment`); faltan gift cards.*
+  - [~] *Criterio:* un cliente "VIP" recibe automáticamente un precio/beneficio distinto en el POS. *Parcial: un cliente con lista de precios propia recibe ese precio en el POS; falta el beneficio automático por segmento.*
 
 - [~] **H56 — Gobierno, simulación y reporte de promociones.** — *Hechos el simulador, el **reporte de performance** y su **export XLSX** (ver sub-ítems). Falta sólo **tope/aprobación**.*
   - [x] **Simulador**: previsualizar el efecto de una promo sobre ventas históricas antes de activarla. — *Hecho (local). Botón **"Simular impacto"** por promo en Configuración → "Promociones" (`PromotionSimModal`): elegís un rango y corre la promo (con el motor PURO, aun en borrador/inactiva) contra las ventas del período → muestra **tickets analizados / tickets con la promo / descuento total estimado / % sobre lo vendido**. Read-only, no modifica nada. Backend: RPC `promotion_sim_data(p_from, p_to, p_limit)` (SECURITY DEFINER, filtro explícito por tenant; arma por venta el contexto AR + líneas con categoría; cap 5000; migración `20260609230000_promotion_sim_data`, aplicada en remoto). Función pura `simulatePromotion` en `lib/promotions/engine.ts` + test. **Follow-up:** desglose por día/producto y guardar simulaciones.*
@@ -830,23 +828,23 @@ Objetivo: igualar o superar a los POS líderes (Square, Lightspeed, Toast, Fudo,
 
 Objetivo: convertir la configuración comercial en un sistema central y auditado: planes, cuotas, recargos, impuestos, costos, reglas, inventario avanzado, compras, offline completo, omnicanal, API y analítica. F11 cubre retail avanzado; F14 lo vuelve **enterprise, versionado, simulable y gobernado**. Ver [`27-commercial-configuration-engine.md`](./27-commercial-configuration-engine.md).
 
-- [ ] **H57 — Jerarquía de configuración y precedencia.**
-  - [ ] Niveles: global NinjaSoft → plan → tenant → rubro → sucursal → caja → canal → rol → usuario → horario/campaña.
-  - [ ] Resolución de valor efectivo con explicación: "este recargo viene de tenant, sobrescrito por sucursal".
+- [~] **H57 — Jerarquía de configuración y precedencia.** *Parcial (ADR-049): herencia negocio, grupo, sucursal y caja con origen por campo; faltan plan, rubro, canal, rol, usuario y campaña como niveles.*
+  - [~] Niveles: global NinjaSoft → plan → tenant → rubro → sucursal → caja → canal → rol → usuario → horario/campaña. *Parcial: negocio, grupo de sucursales, sucursal y caja (`config_overrides`, ADR-049); el resto de los niveles no existe.*
+  - [x] Resolución de valor efectivo con explicación: "este recargo viene de tenant, sobrescrito por sucursal". *Hecho: `effective_config` devuelve valor y origen por campo (ADR-049); `components/config/ScopedConfig.tsx` muestra "Heredado de ...".*
   - [ ] Conflictos detectados antes de guardar.
-  - [ ] *Criterio:* un owner ve por qué una caja usa una regla distinta y puede volver al default sin SQL.
+  - [x] *Criterio:* un owner ve por qué una caja usa una regla distinta y puede volver al default sin SQL. *Hecho: origen por campo y "Volver a heredar" en `components/config/ScopedConfig.tsx` (`config_override_reset_field`, ADR-049).*
 
-- [ ] **H58 — Planes, cuotas, add-ons y entitlements enterprise.**
-  - [ ] Plan base, plan custom por tenant, add-ons, paquetes de módulos, límites blandos/duros y medición de uso.
-  - [ ] Cuotas configurables: usuarios, sucursales, cajas, productos, ventas, comprobantes AFIP, almacenamiento, mensajes, integraciones, API calls.
+- [~] **H58 — Planes, cuotas, add-ons y entitlements enterprise.** *Parcial: plan custom por tenant, addons, módulos y límites duros; faltan límites blandos, medición general y política de exceso.*
+  - [~] Plan base, plan custom por tenant, add-ons, paquetes de módulos, límites blandos/duros y medición de uso. *Parcial: plan custom (`20260607150000_custom_plans_overrides_discounts`), addons (`20260608110000_features_plans_addons`), módulos en `plans.limits.modules`, límites duros y uso medido sólo del asistente IA (`ai_usage`); faltan límites blandos y medición general.*
+  - [~] Cuotas configurables: usuarios, sucursales, cajas, productos, ventas, comprobantes AFIP, almacenamiento, mensajes, integraciones, API calls. *Parcial: usuarios, sucursales, cajas por sucursal y productos con tope por plan validado en triggers (`20261013100000_sucursales_cajas`) y mensajes de IA (`ai_usage`); faltan ventas, comprobantes, almacenamiento, integraciones y API calls.*
   - [ ] Exceso de uso: aviso, grace period, upgrade sugerido, cargo adicional o bloqueo gradual según política.
   - [ ] *Criterio:* internal crea un plan específico para un cliente con 8 sucursales, add-on gastronómico y límite de 100.000 ventas/mes.
 
-- [ ] **H59 — Recargos, financiación, tasas y redondeos por contexto.**
-  - [ ] Recargos/descuentos por medio, marca, adquirente, plan de cuotas, canal, sucursal, horario, ticket mínimo y rol.
-  - [ ] Configuración de financiación: interés compuesto/simple, cuotas sin interés absorbidas por comercio, costo financiero total visible, vigencia y topes.
-  - [ ] Service charge, propina sugerida, fee delivery, cargo por packaging, impuesto/tasa local y redondeo por moneda.
-  - [ ] Transparencia: todo recargo aparece antes de cobrar y en ticket/comprobante cuando corresponda.
+- [~] **H59 — Recargos, financiación, tasas y redondeos por contexto.** *Parcial: cuotas y recargos por medio, marca, proveedor y sucursal; faltan horario, ticket mínimo, rol y CFT.*
+  - [~] Recargos/descuentos por medio, marca, adquirente, plan de cuotas, canal, sucursal, horario, ticket mínimo y rol. *Parcial: por medio, marca, proveedor, plan de cuotas y sucursal (`payment_plans`, `payment_plans.store_id` ADR-057, recargo por caja o sucursal en `config_overrides` ADR-049); faltan canal, horario, ticket mínimo y rol.*
+  - [~] Configuración de financiación: interés compuesto/simple, cuotas sin interés absorbidas por comercio, costo financiero total visible, vigencia y topes. *Parcial: planes de cuotas con recargo y vigencia (`20260608500000_card_plans_validity_voucher`); faltan tipo de interés, cuotas absorbidas explícitas, CFT y topes.*
+  - [~] Service charge, propina sugerida, fee delivery, cargo por packaging, impuesto/tasa local y redondeo por moneda. *Parcial: propina (`20260608550000_commissions_tips`), fee de delivery (`20260608750000_delivery_fee_enforce`) y redondeo de la configuración efectiva; faltan service charge, packaging y tasa local.*
+  - [~] Transparencia: todo recargo aparece antes de cobrar y en ticket/comprobante cuando corresponda. *Parcial: el recargo se muestra en la hoja de cobro antes de cobrar (`lib/pos/checkoutMath.ts`, `components/pos/checkout/CheckoutSheet.tsx`); falta verificar su línea en el comprobante.*
   - [ ] *Criterio:* "Visa 6 cuotas +18%" aplica solo en sucursal A, de lunes a viernes, con simulación del total antes de cobrar.
 
 - [ ] **H60 — Motor de reglas comerciales unificado.**
@@ -855,40 +853,40 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Unifica promociones F9, recargos F11, planes F7/F14, comisiones F12 y reglas gastronómicas F13.
   - [ ] *Criterio:* una regla "mayorista paga transferencia sin recargo y 5% menos desde 20 unidades" se configura sin código.
 
-- [ ] **H61 — Facturación SaaS, dunning y ledger de cobros NinjaSoft.**
-  - [ ] Ledger interno por tenant: cargos, créditos, descuentos, impuestos, pagos, deuda, vencimientos y recibos.
-  - [ ] Dunning configurable: aviso preventivo, vencido, grace period, suspensión parcial, suspensión total y reactivación.
-  - [ ] Aumentos masivos segmentados con preview, exclusiones, aceptación requerida y notificaciones automáticas.
+- [~] **H61 — Facturación SaaS, dunning y ledger de cobros NinjaSoft.** *Parcial: pagos registrados y dunning automático con reactivación; faltan ledger completo y aumentos segmentados.*
+  - [~] Ledger interno por tenant: cargos, créditos, descuentos, impuestos, pagos, deuda, vencimientos y recibos. *Parcial: `billing_records` append-only con pagos registrados por staff (`20260604200000_billing_records`); faltan cargos, créditos, deuda y recibos.*
+  - [~] Dunning configurable: aviso preventivo, vencido, grace period, suspensión parcial, suspensión total y reactivación. *Parcial: aviso preventivo, vencido, gracia de 3 días configurable, suspensión y reactivación reanclando el período (`20260608130000_saas_dunning`, `20260608350000_dunning_3day_grace_reanchor`); falta suspensión parcial.*
+  - [~] Aumentos masivos segmentados con preview, exclusiones, aceptación requerida y notificaciones automáticas. *Parcial: aviso automático a los suscriptos al subir el precio de un plan (`internal_save_plan` en `20260608130000_saas_dunning`); faltan segmentación, exclusiones, preview de MRR y aceptación.*
   - [ ] *Criterio:* billing programa aumento del 20% para planes Pro, excluye clientes con contrato vigente y ve impacto MRR antes de aplicar.
 
-- [ ] **H62 — Centro de configuración PRO.**
-  - [ ] Plantillas por rubro: kiosco, retail, electro, textil, cafetería, heladería, restaurante, peluquería, servicios.
-  - [ ] Import/export de configuración XLSX/JSON: medios, recargos, roles, tickets, tipos de entrega, depósitos, reglas, salones, mesas, comisiones.
-  - [ ] Versionado, diff, preview, rollback y ambiente sandbox por tenant.
-  - [ ] *Criterio:* se clona la configuración de una sucursal a otra, se revisa diff y se revierte en un click.
+- [~] **H62 — Centro de configuración PRO.** *Parcial: perfiles por rubro, importaciones y copia entre sucursales; faltan versionado, rollback y sandbox.*
+  - [~] Plantillas por rubro: kiosco, retail, electro, textil, cafetería, heladería, restaurante, peluquería, servicios. *Parcial: 11 perfiles por rubro (ADR-075); electro, heladería y peluquería usan perfiles genéricos.*
+  - [~] Import/export de configuración XLSX/JSON: medios, recargos, roles, tickets, tipos de entrega, depósitos, reglas, salones, mesas, comisiones. *Parcial: import y export XLSX de sucursales, depósitos, garantías y motivos (ADR-078, ADR-085); faltan medios, recargos, roles, tickets, reglas, salones, mesas, comisiones y JSON.*
+  - [~] Versionado, diff, preview, rollback y ambiente sandbox por tenant. *Parcial: copiar de otra sucursal con vista previa campo por campo y "Diferencias por sucursal" (ADR-049); faltan versionado, rollback y sandbox.*
+  - [~] *Criterio:* se clona la configuración de una sucursal a otra, se revisa diff y se revierte en un click. *Parcial: copia entre sucursales con diff y "Volver a heredar" por campo (ADR-049); falta revertir la copia entera en un click.*
 
-- [ ] **H63 — Gobierno de cambios y aprobaciones.**
+- [~] **H63 — Gobierno de cambios y aprobaciones.** *Parcial: PIN de supervisor por acción y auditoría con motivo; falta el circuito maker-checker.*
   - [ ] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo.
-  - [ ] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud.
+  - [~] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud. *Parcial: motivo y antes/después en `audit_logs` (ADR-073, ADR-083) y PIN de supervisor por acción (ADR-051, ADR-060); faltan solicitud con aprobación diferida, adjuntos y expiración.*
   - [ ] Alertas a owner/manager/internal cuando una configuración crítica cambia.
   - [ ] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito.
 
-- [ ] **H64 — Inventario PRO, compras y proveedores.**
+- [~] **H64 — Inventario PRO, compras y proveedores.** *Parcial: compras, proveedores, lotes y sugerencia de compra hechos (ADR-050, ADR-059); faltan conteos cíclicos, garantías por serie, demanda proyectada y transferencia recomendada.*
   > Nota 2026-10-12: *(Compras, proveedores, costos e importaciones se detallan con su tratamiento fiscal en F18/H101 y H102.)*
-  - [ ] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría.
-  - [ ] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores.
-  - [ ] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales.
-  - [ ] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote.
+  - [~] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría. *Parcial: lotes con vencimiento y consumo FEFO (ADR-050, ADR-059), series (`product_serials`), conteo e importación de stock auditados por sucursal (ADR-078); faltan garantías por serie, conteos cíclicos e inventario físico guiado.*
+  - [x] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores. *Hecho: ADR-050 y ADR-059 (proveedores, OC, recepción parcial, costos, listas del proveedor, `purchase_suggestions`, cuenta corriente de proveedores).*
+  - [~] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales. *Parcial: mínimo y máximo por sucursal con sugerencia de compra (ADR-050, `lib/purchases/suggest.ts`); faltan demanda proyectada y transferencia recomendada.*
+  - [x] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote. *Hecho: la OC se arma desde la sugerencia (`components/purchases/OrderWizardModal.tsx`) y la recepción parcial actualiza costo, stock y lote (ADR-050, ADR-059).*
 
-- [ ] **H65 — Offline-first completo.**
-  - [ ] POS/PWA con cache local, cola de ventas/pagos/comandas/stock, reintentos y resolución de conflictos.
-  - [ ] Reconciliación al reconectar: stock, caja, numeración interna, cola fiscal, pagos y auditoría.
-  - [ ] Políticas por tenant: qué se permite offline, montos máximos, usuarios autorizados, duración máxima y bloqueo preventivo.
+- [~] **H65 — Offline-first completo.** *Parcial: venta offline conservadora (ADR-077); faltan PWA, comandas, pagos integrados y stock multi-dispositivo.*
+  - [~] POS/PWA con cache local, cola de ventas/pagos/comandas/stock, reintentos y resolución de conflictos. *Parcial: cola local de ventas en IndexedDB con `client_sale_id` idempotente, reintentos y revisión del dueño (ADR-077); faltan service worker/PWA y colas de pagos, comandas y stock.*
+  - [~] Reconciliación al reconectar: stock, caja, numeración interna, cola fiscal, pagos y auditoría. *Parcial: `sync_offline_sale` reconcilia precio, stock, promos, turno y auditoría, y la factura va a la cola fiscal (ADR-077, ADR-072); falta numeración interna offline.*
+  - [~] Políticas por tenant: qué se permite offline, montos máximos, usuarios autorizados, duración máxima y bloqueo preventivo. *Parcial: `pos_settings.offline_policy` con switch, monto máximo, ventas por turno y horas máximas (ADR-077); faltan usuarios autorizados y bloqueo preventivo.*
   - [ ] *Criterio:* un local vende 3 horas sin internet y al volver sincroniza sin duplicar ventas ni romper caja/stock/AFIP.
 
-- [ ] **H66 — Omnicanal, marketplace hub y catálogo sincronizado.**
-  - [ ] Canales: mostrador, catálogo público, QR mesa, WhatsApp, Tienda Nube, Mercado Libre, delivery propio, PedidosYa/Rappi futuro.
-  - [ ] Stock reservado por canal, precios/listas por canal, estados de pedido, cancelación, reembolso y conciliación.
+- [~] **H66 — Omnicanal, marketplace hub y catálogo sincronizado.** *Parcial: mostrador, catálogo público y delivery propio con listas por canal; faltan marketplaces y QR de mesa.*
+  - [~] Canales: mostrador, catálogo público, QR mesa, WhatsApp, Tienda Nube, Mercado Libre, delivery propio, PedidosYa/Rappi futuro. *Parcial: mostrador, catálogo público `/c/<slug>` y delivery propio (`20260608720000_delivery_orders`); faltan QR mesa, WhatsApp, Tienda Nube, Mercado Libre y PedidosYa/Rappi.*
+  - [~] Stock reservado por canal, precios/listas por canal, estados de pedido, cancelación, reembolso y conciliación. *Parcial: listas de precios por canal (`price_lists`, `lib/prices/resolve.ts`); faltan stock reservado por canal y conciliación por canal.*
   - [ ] Mapeo de productos/modificadores/categorías por canal sin duplicar catálogo base.
   - [ ] *Criterio:* un producto cambia de precio y se sincroniza a catálogo/QR/marketplace según reglas del canal.
 
@@ -922,8 +920,8 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
 
 - [~] **H71 — Checklist de activación y health de adopción.** — *Parcial (ADR-086): Puesta en marcha dinámica por rubro y plan.*
   - [~] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique. *Todo menos la prueba de impresión (no hay registro de impresión de prueba); suma salón para gastronomía, agenda para servicios y certificar al cajero.*
-  - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
-  - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
+  - [~] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente. *Parcial: puntaje de salud 0 a 100 con motivos (sin ventas, sin ingresos, sin usuarios activos, trial sin uso) en `lib/internal/tenantHealth.ts` (ADR-084) y primera venta y tiempo a primera venta en `lib/saas/activation.ts` (ADR-082). Falta configuración crítica completa y soporte pendiente.*
+  - [~] Internal ve cuentas trabadas y puede disparar ayuda específica. *Parcial: el inicio de `/internal` lista los negocios con peor salud y sus motivos, y se les manda un aviso por negocio o segmento (ADR-084). Falta disparar ayuda o recorrido específico (depende de H70 y H74).*
   - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
 
 - [~] **H72 — Ayuda contextual y base de conocimiento.** — *Primer corte (ADR-086): 29 artículos versionados en `content/help/`, panel Ayuda en el shell, buscador con sinónimos y feedback.*
@@ -944,8 +942,8 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
   - [ ] No molestar: límite de mensajes por sesión/día y preferencias por tenant.
   - [ ] *Criterio:* operaciones cambia el recorrido inicial de restaurantes sin deploy y mide conversión a primera venta.
 
-- [ ] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.**
-  - [ ] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno.
+- [~] **H75 — Certificaciones, soporte asistido y analítica de aprendizaje.** *Parcial: sólo el certificado de POS básico (ADR-086).*
+  - [~] Certificados por rol: cajero, manager, gastronómico, retail avanzado, AFIP, soporte interno. *Parcial: certificado de cajero (POS básico, `content/help/courses.json`, `school_submit_quiz`, ADR-086). Faltan manager, gastronómico, retail avanzado, AFIP y soporte interno.*
   - [ ] Métricas: lecciones vistas, tours completados, pasos abandonados, tickets reducidos, tiempo a primera venta.
   - [ ] Sugerencias automáticas de capacitación según errores reales del tenant.
   - [ ] *Criterio:* internal ve que un tenant falla en cierres de caja y le recomienda curso + tour de arqueo.
@@ -954,14 +952,14 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
 
 Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTOL, Fiscal Flow y Promo) y llevar NinjaSoft a una capa de **comercio unificado** para cadenas, franquicias y retailers que necesitan operar tienda física, e-commerce, marketplaces, pagos, fiscal, promociones, fidelización y devoluciones desde un solo cockpit. Ver [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md).
 
-- [ ] **H76 — Unified Commerce Cockpit.**
-  - [ ] Cockpit central de ventas, inventario, pedidos, pagos, fiscal, devoluciones, promociones y fidelización por canal/sucursal/marca.
+- [~] **H76 — Unified Commerce Cockpit.** *Parcial: el monitor de sucursales (ADR-057, ADR-080) es la base.*
+  - [~] Cockpit central de ventas, inventario, pedidos, pagos, fiscal, devoluciones, promociones y fidelización por canal/sucursal/marca. *Parcial: monitor de sucursales con ventas, cajas, cobros por terminal y Z por sucursal (`branch_monitor_overview`, ADR-080). Faltan canales, pedidos, fiscal, devoluciones, promociones y fidelización.*
   - [ ] Vista 360 de operación en tiempo real: tiendas físicas, catálogo público, e-commerce, marketplace, QR, WhatsApp y delivery.
-  - [ ] Alertas operativas con SLA: pedido demorado, stock roto, pago sin conciliar, factura bloqueada, devolución pendiente, terminal caída.
+  - [~] Alertas operativas con SLA: pedido demorado, stock roto, pago sin conciliar, factura bloqueada, devolución pendiente, terminal caída. *Parcial: alertas de caja abierta sin señal y último cobro rechazado en el monitor (ADR-080, `tests/unit/monitorAlerts.test.ts`). Faltan pedido demorado, stock roto, pago sin conciliar, factura bloqueada y devolución pendiente.*
   - [ ] *Criterio:* un gerente ve en una sola pantalla qué canal vende, qué pedidos faltan surtir, qué pagos fallaron y qué stock está comprometido.
 
-- [ ] **H77 — Jornadas omnicanal avanzadas.**
-  - [ ] Stock Lookup / Endless Aisle: vender desde una tienda usando stock de otra sucursal o depósito.
+- [~] **H77 — Jornadas omnicanal avanzadas.** *Parcial: sólo la consulta de stock de otras sucursales desde el POS.*
+  - [~] Stock Lookup / Endless Aisle: vender desde una tienda usando stock de otra sucursal o depósito. *Parcial: el POS muestra el stock de las otras sucursales (`lib/stock/posBranchStock.ts`, `otherBranchesStock`). Falta vender con stock de otra sucursal o depósito.*
   - [ ] Click & Collect: compra online, retiro en tienda, reserva de stock, preparación y entrega con identidad validada.
   - [ ] Ship from Store: venta online o de tienda con envío desde sucursal óptima.
   - [ ] Reserve Online, Try/Pay in Store: reserva online, prueba en tienda y conversión a venta.
@@ -974,16 +972,16 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Picking por app/PWA, sustituciones autorizadas, faltantes, preparación parcial y split fulfillment.
   - [ ] *Criterio:* un pedido con 3 ítems se divide entre depósito central y sucursal sin perder trazabilidad.
 
-- [ ] **H79 — Fiscal Hub multi-canal y multi-país.**
+- [~] **H79 — Fiscal Hub multi-canal y multi-país.** *Parcial: ARCA Argentina (ADR-072) cubre emisión, cola y contingencia.*
   - [ ] Abstracción fiscal por país/provincia/canal: AFIP/ARCA Argentina primero, arquitectura preparada para otros países.
-  - [ ] Ciclo completo de comprobante: emitir, almacenar XML/PDF, enviar al cliente, reimprimir, anular, nota de crédito/débito y auditar.
-  - [ ] Contingencia autónoma por tienda/caja con cola fiscal, alertas 24/7, reintento, bloqueo preventivo y tablero fiscal.
+  - [~] Ciclo completo de comprobante: emitir, almacenar XML/PDF, enviar al cliente, reimprimir, anular, nota de crédito/débito y auditar. *Parcial: emisión con CAE, XML de request y response guardados, NC por devolución y por anulación, envío del comprobante por email y reimpresión (ADR-072, `supabase/functions/arca_wsfe`). Falta nota de débito.*
+  - [~] Contingencia autónoma por tienda/caja con cola fiscal, alertas 24/7, reintento, bloqueo preventivo y tablero fiscal. *Parcial: cola fiscal con reintentos, dead-letter, contingencia CAEA por punto de venta y panel de monitoreo fiscal (ADR-072). Faltan alertas 24/7 y bloqueo preventivo.*
   - [ ] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos.
   - [ ] *Criterio:* una cadena opera ventas físicas y online con comprobantes centralizados, contingencia y trazabilidad por país/canal.
 
-- [ ] **H80 — Promo & Loyalty omnicanal enterprise.**
+- [~] **H80 — Promo & Loyalty omnicanal enterprise.** *Parcial: el simulador de promociones existe (ADR-074).*
   - [ ] Campañas omnicanal: POS, catálogo, e-commerce, WhatsApp, QR, marketplace y app futura.
-  - [ ] Simulador de campañas, coexistencia, exclusividad, conflictos, presupuesto, forecast de impacto y ticket promedio esperado.
+  - [~] Simulador de campañas, coexistencia, exclusividad, conflictos, presupuesto, forecast de impacto y ticket promedio esperado. *Parcial: simulador sobre ventas pasadas, combinables o exclusivas y topes (ADR-074, `components/promotions/PromotionSimModal.tsx`, `simulatePromotion`). Faltan presupuesto, forecast de impacto y conflictos entre canales.*
   - [ ] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento.
   - [ ] Automatizaciones por evento: primera compra, cumpleaños, abandono, recompra, cliente inactivo, devolución, ticket alto.
   - [ ] *Criterio:* una campaña se simula, se publica en todos los canales y mide uso, margen, ticket promedio y recurrencia.
@@ -994,10 +992,10 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Lista de deseos, carrito persistente omnicanal y recuperación de venta iniciada en otro canal.
   - [ ] *Criterio:* un vendedor atiende en salón desde celular, cobra con QR y evita que el cliente pase por caja.
 
-- [ ] **H82 — Prevención de fraude y riesgo operativo.**
+- [~] **H82 — Prevención de fraude y riesgo operativo.** *Parcial: aprobación por supervisor y seguimiento de contracargos.*
   - [ ] Detección de operaciones sospechosas: anulaciones repetidas, descuentos excesivos, devoluciones anómalas, pagos fallidos, caja fuera de patrón.
-  - [ ] Reglas de bloqueo, revisión manual, aprobación por supervisor y scoring de riesgo.
-  - [ ] Señales de fraude omnicanal: abuso de cupones, cambios cross-channel, múltiples cuentas, chargebacks, vale/gift card sospechosa.
+  - [~] Reglas de bloqueo, revisión manual, aprobación por supervisor y scoring de riesgo. *Parcial: aprobación por supervisor con PIN por acción (`20261017110000_pin_supervisor_politicas.sql`, `lib/account/pin.ts`). Faltan reglas de bloqueo automáticas y scoring de riesgo.*
+  - [~] Señales de fraude omnicanal: abuso de cupones, cambios cross-channel, múltiples cuentas, chargebacks, vale/gift card sospechosa. *Parcial: contracargos y reclamos por venta (ADR-064, `lib/reports/paymentDisputes.ts`). Faltan abuso de cupones, cambios cross-channel, múltiples cuentas y vales sospechosos.*
   - [ ] *Criterio:* una devolución de alto riesgo pide aprobación y queda marcada para auditoría.
 
 - [ ] **H83 — Operación de cadenas, marcas y franquicias.**
@@ -1012,9 +1010,9 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Sincronización con colas, dead-letter, replay, comparación de divergencias y health por integración.
   - [ ] *Criterio:* si Mercado Libre queda desincronizado, el cockpit muestra divergencia y permite replay controlado.
 
-- [ ] **H85 — Observabilidad enterprise de comercio unificado.**
-  - [ ] Tableros de salud: pagos, fiscal, integraciones, stock, OMS, promociones, webhooks, hardware y offline.
-  - [ ] Alarmas por SLA, error rate, latencia, backlog de colas, terminal caída, fiscal bloqueado o integración degradada.
+- [~] **H85 — Observabilidad enterprise de comercio unificado.** *Parcial: salud de webhooks (ADR-070), monitoreo fiscal (ADR-072) y heartbeat de cajas (ADR-080).*
+  - [~] Tableros de salud: pagos, fiscal, integraciones, stock, OMS, promociones, webhooks, hardware y offline. *Parcial: Salud de webhooks por proveedor (`/internal/webhooks`, ADR-070), panel de monitoreo de facturación (ADR-072), heartbeat y monitor de cajas (ADR-080), revisión de ventas offline (ADR-077). Faltan stock, OMS, promociones y hardware.*
+  - [~] Alarmas por SLA, error rate, latencia, backlog de colas, terminal caída, fiscal bloqueado o integración degradada. *Parcial: alertas de caja sin señal y cobro rechazado (ADR-080) y estado "Con errores" por proveedor de webhooks (ADR-070). Faltan alarmas activas (mail o push), latencia y backlog de colas.*
   - [ ] Runbooks operativos para soporte: qué revisar, cómo reintentar, cómo escalar y cómo cerrar incidente.
   - [ ] *Criterio:* soporte detecta una caída de pagos, identifica proveedor/canal afectado y ejecuta runbook sin consultar SQL.
 
@@ -1034,13 +1032,13 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
 >
 > **Clasificación (convención de features de plan):** cada hito indica BASE / OPTIONAL / ADDON / FLAG-OPERATIVO y su key. Las keys nuevas siguen el checklist completo de `CLAUDE.md` (features, `plans.limits.modules`, gating server-side, `featureInfo.ts`, `planComparison.ts`).
 
-- [~] **H89: Sucursales y cajas como entidades administrables.** *(2026-10-12, ADR-045: ABM, gating y auditoría hechos; faltan grupos, plantilla e import XLSX)* · *BASE (la primera sucursal y caja) + OPTIONAL `multi_sucursal` (Business, existe) desde la segunda sucursal + OPTIONAL `multi_caja` (nueva, Pro) desde la segunda caja de una sucursal.*
+- [~] **H89: Sucursales y cajas como entidades administrables.** *(2026-10-12, ADR-045: ABM, gating y auditoría hechos; grupos (ADR-049), plantilla (ADR-057) e import de sucursales por XLSX (ADR-078) hechos; faltan import de cajas y razón social y CUIT por sucursal)* · *BASE (la primera sucursal y caja) + OPTIONAL `multi_sucursal` (Business, existe) desde la segunda sucursal + OPTIONAL `multi_caja` (nueva, Pro) desde la segunda caja de una sucursal.*
   - [x] ABM de sucursales en Configuración: nombre, nombre corto, código, dirección estructurada, teléfono, email, horario, color, estado (activa, pausada, archivada), principal y baja lógica. Grupos o zonas (`store_groups`) y logo por sucursal (ADR-049).
   - [~] Datos fiscales por sucursal: punto de venta ARCA (`stores.afip_pos_number`) y domicilio hechos; razón social y CUIT opcionales pendientes (H98).
   - [x] ABM de cajas por sucursal: nombre, código, tipo (fija, móvil, autoservicio), notas de dispositivo e impresora, baja lógica (`cash_registers.deleted_at`), PV propio opcional, mover de sucursal sin turno abierto.
   - [x] Enforcement server-side de `max_stores` y de cajas por plan (`max_registers_per_store`, `multi_caja`) con triggers en `stores` y `cash_registers` (`tenant_limit_for` + `tenant_has_feature_for`), no sólo en la UI.
   - [x] Plantilla de sucursal nueva: hereda todo por defecto, "Copiar de otra sucursal" o "Usar una plantilla" guardada, eligiendo partes (operación y ticket, medios, impresoras y perfiles, planes propios y personal). Terminales y credenciales no se copian. *(2026-10-12, ADR-057)*
-  - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
+  - [~] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34). *Sucursales hechas: `import_stores` en el motor de ADR-078 (`20261104100100_importaciones_xlsx`). Falta importar cajas.*
   - [x] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón). *(Auditoría 2026-11-05: cubierto por `tests/integration/rls-sucursales.test.ts`, "sin multi_sucursal el servidor rechaza la segunda sucursal".)*
 
 - [x] **H90: Contexto de sucursal y caja activa ("dónde estoy").** *(2026-10-12, ADR-045: fix P0, chip, cabecera del POS, selector de caja y filtros de ventas y Z hechos; 2026-11-05, ADR-080: aviso de contexto cruzado y título de pestaña)* · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
@@ -1067,18 +1065,18 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Selector de alcance en cada pantalla de Configuración ("Configurando: Todo el negocio ▾"), campo marcado "Heredado / Personalizado" con "Volver a heredar" y valor heredado visible.
   - [x] Vista "Diferencias por sucursal" y acciones "Aplicar a todas" (RPC) y "Copiar desde otra sucursal" (con diff). Plantillas para nuevas sucursales (`store_templates`, ADR-057).
   - [x] El override nunca habilita algo fuera del plan: el gating se evalúa antes de la herencia.
-  - [ ] *Criterio:* el dueño cambia el redondeo del negocio y llega a todas las sucursales menos a la que lo tenía pisado; ve en una tabla qué sucursal es distinta y la vuelve al default en un click.
+  - [x] *Criterio:* el dueño cambia el redondeo del negocio y llega a todas las sucursales menos a la que lo tenía pisado; ve en una tabla qué sucursal es distinta y la vuelve al default en un click. *(`tests/integration/rls-config-sucursal.test.ts`, "el dueño pisa campos por sucursal; el resto hereda y se ve el origen"; vista Diferencias por sucursal y Volver a heredar, ADR-049.)*
 
-- [~] **H93: Medios de pago y terminales por sucursal y caja.** *(2026-10-12, ADR-049: overrides de medios, registro de terminales, Edges con terminal_id y caja QR por caja hechos)* · *Medios: OPTIONAL dentro de `multi_sucursal` (cada medio sigue gateado por su key). Registro de terminales: BASE. Requiere H89 y H92.*
+- [x] **H93: Medios de pago y terminales por sucursal y caja.** *(2026-10-12, ADR-049: overrides de medios, registro de terminales, Edges con terminal_id y caja QR por caja hechos)* · *Medios: OPTIONAL dentro de `multi_sucursal` (cada medio sigue gateado por su key). Registro de terminales: BASE. Requiere H89 y H92.*
   - [x] `tenant_payment_methods` sigue siendo el catálogo central; override por sucursal y caja vía `config_overrides` (`domain='payment_method'`, `domain_key=provider_key`): `enabled`, `surcharge_pct`, `plan_mode`, `sort`, `merchant_numbers`.
   - [x] Credenciales por sucursal: `payment_secrets.store_id` opcional (null = del negocio) para proveedores que trabajan por local (GO Cuotas "API Key de la sucursal", Mobbex, Nave `pos_id`, Payway o Fiserv por comercio, Mercado Pago por OAuth). Resolución sucursal → negocio en todas las Edges, el cobro guarda con qué credencial se creó y el asistente de conexión tiene alcance "Todo el negocio / Sucursal X". Sigue sólo service_role. *(2026-10-12, ADR-057)*
   - [x] Registro de terminales `payment_terminals` (sucursal, caja, proveedor, tipo `point` / `qr_caja` / `clover` / `posnet_manual`, id externo, ambiente, etiqueta, adquirente, **n° de comercio**, default por caja, activa, `last_seen_at`). Migra el lector de `localStorage` (respaldo), la caja QR de MP, `point_pos_ids` de Nave y las series de Clover.
-  - [~] Las Edges (`mp_point`, `nave_point`, `clover_point`, `mp_qr`) validan que la terminal sea del negocio y de la sucursal; el POS registra el lector elegido con un tilde. *("Detectar lectores" desde la sección Terminales: pendiente.)*
+  - [x] Las Edges (`mp_point`, `nave_point`, `clover_point`, `mp_qr`) validan que la terminal sea del negocio y de la sucursal; el POS registra el lector elegido con un tilde. *(Detectar desde la sección Terminales hecho: `components/config/TerminalWizard.tsx`.)*
   - [x] Caja QR de Mercado Pago **por caja** (`mp_qr setup` con `cash_register_id`), con la única de siempre como respaldo.
   - [x] N° de comercio por marca con override por sucursal (`merchant_numbers` efectivo) y n° por terminal. Autocompletar desde la terminal integrada en el cupón: `lib/payments/terminal/normalize.ts` completa `card_voucher.comercio` con el de la terminal o el del registro (ADR-053). *(Auditoría 2026-11-05.)*
   - [x] **Cuentas de transferencia** (ADR-055): banco o billetera del catálogo con logo (o propia con logo subido), titular, CUIT, CBU / CVU validados con detección de la entidad, alias, tipo, moneda y nota; pantalla de transferencia en el POS y en la pantalla del cliente (o cierre directo), n° de operación opcional u obligatorio, cuentas y cuenta por defecto por grupo o sucursal y pantalla por caja. Snapshot de la cuenta en `payments.metadata.transfer`. BASE una cuenta; OPTIONAL `transferencia_multicuenta` (Pro).
   - [x] Planes de cuotas y recargos por sucursal: la sucursal pisa u oculta planes del negocio y hereda el resto; el POS cobra con los de su sucursal. *(2026-10-12, ADR-057; recargo único y n° de comercio por sucursal ya estaban en ADR-049)*
-  - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
+  - [x] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo. *(Recargo y n° de comercio por sucursal con `config_overrides` (ADR-049, ADR-057), terminal por caja y n° en el cupón con `lib/payments/terminal/normalize.ts` (ADR-053).)*
 
 - [~] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
   - [x] `product_stock(store_id, product_id, variant_id, qty, min_qty, max_qty, location)` mantenido por trigger sobre `stock_movements`; `products.stock` sigue como total y al commit se garantiza que es la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal principal. En tránsito se calcula desde los traslados (`stock_by_store`). *(ADR-046; reservado queda pendiente)*
@@ -1087,8 +1085,8 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
   - [x] Listas de precios asignables a sucursal o grupo (`price_list_assignments` con alcance `store` y `store_group`, migración `20261021100100_listas_precios_pro`, ADR-058). *(Auditoría 2026-11-05.)*
   - [x] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
-  - [~] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34). *(Auditoría 2026-11-05: ajuste y conteo por sucursal con `adjust_store_stock` (ADR-046) y merma con `register_stock_waste(p_store_id)` (`20261015200000`) hechos; producción por sucursal con `register_production(p_store_id)` (`20261105100300`, ADR-080); import pendiente.)*
-  - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
+  - [x] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34). *(Auditoría 2026-11-05: ajuste y conteo por sucursal con `adjust_store_stock` (ADR-046) y merma con `register_stock_waste(p_store_id)` (`20261015200000`) hechos; producción por sucursal con `register_production(p_store_id)` (`20261105100300`, ADR-080); import de stock inicial por sucursal con `import_stock` (`20261104100100`, ADR-078).)*
+  - [x] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3. *(Precio por sucursal con `price_list_assignments` alcance `store` resuelto en `_resolve_unit_price` (`20261021100200`, ADR-058); stock por sucursal y Ver en otras sucursales, ADR-046.)*
 
 - [x] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
   - [x] Documento con estados `borrador → pendiente de aprobación → programado → en tránsito → recibido parcial → recibido / cancelado`, aprobación configurable por unidades o valor (cuatro ojos) y fecha programada con "Para despachar hoy" (sin cron).
@@ -1097,28 +1095,28 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Auditoría y timeline por traslado. Reporte de artículos en tránsito por traslado o producto, por sucursal y dirección, con valor y XLSX (ADR-080).
   - [x] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran. *(`rls.test.ts` "traslado completo con faltante" y `tests/unit/inTransit.test.ts`.)*
 
-- [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*
+- [~] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.* *(Cliente único, vales por sucursal, sucursal de alta y cobro en la sucursal de la caja hechos; faltan tope de crédito por sucursal, deuda por sucursal en reportes y fidelización compartida.)*
   - [x] Cliente único a nivel negocio (`customers` por tenant) y cuenta corriente v2 cobrable en cualquier sucursal. *(ADR-037)*
   - [x] Vales con sucursales permitidas (`store_credit_vouchers.allowed_branch_ids`). *(F11/H29)*
   - [x] Sucursal de alta (`customers.store_id_alta`, por trigger) e historial de compras filtrable por sucursal con estadísticas por sucursal. *(2026-10-12, ADR-057; deuda por sucursal: pendiente)*
   - [x] Cobros de cuenta corriente registrados en la sucursal de la caja: `account_open_shift` usa `resolve_sale_shift` (turno propio de la caja, `20261013120000`). *(Auditoría 2026-11-05.)*
   - [ ] Límite de crédito global con opción de tope por sucursal.
   - [ ] Fidelización (puntos, cupones, gift cards) compartida: se cubre en F9/H55 y F16/H80.
-  - [ ] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte.
+  - [~] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte. *(Cobrar en otra sucursal hecho (`account_open_shift` con `resolve_sale_shift`); falta la deuda por sucursal en el reporte.)*
 
 - [~] **H97: Reportes consolidados y por sucursal.** · *BASE (reportes de la sucursal propia) + OPTIONAL `multi_sucursal` (consolidado y comparativo) + `metricas_avanzadas` (existe, MARKETING-FUTURO) para tableros comparativos. Requiere H90.*
-  - [~] Filtro global de sucursal (el del chip de H90) en reportes, conciliación, ventas, Z, stock y export XLSX; RPC con `p_store_id` y acceso validado. *(Filtro por caja en Cierres Z hecho (ADR-080); en el resto de los reportes, pendiente.)*
+  - [x] Filtro global de sucursal (el del chip de H90) en reportes, conciliación, ventas, Z, stock y export XLSX; RPC con `p_store_id` y acceso validado. *(Reportes, ventas, conciliación, stock y XLSX filtran por el chip (`app/(app)/reportes/page.tsx`, `lib/reports/branchScope.ts`); RPC con `report_store_filter` (`20261015200000_reportes_por_sucursal`); filtro por caja en Cierres Z (ADR-080).)*
   - [x] Vista consolidada con desglose por sucursal y comparativo entre sucursales (ventas, ticket promedio, medios de pago, margen, devoluciones, diferencias de caja, clientes) con XLSX de una hoja por sucursal más el consolidado. *(2026-10-12, ADR-057)*
   - [x] Cierres Z por sucursal y caja con correlativo propio (completa F11/H30b): trigger `czc_numbering` con lock, que además corrige el número del negocio repetido bajo la RLS por sucursal (`20261105100100`, ADR-080).
   - [ ] Reportes pesados en cola ("Reporte offline" de Napse) con aviso cuando el archivo está listo.
-  - [ ] *Criterio:* el dueño compara las 3 sucursales del mes en una pantalla y descarga un XLSX con una hoja por sucursal más el consolidado.
+  - [x] *Criterio:* el dueño compara las 3 sucursales del mes en una pantalla y descarga un XLSX con una hoja por sucursal más el consolidado. *(`components/reports/BranchCompare.tsx` con `compareSheets` y `exportXlsx`, ADR-057.)*
 
-- [ ] **H98: Fiscal por sucursal y punto de venta.** · *OPTIONAL `facturacion_afip` (existe, MARKETING-FUTURO hasta F3) + OPTIONAL `multi_razon_social` (nueva, Enterprise). Requiere F3 y H89. Motor de impuestos en F18.*
-  - [ ] Punto de venta ARCA por sucursal (y por caja si el negocio lo elige), con domicilio comercial del PV; reemplaza el `tenants.afip_pos_number` único previsto en `15-afip-integration.md`.
-  - [ ] Numeración, cola fiscal y CAEA de contingencia por PV (se coordina con F16/H79).
+- [~] **H98: Fiscal por sucursal y punto de venta.** · *OPTIONAL `facturacion_afip` (existe, MARKETING-FUTURO hasta F3) + OPTIONAL `multi_razon_social` (nueva, Enterprise). Requiere F3 y H89. Motor de impuestos en F18.* *(PV por sucursal y caja y cola fiscal por serie hechos con ARCA, ADR-072; faltan CAEA por PV, varias razones sociales e IIBB por sucursal.)*
+  - [x] Punto de venta ARCA por sucursal (y por caja si el negocio lo elige), con domicilio comercial del PV; reemplaza el `tenants.afip_pos_number` único previsto en `15-afip-integration.md`. *(ADR-072: el comprobante toma `cash_registers.afip_pos_number` o `stores.afip_pos_number`; domicilio de la sucursal, ADR-045.)*
+  - [~] Numeración, cola fiscal y CAEA de contingencia por PV (se coordina con F16/H79). *(Numeración y cola por serie (ambiente, PV, tipo) hechas, ADR-072; el CAEA es una sola serie con PV exclusivo del negocio, no por PV.)*
   - [ ] Varias razones sociales que facturan dentro del negocio (franquicias, consignación): cada sucursal o condición de facturación decide quién emite (como las "condiciones de facturación" de Napse).
   - [ ] Jurisdicción de IIBB por sucursal (para percepciones y Convenio Multilateral, F18/H105).
-  - [ ] *Criterio:* Centro emite con PV 3 y Norte con PV 4; si ARCA cae, cada PV entra en contingencia por separado.
+  - [~] *Criterio:* Centro emite con PV 3 y Norte con PV 4; si ARCA cae, cada PV entra en contingencia por separado. *(PV distinto por sucursal hecho, ADR-072; la contingencia CAEA es del negocio, no por PV.)*
 
 - [~] **H99: Monitor de sucursales, cajas y terminales.** *(2026-10-12, ADR-057: vista de sucursales en el monitor de cajas con alertas, BASE `monitor_cajas`; 2026-11-05, ADR-080: heartbeat por caja y último cobro por terminal; key Enterprise `monitoreo_sucursales` para el historial y avisos push, pendiente)* · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
   - [x] Heartbeat de cada caja (última venta, último ping, versión de la app, display conectado; impresora y balanza quedan para el conector local): `register_heartbeats` + `register_heartbeat`, alerta de caja abierta sin señal (`20261105100200`, ADR-080).
@@ -1179,7 +1177,7 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] `current_tenant_id()` valida la membresía activa (o staff en `internal_scope()`) y todas las policies la llaman como initplan `(select current_tenant_id())`; `ensure_current_tenant()` corrige un negocio activo inválido (ADR-083, raíz de S-07).
   - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()`, validar la membresía también en las Edge Functions que leen el claim y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
-- [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*
+- [~] **H119: Más acciones bajo PIN (parcial: cambio de precio y cajón hechos, ADR-056 y ADR-063).** · *BASE `pin_supervisor`. Requiere H116.*
   - [x] Cambio de precio en la línea con precio resuelto en el servidor: `create_sale` valida el precio y el cambio manual pide PIN de `cambio_precio` (`20261019100000_precio_servidor`, ADR-056). *(Auditoría 2026-11-05.)*
   - [ ] Borrar ítem después de un cobro parcial y cancelar cobros en espera (coordinar con `feat/cobros-en-espera`).
   - [ ] Reapertura de turno cerrado (hoy no existe) con PIN y motivo.
@@ -1195,88 +1193,76 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 > **Estado de partida (2026-10-12):** `price_lists` por canal con `adjustment_pct` y `price_list_items` (gateado por `listas_precios`); el precio se resuelve en el navegador y `create_sale` acepta el `unit_price` recibido; `products.tax_rate` numérico (sin distinguir exento, no gravado y 0 %); `products.cost` único; `customers.iva_condition` y `tenant_branding.iva_condition`; sin proveedores, compras, impuestos internos, percepciones, retenciones, padrones, libros ni asientos. `facturacion_afip` es MARKETING-FUTURO (F3 no iniciada). Conciliación de tarjetas en curso (`feat/conciliacion-tarjetas`).
 
-- [ ] **H100: Listas de precios simples y profesionales.** · *BASE (validación en servidor, historial, asistente simple, etiquetas) + OPTIONAL `listas_precios` (existe, Business: vigencias, listas por cliente, grupo y condición) + OPTIONAL `listas_precios_pro` (nueva, Business: costo y markup, plazos, moneda, escalas, índices, aprobación). Asignación por sucursal requiere F17/H94.*
+- [~] **H100: Listas de precios simples y profesionales.** · *BASE (validación en servidor, historial, asistente simple, etiquetas) + OPTIONAL `listas_precios` (existe, Business: vigencias, listas por cliente, grupo y condición) + OPTIONAL `listas_precios_pro` (nueva, Business: costo y markup, plazos, moneda, escalas, índices, aprobación). Asignación por sucursal requiere F17/H94.* *Parcial: validación en servidor e historial (ADR-056), listas PRO, programados, plazos, escalas y masivo (ADR-058); faltan franjas, versiones de lista, flejes y precios por tramo.*
   - [x] Listas por canal (mostrador, catálogo, mayorista, personalizada) con % sobre base y precio fijo por producto o variante, gating server-side. *(H10, `price_lists`, `lib/prices/resolve.ts`)*
   - [x] **P0 control interno:** `create_sale` recalcula el precio efectivo de lista (`resolve_unit_price` + modificadores) y rechaza el `unit_price` distinto con `price_mismatch` y el precio esperado; el cambio intencional va marcado con motivo y PIN de `cambio_precio` (o supervisor) y queda en la venta y en auditoría; venta libre por flag y tope por rol; mesas y delivery validados al cargar. *(ADR-056, `feat/precio-servidor`, migración `20261019100000` sin aplicar. Se rechaza en vez de registrar la diferencia como descuento: ver ADR-056.)*
-  - [ ] Historial de precios y costos por producto, variante y lista (`price_history`: quién, cuándo, motivo, versión) y consulta "¿cuánto valía el 3 de marzo?". *(Precios: `product_price_history` con quién, cuándo y origen, pestaña en la ficha con gráfico, ADR-056, migración `20261019110000`; costos en `product_cost_history`, ADR-050. Falta motivo, versión y la consulta por fecha en pantalla.)*
-  - [ ] Modo simple: asistente de actualización masiva en 3 pasos (qué: todos, categoría, marca, proveedor, tag; cuánto: % o monto con redondeo; cuándo: ahora o fecha) con vista previa y deshacer.
-  - [ ] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes.
-  - [ ] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante.
-  - [ ] Asignación y precedencia explicable: cliente → grupo de clientes → condición de pago → sucursal → canal → base (`price_list_assignments`; `customers.group_id` ya existe).
-  - [ ] Listas derivadas: de otra lista o de **costo** (reposición, promedio ponderado o último) con **markup** o **margen objetivo** (mostrando ambos), piso, techo y margen mínimo con alerta; reglas por categoría, marca, proveedor y tag (`products.tags` ya existe).
-  - [ ] Redondeo por múltiplo, terminación psicológica (,99 / 9 / 90) y por tramo de precio.
-  - [ ] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente.
-  - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización.
-  - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock.
-  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(ADR-059: import XLSX de la lista del proveedor con mapeo guardado, vista previa de la variación y costo de reposición; falta la versión de lista de venta en borrador)*
-  - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente).
-
+  - [~] Historial de precios y costos por producto, variante y lista (`price_history`: quién, cuándo, motivo, versión) y consulta "¿cuánto valía el 3 de marzo?". *(Precios: `product_price_history` con quién, cuándo y origen, pestaña en la ficha con gráfico, ADR-056, migración `20261019110000`; costos en `product_cost_history`, ADR-050. Falta motivo, versión y la consulta por fecha en pantalla.)*
   - [x] Modo simple: asistente de actualización masiva en 3 pasos (qué: todos, categoría, marca, proveedor, tag; cuánto: % o monto con redondeo; cuándo: ahora o fecha) con vista previa y deshacer. *(ADR-058, `price_bulk_*`)*
-  - [ ] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes. *(Desde y hasta hecho, al vencer se usa la lista que sigue, ADR-058; faltan franja, días y alerta.)*
-  - [ ] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante. *(Precios programados por fila y lotes masivos con aprobación del dueño, antes y después y deshacer, ADR-058; faltan versiones completas.)*
+  - [~] Vigencia desde y hasta, franja horaria y días; al vencer vuelve a la lista padre, se desactiva o alerta N días antes. *(Desde y hasta hecho, al vencer se usa la lista que sigue, ADR-058; faltan franja, días y alerta.)*
+  - [~] Versiones de lista (borrador → aprobada → programada → vigente → histórica) y cambios futuros programados sin tocar la vigente; aprobación opcional con motivo, antes y después y margen resultante. *(Precios programados por fila y lotes masivos con aprobación del dueño, antes y después y deshacer, ADR-058; faltan versiones completas.)*
   - [x] Asignación y precedencia explicable: cliente → grupo de clientes → condición de pago → sucursal → canal → base (`price_list_assignments`; `customers.group_id` ya existe). *(ADR-058: elegida en el POS → cliente → grupo → sucursal → grupo de sucursales → mostrador; la condición es un recargo sobre la lista.)*
-  - [ ] Listas derivadas: de otra lista o de **costo** (reposición, promedio ponderado o último) con **markup** o **margen objetivo** (mostrando ambos), piso, techo y margen mínimo con alerta; reglas por categoría, marca, proveedor y tag (`products.tags` ya existe). *(Derivadas, sobre costo, piso y margen mínimo hechos, ADR-058; faltan techo y reglas por alcance dentro de la lista: hoy el alcance está en la actualización masiva.)*
-  - [ ] Redondeo por múltiplo, terminación psicológica (,99 / 9 / 90) y por tramo de precio. *(Múltiplo y terminación hechos, ADR-058; falta por tramo.)*
+  - [~] Listas derivadas: de otra lista o de **costo** (reposición, promedio ponderado o último) con **markup** o **margen objetivo** (mostrando ambos), piso, techo y margen mínimo con alerta; reglas por categoría, marca, proveedor y tag (`products.tags` ya existe). *(Derivadas, sobre costo, piso y margen mínimo hechos, ADR-058; faltan techo y reglas por alcance dentro de la lista: hoy el alcance está en la actualización masiva.)*
+  - [~] Redondeo por múltiplo, terminación psicológica (,99 / 9 / 90) y por tramo de precio. *(Múltiplo y terminación hechos, ADR-058; falta por tramo.)*
   - [x] Plazos y condiciones: contado, 30, 60, 90 días con **recargo financiero** (tasa mensual o TNA, simple o compuesto, cálculo visible), tomado de la ficha del cliente de cuenta corriente. *(ADR-058, tasa mensual; TNA se carga como % fijo.)*
-  - [ ] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización. *(Lista en moneda con cotización hecha, ADR-058; factura en moneda con F3.)*
-  - [ ] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock. *(Escalas por cantidad hechas, ADR-058.)*
-  - [ ] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(Índice y dólar con tope hechos, ADR-058; falta el import del proveedor con mapeo.)*
-  - [ ] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente). *(Cola por sucursal hecha, ADR-058; faltan los flejes.)*
-  - [ ] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió.
+  - [~] Moneda extranjera: lista en USD con conversión por tipo de cambio de referencia (BNA vendedor, MEP o manual) con fecha de corte (`fx_rates`); factura en pesos o en moneda extranjera con cotización. *(Lista en moneda con cotización hecha, ADR-058; factura en moneda con F3.)*
+  - [~] Escalas por cantidad y por bulto o caja; unidad de venta distinta de la de stock. *(Escalas por cantidad hechas, ADR-058; falta la unidad de venta por bulto o caja.)*
+  - [~] Actualización por índice (IPC, dólar, índice propio) con tope y registro del valor usado; actualización desde la lista del proveedor (import con mapeo de columnas guardado por proveedor, comparación con el costo actual, nueva versión en borrador). *(Índice y dólar con tope hechos, ADR-058; import XLSX de la lista del proveedor con mapeo guardado por proveedor y vista previa de la variación, ADR-059 `supplier_price_list_apply`; falta generar la versión de la lista de venta en borrador.)*
+  - [~] Etiquetas: cola "precios cambiados desde la última impresión" por sucursal; flejes de góndola con precio por unidad de medida y, si corresponde, precio sin impuestos nacionales (sobre el perfil `product_label` existente). *(Cola por sucursal hecha, ADR-058; faltan los flejes.)*
+  - [~] *Criterio:* un comprador importa la lista de un proveedor en USD, el sistema propone precios con markup 60% redondeados a 9, el dueño aprueba con vigencia desde el lunes, el lunes cambian solos y se imprimen los flejes de lo que cambió. *(Lista del proveedor en moneda con TC, lista sobre costo con markup, redondeo, lote masivo con aprobación y programado que aplica solo: ADR-058 y ADR-059; faltan los flejes de góndola.)*
 
-- [ ] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.* · *v1 en `feat/compras-proveedores` (ADR-050, migraciones `20261016100000` a `20261016100300` sin aplicar).*
-  - [ ] Proveedores: CUIT validado contra padrón (H104), condición IVA, alícuotas de padrones, condición de pago, moneda, contactos, baja lógica. *(v1: CUIT con dígito verificador, condición IVA, plazo, moneda, contacto, CBU/alias, baja lógica; falta padrón H104)*
+- [~] **H101: Compras, proveedores y costos.** · *OPTIONAL `compras` (nueva, Pro); los tres costos por producto son BASE. Detalla y reemplaza la parte de compras de F14/H64.* · *v1 en `feat/compras-proveedores` (ADR-050, migraciones `20261016100000` a `20261016100300` sin aplicar).*
+  - [~] Proveedores: CUIT validado contra padrón (H104), condición IVA, alícuotas de padrones, condición de pago, moneda, contactos, baja lógica. *(v1: CUIT con dígito verificador, condición IVA, plazo, moneda, contacto, CBU/alias, baja lógica, ADR-050; alícuotas de padrones por CUIT desde el import de ARBA y AGIP, ADR-068; falta validar el CUIT contra el padrón de ARCA)*
   - [x] Producto por proveedor: código del proveedor, último costo, mínimo de pedido, unidad de compra y conversión. *(conversión en la OC: pendiente)*
   - [x] Orden de compra (abierta → confirmada → recepción parcial → cerrada / cancelada), manual o sugerida por stock mínimo. *(borrador → enviada → recibida en parte → recibida / cancelada; sugerencia por sucursal; impresión y envío por WhatsApp o mail)*
   - [x] Recepción por remito con diferencias y actualización de stock por sucursal (F17/H94).
-  - [ ] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías). *(v1: todo como líneas libres y vínculo con recepciones; falta control de tres vías automático)*
-  - [ ] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1: saldo, aging, NC/ND, pagos con retenciones placeholder. v2 (ADR-059): órdenes de pago con imputación, pago parcial y a cuenta, efectivo de la caja propia, banco y cheques, retenciones con certificado e impresión. v3 (ADR-079): retenciones como agente calculadas por el servidor con certificado PDF, H106)*
+  - [~] Factura de proveedor: neto por alícuota, IVA crédito fiscal, percepciones sufridas (IVA, IIBB por jurisdicción), impuestos internos, no gravado, exento; asociada a OC y remito (control de tres vías). *(v1: todo como líneas libres y vínculo con recepciones; falta control de tres vías automático)*
+  - [x] Cuenta corriente de proveedores, notas de crédito y débito, órdenes de pago (con retenciones como agente, H106), anticipos. *(v1 ADR-050: saldo, aging, NC/ND. v2 ADR-059: órdenes de pago con imputación, pago parcial y a cuenta (anticipo), efectivo de la caja propia, banco y cheques. v3 ADR-079: retenciones como agente calculadas por el servidor con certificado PDF)*
   - [x] Devoluciones al proveedor con salida de stock por sucursal, lote, recálculo del promedio y NC vinculada; anulación de recepciones con reversa de stock, costos y OC. *(ADR-059, `feat/compras-v2`)*
   - [x] Costos por producto: **reposición**, **promedio ponderado** y **último**, con historia; el usuario elige cuál alimenta el markup (H100). Crédito fiscal computable nunca se suma al costo.
-  - [ ] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109). *(v1: moneda y TC por operación en modo profesional; falta diferencia de cambio)*
-  - [ ] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente. *(cubierto por `tests/integration/rls-compras.test.ts`; falta validar en producción)*
+  - [~] Multi-moneda por operación (compra en USD, tipo de cambio de la factura y del pago, diferencia de cambio para H109). *(v1: moneda y TC por operación en modo profesional; falta diferencia de cambio)*
+  - [x] *Criterio:* se recibe parcial una OC, se carga la factura con percepción de IIBB ARBA, el costo promedio se actualiza y la deuda con el proveedor queda en su cuenta corriente. *(`tests/integration/rls-compras.test.ts`: recepción parcial, factura con percepción de IIBB Buenos Aires, promedio y saldo en la cuenta corriente; migraciones sin aplicar en producción)*
 
-- [ ] **H102: Importaciones y costeo de importación.** · *OPTIONAL `importaciones` (nueva, Enterprise). Requiere H101.* · *v1 como `compras_importacion` (Business, ADR-050): hoja de costeo sobre la recepción con prorrateo por concepto y n° de despacho en el lote; faltan carpeta de importación, TC del pago y despacho en la venta.*
-  - [ ] Carpeta de importación: proveedor del exterior, factura comercial, incoterm, FOB, flete internacional, seguro, **CIF**.
-  - [ ] Tributos aduaneros sobre CIF con vigencia: derechos de importación por posición NCM, tasa de estadística, IVA, percepción de IVA adicional, percepción de Ganancias, percepción de IIBB aduanera y "otros tributos" parametrizables.
-  - [ ] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios.
-  - [ ] Prorrateo configurable por concepto (valor, peso, volumen o cantidad) y costo unitario puesto en depósito por producto y lote; crédito fiscal separado del costo.
-  - [ ] Tipo de cambio por operación (oficializado del despacho y del pago) y diferencia de cambio.
-  - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias. *(ADR-059: consumo por lote FEFO/FIFO en la venta y trazabilidad lote y despacho → ventas; falta imprimirlo en la factura, F3/H107)*
-  - [ ] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote.
+- [~] **H102: Importaciones y costeo de importación.** · *OPTIONAL `importaciones` (nueva, Enterprise). Requiere H101.* · *v1 como `compras_importacion` (Business, ADR-050): hoja de costeo sobre la recepción con prorrateo por concepto y n° de despacho en el lote; faltan carpeta de importación, TC del pago y despacho en la venta.*
+  - [~] Carpeta de importación: proveedor del exterior, factura comercial, incoterm, FOB, flete internacional, seguro, **CIF**. *(Hoja de costeo sobre la recepción con FOB, flete, seguro y CIF en moneda de origen, ADR-050, `lib/purchases/landed.ts`; falta la carpeta como entidad propia con proveedor del exterior, factura comercial e incoterm.)*
+  - [~] Tributos aduaneros sobre CIF con vigencia: derechos de importación por posición NCM, tasa de estadística, IVA, percepción de IVA adicional, percepción de Ganancias, percepción de IIBB aduanera y "otros tributos" parametrizables. *(ADR-050: derechos por línea según NCM, tasa de estadística con tope, otros tributos de costo, IVA y percepciones de IVA adicional y Ganancias aparte como crédito; las alícuotas son parámetros de cada hoja, falta el catálogo con vigencia.)*
+  - [x] Gastos de nacionalización: despachante, terminal, depósito fiscal, flete interno, gastos bancarios. *(ADR-050, `lib/purchases/landed.ts`)*
+  - [x] Prorrateo configurable por concepto (valor, peso, volumen o cantidad) y costo unitario puesto en depósito por producto y lote; crédito fiscal separado del costo. *(ADR-050: prorrateo por valor, peso, volumen o cantidad en centavos exactos, costo puesto en depósito por línea y lote, crédito fiscal fuera del costo; `tests/unit/purchasesLanded.test.ts`)*
+  - [~] Tipo de cambio por operación (oficializado del despacho y del pago) y diferencia de cambio. *(TC del despacho en la hoja y TC por OC y recepción, ADR-050; faltan el TC del pago y la diferencia de cambio.)*
+  - [~] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias. *(ADR-059: consumo por lote FEFO/FIFO en la venta y trazabilidad lote y despacho → ventas; falta imprimirlo en la factura, F3/H107)*
+  - [~] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote. *(Costeo con prorrateo por peso y valor, ADR-050, y n° de despacho del lote en sus ventas (`lot_sales`), ADR-059; falta imprimirlo en el comprobante de venta, F3/H107.)*
 
-- [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE `impuestos_iva` (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.* · *ADR-068, `feat/impuestos`, migraciones `20261028100000` a `20261028100300` sin aplicar.*
+- [~] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE `impuestos_iva` (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.* · *ADR-068, `feat/impuestos`, migraciones `20261028100000` a `20261028100300` sin aplicar.*
   - [x] Catálogo cerrado de condición IVA por producto: **21 %, 10,5 %, 27 %, 5 %, 2,5 %, 0 %, exento, no gravado** (exento y no gravado separados para el Libro IVA); migración de `products.tax_rate`. *(ADR-068: `tax_rate_code` con `tax_rate` espejo, por variante, servicio)*
   - [ ] Alícuota por operación cuando depende del receptor o del destino (por ejemplo 27 % a responsables inscriptos en ciertos servicios).
   - [x] Cálculo por ítem de neto, IVA y precio final, con precios cargados con o sin IVA. *(ADR-068: lista con o sin IVA, reparto por resto mayor, IVA por alícuota sobre base agregada, paridad TS/SQL)*
-  - [ ] Impuestos internos por rubro con alícuota y vigencia, **tasa nominal vs. efectiva**, "incluido en precio" sí/no, discriminación en factura A y tratamiento en la base de IVA; por producto y por sucursal. *(ADR-068: por producto, fijo, % sobre precio nominal o % sobre costo, incluido o adicional, fuera de la base de IVA; faltan vigencia por decreto y por sucursal)*
-  - [ ] Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido y otros impuestos nacionales indirectos por ítem para la factura B y, si corresponde, para la exhibición. *(ADR-068: en el ticket B; falta en la exhibición y en la factura con F3)*
-  - [ ] *Criterio:* una venta mixta (21 %, 10,5 %, exento y una bebida con internos) calcula por ítem y totaliza igual que el Libro IVA.
+  - [~] Impuestos internos por rubro con alícuota y vigencia, **tasa nominal vs. efectiva**, "incluido en precio" sí/no, discriminación en factura A y tratamiento en la base de IVA; por producto y por sucursal. *(ADR-068: por producto, fijo, % sobre precio nominal o % sobre costo, incluido o adicional, fuera de la base de IVA; faltan vigencia por decreto y por sucursal)*
+  - [~] Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido y otros impuestos nacionales indirectos por ítem para la factura B y, si corresponde, para la exhibición. *(ADR-068: en el ticket B; falta en la exhibición y en la factura con F3)*
+  - [~] *Criterio:* una venta mixta (21 %, 10,5 %, exento y una bebida con internos) calcula por ítem y totaliza igual que el Libro IVA. *(Cálculo por ítem con paridad TS y SQL (`sale_tax_preview`) y reporte de IVA ventas probados en `tests/integration/rls-impuestos.test.ts`; falta el caso de cruce contra el Libro IVA con internos.)*
 
-- [ ] **H104: Padrones y condición fiscal de clientes y proveedores.** · *BASE `impuestos_iva` (carga manual) + OPTIONAL `percepciones_retenciones` (Business: padrones; ADR-068 unifica `padrones`, `percepciones` y `retenciones`).*
+- [~] **H104: Padrones y condición fiscal de clientes y proveedores.** · *BASE `impuestos_iva` (carga manual) + OPTIONAL `percepciones_retenciones` (Business: padrones; ADR-068 unifica `padrones`, `percepciones` y `retenciones`).*
   - [x] Condición fiscal ampliada: RI, monotributo (categoría), monotributo social, exento, CF, no alcanzado, sujeto no categorizado. *(ADR-068, más no responsable, IVA liberado y exterior, con ids de ARCA, documento validado en el servidor y letra inferida; falta la categoría de monotributo)*
   - [ ] Consulta de constancia de inscripción de ARCA por CUIT (web service de padrón vigente) al alta: razón social, domicilio fiscal, condición IVA, actividades; cache con fecha y re-validación periódica.
-  - [ ] Padrones provinciales periódicos (ARBA, AGIP y otras jurisdicciones) importados por job con alícuotas de percepción y retención por CUIT y vigencia; historial (se usa la alícuota vigente a la fecha del comprobante). *(ADR-068: import manual por partes de ARBA, AGIP y genérico con historial por período; falta la descarga programada)*
-  - [ ] Certificados de exclusión (IVA, Ganancias, IIBB) con vigencia y porcentaje, cargados o consultados. *(ADR-068: cargados; falta la consulta)*
+  - [~] Padrones provinciales periódicos (ARBA, AGIP y otras jurisdicciones) importados por job con alícuotas de percepción y retención por CUIT y vigencia; historial (se usa la alícuota vigente a la fecha del comprobante). *(ADR-068: import manual por partes de ARBA, AGIP y genérico con historial por período; falta la descarga programada)*
+  - [~] Certificados de exclusión (IVA, Ganancias, IIBB) con vigencia y porcentaje, cargados o consultados. *(ADR-068: cargados; falta la consulta)*
   - [ ] Alertas: CUIT dado de baja, padrón vencido sin actualizar, monotributista cerca de tope.
-  - [ ] *Criterio:* al cargar un CUIT se completan razón social y condición IVA, y la percepción de ARBA usa la alícuota del padrón del mes.
+  - [~] *Criterio:* al cargar un CUIT se completan razón social y condición IVA, y la percepción de ARBA usa la alícuota del padrón del mes. *(La percepción de ARBA usa la alícuota del padrón importado, `tests/integration/rls-impuestos.test.ts`; falta completar razón social y condición desde ARCA por CUIT.)*
 
-- [ ] **H105: Percepciones (el comercio como agente).** · *OPTIONAL `percepciones_retenciones` (nueva, Business, ADR-068). Requiere H103 y H104; jurisdicción por sucursal en F17/H98.*
+- [~] **H105: Percepciones (el comercio como agente).** · *OPTIONAL `percepciones_retenciones` (nueva, Business, ADR-068). Requiere H103 y H104; jurisdicción por sucursal en F17/H98.*
   - [x] Motor de reglas: jurisdicción × impuesto × condición del cliente → alícuota (padrón o general) + mínimo de base + mínimo de percepción + exclusiones vigentes. *(ADR-068, `tax_regimes`)*
   - [x] Percepción de IVA para agentes designados (RG 2408 y regímenes específicos). *(ADR-068: régimen configurable con alícuota por condición)*
-  - [ ] Percepción de IIBB: ARBA, AGIP/ARCIBA (incluido alto riesgo fiscal), Convenio Multilateral y jurisdicción genérica con padrón importable; percepciones municipales como "otros tributos". *(ADR-068: ARBA, AGIP y genérica con padrón; faltan coeficientes de CM y municipales)*
-  - [ ] Percepciones en el comprobante, en el array `Tributos` de WSFE, en el ticket y en NC (reversa proporcional). *(ADR-068: en la venta con id de tributo, en el POS y en el ticket; faltan WSFE y NC)*
-  - [ ] *Criterio:* una factura A a un RI de Provincia de Buenos Aires suma la percepción de IIBB del padrón y de IVA si corresponde, y ambas salen en la DDJJ del mes.
+  - [~] Percepción de IIBB: ARBA, AGIP/ARCIBA (incluido alto riesgo fiscal), Convenio Multilateral y jurisdicción genérica con padrón importable; percepciones municipales como "otros tributos". *(ADR-068: ARBA, AGIP y genérica con padrón; faltan coeficientes de CM y municipales)*
+  - [~] Percepciones en el comprobante, en el array `Tributos` de WSFE, en el ticket y en NC (reversa proporcional). *(ADR-068: en la venta con id de tributo, en el POS y en el ticket; array `Tributos` de WSFE en ADR-072; falta la reversa proporcional en NC)*
+  - [~] *Criterio:* una factura A a un RI de Provincia de Buenos Aires suma la percepción de IIBB del padrón y de IVA si corresponde, y ambas salen en la DDJJ del mes. *(La factura A a un RI del padrón suma IIBB e IVA, `tests/integration/rls-impuestos.test.ts`; falta la DDJJ de percepciones del mes, H108.)*
 
 - [~] **H106: Retenciones (como agente y como sujeto).** · *OPTIONAL `percepciones_retenciones` (Business, ADR-068). Requiere H101 y H104.* · *ADR-068: retenciones de IIBB e IVA sugeridas desde el padrón y vista `tax_suffered`. ADR-079 (`feat/retenciones-agente`, migraciones `20261104200000` y `20261104200100` sin aplicar): **como agente completo**; falta como sujeto (SIRTAC / SIRCREB / "Mis Retenciones").*
   - [x] Como agente al pagar a proveedores: Ganancias (RG 830: concepto, escala, mínimo no sujeto, acumulado mensual), IVA (agentes designados), IIBB por jurisdicción, SUSS (contratistas de construcción, limpieza, seguridad); certificado de retención en PDF. *(ADR-079: cálculo en el servidor con desglose explicado en la orden de pago, certificado correlativo por régimen en PDF, registro de retenciones practicadas, archivos SICORE y ARBA, asiento contable; valores de la RG 830 y SUSS sembrados y ajustables, a verificar con contador. AGIP e-ARCIBA y otras provincias: deuda)*
-  - [ ] Como sujeto: registro de retenciones y percepciones sufridas (proveedores, tarjetas vía **SIRTAC**, bancos vía **SIRCREB**, impuesto a los débitos y créditos) para imputarlas en DDJJ; import desde la liquidación (H110) y desde "Mis Retenciones" de ARCA.
+  - [~] Como sujeto: registro de retenciones y percepciones sufridas (proveedores, tarjetas vía **SIRTAC**, bancos vía **SIRCREB**, impuesto a los débitos y créditos) para imputarlas en DDJJ; import desde la liquidación (H110) y desde "Mis Retenciones" de ARCA. *(Percepciones sufridas en compras registradas en la vista `tax_suffered`, ADR-068; faltan tarjetas (SIRTAC), bancos (SIRCREB), débitos y créditos y el import desde "Mis Retenciones".)*
   - [x] *Criterio:* una orden de pago calcula la retención de Ganancias con el acumulado del mes, emite el certificado y queda para SICORE/SIRE. *(ADR-079; SIRE queda para H108)*
 
-- [ ] **H107: Facturación electrónica completa.** · *OPTIONAL `facturacion_afip` (función real desde ADR-072) + OPTIONAL `factura_exportacion` (nueva, Enterprise). Extiende F3; requiere H103, H104 y F17/H98.*
+- [~] **H107: Facturación electrónica completa.** · *OPTIONAL `facturacion_afip` (función real desde ADR-072) + OPTIONAL `factura_exportacion` (nueva, Enterprise). Extiende F3; requiere H103, H104 y F17/H98.*
   - [x] Decisión automática del tipo de comprobante: A, B, C, M según emisor y receptor; tope de identificación del consumidor final como parámetro con vigencia. *(ADR-068 y ADR-072)*
   - [x] Condición frente al IVA del receptor informada en WSFE; arrays `AlicIva` y `Tributos` (internos, percepciones) desde H103 y H105; ids desde `FEParamGetTiposIva` y `FEParamGetTiposTributos`. *(ADR-072; las tablas se consultan desde el asistente)*
-  - [ ] Moneda extranjera (`MonId`, `MonCotiz`); conceptos de servicios con fechas; comprobantes asociados en NC y ND.
+  - [~] Moneda extranjera (`MonId`, `MonCotiz`); conceptos de servicios con fechas; comprobantes asociados en NC y ND. *(Conceptos de servicios con fechas y comprobantes asociados en NC hechos, ADR-072 `_shared/arca/wsfe.ts`; faltan moneda extranjera (hoy `MonId` PES) y notas de débito.)*
   - [ ] **Factura de Crédito Electrónica MiPyME** (Ley 27.440, tipos 201 a 213): monto mínimo, CBU, aceptación o rechazo, vínculo con cuenta corriente.
   - [ ] **Factura E** de exportación (WSFEX) con incoterm y permiso de embarque.
   - [x] QR fiscal en el impreso, CAEA de contingencia por PV, almacenamiento del request y response. *(ADR-072)*
@@ -1284,8 +1270,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 - [~] **H108: Libros y regímenes de información.** · *Libro IVA Digital dentro de OPTIONAL `facturacion_afip` (ADR-076); SICORE, SIRE y DDJJ de IIBB en OPTIONAL `export_contable` (nueva, Pro). Requiere F3 (ventas) y H101 (compras).* · *ADR-076, `feat/libro-iva-digital`, migración `20261103100000` sin aplicar.*
   - [~] Libro IVA Digital ventas y compras (RG 4597) con archivos de importación; prorrateo de crédito fiscal si hay operaciones exentas. *(ADR-076: VENTAS_CBTE, VENTAS_ALICUOTAS, COMPRAS_CBTE y COMPRAS_ALICUOTAS en zip con revisión previa en lenguaje simple, en Contabilidad > Libro IVA Digital; falta el prorrateo, el período de imputación de compras, COMPRAS_IMPORTACIONES y validar el formato con un contador y una importación real)*
-  - [ ] SICORE y SIRE (retenciones y percepciones practicadas).
-  - [ ] DDJJ de IIBB: ARBA, e-ARCIBA, SIFERE (Convenio Multilateral, coeficientes CM05), SIRCAR; base y tributo de impuestos internos.
+  - [~] SICORE y SIRE (retenciones y percepciones practicadas). *(SICORE de retenciones practicadas de Ganancias, IVA y SUSS, ADR-079 `lib/tax/sicore.ts`; faltan percepciones practicadas y SIRE.)*
+  - [~] DDJJ de IIBB: ARBA, e-ARCIBA, SIFERE (Convenio Multilateral, coeficientes CM05), SIRCAR; base y tributo de impuestos internos. *(ARBA agente de retención (actividad 6), ADR-079; faltan percepciones de ARBA, e-ARCIBA, SIFERE, SIRCAR e internos.)*
   - [ ] Exportador genérico por plantilla para otros regímenes de información provinciales o nacionales.
   - [ ] *Criterio:* a fin de mes el contador baja Libro IVA ventas y compras, SICORE y la DDJJ de ARBA y los importa sin retipear.
 
@@ -1300,8 +1286,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Ajuste por inflación: el POS exporta datos con fecha y moneda homogénea; el ajuste (RT 6 contable, Título VI de Ganancias impositivo) se resuelve en el sistema contable del estudio. Evaluar cálculo propio en una etapa posterior.
   - [ ] *Criterio:* a fin de mes el estudio recibe los asientos por sucursal en el formato de su sistema y cuadran con el Libro IVA y los Z.
 
-- [ ] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
-  - [~] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(en curso: `feat/conciliacion-tarjetas`)*
+- [~] **H110: Conciliación de tarjetas, billeteras y bancos.** · *OPTIONAL `conciliacion_tarjetas` (nueva, Business) + OPTIONAL `conciliacion_bancaria` (nueva, Business). Requiere el n° de comercio y F17/H93; enlaza con F8/H21b.*
+  - [x] Reporte de conciliación de tarjetas con `payments.card_voucher` (incluido n° de comercio) y `payments.reconciled_at`. *(ADR-044, migración `20261012120000_conciliacion_tarjetas`, `modules/reports/cardReconciliation.ts`)*
   - [~] Import de liquidaciones: **Mercado Pago por API, automático todos los días** (`payments/search`, cada credencial del negocio y de las sucursales); **Payway, Getnet, Fiserv/Posnet, Nave u otro por XLSX o CSV** con mapeo de columnas. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, feature `conciliacion_procesadores`, Business). Pendiente: MODO, Mobbex, Pagos360 y Directo con preset; presets de columnas guardados; Payway por API si la publican.*
   - [~] Matching automático por id del procesador o intent, **n° de comercio + lote + cupón**, autorización + últimos 4, y monto + día con pareja única; estados Conciliado, Cobro sin venta, Venta sin cobro, Diferencia de monto, Revisado, y Acreditado / Pendiente de acreditación. *Hecho (ADR-061). Contracargos, reclamos y devoluciones como estado propio (Devuelto, Devuelto parcial, Contracargo, Reclamo abierto) con neto efectivo, KPI, filtros y plazo de documentación: hecho en `feat/contracargos-devoluciones` (ADR-064).*
   - [~] **Alertas de contracargos y devoluciones de Mercado Pago** (feature BASE `alertas_contracargos`): detección en la sincronización diaria y por aviso de MP (`topic_chargebacks_wh`, `topic_claims_integration_wh`), `payment_disputes`, notificación al dueño y encargados, marcas y filtro "Con alertas" en Ventas, detalle en Cobros y tarjeta en el Panel del dueño. *Hecho en `feat/contracargos-devoluciones` (ADR-064, migración `20261027100000` sin aplicar). Pendiente: suscribir los dos tópicos en la aplicación de MP, validar con un contracargo real la búsqueda de casos por pago, resumen diario por email y subir la documentación del contracargo desde NinjaPos (`POST /v1/chargebacks/{id}/documentation`).*
@@ -1309,23 +1295,20 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [x] Detalle de la venta con los cobros y los datos del procesador (comisiones, neto, acreditación, tarjeta, pagador) traídos por API con la credencial del cobro. *(ADR-061)*
 
   - [x] **Integración con NubCeo** (conciliador externo): envío de cada venta con sus cobros, ritmo y ventana, solo simular, mapeo de campos y medios, monitor de envíos, anulaciones y devoluciones, e importación de los asientos contables de NubCeo (API o CSV). *(2026-10-12, ADR-062, `feat/nubceo`, migraciones `20261025100000` y `20261025100100` sin aplicar, Edge `nubceo_sync` sin desplegar)* · *OPTIONAL `integracion_nubceo` (nueva, Business, también add-on).* Ver [`30-nubceo.md`](./30-nubceo.md).
-  - [ ] Import de liquidaciones de Prisma/Payway, Fiserv/Posnet, Getnet, Mercado Pago, MODO y Nave (archivo o API).
-  - [ ] Matching automático por **n° de comercio + lote + cupón + monto + fecha** (y `mp_payment_id` o intent en los integrados); estados conciliado, pendiente, diferencia, contracargo.
-  - [ ] Comisiones, IVA sobre comisiones, retenciones y percepciones sufridas (SIRTAC, IIBB, IVA, Ganancias) separadas del bruto, con asiento (H109) y registro para H106.
   - [ ] Conciliación del turno: marcar un Z como conciliado con motivo.
-  - [ ] Conciliación bancaria: extracto importado contra cobros, depósitos, pagos y liquidaciones; SIRCREB e impuesto a los débitos y créditos.
+  - [~] Conciliación bancaria: extracto importado contra cobros, depósitos, pagos y liquidaciones; SIRCREB e impuesto a los débitos y créditos. *(Conciliación manual de movimientos de tesorería con referencia del extracto, ADR-059; faltan el import del extracto, SIRCREB y débitos y créditos.)*
   - [ ] BIN de tarjeta → banco y medio (opcional).
-  - [ ] *Criterio:* el dueño sube la liquidación de Prisma de Norte y ve qué cupones se acreditaron, cuáles faltan y cuánto se llevó de comisión y retenciones.
+  - [x] *Criterio:* el dueño sube la liquidación de Prisma de Norte y ve qué cupones se acreditaron, cuáles faltan y cuánto se llevó de comisión y retenciones. *(ADR-061: import de Payway por archivo con n° de comercio y lote, estados Acreditado y Pendiente, arancel y retenciones por columna)*
 
-- [ ] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.* · *Básica en `feat/compras-v2` (ADR-059, requiere `compras`): cuentas de caja general y bancos, movimientos, transferencias, conciliación manual, cheques propios y de terceros y flujo de fondos proyectado.*
-  - [ ] Caja fuerte por sucursal, retiros del cajón (por límite con motivo), depósitos al banco y transferencias entre sucursales, con comprobante adjunto.
+- [~] **H111: Tesorería multi-sucursal.** · *OPTIONAL `tesoreria` (nueva, Business). Requiere F17/H89.* · *Básica en `feat/compras-v2` (ADR-059, requiere `compras`): cuentas de caja general y bancos, movimientos, transferencias, conciliación manual, cheques propios y de terceros y flujo de fondos proyectado.*
+  - [~] Caja fuerte por sucursal, retiros del cajón (por límite con motivo), depósitos al banco y transferencias entre sucursales, con comprobante adjunto. *(Cuentas de caja general por sucursal, banco y transferencias entre cuentas, ADR-059 `tesoreria`; faltan el retiro del cajón por límite y el comprobante adjunto.)*
   - [ ] Rendiciones por medio de pago con estados (pendiente de aprobación → entregado) y fondo fijo de cambio.
-  - [ ] Saldo teórico vs. contado por cuenta (cajero, caja fuerte, banco) y asiento (H109).
+  - [~] Saldo teórico vs. contado por cuenta (cajero, caja fuerte, banco) y asiento (H109). *(Saldo y saldo conciliado por cuenta en `treasury_balances`, ADR-059, y asiento de los movimientos de tesorería, ADR-066; falta el contado contra el teórico.)*
   - [ ] *Criterio:* el encargado de Norte retira efectivo al llegar al límite, lo deposita y el dueño ve el dinero en tránsito hasta el banco.
 
-- [ ] **H112: Registros de producto, códigos y régimen de precios ("tag registration").** · *BASE (campos y validaciones) + OPTIONAL `sepa` (nueva, Enterprise). SEPA por sucursal requiere F17/H94. **Interpretación a confirmar con el dueño** (ver §5 de la auditoría).*
-  - [ ] Tags de producto como alcance de reglas de precio, promociones, impuestos y reportes (`products.tags` existe).
-  - [ ] GTIN/EAN con validación de dígito verificador, prefijo de empresa GS1 y códigos de balanza.
+- [~] **H112: Registros de producto, códigos y régimen de precios ("tag registration").** · *BASE (campos y validaciones) + OPTIONAL `sepa` (nueva, Enterprise). SEPA por sucursal requiere F17/H94. **Interpretación a confirmar con el dueño** (ver §5 de la auditoría).*
+  - [~] Tags de producto como alcance de reglas de precio, promociones, impuestos y reportes (`products.tags` existe). *(Tags como alcance de la actualización masiva de precios, ADR-058; faltan promociones, impuestos y reportes.)*
+  - [~] GTIN/EAN con validación de dígito verificador, prefijo de empresa GS1 y códigos de balanza. *(Códigos de balanza EAN-13 con dígito verificador, ADR-063 `lib/barcode/scaleLabel.ts`; falta validar el GTIN del producto y el prefijo GS1.)*
   - [ ] Registros sanitarios y técnicos por producto con n° y vencimiento: RNPA/RNE (alimentos), ANMAT (productos médicos y cosméticos), SENASA, INV, certificación de seguridad eléctrica y etiqueta de eficiencia energética; alerta y bloqueo opcional de venta si venció.
   - [ ] Régimen de información de precios SEPA (cadenas alcanzadas): archivo diario por sucursal desde las listas vigentes; marca de productos adheridos a programas oficiales de precios con su tope.
   - [ ] *Criterio:* un producto con RNPA vencido avisa al venderlo y la cadena genera el archivo SEPA del día por sucursal.
@@ -1361,7 +1344,7 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
 
 - [~] **TX-5 — Reportes PRO configurables por usuario.** — *Base hecha (PR #46): mostrar/ocultar reportes persistido. Falta orden, más reportes y filtros guardables.*
   - [~] **Tablero de reportes configurable**: cada usuario **muestra/oculta** reportes con "Personalizar"; persistido en `users.settings.reports` (cross-device, merge sin pisar apariencia). **Orden (drag) pendiente.**
-  - [~] **Catálogo de reportes ampliable**: día/medio/categoría/cajero + **top productos** + **stock bajo** + **top clientes** (PR #49). Faltan márgenes y comparativos por período.
+  - [~] **Catálogo de reportes ampliable**: día/medio/categoría/cajero + **top productos** + **stock bajo** + **top clientes** (PR #49). Comparativo contra el período anterior hecho (`app/(app)/reportes/page.tsx`, toggle "rep-compare"); margen sólo en gastronomía por receta (F13/H52, `modules/reports/api.ts`). Falta margen general por producto.
   - [ ] Filtros guardables (rango/sucursal/medio/categoría) y presets por usuario.
   - [x] **Reporte Excel avanzado**: export multi-hoja con marca, totales, autofilter, header congelado, formato moneda/fecha (`exportXlsx`).
   - [~] *Criterio:* el usuario muestra/oculta reportes y lo encuentra igual en otro dispositivo; descarga Excel. (Orden y filtros guardables pendientes.)
@@ -1476,12 +1459,12 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 
 ## Backlog para fases siguientes (no priorizado)
 
-- [ ] **Registro/login con Google (OAuth)** *(agregado 2026-06-06)*: alta y acceso con cuenta de Google vía Supabase Auth (provider google). **Feature de plan de pago** (gateado por feature flag / plan). Incluye vincular cuenta existente por email y respetar el flujo de onboarding actual.
+- [~] **Registro/login con Google (OAuth)** *(agregado 2026-06-06)*: alta y acceso con cuenta de Google vía Supabase Auth (provider google). **Feature de plan de pago** (gateado por feature flag / plan). Incluye vincular cuenta existente por email y respetar el flujo de onboarding actual. *Parcial: login y alta con Google (`signInWithOAuth` en `app/(auth)/login/page.tsx` y `app/(auth)/signup/page.tsx`). Falta gatearlo por plan (no hay feature key) y el vínculo explícito con cuenta existente.*
 - [ ] **Inventario PRO avanzado fuera de F14:** WMS profundo, ubicaciones/bin picking, ondas de preparación, inventario por radiofrecuencia y terminales industriales.
 - [ ] **Compras y proveedores avanzados fuera de F14:** EDI, portal de proveedor, licitaciones, conciliación automática de facturas de proveedor.
-- [ ] **Devoluciones y cambios avanzados:** cubierto en F11/H29; queda en backlog solo integración posterior con nota de crédito fiscal automática si AFIP requiere ampliar flujo.
-- [ ] **Cuenta corriente de clientes** (fiado) — base en F11/H31; gancha con F9/H55 (fidelización) y segmentos.
-- [ ] **Cuenta corriente de proveedores.**
+- [x] **Devoluciones y cambios avanzados:** cubierto en F11/H29; queda en backlog solo integración posterior con nota de crédito fiscal automática si AFIP requiere ampliar flujo. *Hecho: la devolución encola la nota de crédito fiscal sola (trigger `arca_returns_enqueue` sobre `sale_returns`, `20261101100100_arca_facturacion.sql`, ADR-072).*
+- [~] **Cuenta corriente de clientes** (fiado) — base en F11/H31; gancha con F9/H55 (fidelización) y segmentos. *Base hecha (`20260601130000_customer_account.sql`, `20261011200000_cuenta_corriente_v2.sql`); falta el enganche con fidelización y segmentos (F9/H55).*
+- [x] **Cuenta corriente de proveedores.** *Hecho: vista `supplier_balances` (`20261016100300_compras_facturas_pagos.sql`, ADR-050), saldo en `/compras/proveedores` y órdenes de pago (ADR-059).*
 - [ ] **Reservas / turnos avanzados** multi-recurso o de capacidad compleja; base cubierta en F12/H38 y reservas gastronómicas en F13/H51.
 - [ ] **Multimoneda avanzada:** cobertura multi-país, contabilidad bimonetaria y reglas fiscales por país; base comercial cubierta en F14/H59.
 - [ ] App móvil nativa (React Native) para gerentes en movimiento.
@@ -1491,6 +1474,38 @@ Análisis de referentes (Square, Toast, Lightspeed, Clover, Shopify POS; locales
 - [ ] Multi-país (Uruguay, Chile, México) — requiere abstraer facturación electrónica.
 
 > *Nota:* **Fidelización (puntos/niveles), gift cards y cupones** se movieron del backlog a **F9 — Motor de promociones PRO** (H54–H55); packs de sesiones y membresías simples se cubren antes en F12/H41.
+
+---
+
+## Avance por fase
+
+Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes de cada fase; no cuenta los gates de "Cortes de control" ni el backlog). `[~]` es parcial; la última columna lo cuenta como medio ítem. Recalcular después de marcar ítems.
+
+<!-- roadmap-progress:start -->
+| Fase | Hechos/total | Parciales | Pendientes | % hecho | % con parciales a la mitad |
+|---|---|---|---|---|---|
+| **F0** | 7/10 | 3 | 0 | 70% | 85% |
+| **F1.5** | 8/14 | 3 | 3 | 57% | 68% |
+| **F2** | 16/16 | 0 | 0 | 100% | 100% |
+| **F3** | 21/29 | 7 | 1 | 72% | 84% |
+| **F4** | 10/23 | 9 | 4 | 43% | 63% |
+| **F5** | 16/38 | 7 | 15 | 42% | 51% |
+| **F6** | 55/62 | 4 | 3 | 89% | 92% |
+| **F7** | 44/61 | 12 | 5 | 72% | 82% |
+| **F8** | 12/47 | 21 | 14 | 26% | 48% |
+| **F9** | 12/20 | 7 | 1 | 60% | 78% |
+| **F10** | 30/46 | 11 | 5 | 65% | 77% |
+| **F11** | 65/89 | 12 | 12 | 73% | 80% |
+| **F12** | 39/51 | 7 | 5 | 76% | 83% |
+| **F13** | 39/74 | 26 | 9 | 53% | 70% |
+| **F14** | 4/61 | 31 | 26 | 7% | 32% |
+| **F15** | 3/35 | 12 | 20 | 9% | 26% |
+| **F16** | 0/59 | 16 | 43 | 0% | 14% |
+| **F17** | 98/130 | 18 | 14 | 75% | 82% |
+| **F18** | 33/106 | 56 | 17 | 31% | 58% |
+| **TX** | 19/27 | 4 | 4 | 70% | 78% |
+| **Total** | 531/998 | 266 | 201 | 53% | 67% |
+<!-- roadmap-progress:end -->
 
 ---
 

@@ -146,6 +146,7 @@ Notación: ✅ puede · ❌ la base lo rechaza · ⚠️ con condición.
 | Medios de pago y cuentas de transferencia | ✅ | ✅ | ❌ | ❌ | policies de `transfer_accounts`, `payment_terminals` (ADR-055) |
 | Seguridad y PIN de supervisor | ✅ | ❌ | ❌ | ❌ | `security_settings_save` exige dueño |
 | Impuestos (regímenes, exenciones) | ✅ | ✅ | ❌ | ❌ | `tax_can_write()` (ADR-068) |
+| Valores impositivos del negocio (versiones con vigencia, conceptos y reglas propias, perfiles de padrón, alícuota a mano por CUIT) | ✅ | ✅ | ❌ | ❌ | `tax_custom_save` / `_tax_custom_assert`, `tax_can_write('percepciones_retenciones')`, `role_write_guard` (ADR-105) |
 | Contabilidad | ✅ | ✅ (reabrir: sólo owner) | ❌ | ❌ | `acc_assert()`, `acc_period_reopen` (ADR-066) |
 | Compras, proveedores, tesorería | ✅ | ✅ | ❌ | ❌ | `purchase_can_write()`, `treasury_can_write()` (ADR-050, ADR-059) |
 

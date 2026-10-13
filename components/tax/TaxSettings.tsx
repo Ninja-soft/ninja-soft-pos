@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Segmented } from "@/components/ui/Segmented";
 import { Building2, Lock, Save } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -24,12 +25,27 @@ import { taxErrorMessage, type TaxSettings as Settings } from "@/modules/tax/api
 import { useSaveTaxSettings, useTaxSettings } from "@/modules/tax/hooks";
 import { TaxRegimes } from "./TaxRegimes";
 import { PadronImport } from "./PadronImport";
-import { RetentionValues } from "./RetentionValues";
+import { RetentionScales, RetentionValues } from "./RetentionValues";
+import { IvaRatesCard, ParametersCard } from "./custom/TaxValueCards";
+import { IibbActivitiesCard, SufferedRulesCard } from "./custom/IibbAndRulesCards";
 
-// Configuración > Impuestos (ADR-068): datos fiscales del negocio (BASE),
-// agente de percepción y retención y padrones (percepciones_retenciones).
+// Configuración > Impuestos (ADR-068, ADR-105), por secciones. Todo valor
+// impositivo es del negocio: cada uno muestra si rige la plantilla de
+// NinjaSoft o uno propio, con vigencia, historial y "volver a la plantilla".
+type Section = "general" | "iva" | "percepciones" | "retenciones" | "padrones" | "iibb" | "exportaciones";
+const SECTIONS: { value: Section; label: string }[] = [
+  { value: "general", label: "Datos fiscales" },
+  { value: "iva", label: "IVA" },
+  { value: "percepciones", label: "Percepciones" },
+  { value: "retenciones", label: "Retenciones" },
+  { value: "padrones", label: "Padrones" },
+  { value: "iibb", label: "IIBB" },
+  { value: "exportaciones", label: "Exportaciones" },
+];
+
 export function TaxSettings() {
   const q = useTaxSettings();
+  const [section, setSection] = useState<Section>("general");
   if (q.isLoading) return <SpinnerBlock className="py-16" />;
   if (q.error || !q.data) {
     return (
@@ -38,12 +54,48 @@ export function TaxSettings() {
       </Callout>
     );
   }
+  const s = q.data;
   return (
     <div className="space-y-6">
-      <FiscalCard settings={q.data} />
-      <TaxRegimes settings={q.data} />
-      <RetentionValues settings={q.data} />
-      <PadronImport settings={q.data} />
+      <Segmented value={section} onChange={setSection} options={SECTIONS} aria-label="Secciones de impuestos" size="sm" />
+      {section === "general" && (
+        <>
+          <FiscalCard settings={s} />
+          <Callout tone="info" title="Todo es tuyo">
+            Alícuotas, regímenes, padrones, mínimos, escalas y códigos vienen cargados como plantilla de NinjaSoft
+            (orientativa). Podés cambiar cada valor con la fecha desde la que rige, crear los tuyos y volver a la
+            plantilla cuando quieras. Cada cambio queda en el historial.
+          </Callout>
+        </>
+      )}
+      {section === "iva" && (
+        <>
+          <IvaRatesCard settings={s} />
+          <ParametersCard settings={s} section="iva" needsFeature="iva" />
+        </>
+      )}
+      {section === "percepciones" && <TaxRegimes settings={s} role="perception" />}
+      {section === "retenciones" && (
+        <>
+          <TaxRegimes settings={s} role="retention" />
+          <RetentionValues settings={s} />
+          <RetentionScales settings={s} />
+          <ParametersCard settings={s} section="retenciones" />
+          <SufferedRulesCard settings={s} />
+        </>
+      )}
+      {section === "padrones" && <PadronImport settings={s} />}
+      {section === "iibb" && <IibbActivitiesCard settings={s} />}
+      {section === "exportaciones" && (
+        <>
+          <ParametersCard settings={s} section="exportaciones" />
+          <p className="text-xs text-muted-foreground">
+            Los códigos de régimen de SICORE de cada concepto se cargan en Retenciones (Conceptos de retención) y el de
+            cada régimen de IVA o SUSS, en el régimen. El Libro IVA Digital usa los datos guardados en cada venta y
+            compra.
+          </p>
+        </>
+      )}
     </div>
   );
 }

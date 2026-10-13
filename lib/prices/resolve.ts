@@ -171,6 +171,8 @@ export interface PricingTax {
   internalEnabled: boolean;
   /** Sólo viene cuando algún precio cambia (lista neta o internos adicionales). */
   products: Record<string, ProductTaxLike>;
+  /** Alícuotas de IVA del negocio distintas de la plantilla (ADR-105). */
+  rates?: Partial<Record<string, number>> | null;
 }
 
 export interface PricingWorld {
@@ -480,6 +482,7 @@ export function resolveUnitPrice(w: PricingWorld, q: PriceQuery): PriceResolutio
           discriminates: w.tax.discriminates,
           internalEnabled: w.tax.internalEnabled,
           listIncludesIva: includes,
+          rates: w.tax.rates ?? null,
         }),
       );
     }

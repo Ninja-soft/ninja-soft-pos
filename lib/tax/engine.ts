@@ -56,9 +56,12 @@ export function roundHalf(x: number): number {
 export const toCents = (pesos: number | string | null | undefined): number => roundHalf(Number(pesos ?? 0) * 100);
 export const fromCents = (c: number): number => c / 100;
 
-function ivaRateOf(code: IvaCode, discriminates: boolean): number {
+function ivaRateOf(code: IvaCode, discriminates: boolean, rates?: Partial<Record<string, number>> | null): number {
   const r = IVA_RATES[code] ?? IVA_RATES["21"];
-  return discriminates && r.kind === "gravado" ? r.rate : 0;
+  if (!discriminates || r.kind !== "gravado") return 0;
+  // ADR-105: alícuota propia del negocio (price_context_snapshot.tax.rates).
+  const own = rates?.[r.code];
+  return own != null && Number.isFinite(Number(own)) ? Number(own) : r.rate;
 }
 
 /**
@@ -104,6 +107,8 @@ export interface PriceTaxContext {
   internalEnabled: boolean;
   /** La lista guarda precios con IVA (true) o netos (false). */
   listIncludesIva: boolean;
+  /** Alícuotas de IVA propias del negocio que difieren de la plantilla (ADR-105). */
+  rates?: Partial<Record<string, number>> | null;
 }
 
 /**
@@ -113,7 +118,7 @@ export interface PriceTaxContext {
  */
 export function priceToFinal(price: number, c: PriceTaxContext): number {
   const P = Number(price) || 0;
-  const r = ivaRateOf(c.rateCode, c.discriminates) / 100;
+  const r = ivaRateOf(c.rateCode, c.discriminates, c.rates) / 100;
   const it = c.internalEnabled && c.internal && c.internal.mode !== "none" ? c.internal : null;
   let F: number;
   if (!it) {

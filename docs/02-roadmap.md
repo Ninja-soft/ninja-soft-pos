@@ -976,19 +976,19 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Abstracción fiscal por país/provincia/canal: AFIP/ARCA Argentina primero, arquitectura preparada para otros países.
   - [~] Ciclo completo de comprobante: emitir, almacenar XML/PDF, enviar al cliente, reimprimir, anular, nota de crédito/débito y auditar. *Parcial: emisión con CAE, XML de request y response guardados, NC por devolución y por anulación, envío del comprobante por email y reimpresión (ADR-072, `supabase/functions/arca_wsfe`). Falta nota de débito.*
   - [~] Contingencia autónoma por tienda/caja con cola fiscal, alertas 24/7, reintento, bloqueo preventivo y tablero fiscal. *Parcial: cola fiscal con reintentos, dead-letter, contingencia CAEA por punto de venta y panel de monitoreo fiscal (ADR-072). Faltan alertas 24/7 y bloqueo preventivo.*
-  - [ ] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos.
+  - [~] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos. *Parcial (auditoría F16 2026-10-13): diseñador de tickets con logo, leyendas, layout y QR (`components/tickets/TicketTemplateEditor.tsx`, feature `tickets_pro`). Faltan el PDF fiscal propio, los mensajes de promociones y los anexos.*
   - [ ] *Criterio:* una cadena opera ventas físicas y online con comprobantes centralizados, contingencia y trazabilidad por país/canal.
 
 - [~] **H80 — Promo & Loyalty omnicanal enterprise.** *Parcial: el simulador de promociones existe (ADR-074).*
   - [ ] Campañas omnicanal: POS, catálogo, e-commerce, WhatsApp, QR, marketplace y app futura.
   - [~] Simulador de campañas, coexistencia, exclusividad, conflictos, presupuesto, forecast de impacto y ticket promedio esperado. *Parcial: simulador sobre ventas pasadas, combinables o exclusivas y topes (ADR-074, `components/promotions/PromotionSimModal.tsx`, `simulatePromotion`). Faltan presupuesto, forecast de impacto y conflictos entre canales.*
-  - [ ] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento.
+  - [~] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento. *Parcial (auditoría F16 2026-10-13): cupones con topes por cliente (`20260609310000_coupons.sql`) y saldo a favor del cliente por devolución (`refund_method = 'store_credit'`). Faltan puntos, niveles, gift cards, cashback y beneficios por comportamiento.*
   - [ ] Automatizaciones por evento: primera compra, cumpleaños, abandono, recompra, cliente inactivo, devolución, ticket alto.
   - [ ] *Criterio:* una campaña se simula, se publica en todos los canales y mide uso, margen, ticket promedio y recurrencia.
 
-- [ ] **H81 — Clienteling y venta asistida móvil.**
-  - [ ] POS móvil para vendedor: buscar cliente, ver historial, preferencias, talles, garantías, deuda, puntos y recomendaciones.
-  - [ ] Venta asistida desde celular/tablet con QR de pago, stock de otra tienda, cross-selling/up-selling y envío a domicilio.
+- [~] **H81 — Clienteling y venta asistida móvil.** *Parcial: POS mobile-first instalable con ficha del cliente.*
+  - [~] POS móvil para vendedor: buscar cliente, ver historial, preferencias, talles, garantías, deuda, puntos y recomendaciones. *Parcial (auditoría F16 2026-10-13): POS mobile-first e instalable (ADR-087) con la ficha del cliente desde el POS: historial, deuda y garantías (ADR-085, `lib/customers/c360.ts`). Faltan preferencias, talles, puntos y recomendaciones.*
+  - [~] Venta asistida desde celular/tablet con QR de pago, stock de otra tienda, cross-selling/up-selling y envío a domicilio. *Parcial (auditoría F16 2026-10-13): cobro con QR y link (ADR-048), stock de otras sucursales en el POS (`lib/stock/posBranchStock.ts`) y pedidos de delivery (F13/H49). Faltan cross-selling y up-selling.*
   - [ ] Lista de deseos, carrito persistente omnicanal y recuperación de venta iniciada en otro canal.
   - [ ] *Criterio:* un vendedor atiende en salón desde celular, cobra con QR y evita que el cliente pase por caja.
 
@@ -998,10 +998,10 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [~] Señales de fraude omnicanal: abuso de cupones, cambios cross-channel, múltiples cuentas, chargebacks, vale/gift card sospechosa. *Parcial: contracargos y reclamos por venta (ADR-064, `lib/reports/paymentDisputes.ts`). Faltan abuso de cupones, cambios cross-channel, múltiples cuentas y vales sospechosos.*
   - [ ] *Criterio:* una devolución de alto riesgo pide aprobación y queda marcada para auditoría.
 
-- [ ] **H83 — Operación de cadenas, marcas y franquicias.**
+- [~] **H83 — Operación de cadenas, marcas y franquicias.** *Parcial: herencia negocio → sucursal y grupos de sucursales.*
   - [ ] Multi-marca/multi-negocio dentro de un grupo empresarial.
-  - [ ] Franquicias: configuración central con overrides locales, catálogo central, precios sugeridos/obligatorios y reportes por franquiciado.
-  - [ ] Consolidación regional: país, moneda, impuestos, canales, depósitos, roles y permisos por unidad de negocio.
+  - [~] Franquicias: configuración central con overrides locales, catálogo central, precios sugeridos/obligatorios y reportes por franquiciado. *Parcial (auditoría F16 2026-10-13): configuración del negocio con overrides por sucursal y caja (F17, `venta_config_efectiva`), plantilla de sucursal (ADR-057) y listas de precios por sucursal. Faltan precios obligatorios y el reporte por franquiciado.*
+  - [~] Consolidación regional: país, moneda, impuestos, canales, depósitos, roles y permisos por unidad de negocio. *Parcial (auditoría F16 2026-10-13): grupos o zonas de sucursales (ADR-049), depósitos por sucursal (ADR-085) y roles por sucursal (`staff_branch_assignments`, ADR-045). Faltan país, moneda y canales por unidad.*
   - [ ] *Criterio:* una franquicia recibe catálogo/precios desde central, opera localmente y reporta ventas consolidadas.
 
 - [ ] **H84 — Marketplace y e-commerce integration hub.**
@@ -1016,8 +1016,8 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Runbooks operativos para soporte: qué revisar, cómo reintentar, cómo escalar y cómo cerrar incidente.
   - [ ] *Criterio:* soporte detecta una caída de pagos, identifica proveedor/canal afectado y ejecuta runbook sin consultar SQL.
 
-- [ ] **H86 — Benchmark Napse parity y demos enterprise.**
-  - [ ] Matriz de paridad contra Napse Bridge/Omni/VTOL/Fiscal Flow/Promo, mantenida por producto.
+- [~] **H86 — Benchmark Napse parity y demos enterprise.** *Parcial: matriz de paridad en docs.*
+  - [~] Matriz de paridad contra Napse Bridge/Omni/VTOL/Fiscal Flow/Promo, mantenida por producto. *Parcial (auditoría F16 2026-10-13): matriz en [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md) §2 y auditoría de pantallas en [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md). Falta el estado por capacidad.*
   - [ ] Demos enterprise por vertical: supermercado, moda, farmacia, tienda departamental, franquicia, mayorista.
   - [ ] Dataset demo con miles de productos, múltiples sucursales, e-commerce, promociones, fidelización, devoluciones y pagos conciliados.
   - [ ] *Criterio:* ventas puede mostrar un flujo omnicanal completo tipo cadena retail sin preparar datos manualmente.
@@ -1500,11 +1500,11 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F13** | 39/74 | 26 | 9 | 53% | 70% |
 | **F14** | 4/61 | 31 | 26 | 7% | 32% |
 | **F15** | 3/35 | 12 | 20 | 9% | 26% |
-| **F16** | 0/59 | 16 | 43 | 0% | 14% |
+| **F16** | 0/59 | 26 | 33 | 0% | 22% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 531/998 | 266 | 201 | 53% | 67% |
+| **Total** | 531/998 | 276 | 191 | 53% | 67% |
 <!-- roadmap-progress:end -->
 
 ---

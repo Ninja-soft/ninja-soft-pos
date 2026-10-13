@@ -64,7 +64,19 @@
   }
 }
 
+/* Pastilla de días de prueba: su lugar ya está reservado; sólo aparece. */
+.fadeIn {
+  animation: fade-in 320ms ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .fadeIn,
   .piece,
   .bar,
   .stamp,

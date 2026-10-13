@@ -1,0 +1,11 @@
+Fotos de productos de Unsplash (https://unsplash.com/license): uso comercial libre, sin atribución obligatoria.
+Sin marcas de terceros visibles a propósito.
+
+Origen: repo ninja-soft-web, public/images/products/ (misma licencia, ver su LICENSE.txt).
+Copiadas acá recortadas a 160x160 en webp para el collage de demo del panel de
+marca de login/signup (components/auth/ValuePanel.tsx):
+
+- jean.webp
+- tshirt.webp
+- headphones.webp
+- jacket.webp

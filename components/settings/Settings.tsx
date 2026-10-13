@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { SettingsIcon } from "./brandIcons";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,7 +18,7 @@ export function SettingsSection({
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
-  icon?: LucideIcon;
+  icon?: SettingsIcon;
   actions?: React.ReactNode;
   className?: string;
   /** Clases extra del título (p. ej. ocultarlo en mobile si ya lo muestra el selector). */
@@ -74,7 +74,7 @@ export function SettingsCard({
 }: {
   title?: React.ReactNode;
   description?: React.ReactNode;
-  icon?: LucideIcon;
+  icon?: SettingsIcon;
   actions?: React.ReactNode;
   padded?: boolean;
   className?: string;

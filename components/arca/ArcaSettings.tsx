@@ -25,7 +25,7 @@ import { useArcaConfig, useArcaMutations } from "@/modules/arca/hooks";
 import { ArcaWizard } from "./ArcaWizard";
 import { ArcaMonitor } from "./ArcaMonitor";
 import { Dot, Term } from "./shared";
-import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
+import { ArcaIcon } from "@/components/settings/brandIcons";
 
 type Tab = "asistente" | "monitor" | "ajustes";
 
@@ -83,7 +83,7 @@ export function ArcaSummary({ config }: { config: ArcaConfig }) {
     <div className="space-y-3">
       <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <IntegrationLogo name="arca" size={44} title="ARCA" />
+          <ArcaIcon size={22} className="mt-1" />
           <div className="min-w-0">
           <p className="text-sm text-muted-foreground">Facturación electrónica ARCA</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-2 text-base font-semibold">

@@ -21,7 +21,9 @@ export type SaleMethod =
   | "other"
   | "store_credit"
   | "account"
-  | "directo";
+  | "directo"
+  // Seña del turno ya cobrada (ADR-088): la agrega la hoja, no es un tender.
+  | "sena";
 
 export type TenderChannel = "manual" | "qr" | "link" | "point";
 

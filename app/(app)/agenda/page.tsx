@@ -72,6 +72,7 @@ export default function AgendaPage() {
 
   // Recursos y lista de espera (ADR-082): gating por plan + rol.
   const resourcesOn = useFeature("agenda_recursos") === true;
+  const depositsOn = useFeature("agenda_senas") === true;
   const waitlistOn = useFeature("lista_espera") === true;
   const role = useBranchScope().data?.role ?? null;
   const canManage = role === "owner" || role === "manager";
@@ -363,6 +364,7 @@ export default function AgendaPage() {
         professionalName={detailProfName}
         onClose={() => setDetail(null)}
         onEdit={openEdit}
+        depositsEnabled={depositsOn}
       />
       <WalkInModal
         open={walkInOpen}

@@ -97,6 +97,10 @@ export interface CreateSaleResult {
   sale_id: string;
   number: number;
   total: number;
+  /** ADR-088: lo que salió de la reserva porque el salón no alcanzaba (aviso). */
+  reserve_taken?: { product_id: string; taken: number; from: { name: string; qty: number }[] }[];
+  /** ADR-088: seña del turno aplicada. */
+  deposit_applied?: number;
 }
 
 // Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo
@@ -117,8 +121,11 @@ export interface CreateSaleResult {
 //   * 'pack_session' (consumir sesión · H41): descuenta una sesión del crédito.
 //     `id` = customer_pack_credits.id. La línea cubierta ya entra en 0 (en
 //     `items`); este extra es la señal para consumir la sesión.
+//   * 'appointment' (cobro de un turno · ADR-088): `id` = appointments.id.
+//     create_sale enlaza el turno en la misma transacción y exige que la seña
+//     disponible venga como pago 'sena' (sin doble cobro).
 export interface SaleExtraInput {
-  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session";
+  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session" | "appointment";
   amount?: number;
   method?: string;
   id?: string;

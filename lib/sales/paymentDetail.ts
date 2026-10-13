@@ -43,6 +43,7 @@ const METHOD_LABEL: Record<string, string> = {
   account: "Cuenta corriente",
   store_credit: "Saldo a favor",
   directo: "Directo",
+  sena: "Seña del turno",
   other: "Otro medio",
 };
 

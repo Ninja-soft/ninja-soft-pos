@@ -45,6 +45,8 @@ import { useReconciled } from "@/hooks/useReconciled";
 import { PosBootSkeleton } from "@/components/pos/screen/PosBootSkeleton";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
+import { useAppointmentDeposits } from "@/modules/agenda/hooks";
+import { depositAvailable } from "@/modules/agenda/deposits";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { useProductsWithModifiers } from "@/modules/products/modifiers";
@@ -586,6 +588,14 @@ function PosPageInner() {
   });
   const appliedListName = appliedList?.name ?? null;
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+  // ADR-088: seña del turno que se cobra. Entra como pago fijo en la hoja y
+  // create_sale exige ese pago 'sena' (sin cobrar dos veces).
+  const { data: apptDeposits } = useAppointmentDeposits(origins.appointmentId);
+  const apptAvailable = depositAvailable(apptDeposits ?? []);
+  const apptPrepaid = useMemo(
+    () => (apptAvailable > 0 ? { amount: apptAvailable, label: "Seña del turno" } : null),
+    [apptAvailable],
+  );
 
   // ── Stock de la sucursal del POS (F17 · H94) ───────────────────────────────
   // Con 2+ sucursales y stock_sucursales, la grilla muestra el saldo de ESTA
@@ -1307,7 +1317,7 @@ function PosPageInner() {
         <ModeBanner
           icon={<CalendarDays size={18} />}
           title={`Cobrando turno: ${origins.pendingAppt.service_name}`}
-          text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
+          text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}${apptAvailable > 0 ? `Seña cobrada: ${formatCurrency(apptAvailable)} (se descuenta sola). ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
           exitLabel="Cancelar cobro del turno"
           onExit={origins.exitAppointmentMode}
         />
@@ -1559,6 +1569,7 @@ function PosPageInner() {
           offline={offline.isOffline}
           customerId={customer?.id ?? null}
           taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}
+          prepaid={origins.appointmentId ? apptPrepaid : null}
           prefs={layout.payments}
           initialTenderId={checkoutTender}
           initialWarrantyId={offeredWarrantyId}

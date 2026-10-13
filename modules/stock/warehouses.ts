@@ -161,7 +161,34 @@ export const warehousesApi = {
 
   cancel: (v: { moveId: string; reason: string }) =>
     rpc<void>("warehouse_move_cancel", { p_move_id: v.moveId, p_reason: v.reason }),
+
+  /** ADR-088: ¿la venta puede tomar de la reserva cuando el salón no alcanza? */
+  sellFromReserve: async (): Promise<boolean> => {
+    const { data, error } = await from("pos_settings").select("sell_from_reserve").maybeSingle();
+    if (error) throw error;
+    return Boolean((data as unknown as { sell_from_reserve?: boolean } | null)?.sell_from_reserve);
+  },
+
+  /** Dueño o encargado con `depositos` (auditado en el servidor). */
+  saveSellFromReserve: (value: boolean) =>
+    rpc<{ sell_from_reserve: boolean }>("warehouse_settings_save", { p_sell_from_reserve: value }),
 };
+
+export function useSellFromReserve(enabled = true) {
+  return useQuery({
+    queryKey: ["warehouse-settings"],
+    queryFn: () => warehousesApi.sellFromReserve(),
+    enabled,
+  });
+}
+
+export function useSaveSellFromReserve() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: warehousesApi.saveSellFromReserve,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["warehouse-settings"] }),
+  });
+}
 
 export function useWarehouses(storeId: string | null) {
   return useQuery({

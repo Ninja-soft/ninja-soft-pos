@@ -156,6 +156,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["agenda"],
   },
+  agenda_senas: {
+    desc: "Señas de turnos: cobrá una seña al reservar (en efectivo, transferencia, tarjeta o QR, entra a tu caja) y el POS la descuenta sola al cobrar el turno, sin cobrarla dos veces. Lo que sobra o la seña de un turno cancelado se devuelve con motivo.",
+    impact: "Desactivada, no se pueden cobrar señas al reservar; el turno se cobra entero en el momento (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["agenda"],
+  },
   lista_espera: {
     desc: "Lista de espera: anotá a quien quiere un turno que hoy no tenés libre (servicio, profesional preferido, fecha y franja), avisale por WhatsApp cuando se libera y pasalo a turno con un toque.",
     impact: "Desactivada, no se puede anotar clientes en espera; los huecos se llenan a mano.",

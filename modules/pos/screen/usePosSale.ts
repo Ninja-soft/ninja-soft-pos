@@ -44,6 +44,12 @@ export function saleErrorTitle(msg: string): string {
     return "Tu usuario no está habilitado para vender ahora";
   // F17 · H92/H94 (ADR-049): configuración y stock de la sucursal.
   if (msg.includes("insufficient_stock_branch")) return "No hay stock suficiente en esta sucursal";
+  // ADR-088: depósitos (el salón manda) y seña del turno.
+  if (msg.includes("insufficient_stock_salon"))
+    return "No hay suficiente en el salón: reponé desde el depósito (Depósitos) y volvé a cobrar";
+  if (msg.includes("deposit_mismatch")) return "La seña del turno cambió: cerrá el cobro y volvé a abrirlo";
+  if (msg.includes("appointment_already_charged")) return "Este turno ya se cobró";
+  if (msg.includes("appointment_not_active")) return "El turno está cancelado: no se puede cobrar";
   if (msg.includes("payment_method_disabled_in_store"))
     return "Ese medio de pago está apagado en esta sucursal o caja";
   // ADR-055: transferencias.
@@ -168,12 +174,17 @@ export function usePosSale(ctx: {
       // idéntica a la inmediata. Recargo (H27) y garantía (H28) entran como
       // ítem; la propina (H39) va a sales.tip_amount; packs (H41) como extras.
       const { items, extras: saleExtras } = buildSaleItemsAndExtras(cartToSaleLines(ctx.lines), extras);
+      // ADR-088: el turno viaja en la venta. create_sale lo enlaza en la misma
+      // transacción y aplica su seña (pago 'sena'), sin doble cobro.
+      const allExtras = ctx.appointmentId
+        ? [...saleExtras, { kind: "appointment", id: ctx.appointmentId }]
+        : saleExtras;
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
         discountTotal: ctx.discountTotal,
         customerId: ctx.customerId,
-        extras: saleExtras as never,
+        extras: allExtras as never,
         // Mesa (H44) y delivery (H49): create_sale los cierra en la MISMA
         // transacción (FOR UPDATE, sin doble cobro).
         tableOrderId: ctx.tableOrderId ?? null,
@@ -196,6 +207,16 @@ export function usePosSale(ctx: {
         description: `Total ${formatCurrency(res.total)}`,
         variant: "success",
       });
+      // ADR-088: el salón no alcanzaba y el dueño permite vender de la reserva.
+      const fromReserve = (res.reserve_taken ?? []).reduce((a, r) => a + Number(r.taken || 0), 0);
+      if (fromReserve > 0) {
+        const names = [...new Set((res.reserve_taken ?? []).flatMap((r) => r.from.map((f) => f.name)))].join(", ");
+        toast({
+          title: "Se vendió mercadería del depósito",
+          description: `${fromReserve} u. salieron de ${names}: reponé el salón.`,
+          variant: "info",
+        });
+      }
       ctx.onSuccess({
         saleId: res.sale_id,
         change: change ?? 0,

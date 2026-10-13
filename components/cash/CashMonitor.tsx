@@ -323,7 +323,7 @@ function ShiftDetailModal({ shift, onClose }: { shift: MonitorShift | null; onCl
               {(movements ?? []).slice(0, 12).map((m) => (
                 <li key={m.id} className="flex justify-between gap-3 py-1.5">
                   <span className="min-w-0 truncate">
-                    {m.type === "sale" ? "Venta" : m.type === "sale_void" ? "Anulación" : m.type === "income" ? "Ingreso" : m.type === "expense" ? "Retiro" : m.type}
+                    {m.type === "sale" ? "Venta" : m.type === "sale_void" ? "Anulación" : m.type === "income" ? "Ingreso" : m.type === "expense" ? "Retiro" : m.type === "deposit_in" ? "Seña de turno" : m.type === "deposit_out" ? "Devolución de seña" : m.type}
                     {m.reason ? <span className="text-muted-foreground"> · {m.reason}</span> : null}
                   </span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">

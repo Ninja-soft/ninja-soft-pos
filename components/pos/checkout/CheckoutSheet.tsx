@@ -75,6 +75,7 @@ import { TransferPanel } from "./TransferPanel";
 import { useSalePerceptions } from "@/modules/tax/hooks";
 import type { PreviewItem } from "@/modules/tax/api";
 import { TransferAutoDetect } from "./TransferAutoDetect";
+import { depositToApply } from "@/modules/agenda/deposits";
 import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
 import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
 import type {
@@ -224,6 +225,11 @@ export interface CheckoutSheetProps {
    * suma después del redondeo, igual que create_sale.
    */
   taxPreview?: { items: PreviewItem[]; customerId: string | null } | null;
+  /**
+   * Seña del turno que se cobra (ADR-088): entra como primer pago fijo
+   * (método 'sena', hasta el total). create_sale exige exactamente ese monto.
+   */
+  prepaid?: { amount: number; label: string } | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -281,6 +287,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     transfer = null,
     renderTerminal,
     taxPreview = null,
+    prepaid = null,
   } = props;
 
   // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
@@ -368,7 +375,30 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       visible.find((t) => t.id === "cash") ||
       visible[0] ||
       null;
-    setLines([]);
+    // ADR-088: la seña del turno ya cobrada va como pago fijo (no se quita).
+    const prepaidAmount =
+      prepaid && prepaid.amount > 0
+        ? depositToApply(prepaid.amount, checkoutTotals({ base, rounding, deliveryFee, lines: [] }).grandTotal)
+        : 0;
+    setLines(
+      prepaidAmount > 0
+        ? [
+            {
+              key: "sena",
+              tenderId: "sena",
+              title: prepaid?.label ?? "Seña",
+              detail: "Cobrada al reservar el turno",
+              logo: null,
+              method: "sena",
+              amount: prepaidAmount,
+              surcharge: 0,
+              surchargeItems: [],
+              locked: true,
+              promoEligible: true,
+            },
+          ]
+        : [],
+    );
     setActiveId(initial?.id ?? null);
     setView(initialTenderId && initial ? "editor" : "tenders");
     setPortionStr("");

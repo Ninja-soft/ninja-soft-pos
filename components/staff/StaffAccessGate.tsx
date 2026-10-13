@@ -77,8 +77,11 @@ export function StaffAccessGate({ email }: { email: string }) {
 }
 StaffAccessGate.displayName = "StaffAccessGate";
 
-// Autocuración (B-01): un usuario con membresía activa pero sin negocio activo
-// en el JWT (invitado antes del fix) recibe el suyo y se refresca la sesión.
+// Autocuración (B-01, ADR-083): un usuario con membresía activa y sin negocio
+// activo válido en el JWT (invitado antes del fix, o con un negocio del que lo
+// dieron de baja) recibe el de su primera membresía activa y se refresca la
+// sesión. El servidor decide si el negocio del JWT sigue valiendo y devuelve
+// true sólo cuando hay que refrescar, así no hay recargas en bucle.
 export function TenantClaimHealer() {
   const done = useRef(false);
   useEffect(() => {
@@ -87,8 +90,7 @@ export function TenantClaimHealer() {
     void (async () => {
       const sb = createClient();
       const { data } = await sb.auth.getUser();
-      const meta = data.user?.app_metadata as { current_tenant_id?: string } | undefined;
-      if (!data.user || meta?.current_tenant_id) return;
+      if (!data.user) return;
       if (await staffApi.ensureCurrentTenant()) {
         await sb.auth.refreshSession();
         // Recarga completa: el usuario y las queries cacheadas tienen el JWT viejo.

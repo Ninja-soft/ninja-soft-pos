@@ -1163,15 +1163,19 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Política del dueño: modos del negocio, modo por defecto, período del rotativo, duración máxima y modos por acción.
   - [ ] Pendiente: notificar al supervisor cuando se usa su PIN (push o WhatsApp) y cifrado en reposo de los secretos con Vault.
 
-- [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; retención, alertas e inmutabilidad pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
+- [~] **H117: Visor de auditoría del negocio.** *(2026-10-12, ADR-051: visor, diff, XLSX y lectura restringida hechos; 2026-10-13, ADR-083: inmutabilidad, retención y hash encadenado hechos; alertas pendientes)* · *Registrar: BASE (principio 3). Visor: OPTIONAL `auditoria` (existe, Business; deja de ser MARKETING-FUTURO).*
   - [x] RPC `audit_log_search` con filtros por usuario, sucursal, acción, entidad y fechas, paginada; detalle con diff antes / después; export XLSX.
   - [x] Policy restrictiva: la auditoría la leen dueño y encargado (o lo propio); antes la leía cualquier miembro.
-  - [ ] Pendiente: retención por plan, alertas (muchos PIN fallidos, anulaciones fuera de horario), firma o hash encadenado para inmutabilidad.
+  - [x] Inmutable: sin UPDATE, DELETE ni TRUNCATE para cliente ni service_role (grants y trigger); sólo el sellado y la retención internos tocan filas. El insert del cliente queda en su negocio y no elige `created_at` (ADR-083).
+  - [x] Retención configurable: 24 meses por defecto, override por plan (`plans.limits.audit_retention_months`, mínimo 12), cron diario con lápidas; las acciones fiscales y comerciales no se borran (ADR-083).
+  - [x] Hash encadenado por negocio (`row_hash` al insertar, sellado cada 5 minutos) y `audit_chain_verify` para el panel interno (ADR-083).
+  - [ ] Pendiente: alertas (muchos PIN fallidos, anulaciones fuera de horario), botón de verificación en el panel interno y anclar la cabeza de la cadena fuera de la base.
 
-- [~] **H118: Panel del dueño operativo y por sucursal.** *(2026-10-12, ADR-051: tarjetas, gráficos y selector hechos; `current_tenant_id()` con membresía y lint pendientes)* · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
+- [~] **H118: Panel del dueño operativo y por sucursal.** *(2026-10-12, ADR-051: tarjetas, gráficos y selector hechos; 2026-10-13, ADR-083: `current_tenant_id()` con membresía hecho; `tenantScoped()` y lint pendientes)* · *BASE `panel_dueno` (existe) + OPTIONAL `metricas_avanzadas` (existe) para comparativos largos.*
   - [x] Tarjetas Negocio, Plan y Uso rehechas (uso con barras y límites, incluye cajas por sucursal y usuarios en baja).
   - [x] Gráficos con ECharts: ventas de hoy vs ayer por sucursal y por hora, cajas abiertas, personal activo por estado; selector Todas / sucursal.
-  - [ ] Pendiente: `current_tenant_id()` que valide la membresía activa como initplan (raíz de S-07, medir con `EXPLAIN`), helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
+  - [x] `current_tenant_id()` valida la membresía activa (o staff en `internal_scope()`) y todas las policies la llaman como initplan `(select current_tenant_id())`; `ensure_current_tenant()` corrige un negocio activo inválido (ADR-083, raíz de S-07).
+  - [ ] Pendiente: medir con `EXPLAIN` en producción, helper `tenantScoped()`, validar la membresía también en las Edge Functions que leen el claim y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
 - [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*
   - [x] Cambio de precio en la línea con precio resuelto en el servidor: `create_sale` valida el precio y el cambio manual pide PIN de `cambio_precio` (`20261019100000_precio_servidor`, ADR-056). *(Auditoría 2026-11-05.)*

@@ -62,7 +62,9 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-  // Buscar el owner del tenant; fallback a cualquier miembro.
+  // Buscar el owner activo del tenant; fallback a cualquier miembro activo.
+  // ADR-083: current_tenant_id() exige membresía activa; un link a un miembro
+  // dado de baja abriría un panel vacío.
   type TuRow = {
     user_id: string;
     users: { email: string } | null;
@@ -72,6 +74,8 @@ Deno.serve(async (req: Request) => {
     .select("user_id, users(email)")
     .eq("tenant_id", body.tenant_id)
     .eq("role", "owner")
+    .eq("status", "active")
+    .limit(1)
     .maybeSingle();
 
   let ownerEmail: string | null = (ownerRow as unknown as TuRow | null)?.users?.email ?? null;
@@ -81,6 +85,7 @@ Deno.serve(async (req: Request) => {
       .from("tenant_users")
       .select("user_id, users(email)")
       .eq("tenant_id", body.tenant_id)
+      .eq("status", "active")
       .limit(1)
       .maybeSingle();
     ownerEmail = (anyRow as unknown as TuRow | null)?.users?.email ?? null;

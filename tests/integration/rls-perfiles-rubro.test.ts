@@ -131,7 +131,9 @@ describe.skipIf(!enabled)("perfiles por rubro · RLS y RPC", () => {
     expect(r.error).toBeNull();
     const res = r.data as Applied;
     expect(res.profile).toBe("verduleria");
-    expect(res.activated).toEqual(expect.arrayContaining(["plu_enabled", "allow_free_sale"]));
+    expect(res.activated).toContain("plu_enabled");
+    // venta libre viene prendida por defecto (pos_settings.allow_free_sale default true): queda en already_on.
+    expect([...res.activated, ...res.already_on]).toContain("allow_free_sale");
     // balanza: activada si el plan la incluye, si no queda bloqueada (nunca se fuerza).
     expect([...res.activated, ...res.locked]).toContain("scale_enabled");
     expect(res.categories_created).not.toContain("Frutas");

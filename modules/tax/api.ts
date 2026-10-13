@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { EmitterCondition, IvaCode } from "@/lib/tax/catalog";
 import type { PadronFormat, PadronRow } from "@/lib/tax/padron";
+import { retentionErrorMessage, type GananciasCondition, type RetLine } from "@/lib/tax/retentions";
+import type { CertificateRow } from "@/lib/tax/retentionCertificate";
+import type { ExportAgent, WithholdingExportRow } from "@/lib/tax/sicore";
 
 // Impuestos (ADR-068). Las tablas y RPC nuevas no están en types/database.ts
 // (no se regenera en este PR): cliente suelto, mismo enfoque que
@@ -50,7 +53,7 @@ export interface TaxSettings {
 export type RegimeTax = "iva" | "iibb" | "ganancias" | "suss";
 export type RegimeRole = "perception" | "retention";
 export type PadronSource = "none" | "arba" | "agip" | "generic";
-export type BaseKind = "net" | "net_taxed" | "total";
+export type BaseKind = "net" | "net_taxed" | "total" | "vat";
 
 export interface TaxRegime {
   id: string;
@@ -161,6 +164,129 @@ export interface RetentionSuggestion {
   rate: number;
   jurisdiction: string | null;
   source: string;
+}
+
+// ---------------------------------------------------------------------------
+// Retenciones como agente (ADR-079)
+// ---------------------------------------------------------------------------
+export interface RetConceptEff {
+  tax: "ganancias" | "suss";
+  code: string;
+  name: string;
+  valid_from: string;
+  min_non_taxable: number;
+  rate_registered: number | null;
+  rate_unregistered: number | null;
+  uses_scale: boolean;
+  scale_code: string | null;
+  min_withholding: number;
+  sicore_tax_code: number | null;
+  sicore_regime_code: string | null;
+  is_active: boolean;
+  overridden: boolean;
+  source: string;
+  verify: boolean;
+  notes: string | null;
+}
+
+export interface RetConceptSetting {
+  id: string;
+  tax: "ganancias" | "suss";
+  code: string;
+  is_active: boolean;
+  min_non_taxable: number | null;
+  rate_registered: number | null;
+  rate_unregistered: number | null;
+  min_withholding: number | null;
+  sicore_regime_code: string | null;
+  notes: string | null;
+}
+
+export interface SupplierTaxProfile {
+  id: string;
+  supplier_id: string;
+  ganancias_condition: GananciasCondition | null;
+  ganancias_concept: string | null;
+  suss_code: string | null;
+}
+
+export interface RetentionOptions {
+  ganancias_concept?: string | null;
+  ganancias_condition?: GananciasCondition | null;
+  suss_code?: string | null;
+}
+
+export type PreviewLine = RetLine & { concept_name: string | null; agent_number: string | null };
+
+export interface RetentionPreview {
+  lines: PreviewLine[];
+  total: number;
+  bases: { net: number; net_taxed: number; total: number; vat: number };
+  supplier: {
+    id: string;
+    name: string;
+    cuit: string | null;
+    iva_condition: string | null;
+    ganancias_condition: GananciasCondition | null;
+    ganancias_concept: string | null;
+    suss_code: string | null;
+    has_profile: boolean;
+  };
+  warnings: string[];
+  date: string;
+}
+
+export type WithholdingRecord = CertificateRow &
+  WithholdingExportRow & {
+    payment_id: string;
+    supplier_id: string;
+    supplier_name?: string;
+    reason: string;
+    certificate_number: number | null;
+    created_at: string;
+    voided_at: string | null;
+    void_reason: string | null;
+  };
+
+const NUMERIC_WH = [
+  "payment_total",
+  "payment_base",
+  "prior_base",
+  "accumulated_base",
+  "non_taxable_min",
+  "taxable_base",
+  "month_total",
+  "prior_withheld",
+  "exemption_pct",
+  "amount",
+] as const;
+
+function normWithholding(r: Record<string, unknown>): WithholdingRecord {
+  const out: Record<string, unknown> = { ...r };
+  for (const k of NUMERIC_WH) out[k] = r[k] == null ? 0 : Number(r[k]);
+  out.rate = r.rate == null ? null : Number(r.rate);
+  return out as unknown as WithholdingRecord;
+}
+
+const LINE_NUMS = [
+  "amount",
+  "base",
+  "exemption_pct",
+  "prior_base",
+  "accumulated_base",
+  "non_taxable_min",
+  "taxable_base",
+  "month_total",
+  "prior_withheld",
+  "computed",
+  "min_withholding",
+] as const;
+
+function normLine(l: Record<string, unknown>): PreviewLine {
+  const out: Record<string, unknown> = { ...l };
+  for (const k of LINE_NUMS) out[k] = Number(l[k] ?? 0);
+  out.rate = l.rate == null ? null : Number(l.rate);
+  return out as unknown as PreviewLine;
 }
 
 const n = (v: unknown) => (v == null ? 0 : Number(v));
@@ -339,6 +465,99 @@ export const taxApi = {
   ivaReport: async (from: string, to: string, storeId: string | null): Promise<IvaReport> =>
     check(await loose().rpc<IvaReport>("report_iva_ventas", { p_from: from, p_to: to, p_store: storeId })),
 
+  // --- Retenciones como agente (ADR-079) ---------------------------------
+  retentionPreview: async (p: {
+    supplier_id: string;
+    allocations: { invoice_id: string; amount: number }[];
+    amount: number;
+    date: string;
+    options?: RetentionOptions;
+  }): Promise<RetentionPreview> => {
+    const r = check(await loose().rpc<RetentionPreview>("tax_retention_preview", { p }));
+    return {
+      ...r,
+      total: Number(r.total),
+      lines: (r.lines ?? []).map((l) => normLine(l as unknown as Record<string, unknown>)),
+    };
+  },
+
+  retConcepts: async (): Promise<RetConceptEff[]> => {
+    const r = await loose().rpc<RetConceptEff[]>("tax_ret_concepts_list", {});
+    if (r.error) return [];
+    return (r.data ?? []).map((c) => ({
+      ...c,
+      min_non_taxable: Number(c.min_non_taxable),
+      rate_registered: c.rate_registered == null ? null : Number(c.rate_registered),
+      rate_unregistered: c.rate_unregistered == null ? null : Number(c.rate_unregistered),
+      min_withholding: Number(c.min_withholding),
+    }));
+  },
+
+  retConceptSettings: async (): Promise<RetConceptSetting[]> => {
+    const t = await getCurrentTenantId();
+    if (!t) return [];
+    const r = await loose()
+      .from<RetConceptSetting[]>("tax_ret_concept_settings")
+      .select(
+        "id, tax, code, is_active, min_non_taxable, rate_registered, rate_unregistered, min_withholding, sicore_regime_code, notes",
+      )
+      .eq("tenant_id", t);
+    if (r.error) return [];
+    return r.data ?? [];
+  },
+
+  saveRetConceptSetting: async (v: Omit<RetConceptSetting, "id"> & { id?: string | null }): Promise<void> => {
+    const t = await getCurrentTenantId();
+    if (!t) throw new Error("no_tenant");
+    const { id, ...row } = v;
+    check(
+      id
+        ? await loose().from("tax_ret_concept_settings").update(row).eq("id", id).eq("tenant_id", t)
+        : await loose().from("tax_ret_concept_settings").insert({ ...row, tenant_id: t }),
+    );
+  },
+
+  supplierTaxProfile: async (supplierId: string): Promise<SupplierTaxProfile | null> => {
+    const t = await getCurrentTenantId();
+    if (!t) return null;
+    const r = await loose()
+      .from<SupplierTaxProfile[]>("supplier_tax_profiles")
+      .select("id, supplier_id, ganancias_condition, ganancias_concept, suss_code")
+      .eq("tenant_id", t)
+      .eq("supplier_id", supplierId)
+      .limit(1);
+    if (r.error) return null;
+    return r.data?.[0] ?? null;
+  },
+
+  withholdingsList: async (from: string, to: string): Promise<WithholdingRecord[]> => {
+    const r = check(await loose().rpc<Record<string, unknown>[]>("tax_withholdings_list", { p_from: from, p_to: to }));
+    return (r ?? []).map(normWithholding);
+  },
+
+  withholdingsOfPayment: async (paymentId: string): Promise<WithholdingRecord[]> => {
+    const r = await loose()
+      .from<Record<string, unknown>[]>("tax_withholdings")
+      .select("*")
+      .eq("payment_id", paymentId)
+      .order("created_at", { ascending: true });
+    if (r.error) return [];
+    return (r.data ?? []).map(normWithholding).filter((w) => w.amount > 0);
+  },
+
+  withholdingsExport: async (
+    period: string,
+    format: "sicore" | "arba",
+  ): Promise<{ period: string; agent: ExportAgent; rows: WithholdingExportRow[] }> => {
+    const r = check(
+      await loose().rpc<{ period: string; agent: ExportAgent; rows: Record<string, unknown>[] }>(
+        "tax_withholdings_export",
+        { p_period: period, p_format: format },
+      ),
+    );
+    return { ...r, rows: (r.rows ?? []).map(normWithholding) };
+  },
+
   retentionSuggest: async (
     supplierId: string,
     allocations: { invoice_id: string; amount: number }[],
@@ -356,6 +575,9 @@ export const taxApi = {
 /** Mensaje en castellano para los errores del servidor. */
 export function taxErrorMessage(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e ?? "");
+  const ret = retentionErrorMessage(m);
+  if (ret) return ret;
+  if (m.includes("tax_ret_concept_settings_key")) return "Ese concepto ya tiene un ajuste: editalo.";
   if (m.includes("feature_not_in_plan: percepciones_retenciones"))
     return "Percepciones y retenciones vienen desde el plan Business.";
   if (m.includes("feature_not_in_plan: impuestos_internos")) return "Impuestos internos vienen desde el plan Pro.";

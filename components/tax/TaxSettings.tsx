@@ -24,6 +24,7 @@ import { taxErrorMessage, type TaxSettings as Settings } from "@/modules/tax/api
 import { useSaveTaxSettings, useTaxSettings } from "@/modules/tax/hooks";
 import { TaxRegimes } from "./TaxRegimes";
 import { PadronImport } from "./PadronImport";
+import { RetentionValues } from "./RetentionValues";
 
 // Configuración > Impuestos (ADR-068): datos fiscales del negocio (BASE),
 // agente de percepción y retención y padrones (percepciones_retenciones).
@@ -41,6 +42,7 @@ export function TaxSettings() {
     <div className="space-y-6">
       <FiscalCard settings={q.data} />
       <TaxRegimes settings={q.data} />
+      <RetentionValues settings={q.data} />
       <PadronImport settings={q.data} />
     </div>
   );

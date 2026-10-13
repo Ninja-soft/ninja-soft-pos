@@ -37,6 +37,7 @@ const BASE_LABEL: Record<BaseKind, string> = {
   net: "Neto sin IVA (gravado, exento y no gravado)",
   net_taxed: "Neto gravado",
   total: "Total con IVA",
+  vat: "El IVA facturado (retención de IVA)",
 };
 const SOURCE_LABEL: Record<PadronSource, string> = {
   none: "Sin padrón (alícuota general)",
@@ -89,6 +90,45 @@ const TEMPLATES: { label: string; value: TaxRegimeInput }[] = [
     label: "Retención IIBB AGIP (CABA)",
     value: { ...EMPTY, role: "retention", name: "Retención IIBB AGIP", jurisdiction: "901", padron_source: "agip" },
   },
+  // Retenciones como agente (ADR-079). Ganancias toma mínimos, alícuotas y
+  // escala de los conceptos de la RG 830 (abajo, "Valores de retención").
+  {
+    label: "Retención de Ganancias (RG 830)",
+    value: {
+      ...EMPTY,
+      role: "retention",
+      tax: "ganancias",
+      jurisdiction: null,
+      padron_source: "none",
+      name: "Retención de Ganancias RG 830",
+    },
+  },
+  {
+    label: "Retención de IVA (agente designado)",
+    value: {
+      ...EMPTY,
+      role: "retention",
+      tax: "iva",
+      jurisdiction: null,
+      padron_source: "none",
+      name: "Retención de IVA",
+      default_rate: 50,
+      base_kind: "vat",
+      applies_to: ["responsable_inscripto"],
+    },
+  },
+  {
+    label: "Retención SUSS",
+    value: {
+      ...EMPTY,
+      role: "retention",
+      tax: "suss",
+      jurisdiction: null,
+      padron_source: "none",
+      name: "Retención SUSS",
+      applies_to: ["responsable_inscripto"],
+    },
+  },
   {
     label: "Otra jurisdicción",
     value: { ...EMPTY, name: "Percepción IIBB", jurisdiction: "904", padron_source: "generic" },
@@ -125,8 +165,8 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
     >
       {!enabled ? (
         <Callout tone="neutral" icon={Lock} title="Desde el plan Business">
-          Percepciones de IVA e IIBB con padrones por CUIT, mínimos y exclusiones, y retenciones sugeridas en las órdenes
-          de pago.
+          Percepciones de IVA e IIBB con padrones por CUIT, mínimos y exclusiones, y retenciones de Ganancias, IVA, IIBB
+          y SUSS calculadas en las órdenes de pago con su certificado.
         </Callout>
       ) : (q.data ?? []).length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -177,7 +217,7 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
         open={Boolean(del)}
         onOpenChange={(o) => !o && setDel(null)}
         title="Quitar régimen"
-        description="Las ventas nuevas dejan de percibir (o las órdenes de pago de sugerir) este régimen. Lo ya registrado queda igual."
+        description="Las ventas nuevas dejan de percibir (o las órdenes de pago de retener) este régimen. Lo ya registrado queda igual."
         confirmLabel="Quitar"
         danger
         loading={remove.isPending}
@@ -285,7 +325,11 @@ function RegimeModal({ initial, onClose }: { initial: { id?: string; value: TaxR
           value={v.padron_source}
           onChange={(p) => set({ padron_source: p })}
           options={padronOptions}
-          hint="Con padrón, se usa la alícuota del CUIT vigente a la fecha de la venta. Si no figura, la general."
+          hint={
+            v.tax === "ganancias" || v.tax === "suss"
+              ? "Ganancias y SUSS toman la alícuota del concepto o la actividad (Valores de retención)."
+              : "Con padrón, se usa la alícuota del CUIT vigente a la fecha. Si no figura, la general."
+          }
         />
         <div className="grid gap-3 sm:grid-cols-3">
           <Input

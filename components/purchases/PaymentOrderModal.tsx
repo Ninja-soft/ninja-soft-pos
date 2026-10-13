@@ -5,9 +5,9 @@
 // a cuenta lo no imputado. Medios: efectivo de la caja propia abierta,
 // transferencia (desde una cuenta bancaria de tesorería o sólo con la
 // referencia), cheque o e-cheq propio, cheque de terceros en cartera,
-// depósito, tarjeta u otro. Retenciones de IVA, Ganancias e IIBB con n° de
-// certificado (placeholder hasta H106). Lo valida el servidor
-// (supplier_payment_order_create).
+// depósito, tarjeta u otro. Retenciones como agente calculadas por el
+// servidor con su certificado (H106, ADR-079) y retenciones manuales. Lo
+// valida el servidor (supplier_payment_order_create).
 
 import { useEffect, useMemo, useState } from "react";
 import { Info as InfoIcon, Plus, Trash2, Wand2 } from "lucide-react";
@@ -37,7 +37,8 @@ import {
 } from "@/modules/purchases/hooks";
 import { useCheques, useMyOpenShift, useTreasuryAccounts } from "@/modules/treasury/hooks";
 import { useFeature } from "@/modules/saas/gating";
-import { taxApi, taxErrorMessage } from "@/modules/tax/api";
+import { retentionErrorMessage } from "@/lib/tax/retentions";
+import { AgentRetentionsSection, useAgentRetentions } from "./AgentRetentions";
 import { ErrorList, FormField, SectionTitle, fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface LineRow {
@@ -143,7 +144,19 @@ export function PaymentOrderModal({
   const allocations = Object.entries(alloc)
     .map(([invoice_id, v]) => ({ invoice_id, amount: parseNum(v) }))
     .filter((a) => a.amount > 0);
-  const totals = paymentOrderTotals(draftLines, withholdings, allocations);
+  // ADR-079: retenciones como agente calculadas por el servidor.
+  const agentRet = useFeature("percepciones_retenciones") === true;
+  const manualWh = withholdings.reduce((t, w) => t + w.amount, 0);
+  const linesTotal = draftLines.reduce((t, l) => t + (Number(l.amount) || 0), 0);
+  const agent = useAgentRetentions({
+    enabled: open && agentRet,
+    supplierId: supplier,
+    date,
+    allocations,
+    amount: linesTotal + manualWh,
+  });
+  const agentLines = agent.active && agent.preview ? [{ amount: agent.total }] : [];
+  const totals = paymentOrderTotals(draftLines, [...withholdings, ...agentLines], allocations);
   const chequesInWallet = useMemo(() => new Map(wallet.map((c) => [c.id, c.amount])), [wallet]);
 
   const errors = [
@@ -152,33 +165,12 @@ export function PaymentOrderModal({
       { lines: draftLines, withholdings, allocations },
       { openDocs: docs, hasTreasury: treasury, hasOpenShift: Boolean(shift), chequesInWallet },
     ),
+    ...(agent.active && supplier && agent.error ? [agent.error] : []),
+    ...(agent.active && supplier && !agent.error && agent.loading ? ["Esperá a que se calculen las retenciones."] : []),
   ];
 
   const setLine = (key: number, patch: Partial<LineRow>) =>
     setLines((p) => p.map((x) => (x.key === key ? { ...x, ...patch } : x)));
-
-  // ADR-068: retenciones sugeridas por los regímenes del negocio y el padrón.
-  const agentRet = useFeature("percepciones_retenciones") === true;
-  const [suggesting, setSuggesting] = useState(false);
-  async function suggestRetentions() {
-    setSuggesting(true);
-    try {
-      const rows = await taxApi.retentionSuggest(supplier, allocations, totals.total);
-      if (rows.length === 0) {
-        toast({ title: "Sin retenciones para este pago", description: "No supera los mínimos o el proveedor no está alcanzado.", variant: "info" });
-        return;
-      }
-      const kinds = new Set(rows.map((r) => r.kind));
-      setWh((p) => [
-        ...p.filter((x) => !kinds.has(x.kind as never)),
-        ...rows.map((r) => ({ key: seq++, kind: r.kind as WithholdingKind, certificate: "", amount: fmtInput(r.amount) })),
-      ]);
-    } catch (e) {
-      toast({ title: "No se pudo calcular", description: taxErrorMessage(e), variant: "error" });
-    } finally {
-      setSuggesting(false);
-    }
-  }
 
   function autoImpute() {
     const next: Record<string, string> = {};
@@ -186,15 +178,27 @@ export function PaymentOrderModal({
     setAlloc(next);
   }
 
-  function payAll() {
-    const debt = docs.reduce((t, d) => t + d.open_ars, 0);
-    const whTotal = withholdings.reduce((t, w) => t + w.amount, 0);
-    const target = Math.max(Math.round((debt - whTotal) * 100) / 100, 0);
+  // "Pagar todo": imputa todo y el medio único queda en deuda menos retenciones
+  // (con agente, cuando el servidor termina de calcularlas para esa imputación).
+  const [fillPending, setFillPending] = useState(false);
+  const debt = docs.reduce((t, d) => t + d.open_ars, 0);
+  function fillNet(agentTotal: number) {
+    const target = Math.max(Math.round((debt - manualWh - agentTotal) * 100) / 100, 0);
     setLines((p) => (p.length === 1 ? [{ ...p[0]!, amount: fmtInput(target) }] : p));
+  }
+  function payAll() {
     const next: Record<string, string> = {};
     for (const d of docs) next[d.invoice_id] = fmtInput(d.open_ars);
     setAlloc(next);
+    if (agent.active) setFillPending(true);
+    else fillNet(0);
   }
+  useEffect(() => {
+    if (!fillPending || agent.loading || !agent.preview) return;
+    fillNet(agent.total);
+    setFillPending(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fillPending, agent.loading, agent.preview, agent.total]);
 
   async function save() {
     if (errors.length > 0) return;
@@ -206,12 +210,25 @@ export function PaymentOrderModal({
         lines: draftLines,
         withholdings,
         allocations,
+        ...(agent.active
+          ? {
+              agent_retentions: true,
+              agent_expected_total: agent.total,
+              retention_options: { ...agent.options, save_profile: agent.saveProfile },
+            }
+          : {}),
       });
       toast({ title: "Orden de pago registrada", variant: "success" });
       onOpenChange(false);
       onCreated?.(id);
     } catch (e) {
-      toast({ title: "No se pudo registrar la orden de pago", description: purchaseErrorMessage(e), variant: "error" });
+      const msg = e instanceof Error ? e.message : String(e ?? "");
+      if (msg.includes("retentions_changed")) agent.refetch();
+      toast({
+        title: "No se pudo registrar la orden de pago",
+        description: retentionErrorMessage(msg) ?? purchaseErrorMessage(e),
+        variant: "error",
+      });
     }
   }
 
@@ -492,11 +509,6 @@ export function PaymentOrderModal({
           <SectionTitle
             action={
               <div className="flex flex-wrap gap-2">
-                {agentRet && supplier && (
-                  <Button size="sm" variant="secondary" loading={suggesting} onClick={() => void suggestRetentions()}>
-                    Calcular con el padrón
-                  </Button>
-                )}
                 <Button
                   size="sm"
                   variant="secondary"
@@ -507,14 +519,15 @@ export function PaymentOrderModal({
               </div>
             }
           >
-            Retenciones practicadas
+            {agent.active ? "Otras retenciones (manuales)" : "Retenciones practicadas"}
           </SectionTitle>
           {wh.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado.
-              {agentRet
-                ? " Con \"Calcular con el padrón\" se sugieren las de tus regímenes de retención sobre lo imputado sin IVA."
-                : " El cálculo desde el padrón viene con Percepciones y retenciones (plan Business)."}
+              {agent.active
+                ? "Sólo si tenés que cargar una retención que NinjaSoft no calcula, con su n° de certificado."
+                : agentRet
+                  ? "Si sos agente de retención, configurá tus regímenes en Configuración > Impuestos y NinjaSoft las calcula con su certificado. Mientras tanto podés cargarlas a mano."
+                  : "Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado. El cálculo automático con certificado viene con Percepciones y retenciones (plan Business)."}
             </p>
           )}
           {wh.map((w) => (
@@ -561,6 +574,8 @@ export function PaymentOrderModal({
             </div>
           ))}
         </section>
+
+        {agent.active && supplier && <AgentRetentionsSection state={agent} />}
 
         <FormField label="Notas (opcional)">
           <textarea className={textareaCls} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />

@@ -10,6 +10,7 @@ import {
   ChartLine,
   ChartPie,
   CreditCard,
+  Landmark,
   Download,
   Grid3x3,
   LayoutGrid,
@@ -752,6 +753,13 @@ export default function ReportesPage() {
               className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
             >
               <CreditCard size={16} /> Conciliación
+            </Link>
+            <Link
+              href="/reportes/iva"
+              title="IVA ventas por alícuota y percepciones"
+              className={cn(buttonVariants({ variant: "secondary" }), "shrink-0")}
+            >
+              <Landmark size={16} /> IVA
             </Link>
             {view !== "compare" && (
             <GatedButton

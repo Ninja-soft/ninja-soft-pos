@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { inferLetter, needsIdentification } from "@/lib/tax/comprobante";
+import { saleTaxTicket } from "@/lib/tax/ticket";
+import { checkoutTotals } from "@/lib/pos/checkoutMath";
 import {
   DOC_TYPE_ARCA_ID,
   FISCAL_CONDITIONS,
@@ -76,5 +78,31 @@ describe("catálogo", () => {
     expect(documentError("dni", "123")).toBe("invalid_dni");
     expect(documentError("passport", "AB123")).toBeNull();
     expect(documentError("cuit", "")).toBeNull();
+  });
+});
+
+describe("ticket (percepciones y transparencia fiscal)", () => {
+  it("una línea por percepción y el IVA contenido sólo en el B", () => {
+    const lines = [
+      { kind: "iva", tax: "iva", jurisdiction: null, rate: 21, amount: 210 },
+      { kind: "perception", tax: "iibb", jurisdiction: "902", rate: 1.5, amount: 169.34 },
+      { kind: "perception", tax: "iva", jurisdiction: null, rate: 3, amount: 338.68 },
+    ];
+    const a = saleTaxTicket({ cbte_letter: "A", iva_total: 210, internal_tax_total: 0 }, lines);
+    expect(a.perceptions).toEqual([
+      { name: "Perc. IIBB Buenos Aires 1,5 %", amount: 169.34 },
+      { name: "Perc. IVA 3 %", amount: 338.68 },
+    ]);
+    expect(a.transparency).toBeNull();
+    const b = saleTaxTicket({ cbte_letter: "B", iva_total: "315", internal_tax_total: "40" }, []);
+    expect(b.transparency).toEqual({ iva: 315, others: 40 });
+  });
+});
+
+describe("cobro del POS con percepciones", () => {
+  it("se suman después del redondeo, como create_sale", () => {
+    const t = checkoutTotals({ base: 14003, rounding: 10, perceptions: 508.02, lines: [] });
+    expect(t.productsTotal).toBe(14508.02);
+    expect(t.grandTotal).toBe(14508.02);
   });
 });

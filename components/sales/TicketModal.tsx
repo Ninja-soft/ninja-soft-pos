@@ -35,6 +35,8 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
+import { useSaleTaxLines } from "@/modules/tax/hooks";
+import { saleTaxTicket } from "@/lib/tax/ticket";
 
 export type DetailTab = "ticket" | "cobros";
 const TABS: { value: DetailTab; label: string }[] = [
@@ -53,6 +55,8 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
+  // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
+  const taxLines = useSaleTaxLines(open ? saleId : null);
   // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
   const { data: brand } = useTicketBranding(
     open,
@@ -208,6 +212,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           discount_total: data.sale.discount_total,
           total: data.sale.total,
           status: data.sale.status,
+          ...saleTaxTicket(data.sale, taxLines.data ?? []),
         },
         items: data.items.map((it) => ({
           id: it.id,

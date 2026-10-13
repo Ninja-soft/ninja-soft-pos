@@ -69,6 +69,8 @@ import {
 } from "@/lib/payments/voucherRules";
 import { choosablePlans, ctaNext, initialStep } from "@/lib/pos/posnetWizard";
 import { TransferPanel } from "./TransferPanel";
+import { useSalePerceptions } from "@/modules/tax/hooks";
+import type { PreviewItem } from "@/modules/tax/api";
 import { TransferAutoDetect } from "./TransferAutoDetect";
 import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
 import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
@@ -206,6 +208,12 @@ export interface CheckoutSheetProps {
    * "card:terminal". Lo provee CheckoutSheetConnected.
    */
   renderTerminal?: (req: TerminalChargeRequest) => React.ReactNode;
+  /**
+   * Percepciones (ADR-068): ítems del carrito y cliente para sale_tax_preview.
+   * Sólo consulta si el negocio es agente y hay cliente; el total a cobrar las
+   * suma después del redondeo, igual que create_sale.
+   */
+  taxPreview?: { items: PreviewItem[]; customerId: string | null } | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -260,7 +268,11 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     park,
     transfer = null,
     renderTerminal,
+    taxPreview = null,
   } = props;
+
+  // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
+  const [perc, setPerc] = useState(0);
 
   const [lines, setLines] = useState<PaidLine[]>([]);
   // Cuenta corriente: una sola línea por venta (el cargo, sus cuotas y el token
@@ -365,6 +377,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setTerminalCharge(null);
     setConfirmLeave(false);
     setTransferAccId(transfer?.defaultAccountId ?? null);
+    setPerc(0);
     // Sólo al abrir: no re-resetear si cambian los tenders mientras se cobra.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -400,9 +413,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         promoExtra: Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0)),
         warranty,
         tip,
+        perceptions: perc,
         lines: ls,
       }),
-    [base, rounding, deliveryFee, cartPromo, warranty],
+    [base, rounding, deliveryFee, cartPromo, warranty, perc],
   );
 
   const promoFor = useCallback(
@@ -441,6 +455,28 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const totals = totalsFor(lines, promo, tip);
   const remaining = Math.max(0, totals.remaining);
   const promoExtra = Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0));
+
+  // Mismos ítems que viajan a create_sale: el carrito más la garantía y los
+  // recargos como ítems sin producto (van a la alícuota del negocio).
+  const taxItems = useMemo<PreviewItem[]>(() => {
+    if (!taxPreview) return [];
+    const extra: PreviewItem[] = [];
+    if (warranty > 0) extra.push({ product_id: null, quantity: 1, unit_price: warranty });
+    for (const l of lines) {
+      for (const it of l.surchargeItems) extra.push({ product_id: null, quantity: 1, unit_price: it.amount });
+    }
+    return [...taxPreview.items, ...extra];
+  }, [taxPreview, warranty, lines]);
+  const percQ = useSalePerceptions({
+    items: taxItems,
+    total: round2(totals.productsTotal - perc),
+    customerId: taxPreview?.customerId ?? null,
+    enabled: open && Boolean(taxPreview),
+  });
+  useEffect(() => {
+    if (!percQ.loading) setPerc(percQ.total);
+  }, [percQ.loading, percQ.total]);
+  const percLines = percQ.data?.perceptions ?? [];
 
   // ── Editor del tender activo ───────────────────────────────────────────────
   // Tarjeta en posnet: planes del adquirente (los suyos y los genéricos) de la
@@ -481,9 +517,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       promoExtra,
       warranty,
       tip,
+      perceptions: perc,
       lines,
     }),
-    [base, rounding, deliveryFee, promoExtra, warranty, tip, lines],
+    [base, rounding, deliveryFee, promoExtra, warranty, tip, lines, perc],
   );
   const settle = settleLine(settleInput, portion, surchargePct);
   const received = receivedStr.trim() === "" ? null : keypadNumber(receivedStr);
@@ -848,7 +885,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         },
       })
     : null;
-  const readyToConfirm = lines.length > 0 && totals.settled;
+  // Con percepciones en cálculo no se confirma (el servidor exige cubrirlas).
+  const readyToConfirm = lines.length > 0 && totals.settled && !percQ.loading;
   let ctaLabel = "Elegí cómo paga";
   if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
   else if (active) {
@@ -897,7 +935,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const quick = quickCashAmounts(settle.amount, { custom: quickCash });
   const roundingAdj = round2(
-    totals.productsTotal - deliveryFee - (base - promoExtra + warranty + totals.surcharges),
+    totals.productsTotal - deliveryFee - perc - (base - promoExtra + warranty + totals.surcharges),
   );
 
   const keypadTarget = keypadFieldFor(active?.flow, keypadChoice);
@@ -957,7 +995,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   );
 
   const hasBreakdown =
-    deliveryFee > 0 || warranty > 0 || totals.surcharges > 0 || promoExtra > 0 || Math.abs(roundingAdj) >= 0.01 || tip > 0;
+    deliveryFee > 0 ||
+    warranty > 0 ||
+    totals.surcharges > 0 ||
+    promoExtra > 0 ||
+    Math.abs(roundingAdj) >= 0.01 ||
+    tip > 0 ||
+    perc > 0;
   const breakdown = hasBreakdown ? (
     <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
       {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
@@ -969,6 +1013,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       {Math.abs(roundingAdj) >= 0.01 && (
         <Row label="Redondeo" value={`${roundingAdj > 0 ? "+" : "-"}${money(Math.abs(roundingAdj))}`} />
       )}
+      {percLines.map((p) => (
+        <Row key={p.regime_id} label={`${p.name} ${String(p.rate).replace(".", ",")} %`} value={`+${money(p.amount)}`} />
+      ))}
       {tip > 0 && <Row label="Propina" value={`+${money(tip)}`} />}
     </dl>
   ) : null;

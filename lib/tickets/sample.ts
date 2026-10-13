@@ -26,6 +26,13 @@ export interface SampleTicketData {
     discount_total: number;
     total: number;
     status: string;
+    /** ADR-068: percepciones cobradas (líneas aparte, antes del total). */
+    perceptions?: { name: string; amount: number }[];
+    /**
+     * ADR-068: Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido
+     * y otros impuestos nacionales indirectos (internos) en el comprobante B.
+     */
+    transparency?: { iva: number; others: number } | null;
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];

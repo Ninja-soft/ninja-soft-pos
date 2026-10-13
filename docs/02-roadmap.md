@@ -1269,8 +1269,8 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [x] QR fiscal en el impreso, CAEA de contingencia por PV, almacenamiento del request y response. *(ADR-072)*
   - [ ] *Criterio:* el sistema emite A, B, C, NC, FCE y E en homologación con percepciones e internos y todas cierran contra el Libro IVA.
 
-- [ ] **H108: Libros y regímenes de información.** · *OPTIONAL `export_contable` (nueva, Pro). Requiere F3 (ventas) y H101 (compras).*
-  - [ ] Libro IVA Digital ventas y compras (RG 4597) con archivos de importación; prorrateo de crédito fiscal si hay operaciones exentas.
+- [~] **H108: Libros y regímenes de información.** · *Libro IVA Digital dentro de OPTIONAL `facturacion_afip` (ADR-076); SICORE, SIRE y DDJJ de IIBB en OPTIONAL `export_contable` (nueva, Pro). Requiere F3 (ventas) y H101 (compras).* · *ADR-076, `feat/libro-iva-digital`, migración `20261103100000` sin aplicar.*
+  - [~] Libro IVA Digital ventas y compras (RG 4597) con archivos de importación; prorrateo de crédito fiscal si hay operaciones exentas. *(ADR-076: VENTAS_CBTE, VENTAS_ALICUOTAS, COMPRAS_CBTE y COMPRAS_ALICUOTAS en zip con revisión previa en lenguaje simple, en Contabilidad > Libro IVA Digital; falta el prorrateo, el período de imputación de compras, COMPRAS_IMPORTACIONES y validar el formato con un contador y una importación real)*
   - [ ] SICORE y SIRE (retenciones y percepciones practicadas).
   - [ ] DDJJ de IIBB: ARBA, e-ARCIBA, SIFERE (Convenio Multilateral, coeficientes CM05), SIRCAR; base y tributo de impuestos internos.
   - [ ] Exportador genérico por plantilla para otros regímenes de información provinciales o nacionales.

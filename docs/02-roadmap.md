@@ -27,7 +27,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación (parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
-| **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación (parciales por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
+| **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 En curso (primer corte ADR-091: cockpit, reservas con retiro en tienda, riesgo operativo y runbooks; parciales previos por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
@@ -958,22 +958,22 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
 
 Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTOL, Fiscal Flow y Promo) y llevar NinjaSoft a una capa de **comercio unificado** para cadenas, franquicias y retailers que necesitan operar tienda física, e-commerce, marketplaces, pagos, fiscal, promociones, fidelización y devoluciones desde un solo cockpit. Ver [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md).
 
-- [~] **H76 — Unified Commerce Cockpit.** *Parcial: el monitor de sucursales (ADR-057, ADR-080) es la base.*
-  - [~] Cockpit central de ventas, inventario, pedidos, pagos, fiscal, devoluciones, promociones y fidelización por canal/sucursal/marca. *Parcial: monitor de sucursales con ventas, cajas, cobros por terminal y Z por sucursal (`branch_monitor_overview`, ADR-080). Faltan canales, pedidos, fiscal, devoluciones, promociones y fidelización.*
-  - [ ] Vista 360 de operación en tiempo real: tiendas físicas, catálogo público, e-commerce, marketplace, QR, WhatsApp y delivery.
-  - [~] Alertas operativas con SLA: pedido demorado, stock roto, pago sin conciliar, factura bloqueada, devolución pendiente, terminal caída. *Parcial: alertas de caja abierta sin señal y último cobro rechazado en el monitor (ADR-080, `tests/unit/monitorAlerts.test.ts`). Faltan pedido demorado, stock roto, pago sin conciliar, factura bloqueada y devolución pendiente.*
-  - [ ] *Criterio:* un gerente ve en una sola pantalla qué canal vende, qué pedidos faltan surtir, qué pagos fallaron y qué stock está comprometido.
+- [~] **H76 — Unified Commerce Cockpit.** *Parcial: cockpit con canales, pedidos, pagos, fiscal, stock comprometido y alertas con SLA (ADR-091); faltan promociones y fidelización por canal.*
+  - [~] Cockpit central de ventas, inventario, pedidos, pagos, fiscal, devoluciones, promociones y fidelización por canal/sucursal/marca. *Parcial (ADR-091, 2026-10-13): página Cockpit con `commerce_cockpit`: ventas por canal y por sucursal, pedidos por surtir, pagos, facturas, devoluciones y stock comprometido, sobre el monitor de sucursales (ADR-080). Faltan promociones, fidelización y marca.*
+  - [~] Vista 360 de operación en tiempo real: tiendas físicas, catálogo público, e-commerce, marketplace, QR, WhatsApp y delivery. *Parcial (ADR-091, 2026-10-13): canales mostrador, salón, WhatsApp, teléfono, QR, delivery, take away, link de pago, retiro en tienda y sin conexión, refrescados cada minuto. Faltan catálogo público, e-commerce y marketplace (sin pedidos online todavía).*
+  - [x] Alertas operativas con SLA: pedido demorado, stock roto, pago sin conciliar, factura bloqueada, devolución pendiente, terminal caída. *(ADR-091, 2026-10-13): `cockpitAlerts` (`lib/commerce/cockpit.ts`) con pedido demorado, reserva sin preparar o por vencer, traslado demorado, stock negativo y quiebre con ventas, pago sin conciliar, cobros rechazados, contracargo, factura bloqueada o sin CAE, devolución a revisar, caja sin señal y operaciones de riesgo; más las del monitor (ADR-080). Aviso activo por mail o push pendiente (H85).*
+  - [x] *Criterio:* un gerente ve en una sola pantalla qué canal vende, qué pedidos faltan surtir, qué pagos fallaron y qué stock está comprometido. *(ADR-091, 2026-10-13): página Cockpit; `tests/unit/comercioUnificado.test.ts` y `tests/integration/rls-comercio-unificado.test.ts`.*
 
-- [~] **H77 — Jornadas omnicanal avanzadas.** *Parcial: sólo la consulta de stock de otras sucursales desde el POS.*
-  - [~] Stock Lookup / Endless Aisle: vender desde una tienda usando stock de otra sucursal o depósito. *Parcial: el POS muestra el stock de las otras sucursales (`lib/stock/posBranchStock.ts`, `otherBranchesStock`). Falta vender con stock de otra sucursal o depósito.*
-  - [ ] Click & Collect: compra online, retiro en tienda, reserva de stock, preparación y entrega con identidad validada.
+- [~] **H77 — Jornadas omnicanal avanzadas.** *Parcial: stock de otras sucursales en el POS y reservas con retiro en tienda (ADR-091).*
+  - [~] Stock Lookup / Endless Aisle: vender desde una tienda usando stock de otra sucursal o depósito. *Parcial: el POS muestra el stock de las otras sucursales (`lib/stock/posBranchStock.ts`) y desde la propia se reserva stock de otra sucursal para retirar allá (ADR-091, 2026-10-13). Falta vender y enviar desde la otra sucursal.*
+  - [~] Click & Collect: compra online, retiro en tienda, reserva de stock, preparación y entrega con identidad validada. *Parcial (ADR-091, 2026-10-13): reserva de stock por sucursal que compromete el disponible, preparación, vencimiento y entrega con código de un solo uso o documento contra la venta cobrada (`stock_reservations`, página Reservas y retiros). Falta la compra online.*
   - [ ] Ship from Store: venta online o de tienda con envío desde sucursal óptima.
-  - [ ] Reserve Online, Try/Pay in Store: reserva online, prueba en tienda y conversión a venta.
+  - [~] Reserve Online, Try/Pay in Store: reserva online, prueba en tienda y conversión a venta. *Parcial (ADR-091, 2026-10-13): reserva por teléfono, WhatsApp o mostrador y conversión a venta al retirar. Falta la reserva online del cliente.*
   - [ ] Devoluciones y cambios cross-channel: comprar online y devolver/cambiar en tienda con stock y fiscal consistentes.
   - [ ] *Criterio:* un cliente compra online, retira en sucursal, cambia un producto en otra sucursal y todo queda conciliado.
 
-- [ ] **H78 — OMS y surtido multi-origen.**
-  - [ ] Order Management System liviano: pedidos, reservas, picking, packing, despacho, entrega, cancelación y reembolso.
+- [~] **H78 — OMS y surtido multi-origen.** *Parcial: reservas con preparación, entrega y cancelación (ADR-091).*
+  - [~] Order Management System liviano: pedidos, reservas, picking, packing, despacho, entrega, cancelación y reembolso. *Parcial (ADR-091, 2026-10-13): reservas con estados reservada, lista para retirar, entregada, cancelada y vencida, auditadas; pedidos de delivery (F13/H49). Faltan picking, packing, despacho y reembolso.*
   - [ ] Asignación de origen por reglas: cercanía, stock, margen, SLA, capacidad, horario y costo de envío.
   - [ ] Picking por app/PWA, sustituciones autorizadas, faltantes, preparación parcial y split fulfillment.
   - [ ] *Criterio:* un pedido con 3 ítems se divide entre depósito central y sucursal sin perder trazabilidad.
@@ -982,32 +982,32 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] Abstracción fiscal por país/provincia/canal: AFIP/ARCA Argentina primero, arquitectura preparada para otros países.
   - [~] Ciclo completo de comprobante: emitir, almacenar XML/PDF, enviar al cliente, reimprimir, anular, nota de crédito/débito y auditar. *Parcial: emisión con CAE, XML de request y response guardados, NC por devolución y por anulación, envío del comprobante por email y reimpresión (ADR-072, `supabase/functions/arca_wsfe`). Falta nota de débito.*
   - [~] Contingencia autónoma por tienda/caja con cola fiscal, alertas 24/7, reintento, bloqueo preventivo y tablero fiscal. *Parcial: cola fiscal con reintentos, dead-letter, contingencia CAEA por punto de venta y panel de monitoreo fiscal (ADR-072). Faltan alertas 24/7 y bloqueo preventivo.*
-  - [ ] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos.
+  - [~] Diseñador PDF fiscal/no fiscal con mensajes, promociones y anexos permitidos. *Parcial (auditoría F16 2026-10-13): diseñador de tickets con logo, leyendas, layout y QR (`components/tickets/TicketTemplateEditor.tsx`, feature `tickets_pro`). Faltan el PDF fiscal propio, los mensajes de promociones y los anexos.*
   - [ ] *Criterio:* una cadena opera ventas físicas y online con comprobantes centralizados, contingencia y trazabilidad por país/canal.
 
 - [~] **H80 — Promo & Loyalty omnicanal enterprise.** *Parcial: el simulador de promociones existe (ADR-074).*
   - [ ] Campañas omnicanal: POS, catálogo, e-commerce, WhatsApp, QR, marketplace y app futura.
   - [~] Simulador de campañas, coexistencia, exclusividad, conflictos, presupuesto, forecast de impacto y ticket promedio esperado. *Parcial: simulador sobre ventas pasadas, combinables o exclusivas y topes (ADR-074, `components/promotions/PromotionSimModal.tsx`, `simulatePromotion`). Faltan presupuesto, forecast de impacto y conflictos entre canales.*
-  - [ ] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento.
+  - [~] Fidelización avanzada: puntos, niveles, cupones, vales, gift cards, monedero, cashback, cliente frecuente y beneficios por comportamiento. *Parcial (auditoría F16 2026-10-13): cupones con topes por cliente (`20260609310000_coupons.sql`) y saldo a favor del cliente por devolución (`refund_method = 'store_credit'`). Faltan puntos, niveles, gift cards, cashback y beneficios por comportamiento.*
   - [ ] Automatizaciones por evento: primera compra, cumpleaños, abandono, recompra, cliente inactivo, devolución, ticket alto.
   - [ ] *Criterio:* una campaña se simula, se publica en todos los canales y mide uso, margen, ticket promedio y recurrencia.
 
-- [ ] **H81 — Clienteling y venta asistida móvil.**
-  - [ ] POS móvil para vendedor: buscar cliente, ver historial, preferencias, talles, garantías, deuda, puntos y recomendaciones.
-  - [ ] Venta asistida desde celular/tablet con QR de pago, stock de otra tienda, cross-selling/up-selling y envío a domicilio.
+- [~] **H81 — Clienteling y venta asistida móvil.** *Parcial: POS mobile-first instalable con ficha del cliente.*
+  - [~] POS móvil para vendedor: buscar cliente, ver historial, preferencias, talles, garantías, deuda, puntos y recomendaciones. *Parcial (auditoría F16 2026-10-13): POS mobile-first e instalable (ADR-087) con la ficha del cliente desde el POS: historial, deuda y garantías (ADR-085, `lib/customers/c360.ts`). Faltan preferencias, talles, puntos y recomendaciones.*
+  - [~] Venta asistida desde celular/tablet con QR de pago, stock de otra tienda, cross-selling/up-selling y envío a domicilio. *Parcial (auditoría F16 2026-10-13): cobro con QR y link (ADR-048), stock de otras sucursales en el POS (`lib/stock/posBranchStock.ts`) y pedidos de delivery (F13/H49). Faltan cross-selling y up-selling.*
   - [ ] Lista de deseos, carrito persistente omnicanal y recuperación de venta iniciada en otro canal.
   - [ ] *Criterio:* un vendedor atiende en salón desde celular, cobra con QR y evita que el cliente pase por caja.
 
-- [~] **H82 — Prevención de fraude y riesgo operativo.** *Parcial: aprobación por supervisor y seguimiento de contracargos.*
-  - [ ] Detección de operaciones sospechosas: anulaciones repetidas, descuentos excesivos, devoluciones anómalas, pagos fallidos, caja fuera de patrón.
-  - [~] Reglas de bloqueo, revisión manual, aprobación por supervisor y scoring de riesgo. *Parcial: aprobación por supervisor con PIN por acción (`20261017110000_pin_supervisor_politicas.sql`, `lib/account/pin.ts`). Faltan reglas de bloqueo automáticas y scoring de riesgo.*
+- [~] **H82 — Prevención de fraude y riesgo operativo.** *Parcial: señales por persona, puntaje y marcas automáticas (ADR-091), aprobación por supervisor y contracargos.*
+  - [x] Detección de operaciones sospechosas: anulaciones repetidas, descuentos excesivos, devoluciones anómalas, pagos fallidos, caja fuera de patrón. *(ADR-091, 2026-10-13): `operational_risk_signals` y `lib/risk/operationalRisk.ts`, página Riesgo operativo (feature `prevencion_fraude`).*
+  - [~] Reglas de bloqueo, revisión manual, aprobación por supervisor y scoring de riesgo. *Parcial: aprobación por supervisor con PIN por acción (`20261017110000_pin_supervisor_politicas.sql`); scoring de devoluciones y anulaciones con umbrales del negocio y revisión manual con nota (`risk_settings`, `risk_flags`, (ADR-091, 2026-10-13)). Falta el bloqueo automático (exige recrear `return_sale_v2` y `void_sale`).*
   - [~] Señales de fraude omnicanal: abuso de cupones, cambios cross-channel, múltiples cuentas, chargebacks, vale/gift card sospechosa. *Parcial: contracargos y reclamos por venta (ADR-064, `lib/reports/paymentDisputes.ts`). Faltan abuso de cupones, cambios cross-channel, múltiples cuentas y vales sospechosos.*
-  - [ ] *Criterio:* una devolución de alto riesgo pide aprobación y queda marcada para auditoría.
+  - [~] *Criterio:* una devolución de alto riesgo pide aprobación y queda marcada para auditoría. *Parcial (ADR-091, 2026-10-13): queda marcada y auditada (`risk_flag_raised`); la aprobación es la del PIN por monto (ADR-051), no por puntaje.*
 
-- [ ] **H83 — Operación de cadenas, marcas y franquicias.**
+- [~] **H83 — Operación de cadenas, marcas y franquicias.** *Parcial: herencia negocio → sucursal y grupos de sucursales.*
   - [ ] Multi-marca/multi-negocio dentro de un grupo empresarial.
-  - [ ] Franquicias: configuración central con overrides locales, catálogo central, precios sugeridos/obligatorios y reportes por franquiciado.
-  - [ ] Consolidación regional: país, moneda, impuestos, canales, depósitos, roles y permisos por unidad de negocio.
+  - [~] Franquicias: configuración central con overrides locales, catálogo central, precios sugeridos/obligatorios y reportes por franquiciado. *Parcial (auditoría F16 2026-10-13): configuración del negocio con overrides por sucursal y caja (F17, `venta_config_efectiva`), plantilla de sucursal (ADR-057) y listas de precios por sucursal. Faltan precios obligatorios y el reporte por franquiciado.*
+  - [~] Consolidación regional: país, moneda, impuestos, canales, depósitos, roles y permisos por unidad de negocio. *Parcial (auditoría F16 2026-10-13): grupos o zonas de sucursales (ADR-049), depósitos por sucursal (ADR-085) y roles por sucursal (`staff_branch_assignments`, ADR-045). Faltan país, moneda y canales por unidad.*
   - [ ] *Criterio:* una franquicia recibe catálogo/precios desde central, opera localmente y reporta ventas consolidadas.
 
 - [ ] **H84 — Marketplace y e-commerce integration hub.**
@@ -1017,13 +1017,13 @@ Objetivo: tomar como benchmark las capacidades de Napse/TOTVS (Bridge, Omni, VTO
   - [ ] *Criterio:* si Mercado Libre queda desincronizado, el cockpit muestra divergencia y permite replay controlado.
 
 - [~] **H85 — Observabilidad enterprise de comercio unificado.** *Parcial: salud de webhooks (ADR-070), monitoreo fiscal (ADR-072) y heartbeat de cajas (ADR-080).*
-  - [~] Tableros de salud: pagos, fiscal, integraciones, stock, OMS, promociones, webhooks, hardware y offline. *Parcial: Salud de webhooks por proveedor (`/internal/webhooks`, ADR-070), panel de monitoreo de facturación (ADR-072), heartbeat y monitor de cajas (ADR-080), revisión de ventas offline (ADR-077). Faltan stock, OMS, promociones y hardware.*
+  - [~] Tableros de salud: pagos, fiscal, integraciones, stock, OMS, promociones, webhooks, hardware y offline. *Parcial: Salud de webhooks por proveedor (`/internal/webhooks`, ADR-070), panel de monitoreo de facturación (ADR-072), heartbeat y monitor de cajas (ADR-080), revisión de ventas offline (ADR-077), stock y reservas en el cockpit del negocio (ADR-091). Faltan promociones y hardware en un tablero de plataforma.*
   - [~] Alarmas por SLA, error rate, latencia, backlog de colas, terminal caída, fiscal bloqueado o integración degradada. *Parcial: alertas de caja sin señal y cobro rechazado (ADR-080) y estado "Con errores" por proveedor de webhooks (ADR-070). Faltan alarmas activas (mail o push), latencia y backlog de colas.*
-  - [ ] Runbooks operativos para soporte: qué revisar, cómo reintentar, cómo escalar y cómo cerrar incidente.
-  - [ ] *Criterio:* soporte detecta una caída de pagos, identifica proveedor/canal afectado y ejecuta runbook sin consultar SQL.
+  - [x] Runbooks operativos para soporte: qué revisar, cómo reintentar, cómo escalar y cómo cerrar incidente. *(ADR-091, 2026-10-13): `lib/internal/runbooks.ts` y `/internal/runbooks` (caída de cobros, cobro sin venta, facturas bloqueadas, webhooks, caja sin señal, ventas offline y stock negativo).*
+  - [~] *Criterio:* soporte detecta una caída de pagos, identifica proveedor/canal afectado y ejecuta runbook sin consultar SQL. *Parcial (ADR-091, 2026-10-13): Salud de webhooks identifica el proveedor y el runbook guía sin SQL. Falta el aviso activo de la caída.*
 
-- [ ] **H86 — Benchmark Napse parity y demos enterprise.**
-  - [ ] Matriz de paridad contra Napse Bridge/Omni/VTOL/Fiscal Flow/Promo, mantenida por producto.
+- [~] **H86 — Benchmark Napse parity y demos enterprise.** *Parcial: matriz de paridad en docs.*
+  - [~] Matriz de paridad contra Napse Bridge/Omni/VTOL/Fiscal Flow/Promo, mantenida por producto. *Parcial (auditoría F16 2026-10-13): matriz en [`29-napse-unified-commerce-benchmark.md`](./29-napse-unified-commerce-benchmark.md) §2 y auditoría de pantallas en [`auditoria-napse-vs-ninjapos.md`](./auditoria-napse-vs-ninjapos.md). Falta el estado por capacidad.*
   - [ ] Demos enterprise por vertical: supermercado, moda, farmacia, tienda departamental, franquicia, mayorista.
   - [ ] Dataset demo con miles de productos, múltiples sucursales, e-commerce, promociones, fidelización, devoluciones y pagos conciliados.
   - [ ] *Criterio:* ventas puede mostrar un flujo omnicanal completo tipo cadena retail sin preparar datos manualmente.
@@ -1506,11 +1506,11 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F13** | 39/74 | 26 | 9 | 53% | 70% |
 | **F14** | 4/61 | 31 | 26 | 7% | 32% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
-| **F16** | 0/59 | 16 | 43 | 0% | 14% |
+| **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 538/1004 | 274 | 192 | 54% | 67% |
+| **Total** | 542/1004 | 290 | 172 | 54% | 68% |
 <!-- roadmap-progress:end -->
 
 ---

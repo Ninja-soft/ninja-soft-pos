@@ -53,6 +53,9 @@ import {
   FileSpreadsheet,
   Stamp,
   GraduationCap,
+  PackageSearch,
+  Radar,
+  ShieldAlert,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -252,6 +255,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Cobros en espera (ADR-048): QR y links compartidos que esperan el
         // pago. Con candado si el plan no la incluye.
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
+        // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
+        { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
@@ -315,6 +320,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Cuenta corriente v2: tablero de cobranza. Con candado si el plan no la incluye.
         { href: "/clientes/cuentas", label: "Cuentas corrientes", icon: HandCoins, feature: "cuenta_corriente" },
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
+        // Cockpit de comercio unificado y riesgo operativo (F16 · H76, H82, ADR-091).
+        { href: "/cockpit", label: "Cockpit", icon: Radar, feature: "cockpit_comercio", managersOnly: true },
+        { href: "/riesgo", label: "Riesgo operativo", icon: ShieldAlert, feature: "prevencion_fraude", managersOnly: true },
         // Conciliación de tarjetas (ADR-044) y de procesadores (ADR-061, pestaña). Con candado si el plan no trae la de tarjetas.
         { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
         // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el

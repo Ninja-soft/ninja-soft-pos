@@ -1,22 +1,31 @@
-// F9 · H53 — Núcleo del motor de promociones (evaluación declarativa).
+// F9: Motor de promociones (ADR-074).
 //
-// Motor PURO (sin DOM, sin red, sin estado): toma las líneas del carrito + el
-// contexto (día/hora/fecha) + las promociones definidas, y devuelve la promoción
-// aplicable que MÁS descuenta. Es declarativo: una promo tiene CONDICIONES
-// (vigencia por fecha, día de semana, franja horaria, monto mínimo del carrito,
-// alcance) y una ACCIÓN (% o monto fijo de descuento sobre el alcance).
+// Motor PURO (sin DOM, sin red, sin estado). Lo usan el POS (vista previa del
+// carrito y del cobro), el simulador y el admin ("así se ve en el ticket"). El
+// servidor tiene el MISMO motor en SQL (`_promo_eval_core`, migración
+// 20261102100100_promociones_motor) y create_sale es la autoridad: si el
+// descuento que manda el POS no coincide, rechaza con `promo_mismatch`. La
+// paridad se prueba con la matriz de tests/fixtures/promoMatrix.ts (unit contra
+// este archivo, integración contra la base).
 //
-// v1: se aplica UNA sola promoción (la de mayor descuento; desempate por
-// prioridad y luego por id) para evitar combinaciones inesperadas. Combinables /
-// apilables, productos bonificados (NxM) y segmentos de cliente → siguientes
-// hitos (H54/H55). La INTEGRACIÓN en el POS (aplicar el descuento al carrito y
-// persistirlo en la venta) es follow-up: este módulo sólo decide.
+// Reglas (iguales en los dos lados):
+//   · Líneas que participan: con producto, que no son regalo ni sesión de pack
+//     y con importe > 0 (`excluded` las saca). Recargos, garantía y venta libre
+//     no reciben promos.
+//   · Condiciones: activa, vigencia por fecha (AR), días, franja horaria,
+//     sucursal, lista de precios, medio de pago / marca de tarjeta / banco
+//     (todos los pagos deben cumplir), topes de usos (total y por cliente),
+//     monto mínimo (sobre las líneas que participan) y algo en el alcance.
+//   · Acciones: percent, amount, fixed_price, nxm, second_item, volume_tier,
+//     bundle (combo a precio fijo por juego completo) y gift (aparte).
+//   · Tope por ticket (`max_discount`): el descuento de la promo no lo supera.
+//   · Combinabilidad: las acumulables se aplican en orden de prioridad (mayor
+//     primero, luego id), cada una sobre lo que dejó la anterior; cada
+//     excluyente se calcula sola. Gana lo que más descuenta (mejor precio para
+//     el cliente); ante empate, la excluyente de mayor prioridad.
+//   · Redondeo a centavos por línea (r2), mismo orden de operaciones que SQL.
 
-export type PromoScope = "cart" | "category" | "product";
-// percent / amount (H53) + nxm (2x1, 3x2…), fixed_price (precio fijo del alcance:
-// combo/pack), second_item ("2º al X%": en cada par del alcance, el más barato
-// con `action_value`% off) y volume_tier (% por volumen escalonado: el % sube por
-// tramos de cantidad del alcance) (H54).
+export type PromoScope = "cart" | "category" | "product" | "brand";
 export type PromoActionType =
   | "percent"
   | "amount"
@@ -24,268 +33,133 @@ export type PromoActionType =
   | "fixed_price"
   | "second_item"
   | "volume_tier"
-  // gift = regalo por compra: al cumplir las condiciones, se regala `gift_qty`
-  // unidades del producto `gift_product_id`. NO descuenta (agrega un ítem a $0);
-  // se evalúa aparte de la mejor promo de descuento (ver evaluateGifts).
+  | "bundle"
   | "gift";
 
-// Un tramo de la promo por volumen: a partir de `min_qty` unidades del alcance,
-// se aplica `pct`% de descuento sobre la base del alcance. Califica el tramo más
-// alto cuyo `min_qty` no supera la cantidad del carrito (ver volumeTierDiscount).
 export interface PromoVolumeTier {
   min_qty: number;
   pct: number;
+}
+
+/** Componente de un combo: producto y unidades por juego. */
+export interface PromoBundleItem {
+  product_id: string;
+  qty: number;
 }
 
 export interface Promotion {
   id: string;
   name: string;
   is_active: boolean;
-  // Mayor prioridad gana ante empate de descuento (mayor número = más prioridad).
+  /** Mayor número = se aplica antes y gana los empates. */
   priority: number;
-  // Vigencia por fecha (YYYY-MM-DD, hora local AR). null = sin límite por ese lado.
   valid_from: string | null;
   valid_to: string | null;
-  // Días de semana válidos (0=domingo..6=sábado). null/[] = todos los días.
   days_of_week: number[] | null;
-  // Franja horaria válida en minutos del día (0..1440). null = todo el día.
   time_from: number | null;
   time_to: number | null;
-  // Monto mínimo del SUBTOTAL del carrito para que aplique.
   min_amount: number;
-  // Alcance del descuento: todo el carrito, una categoría o un producto.
   scope: PromoScope;
   scope_category_id: string | null;
   scope_product_id: string | null;
-  // Acción:
-  //  - percent: % de `action_value` sobre la base del alcance.
-  //  - amount: monto fijo `action_value` (acotado a la base).
-  //  - fixed_price: el alcance pasa a costar `action_value` (combo/pack);
-  //    descuento = base − action_value (acotado, ≥ 0).
-  //  - nxm: "lleva buy_qty, paga pay_qty" sobre las unidades del alcance;
-  //    descuento = (unidades gratis) × precio de las unidades MÁS BARATAS.
   action_type: PromoActionType;
   action_value: number;
-  // Sólo para nxm: N (lleva) y M (paga). N > M ≥ 1. null en los demás tipos.
   buy_qty: number | null;
   pay_qty: number | null;
-  // Sólo para volume_tier: tramos de cantidad → %. null en los demás tipos.
   volume_tiers: PromoVolumeTier[] | null;
-  // CONDICIÓN por medio de pago (H54): si está seteado (ej. 'cash'), la promo SÓLO
-  // aplica cuando se paga con ese medio. null = cualquier medio (como hasta hoy).
-  // El medio del cobro llega por PromoContext.paymentMethod (lo resuelve el modal
-  // al elegir el medio); en la evaluación del carrito (sin medio aún) estas promos
-  // no aplican. Es una condición, ortogonal al action_type.
+  /** Medio exigido (cash, debit, credit...). null = cualquiera. */
   payment_method: string | null;
-  // Sólo para action_type='gift' (H54): producto a regalar y cuántas unidades.
-  // null en los demás tipos.
   gift_product_id: string | null;
   gift_qty: number | null;
+  // ── ADR-074 ──
+  /** Marca del alcance 'brand' (o la primera de scope_ids). */
+  scope_brand_id?: string | null;
+  /** Varios ids del alcance (categorías, productos o marcas). Vacío = el id simple. */
+  scope_ids?: string[] | null;
+  /** Combo: productos y unidades por juego; action_value = precio del juego. */
+  bundle_items?: PromoBundleItem[] | null;
+  /** Marcas de tarjeta (visa, master, amex...). Vacío = cualquiera. */
+  card_brands?: string[] | null;
+  /** Bancos emisores (slug de lib/payments/banks). Vacío = cualquiera. */
+  banks?: string[] | null;
+  /** Sucursales donde vale. Vacío = todo el negocio (herencia negocio → sucursal). */
+  store_ids?: string[] | null;
+  /** Listas de precios con las que vale. Vacío = cualquiera. */
+  price_list_ids?: string[] | null;
+  /** Acumulable con otras acumulables. false = excluyente. */
+  stackable?: boolean | null;
+  /** Tope de descuento por ticket. null = sin tope. */
+  max_discount?: number | null;
+  /** Tope de usos totales (ventas no anuladas). */
+  max_uses_total?: number | null;
+  /** Tope de usos por cliente (exige cliente en la venta). */
+  max_uses_per_customer?: number | null;
+  /** Texto para el ticket. null = el nombre. */
+  ticket_label?: string | null;
 }
 
-// Línea del carrito reducida a lo que el motor necesita. `lineTotal` alimenta las
-// acciones agregadas (percent/amount/fixed_price); `unitPrice`/`quantity` el NxM
-// (que razona por unidad). El caller (POS) ya tiene todos estos datos.
 export interface PromoCartLine {
   productId: string | null;
   categoryId: string | null;
+  brandId?: string | null;
   unitPrice: number;
   quantity: number;
-  // Importe de la línea ya neto de su descuento de línea (qty*precio - desc).
+  /** Importe de la línea ya neto de su descuento (qty × precio − desc). */
   lineTotal: number;
+  /** Regalo, sesión de pack, etc.: no participa. */
+  excluded?: boolean;
 }
 
-// Contexto temporal (hora local de Argentina), resuelto por el caller.
+export interface PromoPayment {
+  method: string;
+  /** Marca de la tarjeta (clave o etiqueta: "visa", "Mastercard"...). */
+  cardBrand?: string | null;
+  /** Banco emisor (slug). */
+  bank?: string | null;
+  /**
+   * El POS no pudo evaluar este pago al calcular (Point: el medio real se sabe
+   * al final). Las promos con condición de cobro no aplican.
+   */
+  ineligible?: boolean;
+}
+
+export interface PromoUsage {
+  total: number;
+  customer: number;
+}
+
 export interface PromoContext {
-  weekday: number; // 0=domingo..6=sábado
-  minutes: number; // minutos del día (0..1440)
-  date: string; // YYYY-MM-DD
-  // Medio de pago elegido (H54): habilita las promos condicionadas por medio.
-  // undefined/null = todavía no se eligió (evaluación del carrito) → las promos
-  // con payment_method no aplican; las método-agnósticas sí.
+  weekday: number; // 0=domingo..6=sábado (AR)
+  minutes: number; // minutos del día (AR)
+  date: string; // YYYY-MM-DD (AR)
+  /** Atajo de un solo medio (compatibilidad). */
   paymentMethod?: string | null;
+  /** Pagos de la venta. Sin pagos, las promos por medio no aplican. */
+  payments?: PromoPayment[] | null;
+  storeId?: string | null;
+  priceListId?: string | null;
+  customerId?: string | null;
+  /** Usos por promo (ventas no anuladas), para los topes. */
+  usage?: Record<string, PromoUsage> | null;
 }
 
 export interface PromoResult {
   promotionId: string;
   name: string;
-  discount: number; // monto a descontar (≥ 0)
+  discount: number;
 }
 
-// Subtotal del carrito (todas las líneas).
-export function cartSubtotal(lines: PromoCartLine[]): number {
-  return lines.reduce((acc, l) => acc + (l.lineTotal || 0), 0);
+export interface AppliedPromo {
+  promotionId: string;
+  name: string;
+  /** Texto del ticket (ticket_label o nombre). */
+  label: string;
+  discount: number;
+  stackable: boolean;
+  /** Descuento por línea (mismo índice que las líneas de entrada). */
+  lines: number[];
 }
 
-// Líneas alcanzadas por la promo (sobre las que se calcula el descuento).
-function scopedLines(promo: Promotion, lines: PromoCartLine[]): PromoCartLine[] {
-  if (promo.scope === "category") {
-    return lines.filter((l) => l.categoryId && l.categoryId === promo.scope_category_id);
-  }
-  if (promo.scope === "product") {
-    return lines.filter((l) => l.productId && l.productId === promo.scope_product_id);
-  }
-  return lines; // cart
-}
-
-// Base sobre la que se aplica el descuento (suma del alcance).
-function scopeBase(promo: Promotion, lines: PromoCartLine[]): number {
-  return scopedLines(promo, lines).reduce((acc, l) => acc + (l.lineTotal || 0), 0);
-}
-
-// ¿Está vigente la promo en el contexto dado y matchea las condiciones?
-export function promoApplies(
-  promo: Promotion,
-  lines: PromoCartLine[],
-  ctx: PromoContext,
-): boolean {
-  if (!promo.is_active) return false;
-  if (promo.valid_from && ctx.date < promo.valid_from) return false;
-  if (promo.valid_to && ctx.date > promo.valid_to) return false;
-  if (promo.days_of_week && promo.days_of_week.length > 0 && !promo.days_of_week.includes(ctx.weekday))
-    return false;
-  if (promo.time_from != null && ctx.minutes < promo.time_from) return false;
-  if (promo.time_to != null && ctx.minutes >= promo.time_to) return false;
-  // Condición por medio de pago (H54): si la promo exige un medio, sólo aplica
-  // cuando el contexto trae ese mismo medio (lo setea el modal al elegirlo). Sin
-  // medio en contexto (evaluación del carrito), las promos por medio no aplican.
-  if (promo.payment_method && ctx.paymentMethod !== promo.payment_method) return false;
-  if (cartSubtotal(lines) < (promo.min_amount || 0)) return false;
-  // Debe haber algo en el alcance para descontar.
-  if (scopeBase(promo, lines) <= 0) return false;
-  return true;
-}
-
-// Precios unitarios de TODAS las unidades del alcance (una entrada por unidad),
-// ordenados ascendente. Para NxM: las unidades gratis son las más baratas.
-function scopedUnitPrices(promo: Promotion, lines: PromoCartLine[]): number[] {
-  const prices: number[] = [];
-  for (const l of scopedLines(promo, lines)) {
-    const q = Math.max(0, Math.trunc(l.quantity || 0));
-    for (let i = 0; i < q; i++) prices.push(l.unitPrice || 0);
-  }
-  return prices.sort((a, b) => a - b);
-}
-
-// Descuento de un NxM ("lleva N, paga M") sobre las unidades del alcance: por
-// cada grupo de N unidades, (N−M) salen gratis (las más baratas).
-function nxmDiscount(promo: Promotion, lines: PromoCartLine[]): number {
-  const n = Math.trunc(promo.buy_qty || 0);
-  const m = Math.trunc(promo.pay_qty || 0);
-  if (n < 2 || m < 1 || m >= n) return 0;
-  const prices = scopedUnitPrices(promo, lines);
-  const sets = Math.floor(prices.length / n);
-  const freeUnits = sets * (n - m);
-  // Las `freeUnits` unidades más baratas (prices ya viene ascendente).
-  let disc = 0;
-  for (let i = 0; i < freeUnits && i < prices.length; i++) disc += prices[i] ?? 0;
-  return disc;
-}
-
-// Cantidad total de unidades del alcance (suma de cantidades; soporta peso/kg).
-function scopedQty(promo: Promotion, lines: PromoCartLine[]): number {
-  return scopedLines(promo, lines).reduce(
-    (acc, l) => acc + Math.max(0, l.quantity || 0),
-    0,
-  );
-}
-
-// Descuento "% por volumen escalonado": según la cantidad del alcance, aplica el
-// % del tramo que MÁS conviene entre los que califican (min_qty ≤ cantidad). Así
-// es robusto ante tramos mal ordenados: el cliente nunca recibe menos del mejor
-// tramo al que tiene derecho. Descuento = base del alcance × % / 100.
-function volumeTierDiscount(promo: Promotion, lines: PromoCartLine[]): number {
-  const tiers = promo.volume_tiers ?? [];
-  if (tiers.length === 0) return 0;
-  const qty = scopedQty(promo, lines);
-  let pct = 0;
-  for (const t of tiers) {
-    const minQty = t?.min_qty ?? 0;
-    const tierPct = t?.pct ?? 0;
-    if (minQty >= 1 && qty >= minQty && tierPct > pct) pct = tierPct;
-  }
-  if (pct <= 0) return 0;
-  return (scopeBase(promo, lines) * pct) / 100;
-}
-
-// Descuento "2º ítem al X%": agrupa las unidades del alcance en PARES (ordenadas
-// por precio); en cada par, el más barato recibe `action_value`% de descuento.
-function secondItemDiscount(promo: Promotion, lines: PromoCartLine[]): number {
-  const pct = promo.action_value || 0;
-  if (pct <= 0) return 0;
-  const prices = scopedUnitPrices(promo, lines); // ascendente
-  const pairs = Math.floor(prices.length / 2);
-  let disc = 0;
-  // El más barato de cada par es prices[2*i] (lista ascendente).
-  for (let i = 0; i < pairs; i++) disc += ((prices[2 * i] ?? 0) * pct) / 100;
-  return disc;
-}
-
-// Descuento en dinero que produce la promo (acotado a la base; nunca negativo).
-export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number {
-  const base = scopeBase(promo, lines);
-  if (base <= 0) return 0;
-  let raw: number;
-  switch (promo.action_type) {
-    case "percent":
-      raw = (base * (promo.action_value || 0)) / 100;
-      break;
-    case "amount":
-      raw = promo.action_value || 0;
-      break;
-    case "fixed_price":
-      // El alcance pasa a costar action_value; descuento = lo que sobra.
-      raw = base - (promo.action_value || 0);
-      break;
-    case "nxm":
-      raw = nxmDiscount(promo, lines);
-      break;
-    case "second_item":
-      raw = secondItemDiscount(promo, lines);
-      break;
-    case "volume_tier":
-      raw = volumeTierDiscount(promo, lines);
-      break;
-    default:
-      raw = 0;
-  }
-  const capped = Math.min(Math.max(raw, 0), base);
-  // Redondeo a 2 decimales para evitar ruido de punto flotante.
-  return Math.round(capped * 100) / 100;
-}
-
-// Evalúa todas las promos y devuelve la que MÁS descuenta (desempate: mayor
-// prioridad, luego id menor). null si ninguna aplica o el mejor descuento es 0.
-export function evaluateCart(
-  lines: PromoCartLine[],
-  promos: Promotion[],
-  ctx: PromoContext,
-): PromoResult | null {
-  let best: { promo: Promotion; discount: number } | null = null;
-  for (const promo of promos) {
-    if (!promoApplies(promo, lines, ctx)) continue;
-    const discount = promoDiscount(promo, lines);
-    if (discount <= 0) continue;
-    if (
-      !best ||
-      discount > best.discount ||
-      (discount === best.discount && promo.priority > best.promo.priority) ||
-      (discount === best.discount &&
-        promo.priority === best.promo.priority &&
-        promo.id < best.promo.id)
-    ) {
-      best = { promo, discount };
-    }
-  }
-  if (!best) return null;
-  return { promotionId: best.promo.id, name: best.promo.name, discount: best.discount };
-}
-
-// Regalo por compra (H54). A diferencia del descuento, NO compite por "la mejor":
-// es un mecanismo aparte que puede CONVIVIR con una promo de descuento y con otros
-// regalos. Devuelve TODAS las promos de regalo cuyas condiciones se cumplen (el
-// caller agrega una línea a $0 por cada una). Las líneas de regalo NO deben venir
-// en `lines` (el caller las excluye) para que un regalo no se dispare a sí mismo.
 export interface GiftResult {
   promotionId: string;
   name: string;
@@ -293,15 +167,348 @@ export interface GiftResult {
   giftQty: number;
 }
 
+export interface PromoEvaluation {
+  discount: number;
+  applied: AppliedPromo[];
+  gifts: GiftResult[];
+}
+
+// ── Utilidades ────────────────────────────────────────────────────────────────
+
+/** Redondeo a centavos, mitad hacia arriba (igual que round(numeric, 2)). */
+export function r2(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  const s = x < 0 ? -1 : 1;
+  return (s * Math.round(Math.abs(x) * 100 + 1e-6)) / 100;
+}
+
+const cents = (x: number) => Math.round(x * 100);
+
+const arr = <T>(v: T[] | null | undefined): T[] => (Array.isArray(v) ? v : []);
+
+/** Clave de marca de tarjeta: acepta clave o etiqueta (espejo de _promo_card_key). */
+export function cardKey(v: string | null | undefined): string | null {
+  const s = (v ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s === "mastercard" || s === "master") return "master";
+  if (s === "american express" || s === "americanexpress" || s === "amex") return "amex";
+  return s;
+}
+
+/** Línea que participa de las promos. */
+function eligible(l: PromoCartLine): boolean {
+  return !l.excluded && Boolean(l.productId) && (l.lineTotal || 0) > 0 && (l.quantity || 0) > 0;
+}
+
+/** Subtotal de las líneas que participan. */
+export function cartSubtotal(lines: PromoCartLine[]): number {
+  return r2(lines.reduce((a, l) => a + (eligible(l) ? l.lineTotal : 0), 0));
+}
+
+function scopeIds(p: Promotion): string[] {
+  const many = arr(p.scope_ids).filter(Boolean);
+  if (many.length > 0) return many;
+  const one =
+    p.scope === "category"
+      ? p.scope_category_id
+      : p.scope === "product"
+        ? p.scope_product_id
+        : p.scope === "brand"
+          ? (p.scope_brand_id ?? null)
+          : null;
+  return one ? [one] : [];
+}
+
+/** ¿La línea i entra en el alcance de la promo? (el combo usa sus productos). */
+function inScope(p: Promotion, l: PromoCartLine): boolean {
+  if (p.action_type === "bundle") {
+    return arr(p.bundle_items).some((b) => b.product_id === l.productId);
+  }
+  if (p.scope === "cart") return true;
+  const ids = scopeIds(p);
+  if (p.scope === "category") return Boolean(l.categoryId) && ids.includes(l.categoryId as string);
+  if (p.scope === "product") return Boolean(l.productId) && ids.includes(l.productId as string);
+  if (p.scope === "brand") return Boolean(l.brandId) && ids.includes(l.brandId as string);
+  return false;
+}
+
+function paymentsOk(p: Promotion, ctx: PromoContext): boolean {
+  const brands = arr(p.card_brands);
+  const banks = arr(p.banks);
+  if (!p.payment_method && brands.length === 0 && banks.length === 0) return true;
+  const pays: PromoPayment[] =
+    ctx.payments && ctx.payments.length > 0
+      ? ctx.payments
+      : ctx.paymentMethod
+        ? [{ method: ctx.paymentMethod }]
+        : [];
+  if (pays.length === 0) return false;
+  return pays.every((x) => {
+    if (x.ineligible) return false;
+    if (p.payment_method && x.method !== p.payment_method) return false;
+    if (brands.length > 0) {
+      if (x.method !== "debit" && x.method !== "credit") return false;
+      const k = cardKey(x.cardBrand);
+      if (!k || !brands.includes(k)) return false;
+    }
+    if (banks.length > 0 && !(x.bank && banks.includes(x.bank))) return false;
+    return true;
+  });
+}
+
+// ── Condiciones ───────────────────────────────────────────────────────────────
+
+/** ¿La promo aplica al carrito en este contexto? (no mira el monto del descuento). */
+export function promoApplies(promo: Promotion, lines: PromoCartLine[], ctx: PromoContext): boolean {
+  if (!promo.is_active) return false;
+  if (promo.valid_from && ctx.date < promo.valid_from) return false;
+  if (promo.valid_to && ctx.date > promo.valid_to) return false;
+  const days = arr(promo.days_of_week);
+  if (days.length > 0 && !days.includes(ctx.weekday)) return false;
+  if (promo.time_from != null && ctx.minutes < promo.time_from) return false;
+  if (promo.time_to != null && ctx.minutes >= promo.time_to) return false;
+  const stores = arr(promo.store_ids);
+  if (stores.length > 0 && !(ctx.storeId && stores.includes(ctx.storeId))) return false;
+  const lists = arr(promo.price_list_ids);
+  if (lists.length > 0 && !(ctx.priceListId && lists.includes(ctx.priceListId))) return false;
+  if (!paymentsOk(promo, ctx)) return false;
+  const use = ctx.usage?.[promo.id];
+  if (promo.max_uses_total != null && (use?.total ?? 0) >= promo.max_uses_total) return false;
+  if (promo.max_uses_per_customer != null) {
+    if (!ctx.customerId) return false;
+    if ((use?.customer ?? 0) >= promo.max_uses_per_customer) return false;
+  }
+  if (cents(cartSubtotal(lines)) < cents(promo.min_amount || 0)) return false;
+  return lines.some((l) => eligible(l) && inScope(promo, l));
+}
+
+// ── Asignación por línea ──────────────────────────────────────────────────────
+
+/** Reparte `d` en proporción a `w` (el último absorbe el redondeo). */
+function distribute(d: number, w: number[]): number[] {
+  const out = w.map(() => 0);
+  const idx = w.map((x, i) => (x > 0 ? i : -1)).filter((i) => i >= 0);
+  if (idx.length === 0 || d <= 0) return out;
+  const total = idx.reduce((a, i) => a + (w[i] ?? 0), 0);
+  let acc = 0;
+  idx.forEach((i, k) => {
+    const wi = w[i] ?? 0;
+    const v = k === idx.length - 1 ? r2(d - acc) : r2((d * wi) / total);
+    out[i] = Math.max(0, Math.min(v, wi));
+    acc = r2(acc + (out[i] ?? 0));
+  });
+  return out;
+}
+
+interface Unit {
+  i: number;
+  u: number;
+}
+
+/** Unidades enteras de las líneas del alcance, con su precio neto restante. */
+function unitsOf(rem: number[], lines: PromoCartLine[], ok: boolean[], desc: boolean): Unit[] {
+  const units: Unit[] = [];
+  lines.forEach((l, i) => {
+    if (!ok[i]) return;
+    const k = Math.trunc(l.quantity || 0);
+    // Precio unitario a 6 decimales: mismo orden que round(rem / qty, 6) en SQL.
+    const u = Math.round(((rem[i] ?? 0) / (l.quantity || 1)) * 1e6) / 1e6;
+    for (let j = 0; j < k; j++) units.push({ i, u });
+  });
+  units.sort((a, b) => (a.u !== b.u ? (desc ? b.u - a.u : a.u - b.u) : a.i - b.i));
+  return units;
+}
+
+/** Descuento de la promo línea por línea, sobre lo que queda (`rem`). */
+export function promoAllocation(promo: Promotion, lines: PromoCartLine[], rem: number[]): number[] {
+  const n = lines.length;
+  const zero = () => new Array<number>(n).fill(0);
+  const ok = lines.map((l, i) => eligible(l) && (rem[i] ?? 0) > 0 && inScope(promo, l));
+  const base = r2(rem.reduce((a, x, i) => a + (ok[i] ? x : 0), 0));
+  if (base <= 0) return zero();
+  const v = Number(promo.action_value) || 0;
+  let out = zero();
+
+  const pctOf = (pct: number) =>
+    rem.map((x, i) => (ok[i] ? Math.min(x, r2((x * pct) / 100)) : 0));
+  const byCount = (count: number[], pct: number) =>
+    rem.map((x, i) => {
+      const c = count[i] ?? 0;
+      if (!ok[i] || c <= 0) return 0;
+      const q = lines[i]?.quantity || 1;
+      return Math.min(x, r2((x * c * pct) / (q * 100)));
+    });
+
+  switch (promo.action_type) {
+    case "percent":
+      out = pctOf(Math.min(Math.max(v, 0), 100));
+      break;
+    case "amount":
+      out = distribute(Math.min(v, base), rem.map((x, i) => (ok[i] ? x : 0)));
+      break;
+    case "fixed_price":
+      out = distribute(Math.max(r2(base - v), 0), rem.map((x, i) => (ok[i] ? x : 0)));
+      break;
+    case "volume_tier": {
+      const qty = lines.reduce((a, l, i) => a + (ok[i] ? Math.max(0, l.quantity || 0) : 0), 0);
+      let pct = 0;
+      for (const t of arr(promo.volume_tiers)) {
+        const mq = Number(t?.min_qty) || 0;
+        const tp = Number(t?.pct) || 0;
+        if (mq >= 1 && qty >= mq && tp > pct) pct = tp;
+      }
+      if (pct > 0) out = pctOf(Math.min(pct, 100));
+      break;
+    }
+    case "nxm": {
+      const bn = Math.trunc(promo.buy_qty || 0);
+      const pm = Math.trunc(promo.pay_qty || 0);
+      if (bn < 2 || pm < 1 || pm >= bn) break;
+      const units = unitsOf(rem, lines, ok, false);
+      const free = Math.floor(units.length / bn) * (bn - pm);
+      const count = new Array<number>(n).fill(0);
+      for (let k = 0; k < free && k < units.length; k++) count[units[k]!.i] = (count[units[k]!.i] ?? 0) + 1;
+      out = byCount(count, 100);
+      break;
+    }
+    case "second_item": {
+      const pct = Math.min(Math.max(v, 0), 100);
+      if (pct <= 0) break;
+      const units = unitsOf(rem, lines, ok, false);
+      const pairs = Math.floor(units.length / 2);
+      const count = new Array<number>(n).fill(0);
+      for (let k = 0; k < pairs; k++) {
+        const it = units[2 * k]!;
+        count[it.i] = (count[it.i] ?? 0) + 1;
+      }
+      out = byCount(count, pct);
+      break;
+    }
+    case "bundle": {
+      const items = arr(promo.bundle_items).filter((b) => b.product_id && Math.trunc(b.qty) >= 1);
+      if (items.length === 0) break;
+      const units = unitsOf(rem, lines, ok, true);
+      let sets = Infinity;
+      for (const b of items) {
+        const have = units.filter((x) => lines[x.i]?.productId === b.product_id).length;
+        sets = Math.min(sets, Math.floor(have / Math.trunc(b.qty)));
+      }
+      if (!Number.isFinite(sets) || sets <= 0) break;
+      const count = new Array<number>(n).fill(0);
+      for (const b of items) {
+        let need = sets * Math.trunc(b.qty);
+        for (const x of units) {
+          if (need <= 0) break;
+          if (lines[x.i]?.productId !== b.product_id) continue;
+          count[x.i] = (count[x.i] ?? 0) + 1;
+          need--;
+        }
+      }
+      const taken = byCount(count, 100);
+      const value = r2(taken.reduce((a, x) => a + x, 0));
+      out = distribute(Math.max(r2(value - sets * v), 0), taken);
+      break;
+    }
+    default:
+      out = zero();
+  }
+
+  const total = r2(out.reduce((a, x) => a + x, 0));
+  const cap = promo.max_discount;
+  if (cap != null && cap >= 0 && total > cap) out = distribute(r2(cap), out);
+  return out;
+}
+
+/** Descuento de una promo sola sobre el carrito (sin condiciones). */
+export function promoDiscount(promo: Promotion, lines: PromoCartLine[]): number {
+  const rem = lines.map((l) => (eligible(l) ? l.lineTotal : 0));
+  return r2(promoAllocation(promo, lines, rem).reduce((a, x) => a + x, 0));
+}
+
+const byPriority = (a: Promotion, b: Promotion) =>
+  b.priority !== a.priority ? b.priority - a.priority : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+
+function applied(p: Promotion, alloc: number[]): AppliedPromo {
+  return {
+    promotionId: p.id,
+    name: p.name,
+    label: (p.ticket_label ?? "").trim() || p.name,
+    discount: r2(alloc.reduce((a, x) => a + x, 0)),
+    stackable: Boolean(p.stackable),
+    lines: alloc,
+  };
+}
+
+/**
+ * Evalúa todas las promociones: devuelve el descuento total, cada promo
+ * aplicada (para el carrito y el ticket) y los regalos.
+ */
+export function evaluatePromotions(
+  lines: PromoCartLine[],
+  promos: Promotion[],
+  ctx: PromoContext,
+): PromoEvaluation {
+  const cands = promos
+    .filter((p) => p.action_type !== "gift" && promoApplies(p, lines, ctx))
+    .sort(byPriority);
+  const orig = lines.map((l) => (eligible(l) ? l.lineTotal : 0));
+
+  // Acumulables, en orden, cada una sobre lo que queda.
+  const rem = [...orig];
+  const stack: AppliedPromo[] = [];
+  for (const p of cands) {
+    if (!p.stackable) continue;
+    const alloc = promoAllocation(p, lines, rem);
+    const a = applied(p, alloc);
+    if (a.discount <= 0) continue;
+    alloc.forEach((x, i) => (rem[i] = r2((rem[i] ?? 0) - x)));
+    stack.push(a);
+  }
+  const stackTotal = r2(stack.reduce((a, x) => a + x.discount, 0));
+
+  // Excluyentes, cada una sola: gana la que más descuenta (prioridad en empate).
+  let best: AppliedPromo[] = [];
+  let bestTotal = 0;
+  for (const p of cands) {
+    if (p.stackable) continue;
+    const a = applied(p, promoAllocation(p, lines, orig));
+    if (cents(a.discount) > cents(bestTotal)) {
+      best = [a];
+      bestTotal = a.discount;
+    }
+  }
+  if (cents(stackTotal) > cents(bestTotal)) {
+    best = stack;
+    bestTotal = stackTotal;
+  }
+
+  return { discount: r2(bestTotal), applied: best, gifts: evaluateGifts(lines, promos, ctx) };
+}
+
+/** Compatibilidad: la mejor promo como una sola (nombres unidos si hay varias). */
+export function evaluateCart(
+  lines: PromoCartLine[],
+  promos: Promotion[],
+  ctx: PromoContext,
+): PromoResult | null {
+  const ev = evaluatePromotions(lines, promos, ctx);
+  if (ev.discount <= 0 || ev.applied.length === 0) return null;
+  return {
+    promotionId: ev.applied[0]!.promotionId,
+    name: ev.applied.map((a) => a.name).join(" + "),
+    discount: ev.discount,
+  };
+}
+
+/** Regalos por compra: todas las promos de regalo que se cumplen. */
 export function evaluateGifts(
   lines: PromoCartLine[],
   promos: Promotion[],
   ctx: PromoContext,
 ): GiftResult[] {
   const out: GiftResult[] = [];
-  for (const promo of promos) {
-    if (promo.action_type !== "gift") continue;
-    if (!promo.gift_product_id) continue;
+  for (const promo of [...promos].sort(byPriority)) {
+    if (promo.action_type !== "gift" || !promo.gift_product_id) continue;
     if (!promoApplies(promo, lines, ctx)) continue;
     out.push({
       promotionId: promo.id,
@@ -313,11 +520,7 @@ export function evaluateGifts(
   return out;
 }
 
-// ── Simulador (F9 · H56) ──────────────────────────────────────────────────────
-// Corre UNA promo contra ventas históricas para previsualizar su impacto ANTES de
-// activarla: cuántos tickets habrían tenido la promo y cuánto descuento total.
-// Cada venta histórica trae su contexto (día/hora/fecha local AR, resuelto por la
-// RPC) y sus líneas. PURO: no consulta nada, sólo agrega.
+// ── Simulador (H56) ───────────────────────────────────────────────────────────
 
 export interface SimSale {
   weekday: number;
@@ -328,15 +531,25 @@ export interface SimSale {
 
 export interface SimResult {
   ticketsAnalyzed: number;
-  ticketsWithPromo: number; // tickets donde la promo habría aplicado (descuento > 0)
-  totalDiscount: number; // descuento total estimado
-  totalSold: number; // total vendido del período (suma de subtotales)
+  ticketsWithPromo: number;
+  totalDiscount: number;
+  totalSold: number;
 }
 
-// Simula la promo IGNORANDO su flag is_active (se previsualiza aunque esté en
-// borrador). Igual respeta el resto de las condiciones (fecha/día/hora/min/alcance).
+/** Corre UNA promo (aunque esté en borrador) contra ventas históricas. */
 export function simulatePromotion(promo: Promotion, sales: SimSale[]): SimResult {
-  const draft: Promotion = { ...promo, is_active: true };
+  // Sin condiciones de medio, sucursal, lista ni topes: el histórico no las trae.
+  const draft: Promotion = {
+    ...promo,
+    is_active: true,
+    payment_method: null,
+    card_brands: null,
+    banks: null,
+    store_ids: null,
+    price_list_ids: null,
+    max_uses_total: null,
+    max_uses_per_customer: null,
+  };
   let ticketsWithPromo = 0;
   let totalDiscount = 0;
   let totalSold = 0;
@@ -352,7 +565,19 @@ export function simulatePromotion(promo: Promotion, sales: SimSale[]): SimResult
   return {
     ticketsAnalyzed: sales.length,
     ticketsWithPromo,
-    totalDiscount: Math.round(totalDiscount * 100) / 100,
-    totalSold: Math.round(totalSold * 100) / 100,
+    totalDiscount: r2(totalDiscount),
+    totalSold: r2(totalSold),
+  };
+}
+
+// ── Contexto AR ───────────────────────────────────────────────────────────────
+
+/** Día, minutos y fecha en Argentina para un instante (default: ahora). */
+export function arPromoClock(at: Date = new Date()): Pick<PromoContext, "weekday" | "minutes" | "date"> {
+  const d = new Date(at.getTime() - 3 * 3600 * 1000); // UTC-3, sin horario de verano
+  return {
+    weekday: d.getUTCDay(),
+    minutes: d.getUTCHours() * 60 + d.getUTCMinutes(),
+    date: d.toISOString().slice(0, 10),
   };
 }

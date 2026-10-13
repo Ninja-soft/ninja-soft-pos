@@ -127,8 +127,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Configurar el email del negocio (Configuración, sección Email) para enviar recordatorios.",
   },
   promociones: {
-    desc: "Promociones y combos: arma ofertas (2x1, packs, precios promocionales) que el POS aplica automáticamente.",
-    impact: "Sin promociones el POS no aplica combos ni descuentos automáticos por campaña.",
+    desc: "Promociones: 2x1 y NxM, segunda unidad al %, descuentos por cantidad, combos a precio fijo y promos por medio de pago, tarjeta o banco con días y horarios, por categoría, marca, producto, lista o sucursal, con topes y combinables. El POS las aplica solas, el servidor las vuelve a calcular al cobrar y el ticket muestra cada una.",
+    impact: "Sin promociones el POS no aplica combos ni descuentos automáticos por campaña y el servidor rechaza descuentos de promoción. Los cupones siguen funcionando.",
     minPlan: "Pro",
   },
   descuentos: {

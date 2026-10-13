@@ -37,6 +37,7 @@ import {
   useWarrantyReport,
   useStaffProductivity,
   useGastroTablesReport,
+  useGastroTurnoverReport,
   useGastroKitchenReport,
   useGastroDeliveryReport,
   useGastroTopItemsReport,
@@ -91,6 +92,7 @@ import {
 } from "@/components/charts/builders";
 import { deltaPct, formatChartValue, type ValueFormat } from "@/components/charts/chartTheme";
 import { NoData } from "@/components/ui/NoData";
+import { splitTips, type TipSplitMode } from "@/lib/gastro/tips";
 
 const REPORTS = [
   { key: "by_day", label: "Evolución de ventas" },
@@ -107,6 +109,7 @@ const REPORTS = [
   // Gastronomía (F13 · H52): sólo se ofrecen en el menú si el tenant usa
   // mesas/delivery (gateadas más abajo por dining/delivery).
   { key: "gastro_tables", label: "Gastro · Mesas y salón" },
+  { key: "gastro_turnover", label: "Gastro · Rotación, mozos y propinas" },
   { key: "gastro_kitchen", label: "Gastro · Tiempos de cocina" },
   { key: "gastro_delivery", label: "Gastro · Delivery" },
   { key: "gastro_top_items", label: "Gastro · Top ítems" },
@@ -126,6 +129,7 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
   staff: true,
   low_stock: true,
   gastro_tables: true,
+  gastro_turnover: true,
   gastro_kitchen: true,
   gastro_delivery: true,
   gastro_top_items: true,
@@ -188,6 +192,8 @@ export default function ReportesPage() {
   const { data: deliveryEnabled = false } = useDeliveryEnabled();
   const showGastro = diningEnabled || deliveryEnabled;
   const { data: gTables } = useGastroTablesReport(fromISO, toISO, diningEnabled, storeId);
+  const { data: gTurn } = useGastroTurnoverReport(fromISO, toISO, diningEnabled, storeId);
+  const [tipMode, setTipMode] = useState<TipSplitMode>("por_mozo");
   const { data: gKitchen } = useGastroKitchenReport(fromISO, toISO, showGastro, storeId);
   const { data: gDelivery } = useGastroDeliveryReport(fromISO, toISO, deliveryEnabled, storeId);
   const { data: gTop } = useGastroTopItemsReport(fromISO, toISO, showGastro, storeId);
@@ -373,6 +379,36 @@ export default function ReportesPage() {
           total: gTables.by_waiter.reduce((a, r) => a + r.total, 0),
           orders: gTables.by_waiter.reduce((a, r) => a + r.orders, 0),
         },
+      });
+    }
+    if (diningEnabled && gTurn) {
+      sheets.push({
+        name: "Gastro · Rotación",
+        columns: [
+          { header: "Mesa", key: "table_label", width: 16 },
+          { header: "Salón", key: "area", width: 20 },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Min. sentados", key: "avg_seated_min", type: "number" },
+          { header: "Min. hasta pedir", key: "avg_first_item_min", type: "number" },
+          { header: "Min. cuenta a cobro", key: "avg_bill_to_close_min", type: "number" },
+        ],
+        rows: gTurn.by_table,
+      });
+      const shares = splitTips(gTurn.by_waiter, tipMode);
+      sheets.push({
+        name: "Gastro · Propinas",
+        columns: [
+          { header: "Mozo", key: "waiter", width: 24 },
+          { header: "Pedidos", key: "orders", type: "number" },
+          { header: "Vendido", key: "total", type: "money" },
+          { header: "Propinas", key: "tips", type: "money" },
+          { header: "Reparto", key: "share", type: "money" },
+        ],
+        rows: gTurn.by_waiter.map((r) => ({
+          ...r,
+          share: shares.find((x) => x.waiter === r.waiter)?.share ?? 0,
+        })),
+        totals: { tips: gTurn.tips_total },
       });
     }
     if (showGastro && gKitchen) {
@@ -620,6 +656,11 @@ export default function ReportesPage() {
         note: `${r.orders} pedidos · ticket ${formatCurrency(r.avg_ticket)}`,
       })),
       // Tiempo promedio por estación (en minutos para que el gráfico sea legible).
+      gastro_turnover: (gTurn?.by_table ?? []).map<CategoryDatum>((r) => ({
+        label: `Mesa ${r.table_label}`,
+        value: Number(r.avg_seated_min ?? 0),
+        note: `${r.orders} pedidos`,
+      })),
       gastro_kitchen: (gKitchen?.by_station ?? []).map<CategoryDatum>((r) => ({
         label: r.station,
         value: Math.round((r.avg_seconds / 60) * 10) / 10,
@@ -636,7 +677,7 @@ export default function ReportesPage() {
         note: `Importe ${formatCurrency(r.total)}`,
       })),
     };
-  }, [data, warranty, lowStock, gTables, gKitchen, gDelivery, gTop]);
+  }, [data, warranty, lowStock, gTables, gTurn, gKitchen, gDelivery, gTop]);
 
   // Horas con actividad (para el gráfico "Por hora"; recorta madrugadas vacías).
   const activeHours = useMemo(() => {
@@ -787,7 +828,7 @@ export default function ReportesPage() {
                 <DropdownLabel>Reportes a mostrar</DropdownLabel>
                 {REPORTS.filter((r) => {
                   // Los toggles gastro sólo se ofrecen si el tenant usa el modo.
-                  if (r.key === "gastro_tables") return diningEnabled;
+                  if (r.key === "gastro_tables" || r.key === "gastro_turnover") return diningEnabled;
                   if (r.key === "gastro_delivery") return deliveryEnabled;
                   if (r.key === "gastro_kitchen" || r.key === "gastro_top_items")
                     return showGastro;
@@ -1323,6 +1364,96 @@ export default function ReportesPage() {
                   }
                 />
               )}
+              {diningEnabled && vis.gastro_turnover && (
+                <ReportSection<"column">
+                  id="gastro_turnover"
+                  title="Rotación de mesas, mozos y propinas"
+                  subtitle={
+                    gTurn && gTurn.orders > 0
+                      ? `${gTurn.orders} mesas cobradas · ${fmtMin(gTurn.avg_seated_min)} sentados en promedio`
+                      : undefined
+                  }
+                  className="lg:col-span-2"
+                  chart={() => ({
+                    option: columnBarOption({
+                      items: chart.gastro_turnover,
+                      name: "Minutos sentados",
+                      format: "minutes",
+                    }),
+                    height: 260,
+                    empty: chart.gastro_turnover.length === 0,
+                    ariaLabel: "Minutos promedio sentados por mesa",
+                    summary: {
+                      columns: ["Mesa", "Minutos sentados"],
+                      rows: chart.gastro_turnover.map((d) => [d.label, d.value]),
+                    },
+                  })}
+                  table={
+                    <div className="space-y-6 p-4">
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Hasta pedir</p>
+                          <p className="font-semibold tabular-nums">{fmtMin(gTurn?.avg_first_item_min)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Sentados</p>
+                          <p className="font-semibold tabular-nums">{fmtMin(gTurn?.avg_seated_min)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cuenta a cobro</p>
+                          <p className="font-semibold tabular-nums">{fmtMin(gTurn?.avg_bill_to_close_min)}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                          Por mesa
+                        </p>
+                        <BareTable
+                          cols={["Mesa", "Salón", "Pedidos", "Sentados", "Hasta pedir", "Cuenta a cobro"]}
+                          rows={(gTurn?.by_table ?? []).map((r) => [
+                            r.table_label,
+                            r.area,
+                            String(r.orders),
+                            fmtMin(r.avg_seated_min),
+                            fmtMin(r.avg_first_item_min),
+                            fmtMin(r.avg_bill_to_close_min),
+                          ])}
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Mozos y propinas ({formatCurrency(gTurn?.tips_total ?? 0)})
+                          </p>
+                          <Segmented<TipSplitMode>
+                            size="sm"
+                            aria-label="Reparto de propinas"
+                            value={tipMode}
+                            onChange={setTipMode}
+                            options={[
+                              { value: "por_mozo", label: "Cada mozo lo suyo" },
+                              { value: "pozo", label: "Pozo común" },
+                            ]}
+                          />
+                        </div>
+                        <BareTable
+                          cols={["Mozo", "Pedidos", "Vendido", "Propinas", "Le toca"]}
+                          rows={(gTurn?.by_waiter ?? []).map((r) => [
+                            r.waiter,
+                            String(r.orders),
+                            formatCurrency(r.total),
+                            formatCurrency(r.tips),
+                            formatCurrency(
+                              splitTips(gTurn?.by_waiter ?? [], tipMode).find((x) => x.waiter === r.waiter)
+                                ?.share ?? 0,
+                            ),
+                          ])}
+                        />
+                      </div>
+                    </div>
+                  }
+                />
+              )}
               {vis.gastro_kitchen && (
                 <ReportSection<"column">
                   id="gastro_kitchen"
@@ -1601,6 +1732,15 @@ function formatDuration(seconds: number | null | undefined): string {
   const m = Math.floor(s / 60);
   const rest = s % 60;
   return rest === 0 ? `${m}m` : `${m}m ${rest}s`;
+}
+
+// Minutos con un decimal del reporte de rotación (F13 · H51). null = sin dato.
+function fmtMin(min: number | null | undefined): string {
+  if (min === null || min === undefined) return "s/d";
+  const n = Number(min);
+  if (n < 60) return `${n.toLocaleString("es-AR", { maximumFractionDigits: 1 })} min`;
+  const h = Math.floor(n / 60);
+  return `${h} h ${Math.round(n - h * 60)} min`;
 }
 
 // Tabla "desnuda" (sin card ni header): el chrome lo aporta ReportSection.

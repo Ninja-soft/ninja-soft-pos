@@ -88,6 +88,10 @@ const SalonesManager = dynamic(
   () => import("@/components/dining/SalonesManager").then((m) => m.SalonesManager),
   { loading },
 );
+const KdsSlaCard = dynamic(
+  () => import("@/components/dining/KdsSlaCard").then((m) => m.KdsSlaCard),
+  { loading },
+);
 const MenusManager = dynamic(
   () => import("@/components/dining/MenusManager").then((m) => m.MenusManager),
   { loading },
@@ -273,9 +277,15 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // el modo gastronómico activo (H43). Escritura RLS por tenant.
     case "salones":
       return (
-        <SettingsCard padded>
-          <SalonesManager />
-        </SettingsCard>
+        <div className="space-y-4">
+          <SettingsCard padded>
+            <SalonesManager />
+          </SettingsCard>
+          {/* SLA del KDS por estación (F13 · H46). Escritura: sólo el dueño. */}
+          <SettingsCard padded>
+            <KdsSlaCard />
+          </SettingsCard>
+        </div>
       );
     // Menús por horario (F13 · H47). Escritura RLS owner/manager.
     case "menus":

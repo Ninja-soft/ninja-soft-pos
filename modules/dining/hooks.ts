@@ -13,6 +13,8 @@ import {
   type AddItemInput,
   type KdsStatus,
 } from "./api";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
+import { KdsSlaConfigSchema, parseKdsSla, type KdsSlaConfig } from "@/lib/gastro/kdsSla";
 
 // ── Modo gastronómico (H43): pos_settings.dining_enabled ───────────────────────
 // Lee el toggle del tenant. Gatea el nav del POS (Salón) y la gestión de salones.
@@ -156,7 +158,96 @@ export function useTableOrderMutations() {
         tableOrdersApi.fireCourse(v.orderId, v.course),
       onSuccess: invKitchen,
     }),
+    // Mover / unir / transferir mesas (F13 · H44). Cambian lo que ve la cocina
+    // (la etiqueta de mesa del KDS), por eso refrescan también KDS y comanda.
+    move: useMutation({
+      mutationFn: (v: { orderId: string; targetTableId: string }) =>
+        tableOrdersApi.move(v.orderId, v.targetTableId),
+      onSuccess: invKitchen,
+    }),
+    transferItems: useMutation({
+      mutationFn: (v: { itemIds: string[]; targetTableId: string }) =>
+        tableOrdersApi.transferItems(v.itemIds, v.targetTableId),
+      onSuccess: invKitchen,
+    }),
+    // Anulación con motivo de un ítem enviado (F13 · H45).
+    voidItem: useMutation({
+      mutationFn: (v: { itemId: string; qty: number | null; reason: string }) =>
+        tableOrdersApi.voidItem(v.itemId, v.qty, v.reason),
+      onSuccess: () => {
+        invKitchen();
+        qc.invalidateQueries({ queryKey: ["dining", "kds-voids"] });
+      },
+    }),
+    markVoidsPrinted: useMutation({
+      mutationFn: (voidIds: string[]) => tableOrdersApi.markVoidsPrinted(voidIds),
+    }),
   };
+}
+
+// ── Relevo de mozo (F13 · H44) ─────────────────────────────────────────────────
+export function useSetTableWaiter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { tableId: string; waiterUserId: string }) =>
+      tablesApi.setWaiter(v.tableId, v.waiterUserId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dining", "tables"] }),
+  });
+}
+
+// ── Anulaciones recientes para el KDS (F13 · H45) ──────────────────────────────
+export function useKdsRecentVoids(station: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["dining", "kds-voids", station ?? "all"],
+    enabled,
+    queryFn: () => kdsApi.recentVoids(station),
+    refetchInterval: 8_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useAckKdsVoid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (voidId: string) => kdsApi.ackVoid(voidId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dining", "kds-voids"] }),
+  });
+}
+
+// ── SLA del KDS por estación (F13 · H46): pos_settings.kds_sla ──────────────────
+export const KDS_SLA_KEY = ["dining", "kds-sla"] as const;
+
+export function useKdsSla() {
+  return useQuery({
+    queryKey: KDS_SLA_KEY,
+    staleTime: 60_000,
+    queryFn: async (): Promise<KdsSlaConfig> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("pos_settings")
+        .select("kds_sla" as never)
+        .maybeSingle();
+      if (error) throw error;
+      return parseKdsSla((data as { kds_sla?: unknown } | null)?.kds_sla);
+    },
+  });
+}
+
+export function useSaveKdsSla() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (config: KdsSlaConfig) => {
+      const parsed = KdsSlaConfigSchema.parse(config);
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error("no_tenant");
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("pos_settings")
+        .upsert({ tenant_id: tenantId, kds_sla: parsed } as never, { onConflict: "tenant_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: KDS_SLA_KEY }),
+  });
 }
 
 // ── KDS / pantalla de cocina (F13 · H46) ───────────────────────────────────────

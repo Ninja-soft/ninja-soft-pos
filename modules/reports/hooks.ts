@@ -86,6 +86,19 @@ export function useGastroTablesReport(
   });
 }
 
+export function useGastroTurnoverReport(
+  fromISO: string,
+  toISO: string,
+  enabled: boolean,
+  storeId: string | null = null,
+) {
+  return useQuery({
+    queryKey: ["reports", "gastro-turnover", fromISO, toISO, storeId],
+    queryFn: () => reportsApi.gastroTurnover(fromISO, toISO, storeId),
+    enabled,
+  });
+}
+
 export function useGastroKitchenReport(
   fromISO: string,
   toISO: string,

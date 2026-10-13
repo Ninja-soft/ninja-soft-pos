@@ -24,7 +24,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (falta H32 y parte de H31b) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
-| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081; ronda 2 ADR-097: ticket separado por comensal y partes iguales, KDS por curso con "marchar", prioridad urgente, anulación de delivery con motivo y aviso automático a la lista de espera) |
+| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081; ronda 2 ADR-097: ticket separado por comensal y partes iguales, KDS por curso con "marchar", prioridad urgente, anulación de delivery con motivo y aviso automático a la lista de espera; canales de delivery externos, ADR-102: pedidos de apps con comanda automática, facturación, repartidor y simulador) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 En curso (primer corte ADR-092 en `feat/f14-comercial`: aprobaciones comerciales, alertas de margen, conteo cíclico y garantías por serie; parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 En curso (primer corte ADR-091: cockpit, reservas con retiro en tienda, riesgo operativo y runbooks; parciales previos por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
@@ -806,9 +806,9 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [x] Pedidos con canal: mostrador, teléfono, WhatsApp, QR, delivery propio, marketplace futuro. — *Canal en `delivery_orders.channel` (mostrador/telefono/whatsapp/qr/delivery_propio); marketplace → follow-up.*
   - [x] Datos por pedido: cliente, teléfono, dirección, referencia, horario prometido, cadete/repartidor, costo de envío. — *Todos en `delivery_orders` + alta + cuenta.*
   - [x] **H49 follow-up — Zonas de envío con tarifa automática.** — *Local, pendiente de push. Migración `20260608730000_delivery_zones`: tabla `delivery_zones` (nombre, `fee`, `eta_minutes` opcional, `is_active`, `sort_order`, baja lógica) con RLS tenant-scoped — lectura por miembros, **escritura sólo owner/manager** (espeja `tenant_branding`, enforced server-side; probado por SQL que cashier no puede insertar/actualizar). `delivery_orders.zone_id` (FK on delete set null). `create_delivery_order` ganó `p_zone_id`: al tomar un pedido de delivery, elegir la zona **autocompleta el costo de envío** con su tarifa y lo **snapshotea** en `delivery_orders.delivery_fee` (cambiar la tarifa de la zona después NO altera pedidos viejos — probado por SQL); el fee queda **editable** (override manual gana sobre la zona). Takeaway ignora zona (envío 0). Gestión de zonas en **Configuración → Zonas de envío** (`ZonasManager`, gateada por `delivery_enabled`); selector de zona en el alta (`DeliveryOrderModal`, sólo si hay zonas cargadas — si no, el fee manual sigue como antes); zona/eta visibles en la tarjeta del board y en la cuenta. **Sigue follow-up (NO en este PR):** geocoding/mapa, detección automática de zona por dirección/GPS, polígonos, tarifa por distancia/peso, mínimos por zona.*
-  - [~] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado. — *Delivery: recibido → preparando → en_camino → entregado (+ cancelado). Takeaway: recibido → preparando → listo → entregado (+ cancelado). "Aceptado" fino → follow-up.*
+  - [~] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado. — *Delivery: recibido → preparando → en_camino → entregado (+ cancelado). Takeaway: recibido → preparando → listo → entregado (+ cancelado). "Aceptado" fino → follow-up. Los pedidos de apps (ADR-102) tienen además su estado externo: nuevo, aceptado, listo, retirado, entregado, rechazado y cancelado.*
   - [~] Comanda a cocina y ticket/etiqueta para despacho. — *A cocina vía KDS unificado (el pedido aparece con su identificador delivery). **Comanda IMPRESA de delivery/takeaway hecha (local, pendiente de push):** botón "Imprimir comanda" en la cuenta del pedido (`DeliveryAccountModal`) → reusa `ComandaModal` generalizado (`source="delivery"`) con `delivery_comanda_items` + `mark_delivery_comanda_printed`; encabezado "DELIVERY/TAKEAWAY #1234" + cliente/teléfono/dirección/horario/cadete, agrupado por estación, sin precios, "sólo lo nuevo"/"reimprimir todo" + anti-reimpresión idempotente. Etiqueta de despacho específica → follow-up.*
-  - [ ] Integración futura con PedidosYa, Rappi, Mercado Libre/Tienda Nube cuando aplique. — *Follow-up.*
+  - [~] Integración con PedidosYa, Rappi, Uber Eats y Mercado Pago Delivery. *Núcleo y simulador hechos (ADR-102, `feat/canales-delivery`, migraciones `20261110200000` a `20261110200300` sin aplicar): conexiones por negocio y sucursal, webhook firmado (`delivery_channel_webhook`) con ingesta idempotente por evento y por pedido, comanda automática en el KDS (auto-aceptar o Aceptar con tiempo de preparación), aceptar, rechazar, listo y retirado avisados a la app por una cola con reintentos, cancelación que anula la comanda y la venta (nota de crédito por la cola fiscal), repartidor con ETA y mapa en el tablero, facturación automática o manual con el medio "plataforma" sin movimiento de caja, mapeo de productos con sugerencias, reconciliación de webhooks perdidos y simulador de PedidosYa, Rappi y Uber Eats para probar en cualquier negocio. Feature `canales_delivery` (Pro+). **Falta:** adaptadores reales (requieren el alta comercial con cada app, ver [`36-canales-delivery.md`](./36-canales-delivery.md)), sync de menú y disponibilidad, liquidaciones reales. Mercado Libre/Tienda Nube siguen como follow-up.*
   - [x] *Criterio:* una rotisería toma pedido telefónico, cocina lo prepara, despacho lo marca en camino y caja lo concilia. — *Alta telefónica → KDS prepara → board marca "en camino" → cobro atómico desde el pedido (caja). Probado por SQL.*
 
 - [~] **H50 — Inventario gastronómico, recetas y merma básica.** — *Hechos: receta/escandallo + costo y margen por plato, y **merma tipada** (ver sub-ítems). Falta descuento de insumos al vender, producción/batch y alertas.*
@@ -1558,7 +1558,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
-| **F5** | 16/38 | 9 | 13 | 42% | 54% |
+| **F5** | 23/49 | 10 | 16 | 47% | 57% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 18/56 | 21 | 17 | 32% | 51% |
@@ -1566,7 +1566,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F10** | 31/47 | 13 | 3 | 66% | 80% |
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
-| **F13** | 41/74 | 24 | 9 | 55% | 72% |
+| **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 5/61 | 39 | 17 | 8% | 40% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
@@ -1574,7 +1574,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F18** | 42/113 | 53 | 18 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 575/1039 | 299 | 165 | 55% | 70% |
+| **Total** | 582/1050 | 301 | 167 | 55% | 70% |
 <!-- roadmap-progress:end -->
 
 ---

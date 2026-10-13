@@ -61,6 +61,7 @@ import { execFileSync } from "node:child_process";
 export const PUBLIC_FUNCTIONS = [
   "catalog_purchase_webhook",
   "clover_webhook",
+  "delivery_channel_webhook",
   "directo_webhook",
   "getnet_checkout",
   "getnet_webhook",

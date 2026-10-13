@@ -12,4 +12,6 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   directo: "Directo",
   sena: "Seña",
   mercadolibre: "Mercado Libre",
+  // ADR-102: lo cobró una app de delivery por cuenta del local (sin caja).
+  plataforma: "App de delivery",
 };

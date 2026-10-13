@@ -170,6 +170,9 @@ export interface SalesPageParams {
   range?: { from?: Date; to?: Date };
   // F17 · H90: sucursal (null/undefined = todas las que el usuario ve por RLS).
   storeId?: string | null;
+  // Medio de pago (payments.method): entran las ventas con al menos un cobro
+  // en ese medio. Server-side con inner join a payments.
+  method?: string | null;
 }
 
 // Solo dígitos del N°: evita romper filtros / inyección.
@@ -211,7 +214,7 @@ export const salesApi = {
   // nombre de cliente (ilike con inner join). Nunca tira error si está vacío.
   listPaged: async (params: SalesPageParams): Promise<Paged<SaleRow>> => {
     const supabase = createClient();
-    const { page, pageSize, search, status, range, storeId } = params;
+    const { page, pageSize, search, status, range, storeId, method } = params;
     const start = Math.max(0, (page - 1) * pageSize);
     const end = start + pageSize - 1;
     const q = (search ?? "").trim();
@@ -219,9 +222,14 @@ export const salesApi = {
     // Búsqueda por nombre solo si el texto tiene letras (no es un N°).
     const byName = q.length > 0 && asNumber === null;
 
+    const cols = [
+      "*",
+      byName ? "customers!inner(name)" : "customers(name)",
+      ...(method ? ["payments!inner(method)"] : []),
+    ].join(", ");
     let query = supabase
       .from("sales")
-      .select(byName ? "*, customers!inner(name)" : "*, customers(name)", {
+      .select(cols as "*", {
         count: "exact",
       })
       .order("created_at", { ascending: false });
@@ -240,6 +248,7 @@ export const salesApi = {
     }
     if (asNumber !== null) query = query.eq("number", asNumber);
     if (byName) query = query.ilike("customers.name", `%${q}%`);
+    if (method) query = query.eq("payments.method" as never, method as never);
 
     const { data, error, count } = await query.range(start, end);
     if (error) throw error;

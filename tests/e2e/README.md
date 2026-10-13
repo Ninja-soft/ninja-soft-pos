@@ -27,6 +27,7 @@ Otro path: `E2E_CHROME_PATH`.
 | `E2E_QA_TENANT_ID` | Id del **tenant QA**. Guardarraíl: si el `current_tenant_id` del JWT no coincide, el suite aborta antes de tocar nada. |
 | `E2E_CUSTOMER_NAME` | Cliente de prueba del tenant QA para cuenta corriente. Default `E2E Cliente QA`. |
 | `E2E_AI=1` | Permite mandar un mensaje al asistente (gasta cuota). Sin esto sólo abre el panel y el historial. |
+| `E2E_PWA=1` | `pwa-offline.spec.ts` (`@pwa`, H65): POS sin conexión con service worker. Sólo contra un build de producción LOCAL (`pnpm build && pnpm start -p 3005`); nunca en CI ni contra producción. Prende `PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS` para que `setOffline` alcance al SW. |
 
 **Modo smoke:** sin `E2E_ACCESS_TOKEN` / `E2E_REFRESH_TOKEN` / `E2E_SUPABASE_REF` sólo corren
 las páginas públicas (`/login`, `/signup`, `/recover`, `/auth/callback`, redirect de

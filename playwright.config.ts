@@ -12,6 +12,10 @@ import { existsSync } from "node:fs";
 // Un id por corrida, compartido con los workers (heredan process.env).
 process.env.E2E_RUN_ID ??= String(Date.now());
 
+// PWA (H65, tests/e2e/pwa-offline.spec.ts): sin esto, context.setOffline no
+// alcanza a los fetch del service worker y la prueba "offline" usaría la red.
+if (process.env.E2E_PWA === "1") process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= "1";
+
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3005";
 const SYSTEM_CHROME = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 

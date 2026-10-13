@@ -18,7 +18,7 @@ const BULLETS = [
   {
     icon: ReceiptText,
     title: "Facturación cuando quieras",
-    desc: "Comprobantes y AFIP cuando estés listo.",
+    desc: "Factura electrónica de ARCA cuando estés listo.",
   },
 ];
 

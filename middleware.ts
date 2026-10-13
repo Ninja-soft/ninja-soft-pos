@@ -1,8 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { legacyHostRedirect } from "@/lib/site";
+import { webhookTarget } from "@/lib/hooks";
 
 export async function middleware(request: NextRequest) {
+  // Webhooks con dominio propio → proxy a la Edge Function (sin sesión).
+  const hook = webhookTarget(
+    request.headers.get("host"),
+    request.nextUrl.pathname,
+    request.nextUrl.search,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  );
+  if (hook === "not_found") return new NextResponse("Not found", { status: 404 });
+  if (hook) return NextResponse.rewrite(hook);
+
   // Alias de producción de Vercel → dominio canónico (los previews no).
   const target = legacyHostRedirect(
     request.headers.get("host"),
@@ -23,6 +34,11 @@ export const config = {
     {
       source: "/:path*",
       has: [{ type: "host", value: "ninja-soft-pos.vercel.app" }],
+    },
+    // Host de webhooks: pasa todo (POST de proveedores sin headers de browser).
+    {
+      source: "/:path*",
+      has: [{ type: "host", value: "hooks.soft.ninja" }],
     },
     {
       source:

@@ -57,6 +57,7 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [31](./31-contabilidad.md) | **Contabilidad**: plan de cuentas, asientos automáticos, mapeos, cierres, libros y export a estudios (Tango, Holistor, Xubio, Colppy, CSV) | Producto, backend, soporte |
 
 | [32](./32-impuestos.md) | **Impuestos**: IVA por alícuota, internos, condición fiscal, comprobante, percepciones, padrones (diseños de registro) y retenciones | Producto, backend, soporte |
+| [34](./34-venta-offline.md) | **Venta offline**: qué se vende sin conexión, límites del dueño, cola local, sincronización idempotente, conflictos y revisión | Producto, backend, soporte |
 | [Auditoría Napse vs NinjaPOS](./auditoria-napse-vs-ninjapos.md) | **Multi-sucursal:** sucursal y caja como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal (F17) | Producto, backend, UI |
 | [Auditoría fiscal y contable](./auditoria-fiscal-contable-precios.md) | **Fiscal, contable, precios y compras (Argentina):** listas PRO, importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos (F18) | Producto, backend, contable |
 | [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |

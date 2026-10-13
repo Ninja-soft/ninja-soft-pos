@@ -2472,3 +2472,41 @@ Ley de IVA (texto ordenado 1997), art. 10 (internos discriminados fuera del prec
 - Ventas viejas: sin desglose (el reporte las cuenta aparte). Productos con `tax_rate` fuera del catálogo quedan en 21 % hasta que se editen.
 - **Deuda:** devoluciones y notas de crédito con reversa proporcional de IVA, internos y percepciones (H105, con F3); alícuota por operación según receptor (27 % a RI en ciertos servicios); internos por sucursal y con vigencia por decreto; Convenio Multilateral con coeficientes; constancia de ARCA por CUIT y alertas de CUIT dado de baja; descarga programada de padrones; retenciones de Ganancias (RG 830 con acumulado mensual) y SUSS; certificados de retención en PDF; SICORE, SIRE, Libro IVA Digital y DDJJ de IIBB (H108); un recargo de tarjeta con percepción puede dejar centavos por cobrar al cerrar el pago (el cajero agrega el resto).
 - Tests: `tests/unit/taxEngine.test.ts`, `tests/unit/taxComprobante.test.ts`, `tests/unit/taxPadron.test.ts`, `tests/unit/featureInfo.test.ts`; RLS `tests/integration/rls-impuestos.test.ts` (paridad SQL, datos fiscales por rol, regímenes y padrón por rol y plan, percepción en `create_sale` con pago insuficiente, monotributista con alícuota 0, retención sugerida, documento y gating de internos, reporte y `rls_internal_scope_leaks` = 0). Cadena completa de migraciones sobre PGlite con humo de todo lo anterior y de las policies con rol `authenticated`.
+
+---
+
+## ADR-077: Venta offline conservadora: cola local idempotente, sync_offline_sale y revisión del dueño
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/venta-offline`; migración `20261103200000_venta_offline` sin aplicar) · **Hito:** F3 · Venta offline / AFIP offline (base; lo completo sigue en F14 · H65) · **Base:** ADR-051 (caja propia), ADR-052 (`internal_scope`), ADR-054 (cupón del posnet), ADR-056 (precio en el servidor), ADR-068 (`create_sale` más nueva) · **Numeración:** 069 a 076 tomadas o reservadas por otras ramas. Diseño: [`34-venta-offline.md`](./34-venta-offline.md).
+
+### Contexto
+
+El POS dependía de la conexión para cada cobro: un corte de internet frenaba el local. El roadmap (F3) pide que la venta no se bloquee sin conexión y que al volver se sincronice sin duplicar ni perder ventas. Hacer offline-first completo (PWA, comandas, stock multi-dispositivo) es H65; acá va lo mínimo seguro.
+
+### Decisión
+
+1. **Alcance conservador:** sólo con el POS ya abierto y la caja abierta; sólo medios manuales sin integración (efectivo, transferencia manual, tarjeta en posnet con cupón). Nunca QR, link, Point, terminal integrada, vale, cuenta corriente, Directo, packs, cupones, mesas, delivery ni cambio manual de precio.
+2. **Política del dueño** en `pos_settings.offline_policy` (`enabled`, `max_amount` 50000, `max_sales` 20 por cajero y turno, `max_hours` 48), con check en la tabla y `offline_policy_save` (dueño o encargado, auditado).
+3. **Cola local en IndexedDB** sin dependencias nuevas: `client_sale_id` uuid generado en el cliente (idempotencia), asociada a negocio, usuario y turno, con hash SHA-256 canónico del payload. Foto local del catálogo sin costos ni secretos.
+4. **`sync_offline_sale`** (SECURITY DEFINER) como **wrapper de `create_sale`**: guarda primero la fila en `offline_sales` (única por negocio y `client_sale_id`), valida la política y los medios, y llama a `create_sale` con los mismos parámetros dentro de un savepoint. Lo que falla queda en `needs_review` con el motivo; nunca se pierde.
+5. **Conflictos:** `create_sale` (copia de `20261028100300`) gana un modo offline por GUC transaccional (`ninja.offline_sync`, sólo lo prende `_offline_run_sale`, mismo patrón que `ninja.pc_complete`): precio distinto se respeta y se anota `price_changed`; stock insuficiente se vende y se anota `negative_stock`. Se audita `offline_sale_conflicts`. Online no cambia nada.
+6. **Revisión del dueño:** pantalla **Ventas offline** (`/ventas-offline`) y `offline_sale_resolve` (reintentar en su caja, marcar resuelta o descartar con motivo, dar por vistas las diferencias), auditado.
+7. **Clasificación (CLAUDE.md §6): FLAG-OPERATIVO.** Es una elección del dueño (switch en `pos_settings`), gratis y sin costo de plan: la continuidad del cobro es parte de pagar cualquier plan y no habilita nada que el plan no tenga (los medios y funciones gateadas siguen pasando por `create_sale` y sus triggers). Por eso no hay key en `features` ni en `plans.limits.modules`; el gating real del flag es server-side: con `enabled = false` lo que llegue va a revisión.
+8. **RLS:** `offline_sales` con `tenant_id = current_tenant_id() or internal_scope()` (ADR-052), restrictiva por rol (cajero: las suyas) y por sucursal; sin escritura por PostgREST.
+9. **ARCA:** ticket provisorio; la factura se pide al sincronizar por la cola fiscal (trigger de ventas de la rama de ARCA).
+
+### Alternativas descartadas
+
+- **Duplicar `create_sale` en una RPC offline:** dos lógicas de venta que divergen. Se eligió el wrapper con un GUC acotado.
+- **Guardar automáticamente la venta cuando `create_sale` falla por red:** si el commit llegó y la respuesta no, se duplicaría (la llamada online no lleva `client_sale_id`). El POS pasa a offline y el cajero confirma de nuevo después de mirar Ventas.
+- **Firma HMAC en el cliente:** la clave estaría en el mismo navegador; no agrega seguridad real. El hash detecta corrupción y la seguridad es la revalidación del servidor.
+- **Feature de plan:** cobrar por no perder ventas en un corte no tiene sentido comercial y dejaría a los planes bajos sin respaldo.
+- **Service worker / PWA en esta rama:** servir el HTML en caché con sesiones de distintos usuarios y builds viejos tiene riesgos propios; queda para H65.
+
+### Consecuencias
+
+- Deploy: `20261103200000_venta_offline` después de `20261028100300_impuestos_venta` (recrea `create_sale` con la misma firma). Si otra rama recrea `create_sale` después, tiene que conservar los bloques ADR-077.
+- `sales.created_at` de una venta offline es el de la sincronización; el momento real queda en `sales.offline_sold_at` (reportes por fecha y CbteFch de ARCA: deuda).
+- Las ventas offline se suman al número de venta al sincronizar (no hay numeración offline).
+- **Deuda (H65):** abrir el POS sin conexión (service worker), cajón e impresora en la venta offline, mesas/delivery/cuenta corriente offline, conciliación multi-dispositivo.
+- Tests: `tests/unit/offlineQueue.test.ts`, `offlinePolicy.test.ts`, `offlineSync.test.ts`; RLS `tests/integration/rls-venta-offline.test.ts` (idempotencia, turno ajeno y de otro negocio, cajero en su turno, conflictos, política, revisión, RLS); e2e `tests/e2e/venta-offline.spec.ts` (sólo local, `E2E_OFFLINE=1`).

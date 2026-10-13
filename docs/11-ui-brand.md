@@ -283,3 +283,8 @@ Tokens en `components/pos/ui/posStyles.ts`; mismo lenguaje que el resto de la ap
 | Mesas | Tile neutro, estado como punto + texto. |
 | Logos | Fuente única `lib/payments/logos.ts`: isotipos y logos de tarjeta de fondo transparente, sin placa blanca, con variante `-on-dark` en temas oscuros (`BrandIcon` / `TenderLogo` → `ThemedLogo`, `CardBrandLogo`). |
 | Táctil | Controles de 44px en la barra superior; steppers y acciones de línea crecen a 44px con `pointer: coarse`. Foco visible de 2px en todo el POS. |
+
+
+## Logos oficiales
+
+Los logos de Ninja POS, Ninja Soft, Ninja Food y Ninja Suite están en `public/brand/oficial/` (ver su README). `*-light` va sobre fondos oscuros y `*-dark` sobre claros. Son la única fuente válida: no usar wordmarks viejos de `public/brand/` para piezas nuevas.

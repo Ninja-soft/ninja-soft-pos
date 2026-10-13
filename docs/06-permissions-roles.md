@@ -317,6 +317,9 @@ Reglas:
 - [ ] El profesional puede quedar limitado a su propia agenda y ventas.
 - [ ] La recepción puede cobrar sin modificar comisiones ni reportes globales.
 - [ ] Cambios de comisión, propina o profesional asignado quedan auditados.
+- [x] **Recursos de agenda** (sillas, cabinas, `agenda_resources`): los cargan y editan dueño y encargado (policy + feature `agenda_recursos`); el resto los ve para agendar. ADR-082.
+- [x] **Lista de espera** (`agenda_waitlist`): anotan, cancelan y pasan a turno dueño, encargado y cajero (recepción); solo lectura sólo mira. El paso a turno es sólo por RPC (`agenda_waitlist_schedule`). ADR-082.
+- [x] **Datos de ejemplo de la agenda** (`agenda_demo_seed` / `agenda_demo_clear`): dueño y encargado. ADR-082.
 
 ## 9.3 Roles gastronómicos
 

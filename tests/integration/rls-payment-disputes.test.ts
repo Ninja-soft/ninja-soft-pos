@@ -120,7 +120,7 @@ describe.skipIf(!enabled)("contracargos y devoluciones · RLS y RPC", () => {
     const { data: sales, error: sErr } = await admin
       .from("sales")
       .insert([
-        { tenant_id: ctx.tenantA, store_id: storeA, number: 993001, subtotal: 1000, total: 1000 },
+        { tenant_id: ctx.tenantA, store_id: storeA, number: 993001, subtotal: 1000, total: 1000, status: "completed" },
         { tenant_id: ctx.tenantA, store_id: storeA, number: 993002, subtotal: 500, total: 500, status: "voided" },
       ])
       .select("id, number");

@@ -37,6 +37,21 @@ function persist(q: PrintJob[]) {
   }
 }
 
+/**
+ * Encola un trabajo en la cola de ESTE equipo sin montar el hook (por ejemplo
+ * la etiqueta ZPL de un envío, ADR-103). La procesa la pantalla que tenga la
+ * cola abierta con su driver (Mostrador simulado o el puente local).
+ */
+export function addToDeviceQueue(
+  job: Pick<PrintJob, "doc" | "label" | "printerId" | "payload"> & {
+    maxAttempts?: number;
+  },
+): PrintJob[] {
+  const next = enqueue(load(), { ...job, id: newId() }, Date.now());
+  persist(next);
+  return next;
+}
+
 const newId = () =>
   `j_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 

@@ -32,6 +32,7 @@ export type PrintDocKind =
   | "return"
   | "label"
   | "kitchen"
+  | "etiqueta_envio"
   | "test";
 
 export const PRINT_DOC_LABELS: Record<PrintDocKind, string> = {
@@ -41,6 +42,8 @@ export const PRINT_DOC_LABELS: Record<PrintDocKind, string> = {
   return: "Devolución",
   label: "Etiqueta",
   kitchen: "Comanda",
+  // Envíos (ADR-103): etiqueta ZPL de una logística, para térmica Zebra.
+  etiqueta_envio: "Etiqueta de envío",
   test: "Prueba",
 };
 

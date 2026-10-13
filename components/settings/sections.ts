@@ -23,6 +23,7 @@ import {
   KeyRound,
   Store,
   Tag,
+  Truck,
   Users,
   Utensils,
   Wallet,
@@ -66,6 +67,7 @@ export type SettingsSectionKey =
   | "promociones"
   | "nubceo"
   | "api"
+  | "envios"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -396,6 +398,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "api_publica",
         keywords: "api rest oauth token credencial client id secret integracion erp ecommerce tienda sincronizar webhook desarrollador",
       },
+      // Envíos y logística (ADR-103): logísticas por negocio o sucursal.
+      {
+        key: "envios",
+        label: "Envíos",
+        title: "Envíos y logísticas",
+        description:
+          "Conectá Andreani y otras logísticas con tu contrato, por negocio o por sucursal, probá las credenciales y mirá qué pedirle a cada una.",
+        icon: Truck,
+        feature: "envios",
+        keywords: "envios logistica andreani correo argentino oca pickit hop andesmar bluemail cabify enviopack etiqueta despacho carrier courier seguimiento tracking",
+      },
     ],
   },
   {
@@ -456,6 +469,9 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   supervisor: "seguridad",
   integraciones: "nubceo",
   "api-publica": "api",
+  logistica: "envios",
+  logisticas: "envios",
+  andreani: "envios",
   credenciales: "api",
   conciliacion: "nubceo",
   fiscal: "impuestos",

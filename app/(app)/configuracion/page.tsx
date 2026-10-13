@@ -177,6 +177,12 @@ const ApiSettings = dynamic(
   { loading },
 );
 
+// Envíos y logística (ADR-103): conexiones por negocio o sucursal.
+const ShippingSettings = dynamic(
+  () => import("@/components/shipping/ShippingSettings").then((m) => m.ShippingSettings),
+  { loading },
+);
+
 // Venta sin conexión (ADR-077): política del dueño.
 const OfflinePolicyCard = dynamic(
   () => import("@/components/config/OfflinePolicyCard").then((m) => m.OfflinePolicyCard),
@@ -409,6 +415,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <NubceoSettings />;
     case "api":
       return <ApiSettings />;
+    case "envios":
+      return <ShippingSettings />;
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;

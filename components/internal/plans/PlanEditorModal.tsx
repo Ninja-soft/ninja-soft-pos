@@ -50,6 +50,7 @@ const GROUP_LABELS: Record<string, string> = {
   tickets: "Tickets",
   reportes: "Reportes",
   integraciones: "Integraciones",
+  envios: "Envíos y logística",
   extras: "Extras",
 };
 const GROUP_ORDER = [
@@ -60,6 +61,7 @@ const GROUP_ORDER = [
   "tickets",
   "reportes",
   "integraciones",
+  "envios",
   "extras",
 ];
 

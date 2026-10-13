@@ -13,6 +13,7 @@ import {
   type AppointmentInput,
   type AppointmentStatus,
 } from "./api";
+import { depositsApi, type DepositMethod } from "./deposits";
 
 // ── Profesionales ─────────────────────────────────────────────────────────────
 
@@ -84,6 +85,35 @@ export function useAppointmentMutations() {
         status: AppointmentStatus;
         cancelReason?: string | null;
       }) => appointmentsApi.setStatus(v.id, v.status, v.cancelReason),
+      onSuccess: inv,
+    }),
+  };
+}
+
+// ── Señas de turnos (ADR-088) ─────────────────────────────────────────────────
+
+export function useAppointmentDeposits(appointmentId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["appointment-deposits", appointmentId],
+    enabled: Boolean(appointmentId) && enabled,
+    queryFn: () => depositsApi.list(appointmentId!),
+  });
+}
+
+export function useAppointmentDepositMutations() {
+  const qc = useQueryClient();
+  const inv = () => {
+    void qc.invalidateQueries({ queryKey: ["appointment-deposits"] });
+    void qc.invalidateQueries({ queryKey: ["cash"] });
+  };
+  return {
+    register: useMutation({
+      mutationFn: (v: { appointmentId: string; amount: number; method: DepositMethod; reference?: string | null }) =>
+        depositsApi.register(v),
+      onSuccess: inv,
+    }),
+    refund: useMutation({
+      mutationFn: (v: { depositId: string; reason: string }) => depositsApi.refund(v.depositId, v.reason),
       onSuccess: inv,
     }),
   };

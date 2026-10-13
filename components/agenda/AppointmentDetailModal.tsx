@@ -28,6 +28,7 @@ import {
 } from "@/modules/agenda/api";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDayLong, hhmm } from "@/modules/agenda/dates";
+import { AppointmentDepositsPanel } from "./AppointmentDepositsPanel";
 
 // Detalle de un turno: datos, cambio de estado, reprogramar (abre el editor),
 // cancelar (con motivo) y COBRAR (lleva al POS con el servicio cargado · H38).
@@ -36,11 +37,14 @@ export function AppointmentDetailModal({
   professionalName,
   onClose,
   onEdit,
+  depositsEnabled = false,
 }: {
   appointment: Appointment | null;
   professionalName: string | null;
   onClose: () => void;
   onEdit: (a: Appointment) => void;
+  // Feature agenda_senas (ADR-088): cobrar y devolver la seña del turno.
+  depositsEnabled?: boolean;
 }) {
   const { toast } = useToast();
   const router = useRouter();
@@ -162,6 +166,8 @@ export function AppointmentDetailModal({
             </p>
           )}
         </div>
+
+        {depositsEnabled && <AppointmentDepositsPanel appointment={a} />}
 
         {/* Cancelación con motivo (paso intermedio) */}
         {cancelling ? (

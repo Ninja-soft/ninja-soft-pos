@@ -360,16 +360,20 @@ export const reportsApi = {
     fromISO: string,
     toISO: string,
     storeId: string | null = null,
-  ): Promise<{ type: string; amount: number; created_at: string }[]> => {
+  ): Promise<{ type: string; amount: number; created_at: string; payment_method: string | null }[]> => {
     const supabase = createClient();
-    const out: { type: string; amount: number; created_at: string }[] = [];
+    const out: { type: string; amount: number; created_at: string; payment_method: string | null }[] = [];
     const PAGE = 1000;
     for (let page = 0; page < MAX_PAGES; page++) {
       // Con sucursal: los movimientos de los turnos de esa sucursal
       // (cash_shifts.store_id, desnormalizado en F17).
       let q = supabase
         .from("cash_movements")
-        .select(storeId ? "type, amount, created_at, cash_shifts!inner(store_id)" : "type, amount, created_at")
+        .select(
+          storeId
+            ? "type, amount, created_at, payment_method, cash_shifts!inner(store_id)"
+            : "type, amount, created_at, payment_method",
+        )
         .gte("created_at", fromISO)
         .lt("created_at", toISO);
       if (storeId) q = q.eq("cash_shifts.store_id" as never, storeId as never);
@@ -378,9 +382,9 @@ export const reportsApi = {
         .range(page * PAGE, page * PAGE + PAGE - 1);
       if (error) throw error;
       out.push(
-        ...((data ?? []) as unknown as { type: string; amount: number; created_at: string }[]).map(
-          (m) => ({ type: m.type, amount: m.amount, created_at: m.created_at }),
-        ),
+        ...(
+          (data ?? []) as unknown as { type: string; amount: number; created_at: string; payment_method: string | null }[]
+        ).map((m) => ({ type: m.type, amount: m.amount, created_at: m.created_at, payment_method: m.payment_method })),
       );
       if (!data || data.length < PAGE) break;
     }

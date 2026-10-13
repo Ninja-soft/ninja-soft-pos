@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Segmented";
+import { Switch } from "@/components/ui/Switch";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
@@ -31,6 +32,8 @@ import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useCurrentStoreId, useStores } from "@/modules/stock/hooks";
 import {
+  useSaveSellFromReserve,
+  useSellFromReserve,
   useWarehouseMoves,
   useWarehouseMutations,
   useWarehouseOverview,
@@ -66,6 +69,9 @@ export default function DepositosPage() {
   const [count, setCount] = useState<React.ComponentProps<typeof WarehouseCountModal>["target"]>(null);
   const [replenishOpen, setReplenishOpen] = useState(false);
   const m = useWarehouseMutations();
+  // ADR-088: vender de la reserva cuando el salón no alcanza (dueño o encargado).
+  const { data: sellFromReserve = false } = useSellFromReserve(canManage);
+  const saveSellFromReserve = useSaveSellFromReserve();
 
   useEffect(() => {
     if (!storeId && currentStoreId) setStoreId(currentStoreId);
@@ -193,6 +199,32 @@ export default function DepositosPage() {
             </Button>
           )}
         </div>
+        {canManage && ready && warehouses.length > 0 && (
+          <div className="mt-3 flex items-start justify-between gap-3 rounded-lg bg-muted/40 p-3 text-sm">
+            <span>
+              <span className="block font-medium">Vender de la reserva si el salón no alcanza</span>
+              <span className="block text-xs text-muted-foreground">
+                {sellFromReserve
+                  ? "La venta toma lo que falta de la reserva y te avisa para reponer el salón."
+                  : "Apagado: si el salón no alcanza y no permitís vender sin stock, la venta se frena hasta que repongas."}
+              </span>
+            </span>
+            <Switch
+              label="Vender de la reserva"
+              checked={sellFromReserve}
+              disabled={saveSellFromReserve.isPending}
+              onCheckedChange={(v) =>
+                saveSellFromReserve.mutate(v, {
+                  onError: (e) =>
+                    toast({
+                      title: warehouseErrorMessage(e),
+                      variant: "error",
+                    }),
+                })
+              }
+            />
+          </div>
+        )}
         {!whLoading && warehouses.length === 0 ? (
           <EmptyState
             className="mt-4"

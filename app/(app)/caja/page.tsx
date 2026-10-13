@@ -269,7 +269,11 @@ export default function CajaPage() {
                                   ? "Cobro cuenta corriente"
                                   : m.type === "account_payment_void"
                                     ? "Anulación cobro cuenta corriente"
-                                    : "Anulación"}
+                                    : m.type === "deposit_in"
+                                      ? "Seña de turno"
+                                      : m.type === "deposit_out"
+                                        ? "Devolución de seña"
+                                        : "Anulación"}
                         </span>
                         {m.reason && (
                           <span className="ml-2 text-muted-foreground">{m.reason}</span>
@@ -285,7 +289,8 @@ export default function CajaPage() {
                         className={
                           m.type === "expense" ||
                           m.type === "sale_void" ||
-                          m.type === "account_payment_void"
+                          m.type === "account_payment_void" ||
+                          m.type === "deposit_out"
                             ? "text-danger"
                             : "text-success"
                         }

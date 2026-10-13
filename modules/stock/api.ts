@@ -8,6 +8,7 @@ import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 
 import { createClient } from "@/lib/supabase/client";
 import type { StoreRef, StoreStockRow } from "@/lib/stock/byStore";
+import { TRANSIT_STATUSES, type InTransitSourceLine } from "@/lib/stock/inTransit";
 import {
   DEFAULT_TRANSFER_SETTINGS,
   type DifferenceReason,
@@ -233,6 +234,47 @@ export const stockApi = {
     return ((data ?? []) as unknown as TransferRow[]).map((r) =>
       num(r, ["total_units", "total_value"]),
     );
+  },
+
+  // Ítems de traslados en camino (F17 · H95 · ADR-080). La RLS ya acota a
+  // traslados con origen o destino en las sucursales del usuario
+  // (20261105100000); además se filtra por el negocio actual.
+  inTransitLines: async (): Promise<InTransitSourceLine[]> => {
+    const supabase = createClient();
+    const tenantId = await getCurrentTenantId();
+    let q = supabase
+      .from("stock_transfer_items" as never)
+      .select(
+        "transfer_id, product_id, variant_id, product_name, variant_label, sku, unit, unit_cost, qty_dispatched, qty_received, t:stock_transfers!inner(number, status, origin_store_id, dest_store_id, dispatched_at, deleted_at)",
+      )
+      .in("t.status" as never, [...TRANSIT_STATUSES] as never)
+      .is("t.deleted_at" as never, null)
+      .limit(5000);
+    if (tenantId) q = q.eq("tenant_id" as never, tenantId as never);
+    const { data, error } = await q;
+    if (error) throw error;
+    type Raw = Omit<InTransitSourceLine, "number" | "status" | "origin_store_id" | "dest_store_id" | "dispatched_at"> & {
+      t: {
+        number: number;
+        status: string;
+        origin_store_id: string;
+        dest_store_id: string;
+        dispatched_at: string | null;
+      } | null;
+    };
+    return ((data ?? []) as unknown as Raw[])
+      .filter((r) => r.t)
+      .map(({ t, ...r }) => ({
+        ...r,
+        number: Number(t!.number),
+        status: t!.status,
+        origin_store_id: t!.origin_store_id,
+        dest_store_id: t!.dest_store_id,
+        dispatched_at: t!.dispatched_at,
+        unit_cost: r.unit_cost == null ? null : Number(r.unit_cost),
+        qty_dispatched: r.qty_dispatched == null ? null : Number(r.qty_dispatched),
+        qty_received: Number(r.qty_received) || 0,
+      }));
   },
 
   getTransfer: async (id: string): Promise<TransferDetail> => {

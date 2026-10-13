@@ -295,8 +295,8 @@ export function useProductMutations() {
     }),
     // Producción / batch (F13 · H50): suma stock del producto preparado.
     registerProduction: useMutation({
-      mutationFn: (vars: { id: string; input: ProductionInput }) =>
-        productsApi.registerProduction(vars.id, vars.input),
+      mutationFn: (vars: { id: string; input: ProductionInput; storeId?: string | null }) =>
+        productsApi.registerProduction(vars.id, vars.input, vars.storeId ?? null),
       onSuccess: invalidate,
     }),
   };

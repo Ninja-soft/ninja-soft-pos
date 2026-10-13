@@ -30,6 +30,7 @@ import {
   type MonitorThresholds,
 } from "@/lib/branches/monitorAlerts";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
+import { deviceSummary, registerSignal, SIGNAL_LABEL } from "@/lib/branches/heartbeat";
 import { cn } from "@/lib/utils/cn";
 
 // =============================================================================
@@ -51,6 +52,8 @@ function loadThresholds(): MonitorThresholds {
       terminalStaleMinutes:
         Number(v.terminalStaleMinutes) > 0 ? Number(v.terminalStaleMinutes) : DEFAULT_THRESHOLDS.terminalStaleMinutes,
       noSaleMinutes: Number(v.noSaleMinutes) >= 0 ? Number(v.noSaleMinutes) : DEFAULT_THRESHOLDS.noSaleMinutes,
+      registerStaleMinutes:
+        Number(v.registerStaleMinutes) > 0 ? Number(v.registerStaleMinutes) : DEFAULT_THRESHOLDS.registerStaleMinutes,
     };
   } catch {
     return DEFAULT_THRESHOLDS;
@@ -154,10 +157,11 @@ function ThresholdsEditor({ value, onChange }: { value: MonitorThresholds; onCha
     </label>
   );
   return (
-    <div className={cn(FLAT_PANEL, "grid gap-4 p-4 sm:grid-cols-3")}>
+    <div className={cn(FLAT_PANEL, "grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4")}>
       {field("longShiftHours", "Caja abierta hace más de", "horas", "Avisa turnos que quedaron abiertos.")}
       {field("terminalStaleMinutes", "Terminal sin señal hace más de", "minutos", "Sólo en el horario de la sucursal.")}
       {field("noSaleMinutes", "Sin ventas hace más de", "minutos", "En horario y con caja abierta. 0 = no avisar.")}
+      {field("registerStaleMinutes", "Caja sin señal hace más de", "minutos", "Cajas con turno abierto que dejaron de reportar.")}
     </div>
   );
 }
@@ -221,7 +225,11 @@ function BranchCard({
             icon={Clock}
             label="Último Z"
             value={row.last_z ? formatCurrency(row.last_z.difference) : "Sin cierres"}
-            sub={row.last_z ? `N° ${row.last_z.z_number} · ${formatRelative(row.last_z.closed_at)}` : undefined}
+            sub={
+              row.last_z
+                ? `N° ${row.last_z.store_z_number ?? row.last_z.z_number} · ${formatRelative(row.last_z.closed_at)}`
+                : undefined
+            }
           />
         )}
       </dl>
@@ -239,6 +247,48 @@ function BranchCard({
         </ul>
       )}
 
+      {!compact && (row.registers ?? []).length > 0 && (
+        <ul aria-label="Señal de las cajas" className="space-y-1 border-t border-border pt-2 text-xs">
+          {(row.registers ?? []).map((r) => {
+            const signal = registerSignal(r.last_ping_at, now, thresholds.registerStaleMinutes);
+            const device = [
+              r.last_sale_at ? `última venta ${formatRelative(r.last_sale_at)}` : null,
+              deviceSummary(r.info, r.app_version) || null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <li key={r.id} className="flex items-start justify-between gap-2">
+                <span className="flex min-w-0 items-start gap-1.5">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1 h-2 w-2 shrink-0 rounded-full",
+                      signal === "online" ? "bg-success" : signal === "stale" && r.shift_open ? "bg-warning" : "bg-muted-foreground/40",
+                    )}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-foreground">
+                      {r.name}
+                      {r.user_name ? <span className="text-muted-foreground"> · {r.user_name}</span> : null}
+                    </span>
+                    {device && <span className="block truncate text-muted-foreground">{device}</span>}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0",
+                    signal === "stale" && r.shift_open ? "text-warning" : "text-muted-foreground",
+                  )}
+                >
+                  {r.last_ping_at ? formatRelative(r.last_ping_at) : SIGNAL_LABEL.never}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
       {!compact && row.terminals.length > 0 && (
         <ul className="space-y-1 border-t border-border pt-2 text-xs">
           {row.terminals.map((t) => {
@@ -249,8 +299,16 @@ function BranchCard({
                   <Smartphone size={12} aria-hidden className="shrink-0 text-muted-foreground" />
                   <span className="truncate">{t.label}</span>
                 </span>
-                <span className={cn("shrink-0", stale && inHours ? "text-warning" : "text-muted-foreground")}>
-                  {t.last_seen_at ? formatRelative(t.last_seen_at) : "sin señal"}
+                <span className="flex shrink-0 flex-col items-end">
+                  <span className={cn(stale && inHours ? "text-warning" : "text-muted-foreground")}>
+                    {t.last_seen_at ? formatRelative(t.last_seen_at) : "sin señal"}
+                  </span>
+                  {t.last_charge && (
+                    <span className={t.last_charge.status === "rejected" ? "text-danger" : "text-muted-foreground"}>
+                      {t.last_charge.status === "rejected" ? "Rechazado" : "Aprobado"}{" "}
+                      {formatRelative(t.last_charge.at)}
+                    </span>
+                  )}
                 </span>
               </li>
             );

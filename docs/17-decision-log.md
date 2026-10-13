@@ -2593,3 +2593,38 @@ El dueño tiene dos juegos de credenciales de Getnet: "Web Checkout / Plugin Mag
 5. **Migración renumerada** a `20261031300000_feature_getnet_checkout_propio.sql` (el `20261031200000` lo usa otra rama).
 
 **Consecuencias.** Guardar Web Checkout tarda un poco más (el servidor llama a Getnet: token de Web Checkout, `GET /sellers` y token de la Checkout API). La detección depende de `classifyCredential`: si una credencial de Checkout API también obtiene token y `GET /sellers` de Web Checkout, no se distingue (no se vio con las del dueño). Para prender el checkout propio basta cargar `GETNET_CHECKOUT_API_PCI_ATTESTED=true`: vuelven la segunda tarjeta y el tender, sin deploy de front. Tests: `tests/unit/getnetCheckoutApi.test.ts` (tarjeta única, textos, veredicto del guardado, errores, tender con y sin flag).
+---
+
+## ADR-073: Administración interna de negocios: alta manual, ciclo de vida con motivo y timeline de auditoría (F7 · H11c)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/admin-tenants`; migración y Edges sin aplicar) · **Hito:** F7 · H11c
+
+### Contexto
+
+Auditoría del panel interno de negocios: ya existían cambio de plan (`PlanCard`, `internal_set_plan`), notas internas (`tenant_notes`), feature flags, trial y facturación, y el acceso como el negocio (`internal_impersonate`, auditado pero sin motivo). Faltaban: alta manual de un negocio desde internal, baja lógica, un camino con motivo para suspender y reactivar (el selector de estado suspendía y reactivaba sin motivo) y una auditoría por negocio legible (eran las últimas 30 filas con la acción cruda). El bloqueo real del negocio suspendido ya estaba: `assert_account_active` (20260608690000) corta `create_sale` (la más nueva, `20261028100300_impuestos_venta`, la sigue llamando), `open_cash_shift` y las devoluciones; no miraba `tenants.deleted_at`.
+
+### Decisión
+
+- **Migración `20261101200000_admin_tenants`:**
+  - `assert_account_active` también bloquea con `tenants.deleted_at` (aunque alguien fuerce el estado). No hace falta reescribir `create_sale`.
+  - `internal_tenant_lifecycle(tenant, action, reason)` SECURITY DEFINER: `suspend` | `reactivate` | `delete`. Motivo obligatorio (5 a 500 caracteres). Soporte no puede; la baja es sólo `super_admin` (matriz de H11). Baja lógica = `deleted_at = now()` + estado `cancelled` en negocio y suscripción; nunca `DELETE`. Reactivar quita la baja y deja `active`. Transiciones inválidas: `invalid_transition`. Escribe `audit_logs` (antes, después, motivo, actor) en la misma transacción.
+  - `internal_set_subscription_status` ya no lleva a `suspended`/`cancelled` ni saca de esos estados o de la baja (`use_tenant_lifecycle`); guarda el estado anterior en `before_data`.
+  - `internal_create_tenant(...)` sólo `service_role`: revalida que el actor sea staff (no soporte) leyendo su `app_metadata`, valida nombre, slug, rubro, plan global activo, días de trial (0 a 90; 0 = activo) y dueño; slug único con sufijo `-2`, `-3`; crea negocio, suscripción, membresía de dueño, sucursal y caja por defecto y efectivo/transferencia; audita `tenant_created_internal`.
+- **Edge `internal_create_tenant`** (JWT de staff admin o super_admin): valida con `_shared/tenantAdmin.ts` (lógica pura compartida con el formulario), valida el plan antes de invitar, reusa la cuenta del dueño o lo invita (`inviteUserByEmail`, redirect a `/login`), llama a la RPC, setea `current_tenant_id` si el dueño no tenía negocio y encola el email de trial.
+- **`internal_impersonate`**: motivo obligatorio, guardado en `audit_logs.reason`; si el audit no se escribe, no devuelve el link. Acepta el header `x-ninja-scope` en CORS.
+- **UI** (`/internal/tenants` y su detalle): botón "Nuevo negocio" (oculto para soporte), filtro "Dados de baja" (ocultos por defecto), tarjeta **Ciclo de vida** con confirmación fuerte (motivo; para la baja, escribir el slug), selector de estado limitado a trial, activo y pago pendiente, diálogo de motivo para el acceso como el negocio y **timeline de auditoría** por negocio: etiqueta legible, categoría (ciclo de vida, plan y facturación, accesos, configuración, operación), motivo, autor, antes y después por campo, búsqueda, rango de fechas en el servidor y "Ver más". Lógica pura en `lib/internal/auditTimeline.ts` y `lib/internal/tenantLifecycle.ts`.
+- **RLS:** no se agregan políticas (tenants y subscriptions son de plataforma; todo pasa por RPC). Las lecturas del panel siguen con `internal_scope()` (ADR-052); `rls_internal_scope_leaks()` = 0 en el test.
+- No es una feature de plan (operación interna de NinjaSoft): no suma key en `features`.
+
+### Alternativas descartadas
+
+- **Reescribir `create_sale` para mirar `deleted_at`:** el guard común ya lo cubre para venta, caja y devoluciones con una sola función.
+- **Alta manual con `create_tenant`:** esa Edge da de alta al propio usuario logueado; la del staff crea el negocio para otra persona, elige plan y trial y audita al staff como actor.
+- **Borrar físicamente un negocio:** rompe la regla de baja lógica y la trazabilidad; se revierte con Reactivar.
+
+### Consecuencias
+
+- Deploy: migración `20261101200000_admin_tenants`, después las Edges `internal_create_tenant` (nueva) e `internal_impersonate`. El front nuevo sin la migración: la tarjeta de ciclo de vida falla al guardar (RPC inexistente); sin la Edge nueva el alta responde 404; la Edge de impersonate vieja ignora el motivo (sigue andando).
+- Un pago aprobado por el webhook de Mercado Pago o el dunning pueden reactivar un negocio suspendido a mano (escriben el estado directo). Queda como deuda distinguir la suspensión manual.
+- Pendiente de H11c: banner visible y duración configurable del acceso como el negocio, ficha 360 completa y gestión de miembros desde internal.
+- Tests: `tests/unit/adminTenants.test.ts`; RLS `tests/integration/rls-admin-tenants.test.ts` (permisos por nivel, motivo, bloqueo con `assert_account_active` y `open_cash_shift`, transiciones, selector sin atajos, baja sólo super_admin y con `deleted_at`, alta sólo `service_role` con slug desambiguado y auditoría, y `rls_internal_scope_leaks` = 0).

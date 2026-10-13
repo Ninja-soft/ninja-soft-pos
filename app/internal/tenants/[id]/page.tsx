@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Check,
@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
+import { ReasonDialog } from "@/components/internal/ReasonDialog";
+import { TenantAuditTimeline } from "@/components/internal/TenantAuditTimeline";
+import { TenantLifecycleCard } from "@/components/internal/TenantLifecycleCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
@@ -27,7 +30,7 @@ import {
   useTenantNotes,
   useTenantNoteMutations,
   useImpersonateTenant,
-  useInternalAudit,
+  useMyStaffLevel,
   useTenantAddons,
   useGiftAiAddon,
   AI_ASSISTANT_ADDON_KEY,
@@ -35,6 +38,11 @@ import {
 import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
 import { formatCurrency, formatRelative } from "@/lib/utils/format";
 import { appOrigin } from "@/lib/site";
+import {
+  EDITABLE_STATUSES,
+  lifecycleErrorMessage,
+  lifecycleState,
+} from "@/lib/internal/tenantLifecycle";
 
 const STATUSES = [
   { key: "trial", name: "Trial" },
@@ -75,19 +83,16 @@ export default function InternalTenantDetail({
   const supabase = createClient();
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
-  // Nivel del staff actual (para mostrar/ocultar impersonation).
-  const { data: myUser } = useQuery({
-    queryKey: ["my-user"],
-    queryFn: () => createClient().auth.getUser().then((r) => r.data.user),
-    staleTime: 5 * 60 * 1000,
-  });
-  const myLevel =
-    (myUser?.app_metadata as { internal_level?: string } | undefined)
-      ?.internal_level ?? null;
+  // Nivel del staff actual (para mostrar/ocultar impersonation y acciones).
+  const { level: myLevel } = useMyStaffLevel();
   const canImpersonate = myLevel === "super_admin" || myLevel === "admin";
+  const lcState = tenant
+    ? lifecycleState({ status: tenant.status, deletedAt: tenant.deletedAt })
+    : "operating";
 
   // Impersonation.
   const impersonate = useImpersonateTenant();
+  const [impersonateAsk, setImpersonateAsk] = useState(false);
   const [impersonateResult, setImpersonateResult] = useState<{
     actionLink: string;
     ownerEmail: string;
@@ -97,14 +102,6 @@ export default function InternalTenantDetail({
   const { data: tenantAddons } = useTenantAddons(params.id);
   const hasAiAddon = tenantAddons?.has(AI_ASSISTANT_ADDON_KEY) ?? false;
   const giftAi = useGiftAiAddon(params.id);
-
-  // Audit log del tenant (últimas 30 acciones).
-  const { data: auditEntries } = useInternalAudit({ tenantId: params.id });
-  const [auditTab, setAuditTab] = useState<"all" | "billing">("all");
-  const BILLING_TYPES = new Set(["subscription", "trial", "billing_record", "billing", "impersonation"]);
-  const visibleAudit = auditTab === "billing"
-    ? (auditEntries ?? []).filter((e) => BILLING_TYPES.has(e.entity_type))
-    : (auditEntries ?? []);
 
   // Genera el link de suscripción (preapproval) de Mercado Pago para el tenant.
   const checkout = useMutation({
@@ -134,7 +131,9 @@ export default function InternalTenantDetail({
     p.then(() => toast({ title: ok, variant: "success" })).catch((e) =>
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : undefined,
+        description: lifecycleErrorMessage(
+          e instanceof Error ? e.message : (e as { message?: string } | null)?.message,
+        ),
         variant: "error",
       }),
     );
@@ -160,10 +159,14 @@ export default function InternalTenantDetail({
           {tenant?.name ?? "…"}
         </Display>
         {(() => {
-          const st = tenant?.subStatus ?? tenant?.status;
+          const st = tenant?.deletedAt
+            ? "deleted"
+            : tenant?.subStatus ?? tenant?.status;
           return st ? (
             <span className="rounded-md bg-ninja-flame/12 px-2.5 py-1 text-xs font-semibold text-ninja-flameSoft">
-              {STATUSES.find((s) => s.key === st)?.name ?? st}
+              {st === "deleted"
+                ? "Dado de baja"
+                : STATUSES.find((s) => s.key === st)?.name ?? st}
             </span>
           ) : null;
         })()}
@@ -199,7 +202,21 @@ export default function InternalTenantDetail({
         )}
       </div>
 
-      <div className="mt-6">
+      {tenant && (
+        <div className="mt-6">
+          <TenantLifecycleCard
+            tenant={{
+              id: tenant.id,
+              slug: tenant.slug,
+              status: tenant.status,
+              deletedAt: tenant.deletedAt,
+            }}
+            level={myLevel}
+          />
+        </div>
+      )}
+
+      <div className="mt-4">
         <PlanCard tenantId={params.id} />
       </div>
 
@@ -212,16 +229,31 @@ export default function InternalTenantDetail({
             <select
               className={selectCls}
               value={tenant?.subStatus ?? tenant?.status ?? "trial"}
+              disabled={lcState !== "operating"}
               onChange={(e) =>
                 wrap(setStatus.mutateAsync(e.target.value), "Estado actualizado")
               }
             >
-              {STATUSES.map((s) => (
+              {lcState !== "operating" && (
+                <option
+                  value={tenant?.subStatus ?? tenant?.status ?? ""}
+                  className="bg-popover text-popover-foreground"
+                >
+                  {STATUSES.find((s) => s.key === (tenant?.subStatus ?? tenant?.status))?.name ??
+                    "Fuera de operación"}
+                </option>
+              )}
+              {EDITABLE_STATUSES.map((s) => (
                 <option key={s.key} value={s.key} className="bg-popover text-popover-foreground">
                   {s.name}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {lcState === "operating"
+                ? "Suspender, cancelar o reactivar se hace desde Ciclo de vida (pide motivo)."
+                : "Reactivá el negocio desde Ciclo de vida para cambiar el estado."}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -400,17 +432,7 @@ export default function InternalTenantDetail({
               {!impersonateResult ? (
                 <Button
                   disabled={impersonate.isPending}
-                  onClick={() =>
-                    impersonate.mutate(params.id, {
-                      onSuccess: (res) => setImpersonateResult(res),
-                      onError: (e) =>
-                        toast({
-                          title: "Error al generar link",
-                          description: e instanceof Error ? e.message : undefined,
-                          variant: "error",
-                        }),
-                    })
-                  }
+                  onClick={() => setImpersonateAsk(true)}
                 >
                   {impersonate.isPending ? "Generando…" : "Generar magic link"}
                 </Button>
@@ -451,6 +473,32 @@ export default function InternalTenantDetail({
           </Card>
         </>
       )}
+
+      <ReasonDialog
+        open={impersonateAsk}
+        onOpenChange={setImpersonateAsk}
+        title="Acceder como este negocio"
+        description="Se genera un link de un solo uso para el dueño (vence en aproximadamente 1 hora). El motivo queda en la auditoría del negocio."
+        confirmLabel="Generar link"
+        loading={impersonate.isPending}
+        onConfirm={(reason) =>
+          impersonate.mutate(
+            { tenantId: params.id, reason },
+            {
+              onSuccess: (res) => {
+                setImpersonateResult(res);
+                setImpersonateAsk(false);
+              },
+              onError: (e) =>
+                toast({
+                  title: "Error al generar link",
+                  description: e instanceof Error ? e.message : undefined,
+                  variant: "error",
+                }),
+            },
+          )
+        }
+      />
 
       <Heading className="mt-8" as="h2">
         Notas internas
@@ -568,56 +616,11 @@ export default function InternalTenantDetail({
         </CardContent>
       </Card>
 
-      {/* ── Ficha 360: actividad reciente ────────────────────────────────── */}
+      {/* ── Auditoría del negocio (timeline filtrable, ADR-073) ───────────── */}
       <Heading className="mt-8" as="h2">
-        Actividad reciente
+        Auditoría
       </Heading>
-      <Card className="mt-3">
-        {/* tabs (segmentado) */}
-        <div className="border-b border-border p-3">
-          <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
-            {(["all", "billing"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setAuditTab(tab)}
-                className={
-                  auditTab === tab
-                    ? "rounded-md bg-ninja-flame/15 px-3 py-1.5 text-sm font-semibold text-ninja-flameSoft transition"
-                    : "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:text-foreground"
-                }
-              >
-                {tab === "all" ? "Todo" : "Plan & facturación"}
-              </button>
-            ))}
-          </div>
-        </div>
-        <CardContent className="p-0">
-          {visibleAudit.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-muted-foreground">
-              Sin registros de actividad.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {visibleAudit.slice(0, 30).map((entry) => (
-                <li key={entry.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                    {entry.entity_type}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                    {entry.action.replace(/_/g, " ")}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {entry.actorName ?? entry.actorEmail ?? "sistema"}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatRelative(entry.created_at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <TenantAuditTimeline tenantId={params.id} />
     </>
   );
 }

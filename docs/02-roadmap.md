@@ -342,7 +342,7 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [x] Toda acción crítica en `audit_logs`; matriz de permisos versionada en [`06-permissions-roles.md`](./06-permissions-roles.md). — *`staff_level_set`, `user_suspended`/`user_reactivated` auditados; matriz actualizada con la fila de suspensión y el estado de implementación.*
   - [x] *Criterio:* un super-admin suma a otra persona como admin de NinjaSoft en una acción; un admin no puede tocar staff. — *Enforced en `staff_admin` (set_level solo super; set_active sobre staff solo super).*
 
-- [~] **H11c — Consola internal completa + login independiente.** — *KPIs SaaS + buscador de tenants (2026-06-04); login interno diferenciado + buscador global multi-campo (2026-06-05). Faltan: ficha 360, gestión de miembros desde internal, impersonation.*
+- [~] **H11c — Consola internal completa + login independiente.** *KPIs SaaS + buscador de tenants (2026-06-04); login interno diferenciado + buscador global multi-campo (2026-06-05); alta manual, ciclo de vida con motivo y timeline de auditoría por negocio (2026-10-13, ADR-073). Faltan: ficha 360 completa, gestión de miembros desde internal, banner de impersonation.*
   - [x] Entrar directo a `/internal` redirige a `/internal/tenants`; si no hay sesión, login conserva destino interno (`/login?next=/internal/tenants`).
   - [x] Dashboard con 8 KPIs SaaS (total, trial, activos, con problemas, nuevos 7/30d, conversión, MRR), breakdown por plan, alerta de negocios con problemas, quick links y tabla con buscador. Componente `TenantSearchTable`.
   - [x] Pantalla de acceso interno con copy y layout diferenciado de POS/tenant. — *`/login-internal` (2026-06-05): card propia "Staff NinjaSoft / Panel interno" con aviso de auditoría, sin registro, link cruzado al login de clientes; al entrar va a `/internal/tenants`.*
@@ -351,8 +351,11 @@ Objetivo: que NinjaSoft opere el SaaS completo sin SQL, con control fino de usua
   - [ ] Ficha 360 del tenant: datos legales/comerciales, owners, usuarios, sucursales, cajas, ventas, módulos activos, flags, salud, últimos errores y actividad.
   - [ ] Desde internal se puede invitar usuarios al tenant, reenviar invitación, cambiar rol, suspender/reactivar miembro y resetear acceso con motivo.
   - [ ] Desde internal se puede convertir un usuario existente en staff NinjaSoft y asignarle rol/nivel interno según permiso.
-  - [ ] Impersonation/abrir contexto de tenant solo con motivo, duración limitada, banner visible y auditoría.
-  - [ ] Acciones peligrosas requieren confirmación fuerte, motivo y quedan en `audit_logs`.
+  - [~] Impersonation/abrir contexto de tenant solo con motivo, duración limitada, banner visible y auditoría. *Motivo obligatorio y auditado antes de devolver el link de un uso (ADR-073, 2026-10-13). Falta banner visible y duración configurable.*
+  - [x] Acciones peligrosas requieren confirmación fuerte, motivo y quedan en `audit_logs`. *ADR-073: suspender, reactivar y dar de baja con motivo obligatorio; la baja pide escribir el identificador y es sólo super admin (`internal_tenant_lifecycle`).*
+  - [x] **Alta manual de negocio desde internal** (nombre, rubro, dueño por email con invitación, plan y trial). *ADR-073: Edge `internal_create_tenant` + RPC `internal_create_tenant` (service_role), auditado.*
+  - [x] **Suspender / reactivar / baja lógica** con motivo y efecto real en el servidor. *ADR-073: `assert_account_active` bloquea venta, caja y devoluciones del negocio suspendido, cancelado o con `deleted_at`; nunca `DELETE`.*
+  - [x] **Timeline de auditoría por negocio** legible y filtrable (categoría, texto, fechas, motivo, antes/después). *ADR-073, `TenantAuditTimeline`.*
   - [ ] *Criterio:* un super-admin entra por `/internal` sin pasar por POS, encuentra un tenant, invita un owner/cajero, cambia plan, activa módulos y promueve un usuario a admin interno, todo auditado.
 
 - [x] **H11b — Miembros del negocio (lo gestiona el DUEÑO en `/dashboard-team`).** — *Hecho (PR #25, 2026-05-30).*

@@ -226,19 +226,21 @@ export async function closeTicket(page: Page): Promise<string | null> {
 export async function voidSale(page: Page, saleNumber: string | null, reason: string) {
   await gotoClean(page, "/ventas");
   if (saleNumber) {
-    await page.getByPlaceholder("Buscar por N°, ticket o cliente…").fill(saleNumber);
+    await page.getByPlaceholder("N°, ticket o cliente").fill(saleNumber);
   }
-  const row = page
-    .getByRole("row")
-    .filter({ hasText: "Completada" })
-    .filter({ has: page.getByTitle("Anular") })
+  // Ventas rediseñada: cada venta es un ítem de lista; "Anular" vive en "Más acciones".
+  const card = page
+    .getByRole("listitem")
+    .filter({ has: page.locator('[aria-label^="Venta "][aria-label$=", Completada"]') })
     .first();
-  await expect(row).toBeVisible();
-  await row.getByTitle("Anular").click();
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Más acciones" }).click();
+  await page.getByRole("menuitem", { name: /Anular venta/ }).click();
   const confirm = dialog(page, /^Anular venta/);
   await confirm.getByLabel("Motivo de anulación").fill(reason);
   await confirm.getByRole("button", { name: "Anular venta" }).click();
-  await expect(page.getByText(/Venta #\d+ anulada/).first()).toBeVisible();
+  // El número sale con el formato del negocio (p.ej. "63" o "NJ-00000063").
+  await expect(page.getByText(/Venta \S+ anulada/).first()).toBeVisible();
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,8 +10,10 @@ import { pickupFailureMessage, reservationErrorMessage, type StockReservation } 
 import { useReservationMutations } from "@/modules/stock/reservations";
 
 // Entrega de una reserva (retiro en tienda). El cliente presenta el código
-// o su documento; el cajero cobra antes en el POS y carga acá el número de
-// esa venta. Sin código ni documento, sólo un dueño o encargado, con motivo.
+// o su documento (sin ellos, sólo un dueño o encargado, con motivo). Lo
+// normal (ADR-096): validar y cobrar en el POS con la reserva cargada; la
+// venta la entrega en la misma transacción. Si ya se cobró aparte, se carga
+// el número de esa venta.
 export function ReservationDeliverModal({
   reservation,
   onOpenChange,
@@ -21,6 +24,7 @@ export function ReservationDeliverModal({
   canOverride: boolean;
 }) {
   const { toast } = useToast();
+  const router = useRouter();
   const m = useReservationMutations();
   const [code, setCode] = useState("");
   const [doc, setDoc] = useState("");
@@ -41,6 +45,26 @@ export function ReservationDeliverModal({
   const saleNumber = Number(sale.replace(/\D/g, ""));
   const identity = useOverride ? override.trim().length >= 3 : code.trim().length > 0 || doc.trim().length > 0;
   const valid = identity && saleNumber > 0;
+
+  async function chargeInPos() {
+    if (!reservation || !identity) return;
+    try {
+      const r = await m.verify.mutateAsync({
+        id: reservation.id,
+        code: useOverride ? "" : code,
+        doc: useOverride ? "" : doc,
+        overrideReason: useOverride ? override : "",
+      });
+      if (!r.ok) {
+        setFailure(pickupFailureMessage(r.error ?? "", r.attempts_left ?? 0));
+        return;
+      }
+      onOpenChange(false);
+      router.push(`/pos?reservation=${reservation.id}`);
+    } catch (e) {
+      toast({ title: "No se pudo validar el retiro", description: reservationErrorMessage(e), variant: "error" });
+    }
+  }
 
   async function submit() {
     if (!reservation || !valid) return;
@@ -68,14 +92,17 @@ export function ReservationDeliverModal({
       open={reservation != null}
       onOpenChange={onOpenChange}
       title={reservation ? `Entregar reserva #${reservation.number}` : "Entregar reserva"}
-      description="Primero cobrá los productos en el POS de esta sucursal y cargá el número de esa venta."
+      description="Validá al cliente y cobrá en el POS de esta sucursal: la venta entrega la reserva. Si ya la cobraste, cargá el número de esa venta."
       footer={
         <>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={submit} disabled={!valid} loading={m.deliver.isPending}>
-            Entregar
+          <Button variant="secondary" onClick={submit} disabled={!valid} loading={m.deliver.isPending}>
+            Entregar con esa venta
+          </Button>
+          <Button onClick={chargeInPos} disabled={!identity || saleNumber > 0} loading={m.verify.isPending}>
+            Cobrar en el POS
           </Button>
         </>
       }
@@ -122,7 +149,7 @@ export function ReservationDeliverModal({
             </button>
           )}
           <Input
-            label="Número de la venta"
+            label="Número de la venta (sólo si ya se cobró)"
             inputMode="numeric"
             value={sale}
             onChange={(e) => setSale(e.target.value)}

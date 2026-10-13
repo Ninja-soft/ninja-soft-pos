@@ -186,6 +186,11 @@ export interface CheckoutSheetProps {
   voucherRules?: CardVoucherRules | null;
   warrantyPlans: CheckoutWarrantyPlan[];
   initialWarrantyId?: string;
+  /**
+   * ADR-096: líneas del carrito que puede cubrir la garantía extendida
+   * (garantía de fábrica > 0). La garantía queda enlazada a la elegida.
+   */
+  warrantyTargets?: { lineId: string; label: string }[];
   professionals: CheckoutProfessional[];
   voucherRequired: boolean;
   storeCreditBalance: number;
@@ -247,6 +252,7 @@ const SPLITS = [
 ];
 let keySeq = 0;
 const NO_ACQUIRERS: AcquirerDef[] = [];
+const NO_TARGETS: { lineId: string; label: string }[] = [];
 
 export function CheckoutSheet(props: CheckoutSheetProps) {
   const {
@@ -270,6 +276,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     voucherRules = null,
     warrantyPlans,
     initialWarrantyId = "",
+    warrantyTargets = NO_TARGETS,
     professionals,
     voucherRequired,
     storeCreditBalance,
@@ -337,6 +344,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [tipPct, setTipPct] = useState<number | null>(null);
   const [tipCustom, setTipCustom] = useState("");
   const [warrantyId, setWarrantyId] = useState("");
+  const [warrantyLineId, setWarrantyLineId] = useState("");
   const [professionalId, setProfessionalId] = useState("");
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [electronic, setElectronic] = useState<{ tender: ResolvedTender; amount: number } | null>(null);
@@ -416,6 +424,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setTipPct(null);
     setTipCustom("");
     setWarrantyId(initialWarrantyId);
+    setWarrantyLineId("");
     setProfessionalId("");
     setExtrasOpen(Boolean(initialWarrantyId));
     setElectronic(null);
@@ -712,7 +721,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const finalPromo = promoFor(ls, null, t);
     const tt = totalsFor(ls, finalPromo, t);
     const extras: PaymentExtra[] = [];
-    if (warranty > 0 && wplan) extras.push({ kind: "warranty", name: `Garantía ${wplan.label}`, amount: warranty });
+    if (warranty > 0 && wplan) {
+      // ADR-096: la garantía queda enlazada al producto que cubre.
+      const target = warrantyTargets.find((t) => t.lineId === warrantyLineId) ?? warrantyTargets[0];
+      extras.push({
+        kind: "warranty",
+        name: `Garantía ${wplan.label}`,
+        amount: warranty,
+        planId: wplan.id,
+        ...(target ? { forLineId: target.lineId } : {}),
+      });
+    }
     for (const l of ls) {
       for (const s of l.surchargeItems) {
         if (s.amount > 0) extras.push({ kind: "surcharge", name: s.name, amount: s.amount });
@@ -1559,6 +1578,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     ...warrantyPlans.map((w) => ({ value: w.id, label: `${w.label} · ${w.months} meses` })),
                   ]}
                 />
+                {warrantyId && warrantyTargets.length > 1 && (
+                  <div className="mt-2">
+                    <p className={cn(LABEL, "mb-1.5")}>Cubre a</p>
+                    <Segmented
+                      size="sm"
+                      aria-label="Producto que cubre la garantía"
+                      value={warrantyTargets.some((t) => t.lineId === warrantyLineId) ? warrantyLineId : warrantyTargets[0]!.lineId}
+                      onChange={setWarrantyLineId}
+                      options={warrantyTargets.map((t) => ({ value: t.lineId, label: t.label }))}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {professionals.length > 0 && (

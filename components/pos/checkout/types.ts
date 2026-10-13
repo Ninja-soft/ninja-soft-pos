@@ -12,6 +12,9 @@ export interface PaymentExtra {
   method?: string;
   /** professionals.id (kind='professional'). */
   id?: string;
+  /** ADR-096 (kind='warranty'): plan elegido y línea del carrito que cubre. */
+  planId?: string;
+  forLineId?: string;
 }
 
 /** Ítem del carrito para dividir "por ítem". */

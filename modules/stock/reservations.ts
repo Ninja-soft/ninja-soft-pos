@@ -38,6 +38,18 @@ export const reservationsApi = {
     }));
   },
 
+  get: async (id: string): Promise<StockReservation | null> => {
+    const { data, error } = await createClient()
+      .from("stock_reservations" as never)
+      .select(SELECT)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const r = data as unknown as StockReservation;
+    return { ...r, items: [...(r.items ?? [])].sort((a, b) => a.sort - b.sort) };
+  },
+
   availability: async (
     storeId: string,
     productIds: string[],
@@ -65,6 +77,24 @@ export interface DeliverResult {
   sale_id?: string;
 }
 
+/** ADR-096: resultado de validar la identidad para cobrar la reserva en el POS. */
+export interface PickupVerifyResult {
+  ok: boolean;
+  error?: string;
+  attempts_left?: number;
+  id?: string;
+  number?: number;
+}
+
+export function useStockReservation(id: string | null) {
+  return useQuery({
+    queryKey: ["stock-reservation", id],
+    enabled: Boolean(id),
+    queryFn: () => reservationsApi.get(id!),
+    staleTime: 15_000,
+  });
+}
+
 export function useStockReservations(storeId: string | null, open: boolean, enabled = true) {
   return useQuery({
     queryKey: ["stock-reservations", storeId, open],
@@ -87,6 +117,7 @@ export function useReservationMutations() {
   const qc = useQueryClient();
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["stock-reservations"] });
+    qc.invalidateQueries({ queryKey: ["stock-reservation"] });
     qc.invalidateQueries({ queryKey: ["stock-reservation-availability"] });
     qc.invalidateQueries({ queryKey: ["commerce-cockpit"] });
   };
@@ -125,11 +156,24 @@ export function useReservationMutations() {
     onSettled: invalidate,
   });
 
+  // ADR-096: valida código, documento o motivo del encargado y deja la
+  // reserva lista para cobrarse en el POS (create_sale la entrega).
+  const verify = useMutation({
+    mutationFn: (i: { id: string; code: string; doc: string; overrideReason: string }) =>
+      rpc<PickupVerifyResult>("stock_reservation_pickup_verify", {
+        p_id: i.id,
+        p_code: i.code.trim() || null,
+        p_customer_doc: i.doc.trim() || null,
+        p_override_reason: i.overrideReason.trim() || null,
+      }),
+    onSettled: invalidate,
+  });
+
   const cancel = useMutation({
     mutationFn: (i: { id: string; reason: string }) =>
       rpc<void>("stock_reservation_cancel", { p_id: i.id, p_reason: i.reason }),
     onSuccess: invalidate,
   });
 
-  return { create, prepare, deliver, cancel };
+  return { create, prepare, deliver, verify, cancel };
 }

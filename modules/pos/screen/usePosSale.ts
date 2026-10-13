@@ -50,6 +50,17 @@ export function saleErrorTitle(msg: string): string {
   if (msg.includes("deposit_mismatch")) return "La seña del turno cambió: cerrá el cobro y volvé a abrirlo";
   if (msg.includes("appointment_already_charged")) return "Este turno ya se cobró";
   if (msg.includes("appointment_not_active")) return "El turno está cancelado: no se puede cobrar";
+  // ADR-096: reservas de stock y garantía enlazada.
+  if (msg.includes("insufficient_stock_reserved"))
+    return "Ese stock está reservado para otro cliente: no alcanza lo disponible";
+  if (msg.includes("reservation_not_verified")) return "Validá de nuevo al cliente en Reservas para cobrar el retiro";
+  if (msg.includes("reservation_items_mismatch")) return "La venta tiene que incluir todos los productos de la reserva";
+  if (msg.includes("reservation_wrong_store")) return "La reserva es de otra sucursal: cobrala en esa caja";
+  if (msg.includes("reservation_expired")) return "La reserva venció";
+  if (msg.includes("reservation_not_open") || msg.includes("reservation_not_found"))
+    return "La reserva ya no está vigente";
+  if (msg.includes("feature_not_in_plan: reservas_stock")) return "Tu plan no incluye reservas de stock";
+  if (msg.includes("warranty_link_invalid")) return "La garantía extendida no quedó enlazada a un producto: volvé a elegirla";
   if (msg.includes("payment_method_disabled_in_store"))
     return "Ese medio de pago está apagado en esta sucursal o caja";
   // ADR-055: transferencias.
@@ -134,6 +145,7 @@ export function cartToSaleLines(lines: CartLine[]): SaleArgsLine[] {
     priceOverride: l.priceOverride ?? false,
     overrideReason: l.overrideReason ?? null,
     listPrice: l.listPrice ?? null,
+    lineId: l.lineId,
   }));
 }
 
@@ -144,6 +156,8 @@ export function usePosSale(ctx: {
   tableOrderId: string | null;
   deliveryOrderId: string | null;
   appointmentId: string | null;
+  /** ADR-096: reserva que se entrega con esta venta. */
+  reservationId?: string | null;
   salePromo: (p?: Promo | null) => Promo | null;
   couponId: string | null;
   /** hadCash: la venta tuvo un cobro en efectivo (cajón, ADR-063). */
@@ -176,9 +190,11 @@ export function usePosSale(ctx: {
       const { items, extras: saleExtras } = buildSaleItemsAndExtras(cartToSaleLines(ctx.lines), extras);
       // ADR-088: el turno viaja en la venta. create_sale lo enlaza en la misma
       // transacción y aplica su seña (pago 'sena'), sin doble cobro.
-      const allExtras = ctx.appointmentId
+      const withAppt = ctx.appointmentId
         ? [...saleExtras, { kind: "appointment", id: ctx.appointmentId }]
         : saleExtras;
+      // ADR-096: la venta entrega la reserva en la misma transacción.
+      const allExtras = ctx.reservationId ? [...withAppt, { kind: "reservation", id: ctx.reservationId }] : withAppt;
       const res = await sale.mutateAsync({
         items: items as never,
         payments: payments as never,
@@ -267,7 +283,9 @@ export function usePosSale(ctx: {
       payments,
       extraKinds: saleExtras.map((e) => e.kind),
       anyPriceOverride: ctx.lines.some((l) => l.priceOverride),
-      hasServerOrigin: Boolean(ctx.tableOrderId || ctx.deliveryOrderId || ctx.couponId || ctx.appointmentId),
+      hasServerOrigin: Boolean(
+        ctx.tableOrderId || ctx.deliveryOrderId || ctx.couponId || ctx.appointmentId || ctx.reservationId,
+      ),
       payload: {
         items: items as unknown as Record<string, unknown>[],
         payments: toSalePayments(payments as never),

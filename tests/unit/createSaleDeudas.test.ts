@@ -73,12 +73,16 @@ describe("seña de turnos: helpers", () => {
 
 describe("migración 20261108200000", () => {
   // ADR-093 (20261108600000) recrea las dos copiando esta definición y sólo
-  // agrega tenant_id explícito en los inserts: es la única posterior permitida.
+  // agrega tenant_id explícito en los inserts. ADR-096 (20261109500000) recrea
+  // create_sale copiando la de ADR-093 y sólo agrega bloques marcados
+  // (reservas de stock y garantía enlazada). Son las únicas posteriores.
   const ADR093 = "20261108600000_perf_f4_create_sale_tenant.sql";
+  const ADR096 = "20261109500000_create_sale_reservas_garantia.sql";
   const later = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093)
+    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093 && f !== ADR096)
     .map((f) => readFileSync(join(DIR, f), "utf8"));
   const adr093 = readFileSync(join(DIR, ADR093), "utf8");
+  const adr096 = readFileSync(join(DIR, ADR096), "utf8");
   const body = (s: string, fn: RegExp) => {
     const i = s.search(fn);
     const end = s.slice(i).search(/\n\$(function)?\$;/);
@@ -92,12 +96,23 @@ describe("migración 20261108200000", () => {
       .replace(/\btenant_id, /g, "")
       .replace(/\bv_tenant, (?=v_|p_)/g, "")
       .replace(/\s+/g, " ");
+  // Quita lo agregado por ADR-096: bloques entre marcas, líneas marcadas y el
+  // `returning id` del insert de sale_items.
+  const strip096 = (s: string) =>
+    s
+      .replace(/\)\n\s*returning id into v_line_id;[^\n]*/g, ");")
+      .replace(/[ \t]*-- ADR-096 >>>[\s\S]*?-- <<< ADR-096\n/g, "")
+      .split("\n")
+      .filter((l) => !l.includes("ADR-096"))
+      .join("\n")
+      .replace(/\s+/g, " ");
 
-  it("es la última definición de create_sale y de return_sale_v2 (salvo la copia de ADR-093)", () => {
+  it("es la última definición de create_sale y de return_sale_v2 (salvo las copias de ADR-093 y ADR-096)", () => {
     for (const s of later) {
       expect(s).not.toMatch(/function (public\.)?create_sale\(/);
       expect(s).not.toMatch(/function (public\.)?return_sale_v2\(/);
     }
+    expect(adr096).not.toMatch(/function (public\.)?return_sale_v2\(/);
     expect(sql).toMatch(/create or replace function public\.create_sale\(p_items jsonb/);
     expect(sql).toMatch(/create or replace function return_sale_v2\(/);
   });
@@ -109,6 +124,27 @@ describe("migración 20261108200000", () => {
       expect(b.length).toBeGreaterThan(1000);
       expect(b).toBe(a);
     }
+  });
+
+  it("ADR-096 copia create_sale de ADR-093 y sólo agrega bloques marcados", () => {
+    const fn = /create or replace function public\.create_sale\(/;
+    const a = body(adr093, fn).replace(/\s+/g, " ");
+    const raw = body(adr096, fn);
+    const b = strip096(raw);
+    expect(b.length).toBeGreaterThan(1000);
+    expect(b).toBe(a);
+    // Lo agregado: reservas y garantía enlazada.
+    expect(raw).toContain("insufficient_stock_reserved");
+    expect(raw).toContain("negative_stock_reserved");
+    expect(raw).toContain("'stock_reservation_delivered'");
+    expect(raw).toContain("reservation_items_mismatch");
+    expect(raw).toContain("reservation_not_verified");
+    expect(raw).toMatch(/tenant_has_feature_for\(v_tenant, 'reservas_stock'\)/);
+    expect(raw).toMatch(/pg_advisory_xact_lock\(hashtext\('stock_reservation:' \|\| v_store::text\)\)/);
+    expect(raw).toContain("warranty_link_invalid");
+    expect(raw).toMatch(/warranty_for_item_id = v_line_ids\[v_wl_for \+ 1\]/);
+    // tenant_id explícito en todo insert (P8).
+    for (const ins of raw.match(/insert into \w+ \([^)]*\)/g) ?? []) expect(ins, ins).toContain("tenant_id");
   });
 
   it("conserva los bloques de impuestos, promociones, offline y precio en el servidor", () => {

@@ -157,6 +157,7 @@ const ERRORS: [RegExp, string][] = [
   [/invalid_customer_doc/, "El documento tiene que tener entre 6 y 11 números."],
   [/customer_name_required/, "Cargá el nombre del cliente."],
   [/reservation_expired/, "La reserva venció."],
+  [/reservation_not_found/, "No encontramos la reserva."],
   [/invalid_status/, "La reserva ya no está vigente."],
   [/override_requires_manager/, "Entregar sin código pide un dueño o encargado."],
   [/sale_required/, "Cargá el número de la venta con la que se cobró."],

@@ -92,6 +92,10 @@ export interface SaleItemInput {
   price_override?: boolean;
   override_reason?: string;
   list_price?: number;
+  // ADR-096: línea de garantía extendida enlazada (plan e índice en p_items
+  // de la línea que cubre).
+  warranty_plan_id?: string;
+  warranty_for?: number;
 }
 export interface CreateSaleResult {
   sale_id: string;
@@ -124,8 +128,11 @@ export interface CreateSaleResult {
 //   * 'appointment' (cobro de un turno · ADR-088): `id` = appointments.id.
 //     create_sale enlaza el turno en la misma transacción y exige que la seña
 //     disponible venga como pago 'sena' (sin doble cobro).
+//   * 'reservation' (retiro de una reserva de stock · ADR-096): `id` =
+//     stock_reservations.id, con la identidad ya validada. create_sale exige
+//     que la venta cubra sus renglones y la entrega en la misma transacción.
 export interface SaleExtraInput {
-  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session" | "appointment";
+  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session" | "appointment" | "reservation";
   amount?: number;
   method?: string;
   id?: string;

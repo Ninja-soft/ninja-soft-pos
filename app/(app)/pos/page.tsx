@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, Hourglass, Utensils } from "lucide-react";
+import { Bike, CalendarDays, Hourglass, PackageCheck, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -684,6 +684,18 @@ function PosPageInner() {
 
   // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
   const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
+  // ADR-096: la garantía extendida se enlaza a una de estas líneas (con serie primero).
+  const warrantyTargets = useMemo(
+    () =>
+      lines
+        .filter((l) => l.productId && (l.warrantyMonths ?? 0) > 0)
+        .sort((a, b) => Number(Boolean(b.serial)) - Number(Boolean(a.serial)))
+        .map((l) => ({
+          lineId: l.lineId,
+          label: `${l.name}${l.variantLabel ? ` (${l.variantLabel})` : ""}${l.serial ? ` · ${l.serial}` : ""}`,
+        })),
+    [lines],
+  );
   useEffect(() => {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
@@ -941,7 +953,9 @@ function PosPageInner() {
           ? PARK_BLOCK_COPY.table_or_delivery
           : origins.appointmentId
             ? PARK_BLOCK_COPY.appointment
-            : null;
+            : origins.reservationId
+              ? "Los retiros de reservas se cobran en el momento."
+              : null;
   const parker = usePosPark({
     lines,
     discountTotal,
@@ -1005,6 +1019,7 @@ function PosPageInner() {
     tableOrderId: origins.tableOrderId,
     deliveryOrderId: origins.deliveryOrderId,
     appointmentId: origins.appointmentId,
+    reservationId: origins.reservationId,
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
     onSuccess: ({ saleId, change, hadCash }) => {
@@ -1325,6 +1340,15 @@ function PosPageInner() {
           onExit={origins.exitAppointmentMode}
         />
       )}
+      {origins.reservation && (
+        <ModeBanner
+          icon={<PackageCheck size={18} />}
+          title={`Retiro de la reserva #${origins.reservation.number}`}
+          text={`Cliente: ${origins.reservation.customer_name}. Cobrá los productos reservados: al confirmar, la reserva queda entregada con esta venta.`}
+          exitLabel="Cancelar retiro"
+          onExit={origins.exitReservationMode}
+        />
+      )}
       {origins.tableActive && (
         <ModeBanner
           icon={<Utensils size={18} />}
@@ -1576,6 +1600,7 @@ function PosPageInner() {
           prefs={layout.payments}
           initialTenderId={checkoutTender}
           initialWarrantyId={offeredWarrantyId}
+          warrantyTargets={warrantyTargets}
           storeCreditBalance={scBalance ?? 0}
           splitItems={pricing.splitItems}
           tipPresets={layout.tipPresets}

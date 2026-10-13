@@ -1,4 +1,5 @@
 // Venta ficticia para el preview del editor de tickets (H9b).
+import type { TicketFiscal } from "@/lib/arca/ticket";
 export interface SampleBrand {
   logo_url: string | null;
   legal_name: string | null;
@@ -33,6 +34,11 @@ export interface SampleTicketData {
      * y otros impuestos nacionales indirectos (internos) en el comprobante B.
      */
     transparency?: { iva: number; others: number } | null;
+    /**
+     * F3 · ADR-072: factura electrónica de la venta (tipo, número, CAE o CAEA,
+     * vencimiento y QR fiscal) o el aviso de pendiente de autorización.
+     */
+    fiscal?: TicketFiscal | null;
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];

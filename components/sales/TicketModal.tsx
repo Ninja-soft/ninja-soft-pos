@@ -37,6 +37,9 @@ import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
 import { useSaleTaxLines } from "@/modules/tax/hooks";
 import { saleTaxTicket } from "@/lib/tax/ticket";
+import { useSaleFiscalDocuments } from "@/modules/arca/hooks";
+import { ticketFiscal } from "@/lib/arca/ticket";
+import { FiscalStatus } from "@/components/arca/FiscalStatus";
 
 export type DetailTab = "ticket" | "cobros";
 const TABS: { value: DetailTab; label: string }[] = [
@@ -57,6 +60,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
   const { data, isLoading } = useSaleDetail(saleId, open);
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
+  // F3 · ADR-072: factura electrónica de la venta (CAE + QR en el ticket).
+  const fiscalDocs = useSaleFiscalDocuments(open ? saleId : null);
+  const saleFiscalDoc = (fiscalDocs.data ?? []).find((d) => d.origin === "sale") ?? null;
   // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
   const { data: brand } = useTicketBranding(
     open,
@@ -213,6 +219,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           total: data.sale.total,
           status: data.sale.status,
           ...saleTaxTicket(data.sale, taxLines.data ?? []),
+          fiscal: ticketFiscal(saleFiscalDoc),
         },
         items: data.items.map((it) => ({
           id: it.id,
@@ -339,6 +346,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           )}
 
           <div className="no-print mt-4 space-y-3">
+            {/* Estado fiscal (ADR-072): factura, CAE, QR y reproceso. */}
+            <FiscalStatus saleId={data.sale.id} docs={fiscalDocs.data ?? []} saleStatus={data.sale.status} />
             {/* Estado de envío + hint SMTP + formulario inline (bloque propio). */}
             <SendReceiptEmail
               saleId={data.sale.id}

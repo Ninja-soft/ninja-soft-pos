@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   CreditCard,
+  FileCheck2,
   LayoutTemplate,
   Mail,
   MonitorSmartphone,
@@ -62,7 +63,8 @@ export type SettingsSectionKey =
   | "garantias"
   | "impuestos"
   | "promociones"
-  | "nubceo";
+  | "nubceo"
+  | "facturacion";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -337,6 +339,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         keywords: "ticket comprobante plantilla diseño",
       },
       {
+        key: "facturacion",
+        label: "Facturación electrónica",
+        title: "Facturación electrónica ARCA",
+        description:
+          "Facturas A, B y C con CAE de ARCA, paso a paso: certificado, punto de venta, prueba y paso a real.",
+        icon: FileCheck2,
+        feature: "facturacion_afip",
+        keywords: "arca afip cae caea factura electronica certificado punto de venta homologacion produccion contingencia wsfe qr",
+      },
+      {
         key: "impresion",
         label: "Impresión",
         title: "Impresión",
@@ -414,6 +426,9 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = SETTINGS_GROUPS.flatMap(
 /** Nombres alternativos aceptados en `?seccion=`. */
 export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cupones: "promociones",
+  arca: "facturacion",
+  afip: "facturacion",
+  "factura-electronica": "facturacion",
   diagnostico: "hardware",
   pantalla: "pantalla-cliente",
   cuenta: "cuenta-corriente",

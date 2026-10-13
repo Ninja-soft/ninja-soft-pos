@@ -151,6 +151,12 @@ const TaxSettings = dynamic(
   { loading },
 );
 
+// Facturación electrónica ARCA (F3 · ADR-072).
+const ArcaSettings = dynamic(
+  () => import("@/components/arca/ArcaSettings").then((m) => m.ArcaSettings),
+  { loading },
+);
+
 // Integraciones (ADR-062).
 const NubceoSettings = dynamic(
   () => import("@/components/integrations/nubceo/NubceoSettings").then((m) => m.NubceoSettings),
@@ -365,6 +371,9 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.
     case "nubceo":
       return <NubceoSettings />;
+    // Facturación electrónica ARCA (ADR-072): dueño o encargado.
+    case "facturacion":
+      return <ArcaSettings />;
   }
 }
 

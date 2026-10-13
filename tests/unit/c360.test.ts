@@ -107,6 +107,11 @@ describe("cliente 360 · línea de tiempo", () => {
     expect(describeItem(item({ kind: "dispute", sub: "refund", detail: "pos" })).title).toBe(
       "Devolución en Mercado Pago (desde el POS)",
     );
+    // El detalle de la venta muestra los medios legibles, no la key de payments.method.
+    expect(describeItem(item({ kind: "sale", detail: "cash, account" })).detail).toBe(
+      "Cobro: Efectivo, Cuenta corriente",
+    );
+    expect(describeItem(item({ kind: "sale", detail: "medio_nuevo" })).detail).toBe("Cobro: medio_nuevo");
     expect(describeItem(item({ kind: "pending_charge", sub: "qr", status: "waiting" })).title).toBe(
       "Cobro en espera (QR) · esperando el pago",
     );

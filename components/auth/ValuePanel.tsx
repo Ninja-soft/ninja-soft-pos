@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CalendarClock, Boxes, ReceiptText, Zap } from "lucide-react";
 import { LogoNinjaPos } from "@/components/brand/Logo";
+import { signupTrialDays, trialCopy, useSignupPlans } from "@/modules/saas/signupPlans";
 
 const BULLETS = [
   {
@@ -26,7 +27,10 @@ const BULLETS = [
 // layout). Superficie plana noche violeta, siempre oscura (data-theme fijo) para
 // que el logo oficial con "Ninja" en blanco se lea igual en tema claro. Sin
 // degradados, sin glow, sin sombras: el degradé vive sólo dentro del logo.
-export function ValuePanel({ showTrial = false }: { showTrial?: boolean }) {
+export function ValuePanel() {
+  // Días de prueba según los planes configurados en internal (no hardcodeado).
+  const { data: plans } = useSignupPlans();
+  const trialDays = signupTrialDays(plans);
   return (
     <aside
       data-theme="ninja-dark"
@@ -50,10 +54,10 @@ export function ValuePanel({ showTrial = false }: { showTrial?: boolean }) {
           Ventas, caja y stock en un solo lugar, desde la compu, la tablet o el
           celular.
         </p>
-        {showTrial && (
-          <p className="mt-5 flex items-center gap-2 text-sm font-medium text-ninja-softWhite">
-            <CalendarClock size={16} className="text-ninja-flameSoft" aria-hidden />
-            14 días de prueba gratis. Sin tarjeta.
+        {trialDays > 0 && (
+          <p className="mt-6 inline-flex items-center gap-2.5 rounded-lg bg-white/[0.06] px-3.5 py-2.5 text-sm font-semibold text-ninja-softWhite">
+            <CalendarClock size={17} className="text-ninja-flameSoft" aria-hidden />
+            {trialCopy(trialDays)}
           </p>
         )}
 

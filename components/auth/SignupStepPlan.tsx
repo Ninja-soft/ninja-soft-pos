@@ -108,6 +108,7 @@ export function SignupStepPlan({
         onSelect={onChange}
         comparedToKey={comparedToKey}
         columnsClassName="gap-4 sm:grid-cols-2"
+        compact
         diffLabel={recommendedName ? `Suma sobre ${recommendedName}` : "Suma sobre el recomendado"}
       />
 

@@ -77,6 +77,19 @@ const arsCompact = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 });
 
+// Días de prueba sin tarjeta que se anuncian en el registro: los del plan
+// recomendado (configurable en internal › Planes); si ése no tiene prueba, el
+// mayor entre los planes activos. 0 = no hay prueba gratis.
+export function signupTrialDays(plans: SignupPlan[] | undefined): number {
+  if (!plans?.length) return 0;
+  const rec = plans.find((p) => p.isRecommended && p.trialDays > 0);
+  return rec ? rec.trialDays : Math.max(0, ...plans.map((p) => p.trialDays));
+}
+
+export function trialCopy(days: number): string {
+  return `${days === 1 ? "1 día" : `${days} días`} de prueba gratis. Sin tarjeta.`;
+}
+
 export function formatPlanPrice(value: number): string {
   return arsCompact.format(value);
 }

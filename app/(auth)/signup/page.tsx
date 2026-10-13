@@ -11,7 +11,7 @@ import { createTenant } from "@/modules/tenants/api";
 import { redeemInviteCode } from "@/modules/auth/invite";
 import { applySignupPlan } from "@/modules/auth/plan";
 import { startOwnerSubscriptionCheckout } from "@/modules/saas/subscriptionBilling";
-import { useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
+import { signupTrialDays, trialCopy, useSignupPlans, type SignupPlan } from "@/modules/saas/signupPlans";
 import { activateAiAddon } from "@/modules/saas/aiPublicConfig";
 import {
   SignupAccountSchema,
@@ -571,7 +571,11 @@ function SignupWizard() {
       <AuthHeading
         className="mb-6"
         title="Creá tu cuenta"
-        description="14 días de prueba gratis. Sin tarjeta."
+        description={
+          signupTrialDays(signupPlans) > 0
+            ? trialCopy(signupTrialDays(signupPlans))
+            : "Elegí tu plan y empezá a vender."
+        }
       />
 
       {/* En SSO el negocio y el plan van juntos en una sola vista; el

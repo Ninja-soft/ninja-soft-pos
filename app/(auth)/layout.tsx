@@ -32,7 +32,7 @@ export default function AuthLayout({
           : "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]",
       )}
     >
-      <ValuePanel showTrial={isSignup} />
+      <ValuePanel />
 
       <div className={cn("flex min-h-screen flex-col px-4 sm:px-8", isSignup && "xl:px-12")}>
         <main

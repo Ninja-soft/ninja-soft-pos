@@ -35,6 +35,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  Warehouse,
   Hourglass,
   X,
   ArrowLeftRight,
@@ -255,6 +256,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
       items: [
         { href: "/productos", label: "Productos", icon: Package },
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
+        // Depósitos internos de la sucursal (F11 · H33, ADR-085).
+        { href: "/depositos", label: "Depósitos", icon: Warehouse, feature: "depositos" },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],

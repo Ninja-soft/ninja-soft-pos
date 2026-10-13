@@ -15,6 +15,8 @@ import { format } from "date-fns";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { Select } from "@/components/ui/Select";
 import { showRegisterFilter, zFileName, zSeriesLabel } from "@/lib/cash/zNumbers";
+import { parseZItems, zItemsTotals } from "@/lib/cash/zItems";
+import { formatQty } from "@/lib/utils/format";
 
 function fdate(s: string | null): string {
   if (!s) return "Sin datos";
@@ -24,6 +26,11 @@ function fdate(s: string | null): string {
 function breakdown(z: ZClosure): [string, number][] {
   const b = (z.payment_breakdown ?? {}) as Record<string, number>;
   return Object.entries(b);
+}
+
+// Ítems vendidos resumidos (F11 · H30b): null en los Z anteriores al resumen.
+function itemsOf(z: ZClosure) {
+  return parseZItems((z as ZClosure & { items_summary?: unknown }).items_summary);
 }
 
 // Cobros de cuenta corriente del turno por medio (Cuenta corriente v2).
@@ -110,6 +117,15 @@ export function ZClosuresHistory() {
           m: METHOD_LABELS[k] ?? k,
           a: v,
         })),
+      },
+      {
+        name: "Items vendidos",
+        columns: [
+          { header: "Producto", key: "n", width: 32 },
+          { header: "Cantidad", key: "q", type: "number" },
+          { header: "Total", key: "t", type: "money" },
+        ],
+        rows: (itemsOf(z) ?? []).map((l) => ({ n: l.name, q: l.qty, t: l.total })),
       },
     ]);
   }
@@ -283,6 +299,7 @@ export function ZClosuresHistory() {
                   ))}
                 </>
               )}
+              <ZItemsBlock z={sel} />
             </div>
 
             <div className="flex justify-end gap-2">
@@ -297,6 +314,31 @@ export function ZClosuresHistory() {
         )}
       </Modal>
     </section>
+  );
+}
+
+function ZItemsBlock({ z }: { z: ZClosure }) {
+  const items = itemsOf(z);
+  if (items === null) {
+    return (
+      <>
+        <hr className="border-border" />
+        <p className="text-xs text-muted-foreground">Este Z es anterior al detalle de ítems vendidos.</p>
+      </>
+    );
+  }
+  if (items.length === 0) return null;
+  const totals = zItemsTotals(items);
+  return (
+    <>
+      <hr className="border-border" />
+      <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Ítems vendidos ({formatQty(totals.units)} u.)
+      </div>
+      {items.map((l, i) => (
+        <Row key={`it-${i}`} k={`${formatQty(l.qty)} x ${l.name}`} v={formatCurrency(l.total)} />
+      ))}
+    </>
   );
 }
 

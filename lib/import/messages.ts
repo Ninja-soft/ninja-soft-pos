@@ -13,6 +13,7 @@ const FEATURE_LABELS: Record<string, string> = {
   productos: "el catálogo de productos",
   clientes: "la gestión de clientes",
   stock: "el control de stock",
+  depositos: "los depósitos internos",
 };
 
 const CODES: Record<string, string> = {
@@ -40,6 +41,11 @@ const CODES: Record<string, string> = {
   no_tenant: "No hay un negocio activo en la sesión.",
   too_many_rows: "Demasiadas filas en un solo envío.",
   invalid_rows: "El envío no tiene el formato esperado.",
+  import_warehouse_not_found: "No hay ningún depósito con ese código o nombre en la sucursal.",
+  invalid_kind: "El tipo de depósito no es válido (Reserva, Devoluciones, Merma u Otro).",
+  insufficient_warehouse_stock: "No alcanza el stock del salón para pasar esa cantidad al depósito.",
+  warehouse_principal_is_computed: "El salón de ventas no se cuenta: su stock es lo que queda de la sucursal.",
+  store_forbidden: "No tenés acceso a esa sucursal.",
 };
 
 const CONSTRAINTS: Array<[RegExp, string]> = [
@@ -51,6 +57,8 @@ const CONSTRAINTS: Array<[RegExp, string]> = [
   [/customers_iva_condition_check/, "La condición frente al IVA no es válida."],
   [/customers_document_type_check/, "El tipo de documento no es válido."],
   [/return_reasons_stock_destination_check/, "El destino del stock no es válido."],
+  [/warehouses_store_name_key/, "Ya hay un depósito con ese nombre en la sucursal."],
+  [/warehouses_tenant_code_key/, "Ese código de depósito ya existe."],
 ];
 
 const NOTES: Record<string, string> = {

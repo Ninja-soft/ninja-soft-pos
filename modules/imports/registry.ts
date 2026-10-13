@@ -10,6 +10,7 @@ import {
   storeImportDefinition,
   warrantyImportDefinition,
 } from "./entities";
+import { warehouseImportDefinition, warehouseStockImportDefinition } from "./warehouses";
 
 // El motor trabaja con filas genéricas; cada definición tipa las suyas.
 type AnyDefinition = ImportDefinition<never>;
@@ -22,6 +23,8 @@ export const IMPORT_DEFINITIONS: AnyDefinition[] = [
   storeImportDefinition,
   warrantyImportDefinition,
   returnReasonImportDefinition,
+  warehouseImportDefinition,
+  warehouseStockImportDefinition,
 ] as unknown as AnyDefinition[];
 
 export function importDefinition(entity: ImportEntityKey): ImportDefinition<Record<string, unknown>> {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ScanBarcode } from "lucide-react";
+import { ExternalLink, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -14,6 +14,11 @@ import { money } from "../ui/posStyles";
 
 const row =
   "flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-fg-6";
+
+/** Ficha completa del cliente (ADR-067), con compras, deuda y vales. */
+export function customerProfileHref(customerId: string): string {
+  return `/clientes/${encodeURIComponent(customerId)}`;
+}
 
 export function CustomerPickerDialog({
   open,
@@ -45,6 +50,19 @@ export function CustomerPickerDialog({
           onChange={(e) => onSearch(e.target.value)}
           autoFocus
         />
+        {/* Historial del cliente desde el POS (F11 · H31): la ficha completa
+            se abre en otra pestaña para no perder el carrito. */}
+        {current && (
+          <a
+            href={customerProfileHref(current.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-h-11 items-center justify-between gap-2 rounded-lg bg-fg-6 px-3 text-sm font-medium transition-colors hover:bg-fg-10"
+          >
+            <span className="min-w-0 truncate">Ver ficha e historial de {current.name}</span>
+            <ExternalLink size={15} className="shrink-0 text-muted-foreground" aria-hidden />
+          </a>
+        )}
         {/* Alta rápida por DNI (H31). */}
         <Button type="button" variant="secondary" className="w-full" onClick={onScanDni}>
           <ScanBarcode size={16} /> Escanear DNI y agregar cliente

@@ -602,14 +602,15 @@ export function AppShell({
         <Link
           href="/dashboard"
           onClick={() => setDrawer(false)}
-          className="flex min-w-0 flex-1 items-center gap-2.5"
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
         >
-          <Isotype className="h-9 w-auto" priority />
-          <WordmarkPos className="h-7 w-auto" priority />
+          <Isotype className="h-9 w-auto shrink-0" priority />
+          {/* El wordmark se achica para no quedar debajo de Ayuda y la campana. */}
+          <WordmarkPos className="h-7 w-auto min-w-0 max-w-full object-contain object-left" priority />
         </Link>
         {/* Campana en la barra lateral (desktop): flotando sobre el contenido
             tapaba botones de la pantalla de cobro. En mobile vive en el header. */}
-        <div className="hidden items-center gap-1 lg:flex">
+        <div className="hidden shrink-0 items-center gap-0.5 lg:flex">
           {/* Ayuda contextual (F15 · H72): artículos de la pantalla y el rol. */}
           <HelpButton role={shell?.role ?? null} />
           <NotificationBell align="start" />

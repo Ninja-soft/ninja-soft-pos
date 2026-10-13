@@ -132,7 +132,7 @@ describe.skipIf(!enabled)("impuestos · motor, padrones, percepciones y RLS", ()
       .select("id")
       .single();
     if (rErr || !reg) throw rErr ?? new Error("register");
-    const sh = await rpc(ctx.owner.client, "open_cash_shift", { p_register_id: (reg as { id: string }).id, p_opening_amount: 0 });
+    const sh = await rpc(ctx.cashier.client, "open_cash_shift", { p_register_id: (reg as { id: string }).id, p_opening_amount: 0 });
     if (sh.error) throw new Error(sh.error.message);
 
     const { data: cust, error: cErr } = await ctx.owner.client

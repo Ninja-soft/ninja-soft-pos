@@ -11,8 +11,9 @@ type Snapshot = { name: string | null; logoUrl: string | null } | null;
 // Recuerda en este dispositivo el negocio activo (nombre + logo público) para
 // que el login lo muestre la próxima vez. Ver lib/auth/rememberedBusiness.ts.
 // Montado en el AppShell: corre en toda sesión autenticada del panel/POS.
-// No escribe nada para staff interno ni durante un acceso del staff como el
-// negocio (ADR-084): ese dispositivo no es del negocio.
+// No escribe nada durante un acceso del staff como el negocio (ADR-084): ese
+// dispositivo no es del negocio. El staff interno que además es miembro activo
+// del negocio (su propio negocio) sí se recuerda: la membresía es la prueba.
 export function RememberBusiness() {
   const { data } = useQuery({
     queryKey: ["remember-business"],
@@ -22,8 +23,7 @@ export function RememberBusiness() {
       const supabase = createClient();
       const user = await getCurrentUser();
       if (!user) return null;
-      const meta = (user.app_metadata ?? {}) as { is_internal?: boolean; current_tenant_id?: string };
-      if (meta.is_internal) return null;
+      const meta = (user.app_metadata ?? {}) as { current_tenant_id?: string };
       const { data: imp, error: impErr } = await (supabase as any).rpc("my_impersonation");
       if (impErr || imp) return null;
       // Negocio ACTIVO del JWT (con dos membresías no vale cualquiera).

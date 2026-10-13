@@ -145,6 +145,12 @@ const SupervisorPinCard = dynamic(
   { loading },
 );
 
+// Impuestos (ADR-068): datos fiscales, agente de percepción y padrones.
+const TaxSettings = dynamic(
+  () => import("@/components/tax/TaxSettings").then((m) => m.TaxSettings),
+  { loading },
+);
+
 // Integraciones (ADR-062).
 const NubceoSettings = dynamic(
   () => import("@/components/integrations/nubceo/NubceoSettings").then((m) => m.NubceoSettings),
@@ -348,6 +354,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       );
     case "precios":
       return <PriceListsCard />;
+    case "impuestos":
+      return <TaxSettings />;
     case "garantias":
       return (
         <SettingsCard padded>

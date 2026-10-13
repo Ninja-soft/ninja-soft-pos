@@ -68,6 +68,25 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["caja"],
     needs: "Un cajón enchufado a la impresora térmica de la caja (pulso ESC/POS por USB, serie o el puente local).",
   },
+  impuestos_iva: {
+    desc: "IVA por alícuota y condición fiscal: catálogo cerrado (21, 10,5, 27, 5, 2,5, 0 %, exento y no gravado) por producto y variante, listas con o sin IVA, datos fiscales del negocio y del cliente con CUIT o DNI validado, desglose de neto e IVA en cada venta, tipo de comprobante que corresponde (A, B, C, M o E), IVA contenido en el ticket B y reporte de IVA ventas.",
+    impact: "Desactivado, el IVA queda fijo en 21 % y no se pueden cargar los datos fiscales del negocio (las ventas siguen funcionando).",
+    minPlan: "Start",
+  },
+  impuestos_internos: {
+    desc: "Impuestos internos por producto: monto fijo por unidad, porcentaje sobre el precio (tasa nominal, que integra su propia base) o sobre el costo, incluido en el precio o adicional, discriminados en cada venta y fuera de la base del IVA.",
+    impact: "Desactivado, los internos no se discriminan: todo el precio se toma como neto más IVA (el servidor rechaza cargarlos).",
+    minPlan: "Pro",
+    requires: ["impuestos_iva"],
+    needs: "Para bebidas alcohólicas, tabaco, electrónica y otros rubros alcanzados por la Ley 24.674.",
+  },
+  percepciones_retenciones: {
+    desc: "Agente de percepción y retención: regímenes de IVA e IIBB por jurisdicción (ARBA, AGIP y otras), padrones importados con la alícuota de cada CUIT y su vigencia, exclusiones con certificado, mínimos de base y de monto; la percepción se suma a la venta como línea aparte y la retención se sugiere en la orden de pago al proveedor.",
+    impact: "Desactivado, no se perciben ni se sugieren retenciones (el servidor no las calcula) y no se pueden importar padrones.",
+    minPlan: "Business",
+    requires: ["impuestos_iva"],
+    needs: "Estar designado agente por ARCA o la provincia y descargar el padrón del organismo (ARBA lo entrega con la clave CIT del agente).",
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",

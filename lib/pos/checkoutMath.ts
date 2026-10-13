@@ -3,6 +3,8 @@
 // el que reaplica create_sale en el server:
 //
 //   total de productos = redondeo(base - promo extra + garantía + recargos) + envío
+//                        + percepciones (ADR-068: el negocio agente las suma
+//                        después del redondeo, igual que create_sale)
 //   total a cobrar     = total de productos + propina
 //
 // `base` es el total del carrito SIN redondear (subtotal - descuentos - promo
@@ -87,6 +89,8 @@ export interface CheckoutInput {
   /** Prima de garantía extendida. */
   warranty?: number;
   tip?: number;
+  /** Percepciones de IVA e IIBB (sale_tax_preview). */
+  perceptions?: number;
   lines: CheckoutLine[];
 }
 
@@ -109,7 +113,7 @@ export function checkoutTotals(i: CheckoutInput): CheckoutTotals {
     applyRounding(
       i.base - (i.promoExtra ?? 0) + (i.warranty ?? 0) + surcharges,
       i.rounding,
-    ) + fee,
+    ) + fee + Math.max(0, i.perceptions ?? 0),
   );
   const tip = Math.max(0, i.tip ?? 0);
   const grandTotal = round2(productsTotal + tip);

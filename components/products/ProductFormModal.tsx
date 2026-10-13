@@ -29,6 +29,8 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/format";
+import { ProductTaxFields } from "./ProductTaxFields";
+import { productTaxDefaults } from "@/modules/products/tax";
 import {
   ProductSchema,
   type ProductInput,
@@ -111,6 +113,9 @@ const FIELD_TAB: Partial<Record<keyof ProductInput, TabKey>> = {
   cost: "precios",
   replacement_cost: "precios",
   tax_rate: "precios",
+  tax_rate_code: "precios",
+  internal_tax_rate: "precios",
+  internal_tax_amount: "precios",
   stock: "stock",
   stock_min: "stock",
   unit: "stock",
@@ -277,6 +282,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       stock_min: product?.stock_min ?? 0,
       unit: product?.unit ?? "un",
       tax_rate: product?.tax_rate ?? 21,
+      ...productTaxDefaults(product),
       season: product?.season ?? "",
       tags: product?.tags?.join(", ") ?? "",
       image_url: product?.image_url ?? "",
@@ -608,14 +614,13 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 {...register("price", { onChange: () => setMarginDraft(null) })}
               />
             </div>
-            <Input
-              variant="filled"
-              label="IVA %"
-              type="number"
-              step="0.5"
-              className="max-w-[140px]"
-              {...register("tax_rate")}
-            />
+          </Group>
+
+          <Group
+            title="Impuestos"
+            description="Alícuota de IVA del catálogo, servicio e impuestos internos. El precio de venta es final (con IVA)."
+          >
+            <ProductTaxFields register={register} watch={watch} setValue={setValue} price={price} cost={cost ?? 0} />
           </Group>
 
           <Group

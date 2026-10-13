@@ -36,6 +36,8 @@ import {
   useTreasuryEnabled,
 } from "@/modules/purchases/hooks";
 import { useCheques, useMyOpenShift, useTreasuryAccounts } from "@/modules/treasury/hooks";
+import { useFeature } from "@/modules/saas/gating";
+import { taxApi, taxErrorMessage } from "@/modules/tax/api";
 import { ErrorList, FormField, SectionTitle, fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface LineRow {
@@ -154,6 +156,29 @@ export function PaymentOrderModal({
 
   const setLine = (key: number, patch: Partial<LineRow>) =>
     setLines((p) => p.map((x) => (x.key === key ? { ...x, ...patch } : x)));
+
+  // ADR-068: retenciones sugeridas por los regímenes del negocio y el padrón.
+  const agentRet = useFeature("percepciones_retenciones") === true;
+  const [suggesting, setSuggesting] = useState(false);
+  async function suggestRetentions() {
+    setSuggesting(true);
+    try {
+      const rows = await taxApi.retentionSuggest(supplier, allocations, totals.total);
+      if (rows.length === 0) {
+        toast({ title: "Sin retenciones para este pago", description: "No supera los mínimos o el proveedor no está alcanzado.", variant: "info" });
+        return;
+      }
+      const kinds = new Set(rows.map((r) => r.kind));
+      setWh((p) => [
+        ...p.filter((x) => !kinds.has(x.kind as never)),
+        ...rows.map((r) => ({ key: seq++, kind: r.kind as WithholdingKind, certificate: "", amount: fmtInput(r.amount) })),
+      ]);
+    } catch (e) {
+      toast({ title: "No se pudo calcular", description: taxErrorMessage(e), variant: "error" });
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   function autoImpute() {
     const next: Record<string, string> = {};
@@ -466,21 +491,30 @@ export function PaymentOrderModal({
         <section className="space-y-2">
           <SectionTitle
             action={
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setWh((p) => [...p, { key: seq++, kind: "iibb", certificate: "", amount: "" }])}
-              >
-                <Plus size={14} /> Agregar retención
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {agentRet && supplier && (
+                  <Button size="sm" variant="secondary" loading={suggesting} onClick={() => void suggestRetentions()}>
+                    Calcular con el padrón
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setWh((p) => [...p, { key: seq++, kind: "iibb", certificate: "", amount: "" }])}
+                >
+                  <Plus size={14} /> Agregar retención
+                </Button>
+              </div>
             }
           >
             Retenciones practicadas
           </SectionTitle>
           {wh.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado. El cálculo automático
-              llega con Retenciones (H106).
+              Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado.
+              {agentRet
+                ? " Con \"Calcular con el padrón\" se sugieren las de tus regímenes de retención sobre lo imputado sin IVA."
+                : " El cálculo desde el padrón viene con Percepciones y retenciones (plan Business)."}
             </p>
           )}
           {wh.map((w) => (

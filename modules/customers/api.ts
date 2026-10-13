@@ -57,6 +57,8 @@ function payload(input: CustomerOutput) {
     document_type: input.document_type ?? null,
     document_number: input.document_number,
     iva_condition: input.iva_condition ?? null,
+    // ADR-068: jurisdicción de IIBB (no está en los tipos generados).
+    iibb_jurisdiction: input.iibb_jurisdiction ?? null,
     email: input.email,
     phone: input.phone,
     address: input.address,

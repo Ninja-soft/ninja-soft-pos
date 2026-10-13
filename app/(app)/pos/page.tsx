@@ -91,13 +91,14 @@ import {
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
 import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
-import { usePosSale } from "@/modules/pos/screen/usePosSale";
+import { cartToSaleLines, usePosSale } from "@/modules/pos/screen/usePosSale";
 import { formatCurrency } from "@/lib/utils/format";
 import { usePosPark, type EditingCharge } from "@/modules/pos/screen/usePosPark";
 import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
 import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
 import { pendingChargesApi, cancelAtProvider } from "@/modules/pending-charges/api";
 import {
+  buildSaleItemsAndExtras,
   closeShiftDecision,
   PARK_BLOCK_COPY,
   pendingChargeErrorCopy,
@@ -916,6 +917,19 @@ function PosPageInner() {
   const editRef = useRef(editPendingCharge);
   editRef.current = editPendingCharge;
 
+  // ADR-068: ítems para la vista previa de percepciones (los mismos de create_sale).
+  const taxPreviewItems = useMemo(
+    () =>
+      buildSaleItemsAndExtras(cartToSaleLines(lines), []).items.map((i) => ({
+        product_id: i.product_id,
+        variant_id: i.variant_id ?? null,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        discount: i.discount,
+      })),
+    [lines],
+  );
+
   const { handleSale, saving } = usePosSale({
     lines,
     discountTotal,
@@ -1447,6 +1461,7 @@ function PosPageInner() {
           promoForMethod={pricing.promoForMethod}
           tenders={tenders}
           customerId={customer?.id ?? null}
+          taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}
           prefs={layout.payments}
           initialTenderId={checkoutTender}
           initialWarrantyId={offeredWarrantyId}

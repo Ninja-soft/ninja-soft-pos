@@ -68,6 +68,8 @@ export function PriceListFormModal({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [posSelectable, setPosSelectable] = useState(false);
+  // ADR-068: precios con IVA (final) o netos (el resolver suma el IVA).
+  const [includesTax, setIncludesTax] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -87,6 +89,7 @@ export function PriceListFormModal({
     setFrom(toLocalInput(list?.valid_from));
     setTo(toLocalInput(list?.valid_to));
     setPosSelectable(Boolean(list?.pos_selectable));
+    setIncludesTax(list?.prices_include_tax !== false);
   }, [open, list]);
 
   const taken = new Set(lists.filter((l) => l.channel !== "custom" && l.id !== list?.id).map((l) => l.channel));
@@ -131,6 +134,7 @@ export function PriceListFormModal({
       valid_from: fromLocalInput(from),
       valid_to: fromLocalInput(to),
       pos_selectable: posSelectable,
+      prices_include_tax: includesTax,
     };
   }
 
@@ -297,6 +301,16 @@ export function PriceListFormModal({
             <span className="block text-xs text-muted-foreground">El cajero puede cobrar con esta lista desde el carrito.</span>
           </span>
           <Switch checked={posSelectable} onCheckedChange={setPosSelectable} label="Elegible en el POS" />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 rounded-md bg-muted/60 px-3 py-2.5">
+          <span className="text-sm">
+            Precios con IVA incluido
+            <span className="block text-xs text-muted-foreground">
+              Apagado: los precios de la lista son netos y al vender se suma el IVA de cada producto (mayoristas, factura A).
+            </span>
+          </span>
+          <Switch checked={includesTax} onCheckedChange={setIncludesTax} label="Precios con IVA incluido" />
         </div>
 
         {list && <AssignmentsEditor listId={list.id} />}

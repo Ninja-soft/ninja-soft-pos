@@ -16,6 +16,7 @@ import {
   ReceiptText,
   RotateCcw,
   ScanLine,
+  Landmark,
   ShieldCheck,
   SlidersHorizontal,
   Store,
@@ -59,6 +60,7 @@ export type SettingsSectionKey =
   | "hardware"
   | "precios"
   | "garantias"
+  | "impuestos"
   | "promociones"
   | "nubceo";
 
@@ -286,6 +288,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "garantias",
         keywords: "garantia extendida prima",
       },
+      {
+        key: "impuestos",
+        label: "Impuestos",
+        title: "Impuestos",
+        description:
+          "Condición fiscal del negocio, IVA de los ítems sin producto, agente de percepción y retención, jurisdicciones y padrones.",
+        icon: Landmark,
+        feature: "impuestos_iva",
+        keywords: "iva alicuota afip arca cuit iibb ingresos brutos arba agip percepcion retencion padron monotributo responsable inscripto fiscal",
+      },
     ],
   },
   {
@@ -415,6 +427,10 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   supervisor: "seguridad",
   integraciones: "nubceo",
   conciliacion: "nubceo",
+  fiscal: "impuestos",
+  iva: "impuestos",
+  percepciones: "impuestos",
+  padrones: "impuestos",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

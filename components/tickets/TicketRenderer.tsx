@@ -128,10 +128,31 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
                 <span>-{formatCurrency(sale.discount_total)}</span>
               </div>
             )}
+            {(sale.perceptions ?? []).map((p, i) => (
+              <div key={i} className="flex justify-between text-xs">
+                <span>{p.name}</span>
+                <span>{formatCurrency(p.amount)}</span>
+              </div>
+            ))}
             <div className="mt-1 flex justify-between text-base font-bold">
               <span>TOTAL</span>
               <span>{formatCurrency(sale.total)}</span>
             </div>
+            {sale.transparency && sale.transparency.iva + sale.transparency.others > 0 && (
+              <div className="mt-1 text-[10px] leading-tight">
+                <p>Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)</p>
+                <div className="flex justify-between">
+                  <span>IVA contenido</span>
+                  <span>{formatCurrency(sale.transparency.iva)}</span>
+                </div>
+                {sale.transparency.others > 0 && (
+                  <div className="flex justify-between">
+                    <span>Otros impuestos nacionales indirectos</span>
+                    <span>{formatCurrency(sale.transparency.others)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       case "payments":

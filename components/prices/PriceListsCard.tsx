@@ -238,6 +238,7 @@ export function PriceListsCard() {
                       </Badge>
                     )}
                     {l.pos_selectable && <Badge tone="neutral">En el POS</Badge>}
+                    {l.prices_include_tax === false && <Badge tone="neutral">Sin IVA</Badge>}
                   </div>
                   {(l.valid_from || l.valid_to || (pro && l.rounding)) && (
                     <div className="text-xs text-muted-foreground">

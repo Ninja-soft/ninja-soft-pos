@@ -209,9 +209,10 @@ describe.skipIf(!enabled)("impuestos · motor, padrones, percepciones y RLS", ()
 
   it("regímenes y padrón: el dueño los carga; cajero y negocio sin plan no", async () => {
     const reg = await ctx.owner.client.from("tax_regimes").insert([
-      { tenant_id: ctx.tenant, tax: "iibb", role: "perception", jurisdiction: "902", name: "IIBB ARBA", padron_source: "arba", min_amount: 10 },
-      { tenant_id: ctx.tenant, tax: "iva", role: "perception", name: "IVA RG 2408", default_rate: 3, base_kind: "net_taxed", applies_to: ["responsable_inscripto"] },
-      { tenant_id: ctx.tenant, tax: "iibb", role: "retention", jurisdiction: "902", name: "Ret ARBA", padron_source: "arba" },
+      // Multi-row de PostgREST: toda fila lleva todas las claves (la que falta va null, no default).
+      { tenant_id: ctx.tenant, tax: "iibb", role: "perception", jurisdiction: "902", name: "IIBB ARBA", padron_source: "arba", min_amount: 10, default_rate: null, base_kind: "net", applies_to: ["responsable_inscripto", "monotributo", "exento"] },
+      { tenant_id: ctx.tenant, tax: "iva", role: "perception", jurisdiction: null, name: "IVA RG 2408", padron_source: "none", min_amount: 0, default_rate: 3, base_kind: "net_taxed", applies_to: ["responsable_inscripto"] },
+      { tenant_id: ctx.tenant, tax: "iibb", role: "retention", jurisdiction: "902", name: "Ret ARBA", padron_source: "arba", min_amount: 0, default_rate: null, base_kind: "net", applies_to: ["responsable_inscripto", "monotributo", "exento"] },
     ] as never);
     expect(reg.error).toBeNull();
     const caj = await ctx.cashier.client

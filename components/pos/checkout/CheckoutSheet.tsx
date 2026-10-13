@@ -54,7 +54,7 @@ import {
 } from "@/lib/pos/cardBrands";
 import { Keypad, applyKey, keypadNumber, type KeypadKey } from "../ui/Keypad";
 import { PosSheet } from "../ui/PosSheet";
-import { TenderLogo, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
+import { TenderLogo, tenderColorIcon, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
@@ -1163,6 +1163,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         size={36}
         fallback={tenderFallback(active)}
         glyph={tenderGlyph(active)}
+        colorIcon={tenderColorIcon(active)}
         framed
       />
       <div className="min-w-0">
@@ -1706,6 +1707,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     size={18}
                     fallback={tenderFallback(active)}
                     glyph={tenderGlyph(active)}
+                    colorIcon={tenderColorIcon(active)}
                   />
                   {active.group === "cash" || active.group === "transfer" || active.group === "card" || active.group === "customer"
                     ? active.label

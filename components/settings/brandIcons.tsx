@@ -14,6 +14,19 @@ export type SettingsIcon = ComponentType<{
   "aria-hidden"?: boolean | "true" | "false";
 }>;
 
+// Ancho/alto de cada logo de marca (los íconos de lucide no lo tienen: 1).
+const RATIO = new WeakMap<object, number>();
+
+/**
+ * Tamaño (alto) de un ícono dentro de una caja cuadrada: un ícono o logo
+ * cuadrado usa `box`; un wordmark (ARCA) se achica hasta que su ancho entre en
+ * `maxWidth`. Así todos ocupan el mismo lugar visual en el menú.
+ */
+export function iconSizeInBox(icon: SettingsIcon, box: number, maxWidth = box): number {
+  const ratio = RATIO.get(icon) ?? 1;
+  return ratio > 1 ? Math.max(6, Math.floor(maxWidth / ratio)) : box;
+}
+
 function brandIcon(opts: {
   src: string;
   alt: string;
@@ -45,6 +58,7 @@ function brandIcon(opts: {
     );
   }
   BrandIcon.displayName = `BrandIcon(${opts.alt})`;
+  RATIO.set(BrandIcon, opts.ratio ?? 1);
   return BrandIcon;
 }
 
@@ -62,8 +76,11 @@ export const MercadoLibreIcon = brandIcon({
   alt: "Mercado Libre",
 });
 
+// Sólo la nube de NubCeo (círculo azul, cuadrado): mismo tamaño que el resto
+// de los íconos y legible en todos los temas sin forzar color. También en el
+// encabezado de la sección: el título ya dice "NubCeo", el wordmark repetiría
+// el nombre (y su versión "on-dark" no se lee en los temas claros).
 export const NubceoIcon = brandIcon({
-  src: "/images/integrations/nubceo-wordmark-on-dark.webp",
+  src: "/images/integrations/nubceo-nube.png",
   alt: "NubCeo",
-  ratio: 3.2,
 });

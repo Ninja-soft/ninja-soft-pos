@@ -69,6 +69,25 @@ export function tenderGlyph(t: {
   return glyph;
 }
 
+// Íconos a color (Flaticon, ver public/img/medios_de_pago/LICENSES.md) de los
+// tres medios manuales de la hoja de cobro: efectivo, transferencia y tarjeta
+// en posnet. Ya vienen recortados al borde (sin aire), así que llenan su caja.
+const COLOR_BASE = "/img/medios_de_pago/iconos-color";
+const COLOR_ICON: Record<string, string> = {
+  cash: `${COLOR_BASE}/efectivo.png`,
+  transfer: `${COLOR_BASE}/transferencia.png`,
+  card: `${COLOR_BASE}/posnet.png`,
+};
+
+/**
+ * Ícono a color de un medio manual (efectivo, transferencia, tarjeta en
+ * posnet sin integrar), o null. Sólo por id exacto: la tarjeta en terminal
+ * integrada ("card:terminal") y el resto de los medios conservan su ícono.
+ */
+export function tenderColorIcon(t: { id?: string }): string | null {
+  return (t.id && COLOR_ICON[t.id]) || null;
+}
+
 function Glyph({ name, size }: { name: TenderGlyph; size: number }) {
   // Máscara sobre currentColor: el duotone (capa al 20 %) toma el color del
   // tema sin variantes por fondo.
@@ -107,6 +126,7 @@ export function TenderLogo({
   fallback,
   glyph,
   framed = false,
+  colorIcon,
   className,
 }: {
   source: LogoSource;
@@ -116,8 +136,26 @@ export function TenderLogo({
   /** Ícono del set propio; tiene prioridad sobre el logo. */
   glyph?: TenderGlyph | null;
   framed?: boolean;
+  /** Ícono a color (tenderColorIcon): ocupa toda la caja, sin marco. */
+  colorIcon?: string | null;
   className?: string;
 }) {
+  if (colorIcon) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={colorIcon}
+        alt=""
+        aria-hidden
+        width={size}
+        height={size}
+        loading="eager"
+        draggable={false}
+        className={cn("block shrink-0 select-none object-contain", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   const icon = glyph ?? (source.logo ? null : FALLBACK_GLYPH[fallback ?? "wallet"]);
   const inner = framed ? Math.round(size * 0.7) : size;
   return (

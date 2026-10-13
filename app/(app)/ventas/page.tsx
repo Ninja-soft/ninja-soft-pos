@@ -292,6 +292,33 @@ export default function VentasPage() {
                       title="Sin resultados"
                       description="Probá con otro número de venta, ticket o cliente."
                     />
+                  ) : statusFilter || range?.from ? (
+                    <EmptyState
+                      compact
+                      icon={Search}
+                      title={
+                        statusFilter === "alerts"
+                          ? "No hay ventas con alertas en este período"
+                          : "Ningún resultado con estos filtros"
+                      }
+                      description={
+                        statusFilter === "alerts"
+                          ? "Acá aparecen las ventas con contracargos, reclamos o devoluciones de Mercado Pago."
+                          : "Probá con otro estado o con otras fechas."
+                      }
+                      action={
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setStatusFilter("");
+                            setRange(undefined);
+                          }}
+                        >
+                          Limpiar filtros
+                        </Button>
+                      }
+                    />
                   ) : (
                     <EmptyState
                       compact

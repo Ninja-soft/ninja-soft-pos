@@ -96,7 +96,11 @@ Todo lo que crea el suite lleva el prefijo `E2E-<timestamp>` (un id por corrida)
 - Diseño del POS: se vuelve al del negocio.
 - Compras (`compras.spec.ts`): un proveedor `E2E-… Proveedor` que termina **archivado**
   y una orden de compra en borrador que se **cancela** (motivo `E2E-… limpieza e2e`).
-- Cobros en espera, precio validado, conciliación: no escriben nada (ver abajo).
+- Devoluciones (`devoluciones.spec.ts`): una venta en efectivo de prueba que se
+  **anula** al final; el wizard se recorre hasta Reintegro y se cierra (nunca se
+  confirma una devolución ni se pide un reintegro a Mercado Pago).
+- Cobros en espera, precio validado, conciliación (incluida la selección masiva
+  sobre cobros simulados), ficha 360: no escriben nada (ver abajo).
 - Terminales, Mis PINes, transferencias, listas de precios, hardware: sólo lectura
   o wizard recorrido y cancelado.
 

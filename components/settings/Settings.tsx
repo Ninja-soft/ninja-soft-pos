@@ -103,7 +103,8 @@ export function SettingsCard({
       )}
       <div
         className={cn(
-          padded ? "p-5" : "divide-y divide-border",
+          // Mismo padding que la cabecera y que SettingRow / SettingsNotice.
+          padded ? "px-5 py-4" : "divide-y divide-border",
           bodyClassName,
         )}
       >
@@ -113,6 +114,23 @@ export function SettingsCard({
   );
 }
 SettingsCard.displayName = "SettingsCard";
+
+/**
+ * Aviso (Callout) dentro de una `SettingsCard` sin `padded`: va como una fila
+ * más, con el mismo padding que `SettingRow` (px-5 py-4), así queda alineado
+ * con las etiquetas y separado parejo arriba y abajo. En cards `padded` el
+ * Callout va directo (el cuerpo ya trae p-5).
+ */
+export function SettingsNotice({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return <div className={cn("px-5 py-4", className)}>{children}</div>;
+}
+SettingsNotice.displayName = "SettingsNotice";
 
 /**
  * Fila de ajuste: etiqueta + ayuda a la izquierda, control a la derecha.

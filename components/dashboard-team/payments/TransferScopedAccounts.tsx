@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Callout } from "@/components/ui/Callout";
 import { useToast } from "@/components/ui/Toast";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
-import { SettingsCard } from "@/components/settings/Settings";
+import { SettingsCard, SettingsNotice } from "@/components/settings/Settings";
 import { InheritBadge, useScopeNamer, type ScopeSel } from "@/components/config/ScopedConfig";
 import { BankLogo } from "@/components/payments/BankLogo";
 import { cn } from "@/lib/utils/cn";
@@ -75,7 +75,7 @@ export function TransferScopedAccounts({ scope }: { scope: Scope }) {
   return (
     <SettingsCard title="Cuentas de transferencia" description="Qué cuentas muestra el POS acá y cuál va primero.">
       {!multi && (
-        <div className="px-5 py-3">
+        <SettingsNotice>
           <Callout
             tone="neutral"
             icon={Lock}
@@ -87,7 +87,7 @@ export function TransferScopedAccounts({ scope }: { scope: Scope }) {
           >
             Elegir cuentas distintas por sucursal viene con Varias cuentas de transferencia.
           </Callout>
-        </div>
+        </SettingsNotice>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 pt-3">
         <span className="text-xs text-muted-foreground">Cuentas:</span>

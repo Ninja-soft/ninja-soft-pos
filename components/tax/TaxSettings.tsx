@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { SettingRow, SettingsCard } from "@/components/settings/Settings";
+import { SettingRow, SettingsCard, SettingsNotice } from "@/components/settings/Settings";
 import {
   EMITTER_CONDITIONS,
   FISCAL_CONDITION_LABEL,
@@ -161,12 +161,12 @@ function FiscalCard({ settings }: { settings: Settings }) {
       }
     >
       {!settings.configured && (
-        <div className="px-5 pt-4">
+        <SettingsNotice>
           <Callout tone="info" title="Todavía sin configurar">
             Mientras no elijas la condición, las ventas guardan el IVA contenido como si fueras responsable inscripto pero
             sin tipo de comprobante.
           </Callout>
-        </div>
+        </SettingsNotice>
       )}
       <SettingRow label="Condición frente al IVA" description="Responsable inscripto emite A o B; el resto, C.">
         <Select

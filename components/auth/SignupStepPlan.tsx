@@ -83,7 +83,7 @@ export function SignupStepPlan({
 
   if (isError || !plans || plans.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-ninja-lavender">
+      <div className="rounded-xl border border-border bg-muted p-4 text-sm text-ninja-lavender">
         No pudimos cargar los planes ahora. Vas a poder elegirlo desde tu panel
         después de crear la cuenta.
       </div>
@@ -117,7 +117,7 @@ export function SignupStepPlan({
           "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 text-left transition",
           addonAi
             ? "choice-on choice-check"
-            : "border-white/10 bg-white/[0.03] hover:bg-muted",
+            : "border-border bg-muted hover:bg-muted",
         )}
       >
         <div className="flex items-start justify-between gap-3">
@@ -129,7 +129,7 @@ export function SignupStepPlan({
                   Sumar Asistente IA
                 </span>
                 {aiPrice ? (
-                  <span className="inline-flex items-center rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
                     +{formatPlanPrice(Number(aiPrice))}/mes
                   </span>
                 ) : null}

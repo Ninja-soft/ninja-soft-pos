@@ -5,14 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { AuthAlert, AuthHeading, AuthLink } from "@/components/auth/AuthBits";
 
 function validatePassword(value: string) {
   if (value.length < 10) return "Mínimo 10 caracteres.";
@@ -100,60 +94,55 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Blanquear contraseña</CardTitle>
-        <CardDescription>
-          Definí una nueva contraseña desde el enlace que recibiste por email.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!ready ? (
-          <p className="text-sm text-ninja-lavender">Validando enlace...</p>
-        ) : sessionError ? (
-          <div className="space-y-4">
-            <p className="text-sm text-destructive">{sessionError}</p>
-            <Link
-              href="/recover"
-              className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-border bg-secondary px-5 text-sm font-semibold text-secondary-foreground transition hover:bg-secondary/70"
-            >
-              Enviar otro enlace
-            </Link>
-          </div>
-        ) : done ? (
-          <p className="text-sm text-ninja-lavender">
-            Contraseña actualizada. Te estamos llevando al login.
-          </p>
-        ) : (
-          <form onSubmit={submit} className="space-y-4" noValidate>
-            <Input
-              label="Nueva contraseña"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              hint="Mínimo 10 caracteres, una mayúscula, una minúscula y un número."
-            />
-            <Input
-              label="Repetir contraseña"
-              type="password"
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" loading={loading} className="w-full">
-              Guardar nueva contraseña
-            </Button>
-          </form>
-        )}
+    <>
+      <AuthHeading
+        title="Creá una nueva contraseña"
+        description="Definí tu nueva contraseña desde el enlace que recibiste por email."
+      />
 
-        <p className="mt-6 text-center text-sm text-ninja-lavender">
-          <Link href="/login" className="text-ninja-flameSoft hover:underline">
-            Volver a iniciar sesión
-          </Link>
+      {!ready ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Validando enlace...
         </p>
-      </CardContent>
-    </Card>
+      ) : sessionError ? (
+        <div className="space-y-5">
+          <AuthAlert>{sessionError}</AuthAlert>
+          <Link
+            href="/recover"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-border bg-secondary px-5 text-sm font-semibold text-secondary-foreground outline-none transition hover:bg-secondary/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            Enviar otro enlace
+          </Link>
+        </div>
+      ) : done ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Contraseña actualizada. Te estamos llevando al inicio de sesión.
+        </p>
+      ) : (
+        <form onSubmit={submit} className="space-y-5" noValidate>
+          <PasswordInput
+            label="Nueva contraseña"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            hint="Mínimo 10 caracteres, una mayúscula, una minúscula y un número."
+          />
+          <PasswordInput
+            label="Repetir contraseña"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+          {error && <AuthAlert>{error}</AuthAlert>}
+          <Button type="submit" loading={loading} className="w-full">
+            Guardar nueva contraseña
+          </Button>
+        </form>
+      )}
+
+      <p className="mt-8 text-center text-sm text-muted-foreground">
+        <AuthLink href="/login">Volver a iniciar sesión</AuthLink>
+      </p>
+    </>
   );
 }

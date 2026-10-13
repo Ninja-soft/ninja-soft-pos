@@ -65,10 +65,10 @@ export function SignupStepBusiness({
               onClick={() => onChange(v)}
               aria-pressed={active}
               className={cn(
-                "flex items-start gap-3 rounded-xl border bg-white/[0.03] p-3.5 text-left transition",
+                "flex items-start gap-3 rounded-xl border bg-muted p-3.5 text-left transition",
                 active
                   ? "choice-on choice-check"
-                  : "border-white/10 hover:bg-white/[0.06]",
+                  : "border-border hover:bg-secondary",
               )}
             >
               <span
@@ -76,7 +76,7 @@ export function SignupStepBusiness({
                   "grid h-9 w-9 shrink-0 place-items-center rounded-lg transition",
                   active
                     ? "bg-ninja-flame/20 text-ninja-flameSoft"
-                    : "bg-white/5 text-ninja-lavender",
+                    : "bg-muted text-ninja-lavender",
                 )}
               >
                 <Icon size={18} />

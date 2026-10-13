@@ -1,23 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Clock, ShieldCheck } from "lucide-react";
+import { Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { LoginSchema, type LoginInput } from "@/modules/auth/schemas";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/Card";
-import { Accent, Eyebrow } from "@/components/ui/Typography";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { AuthAlert, AuthHeading, AuthLink } from "@/components/auth/AuthBits";
 
 export default function LoginInternalPage({
   searchParams,
@@ -54,63 +47,55 @@ export default function LoginInternalPage({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <Eyebrow className="mb-2 flex items-center gap-1.5">
-          <ShieldCheck size={13} /> Staff NinjaSoft
-        </Eyebrow>
-        <CardTitle>
-          Panel <Accent>interno</Accent>
-        </CardTitle>
-        <CardDescription>
-          Acceso exclusivo del equipo de NinjaSoft. Toda acción administrativa
-          queda auditada.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {inactivityLogout && (
-          <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-amber-500/10 p-3 text-sm text-warning">
-            <Clock size={16} className="mt-0.5 shrink-0" />
-            <span>Tu sesión se cerró por inactividad. Volvé a iniciar sesión para continuar.</span>
-          </div>
-        )}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <Input
-            label="Email"
-            type="email"
-            autoComplete="email"
-            error={errors.email?.message}
-            {...register("email")}
-          />
-          <Input
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            error={errors.password?.message}
-            {...register("password")}
-          />
-          {serverError && (
-            <p className="text-sm text-destructive">{serverError}</p>
-          )}
-          <Button type="submit" loading={isSubmitting} className="w-full">
-            Entrar al panel
-          </Button>
-        </form>
+    <>
+      <AuthHeading
+        title="Panel interno"
+        description="Acceso exclusivo del equipo de NinjaSoft. Toda acción administrativa queda auditada."
+      />
 
-        <div className="mt-6 space-y-2 text-center text-sm text-ninja-lavender">
-          <p>
-            <Link href="/recover" className="text-ninja-flameSoft hover:underline">
-              Olvidé mi contraseña
-            </Link>
-          </p>
-          <p>
-            ¿Sos cliente?{" "}
-            <Link href="/login" className="text-ninja-flameSoft hover:underline">
-              Ir al acceso del POS
-            </Link>
-          </p>
+      {inactivityLogout && (
+        <div
+          role="status"
+          className="mb-6 flex items-start gap-2.5 rounded-lg bg-amber-500/10 p-3 text-sm text-warning"
+        >
+          <Clock size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            Tu sesión se cerró por inactividad. Volvé a iniciar sesión para
+            continuar.
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      )}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+        <Input
+          label="Email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          error={errors.email?.message}
+          {...register("email")}
+        />
+        <PasswordInput
+          label="Contraseña"
+          autoComplete="current-password"
+          error={errors.password?.message}
+          labelAside={
+            <AuthLink href="/recover" className="text-sm">
+              Olvidé mi contraseña
+            </AuthLink>
+          }
+          {...register("password")}
+        />
+        {serverError && <AuthAlert>{serverError}</AuthAlert>}
+        <Button type="submit" loading={isSubmitting} className="w-full">
+          Entrar al panel
+        </Button>
+      </form>
+
+      <p className="mt-8 text-center text-sm text-muted-foreground">
+        ¿Sos cliente? <AuthLink href="/login">Ir al acceso del POS</AuthLink>
+      </p>
+    </>
   );
 }

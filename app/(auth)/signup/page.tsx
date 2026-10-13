@@ -25,9 +25,9 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { useToast } from "@/components/ui/Toast";
-import { Isotype, WordmarkPos } from "@/components/brand/Logo";
-import { ValuePanel } from "@/components/auth/ValuePanel";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { AuthHeading, AuthLink } from "@/components/auth/AuthBits";
 import { SignupStepBusiness } from "@/components/auth/SignupStepBusiness";
 import { SignupStepPlan } from "@/components/auth/SignupStepPlan";
 import type { Vertical } from "@/lib/verticals/config";
@@ -60,7 +60,7 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
                     ? "bg-[var(--pos-solid)] text-white"
                     : done
                       ? "bg-ninja-flame/20 text-ninja-flameSoft"
-                      : "bg-white/10 text-ninja-lavender",
+                      : "bg-muted text-ninja-lavender",
                 )}
               >
                 {done ? <Check size={13} /> : it.n}
@@ -75,7 +75,7 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
               </span>
             </span>
             {i < items.length - 1 && (
-              <span className="h-px w-4 bg-white/15 sm:w-6" aria-hidden />
+              <span className="h-px w-4 bg-border sm:w-6" aria-hidden />
             )}
           </div>
         );
@@ -502,16 +502,15 @@ function SignupWizard() {
   const businessErrors = businessForm.formState.errors;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-white/10 bg-card/70 backdrop-blur-xl">
-      <div className="grid lg:grid-cols-2">
-        <ValuePanel />
-
-        <div className="p-6 sm:p-8">
-          {/* Header compacto (mobile) */}
-          <div className="mb-6 flex items-center gap-2 lg:hidden">
-            <Isotype className="h-7 w-auto" priority />
-            <WordmarkPos variant="dark" className="h-6 w-auto" priority />
-          </div>
+    // El panel de marca y el logo los pone app/(auth)/layout.tsx.
+    <div>
+      <div>
+        <div>
+          <AuthHeading
+            className="mb-6"
+            title="Creá tu cuenta"
+            description="14 días de prueba gratis. Sin tarjeta."
+          />
 
           {/* En SSO el negocio y el plan van juntos en una sola vista; el
               stepper sólo aplica al flujo email de 3 pasos. */}
@@ -523,12 +522,12 @@ function SignupWizard() {
               <div className="space-y-5">
                 <GoogleButton onClick={onGoogle} loading={googleLoading} />
 
-                <div className="flex items-center gap-3">
-                  <span className="h-px flex-1 bg-white/10" />
-                  <span className="text-xs uppercase tracking-wider text-ninja-lavender">
-                    o con email
+                <div className="flex items-center gap-3" role="separator" aria-label="o con tu email">
+                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="text-xs text-muted-foreground" aria-hidden>
+                    o con tu email
                   </span>
-                  <span className="h-px flex-1 bg-white/10" />
+                  <span className="h-px flex-1 bg-border" aria-hidden />
                 </div>
 
                 <form
@@ -558,9 +557,8 @@ function SignupWizard() {
                     error={accountErrors.email?.message}
                     {...accountForm.register("email")}
                   />
-                  <Input
+                  <PasswordInput
                     label="Contraseña"
-                    type="password"
                     autoComplete="new-password"
                     hint="Mínimo 10 caracteres, con mayúscula, minúscula y número."
                     error={accountErrors.password?.message}
@@ -582,11 +580,8 @@ function SignupWizard() {
                   </Button>
                 </form>
 
-                <p className="text-center text-sm text-ninja-lavender">
-                  ¿Ya tenés cuenta?{" "}
-                  <Link href="/login" className="text-ninja-flameSoft hover:underline">
-                    Ingresá
-                  </Link>
+                <p className="text-center text-sm text-muted-foreground">
+                  ¿Ya tenés cuenta? <AuthLink href="/login">Iniciar sesión</AuthLink>
                 </p>
               </div>
             )}

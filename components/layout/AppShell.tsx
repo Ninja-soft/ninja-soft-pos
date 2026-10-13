@@ -90,6 +90,7 @@ import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { ReadOnlyBanner } from "@/components/permissions/RoleGate";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
+import { RememberBusiness } from "@/components/layout/RememberBusiness";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { usePrefetchPos } from "@/modules/pos/layoutHooks";
@@ -716,6 +717,7 @@ export function AppShell({
     return (
       <>
         <InactivityGuard />
+        <RememberBusiness />
         <SuspendedGate email={email} cancelled={account?.isCancelled ?? false} />
       </>
     );
@@ -725,6 +727,7 @@ export function AppShell({
     <div className="flex min-h-dvh">
       <InactivityGuard />
       <TenantClaimHealer />
+      <RememberBusiness />
       <StaffAccessGate email={email} />
       <SupervisorPinHost />
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-border bg-background/60 glass-blur lg:block">

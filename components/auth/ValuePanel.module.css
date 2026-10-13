@@ -1,0 +1,246 @@
+/* Animaciones del panel de marca de auth (components/auth/ValuePanel.tsx).
+   Sin sombras, glow ni degradados: sólo opacidad y transformaciones. Todo se
+   apaga con prefers-reduced-motion (las piezas quedan en su estado final). */
+
+/* Escenario del collage: tamaño de diseño fijo, escalado por JS para entrar
+   en el alto/ancho disponible sin cortarse. */
+.stage {
+  transform-origin: top left;
+  transform: scale(var(--stage-scale, 1));
+}
+
+/* Entrada de cada pieza: sube y asienta en su rotación final. */
+.piece {
+  opacity: 0;
+  transform: translateY(18px) rotate(var(--rot, 0deg));
+  animation: piece-in 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes piece-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--rot, 0deg));
+  }
+}
+
+/* Barras del gráfico creciendo desde la base, escalonadas. */
+.bar {
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: bar-grow 900ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes bar-grow {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* Sello "Cobrado": aparece con un golpe corto cuando termina de contar. */
+.stamp {
+  opacity: 0;
+  transform: scale(1.6) rotate(-8deg);
+  animation: stamp-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes stamp-in {
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
+}
+
+/* Pastilla de días de prueba: su lugar ya está reservado; sólo aparece. */
+.fadeIn {
+  animation: fade-in 320ms ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fadeIn,
+  .piece,
+  .bar,
+  .stamp {
+    animation: none;
+    opacity: 1;
+  }
+  .piece {
+    transform: rotate(var(--rot, 0deg));
+  }
+  .bar {
+    transform: none;
+  }
+  .stamp {
+    transform: rotate(-8deg);
+  }
+}
+
+/* ---- Skeletons (mientras esperan fuentes, escala, planes o el logo) -------
+   Bloques planos con la misma silueta y tamaño de lo que va a aparecer, con un
+   pulso suave de opacidad (sin shimmer ni degradados). */
+.skel {
+  background-color: rgb(247 244 255 / 0.07);
+  fill: rgb(247 244 255 / 0.07);
+  animation: skel-pulse 1600ms ease-in-out infinite;
+}
+
+@keyframes skel-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Skeleton del collage: composición ancha o angosta con el mismo umbral que
+   useStageScale (escala de la ancha < 0.8 → 448 x 281.6 px). */
+.skelNarrow {
+  display: none;
+}
+
+@container (max-width: 447.98px), (max-height: 281.58px) {
+  .skelWide {
+    display: none;
+  }
+  .skelNarrow {
+    display: block;
+  }
+}
+
+/* El skeleton se funde cuando llega el contenido (queda montado, sin eventos). */
+.skelOut {
+  pointer-events: none;
+  animation: skel-out 320ms ease-out forwards;
+}
+
+@keyframes skel-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* ---- Negocio recordado: logo en órbita (components/auth/BusinessOrbit.tsx) --
+   Adaptado de la escena "Integrá" de soft.ninja. En el SVG el origen (0,0) es
+   el centro del viewBox, así que rotar/escalar con origen 0 0 gira en torno
+   al logo. */
+.orbitIn {
+  animation: fade-in 420ms ease-out both;
+}
+
+.hub {
+  animation: hub-in 620ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes hub-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+
+.spinSlow {
+  transform-origin: 0 0;
+  animation: spin 80s linear infinite;
+}
+
+.raysTurn {
+  transform-origin: 0 0;
+  animation: spin 140s linear infinite;
+}
+
+.orbitA {
+  transform-origin: 0 0;
+  animation: spin 14s linear infinite;
+}
+
+.orbitB {
+  transform-origin: 0 0;
+  animation: spin 22s linear infinite reverse;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Onda que sale del disco y se apaga (sc-ping de soft.ninja). */
+.ping {
+  transform-origin: 0 0;
+  opacity: 0;
+  animation: ping 3200ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes ping {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+/* Trazo que irradia: un segmento de --len (sobre pathLength 100) que nace en
+   el borde interno del rayo, viaja hacia afuera y se apaga. */
+.ray {
+  stroke-dasharray: var(--len, 24) 200;
+  stroke-dashoffset: var(--len, 24);
+  opacity: 0;
+  animation-name: ray;
+  animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+@keyframes ray {
+  0% {
+    stroke-dashoffset: var(--len, 24);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    stroke-dashoffset: -100;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel,
+  .skelOut,
+  .orbitIn,
+  .hub,
+  .spinSlow,
+  .raysTurn,
+  .orbitA,
+  .orbitB,
+  .ping,
+  .ray {
+    animation: none;
+  }
+  .skelOut {
+    opacity: 0;
+    visibility: hidden;
+  }
+  .ping {
+    opacity: 0;
+  }
+  /* Quieto: cada trazo queda como una rayita a mitad de su recorrido. */
+  .ray {
+    opacity: 0.85;
+    stroke-dashoffset: -30;
+  }
+}

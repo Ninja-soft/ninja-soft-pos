@@ -3,6 +3,7 @@ import {
   POS_SHORTCUTS,
   isTypingTarget,
   matchPosShortcut,
+  shortcutLabelToKey,
 } from "@/lib/pos/shortcuts";
 
 describe("atajos del POS", () => {
@@ -54,7 +55,27 @@ describe("atajos del POS", () => {
       s.keys.map((k) => [k, s.action] as const),
     );
     for (const [key, action] of keys) {
-      expect(matchPosShortcut({ key }, { tagName: "BODY" })).toBe(action);
+      expect(matchPosShortcut(shortcutLabelToKey(key), { tagName: "BODY" })).toBe(action);
     }
+  });
+
+  it("ADR-106: pausar (Shift + F8 o Pausa) y limpiar (Shift + F4) sin pisar F2/F4/F8/F9", () => {
+    const input = { tagName: "INPUT", type: "search" };
+    expect(matchPosShortcut({ key: "F8", shiftKey: true }, input)).toBe("pause");
+    expect(matchPosShortcut({ key: "Pause" }, input)).toBe("pause");
+    expect(matchPosShortcut({ key: "F4", shiftKey: true }, input)).toBe("clear");
+    // Sin Shift siguen siendo los de siempre.
+    expect(matchPosShortcut({ key: "F8" }, input)).toBe("pending");
+    expect(matchPosShortcut({ key: "F4" }, input)).toBe("customer");
+    // Shift con otras teclas de función no dispara nada (ni cobra).
+    for (const key of ["F2", "F9", "F12", "F5"]) expect(matchPosShortcut({ key, shiftKey: true })).toBeNull();
+    expect(matchPosShortcut({ key: "F8", shiftKey: true, ctrlKey: true })).toBeNull();
+    // Cada tecla del catálogo es de una sola acción.
+    const seen = new Map<string, string>();
+    for (const s of POS_SHORTCUTS)
+      for (const k of s.keys) {
+        expect(seen.has(k)).toBe(false);
+        seen.set(k, s.action);
+      }
   });
 });

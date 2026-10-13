@@ -1,4 +1,5 @@
 import type { SaleMethod, ResolvedTender } from "@/lib/pos/tenders";
+import type { CheckoutLine } from "@/lib/pos/checkoutMath";
 
 // Extra del cobro hacia el POS. `kind` decide qué hace create_sale (ver
 // SaleExtraInput): warranty/surcharge entran como ítem de venta; 'tip' va a
@@ -137,6 +138,60 @@ export interface SheetParkOptions {
   onEmail?: (chargeId: string, to: string, note: string) => Promise<void>;
 }
 
+/** Línea de pago registrada en la hoja de cobro. */
+export interface PaidLine extends CheckoutLine {
+  key: string;
+  tenderId: string;
+  title: string;
+  detail?: string;
+  logo: string | null;
+  method: SaleMethod;
+  reference?: string;
+  card_voucher?: CheckoutPayment["card_voucher"];
+  transfer?: CheckoutPayment["transfer"];
+  surchargeItems: { name: string; amount: number }[];
+  /** Cobro electrónico ya aprobado: no se puede quitar. */
+  locked: boolean;
+  /** ¿Puede llevar promo por medio? (Point no: el medio real se sabe al final). */
+  promoEligible: boolean;
+}
+
+/**
+ * Estado de la hoja de cobro que viaja con una venta pausada (ADR-106):
+ * líneas de pago registradas, propina, garantía y vendedor elegidos.
+ */
+export interface CheckoutSnapshot {
+  v: 1;
+  lines: PaidLine[];
+  tipPct: number | null;
+  tipCustom: string;
+  warrantyId: string;
+  warrantyLineId: string;
+  professionalId: string;
+}
+
+/** QR o link generado que sigue esperando el pago al pausar (ADR-106). */
+export interface LiveIntent {
+  intentId: string;
+  provider: string;
+  channel: "qr" | "link";
+  amount: number;
+  surcharges: { name: string; amount: number }[];
+  tenderId: string;
+  title: string;
+  logo: string | null;
+  shareUrl: string | null;
+}
+
+/** Pausar la venta desde la hoja de cobro (ADR-106). */
+export interface SheetPauseOptions {
+  /** Motivo por el que no se puede pausar (mesa, turno...). null = se puede. */
+  blockedReason: string | null;
+  onPause: (snap: CheckoutSnapshot, live: LiveIntent | null) => void;
+  /** "Limpiar" desde la hoja: vacía la venta (con sus reglas de pagos). */
+  onClear?: (snap: CheckoutSnapshot) => void;
+}
+
 /** Pedido de cobro electrónico que la hoja delega al modal del proveedor. */
 export interface ElectronicRequest {
   tender: ResolvedTender;
@@ -152,6 +207,16 @@ export interface ElectronicRequest {
     customerPhone: string | null;
     onPark: (r: ElectronicParkInput) => Promise<{ id: string } | null>;
     onEmail?: (chargeId: string, to: string, note: string) => Promise<void>;
+  };
+  /**
+   * Pausar la venta con el QR o link esperando (ADR-106). El modal entrega el
+   * intent vivo (null si lo tuvo que cancelar: QR de la caja de Mercado Pago).
+   */
+  pause?: {
+    blockedReason: string | null;
+    onPause: (live: Omit<LiveIntent, "tenderId" | "title" | "logo"> | null) => void;
+    /** El POS registra acá el "pausar ya" del modal (atajo de teclado). */
+    registerPause?: (fn: (() => void) | null) => void;
   };
 }
 

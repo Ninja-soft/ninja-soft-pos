@@ -45,7 +45,7 @@ export function GoogleButton({
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-border bg-white/95 px-4 text-sm font-semibold text-[#1f1f1f] transition hover:bg-white disabled:pointer-events-none disabled:opacity-60",
+        "inline-flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-border bg-white/95 px-4 text-sm font-semibold text-[#1f1f1f] outline-none transition hover:bg-white focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60",
         className,
       )}
     >

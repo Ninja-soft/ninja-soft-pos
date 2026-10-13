@@ -5,9 +5,11 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Eraser,
   Gift,
   Link2,
   Lock,
+  Pause,
   QrCode,
   ShieldCheck,
   SlidersHorizontal,
@@ -32,7 +34,6 @@ import {
   splitShare,
   tipFromPercent,
   tipMethodFor,
-  type CheckoutLine,
   type KeypadField,
 } from "@/lib/pos/checkoutMath";
 import {
@@ -82,6 +83,9 @@ import type {
   AccountPayRequest,
   AccountPayState,
   CheckoutPayment,
+  CheckoutSnapshot,
+  PaidLine,
+  SheetPauseOptions,
   ElectronicParkInput,
   ElectronicRequest,
   ElectronicResult,
@@ -116,23 +120,6 @@ export interface CheckoutProfessional {
   id: string;
   name: string;
   commission_pct: number | string | null;
-}
-
-interface PaidLine extends CheckoutLine {
-  key: string;
-  tenderId: string;
-  title: string;
-  detail?: string;
-  logo: string | null;
-  method: SaleMethod;
-  reference?: string;
-  card_voucher?: CheckoutPayment["card_voucher"];
-  transfer?: CheckoutPayment["transfer"];
-  surchargeItems: { name: string; amount: number }[];
-  /** Cobro electrónico ya aprobado: no se puede quitar. */
-  locked: boolean;
-  /** ¿Puede llevar promo por medio? (Point no: el medio real se sabe al final). */
-  promoEligible: boolean;
 }
 
 /** Transferencia (ADR-055): cuentas de la caja y si se muestra la pantalla. */
@@ -235,6 +222,14 @@ export interface CheckoutSheetProps {
    * (método 'sena', hasta el total). create_sale exige exactamente ese monto.
    */
   prepaid?: { amount: number; label: string } | null;
+  /** Pausar la venta (y Limpiar) desde la hoja (ADR-106). */
+  pause?: SheetPauseOptions | null;
+  /** Estado de la hoja a restaurar al abrir (venta pausada que se retoma). */
+  restore?: CheckoutSnapshot | null;
+  /** El POS llama acá para pausar con el atajo de teclado. */
+  pauseRef?: React.MutableRefObject<(() => void) | null>;
+  /** El POS llama acá para limpiar con el atajo de teclado. */
+  clearRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -295,6 +290,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     renderTerminal,
     taxPreview = null,
     prepaid = null,
+    pause = null,
+    restore = null,
+    pauseRef,
+    clearRef,
   } = props;
 
   // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
@@ -361,6 +360,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     planLabel: string | null;
   } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // ADR-106: por qué no se pudo pausar (cobro en la terminal o el Point en curso).
+  const [pauseNotice, setPauseNotice] = useState<string | null>(null);
+  // "Pausar" del modal del QR (entrega el intent vivo).
+  const qrPauseRef = useRef<(() => void) | null>(null);
   // Estado del panel de cuenta corriente (reference JSON con cuotas / override y
   // si el cargo está bloqueado). Arranca bloqueado hasta que el panel lea la cuenta.
   const [accountPay, setAccountPay] = useState<AccountPayState>({ reference: undefined, blocked: true });
@@ -388,8 +391,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       prepaid && prepaid.amount > 0
         ? depositToApply(prepaid.amount, checkoutTotals({ base, rounding, deliveryFee, lines: [] }).grandTotal)
         : 0;
+    // ADR-106: venta pausada que se retoma: vuelven sus pagos y extras.
+    const restored = restore?.lines ?? [];
     setLines(
-      prepaidAmount > 0
+      restored.length > 0
+        ? restored
+        : prepaidAmount > 0
         ? [
             {
               key: "sena",
@@ -421,12 +428,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setVoucher(EMPTY_VOUCHER);
     setItemsOpen(false);
     setPickedItems([]);
-    setTipPct(null);
-    setTipCustom("");
-    setWarrantyId(initialWarrantyId);
-    setWarrantyLineId("");
-    setProfessionalId("");
-    setExtrasOpen(Boolean(initialWarrantyId));
+    setTipPct(restore?.tipPct ?? null);
+    setTipCustom(restore?.tipCustom ?? "");
+    setWarrantyId(restore?.warrantyId || initialWarrantyId);
+    setWarrantyLineId(restore?.warrantyLineId ?? "");
+    setProfessionalId(restore?.professionalId ?? "");
+    setExtrasOpen(Boolean(restore?.warrantyId || initialWarrantyId || restore?.tipPct != null || restore?.tipCustom || restore?.professionalId));
+    setPauseNotice(null);
     setElectronic(null);
     setTerminalCharge(null);
     setConfirmLeave(false);
@@ -967,6 +975,43 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     if (lockedTotal > 0) setConfirmLeave(true);
     else onOpenChange(false);
   }
+
+  // ── Pausar venta (ADR-106) ─────────────────────────────────────────────────
+  // Lo que se guarda de la hoja: pagos registrados y extras elegidos.
+  function snapshot(): CheckoutSnapshot {
+    return { v: 1, lines, tipPct, tipCustom, warrantyId, warrantyLineId, professionalId };
+  }
+  const pauseBlocked = !pause
+    ? "No disponible"
+    : (pause.blockedReason ??
+      (terminalCharge
+        ? "Esperá que termine el cobro en la terminal (o cancelalo) para pausar."
+        : electronic?.tender.flow === "point"
+          ? "Esperá que termine el cobro en el Point (o cancelalo) para pausar."
+          : null));
+  function doPause() {
+    if (!pause) return;
+    if (pauseBlocked) {
+      setPauseNotice(pauseBlocked);
+      return;
+    }
+    // Con el QR abierto, el modal entrega el intent que sigue esperando.
+    if (electronic && qrPauseRef.current) {
+      qrPauseRef.current();
+      return;
+    }
+    pause.onPause(snapshot(), null);
+  }
+  if (pauseRef) pauseRef.current = doPause;
+  function doClear() {
+    if (!pause?.onClear) return;
+    if (electronic || terminalCharge) {
+      setPauseNotice("Terminá o cancelá el cobro en curso para limpiar la venta.");
+      return;
+    }
+    pause.onClear(snapshot());
+  }
+  if (clearRef) clearRef.current = doClear;
 
   // ── Botón principal ────────────────────────────────────────────────────────
   const posnetNextStep = isPosnet
@@ -1652,6 +1697,35 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         <span>{electronic ? "Esperando el cobro" : ctaLabel}</span>
       </button>
       <p className="mt-2 text-center text-xs text-muted-foreground">{ctaHint}</p>
+      {pause && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={doPause}
+            aria-keyshortcuts="Shift+F8 Pause"
+            title="Pausar la venta con sus pagos (Shift + F8)"
+            className="flex h-11 items-center justify-center gap-2 rounded-lg bg-fg-6 px-3 text-sm font-semibold text-foreground transition-colors hover:bg-fg-10"
+          >
+            <Pause size={16} aria-hidden className="shrink-0" />
+            <span className="whitespace-nowrap">Pausar venta</span>
+          </button>
+          {pause.onClear && (
+            <button
+              type="button"
+              onClick={doClear}
+              aria-keyshortcuts="Shift+F4"
+              className="flex h-11 items-center justify-center gap-2 rounded-lg bg-fg-6 px-3 text-sm font-semibold text-foreground transition-colors hover:bg-danger/15 hover:text-danger"
+            >
+              <Eraser size={16} aria-hidden /> Limpiar
+            </button>
+          )}
+        </div>
+      )}
+      {pauseNotice && (
+        <p role="status" className="mt-2 text-center text-xs font-medium text-warning">
+          {pauseNotice}
+        </p>
+      )}
     </div>
   );
 
@@ -1868,8 +1942,21 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             <p className="mt-1.5 text-sm text-muted-foreground">
               Ya se cobraron {money(lockedTotal)} con QR o Point. Si salís sin confirmar la venta, el cobro queda
               en Cobros QR para conciliar y el carrito sigue abierto.
+              {pause && !pauseBlocked ? " Si el cliente vuelve después, pausala: el pago queda guardado con la venta." : ""}
             </p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
+            {pause && !pauseBlocked && (
+              <Button
+                className="mt-5 w-full"
+                size="lg"
+                onClick={() => {
+                  setConfirmLeave(false);
+                  doPause();
+                }}
+              >
+                <Pause size={16} aria-hidden /> Pausar venta
+              </Button>
+            )}
+            <div className={cn("grid grid-cols-2 gap-2", pause && !pauseBlocked ? "mt-2" : "mt-5")}>
               <Button variant="secondary" size="lg" onClick={() => setConfirmLeave(false)}>
                 Volver al cobro
               </Button>
@@ -1914,6 +2001,25 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                   customerPhone: park.customerPhone,
                   onPark: parkElectronic,
                   onEmail: park.onEmail,
+                }
+              : undefined,
+          pause:
+            pause && electronic.tender.flow === "qr"
+              ? {
+                  blockedReason: pause.blockedReason,
+                  onPause: (live) => {
+                    const t = electronic.tender;
+                    const snap = snapshot();
+                    // Se desmonta sin cerrar: el QR o link sigue vivo para el cliente.
+                    setElectronic(null);
+                    pause.onPause(
+                      snap,
+                      live ? { ...live, tenderId: t.id, title: `${t.brandLabel} ${t.label}`, logo: t.logo } : null,
+                    );
+                  },
+                  registerPause: (fn) => {
+                    qrPauseRef.current = fn;
+                  },
                 }
               : undefined,
         })}

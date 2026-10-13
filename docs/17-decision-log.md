@@ -3796,6 +3796,80 @@ El dueño pidió que los pedidos de PedidosYa, Rappi y Uber Eats entren solos, c
 
 ---
 
+## ADR-106: Pausar venta y Limpiar en el POS: la venta en curso (carrito, hoja de cobro y pagos) se guarda por negocio, sucursal, caja y turno, y se retoma con el criterio del servidor (F8 · H21j)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausar-venta`, migración `20261111100000_pausar_venta` sin aplicar) · **Base:** ADR-048 (cobros en espera), ADR-051 (caja propia), ADR-056 y ADR-058 (precio del servidor), ADR-077 (venta offline), ADR-100 (atajos).
+
+### Contexto
+
+Pedido literal del dueño: "si estoy cobrando y el cliente quiere hacer algo e interrumpir el cobro (ejemplo: se le apagó el celular) pueda seguir cobrando a otro y luego retomar esa transacción fácil". Y después: "también quiero un botón para limpiar fácil lo cargado". Hasta acá sólo existía "Dejar en espera" (ADR-048), que exige un único QR o link que cubra toda la venta, y un tachito chico arriba del carrito que vaciaba sin red.
+
+### Decisión
+
+1. **Tablas `paused_sales` y `paused_sale_payments`** (por negocio, sucursal, caja, turno actual y turno de origen). La pausada guarda el carrito tal cual (líneas, descuento, cupón, cliente, garantía ofrecida, lista y condición de precio, notas), el estado de la hoja de cobro (líneas de pago, propina, garantía y vendedor) y los argumentos de `create_sale` (mismo mapeo que la venta inmediata). Los pagos se normalizan: `line` (registrado en la hoja: efectivo, tarjeta con cupón, QR aprobado, transferencia, cuenta corriente) e `intent` (QR o link generado que sigue esperando). `credited` = la plata ya entró por un proveedor (todo menos efectivo, cuenta corriente y saldo a favor; un intent, sólo aprobado). Espejo en `paused_payment_credited` (SQL) e `isCreditedPayment` (TS), con test que los compara.
+2. **Nada es venta hasta confirmar.** No se reserva stock ni se crea nada en `sales`: `create_sale` corre al retomar y cobrar. Estados `paused → resumed → completed | discarded` (`resumed → paused` al volver a pausar, conservando id, nombre y pagos).
+3. **Pagos acreditados sin pérdida ni duplicado.** Un intent vive en una sola pausada viva (índice único) y nunca en un cobro en espera. El **trigger `AFTER UPDATE OF status, sale_id` en `mp_payment_intents`** (webhooks y sondeos de todos los proveedores, sin tocar sus Edges) concilia el estado del intent contra la pausada; si `create_sale` ancla el intent a una venta, la pausada queda `completed` sola; un pago tardío sobre una descartada queda `needs_review`. Al retomar, el POS sondea al proveedor los intents pendientes y, si siguen pendientes, ofrece "Seguir esperando" (queda pausada) o "Cancelar el QR y retomar" (intent `cancelled` local más baja en el proveedor donde hay API).
+4. **QR de la caja de Mercado Pago (Orders API):** bloquea la caja para la venta siguiente, así que al pausar se da de baja y se re-consulta (si el cliente justo pagó, entra como cobrado); los demás QR y links siguen vivos con la venta.
+5. **Retomar con el criterio del servidor:** `resume_paused_sale` corre `create_sale` en seco (`_pc_dry_run`, revertido) con el turno propio y la lista y condición de la venta (headers de ADR-058). Un `price_mismatch` reprecia el carrito con `usePriceRefresh`; otros rechazos (stock, cupón, topes) se avisan; el cambio de total se informa. Además el POS compara cada línea con el resolver de precios vigente y reprecia lo que cambió (sin tocar precio manual, regalos, packs ni modificadores). Las promos se recalculan solas con el motor del POS. Si había pagos, la hoja se abre con ellos restaurados (los cobrados por un proveedor, bloqueados).
+6. **Descartar:** sin pagos, confirmación simple; con efectivo, confirmar que se devolvió; con pagos acreditados no se descarta: se muestra qué hacer (retomar y terminar la venta, o devolver desde Cobros QR, anulando el cupón o devolviendo la transferencia) y sólo dueño o encargado confirma "ya se devolvió" con motivo (`refund_requires_manager` y `reason_required` en el servidor). Los intents pendientes se cancelan.
+7. **Limpiar** (reemplaza al tachito): botón con texto junto a Pausar (en el carrito y en la hoja de cobro), atajo **Shift + F4**, confirmación breve y **Deshacer** en el aviso durante 7 s (restaura carrito, cliente, cupón, lista, garantía y pagos). Con pagos acreditados no se limpia: se ofrece Pausar. Pasado el Deshacer, si había pagos en curso (efectivo o QR pendiente) queda `pos_sale_cleared_with_payments` en `audit_logs` (`log_pos_cleared_sale`, que vuelve a rechazar pagos acreditados), y si era una pausada retomada se descarta.
+8. **Atajos (ADR-100):** Pausar = **Shift + F8** (al lado de F8, cobros en espera) o la tecla **Pausa**; Limpiar = **Shift + F4**. Shift con otras teclas de función no dispara nada. Andan con la hoja de cobro o el QR abiertos; Shift + F4 otra vez (o Enter) confirma la limpieza.
+9. **Visibilidad (RLS con `(select ...)`, sin `is_internal()`):** negocio activo, sucursal permitida y (quien la pausó, quien la retomó, el dueño del turno al que pertenece, o dueño o encargado). Sin policies de escritura ni grants de insert, update o delete: todo por RPC SECURITY DEFINER con `tenant_id` explícito y `role_write_guard('operate')` en ambas tablas. Pausar y retomar exigen el turno propio (`shift_owner_ok`, ADR-051) y de la sucursal de la venta; se puede pausar un carrito sin caja abierta (sin turno). Una venta retomada por otra persona sólo la toma dueño o encargado.
+10. **Cierre de caja sin recrear `close_cash_shift`:** un trigger `AFTER UPDATE OF status` en `cash_shifts` pasa las pausadas del turno que cierra a la próxima apertura de su caja (`carry_over`) y otro `AFTER INSERT` las engancha al abrir. El POS avisa antes del arqueo cuántas hay y por cuánto, y ofrece descartar las que no tienen pagos; las que tienen pagos pasan siempre. No son ventas: no entran en el arqueo.
+11. **Sin conexión:** la pausa se guarda en este equipo (`localStorage` por negocio y usuario, `ninja_paused_sales_v1`) y se sube sola al volver (`pause_sale` idempotente por id, `source = 'offline'`, sin turno: se engancha a la próxima apertura). Una pausada del servidor no se retoma sin conexión (no hay lock). No se reusa la cola de ventas offline: una pausa no es una venta y no debe sincronizarse como tal.
+12. **Auditoría:** `paused_sale_paused`, `paused_sale_repaused`, `paused_sale_resumed` (con el total del servidor y el error del ensayo), `paused_sale_completed`, `paused_sale_discarded` (con montos acreditados y si se confirmó la devolución) y `pos_sale_cleared_with_payments`.
+13. **Feature: BASE**, parte de `pos` (sin key nueva; gating `tenant_has_feature('pos')` en `pause_sale`). Es operación básica de mostrador, como el carrito, y no entra en la matriz de planes. Mesas, delivery, turnos de agenda, retiros de reservas y la edición de un cobro en espera no se pausan (tienen su propio guardado o cierre atómico): el botón explica por qué.
+
+### Alternativas descartadas
+
+- **Extender `pending_charges` (ADR-048):** su modelo es "un QR que cubre toda la venta y se completa sola en el servidor"; una pausa puede tener varios pagos, efectivo o ninguno, y la completa el cajero.
+- **Guardar la pausa sólo en el navegador:** se pierde con la recarga o el corte, no la ve el encargado y no permite conciliar el webhook.
+- **Venta `pending` en `sales`:** rompe reportes, arqueos, stock y Z (mismo motivo que ADR-048).
+- **Recrear `close_cash_shift` con otra decisión obligatoria:** lo recrean varias ramas; los triggers mantienen la regla (nada huérfano) sin tocarlo.
+- **Pausar con F6, F7 o F10:** los usa el navegador (barra, cursor, menú).
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261111100000_pausar_venta` (después de `20261109500000`; usa `_pc_dry_run` de `20261015120000`, `shift_owner_ok` de `20261017120000` y `trg_role_write_guard` de `20261031200000`). Sin Edges ni secrets. Sin la migración, Pausar falla con un aviso y la venta vuelve al POS; el resto sigue igual.
+- Cada cambio de estado de un intent busca su pausada por índice único: costo despreciable. El ensayo al retomar es una llamada a `create_sale` revertida.
+- **Riesgos:** si el servidor rechaza la pausa, la venta vuelve al POS tal cual, pero un QR que se pausó vivo queda sin seguimiento (si se paga, aparece en Cobros QR para conciliar). Una pausada retomada en un equipo que se corta queda "en curso": la ve y la retoma quien la tenía, o el encargado.
+- **Pendiente:** Realtime para el aviso de QR cobrado en la pausa (hoy sondeo cada 10 s con QR esperando), notas de venta en el POS (el campo ya viaja), e2e con un proveedor de pago real.
+- Tests: `tests/unit/pausedSales.test.ts` (serialización y restauración, pagos acreditados contra el SQL, reglas de descarte y de Limpiar, cambios de precio, copia local), `tests/unit/posShortcuts.test.ts` (atajos nuevos sin pisar F2, F4, F8 ni F9) y RLS `tests/integration/rls-pausar-venta.test.ts` (cajero en su turno, otro cajero y otro negocio no ven, escritura directa bloqueada, inserts multi-fila con todas las claves, intent único, conciliación por webhook, descarte con pagos, ensayo sin ventas, venta que completa la pausada, cierre y apertura de caja, Limpiar auditado).
+
+---
+
+## ADR-108: Ventas pausadas que vencen a las 24 h (baja lógica, job cada 15 min, criterio del servidor) y las que tienen pagos no se borran solas
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausadas-24h`, migración `20261111100100_pausadas_vencen_24h` sin aplicar) · **Base:** ADR-106 (pausar venta). ADR-107 queda reservado para el PR abierto del catálogo.
+
+### Contexto
+
+Pedido del dueño: "que se borren a las 24 hs y mejorame el diseño: acá no muestra el contenido, ni si tiene cliente o no". Con ADR-106 una pausada vivía para siempre (pasaba de turno en turno) y la lista mostraba un input editable, el total y una línea gris.
+
+### Decisión
+
+1. **Vencimiento a las 24 h del último movimiento** (pausar o retomar; volver a pausar reinicia el reloj). Columna `paused_sales.expires_at` mantenida por el trigger `paused_sales_set_expiry`, con `paused_sale_ttl()` = 24 h (espejo `PAUSED_TTL_HOURS` en TS, con test que los compara).
+2. **Baja lógica:** estado nuevo `expired` + `expired_at`. Nunca DELETE. La fila y sus pagos quedan para auditoría.
+3. **Pagos (lo importante):** una pausada con **pagos vivos** (línea confirmada en la hoja: efectivo en el cajón, tarjeta con cupón, transferencia; o un QR o link pendiente o aprobado) **no vence en silencio**. La plata ya está en el cajón o en el proveedor, y ADR-106 exige devolverla a mano (y, si está acreditada, que lo confirme dueño o encargado con motivo); anularla sola sería perder el rastro del cobro. El job la deja abierta, marca `expiry_held_at` y audita `paused_sale_expiry_held` una sola vez; el POS la muestra como **"Venció: tiene pagos, resolvela"** (retomar y terminar el cobro, o descartar con las reglas de siempre). Los intents muertos (rechazado, cancelado, vencido) no cuentan como pago: esa pausada vence. Un pago tardío sobre una vencida queda `needs_review` (igual que sobre una descartada).
+4. **Criterio del servidor aunque el job no haya corrido:** `list_open_paused_sales(p_store_id)` (SECURITY INVOKER, respeta la RLS de ADR-106, devuelve filas de `paused_sales` para embeber los pagos) no lista las vencidas sin pagos, y `resume_paused_sale` rechaza con `paused_sale_expired` las vencidas por estado o por reloj (sin pagos vivos). Renombrar una vencida da `paused_sale_closed`.
+5. **Job pg_cron `paused-sales-expire` cada 15 min** (`expire_paused_sales(500)`, SECURITY DEFINER, sólo `service_role`, `FOR UPDATE SKIP LOCKED`, idempotente). Primero concilia los intents: si alguno ya es venta, la pausada queda `completed`. **Auditoría:** una fila por pausada (`paused_sale_expired` o `paused_sale_expiry_held`), actor nulo (sistema), con total, nombre, cliente y resumen de pagos.
+6. **Retomadas abandonadas:** una `resumed` también vence 24 h después de retomarla (el POS que la tenía ya no tiene el carrito). Si igual se cobra, `complete_paused_sale` la completa (no rechaza las vencidas: la venta existió).
+7. **Sin conexión:** las pausadas guardadas en el equipo también vencen: sin pagos, se borran del `localStorage` al cargar.
+8. **Rediseño de la lista:** cada pausada es una tarjeta con el cliente destacado (avatar con iniciales y nombre, o "Consumidor final" con el chip "Sin cliente"), el nombre o nota editable en línea con un lápiz (ya no un input grande), el total grande y la cantidad de productos, el contenido (foto del producto si tiene o iniciales, nombre, variante o modificadores, cantidad y subtotal; las primeras 3 y "+N productos más" desplegable), la hora de pausa, quién la pausó ("por vos" o el nombre del equipo) y cuánto falta para que venza ("Vence en 3 h"; menos de 2 h, resaltada; vencida con pagos, en rojo con la explicación). Retomar primario, Descartar secundario con la confirmación de ADR-106. Los chips de la barra superior muestran "Vence en 40 min" o "Venció" cuando corresponde. Tokens del tema, sin sombras, gradientes ni bordes de color.
+
+### Alternativas descartadas
+
+- **Vencer también las que tienen pagos y anular los pagos solos:** el efectivo no se puede "anular" (hay que devolverlo en mano) y devolver un cobro de proveedor sin una persona es riesgoso; se perdería el rastro de plata que entró.
+- **Filtrar sólo en el front:** el reloj del equipo puede estar mal y otra caja podría retomarla.
+- **Columna generada para `expires_at`:** `timestamptz + interval` no es inmutable en Postgres; va por trigger.
+- **DELETE físico a los N días:** contra la regla de baja lógica.
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261111100100_pausadas_vencen_24h` después de `20261111100000_pausar_venta`. Al aplicarla, las pausadas de más de 24 h sin pagos vencen en la próxima corrida del job (cada 15 min). Sin la migración, el POS usa la lectura de ADR-106 (sin vencimiento).
+- Sin Edges ni secrets nuevos (el job es SQL puro en pg_cron).
+- Tests: `tests/unit/pausedSalesExpiry.test.ts` (vencimiento, "vence pronto", retenidas con pagos, TTL contra el SQL, contenido de la tarjeta) y `tests/integration/rls-pausadas-24h.test.ts` (vencida no se lista ni se retoma sin job, otro negocio no ve nada, el job sólo con `service_role`, baja lógica con auditoría idempotente, retenida con efectivo y QR pendiente, QR vencido no retiene, retomar reinicia el reloj, pago tardío para revisión).
+
 ## ADR-107: Catálogo Tiendita sincronizado desde el feed del scraper en Railway (reemplaza el import por Excel)
 
 **Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-sync-railway`; migración `20261110500000_catalogo_sync_railway` sin aplicar; Edge `catalog_sync` sin desplegar; secrets sin setear) · **Base:** ADR-052 (`internal_scope()`), ADR-062 (patrón de cron interno con `X-Cron-Secret`), ADR-083 (`audit_logs`), ADR-090 (auditoría de rendimiento), ADR-093 (`catalog_search` sobre `catalog_products`).

@@ -103,3 +103,87 @@ export function WordmarkSoft({
     />
   );
 }
+
+// Logos OFICIALES (public/brand/oficial, ver su README): `*-light` lleva
+// "Ninja" en blanco (fondos oscuros), `*-dark` lleva "Ninja" oscuro (fondos
+// claros). El swap es por CSS según data-theme (.wordmark-on-dark/-light), sin
+// JS ni flash. `variant="dark"` fuerza la versión para fondo oscuro.
+function OfficialLogo({
+  name,
+  alt,
+  width,
+  sizes,
+  className,
+  priority,
+  variant = "auto",
+}: {
+  name: "ninja-pos" | "ninja-soft";
+  alt: string;
+  width: number;
+  sizes: string;
+  className?: string;
+  priority?: boolean;
+  variant?: "auto" | "dark";
+}) {
+  const onDark = (
+    <Image
+      src={`/brand/oficial/${name}-light.webp`}
+      alt={alt}
+      width={width}
+      height={255}
+      sizes={sizes}
+      priority={priority}
+      className={cn(variant === "auto" && "wordmark-on-dark", className)}
+    />
+  );
+  if (variant === "dark") return onDark;
+  return (
+    <>
+      {onDark}
+      <Image
+        src={`/brand/oficial/${name}-dark.webp`}
+        alt={alt}
+        width={width}
+        height={255}
+        sizes={sizes}
+        className={cn("wordmark-on-light", className)}
+      />
+    </>
+  );
+}
+
+/** Logo oficial Ninja POS (1059x255). */
+export function LogoNinjaPos({
+  className,
+  priority,
+  variant,
+}: {
+  className?: string;
+  priority?: boolean;
+  variant?: "auto" | "dark";
+}) {
+  return (
+    <OfficialLogo
+      name="ninja-pos"
+      alt="Ninja POS"
+      width={1059}
+      sizes={WORDMARK_SIZES}
+      priority={priority}
+      variant={variant}
+      className={cn("h-8 w-auto", className)}
+    />
+  );
+}
+
+/** Logo oficial Ninja Soft (1130x255), para firmas "Un producto de Ninja Soft". */
+export function LogoNinjaSoft({ className }: { className?: string }) {
+  return (
+    <OfficialLogo
+      name="ninja-soft"
+      alt="Ninja Soft"
+      width={1130}
+      sizes="160px"
+      className={cn("h-4 w-auto", className)}
+    />
+  );
+}

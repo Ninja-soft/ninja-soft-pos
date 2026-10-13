@@ -238,6 +238,7 @@ export function CheckoutSheetConnected({
           customerId={customerId}
           prefetched={prefetched}
           park={req.park ?? null}
+          pause={req.pause ?? null}
           base={req.amount}
           onQrState={onQrState}
           onOpenChange={(o) => {

@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   Check,
+  ChevronDown,
   CreditCard,
   Flame,
   Package,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
-import { Button } from "@/components/ui/Button";
+import { buttonVariants } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
 import { ProfileOnboardingPrompt } from "@/components/profiles/ProfileOnboardingPrompt";
@@ -36,6 +37,7 @@ import {
   buildActivationChecklist,
   checklistProfile,
   type ChecklistKey,
+  type ChecklistStep,
   type ChecklistStatus,
 } from "@/lib/onboarding/activationChecklist";
 
@@ -59,41 +61,353 @@ const ICONS: Record<ChecklistKey, React.ElementType> = {
 
 const COLLAPSE_KEY = "onboarding-checklist-collapsed";
 
-// Anillo de progreso (SVG) con trazo sólido de marca.
-function ProgressRing({ pct }: { pct: number }) {
-  const size = 56;
-  const stroke = 5;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c - (pct / 100) * c;
+// Foco visible común a los controles propios de la tarjeta.
+const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
+
+function pendingCopy(left: number) {
+  return left === 1 ? "Te falta 1 paso para dejar todo listo." : `Te faltan ${left} pasos para dejar todo listo.`;
+}
+
+// Progreso segmentado: un segmento por paso. Hechos en tono de éxito, el
+// siguiente paso en naranja (es la acción), el resto neutro.
+function SegmentedProgress({
+  steps,
+  status,
+  nextKey,
+}: {
+  steps: readonly ChecklistStep[];
+  status: ChecklistStatus;
+  nextKey: ChecklistKey | null;
+}) {
+  const done = steps.filter((s) => status[s.key] === true).length;
   return (
-    <span className="relative inline-flex h-14 w-14 shrink-0 items-center justify-center">
-      <svg width={size} height={size} className="-rotate-90" aria-hidden>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          className="stroke-border"
+    <div
+      role="progressbar"
+      aria-label="Progreso de la puesta en marcha"
+      aria-valuemin={0}
+      aria-valuemax={steps.length}
+      aria-valuenow={done}
+      aria-valuetext={`${done} de ${steps.length} pasos completados`}
+      className="flex gap-1"
+    >
+      {steps.map((s) => (
+        <span
+          key={s.key}
+          className={cn(
+            "h-1.5 flex-1 rounded-full transition-colors duration-500",
+            status[s.key] === true ? "bg-success" : s.key === nextKey ? "bg-[var(--pos-solid)]" : "bg-border",
+          )}
         />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          stroke="var(--pos-solid, #db3a14)"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-          style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.22,1,0.36,1)" }}
-        />
-      </svg>
-      <span className="absolute font-display text-sm font-bold tabular-nums text-foreground">
-        {pct}%
+      ))}
+    </div>
+  );
+}
+
+export interface OnboardingChecklistCardProps {
+  steps: readonly ChecklistStep[];
+  status: ChecklistStatus;
+  onPostpone: () => void;
+  onDismiss: () => void;
+  /** Atajos extra al pie (perfil por rubro, catálogo de muestra). */
+  children?: React.ReactNode;
+}
+
+/**
+ * Vista de la "Puesta en marcha" (sólo presentación, sin datos): el siguiente
+ * paso pendiente es el protagonista, el resto de pendientes va compacto debajo
+ * y los completados se resumen en una fila desplegable.
+ */
+export function OnboardingChecklistCard({
+  steps,
+  status,
+  onPostpone,
+  onDismiss,
+  children,
+}: OnboardingChecklistCardProps) {
+  const [showDone, setShowDone] = useState(false);
+  const [showAllRest, setShowAllRest] = useState(false);
+  const doneSteps = steps.filter((s) => status[s.key] === true);
+  const pending = steps.filter((s) => status[s.key] !== true);
+  const [next, ...rest] = pending;
+  // Con muchos pendientes, "Después" muestra los primeros y el resto a pedido.
+  const REST_PREVIEW = 3;
+  const restCollapsible = rest.length > REST_PREVIEW + 1;
+  const visibleRest = restCollapsible && !showAllRest ? rest.slice(0, REST_PREVIEW) : rest;
+  const hiddenRest = rest.length - REST_PREVIEW;
+  const total = steps.length;
+  const NextIcon = next ? ICONS[next.key] : Rocket;
+  const nextIndex = next ? steps.indexOf(next) + 1 : 0;
+
+  return (
+    <section
+      aria-labelledby="onboarding-title"
+      className="mt-6 animate-slide-up rounded-lg border border-border bg-card"
+    >
+      {/* Encabezado: título, cuánto falta, progreso segmentado y controles */}
+      <div className="p-4 sm:p-6">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft sm:flex">
+            <Flame size={20} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <h2 id="onboarding-title" className="font-display text-lg font-bold leading-tight sm:text-xl">
+                Puesta en marcha
+              </h2>
+              <span className="font-display text-sm font-bold tabular-nums text-muted-foreground">
+                {doneSteps.length}/{total}
+              </span>
+            </div>
+            <p className="mt-0.5 text-sm text-muted-foreground">{pendingCopy(pending.length)}</p>
+          </div>
+          <div className="-mr-1.5 -mt-1 flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={onPostpone}
+              className={cn(
+                "hidden rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground sm:inline-flex",
+                FOCUS,
+              )}
+            >
+              Ocultar por ahora
+            </button>
+            <button
+              type="button"
+              onClick={onDismiss}
+              aria-label="Ocultar la guía para siempre"
+              title="Ocultar para siempre"
+              className={cn(
+                "rounded-md p-1.5 text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground",
+                FOCUS,
+              )}
+            >
+              <X size={16} aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 sm:pl-[60px]">
+          <SegmentedProgress steps={steps} status={status} nextKey={next?.key ?? null} />
+        </div>
+      </div>
+
+      <div className="border-t border-border p-4 sm:p-6">
+        {/* Protagonista: el siguiente paso */}
+        {next && (
+          <div className="rounded-lg border border-border bg-muted/40 p-4 sm:p-5">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-ninja-flameSoft">
+              Siguiente paso · {nextIndex} de {total}
+            </p>
+            <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft">
+                  <NextIcon size={20} aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="font-display text-lg font-bold leading-snug text-foreground">{next.label}</h3>
+                  <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{next.desc}</p>
+                </div>
+              </div>
+              <Link
+                href={next.href as Route}
+                className={cn(buttonVariants({ variant: "primary", size: "lg" }), "w-full shrink-0 sm:w-auto")}
+              >
+                {next.cta}
+                <ArrowRight size={16} aria-hidden />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Después: el resto de pendientes, compactos */}
+        {rest.length > 0 && (
+          <div className="mt-5">
+            <h3 className="font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Después
+            </h3>
+            <ul id="onboarding-rest-list" className="mt-2 divide-y divide-border">
+              {visibleRest.map((step) => {
+                const Icon = ICONS[step.key];
+                return (
+                  <li key={step.key} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <Icon size={16} aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold leading-snug text-foreground">{step.label}</div>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">{step.desc}</p>
+                      </div>
+                    </div>
+                    <Link
+                      href={step.href as Route}
+                      aria-label={`${step.cta}: ${step.label}`}
+                      className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "w-full shrink-0 gap-1.5 sm:w-auto")}
+                    >
+                      {step.cta}
+                      <ArrowRight size={14} aria-hidden />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {restCollapsible && (
+              <button
+                type="button"
+                onClick={() => setShowAllRest((v) => !v)}
+                aria-expanded={showAllRest}
+                aria-controls="onboarding-rest-list"
+                className={cn(
+                  "group mb-1 inline-flex items-center gap-1.5 rounded-md py-1.5 text-sm font-medium text-muted-foreground transition hover:text-foreground",
+                  FOCUS,
+                )}
+              >
+                {showAllRest ? "Ver menos" : hiddenRest === 1 ? "Ver 1 paso más" : `Ver ${hiddenRest} pasos más`}
+                <ChevronDown
+                  size={16}
+                  aria-hidden
+                  className={cn("shrink-0 transition-transform", showAllRest && "rotate-180")}
+                />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Completados: una sola fila desplegable */}
+        {doneSteps.length > 0 && (
+          <div className={cn(rest.length > 0 ? "mt-2 border-t border-border pt-3" : "mt-4")}>
+            <button
+              type="button"
+              onClick={() => setShowDone((v) => !v)}
+              aria-expanded={showDone}
+              aria-controls="onboarding-done-list"
+              className={cn(
+                "group flex w-full items-center gap-2.5 rounded-md py-1.5 text-left text-sm transition",
+                FOCUS,
+              )}
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+                <Check size={14} strokeWidth={3} aria-hidden />
+              </span>
+              <span className="shrink-0 font-medium text-foreground">
+                {doneSteps.length === 1 ? "1 paso listo" : `${doneSteps.length} pasos listos`}
+              </span>
+              {!showDone && (
+                <span className="hidden min-w-0 flex-1 truncate text-muted-foreground sm:block">
+                  {doneSteps.map((s) => s.label).join(" · ")}
+                </span>
+              )}
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className={cn(
+                  "ml-auto shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
+                  showDone && "rotate-180",
+                )}
+              />
+            </button>
+            {showDone && (
+              <ul id="onboarding-done-list" className="mt-2 flex flex-wrap gap-2">
+                {doneSteps.map((s) => (
+                  <li key={s.key}>
+                    <Link
+                      href={s.href as Route}
+                      aria-label={`${s.label} (listo). Revisar`}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 py-1 pl-1.5 pr-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground",
+                        FOCUS,
+                      )}
+                    >
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-success/15 text-success">
+                        <Check size={10} strokeWidth={3.5} aria-hidden />
+                      </span>
+                      {s.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {children}
+
+        {/* En celular, "Ocultar por ahora" va al pie para no apretar el título. */}
+        <button
+          type="button"
+          onClick={onPostpone}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "md" }),
+            "mt-3 w-full font-medium text-muted-foreground sm:hidden",
+          )}
+        >
+          Ocultar por ahora
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function OnboardingCelebration({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mt-6 animate-slide-up rounded-lg border border-border bg-card p-5 sm:p-6">
+      <div className="flex items-center gap-4">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-success/15 text-success">
+          <Rocket size={22} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-lg font-bold leading-tight">¡Todo listo para vender!</h2>
+          <p className="text-sm text-muted-foreground">Configuraste tu negocio. Esta guía no volverá a aparecer.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className={cn(
+            "shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground",
+            FOCUS,
+          )}
+        >
+          <X size={16} aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function OnboardingCollapsedPill({
+  done,
+  total,
+  onExpand,
+}: {
+  done: number;
+  total: number;
+  onExpand: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      aria-label={`Mostrar la puesta en marcha: ${done} de ${total} pasos completados`}
+      className={cn(
+        "group mt-6 inline-flex items-center gap-2.5 rounded-md border border-border bg-card py-2 pl-2 pr-4 text-sm font-medium text-foreground transition hover:bg-muted/60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      )}
+    >
+      <span className="flex h-6 w-6 items-center justify-center rounded bg-ninja-flame/10 text-ninja-flameSoft">
+        <Flame size={13} aria-hidden />
       </span>
-    </span>
+      <span>Puesta en marcha</span>
+      <span className="font-display text-xs font-bold tabular-nums text-muted-foreground">
+        {done}/{total}
+      </span>
+      <ArrowRight
+        size={14}
+        aria-hidden
+        className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
+      />
+    </button>
   );
 }
 
@@ -185,7 +499,6 @@ export function OnboardingChecklist() {
   const done = merged ? STEPS.filter((s) => merged[s.key] === true).length : 0;
   const total = STEPS.length;
   const allDone = done === total;
-  const pct = Math.round((done / total) * 100);
 
   // Estado de éxito efímero: cuando el checklist pasa a completo en la sesión,
   // mostramos una tarjeta de logro una sola vez (luego desaparece sola).
@@ -232,219 +545,39 @@ export function OnboardingChecklist() {
   // Estado de logro efímero (una vez completado dentro de la sesión).
   if (allDone) {
     if (!celebrate) return null;
-    return (
-      <div className="mt-6 animate-slide-up">
-        <div className="relative overflow-hidden rounded-lg border border-border bg-card p-5 sm:p-6">
-          <div className="relative flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft">
-              <Rocket size={22} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-display text-lg font-bold leading-tight">
-                ¡Todo listo para vender!
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Configuraste tu negocio. Esta guía no volverá a aparecer.
-              </p>
-            </div>
-            <button
-              onClick={() => setCelebrate(false)}
-              aria-label="Cerrar"
-              className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <OnboardingCelebration onClose={() => setCelebrate(false)} />;
   }
 
-  // Pill compacto cuando el usuario eligió "Saltar por ahora".
+  // Pill compacto cuando el usuario eligió "Ocultar por ahora".
   if (collapsed) {
-    return (
-      <button
-        onClick={() => setCollapsedPersist(false)}
-        className="group mt-6 inline-flex items-center gap-2.5 rounded-md border border-border bg-card py-2 pl-2 pr-4 text-sm font-medium text-foreground transition hover:bg-muted/60"
-      >
-        <span className="flex h-6 w-6 items-center justify-center rounded bg-ninja-flame/10 text-ninja-flameSoft">
-          <Flame size={13} />
-        </span>
-        <span>Puesta en marcha</span>
-        <span className="font-display text-xs font-bold tabular-nums text-ninja-flameSoft">
-          {done}/{total}
-        </span>
-        <ArrowRight
-          size={14}
-          className="text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-ninja-flameSoft"
-        />
-      </button>
-    );
+    return <OnboardingCollapsedPill done={done} total={total} onExpand={() => setCollapsedPersist(false)} />;
   }
 
   return (
     <>
-      <div className="relative mt-6 animate-slide-up overflow-hidden rounded-lg border border-border bg-card">
+      <OnboardingChecklistCard
+        steps={STEPS}
+        status={merged}
+        onPostpone={() => setCollapsedPersist(true)}
+        onDismiss={() => setConfirmOpen(true)}
+      >
+        {/* Perfil por rubro (F5 · ADR-075): al crear el negocio, el dueño elige
+            el perfil de su rubro con vista previa de lo que cambia. */}
+        <ProfileOnboardingPrompt />
 
-        <div className="relative p-5 sm:p-6">
-          {/* Cerrar para siempre */}
-          <button
-            onClick={() => setConfirmOpen(true)}
-            aria-label="Ocultar la guía para siempre"
-            className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground transition hover:bg-secondary/60 hover:text-foreground"
-          >
-            <X size={16} />
-          </button>
-
-          {/* Header: medallón + título + anillo de progreso */}
-          <div className="flex items-start gap-4 pr-8">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-ninja-flame/10 text-ninja-flameSoft">
-              <Flame size={20} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 className="font-display text-lg font-bold leading-tight sm:text-xl">
-                Puesta en marcha
-              </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{done}</span> de{" "}
-                <span className="font-medium text-foreground">{total}</span> completados
-                {" · "}
-                cuando termines, esto desaparece.
-              </p>
-            </div>
-            <div className="hidden sm:block">
-              <ProgressRing pct={pct} />
-            </div>
+        {/* Configuración rápida por rubro (F12 · H35): atajo para sembrar un
+            catálogo de muestra cuando todavía no se cargaron productos. Deja
+            el negocio listo para cobrar sin Excel ni SQL. */}
+        {!merged.producto && (
+          <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">¿Heladería, peluquería, cafetería?</span>{" "}
+              Sembrá un catálogo de muestra por rubro en un par de clics.
+            </p>
+            <IndustryPresetButton size="sm" className="w-full shrink-0 sm:w-auto" />
           </div>
-
-          {/* Barra de progreso (visible siempre; el anillo se oculta en mobile) */}
-          <div className="mt-4 flex items-center gap-3 sm:hidden">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-[var(--pos-solid)] transition-[width] duration-700 ease-out"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="font-display text-xs font-bold tabular-nums text-ninja-flameSoft">
-              {pct}%
-            </span>
-          </div>
-
-          {/* Pasos */}
-          <ul className="mt-5 space-y-1.5">
-            {STEPS.map((step, i) => {
-              const ok = merged?.[step.key] === true;
-              const Icon = ICONS[step.key];
-              return (
-                <li
-                  key={step.key}
-                  className={cn(
-                    "group flex items-center gap-3.5 rounded-md border px-3 py-3 transition-colors sm:gap-4",
-                    ok
-                      ? "border-transparent bg-transparent"
-                      : "border-border/70 bg-background/40 hover:bg-muted/50",
-                  )}
-                >
-                  {/* Indicador de estado */}
-                  {ok ? (
-                    <span className="relative flex h-9 w-9 shrink-0 items-center justify-center">
-                      <span className="absolute inset-0 rounded-full bg-ninja-flame/10" />
-                                            <Check
-                        size={17}
-                        strokeWidth={3}
-                        className="relative animate-scale-in text-ninja-flameSoft"
-                      />
-                    </span>
-                  ) : (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 font-display text-sm font-bold tabular-nums text-muted-foreground transition group-hover:bg-muted group-hover:text-ninja-flameSoft">
-                      {i + 1}
-                    </span>
-                  )}
-
-                  {/* Ícono + textos */}
-                  <span
-                    className={cn(
-                      "hidden h-9 w-9 shrink-0 items-center justify-center rounded-md sm:flex",
-                      ok
-                        ? "text-muted-foreground/50"
-                        : "bg-ninja-flame/[0.08] text-ninja-flameSoft",
-                    )}
-                  >
-                    <Icon size={17} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={cn(
-                        "text-sm font-semibold leading-snug transition-colors sm:truncate",
-                        ok
-                          ? "text-muted-foreground line-through decoration-ninja-flame/30"
-                          : "text-foreground",
-                      )}
-                    >
-                      {step.label}
-                    </div>
-                    {!ok && (
-                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground sm:truncate">
-                        {step.desc}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* CTA solo si está pendiente */}
-                  {ok ? (
-                    <span className="shrink-0 text-xs font-medium text-ninja-flameSoft/70">
-                      Listo
-                    </span>
-                  ) : (
-                    <Link href={step.href as Route} className="shrink-0">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="gap-1.5"
-                      >
-                        {step.cta}
-                        <ArrowRight size={14} />
-                      </Button>
-                    </Link>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-          {/* Perfil por rubro (F5 · ADR-075): al crear el negocio, el dueño elige
-              el perfil de su rubro con vista previa de lo que cambia. */}
-          <ProfileOnboardingPrompt />
-
-          {/* Configuración rápida por rubro (F12 · H35): atajo para sembrar un
-              catálogo de muestra cuando todavía no se cargaron productos. Deja
-              el negocio listo para cobrar sin Excel ni SQL. */}
-          {!merged.producto && (
-            <div className="mt-4 flex flex-col gap-3 rounded-md border border-border/70 bg-muted/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  ¿Heladería, peluquería, cafetería?
-                </span>{" "}
-                Sembrá un catálogo de muestra por rubro en un par de clics.
-              </p>
-              <IndustryPresetButton
-                size="sm"
-                className="shrink-0"
-              />
-            </div>
-          )}
-
-          {/* Saltar por ahora */}
-          <div className="mt-4 flex justify-end border-t border-border/60 pt-3">
-            <button
-              onClick={() => setCollapsedPersist(true)}
-              className="text-sm font-medium text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
-            >
-              Saltar por ahora
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
+      </OnboardingChecklistCard>
 
       <ConfirmDialog
         open={confirmOpen}

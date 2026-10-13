@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, Hourglass, PackageCheck, Utensils } from "lucide-react";
+import { Bike, CalendarDays, Hourglass, PackageCheck, Pause, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -106,6 +106,19 @@ import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
 import { cartToSaleLines, usePosSale } from "@/modules/pos/screen/usePosSale";
 import { formatCurrency } from "@/lib/utils/format";
 import { usePosPark, type EditingCharge } from "@/modules/pos/screen/usePosPark";
+import { usePosPause } from "@/modules/pos/screen/usePosPause";
+import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
+import { SaleActions } from "@/components/pos/screen/SaleActions";
+import { PausedSalesBar } from "@/components/paused-sales/PausedSalesBar";
+import { PausedSalesPanel } from "@/components/paused-sales/PausedSalesPanel";
+import {
+  ClearBlockedDialog,
+  ClearConfirmDialog,
+  IntentWaitDialog,
+  PausedOnCloseDialog,
+  SwitchSaleDialog,
+} from "@/components/paused-sales/PausedSaleDialogs";
+import type { PausedSale } from "@/modules/paused-sales/logic";
 import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
 import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
 import { pendingChargesApi, cancelAtProvider } from "@/modules/pending-charges/api";
@@ -921,6 +934,18 @@ function PosPageInner() {
     [],
   );
 
+  // ── Pausar venta (ADR-106) ─────────────────────────────────────────────────
+  // El hook se arma más abajo (necesita totales y el cobro); los callbacks de
+  // la venta y los atajos lo leen por ref.
+  const pauseRef = useRef<ReturnType<typeof usePosPause>>(null as unknown as ReturnType<typeof usePosPause>);
+  const sheetPauseRef = useRef<(() => void) | null>(null);
+  const sheetClearRef = useRef<(() => void) | null>(null);
+  const [pausedOpen, setPausedOpen] = useState(false);
+  const [pausedClose, setPausedClose] = useState<PausedSale[] | null>(null);
+  // Cupón de una venta retomada: se vuelve a aplicar solo (el servidor lo valida).
+  const [autoCoupon, setAutoCoupon] = useState<string | null>(null);
+  const handlePriceMismatchRaw = usePriceRefresh();
+
   // ── Cobros en espera (ADR-048) ─────────────────────────────────────────────
   const pcMut = usePendingChargeMutations();
   const parkFeature = useFeature("cobros_en_espera");
@@ -967,6 +992,8 @@ function PosPageInner() {
     couponCode: pricing.appliedCoupon?.code ?? null,
     editing: editingCharge,
     onParked: () => {
+      // ADR-106: una pausada retomada que se deja en espera sigue como cobro en espera.
+      pauseRef.current.onSaleDone(null);
       setCheckoutOpen(false);
       clear();
       setCustomer(null);
@@ -1046,6 +1073,8 @@ function PosPageInner() {
       setOfferedWarrantyId("");
       pricing.clearCoupon();
       origins.afterSale();
+      // ADR-106: si era una venta pausada retomada, queda completada.
+      pauseRef.current.onSaleDone(saleId);
       flashPaidScreen(change);
       setTicketId(saleId);
       setTicketOpen(true);
@@ -1059,6 +1088,7 @@ function PosPageInner() {
       setOfferedWarrantyId("");
       pricing.clearCoupon();
       origins.afterSale();
+      pauseRef.current.onSaleDone(null);
       flashPaidScreen(change);
       setOfflineTicket(entry);
     },
@@ -1189,6 +1219,8 @@ function PosPageInner() {
   // F8 cobros en espera, F9 (o F12) cobra y "?" abre la ayuda. Con un diálogo
   // abierto sólo se atiende la ayuda: el resto queda para ese diálogo.
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const checkoutOpenRef = useRef(checkoutOpen);
+  checkoutOpenRef.current = checkoutOpen;
   const shortcutRef = useRef<(a: ReturnType<typeof matchPosShortcut>) => boolean>(() => false);
   shortcutRef.current = (action) => {
     switch (action) {
@@ -1201,6 +1233,15 @@ function PosPageInner() {
         return true;
       case "customer":
         setCustOpen(true);
+        return true;
+      case "pause":
+        if (checkoutOpen) sheetPauseRef.current?.();
+        else void pauseRef.current.pause();
+        return true;
+      case "clear":
+        if (pauseRef.current.dialogs.clearConfirm) pauseRef.current.confirmClear();
+        else if (checkoutOpen) sheetClearRef.current?.();
+        else pauseRef.current.requestClear();
         return true;
       case "pending":
         if (parkFeature === false && pendingWatch.open.length === 0) return false;
@@ -1219,7 +1260,13 @@ function PosPageInner() {
       const action = matchPosShortcut(e, e.target as HTMLElement | null);
       if (!action) return;
       const dialogOpen = Boolean(document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'));
-      if (dialogOpen && action !== "help") return;
+      // ADR-106: pausar y limpiar también andan con la hoja de cobro (o el QR)
+      // abierta, y Shift + F4 confirma la limpieza pedida.
+      const allowed =
+        action === "help" ||
+        (action === "pause" && checkoutOpenRef.current) ||
+        (action === "clear" && (checkoutOpenRef.current || Boolean(pauseRef.current.dialogs.clearConfirm)));
+      if (dialogOpen && !allowed) return;
       if (shortcutRef.current(action)) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
@@ -1235,6 +1282,95 @@ function PosPageInner() {
   }
 
   const itemCount = lines.reduce((a, l) => a + (l.unit === "kg" ? 1 : l.quantity), 0);
+
+  // ADR-106: mesa, delivery, turno, reserva y cobro en espera tienen su propio
+  // guardado (o su cierre atómico): esas ventas no se pausan.
+  const pauseBlockedReason =
+    origins.tableOrderId || origins.deliveryOrderId
+      ? "Las mesas y los pedidos ya quedan guardados: salí del cobro y retomalos desde el Salón o Pedidos."
+      : origins.appointmentId
+        ? "El cobro de un turno no se pausa: salí y cobralo desde la agenda cuando vuelva."
+        : origins.reservationId
+          ? "El retiro de una reserva no se pausa: la reserva sigue guardada."
+          : editingCharge
+            ? "Estás editando un cobro en espera: actualizalo o salí sin cambios."
+            : null;
+  const pauser = usePosPause({
+    storeId: register?.store_id ?? null,
+    registerId: register?.id ?? null,
+    shiftId: hasShift ? (shift?.id ?? null) : null,
+    tenantId: bootScope?.tenantId ?? null,
+    userId: currentUserId,
+    offline: offline.isOffline,
+    blockedReason: pauseBlockedReason,
+    cartInput: () => {
+      const st = useCartStore.getState();
+      const pc = usePricingContext.getState();
+      return {
+        lines: st.lines,
+        discountTotal: st.discountTotal,
+        couponCode: pricing.appliedCoupon?.code ?? (pricing.couponInput.trim() || null),
+        customer,
+        offeredWarrantyId,
+        pricing: { listId: pc.listId, termId: pc.termId },
+        notes: null,
+      };
+    },
+    // Mismos argumentos que create_sale (ADR-048): el servidor ensaya la venta al retomar.
+    saleArgs: () => {
+      const { items, extras } = buildSaleItemsAndExtras(cartToSaleLines(useCartStore.getState().lines), []);
+      const promo = pricing.salePromo(null);
+      const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
+      const couponId = pricing.couponDiscount > 0 ? (pricing.appliedCoupon?.coupon_id ?? null) : null;
+      return {
+        items,
+        extras,
+        discount_total: useCartStore.getState().discountTotal,
+        customer_id: customer?.id ?? null,
+        ...(promoDisc > 0 ? { promo_discount: promoDisc, promo_id: promo?.id ?? null, promo_name: promo?.name ?? null } : {}),
+        ...(couponId ? { coupon_id: couponId } : {}),
+      };
+    },
+    total: total + origins.deliveryFee,
+    itemCount,
+    resetSale: () => {
+      setCheckoutOpen(false);
+      clear();
+      setCustomer(null);
+      setOfferedWarrantyId("");
+      pricing.clearCoupon();
+      setAutoCoupon(null);
+      resetPricingContext();
+    },
+    applyCart: (c) => {
+      useCartStore.setState({ lines: c.lines, discountTotal: c.discountTotal });
+      setCustomer(c.customer);
+      setOfferedWarrantyId(c.offeredWarrantyId);
+      usePricingContext.getState().setList(c.pricing.listId);
+      usePricingContext.getState().setTerm(c.pricing.termId);
+      pricing.clearCoupon();
+      if (c.couponCode) {
+        pricing.setCouponInput(c.couponCode);
+        setAutoCoupon(c.couponCode);
+      }
+    },
+    priceFor: (productId, variantId, current, qty) =>
+      priceResolver.world ? priceFor(productId, variantId, current, qty) : null,
+    handlePriceMismatch: (e) => handlePriceMismatchRaw(e, useCartStore.getState().lines),
+    openCheckout: () => startCheckoutRef.current(),
+  });
+  pauseRef.current = pauser;
+  useEffect(() => {
+    if (!autoCoupon || pricing.couponInput.trim() !== autoCoupon) return;
+    setAutoCoupon(null);
+    void pricing.applyCoupon();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCoupon, pricing.couponInput]);
+  // Ventas pausadas de ESTE turno al cerrar la caja.
+  function pausedOfShift(): PausedSale[] {
+    if (!shift) return [];
+    return pauser.all.filter((x) => x.cash_shift_id === shift.id && (x.status === "paused" || x.status === "resumed"));
+  }
   const cartTitle =
     origins.tableActive ? "Cuenta de la mesa" : preset === "salon" ? "Pedido" : "Carrito";
 
@@ -1303,6 +1439,15 @@ function PosPageInner() {
       autoPrint={autoPrint}
       onAutoPrint={setAutoPrint}
       compact={preset === "caja_rapida"}
+      actionsSlot={
+        <SaleActions
+          disabled={lines.length === 0}
+          pauseBlocked={pauseBlockedReason}
+          onPause={() => void pauser.pause()}
+          onClear={() => pauser.requestClear()}
+          compact={preset === "caja_rapida"}
+        />
+      }
       priceSlot={
         priceResolver.world && !origins.tableActive && !origins.deliveryActive ? (
           <PosPriceContextBar
@@ -1341,6 +1486,23 @@ function PosPageInner() {
       {/* H65 (ADR-087): versión nueva; no recarga con carrito o cobro en curso. */}
       <SwUpdateBanner busy={checkoutOpen || saving || lines.length > 0} />
       <ForeignShiftBanner shift={shift} />
+      {/* ADR-106: ventas pausadas, a un toque de retomarlas. */}
+      <PausedSalesBar
+        list={pauser.list}
+        busyId={pauser.busyId}
+        onResume={(x) => void pauser.resume(x)}
+        onOpenAll={() => setPausedOpen(true)}
+      />
+      {pauser.resumed && (
+        <ModeBanner
+          tone="info"
+          icon={<Pause size={18} />}
+          title={`Retomaste "${pauser.resumed.label}"`}
+          text="Cobrala como siempre. Si el cliente se va de nuevo, volvé a pausarla: conserva el nombre y los pagos."
+          exitLabel="Pausar de nuevo"
+          onExit={() => void pauser.pause()}
+        />
+      )}
       {/* F3 · ADR-072: ARCA caído, facturando en contingencia (no bloquea). */}
       <ArcaPosIndicator />
       {editingCharge && (
@@ -1482,6 +1644,12 @@ function PosPageInner() {
                 if (!offline.isOffline) void offline.syncNow();
                 return;
               }
+              // ADR-106: avisar las ventas pausadas del turno antes del arqueo.
+              const mine = pausedOfShift();
+              if (mine.length > 0) {
+                setPausedClose(mine);
+                return;
+              }
               setCloseShiftModal(true);
             }}
             onCustomerDisplay={openCustomerDisplay}
@@ -1490,6 +1658,22 @@ function PosPageInner() {
               posHw.hasDrawer ? (
                 <PosDrawerButton hw={posHw.hw} decision={posHw.noSaleDecision} open={posHw.opener} />
               ) : null
+            }
+            pausedSlot={
+              pauser.list.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPausedOpen(true)}
+                  className="relative grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fg-4 text-muted-foreground transition-colors hover:bg-fg-6 hover:text-foreground"
+                  aria-label={`Ventas pausadas: ${pauser.list.length}`}
+                  title="Ventas pausadas"
+                >
+                  <Pause size={18} aria-hidden />
+                  <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ninja-flame px-1 text-[11px] font-bold text-white">
+                    {pauser.list.length}
+                  </span>
+                </button>
+              ) : undefined
             }
             pendingSlot={
               parkFeature !== false || pendingWatch.open.length > 0 ? (
@@ -1539,11 +1723,6 @@ function PosPageInner() {
         total={total + origins.deliveryFee}
         canCheckout={canCheckout}
         onCheckout={() => startCheckout()}
-        onClear={() => {
-          clear();
-          pricing.clearCoupon();
-          setOfferedWarrantyId("");
-        }}
         linesInCenter={preset === "caja_rapida"}
         aside={
           preset === "caja_rapida" && effectiveLayout.keypad ? (
@@ -1613,6 +1792,67 @@ function PosPageInner() {
         </Modal>
       </MountWhenOpened>
 
+      {/* Ventas pausadas (ADR-106). */}
+      <MountWhenOpened open={pausedOpen}>
+        <Modal open={pausedOpen} onOpenChange={setPausedOpen} title="Ventas pausadas" className="sm:max-w-xl">
+          <PausedSalesPanel
+            list={pauser.list}
+            busyId={pauser.busyId}
+            role={role}
+            currentUserId={currentUserId}
+            onResume={(x) => {
+              setPausedOpen(false);
+              void pauser.resume(x);
+            }}
+            onRename={(x, label) => void pauser.rename(x, label)}
+            onDiscard={pauser.discard}
+          />
+        </Modal>
+      </MountWhenOpened>
+      <ClearConfirmDialog
+        open={Boolean(pauser.dialogs.clearConfirm)}
+        onOpenChange={(o) => !o && pauser.dialogs.setClearConfirm(false)}
+        total={pauser.dialogs.clearConfirm?.total ?? 0}
+        cash={pauser.dialogs.clearConfirm?.cash ?? 0}
+        pendingIntents={pauser.dialogs.clearConfirm?.pendingIntents ?? 0}
+        onConfirm={pauser.confirmClear}
+      />
+      <ClearBlockedDialog
+        credited={pauser.dialogs.clearBlocked?.credited ?? null}
+        onClose={() => pauser.dialogs.setClearBlocked(null)}
+        onPause={() => {
+          pauser.dialogs.setClearBlocked(null);
+          if (checkoutOpen) sheetPauseRef.current?.();
+          else void pauser.pause();
+        }}
+      />
+      <IntentWaitDialog
+        sale={pauser.dialogs.intentWait}
+        onClose={() => pauser.dialogs.setIntentWait(null)}
+        onCancelAndResume={(x) => void pauser.resume(x, { cancelPending: true, force: true })}
+      />
+      <SwitchSaleDialog
+        sale={pauser.dialogs.switchTarget}
+        onClose={() => pauser.dialogs.setSwitchTarget(null)}
+        onSwitch={(x) => void pauser.switchTo(x)}
+      />
+      <PausedOnCloseDialog
+        list={pausedClose}
+        onClose={() => setPausedClose(null)}
+        onCarry={() => {
+          setPausedClose(null);
+          setCloseShiftModal(true);
+        }}
+        onDiscardFree={async () => {
+          for (const x of pausedClose ?? []) {
+            const live = x.payments.filter((p) => p.status !== "cancelled" && p.status !== "expired");
+            if (live.length === 0) await pauser.discard(x, "Cierre de caja", false);
+          }
+          setPausedClose(null);
+          setCloseShiftModal(true);
+        }}
+      />
+
       {/* Cobro único: todos los medios, pago dividido, propina y promo por medio. */}
       <MountWhenOpened open={checkoutOpen}>
         <CheckoutSheetConnected
@@ -1648,6 +1888,14 @@ function PosPageInner() {
           }}
           onQrState={handleQrState}
           onTransferState={handleTransferState}
+          pause={{
+            blockedReason: pauseBlockedReason,
+            onPause: (snap, live) => void pauser.pause(snap, live),
+            onClear: (snap) => pauser.requestClear(snap),
+          }}
+          restore={pauser.checkoutRestore}
+          pauseRef={sheetPauseRef}
+          clearRef={sheetClearRef}
           park={{
             blockedReason: parkBlockedReason,
             label: editingCharge ? "Actualizar cobro en espera" : "Dejar en espera",

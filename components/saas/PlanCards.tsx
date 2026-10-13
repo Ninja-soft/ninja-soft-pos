@@ -20,9 +20,9 @@
 // inclusiones y diferencias.
 // =============================================================================
 
-import { useMemo, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Plus, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Plus, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PlanBadge } from "@/components/internal/plans/PlanBadge";
 import {
@@ -138,6 +138,8 @@ function PlanCardItem({
   selected,
   onSelect,
   cta,
+  diffLabel,
+  compact,
 }: {
   plan: PlanCardModel;
   features: ComparableFeature[];
@@ -147,7 +149,11 @@ function PlanCardItem({
   selected: boolean;
   onSelect?: () => void;
   cta?: ReactNode;
+  diffLabel: string;
+  // Compacta: sólo los puntos principales; el resto queda plegado.
+  compact?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const recommended = plan.isRecommended;
   const isContact = plan.trialDays <= 0;
 
@@ -189,7 +195,9 @@ function PlanCardItem({
       className={cn(
         "relative flex flex-col gap-4 rounded-lg border p-5 text-left transition",
         selected
-          ? "choice-on choice-check"
+          ? onSelect
+            ? "choice-on"
+            : "choice-on choice-check"
           : recommended
             ? "border-ninja-flame/40 bg-muted/60"
             : "border-border bg-muted/60",
@@ -255,11 +263,26 @@ function PlanCardItem({
         )}
       </div>
 
+      {compact ? (
+        <CompactFeatures
+          lines={[
+            ...added.map((label) => ({ label, tone: "added" as const })),
+            ...limitLines.map((label) => ({ label, tone: "included" as const })),
+            ...includedLabels
+              .filter((l) => !added.includes(l))
+              .map((label) => ({ label, tone: "included" as const })),
+          ]}
+          heading={hasDiff ? diffLabel : null}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
+      ) : (
+        <>
       {/* Diferencias vs el plan de referencia (lo que ESTE suma). */}
       {hasDiff && (
         <div>
           <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-ninja-flame">
-            Sumás respecto del actual
+            {diffLabel}
           </div>
           <ul className="space-y-1.5">
             {added.slice(0, 6).map((l) => (
@@ -278,8 +301,55 @@ function PlanCardItem({
           <FeatureLine key={l} label={l} tone="included" />
         ))}
       </ul>
+        </>
+      )}
 
       {cta && <div className="mt-auto pt-1">{cta}</div>}
+    </div>
+  );
+}
+
+// Cantidad de puntos visibles en la tarjeta compacta (el resto, plegado).
+const COMPACT_VISIBLE = 3;
+
+function CompactFeatures({
+  lines,
+  heading,
+  expanded,
+  onToggle,
+}: {
+  lines: { label: string; tone: "added" | "included" }[];
+  heading: string | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const listId = useId();
+  const visible = expanded ? lines : lines.slice(0, COMPACT_VISIBLE);
+  const hidden = lines.length - COMPACT_VISIBLE;
+  return (
+    <div>
+      {heading && (
+        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-ninja-flame">
+          {heading}
+        </div>
+      )}
+      <ul id={listId} className="space-y-1.5">
+        {visible.map((l) => (
+          <FeatureLine key={`${l.tone}-${l.label}`} label={l.label} tone={l.tone} />
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={listId}
+          className="mt-2 inline-flex items-center gap-1 rounded-md text-xs font-semibold text-ninja-flame outline-none transition hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown size={13} className={cn("transition-transform", expanded && "rotate-180")} aria-hidden />
+          {expanded ? "Ver menos" : `Ver ${hidden} más`}
+        </button>
+      )}
     </div>
   );
 }
@@ -290,6 +360,8 @@ export function PlanCards({
   onSelect,
   comparedToKey,
   renderCta,
+  diffLabel = "Sumás respecto del actual",
+  compact = false,
   className,
   // 4 planes (Start/Pro/Business/Enterprise): 1 col mobile, 2 tablet, 4 desktop.
   // Así entran todos sin cortarse en el selector/registro.
@@ -303,6 +375,10 @@ export function PlanCards({
   comparedToKey?: string | null;
   // CTA por plan (ej. botón "Mejorar" en el panel). Recibe el plan y si es el actual.
   renderCta?: (plan: PlanCardModel, isCompared: boolean) => ReactNode;
+  // Título de la lista de diferencias (en el registro no hay "plan actual").
+  diffLabel?: string;
+  // Tarjetas compactas: puntos principales y el resto plegado (registro).
+  compact?: boolean;
   className?: string;
   columnsClassName?: string;
 }) {
@@ -325,6 +401,8 @@ export function PlanCards({
           plan={p}
           features={features}
           comparedTo={compared}
+          diffLabel={diffLabel}
+          compact={compact}
           selected={selectedKey === p.key}
           onSelect={onSelect ? () => onSelect(p.key) : undefined}
           cta={renderCta?.(p, compared?.key === p.key)}

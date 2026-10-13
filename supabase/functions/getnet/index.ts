@@ -11,6 +11,8 @@
 //     hace la Edge pública getnet_checkout.
 //
 // Actions (body.action):
+//   * capabilities → { own_checkout_enabled } (booleano del flag PCI, nunca
+//     el secret). Cualquier miembro del negocio.
 //   * probe {slot?, client_id?, client_secret?, environment?, store_id?} →
 //     prueba las credenciales de un slot (las del body o las guardadas del
 //     alcance) y avisa si parecen del otro slot. Sólo dueño o encargado. No
@@ -33,9 +35,7 @@ import {
   decideFor,
   describeDetectFailure,
   describeDiag,
-  detectGetnetProfile,
   fetchGetnetOrderFor,
-  fetchGetnetSeller,
   type GetnetEnv,
   getnetEnvOf,
   logGetnetError,
@@ -45,7 +45,6 @@ import {
   type ApiAttempt,
   apiCredsOf,
   apiHeaders,
-  classifyCredential,
   decideApiPaymentInfo,
   isApiPaymentId,
   isOwnCheckoutIntent,
@@ -55,7 +54,13 @@ import {
   SLOT_MISMATCH_COPY,
   type SlotKey,
 } from "../_shared/getnet_api.ts";
-import { getnetAuth, getnetPanRelayEnabled, loadGetnetSandbox, loadGetnetSlot } from "../_shared/getnet_server.ts";
+import {
+  assessGetnetCredential,
+  getnetAuth,
+  getnetPanRelayEnabled,
+  loadGetnetSandbox,
+  loadGetnetSlot,
+} from "../_shared/getnet_server.ts";
 import { bodyStoreId, insertIntentWithScope, intentSecretScope, isScopeUuid } from "../_shared/paymentSecrets.ts";
 
 const cors = {
@@ -110,10 +115,21 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!mem) return json({ error: "forbidden" }, 403);
 
+  // ── capabilities: ¿está habilitado el checkout propio? (ADR-069 adenda) ────
+  // Sólo un booleano: nunca el valor del secret. Lo leen el asistente de
+  // conexión (muestra o no la tarjeta Checkout API) y el POS (tender propio).
+  if (action === "capabilities") {
+    return json({ own_checkout_enabled: getnetPanRelayEnabled() });
+  }
+
   // ── probe: prueba credenciales de un slot sin guardarlas ────────────────────
   if (action === "probe") {
     if (!["owner", "manager"].includes(String(mem.role))) return json({ error: "forbidden" }, 403);
     const slot: SlotKey = b.slot === "checkout_api" ? "checkout_api" : "web_checkout";
+    // Checkout API sólo con el checkout propio habilitado (ADR-069 adenda).
+    if (slot === "checkout_api" && !getnetPanRelayEnabled()) {
+      return json({ ok: false, slot, error: "checkout_api_unavailable" });
+    }
     const keyId = slot === "checkout_api" ? "api_client_id" : "client_id";
     const keySecret = slot === "checkout_api" ? "api_client_secret" : "client_secret";
     let clientId = typeof b.client_id === "string" ? b.client_id.trim() : "";
@@ -136,30 +152,15 @@ Deno.serve(async (req: Request) => {
         : getnetEnvOf(saved, await loadGetnetSandbox(admin, tenantId));
 
     // Web Checkout: token (form) + GET /sellers. Checkout API: token (Basic).
-    // Se prueban las dos para avisar si la credencial está en el slot equivocado.
-    const web = await detectGetnetProfile(clientId, clientSecret, {
+    // Se prueban las dos para detectar credenciales del otro juego.
+    const { web, webProduct, seller, sellerDiag, api, verdict } = await assessGetnetCredential({
+      slot,
+      clientId,
+      clientSecret,
       env,
       preferred: slot === "web_checkout" ? saved.api_profile : undefined,
       crossEnv: slot === "web_checkout",
     });
-    let seller = null;
-    let webProduct: boolean | null = null;
-    let sellerDiag = null;
-    if (web.ok && web.profile.api === "global") {
-      const s = await fetchGetnetSeller(web.profile, web.token);
-      if (s.ok) {
-        seller = s.seller;
-        webProduct = s.seller.checkout_enabled !== false;
-      } else {
-        sellerDiag = s.diag;
-        // 401/403/404 en /sellers: el token sale, pero Web Checkout no es su producto.
-        webProduct = [401, 403, 404].includes(s.diag.http_status) ? false : null;
-      }
-    } else if (web.ok) {
-      webProduct = true; // Geopagos: el token alcanza.
-    }
-    const api = await requestApiToken({ clientId, clientSecret, env });
-    const verdict = classifyCredential({ slot, webToken: web.ok, webProduct, apiToken: api.ok });
     const pciReady = getnetPanRelayEnabled();
     for (const d of web.attempts) logGetnetError("getnet.probe", d, { tenant_id: tenantId, slot });
 
@@ -203,7 +204,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // slot web_checkout
+    // slot web_checkout. Credenciales de Checkout API / Plugin VTEX: se
+    // rechazan con un texto único (no se guardan, ADR-069 adenda).
     if (!web.ok || webProduct === false) {
       if (verdict.mismatch) {
         return json({

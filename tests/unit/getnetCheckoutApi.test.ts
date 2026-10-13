@@ -27,15 +27,20 @@ import {
   requestApiToken,
   scrub,
   SLOT_MISMATCH_COPY,
+  webCheckoutSaveVerdict,
 } from "@/supabase/functions/_shared/getnet_api";
 import { normalizeGetnetOrder } from "@/supabase/functions/_shared/processorData";
 import {
+  GETNET_VTEX_IN_WEB_CHECKOUT,
+  GETNET_VTEX_WARNING,
+  getnetSaveError,
   getnetSlotClearKeys,
   getnetSlotError,
   getnetSlotSave,
   getnetSlotsFromKeys,
   getnetSlotsOf,
   GETNET_SLOT_BY_KEY,
+  visibleGetnetSlots,
 } from "@/lib/payments/getnetSlots";
 import { buildGetnetPayBody, checkoutProviderOf, CHECKOUT_EDGE, SECURE_COPY } from "@/lib/payments/checkoutProviders";
 import { probeSecrets } from "@/lib/payments/getnetProbe";
@@ -143,7 +148,11 @@ describe("Checkout API · detección de slot", () => {
     const v = classifyCredential({ slot: "web_checkout", webToken: true, webProduct: false, apiToken: true });
     expect(v).toEqual({ looksLike: "checkout_api", mismatch: true });
     expect(classifyCredential({ slot: "web_checkout", webToken: false, webProduct: null, apiToken: true }).mismatch).toBe(true);
-    expect(SLOT_MISMATCH_COPY.web_checkout).toMatch(/Checkout API \/ Plugin VTEX/);
+    expect(SLOT_MISMATCH_COPY.web_checkout).toBe(
+      "Estas credenciales son de Checkout API / Plugin VTEX. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.",
+    );
+    // El front muestra el mismo texto que la Edge.
+    expect(GETNET_VTEX_IN_WEB_CHECKOUT).toBe(SLOT_MISMATCH_COPY.web_checkout);
   });
 
   it("Web Checkout cargada en Checkout API: avisa", () => {
@@ -323,7 +332,56 @@ describe("Checkout API · respuestas y estados", () => {
   });
 });
 
+describe("guardado de Web Checkout (ADR-069 adenda)", () => {
+  it("rechaza credenciales de Checkout API / Plugin VTEX", () => {
+    expect(webCheckoutSaveVerdict({ webToken: true, webProduct: false, apiToken: true, webFailKinds: [] })).toBe(
+      "checkout_api_credentials",
+    );
+    expect(
+      webCheckoutSaveVerdict({ webToken: false, webProduct: null, apiToken: true, webFailKinds: ["invalid_credentials"] }),
+    ).toBe("checkout_api_credentials");
+    expect(getnetSaveError("getnet_checkout_api_credentials")).toBe(GETNET_VTEX_IN_WEB_CHECKOUT);
+  });
+
+  it("rechaza credenciales inválidas en todas las APIs", () => {
+    expect(
+      webCheckoutSaveVerdict({
+        webToken: false,
+        webProduct: null,
+        apiToken: false,
+        webFailKinds: ["invalid_credentials", "invalid_credentials"],
+      }),
+    ).toBe("invalid_credentials");
+    expect(getnetSaveError("getnet_invalid_credentials")).toMatch(/Web Checkout \/ Plugin Magento \/ Plugin WooCommerce/);
+  });
+
+  it("deja guardar Web Checkout y no bloquea por un corte de Getnet", () => {
+    expect(webCheckoutSaveVerdict({ webToken: true, webProduct: true, apiToken: true, webFailKinds: [] })).toBe("ok");
+    expect(webCheckoutSaveVerdict({ webToken: true, webProduct: true, apiToken: false, webFailKinds: [] })).toBe("ok");
+    expect(
+      webCheckoutSaveVerdict({ webToken: false, webProduct: null, apiToken: false, webFailKinds: ["network", "provider_down"] }),
+    ).toBe("ok");
+  });
+
+  it("la Checkout API apagada tiene su texto al guardar", () => {
+    expect(getnetSaveError("checkout_api_unavailable")).toMatch(/no está habilitado/);
+    expect(getnetSaveError("otro")).toBeNull();
+  });
+});
+
 describe("slots de credenciales (wizard y POS)", () => {
+  it("con el checkout propio apagado el asistente muestra sólo Web Checkout", () => {
+    expect(visibleGetnetSlots(false).map((s) => s.key)).toEqual(["web_checkout"]);
+    expect(visibleGetnetSlots(true).map((s) => s.key)).toEqual(["web_checkout", "checkout_api"]);
+    expect(GETNET_SLOT_BY_KEY.web_checkout.title).toBe("Web Checkout / Plugin Magento / Plugin WooCommerce");
+    expect(GETNET_SLOT_BY_KEY.web_checkout.credentials).toBe(
+      "Estas son las credenciales que tenés que cargar. Las encontrás en el portal de Getnet como Web Checkout, Plugin Magento o Plugin WooCommerce.",
+    );
+    expect(GETNET_VTEX_WARNING).toBe(
+      "No uses las de Checkout API / Plugin VTEX: no funcionan para cobrar con QR ni link desde NinjaSoft.",
+    );
+  });
+
   it("una conexión vieja sin flags es Web Checkout", () => {
     expect(getnetSlotsOf({ connected: true })).toEqual({ web_checkout: true, checkout_api: false });
     expect(getnetSlotsOf({ connected: true, web_checkout_connected: false, checkout_api_connected: true })).toEqual({
@@ -350,7 +408,7 @@ describe("slots de credenciales (wizard y POS)", () => {
 
   it("copy de los slots dice qué credencial usar", () => {
     expect(GETNET_SLOT_BY_KEY.web_checkout.purpose).toMatch(/QR o link/);
-    expect(GETNET_SLOT_BY_KEY.web_checkout.credentials).toMatch(/Web Checkout \/ Plugin Magento \/ Plugin WooCommerce/);
+    expect(GETNET_SLOT_BY_KEY.web_checkout.credentials).toMatch(/Web Checkout, Plugin Magento o Plugin WooCommerce/);
     expect(GETNET_SLOT_BY_KEY.checkout_api.purpose).toMatch(/como Payway/);
     expect(GETNET_SLOT_BY_KEY.checkout_api.credentials).toMatch(/Checkout API \/ Plugin VTEX/);
     expect(getnetSlotError("web_checkout_not_connected")).toMatch(/Web Checkout/);
@@ -368,7 +426,7 @@ describe("slots de credenciales (wizard y POS)", () => {
     });
   });
 
-  it("POS: el checkout propio exige Checkout API y su feature; QR y link, Web Checkout", () => {
+  it("POS: el checkout propio exige Checkout API, su feature y el flag PCI; QR y link, Web Checkout", () => {
     const row = (over: Partial<ProviderStatus>): ProviderStatus => ({ provider_key: "getnet", enabled: true, connected: true, ...over });
     const ctx = (r: ProviderStatus, features?: Record<string, boolean>): TenderContext => ({
       providers: [r],
@@ -379,13 +437,21 @@ describe("slots de credenciales (wizard y POS)", () => {
     const ids = (c: TenderContext) => resolveTenders(c).map((t) => t.id).filter((id) => id.startsWith("getnet"));
 
     expect(ids(ctx(row({})))).toEqual(["getnet:qr", "getnet:link"]);
-    expect(ids(ctx(row({ web_checkout_connected: false, checkout_api_connected: true })))).toEqual(["getnet:own"]);
+    // Flag PCI apagado (o sin respuesta de la Edge): el tender propio no aparece.
     expect(ids(ctx(row({ web_checkout_connected: true, checkout_api_connected: true })))).toEqual([
       "getnet:qr",
       "getnet:link",
-      "getnet:own",
     ]);
-    const all = row({ web_checkout_connected: true, checkout_api_connected: true });
+    expect(
+      ids(ctx(row({ web_checkout_connected: false, checkout_api_connected: true, own_checkout_enabled: false }))),
+    ).toEqual([]);
+    expect(
+      ids(ctx(row({ web_checkout_connected: false, checkout_api_connected: true, own_checkout_enabled: true }))),
+    ).toEqual(["getnet:own"]);
+    expect(
+      ids(ctx(row({ web_checkout_connected: true, checkout_api_connected: true, own_checkout_enabled: true }))),
+    ).toEqual(["getnet:qr", "getnet:link", "getnet:own"]);
+    const all = row({ web_checkout_connected: true, checkout_api_connected: true, own_checkout_enabled: true });
     expect(ids(ctx(all, { getnet: true, getnet_checkout_propio: false }))).toEqual(["getnet:qr", "getnet:link"]);
     expect(TENDER_BY_ID["getnet:own"]?.label).toBe("Link (checkout propio)");
   });

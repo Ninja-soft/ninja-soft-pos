@@ -37,6 +37,7 @@ import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSe
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
 import { useBranchContext } from "@/modules/branches/hooks";
+import { posApi } from "@/modules/pos/api";
 
 // Alcances con credencial propia (F17 · ADR-057). Sin la migración la RPC no
 // existe: no hay credenciales por sucursal.
@@ -50,7 +51,13 @@ type SecretScope = { provider_key: string; store_id: string | null; keys: string
 async function invokeSecret(body: Record<string, unknown>) {
   const supabase = createClient();
   const { data, error } = await supabase.functions.invoke("set_payment_secret", { body });
-  if (error) throw error;
+  if (error) {
+    // Non-2xx: el código estable viene en el cuerpo (p. ej. Getnet rechaza
+    // credenciales de Checkout API / Plugin VTEX, ADR-069 adenda).
+    const ctx = (error as { context?: Response }).context;
+    const code = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null)?.error : undefined;
+    throw code ? new Error(code) : error;
+  }
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
 }
 
@@ -232,6 +239,15 @@ export function PaymentMethodsCard() {
       }),
   });
 
+  // Checkout propio de Getnet habilitado (flag PCI como booleano de la Edge,
+  // ADR-069 adenda). Apagado: el asistente muestra sólo Web Checkout.
+  const { data: getnetOwnCheckout = false } = useQuery({
+    queryKey: ["getnet-own-checkout"],
+    queryFn: () => posApi.getnetOwnCheckoutEnabled(),
+    enabled: connectBrand !== null && connectionKeyOf(connectBrand) === "getnet",
+    staleTime: 5 * 60_000,
+  });
+
   if (!ctx || !ctx.canManage) return null;
 
   const brand = connectBrand ? BRAND_BY_KEY[connectBrand] : undefined;
@@ -402,6 +418,7 @@ export function PaymentMethodsCard() {
           }}
           onProbe={connKey === "getnet" ? (v) => probeGetnet(v, connectScope) : undefined}
           getnetSlots={getnetSlots}
+          getnetOwnCheckout={getnetOwnCheckout}
           onClearSlot={connKey === "getnet" ? clearGetnetSlot : undefined}
           onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate(connectScope) : undefined}
           oauthPending={oauthStart.isPending}

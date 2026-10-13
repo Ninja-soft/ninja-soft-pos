@@ -341,11 +341,37 @@ export function classifyCredential(r: {
 }
 
 export const SLOT_MISMATCH_COPY: Record<SlotKey, string> = {
+  // Decisión del dueño (ADR-069, adenda): las de Checkout API / Plugin VTEX no
+  // se toman en Web Checkout. Mismo texto en "Probar" y al guardar.
   web_checkout:
-    "Estas credenciales parecen de Checkout API / Plugin VTEX: sirven para el checkout propio, no para QR ni link. Cargalas en \"Checkout API\" y acá usá las que dicen Web Checkout / Plugin Magento / Plugin WooCommerce.",
+    "Estas credenciales son de Checkout API / Plugin VTEX. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.",
   checkout_api:
     "Estas credenciales parecen de Web Checkout / Plugin Magento / Plugin WooCommerce: sirven para QR y link. Cargalas en \"Web Checkout\" y acá usá las que dicen Checkout API / Plugin VTEX.",
 };
+
+/**
+ * Veredicto del GUARDADO de credenciales nuevas en el slot Web Checkout
+ * (set_payment_secret, ADR-069 adenda). Sólo bloquea lo definitivo:
+ *   * checkout_api_credentials: la credencial es de Checkout API / Plugin VTEX
+ *     (classifyCredential la ubica en el otro slot).
+ *   * invalid_credentials: ni Web Checkout ni la Checkout API dan token y
+ *     Web Checkout las rechazó como inválidas en todos los servicios.
+ * Si Getnet no responde (red, 5xx) se deja guardar: la prueba del asistente
+ * ya corrió antes y un corte de Getnet no tiene que bloquear la conexión.
+ */
+export function webCheckoutSaveVerdict(r: {
+  webToken: boolean;
+  webProduct: boolean | null;
+  apiToken: boolean;
+  webFailKinds: string[];
+}): "ok" | "checkout_api_credentials" | "invalid_credentials" {
+  const v = classifyCredential({ slot: "web_checkout", webToken: r.webToken, webProduct: r.webProduct, apiToken: r.apiToken });
+  if (v.mismatch) return "checkout_api_credentials";
+  if (!r.webToken && !r.apiToken && r.webFailKinds.length > 0 && r.webFailKinds.every((k) => k === "invalid_credentials")) {
+    return "invalid_credentials";
+  }
+  return "ok";
+}
 
 // ── Tarjeta ──────────────────────────────────────────────────────────────────
 

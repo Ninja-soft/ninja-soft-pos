@@ -9,6 +9,11 @@
 // (dueño o encargado con acceso a la sucursal, plan con multi_sucursal). Una
 // credencial de sucursal NO toca tenant_payment_methods.config.connected (eso
 // refleja la del negocio); la UI lee payment_secret_scopes().
+//
+// Getnet (ADR-069 adenda): rechaza las claves del slot Checkout API mientras
+// el checkout propio esté apagado y prueba un Client ID / Secret nuevo de Web
+// Checkout antes de guardarlo (no guarda credenciales de Checkout API / Plugin
+// VTEX ni credenciales que Getnet rechaza).
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
@@ -18,6 +23,8 @@ import {
   saveProviderSecret,
   scopeErrorStatus,
 } from "../_shared/paymentSecrets.ts";
+import { assessGetnetCredential, getnetPanRelayEnabled } from "../_shared/getnet_server.ts";
+import { webCheckoutSaveVerdict } from "../_shared/getnet_api.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -139,6 +146,35 @@ Deno.serve(async (req: Request) => {
   for (const [k, v] of Object.entries(secrets)) {
     if (typeof v === "string" && v.trim()) clean[k] = v.trim();
   }
+  // Getnet (ADR-069 adenda): sólo se cargan las credenciales de Web Checkout.
+  //   * Las claves api_* (slot Checkout API) se rechazan mientras el checkout
+  //     propio esté apagado (secret GETNET_CHECKOUT_API_PCI_ATTESTED).
+  //   * Un Client ID / Secret nuevo en Web Checkout se prueba antes de
+  //     guardarlo: si es de Checkout API / Plugin VTEX, o Getnet lo rechaza
+  //     como inválido, no se guarda.
+  if (providerKey === "getnet") {
+    if (Object.keys(clean).some((k) => k.startsWith("api_")) && !getnetPanRelayEnabled()) {
+      return json({ error: "checkout_api_unavailable" }, 409);
+    }
+    if (clean.client_id && clean.client_secret) {
+      const a = await assessGetnetCredential({
+        slot: "web_checkout",
+        clientId: clean.client_id,
+        clientSecret: clean.client_secret,
+        env: clean.environment === "test" ? "test" : "prod",
+        preferred: clean.api_profile,
+      });
+      const verdict = webCheckoutSaveVerdict({
+        webToken: a.web.ok,
+        webProduct: a.webProduct,
+        apiToken: a.api.ok,
+        webFailKinds: a.web.attempts.map((d) => d.kind),
+      });
+      if (verdict === "checkout_api_credentials") return json({ error: "getnet_checkout_api_credentials" }, 422);
+      if (verdict === "invalid_credentials") return json({ error: "getnet_invalid_credentials" }, 422);
+    }
+  }
+
   // merge (ADR-032): agrega/quita claves sin pisar el resto del secreto. Lo
   // usa Mercado Pago para el token de PRUEBA (test_access_token), que convive
   // con la conexión de producción (OAuth o token manual).

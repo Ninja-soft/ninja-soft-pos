@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261031200000_feature_getnet_checkout_propio  (ADR-069)
+-- 20261031300000_feature_getnet_checkout_propio  (ADR-069)
 --
 -- Feature de plan nueva (convención CLAUDE.md §6):
 --

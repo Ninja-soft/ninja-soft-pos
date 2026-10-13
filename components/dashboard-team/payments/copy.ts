@@ -49,7 +49,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   mercadopago_point: "Tarjeta, contactless y cuotas en tu lector Point",
   payway: "Checkout de Payway con tus planes de cuotas",
   payway_point: "Terminal Payway integrada al POS",
-  getnet: "QR y link con el checkout de Getnet, o tu propio checkout con tu marca",
+  getnet: "QR y link con el checkout de Getnet, con crédito o débito",
   getnet_point: "Terminal Getnet integrada al POS",
   nave: "QR interoperable: lo paga cualquier billetera",
   nave_point: "Tarjeta, contactless o QR en tu terminal Nave",
@@ -112,9 +112,9 @@ export const CHANNEL_INFO: Record<string, Explain> = {
   },
   getnet: {
     activa:
-      "Con las credenciales de Web Checkout el cliente paga en la página de Getnet desde el QR o el link. Con las de Checkout API paga en tu propio checkout, con tu marca y tus cuotas (como Payway).",
+      "Con las credenciales de Web Checkout / Plugin Magento / Plugin WooCommerce el cliente paga en la página de Getnet desde el QR o el link.",
     pasos: [
-      "En el POS elegís Getnet: QR, Link o Link (checkout propio).",
+      "En el POS elegís Getnet: QR o Link.",
       "El cliente escanea el QR o abre el link y paga.",
       "Al aprobarse, la venta se cierra sola.",
     ],
@@ -305,14 +305,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
   getnet: {
     steps: [
       { icon: "login", text: "Entrá al Portal Getnet o pedíselas a tu ejecutivo." },
-      { icon: "key", text: "Elegí arriba qué credenciales cargás y copiá su Client ID y Client Secret." },
-      { icon: "paste", text: "Pegalos acá y, en el paso siguiente, tocá Probar credenciales." },
+      {
+        icon: "key",
+        text: "Buscá las que dicen Web Checkout, Plugin Magento o Plugin WooCommerce y copiá su Client ID y Client Secret.",
+      },
+      { icon: "paste", text: "Pegalos acá y, en el paso siguiente, tocá Probar credenciales. Si no pasan la prueba, no se guardan." },
     ],
     where: "Portal Getnet › Credenciales",
-    warning: {
-      title: "Getnet te da dos juegos de credenciales",
-      text: "Web Checkout / Plugin Magento / Plugin WooCommerce sirven para QR y link (el cliente paga en la página de Getnet). Checkout API / Plugin VTEX sirven para tu checkout propio. No son intercambiables: si cargás unas en el lugar de las otras, la prueba te avisa.",
-    },
+    // El aviso de Checkout API / Plugin VTEX lo pone el asistente debajo de la
+    // tarjeta de Web Checkout (ADR-069 adenda).
   },
   pagos360: {
     steps: [

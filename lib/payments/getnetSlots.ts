@@ -11,7 +11,10 @@ export type GetnetSlot = "web_checkout" | "checkout_api";
 
 export type GetnetSlotDef = {
   key: GetnetSlot;
+  /** Cómo lo llama el portal de Getnet (título de la tarjeta). */
   title: string;
+  /** Nombre corto para botones y avisos. */
+  short: string;
   /** Para qué sirve, en una línea. */
   purpose: string;
   /** Qué credenciales cargar (cómo las llama Getnet). */
@@ -23,9 +26,11 @@ export type GetnetSlotDef = {
 export const GETNET_SLOTS: GetnetSlotDef[] = [
   {
     key: "web_checkout",
-    title: "Web Checkout",
+    title: "Web Checkout / Plugin Magento / Plugin WooCommerce",
+    short: "Web Checkout",
     purpose: "Para cobrar con QR o link: el cliente paga en la página de Getnet.",
-    credentials: "Usá las credenciales que dicen Web Checkout / Plugin Magento / Plugin WooCommerce.",
+    credentials:
+      "Estas son las credenciales que tenés que cargar. Las encontrás en el portal de Getnet como Web Checkout, Plugin Magento o Plugin WooCommerce.",
     keys: [
       "client_id",
       "client_secret",
@@ -40,13 +45,45 @@ export const GETNET_SLOTS: GetnetSlotDef[] = [
   },
   {
     key: "checkout_api",
-    title: "Checkout API",
+    title: "Checkout API / Plugin VTEX",
+    short: "Checkout API",
     purpose:
       "Para tu propio checkout con tu marca (como Payway): el cliente carga la tarjeta en NinjaPos y elige cuotas.",
     credentials: "Usá las credenciales que dicen Checkout API / Plugin VTEX.",
     keys: ["api_client_id", "api_client_secret", "api_environment", "api_channel_entry", "api_seller_id"],
   },
 ];
+
+/** Aviso fijo del asistente (ADR-069 adenda): las de Checkout API no sirven. */
+export const GETNET_VTEX_WARNING =
+  "No uses las de Checkout API / Plugin VTEX: no funcionan para cobrar con QR ni link desde NinjaSoft.";
+
+/** Mismo texto que la Edge (SLOT_MISMATCH_COPY.web_checkout). */
+export const GETNET_VTEX_IN_WEB_CHECKOUT =
+  "Estas credenciales son de Checkout API / Plugin VTEX. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.";
+
+/**
+ * Tarjetas que muestra el asistente. La de Checkout API sólo aparece con el
+ * checkout propio habilitado (flag PCI que expone la Edge getnet como
+ * booleano). Apagado: una sola tarjeta, Web Checkout.
+ */
+export function visibleGetnetSlots(ownCheckoutEnabled: boolean): GetnetSlotDef[] {
+  return GETNET_SLOTS.filter((s) => s.key === "web_checkout" || ownCheckoutEnabled);
+}
+
+/** Error de set_payment_secret al guardar Getnet → texto del asistente. */
+export function getnetSaveError(code: string | undefined): string | null {
+  switch (code) {
+    case "getnet_checkout_api_credentials":
+      return GETNET_VTEX_IN_WEB_CHECKOUT;
+    case "getnet_invalid_credentials":
+      return "Getnet rechazó el Client ID / Client Secret. Revisá que sean las de Web Checkout / Plugin Magento / Plugin WooCommerce y el ambiente.";
+    case "checkout_api_unavailable":
+      return "Las credenciales de Checkout API / Plugin VTEX no se pueden cargar: el checkout propio con Getnet no está habilitado. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.";
+    default:
+      return null;
+  }
+}
 
 export const GETNET_SLOT_BY_KEY: Record<GetnetSlot, GetnetSlotDef> = Object.fromEntries(
   GETNET_SLOTS.map((s) => [s.key, s]),
@@ -115,7 +152,7 @@ export function getnetSlotClearKeys(slot: GetnetSlot): string[] {
 export function getnetSlotError(code: string | undefined): string | null {
   switch (code) {
     case "web_checkout_not_connected":
-      return "Para cobrar con QR o link de Getnet cargá las credenciales de Web Checkout (las de Checkout API sirven sólo para el checkout propio).";
+      return "Para cobrar con QR o link de Getnet cargá las credenciales de Web Checkout / Plugin Magento / Plugin WooCommerce (las de Checkout API / Plugin VTEX no sirven).";
     case "checkout_api_not_connected":
       return "Para el checkout propio de Getnet cargá las credenciales de Checkout API en Medios de pago.";
     case "checkout_api_unavailable":

@@ -422,6 +422,11 @@ export interface ProviderStatus {
   /** Getnet (ADR-069): slots cargados. Sin flags, `connected` = Web Checkout. */
   web_checkout_connected?: boolean;
   checkout_api_connected?: boolean;
+  /**
+   * Getnet (ADR-069 adenda): checkout propio habilitado (flag PCI que expone
+   * la Edge). Sin él, "Link (checkout propio)" no aparece.
+   */
+  own_checkout_enabled?: boolean;
   surcharge_pct?: number;
   /** config.plan_mode del medio: "global" = recargo único. */
   plan_mode?: string | null;
@@ -465,13 +470,13 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
   const enabled = { has: (key: string) => isProviderEnabled(key, byKey.get(key)) };
   const connected = (key: string) => rows.some((r) => r.provider_key === key && r.connected);
   // Getnet: el canal exige su juego de credenciales (una conexión vieja sin
-  // flags sólo tenía Web Checkout).
+  // flags sólo tenía Web Checkout). El checkout propio, además, el flag PCI.
   const slotConnected = (key: string, slot: "web_checkout" | "checkout_api") =>
     rows.some(
       (r) =>
         r.provider_key === key &&
         (slot === "checkout_api"
-          ? r.checkout_api_connected === true
+          ? r.checkout_api_connected === true && r.own_checkout_enabled === true
           : (r.web_checkout_connected ?? (r.checkout_api_connected === undefined ? r.connected : false)) === true),
     );
   // Sin ninguna configuración: sólo los medios manuales básicos (como antes).

@@ -31,9 +31,11 @@ import {
   type GetnetProbeResult,
 } from "@/lib/payments/getnetProbe";
 import {
-  GETNET_SLOTS,
   GETNET_SLOT_BY_KEY,
+  GETNET_VTEX_WARNING,
+  getnetSaveError,
   getnetSlotSave,
+  visibleGetnetSlots,
   type GetnetSlot,
 } from "@/lib/payments/getnetSlots";
 import {
@@ -286,6 +288,7 @@ export function ConnectProviderModal({
   scopeName = null,
   onProbe,
   getnetSlots,
+  getnetOwnCheckout = false,
   onClearSlot,
 }: {
   open: boolean;
@@ -309,6 +312,11 @@ export function ConnectProviderModal({
   onProbe?: (v: ConnectProbe) => Promise<GetnetProbeResult>;
   /** Getnet: slots cargados en este alcance (ADR-069). */
   getnetSlots?: Record<GetnetSlot, boolean>;
+  /**
+   * Getnet (ADR-069 adenda): checkout propio habilitado (flag PCI, booleano de
+   * la Edge). Apagado: sólo se muestra y se carga Web Checkout.
+   */
+  getnetOwnCheckout?: boolean;
   /** Getnet: borra sólo un slot. */
   onClearSlot?: (slot: GetnetSlot) => Promise<void>;
 }) {
@@ -316,7 +324,8 @@ export function ConnectProviderModal({
   const isMp = providerKey === "mercadopago";
   const isGetnet = providerKey === "getnet" && Boolean(getnetSlots);
   // Getnet: slot que se edita (Web Checkout o Checkout API).
-  const firstSlot: GetnetSlot = getnetSlots && !getnetSlots.web_checkout && getnetSlots.checkout_api ? "checkout_api" : "web_checkout";
+  const firstSlot: GetnetSlot =
+    getnetOwnCheckout && getnetSlots && !getnetSlots.web_checkout && getnetSlots.checkout_api ? "checkout_api" : "web_checkout";
   const [slot, setSlot] = useState<GetnetSlot>(firstSlot);
   const spec = isGetnet && slot === "checkout_api" ? FORMS.getnet_api : FORMS[providerKey];
   const guide = CONNECT_GUIDE[providerKey];
@@ -396,8 +405,11 @@ export function ConnectProviderModal({
     try {
       await fn();
       onOk();
-    } catch {
-      setServerError("No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
+    } catch (e) {
+      // Getnet (ADR-069 adenda): el servidor no guarda credenciales de
+      // Checkout API / Plugin VTEX ni credenciales rechazadas.
+      const getnetMsg = isGetnet ? getnetSaveError(e instanceof Error ? e.message : undefined) : null;
+      setServerError(getnetMsg ?? "No pudimos guardar la conexión. Revisá los datos y probá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -415,7 +427,7 @@ export function ConnectProviderModal({
     setStep(1);
   };
 
-  const finish = () => {
+  const finish = async () => {
     if (isMp) {
       if (needsTestToken && !mpTestValid) {
         setShowErrors(true);
@@ -435,9 +447,13 @@ export function ConnectProviderModal({
       return;
     }
     const secrets = typedSecrets();
-    // Getnet: ambiente explícito + API detectada por la prueba (si la hubo).
-    if (onProbe) Object.assign(secrets, probeSecrets(probe, env));
     if (isGetnet) {
+      // Getnet (ADR-069 adenda): no se guardan credenciales que fallan la
+      // prueba. Si no se probaron, se prueban ahora; si fallan, el resultado
+      // queda a la vista (en rojo) y no se guarda nada.
+      const checked = probe ?? (await runProbe(false));
+      if (!checked?.ok) return;
+      Object.assign(secrets, probeSecrets(checked, env));
       // Un slot por vez, sin pisar el otro (merge) y sin dejar datos viejos del mismo.
       const save = getnetSlotSave(slot, secrets, env);
       run(
@@ -446,6 +462,8 @@ export function ConnectProviderModal({
       );
       return;
     }
+    // Ambiente explícito + API detectada por la prueba (si la hubo).
+    if (onProbe) Object.assign(secrets, probeSecrets(probe, env));
     run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
   };
 
@@ -459,19 +477,22 @@ export function ConnectProviderModal({
   }
 
   // Prueba las credenciales tipeadas (o, sin tipear, las guardadas) sin guardar.
-  const runProbe = async (saved: boolean) => {
-    if (!onProbe) return;
+  const runProbe = async (saved: boolean): Promise<GetnetProbeResult | null> => {
+    if (!onProbe) return null;
     setProbing(true);
     setProbe(null);
+    let r: GetnetProbeResult;
     try {
       const probeEnv = saved ? currentEnv : env;
       const slotArg = isGetnet ? { slot } : {};
-      setProbe(await onProbe(saved ? { env: probeEnv, ...slotArg } : { secrets: typedSecrets(), env: probeEnv, ...slotArg }));
+      r = await onProbe(saved ? { env: probeEnv, ...slotArg } : { secrets: typedSecrets(), env: probeEnv, ...slotArg });
     } catch {
-      setProbe({ ok: false, summary: "No pudimos probar las credenciales. Revisá tu conexión y probá de nuevo." });
+      r = { ok: false, summary: "No pudimos probar las credenciales. Revisá tu conexión y probá de nuevo." };
     } finally {
       setProbing(false);
     }
+    setProbe(r);
+    return r;
   };
 
   const closeOrBack = () => (connected ? setView("manage") : onOpenChange(false));
@@ -575,7 +596,7 @@ export function ConnectProviderModal({
   } else if (step === 1) {
     footer = (
       <>
-        <Button className="w-full" loading={saving} onClick={finish}>
+        <Button className="w-full" loading={saving || probing} onClick={() => void finish()}>
           {isMp ? "Continuar" : connected ? "Guardar cambios" : `Conectar ${brand.name}`}
         </Button>
         {!isMp && (
@@ -663,6 +684,7 @@ export function ConnectProviderModal({
             {isGetnet && getnetSlots && (
               <GetnetSlotCards
                 slots={getnetSlots}
+                ownCheckout={getnetOwnCheckout}
                 active={slot}
                 onPick={pickSlot}
                 onEdit={(s) => {
@@ -671,17 +693,18 @@ export function ConnectProviderModal({
                   setStep(0);
                 }}
                 onClear={
-                  onClearSlot && getnetSlots.web_checkout && getnetSlots.checkout_api
+                  onClearSlot && getnetOwnCheckout && getnetSlots.web_checkout && getnetSlots.checkout_api
                     ? (s) =>
                         run(
                           () => onClearSlot(s),
-                          () => toast({ title: `Credenciales de ${GETNET_SLOT_BY_KEY[s].title} quitadas`, variant: "success" }),
+                          () => toast({ title: `Credenciales de ${GETNET_SLOT_BY_KEY[s].short} quitadas`, variant: "success" }),
                         )
                     : undefined
                 }
                 pending={saving}
               />
             )}
+            {isGetnet && !getnetOwnCheckout && <Notice tone="warning">{GETNET_VTEX_WARNING}</Notice>}
 
             {onProbe && (!isGetnet || getnetSlots?.[slot]) && (
               <div className="space-y-2.5">
@@ -695,7 +718,7 @@ export function ConnectProviderModal({
                   {probing
                     ? "Probando la conexión..."
                     : isGetnet
-                      ? `Probar ${GETNET_SLOT_BY_KEY[slot].title}`
+                      ? `Probar ${GETNET_SLOT_BY_KEY[slot].short}`
                       : "Probar conexión"}
                 </button>
                 {probe && <ProbePanel result={probe} />}
@@ -734,8 +757,9 @@ export function ConnectProviderModal({
               <>
                 {isGetnet && getnetSlots && (
                   <div className="space-y-2.5">
-                    <Eyebrow>¿Qué credenciales vas a cargar?</Eyebrow>
-                    <GetnetSlotCards slots={getnetSlots} active={slot} onPick={pickSlot} />
+                    <Eyebrow>{getnetOwnCheckout ? "¿Qué credenciales vas a cargar?" : "Las credenciales que tenés que cargar"}</Eyebrow>
+                    <GetnetSlotCards slots={getnetSlots} ownCheckout={getnetOwnCheckout} active={slot} onPick={pickSlot} />
+                    {slot === "web_checkout" && <Notice tone="warning">{GETNET_VTEX_WARNING}</Notice>}
                   </div>
                 )}
                 {guide && (
@@ -901,7 +925,7 @@ export function ConnectProviderModal({
             </div>
             <div>
               <p className="text-lg font-bold">
-                {isGetnet ? `${GETNET_SLOT_BY_KEY[slot].title} de ${brand.name} quedó conectado` : `${brand.name} quedó conectado`}
+                {isGetnet ? `${GETNET_SLOT_BY_KEY[slot].short} de ${brand.name} quedó conectado` : `${brand.name} quedó conectado`}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {finalEnv === "test"
@@ -985,9 +1009,17 @@ function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwit
   if (result.error === "not_connected") {
     return <Notice tone="warning">Cargá el Client ID y el Client Secret para probarlos.</Notice>;
   }
-  if (!result.ok && result.slot_mismatch) {
+  if (result.error === "checkout_api_unavailable") {
     return (
-      <Notice tone="warning" title="Estas credenciales van en el otro lugar">
+      <Notice tone="warning">
+        El checkout propio con Getnet no está habilitado. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.
+      </Notice>
+    );
+  }
+  if (!result.ok && result.slot_mismatch) {
+    // ADR-069 adenda: credenciales del otro juego. No se guardan.
+    return (
+      <Notice tone="danger" title="Estas credenciales no sirven acá">
         {result.summary}
       </Notice>
     );
@@ -1085,6 +1117,7 @@ function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwit
 // cargado. Elegible (paso de datos) o con acciones (Administrar).
 function GetnetSlotCards({
   slots,
+  ownCheckout,
   active,
   onPick,
   onEdit,
@@ -1092,33 +1125,45 @@ function GetnetSlotCards({
   pending = false,
 }: {
   slots: Record<GetnetSlot, boolean>;
+  /** Checkout propio habilitado: muestra también la tarjeta Checkout API. */
+  ownCheckout: boolean;
   active: GetnetSlot;
   onPick: (s: GetnetSlot) => void;
   onEdit?: (s: GetnetSlot) => void;
   onClear?: (s: GetnetSlot) => void;
   pending?: boolean;
 }) {
+  // ADR-069 adenda: con el checkout propio apagado hay UNA sola tarjeta
+  // (Web Checkout), sin elección.
+  const defs = visibleGetnetSlots(ownCheckout);
+  const single = defs.length === 1;
   return (
-    <div className="grid gap-2.5" role="radiogroup" aria-label="Credenciales de Getnet">
-      {GETNET_SLOTS.map((d) => {
+    <div className="grid gap-2.5" role={single ? undefined : "radiogroup"} aria-label="Credenciales de Getnet">
+      {defs.map((d) => {
         const on = active === d.key;
         const loaded = slots[d.key];
         return (
           <div
             key={d.key}
-            role="radio"
-            aria-checked={on}
-            tabIndex={0}
-            onClick={() => onPick(d.key)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onPick(d.key);
-              }
-            }}
+            role={single ? undefined : "radio"}
+            aria-checked={single ? undefined : on}
+            tabIndex={single ? undefined : 0}
+            onClick={single ? undefined : () => onPick(d.key)}
+            onKeyDown={
+              single
+                ? undefined
+                : (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPick(d.key);
+                    }
+                  }
+            }
             className={cn(
-              "cursor-pointer rounded-lg border p-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              on ? "border-foreground/40 bg-fg-4" : "border-border hover:bg-fg-4",
+              "rounded-lg border p-3.5 text-left transition",
+              single && "border-border bg-fg-4",
+              !single && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              !single && (on ? "border-foreground/40 bg-fg-4" : "border-border hover:bg-fg-4"),
             )}
           >
             <div className="flex items-center justify-between gap-2">

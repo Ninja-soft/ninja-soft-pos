@@ -660,6 +660,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       : null;
   const needsRef = Boolean(active?.requiresReference) || Boolean(isTransfer && transfer?.requireReference);
   const refOk = !needsRef || opRef.trim() !== "";
+  // Al elegir transferencia, el cursor va directo al n° de operación.
+  const showTransferRef = Boolean(isTransfer && (needsRef || transferScreen));
+  useEffect(() => {
+    if (!open || !showTransferRef) return;
+    const t = window.setTimeout(() => document.getElementById("checkout-opref")?.focus(), 60);
+    return () => window.clearTimeout(t);
+  }, [open, showTransferRef, transferAcc?.id]);
   const belowMin = Boolean(active?.minAmount && settle.amount > 0 && settle.amount < active.minAmount);
   const isAccount = active?.flow === "account";
   const accountOk = !isAccount || !renderAccount || !accountPay.blocked;

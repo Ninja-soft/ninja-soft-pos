@@ -212,6 +212,40 @@ describe.skipIf(!enabled)("F17 · reportes y merma por sucursal", () => {
     expect(g.error?.message).toMatch(/forbidden/);
   });
 
+  // TX-5 · ADR-100: filtros guardables por medio de pago y categoría.
+  it("filtra por medio de pago y por categoría sin romper el alcance por sucursal", async () => {
+    const cash = await rpc(ctx.owner, "sales_report", { p_from: FROM, p_to: TO, p_method: "cash" });
+    expect(cash.error).toBeNull();
+    expect(Number((cash.data as { total: number }).total)).toBe(140);
+
+    const debit = await rpc(ctx.owner, "sales_report", { p_from: FROM, p_to: TO, p_method: "debit" });
+    expect(debit.error).toBeNull();
+    expect((debit.data as { count: number }).count).toBe(0);
+    expect((debit.data as { by_method: unknown[] }).by_method).toEqual([]);
+
+    const { data: cat, error: cErr } = await ctx.admin
+      .from("categories")
+      .insert({ tenant_id: ctx.tenant, name: `Cat ${STAMP}` })
+      .select("id")
+      .single();
+    if (cErr || !cat) throw cErr ?? new Error("categoría");
+    const otherCat = await rpc(ctx.owner, "sales_report", { p_from: FROM, p_to: TO, p_category_id: cat.id });
+    expect((otherCat.data as { count: number }).count).toBe(0);
+
+    await ctx.admin.from("products").update({ category_id: cat.id }).eq("id", ctx.product);
+    const byCat = await rpc(ctx.owner, "sales_report", { p_from: FROM, p_to: TO, p_category_id: cat.id });
+    expect(byCat.error).toBeNull();
+    expect(Number((byCat.data as { total: number }).total)).toBe(140);
+    expect((byCat.data as { by_category: { category: string }[] }).by_category.map((r) => r.category)).toEqual([
+      `Cat ${STAMP}`,
+    ]);
+
+    // El cajero de Norte sigue viendo sólo Norte aunque filtre.
+    const mine = await rpc(ctx.cashier, "sales_report", { p_from: FROM, p_to: TO, p_method: "cash", p_category_id: cat.id });
+    expect(mine.error).toBeNull();
+    expect(Number((mine.data as { total: number }).total)).toBe(40);
+  });
+
   it("una sucursal de otro negocio da forbidden", async () => {
     const r = await rpc(ctx.owner, "sales_report", {
       p_from: FROM,

@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { RegisterHardwareTests } from "@/components/hardware/RegisterHardwareTests";
+import { SimulatedCounterPanel } from "@/components/hardware/SimulatedCounterPanel";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { branchLabel } from "@/modules/branches/logic";
 import { useRegisterHardwareList } from "@/modules/hardware/hooks";
@@ -518,6 +519,9 @@ export function HardwareCard() {
           <RegisterTestsPicker />
         </PeripheralCard>
       </div>
+
+      {/* Mostrador simulado (ADR-101): impresión ESC/POS, cola, cajón y visor sin equipos. */}
+      <SimulatedCounterPanel business={ctx?.tenantName ?? null} registerName={register?.name ?? null} log={log} />
 
       {/* Entorno / capacidades del navegador */}
       <Card>

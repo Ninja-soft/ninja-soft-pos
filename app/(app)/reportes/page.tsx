@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowDown,
+  ArrowUp,
+  Bookmark,
   ChartArea,
   ChartBar,
   ChartBarStacked,
@@ -25,6 +28,26 @@ import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { Switch } from "@/components/ui/Switch";
+import { Select, type SelectOption } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useCategories } from "@/modules/products/hooks";
+import { ReportPresetsModal, describeFilters } from "@/components/reports/ReportPresetsModal";
+import {
+  EMPTY_PRESETS,
+  activeFilterCount,
+  detectRange,
+  moveInOrder,
+  removePreset,
+  resolveOrder,
+  resolveRange,
+  sanitizePresets,
+  setDefaultPreset,
+  upsertPreset,
+  type ReportFilters,
+  type ReportPreset,
+  type ReportPresetState,
+} from "@/lib/reports/savedFilters";
 import {
   Dropdown,
   DropdownContent,
@@ -70,13 +93,17 @@ import {
 } from "@/modules/delivery/api";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { exportXlsx } from "@/lib/utils/xlsx";
-import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
+import {
+  loadReportSettings,
+  saveReportOrder,
+  saveReportPresets,
+  saveReportPrefs,
+} from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { ReportSection, type ReportChartSpec } from "@/components/reports/ReportSection";
 import { KpiCard } from "@/components/reports/KpiCard";
 import { PaymentFeesSection } from "@/components/reports/PaymentFeesSection";
 import { Segmented, type SegmentedOption } from "@/components/ui/Segmented";
-import { SpinnerBlock } from "@/components/ui/Spinner";
 import {
   bulletOption,
   cashFlowOption,
@@ -116,6 +143,10 @@ const REPORTS = [
   { key: "gastro_top_items", label: "Gastro · Top ítems" },
 ] as const;
 type ReportKey = (typeof REPORTS)[number]["key"];
+const REPORT_KEYS: ReportKey[] = REPORTS.map((r) => r.key);
+const GASTRO_KEYS: ReportKey[] = REPORT_KEYS.filter((k) => k.startsWith("gastro_"));
+const MAIN_KEYS: ReportKey[] = REPORT_KEYS.filter((k) => !k.startsWith("gastro_"));
+const ALL = "all";
 type ReportView = "consolidated" | "branch" | "compare";
 const DEFAULT_VIS: Record<ReportKey, boolean> = {
   by_day: true,
@@ -158,6 +189,26 @@ export default function ReportesPage() {
   const storeId = branch.filterStoreId;
   const scopeLabel = reportScopeLabel(branch.isMulti, branch.filterStore);
 
+  // Filtros extra guardables (TX-5 · ADR-100): medio de pago y categoría
+  // filtran el reporte de ventas en el servidor (sales_report).
+  const [method, setMethod] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const { data: categories = [] } = useCategories();
+  const categoryOptions = useMemo<SelectOption<string>[]>(() => {
+    const live = categories.filter((c) => !c.deleted_at);
+    const roots = live.filter((c) => !c.parent_id);
+    const out: SelectOption<string>[] = [{ value: ALL, label: "Todas" }];
+    for (const r of roots) {
+      out.push({ value: r.id, label: r.name });
+      for (const ch of live.filter((c) => c.parent_id === r.id)) out.push({ value: ch.id, label: `${r.name} / ${ch.name}` });
+    }
+    return out;
+  }, [categories]);
+  const methodOptions = useMemo<SelectOption<string>[]>(
+    () => [{ value: ALL, label: "Todos" }, ...Object.entries(METHOD_LABELS).map(([value, label]) => ({ value, label }))],
+    [],
+  );
+
   // Vista (F17 · H97 · ADR-057): Consolidado / Por sucursal salen del chip
   // (una sola fuente de verdad para todo el panel); Comparar es local.
   const [compareBranches, setCompareBranches] = useState(false);
@@ -181,7 +232,12 @@ export default function ReportesPage() {
     ...(canCompare ? [{ value: "compare" as const, label: "Comparar sucursales" }] : []),
   ];
 
-  const { data, isLoading } = useSalesReport(fromISO, toISO, { storeId, enabled: view !== "compare" });
+  const { data, isLoading } = useSalesReport(fromISO, toISO, {
+    storeId,
+    method,
+    categoryId,
+    enabled: view !== "compare",
+  });
   const { data: warranty } = useWarrantyReport(fromISO, toISO, storeId);
   // Productividad por profesional (H39): el owner liquida comisiones de la semana
   // mirando esta tabla (+ export XLSX).
@@ -483,11 +539,26 @@ export default function ReportesPage() {
     await exportXlsx(`reporte-ventas-${fileTag ? `${fileTag}-` : ""}${tag}`, sheets);
   }
 
+  // ── Preferencias por usuario (users.settings, cross-device): visibilidad,
+  // orden y filtros guardados (TX-5). Una sola lectura al montar.
+  const { toast } = useToast();
   const [vis, setVis] = useState<Record<ReportKey, boolean>>(DEFAULT_VIS);
+  const [order, setOrder] = useState<ReportKey[]>(REPORT_KEYS);
+  const [presets, setPresets] = useState<ReportPresetState>(EMPTY_PRESETS);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   useEffect(() => {
-    loadReportPrefs().then((p) => {
-      if (p) setVis((v) => ({ ...v, ...p }));
+    let alive = true;
+    loadReportSettings().then((s) => {
+      if (!alive) return;
+      if (s.visibility) setVis((v) => ({ ...v, ...s.visibility }));
+      setOrder(resolveOrder(s.order, REPORT_KEYS));
+      setPresets(sanitizePresets(s.presets));
+      setPrefsLoaded(true);
     });
+    return () => {
+      alive = false;
+    };
   }, []);
   function toggle(k: ReportKey) {
     setVis((prev) => {
@@ -496,6 +567,65 @@ export default function ReportesPage() {
       return next;
     });
   }
+  function move(k: ReportKey, dir: -1 | 1) {
+    setOrder((prev) => {
+      const group = GASTRO_KEYS.includes(k) ? GASTRO_KEYS : MAIN_KEYS;
+      const next = moveInOrder(prev, k, dir, group);
+      if (next !== prev) void saveReportOrder(next);
+      return next;
+    });
+  }
+
+  const currentFilters: ReportFilters = {
+    ...detectRange(range?.from ?? new Date(), range?.to ?? range?.from ?? new Date()),
+    storeId,
+    method,
+    categoryId,
+  };
+  const describe = (f: ReportFilters) =>
+    describeFilters(f, {
+      store: (id) => {
+        const b = branch.allowed.find((x) => x.id === id);
+        return b ? b.short_name?.trim() || b.name : null;
+      },
+      method: (k) => METHOD_LABELS[k] ?? k,
+      category: (id) => categoryOptions.find((o) => o.value === id)?.label ?? null,
+    });
+  function applyPreset(p: ReportPreset, quiet = false) {
+    const r = resolveRange(p.filters);
+    setRange({ from: r.from, to: r.to });
+    const store = p.filters.storeId;
+    if (branch.isMulti) {
+      if (store && branch.allowed.some((b) => b.id === store)) branch.setSelection(store);
+      else if (!store) branch.setSelection(ALL_BRANCHES);
+    }
+    setCompareBranches(false);
+    setMethod(p.filters.method);
+    setCategoryId(p.filters.categoryId);
+    setPresetsOpen(false);
+    if (!quiet) toast({ title: `Filtro aplicado: ${p.name}`, variant: "success" });
+  }
+  function persistPresets(next: ReportPresetState) {
+    setPresets(next);
+    void saveReportPresets(next);
+  }
+  function savePreset(name: string): string | null {
+    const r = upsertPreset(presets, name, currentFilters);
+    if ("error" in r) return r.error === "empty_name" ? "Poné un nombre." : "Llegaste al máximo de filtros guardados.";
+    persistPresets(r.state);
+    toast({ title: "Filtro guardado", description: name.trim(), variant: "success" });
+    return null;
+  }
+  // Predeterminado: se aplica una vez, cuando ya están las prefs y las sucursales.
+  const appliedDefault = useRef(false);
+  useEffect(() => {
+    if (appliedDefault.current || !prefsLoaded || !branch.ready) return;
+    appliedDefault.current = true;
+    const p = presets.presets.find((x) => x.id === presets.defaultId);
+    if (p) applyPreset(p, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded, branch.ready]);
+  const extraFilters = activeFilterCount({ ...currentFilters, storeId: null });
 
   // Stock bajo (no depende del rango: es stock actual). Con una sucursal
   // elegida y stock por sucursal en el plan, es el faltante de esa sucursal
@@ -560,6 +690,8 @@ export default function ReportesPage() {
   const { data: prevData, isLoading: prevLoading } = useSalesReport(prevFromISO, prevToISO, {
     enabled: compare && !!data,
     storeId,
+    method,
+    categoryId,
   });
   const prevHint = nDays === 1 ? "vs. día anterior" : `vs. ${nDays} días anteriores`;
 
@@ -777,6 +909,28 @@ export default function ReportesPage() {
             </div>
           </div>
           {view !== "compare" && (
+            <div className="flex w-40 shrink-0 flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Medio de pago</span>
+              <Select
+                aria-label="Filtrar por medio de pago"
+                value={method ?? ALL}
+                options={methodOptions}
+                onChange={(v) => setMethod(v === ALL ? null : v)}
+              />
+            </div>
+          )}
+          {view !== "compare" && (
+            <div className="flex w-48 shrink-0 flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Categoría</span>
+              <Select
+                aria-label="Filtrar por categoría"
+                value={categoryId ?? ALL}
+                options={categoryOptions}
+                onChange={(v) => setCategoryId(v === ALL ? null : v)}
+              />
+            </div>
+          )}
+          {view !== "compare" && (
           <div className="flex shrink-0 flex-col gap-1">
             <span className="text-xs text-muted-foreground">Comparar</span>
             <div className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
@@ -792,6 +946,17 @@ export default function ReportesPage() {
           {/* Acciones agrupadas a la derecha: si no entran en la fila bajan
               juntas (nunca queda un botón suelto en una segunda fila). */}
           <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+            <Button
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setPresetsOpen(true)}
+              aria-haspopup="dialog"
+            >
+              <Bookmark size={16} /> Guardados
+              {presets.presets.length > 0 && (
+                <span className="font-mono text-xs text-muted-foreground">{presets.presets.length}</span>
+              )}
+            </Button>
             <Link
               href="/reportes/conciliacion"
               title="Conciliación de tarjetas"
@@ -825,9 +990,9 @@ export default function ReportesPage() {
                   <SlidersHorizontal size={16} /> Personalizar
                 </Button>
               </DropdownTrigger>
-              <DropdownContent align="end" className="w-60">
-                <DropdownLabel>Reportes a mostrar</DropdownLabel>
-                {REPORTS.filter((r) => {
+              <DropdownContent align="end" className="w-72">
+                <DropdownLabel>Reportes a mostrar y orden</DropdownLabel>
+                {order.flatMap((k) => REPORTS.filter((r) => r.key === k)).filter((r) => {
                   // Los toggles gastro sólo se ofrecen si el tenant usa el modo.
                   if (r.key === "gastro_tables" || r.key === "gastro_turnover") return diningEnabled;
                   if (r.key === "gastro_delivery") return deliveryEnabled;
@@ -837,9 +1002,27 @@ export default function ReportesPage() {
                 }).map((r) => (
                   <div
                     key={r.key}
-                    className="flex items-center justify-between gap-3 px-2 py-1.5 text-sm"
+                    className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm"
                   >
-                    {r.label}
+                    <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => move(r.key, -1)}
+                      aria-label={`Subir ${r.label}`}
+                      title="Subir"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ArrowUp size={14} strokeWidth={1.75} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => move(r.key, 1)}
+                      aria-label={`Bajar ${r.label}`}
+                      title="Bajar"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ArrowDown size={14} strokeWidth={1.75} />
+                    </button>
                     <Switch
                       checked={vis[r.key]}
                       onCheckedChange={() => toggle(r.key)}
@@ -903,59 +1086,71 @@ export default function ReportesPage() {
           />
         </div>
 
+        {extraFilters > 0 && (
+          <p className="mt-4 text-xs text-muted-foreground" role="status">
+            Medio y categoría filtran las ventas (indicadores, evolución, medios, categorías,
+            productos, cajeros y clientes). Garantías, staff, stock y gastronomía no cambian.
+          </p>
+        )}
+
         {isLoading ? (
-          <SpinnerBlock className="mt-8" />
+          <div className="mt-6 grid gap-4 lg:grid-cols-2" aria-busy="true" aria-label="Cargando reportes">
+            <Skeleton className="h-[340px] lg:col-span-2" />
+            <Skeleton className="h-[300px]" />
+            <Skeleton className="h-[300px]" />
+          </div>
         ) : (
           <div className="mt-6 grid gap-4 lg:grid-flow-dense lg:grid-cols-2">
-            {vis.by_day && (
-              <ReportSection<SeriesKind>
-                id="by_day"
-                title="Evolución de ventas"
-                subtitle={
-                  days.length > 1
-                    ? `${metricName} · promedio diario ${formatChartValue(
-                        days.reduce((a, d) => a + metricValue(d), 0) / days.length,
-                        metricFormat,
-                      )}`
-                    : metricName
-                }
-                className="lg:col-span-2"
-                chartTypes={TIME_TYPES}
-                controls={
-                  <Segmented<DayMetric>
-                    aria-label="Métrica"
-                    value={metric}
-                    onChange={setMetric}
-                    size="sm"
-                    options={METRIC_OPTIONS}
-                  />
-                }
-                chart={(kind) => ({
-                  option: timeSeriesOption({
-                    labels: days.map((d) => d.label),
-                    tooltipLabels: days.map((d) => d.long),
-                    values: days.map(metricValue),
-                    name: metricName,
-                    format: metricFormat,
-                    kind,
-                    showAverage: true,
-                    previous:
-                      compare && prevDays
-                        ? {
-                            values: prevDays.map(metricValue),
-                            labels: prevDays.map((d) => d.long),
-                            name: "Período anterior",
-                          }
-                        : null,
-                  }),
-                  height: 300,
-                  compactHeight: 260,
-                  empty: !days.some((d) => d.count > 0),
-                  ariaLabel: `${metricName} por día`,
-                  summary: {
-                    columns: ["Día", metricName],
-                    rows: days.map((d) => [d.long, formatChartValue(metricValue(d), metricFormat)]),
-                  },
+            {renderOrdered(order, {
+              by_day: vis.by_day && (
+                <ReportSection<SeriesKind>
+                  id="by_day"
+                  title="Evolución de ventas"
+                  subtitle={
+                    days.length > 1
+                      ? `${metricName} · promedio diario ${formatChartValue(
+                          days.reduce((a, d) => a + metricValue(d), 0) / days.length,
+                          metricFormat,
+                        )}`
+                      : metricName
+                  }
+                  className="lg:col-span-2"
+                  chartTypes={TIME_TYPES}
+                  controls={
+                    <Segmented<DayMetric>
+                      aria-label="Métrica"
+                      value={metric}
+                      onChange={setMetric}
+                      size="sm"
+                      options={METRIC_OPTIONS}
+                    />
+                  }
+                  chart={(kind) => ({
+                    option: timeSeriesOption({
+                      labels: days.map((d) => d.label),
+                      tooltipLabels: days.map((d) => d.long),
+                      values: days.map(metricValue),
+                      name: metricName,
+                      format: metricFormat,
+                      kind,
+                      showAverage: true,
+                      previous:
+                        compare && prevDays
+                          ? {
+                              values: prevDays.map(metricValue),
+                              labels: prevDays.map((d) => d.long),
+                              name: "Período anterior",
+                            }
+                          : null,
+                    }),
+                    height: 300,
+                    compactHeight: 260,
+                    empty: !days.some((d) => d.count > 0),
+                    ariaLabel: `${metricName} por día`,
+                    summary: {
+                      columns: ["Día", metricName],
+                      rows: days.map((d) => [d.long, formatChartValue(metricValue(d), metricFormat)]),
+                    },
                 })}
                 table={
                   <BareTable
@@ -969,8 +1164,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.by_hour && (
+            ),
+            by_hour: vis.by_hour && (
               <ReportSection<"heatmap" | "bar">
                 id="by_hour"
                 title="Ventas por día y hora"
@@ -1022,8 +1217,9 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.by_method && (
+            ),
+            by_method: vis.by_method && (
+              <>
               <ReportSection<"doughnut" | "ranking">
                 id="by_method"
                 title="Medios de pago"
@@ -1034,12 +1230,11 @@ export default function ReportesPage() {
                 }
                 table={<BareTable cols={["Medio", "Total", "%"]} rows={withShare(chart.by_method)} />}
               />
-            )}
-            {vis.by_method && (
-              // F8 · ADR-099: comisiones estimadas y propinas por medio.
+              {/* F8 · ADR-099: comisiones estimadas y propinas por medio. */}
               <PaymentFeesSection fromISO={fromISO} toISO={toISO} storeId={storeId} />
-            )}
-            {vis.by_category && (
+              </>
+            ),
+            by_category: vis.by_category && (
               <ReportSection<"treemap" | "doughnut" | "ranking">
                 id="by_category"
                 title="Categorías"
@@ -1059,8 +1254,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.by_product && (
+            ),
+            by_product: vis.by_product && (
               <ReportSection<"ranking" | "treemap">
                 id="by_product"
                 title="Top productos"
@@ -1080,8 +1275,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.by_customer && (
+            ),
+            by_customer: vis.by_customer && (
               <ReportSection<"ranking">
                 id="by_customer"
                 title="Top clientes"
@@ -1100,8 +1295,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.by_user && (
+            ),
+            by_user: vis.by_user && (
               <ReportSection<"ranking" | "doughnut">
                 id="by_user"
                 title="Por cajero"
@@ -1119,8 +1314,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.warranties && (
+            ),
+            warranties: vis.warranties && (
               <ReportSection<"ranking" | "doughnut">
                 id="warranties"
                 title="Garantías y comisiones"
@@ -1146,8 +1341,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.cash_flow && (
+            ),
+            cash_flow: vis.cash_flow && (
               <ReportSection<"flow">
                 id="cash_flow"
                 title="Flujo de caja"
@@ -1194,8 +1389,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.staff && (
+            ),
+            staff: vis.staff && (
               <ReportSection<"stacked" | "ranking">
                 id="staff"
                 title="Productividad del staff"
@@ -1264,8 +1459,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
-            {vis.low_stock && (
+            ),
+            low_stock: vis.low_stock && (
               <ReportSection<"bullet">
                 id="low_stock"
                 title="Stock bajo"
@@ -1295,7 +1490,8 @@ export default function ReportesPage() {
                   />
                 }
               />
-            )}
+            ),
+            })}
           </div>
         )}
 
@@ -1306,92 +1502,93 @@ export default function ReportesPage() {
             <Eyebrow>Operación gastronómica</Eyebrow>
             <Display className="mt-2 text-2xl md:text-3xl">Gastronomía</Display>
             <div className="mt-6 grid gap-4 lg:grid-flow-dense lg:grid-cols-2">
-              {diningEnabled && vis.gastro_tables && (
-                <ReportSection<"ranking" | "doughnut">
-                  id="gastro_tables"
-                  title="Mesas y salón"
-                  subtitle={
-                    gTables && gTables.orders > 0
-                      ? `${gTables.orders} pedidos · ticket prom. ${formatCurrency(gTables.avg_ticket)}`
-                      : undefined
-                  }
-                  className="lg:col-span-2"
-                  chartTypes={RANK_MIX_TYPES}
-                  chart={(kind) =>
-                    categoryChart(kind, chart.gastro_area, "Vendido", "currency", "Vendido por salón")
-                  }
-                  table={
-                    <div className="space-y-6 p-4">
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                          Por salón
-                        </p>
-                        <BareTable
-                          cols={["Salón", "Vendido", "Pedidos", "Ticket prom."]}
-                          rows={(gTables?.by_area ?? []).map((r) => [
-                            r.area,
-                            formatCurrency(r.total),
-                            String(r.orders),
-                            formatCurrency(r.avg_ticket),
-                          ])}
-                        />
+              {renderOrdered(order, {
+                gastro_tables: diningEnabled && vis.gastro_tables && (
+                  <ReportSection<"ranking" | "doughnut">
+                    id="gastro_tables"
+                    title="Mesas y salón"
+                    subtitle={
+                      gTables && gTables.orders > 0
+                        ? `${gTables.orders} pedidos · ticket prom. ${formatCurrency(gTables.avg_ticket)}`
+                        : undefined
+                    }
+                    className="lg:col-span-2"
+                    chartTypes={RANK_MIX_TYPES}
+                    chart={(kind) =>
+                      categoryChart(kind, chart.gastro_area, "Vendido", "currency", "Vendido por salón")
+                    }
+                    table={
+                      <div className="space-y-6 p-4">
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Por salón
+                          </p>
+                          <BareTable
+                            cols={["Salón", "Vendido", "Pedidos", "Ticket prom."]}
+                            rows={(gTables?.by_area ?? []).map((r) => [
+                              r.area,
+                              formatCurrency(r.total),
+                              String(r.orders),
+                              formatCurrency(r.avg_ticket),
+                            ])}
+                          />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Por mesa (rotación = pedidos cerrados)
+                          </p>
+                          <BareTable
+                            cols={["Mesa", "Salón", "Vendido", "Pedidos", "Ticket prom."]}
+                            rows={(gTables?.by_table ?? []).map((r) => [
+                              r.table_label,
+                              r.area,
+                              formatCurrency(r.total),
+                              String(r.orders),
+                              formatCurrency(r.avg_ticket),
+                            ])}
+                          />
+                        </div>
+                        <div>
+                          <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                            Por mozo
+                          </p>
+                          <BareTable
+                            cols={["Mozo", "Vendido", "Pedidos", "Ticket prom."]}
+                            rows={(gTables?.by_waiter ?? []).map((r) => [
+                              r.waiter,
+                              formatCurrency(r.total),
+                              String(r.orders),
+                              formatCurrency(r.avg_ticket),
+                            ])}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                          Por mesa (rotación = pedidos cerrados)
-                        </p>
-                        <BareTable
-                          cols={["Mesa", "Salón", "Vendido", "Pedidos", "Ticket prom."]}
-                          rows={(gTables?.by_table ?? []).map((r) => [
-                            r.table_label,
-                            r.area,
-                            formatCurrency(r.total),
-                            String(r.orders),
-                            formatCurrency(r.avg_ticket),
-                          ])}
-                        />
-                      </div>
-                      <div>
-                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                          Por mozo
-                        </p>
-                        <BareTable
-                          cols={["Mozo", "Vendido", "Pedidos", "Ticket prom."]}
-                          rows={(gTables?.by_waiter ?? []).map((r) => [
-                            r.waiter,
-                            formatCurrency(r.total),
-                            String(r.orders),
-                            formatCurrency(r.avg_ticket),
-                          ])}
-                        />
-                      </div>
-                    </div>
-                  }
-                />
-              )}
-              {diningEnabled && vis.gastro_turnover && (
-                <ReportSection<"column">
-                  id="gastro_turnover"
-                  title="Rotación de mesas, mozos y propinas"
-                  subtitle={
-                    gTurn && gTurn.orders > 0
-                      ? `${gTurn.orders} mesas cobradas · ${fmtMin(gTurn.avg_seated_min)} sentados en promedio`
-                      : undefined
-                  }
-                  className="lg:col-span-2"
-                  chart={() => ({
-                    option: columnBarOption({
-                      items: chart.gastro_turnover,
-                      name: "Minutos sentados",
-                      format: "minutes",
-                    }),
-                    height: 260,
-                    empty: chart.gastro_turnover.length === 0,
-                    ariaLabel: "Minutos promedio sentados por mesa",
-                    summary: {
-                      columns: ["Mesa", "Minutos sentados"],
-                      rows: chart.gastro_turnover.map((d) => [d.label, d.value]),
-                    },
+                    }
+                  />
+                ),
+                gastro_turnover: diningEnabled && vis.gastro_turnover && (
+                  <ReportSection<"column">
+                    id="gastro_turnover"
+                    title="Rotación de mesas, mozos y propinas"
+                    subtitle={
+                      gTurn && gTurn.orders > 0
+                        ? `${gTurn.orders} mesas cobradas · ${fmtMin(gTurn.avg_seated_min)} sentados en promedio`
+                        : undefined
+                    }
+                    className="lg:col-span-2"
+                    chart={() => ({
+                      option: columnBarOption({
+                        items: chart.gastro_turnover,
+                        name: "Minutos sentados",
+                        format: "minutes",
+                      }),
+                      height: 260,
+                      empty: chart.gastro_turnover.length === 0,
+                      ariaLabel: "Minutos promedio sentados por mesa",
+                      summary: {
+                        columns: ["Mesa", "Minutos sentados"],
+                        rows: chart.gastro_turnover.map((d) => [d.label, d.value]),
+                      },
                   })}
                   table={
                     <div className="space-y-6 p-4">
@@ -1458,8 +1655,8 @@ export default function ReportesPage() {
                     </div>
                   }
                 />
-              )}
-              {vis.gastro_kitchen && (
+              ),
+              gastro_kitchen: vis.gastro_kitchen && (
                 <ReportSection<"column">
                   id="gastro_kitchen"
                   title="Tiempos de cocina (KDS)"
@@ -1495,8 +1692,8 @@ export default function ReportesPage() {
                     />
                   }
                 />
-              )}
-              {deliveryEnabled && vis.gastro_delivery && (
+              ),
+              gastro_delivery: deliveryEnabled && vis.gastro_delivery && (
                 <ReportSection<"doughnut" | "ranking">
                   id="gastro_delivery"
                   title="Delivery / take away"
@@ -1557,8 +1754,8 @@ export default function ReportesPage() {
                     </div>
                   }
                 />
-              )}
-              {vis.gastro_top_items && (
+              ),
+              gastro_top_items: vis.gastro_top_items && (
                 <ReportSection<"ranking" | "treemap">
                   id="gastro_top_items"
                   title="Top ítems (mesa + delivery)"
@@ -1617,15 +1814,33 @@ export default function ReportesPage() {
                     </div>
                   }
                 />
-              )}
+              ),
+              })}
             </div>
           </div>
         )}
         </>
         )}
       </div>
+      <ReportPresetsModal
+        open={presetsOpen}
+        onOpenChange={setPresetsOpen}
+        state={presets}
+        current={currentFilters}
+        describe={describe}
+        onApply={(p) => applyPreset(p)}
+        onSave={savePreset}
+        onDelete={(id) => persistPresets(removePreset(presets, id))}
+        onSetDefault={(id) => persistPresets(setDefaultPreset(presets, id))}
+      />
     </>
   );
+}
+
+/** Renderiza las secciones en el orden elegido por el usuario (orden real del
+ *  DOM, así el foco con Tab sigue el orden visual). */
+function renderOrdered(order: ReportKey[], nodes: Partial<Record<ReportKey, ReactNode>>): ReactNode {
+  return order.map((k) => (nodes[k] ? <Fragment key={k}>{nodes[k]}</Fragment> : null));
 }
 
 // ── Tipos de gráfico por familia de datos ──────────────────────────────────

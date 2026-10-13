@@ -95,8 +95,14 @@ export const SETTLEMENT_PROVIDERS: SettlementProvider[] = [
   { key: "mercadopago", label: "Mercado Pago", api: true, logo: "mercadopago" },
   { key: "payway", label: "Payway", api: false, logo: "payway" },
   { key: "getnet", label: "Getnet", api: false, logo: "getnet" },
-  { key: "fiserv", label: "Fiserv / Posnet", api: false, logo: "fiserv" },
+  { key: "fiserv", label: "Fiserv / Clover", api: false, logo: "fiserv" },
   { key: "nave", label: "Nave", api: false, logo: "nave" },
+  // Sin API de liquidaciones: por archivo (cualquier provider_key sirve en
+  // settlement_import_lines; ADR-061, pendiente "por archivo con preset").
+  { key: "directo", label: "Directo", api: false, logo: "directo" },
+  { key: "gocuotas", label: "GO Cuotas", api: false, logo: "gocuotas" },
+  { key: "modo", label: "MODO", api: false, logo: "modo" },
+  { key: "transfer", label: "Transferencias", api: false, logo: "transfer" },
   { key: "otro", label: "Otro adquirente", api: false, logo: null },
 ];
 

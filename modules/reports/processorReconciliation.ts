@@ -14,13 +14,13 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { SettlementLineRow, UnmatchedPayment } from "@/lib/reports/processorReconciliation";
 
-const LINE_COLS =
+export const LINE_COLS =
   "id, provider_key, scope_store_id, external_id, order_id, external_reference, kind, status, operation_at, release_date, released, gross, fee, taxes, net, refunded, payment_method, payment_type, card_brand, last4, installments, lote, cupon, autorizacion, comercio, terminal, description, payer, fee_detail, payment_id, intent_id, sale_id, match_status, match_method, diff_amount, review_note, reviewed_at";
 
 const PAGE = 1000;
 const MAX_ROWS = 20_000;
 
-const toNum = (r: SettlementLineRow): SettlementLineRow => ({
+export const toNum = (r: SettlementLineRow): SettlementLineRow => ({
   ...r,
   gross: Number(r.gross),
   fee: Number(r.fee),

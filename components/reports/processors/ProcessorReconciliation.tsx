@@ -11,6 +11,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -26,7 +27,6 @@ import {
 } from "lucide-react";
 import { startOfDay, startOfMonth, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -64,7 +64,6 @@ import {
   summarySentences,
   xlsxLineRows,
   type LineFilter,
-  type MatchTone,
   type SettlementLineRow,
   type UnmatchedPayment,
 } from "@/lib/reports/processorReconciliation";
@@ -91,13 +90,12 @@ import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
+import { ProviderTile, StatusChip } from "@/components/reports/conciliacion/ui";
 import { ImportSettlementModal } from "./ImportSettlementModal";
 import { MpConnectModal } from "./MpConnectModal";
 import { CreateSaleFromLineModal, IgnoreLineModal, LinkLineModal } from "./LineActionModals";
 
 const FEATURE = "conciliacion_procesadores";
-
-const TONE: Record<MatchTone, BadgeTone> = { success: "success", warning: "warning", danger: "danger", neutral: "neutral" };
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
 const fmtLongDate = (iso: string) =>
@@ -159,6 +157,7 @@ function Locked() {
 
 function ProviderLogo({ provider, size = 18 }: { provider: string; size?: number }) {
   const src = paymentIcon(provider);
+  if (size > 24) return <ProviderTile logo={src ? provider : null} label={providerLabel(provider)} size={size} />;
   return src ? (
     <ThemedLogo src={src} alt="" className="h-[18px] w-[18px] shrink-0" />
   ) : (
@@ -170,20 +169,19 @@ function ProviderLogo({ provider, size = 18 }: { provider: string; size?: number
 
 function MatchBadge({ status }: { status: keyof typeof MATCH_LABEL }) {
   const m = MATCH_LABEL[status];
-  return (
-    <Badge tone={TONE[m.tone]} title={m.help}>
-      {m.label}
-    </Badge>
-  );
+  return <StatusChip label={m.label} tone={m.tone} title={m.help} icon={status === "ignored" ? "seen" : undefined} />;
 }
 
 function DisputeBadge({ state }: { state: LineDisputeState | null }) {
   if (!state) return null;
   const d = LINE_DISPUTE_LABEL[state];
   return (
-    <Badge tone={TONE[d.tone]} title={d.help}>
-      {d.label}
-    </Badge>
+    <StatusChip
+      label={d.label}
+      tone={d.tone}
+      title={d.help}
+      icon={state === "refunded" || state === "partially_refunded" ? "refund" : "risk"}
+    />
   );
 }
 
@@ -216,7 +214,22 @@ const DISPUTE_FILTER_LABEL: Partial<Record<LineFilter, string>> = {
   d_claim: "Reclamos abiertos",
 };
 
-export function ProcessorReconciliation() {
+/**
+ * Sin props: vista completa con selector de procesador y período. Con
+ * `provider` (y el período del hub), es el detalle de un procesador dentro de
+ * /reportes/conciliacion: sin selector propio y con "Volver".
+ */
+export function ProcessorReconciliation({
+  provider: providerProp,
+  fromISO: fromProp,
+  toISO: toProp,
+  onBack,
+}: {
+  provider?: string;
+  fromISO?: string;
+  toISO?: string;
+  onBack?: () => void;
+} = {}) {
   const { toast } = useToast();
   const enabled = useFeature(FEATURE);
   const { data: me } = useMyTenant();
@@ -224,18 +237,26 @@ export function ProcessorReconciliation() {
   const { data: numFmt } = useSaleNumberFormat();
   const { data: methods } = usePaymentMethodsStatus();
 
-  const [provider, setProvider] = useState<string>("mercadopago");
-  const providerDef = SETTLEMENT_PROVIDERS.find((p) => p.key === provider)!;
+  const [providerState, setProvider] = useState<string>(providerProp ?? "mercadopago");
+  const provider = providerProp ?? providerState;
+  const embedded = providerProp != null;
+  const providerDef = SETTLEMENT_PROVIDERS.find((p) => p.key === provider) ?? {
+    key: provider,
+    label: providerLabel(provider),
+    api: false,
+    logo: null,
+  };
   const [range, setRange] = useState<DateRange | undefined>(() => ({
     from: startOfDay(subDays(new Date(), 29)),
     to: startOfDay(new Date()),
   }));
   const { fromISO, toISO } = useMemo(() => {
+    if (fromProp && toProp) return { fromISO: fromProp, toISO: toProp };
     const f = startOfDay(range?.from ?? new Date());
     const t = startOfDay(range?.to ?? range?.from ?? new Date());
     t.setDate(t.getDate() + 1);
     return { fromISO: f.toISOString(), toISO: t.toISOString() };
-  }, [range]);
+  }, [range, fromProp, toProp]);
   const [filter, setFilter] = useState<LineFilter>("exceptions");
   // Link de los avisos: /reportes/conciliacion?vista=procesadores&filtro=disputas
   useEffect(() => {
@@ -320,7 +341,7 @@ export function ProcessorReconciliation() {
   }
 
   async function exportAll() {
-    const tag = localISODate(range?.from ?? new Date());
+    const tag = fromProp ? fromProp.slice(0, 10) : localISODate(range?.from ?? new Date());
     await exportXlsx(`conciliacion-${provider}_${tag}`, [
       {
         name: "Resumen",
@@ -397,6 +418,22 @@ export function ProcessorReconciliation() {
     <div className="mt-6 space-y-6">
       {/* Proveedor y período */}
       <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        {embedded && (
+          <div className="flex min-w-0 items-center gap-3">
+            {onBack && (
+              <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2">
+                <ArrowLeft size={15} /> Procesadores
+              </Button>
+            )}
+            <ProviderLogo provider={provider} size={32} />
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold">{providerDef.label}</h2>
+              <p className="text-xs text-muted-foreground">{providerDef.api ? "Automático" : "Por archivo"}</p>
+            </div>
+          </div>
+        )}
+        {!embedded && (
+        <>
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-xs text-muted-foreground">Procesador</span>
           <select
@@ -445,6 +482,8 @@ export function ProcessorReconciliation() {
             ))}
           </div>
         </div>
+        </>
+        )}
         <div className="flex flex-wrap gap-2 sm:ml-auto">
           {providerDef.api ? (
             <Button onClick={runSync} disabled={sync.isPending || needsConnect}>

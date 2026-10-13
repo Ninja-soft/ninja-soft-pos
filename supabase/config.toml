@@ -68,6 +68,10 @@ verify_jwt = false
 [functions.clover_webhook]
 verify_jwt = false
 
+# Pedidos de apps de delivery (ADR-102): firma HMAC por adaptador.
+[functions.delivery_channel_webhook]
+verify_jwt = false
+
 [functions.directo_webhook]
 verify_jwt = false
 
@@ -78,6 +82,12 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.gocuotas_webhook]
+verify_jwt = false
+
+[functions.ml_oauth_callback]
+verify_jwt = false
+
+[functions.ml_webhook]
 verify_jwt = false
 
 [functions.mobbex_webhook]

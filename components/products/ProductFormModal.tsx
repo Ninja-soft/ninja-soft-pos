@@ -51,6 +51,7 @@ import { VariantsEditor } from "@/components/products/VariantsEditor";
 import { StoreStockPanel } from "@/components/stock/StoreStockPanel";
 import { ModifiersEditor } from "@/components/products/ModifiersEditor";
 import { RecipeEditor } from "@/components/products/RecipeEditor";
+import dynamic from "next/dynamic";
 import { AttributesEditor } from "@/components/products/AttributesEditor";
 import { CategoryPathEditor } from "@/components/products/CategoryPathEditor";
 import { PackagesEditor } from "@/components/products/PackagesEditor";
@@ -91,6 +92,11 @@ type TabKey =
   | "medidas"
   | "mas"
   | "historial";
+
+const MlProductPanel = dynamic(
+  () => import("@/components/mercadolibre/MlProductPanel").then((m) => m.MlProductPanel),
+  { ssr: false },
+);
 
 const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "general", label: "General", icon: LayoutGrid },
@@ -212,6 +218,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const { data: priceLists = [] } = usePriceLists();
   const packagesAllowed = useFeature("medidas_bultos") !== false;
   const historyAllowed = useFeature("historial_precios") !== false;
+  // Mercado Libre (ADR-104): sólo con la feature y el producto guardado.
+  const mlAllowed = useFeature("mercadolibre") === true;
   const { data: myTenant } = useMyTenant();
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
@@ -959,6 +967,12 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               <SaveFirst>Guardá el producto primero; después cargás la receta (insumos y costos).</SaveFirst>
             )}
           </Disclosure>
+
+          {mlAllowed && active && (
+            <Disclosure title="Mercado Libre">
+              <MlProductPanel productId={active.id} canManage={Boolean(myTenant?.canManage)} />
+            </Disclosure>
+          )}
         </div>
       </form>
       {/* ── Historial de precios (fuera del form: sólo lectura) ─────── */}

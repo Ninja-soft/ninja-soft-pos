@@ -24,7 +24,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (falta H32 y parte de H31b) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
-| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081; ronda 2 ADR-097: ticket separado por comensal y partes iguales, KDS por curso con "marchar", prioridad urgente, anulación de delivery con motivo y aviso automático a la lista de espera) |
+| **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081; ronda 2 ADR-097: ticket separado por comensal y partes iguales, KDS por curso con "marchar", prioridad urgente, anulación de delivery con motivo y aviso automático a la lista de espera; canales de delivery externos, ADR-102: pedidos de apps con comanda automática, facturación, repartidor y simulador) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 En curso (primer corte ADR-092 en `feat/f14-comercial`: aprobaciones comerciales, alertas de margen, conteo cíclico y garantías por serie; parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 En curso (primer corte ADR-091: cockpit, reservas con retiro en tienda, riesgo operativo y runbooks; parciales previos por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
@@ -234,15 +234,29 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Vigencia por fecha/horario. *Hecho: vigencia, días y franja horaria (ADR-074).*
   - [x] Combinables o exclusivas. *Hecho: excluyentes o acumulables (`stackable`, ADR-074).*
 - [ ] **Marketplace de integraciones:**
-  - [ ] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06)*
-    - [ ] **Conexión por tenant**: OAuth "Conectar con Mercado Libre" (un click, mismo patrón que MP en H15); tokens y refresh en tabla de secretos con RLS deny-all (solo Edge Functions), renovación automática.
-    - [ ] **Publicar desde el POS**: crear/editar publicaciones ML desde la ficha del producto — título, precio, fotos (reusa WebP de H7), categoría ML sugerida y atributos obligatorios. Vincular productos existentes con publicaciones ya creadas (matcheo por SKU/EAN de H10b).
-    - [ ] **Gestor de publicaciones**: pantalla dedicada con listado y estado (activa, pausada, sin stock, con problemas), pausar/reactivar, edición rápida de precio/stock y métricas básicas (visitas, preguntas pendientes).
-    - [ ] **Sincronización de stock y precio**: venta en mostrador descuenta stock de la publicación; cambio de precio/stock en el POS impacta en ML. Lista de precios por canal (gancha con H10: mostrador vs. ML con margen propio).
-    - [ ] **Ventas de ML dentro del POS**: las órdenes de ML entran por webhook/notificaciones como ventas del canal "Mercado Libre" — descuentan stock, aparecen en /ventas y reportes con comisión ML y costo de envío visibles por venta.
-    - [ ] **Conciliación**: cobros de ML (vía Mercado Pago) cruzados con sus órdenes; divergencias de stock detectadas con resolución manual (gancha con cockpit H84).
-    - [ ] **Preguntas y mensajería** de compradores: bandeja básica para responder desde el POS *(etapa 2)*.
-    - [ ] *Criterio:* el dueño conecta su cuenta ML, publica un producto del catálogo con foto y precio propio del canal, una venta en ML descuenta stock y aparece en /ventas con su comisión, y una venta en mostrador baja el stock de la publicación sin tocar ML a mano.
+  - [~] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06; ampliado 2026-10-13 con la doc oficial de ML, ADR-104, guía `docs/38-mercadolibre.md`)* Feature `mercadolibre` OPTIONAL desde Pro.
+    - **Fase MVP** *(rama `feat/mercadolibre-mvp`, migraciones `20261110400000` a `20261110400300` sin aplicar; falta crear la app en DevCenter y cargar `ML_CLIENT_ID`/`ML_CLIENT_SECRET`)*:
+      - [x] **Conexión**: OAuth con PKCE por negocio, varias cuentas por negocio (una cuenta de ML en un solo negocio), tokens sólo service_role, renovación con lock por cuenta (refresh de un solo uso), estado de la conexión y reconexión.
+      - [x] **Notificaciones**: `ml_webhook` responde sin llamar a ML (inbox idempotente), worker con GET autenticado, reconciliación por `missed_feeds` y búsqueda de órdenes, cola de escrituras con coalescing, límite de llamadas por cuenta y backoff.
+      - [x] **Publicaciones**: vincular existentes por SKU/GTIN, publicar desde la ficha del producto (predictor de categoría, atributos obligatorios, `/items/validate`, fotos, tipo de publicación, precio del canal por lista o margen, User Products y clásico), pausar/activar en lote, estado y calidad.
+      - [x] **Sincronización**: stock absoluto de la sucursal/depósito de la cuenta (x-version y 409 en `selling_address`), precio por `PUT /items` respetando la automatización de precios de ML.
+      - [x] **Ventas**: orden (o carrito) -> UNA venta del POS, canal Mercado Libre, medio Mercado Libre sin caja, stock una sola vez, comisión y envío visibles, cancelación que revierte y anula, bloqueo por fraude.
+      - [x] **Facturación**: al pagar, al despachar o a mano con la cola ARCA (CUIT -> A, DNI -> B para RI) y PDF subido a `/packs/{id}/fiscal_documents`.
+      - [x] **Envíos y preguntas**: etiquetas ME2 PDF/ZPL de a 50 (ZPL a la cola de impresión), estado y tracking; bandeja de preguntas.
+      - [ ] *Criterio:* checklist de aceptación de `docs/38-mercadolibre.md` §1.6 con usuarios de test (pendiente: app de ML y secrets).
+    - **Fase v2: logística y stock avanzado**:
+      - [ ] Panel por logística (ME1, ME2 drop_off / Colecta / Places, Flex, Full) con KPIs.
+      - [ ] Convivencia Full/Flex con `selling_address` separado y depósito virtual "Full" (sólo lectura) con inventario, no disponibles y operaciones (`fbm_stock_operations`).
+      - [ ] Multi-origen: mapeo de depósitos de ML a sucursales/depósitos del POS (`ml_location_map` tipo `seller_warehouse`).
+      - [ ] Planificador de envíos a Full (replenishment) con reserva en tránsito y conciliación por `inbound_reception`.
+      - [ ] ME1: tracking y estados por `/v2/shipments/{id}/seller_notifications` (punto de enganche `ml_shipments.me1_tracking`; se integra con la rama de envíos).
+      - [ ] Flex: zonas, rangos, feriados, registro del cadete y conciliación con `flex-handshakes`.
+      - [ ] Reclamos y devoluciones que generan `sale_return` y NC ARCA; NC subida al pack.
+      - [ ] Mensajería postventa con motivos; catálogo (elegibilidad, opt-in, `price_to_win`); edición masiva grande por la cola.
+    - **Fase v3: crecimiento**:
+      - [ ] Central de promociones: invitaciones con deadline, simulador de margen (costo POS + comisión + envío - bonificación ML), adhesión masiva, campaña propia, relámpago con stock, alertas por margen negativo.
+      - [ ] Métricas: visitas, conversión, reputación, calidad por ítem (`performance`); Product Ads en lectura (ACOS, ROAS).
+      - [ ] Sugerencias de precio, Facturador de ML como alternativa (`invoice_mode = ml_billing`) y asistente IA para títulos y atributos.
   - [ ] Tienda Nube.
   - [~] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07; base hecha 2026-06-08)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan). — *Addon completo: config por proveedor, contexto amplio, cuota, burbuja con compra y explicador sin addon. Falta el tool-use que aplica cambios al ticket (hoy guía/consulta).*
     - [x] **Burbuja de chat** en el shell (visible solo con el addon activo) con **Gemini o Claude** vía Edge Function `ai_assistant` (la key vive en `platform_secrets` por proveedor, nunca en el cliente); burbuja con spinner/gif/ícono de proveedor y **botón de compra** cuando no está el addon. — *PRs #208, #231, #238.*
@@ -792,9 +806,9 @@ Objetivo: cubrir restaurantes, resto-bares, cafeterías, heladerías, panadería
   - [x] Pedidos con canal: mostrador, teléfono, WhatsApp, QR, delivery propio, marketplace futuro. — *Canal en `delivery_orders.channel` (mostrador/telefono/whatsapp/qr/delivery_propio); marketplace → follow-up.*
   - [x] Datos por pedido: cliente, teléfono, dirección, referencia, horario prometido, cadete/repartidor, costo de envío. — *Todos en `delivery_orders` + alta + cuenta.*
   - [x] **H49 follow-up — Zonas de envío con tarifa automática.** — *Local, pendiente de push. Migración `20260608730000_delivery_zones`: tabla `delivery_zones` (nombre, `fee`, `eta_minutes` opcional, `is_active`, `sort_order`, baja lógica) con RLS tenant-scoped — lectura por miembros, **escritura sólo owner/manager** (espeja `tenant_branding`, enforced server-side; probado por SQL que cashier no puede insertar/actualizar). `delivery_orders.zone_id` (FK on delete set null). `create_delivery_order` ganó `p_zone_id`: al tomar un pedido de delivery, elegir la zona **autocompleta el costo de envío** con su tarifa y lo **snapshotea** en `delivery_orders.delivery_fee` (cambiar la tarifa de la zona después NO altera pedidos viejos — probado por SQL); el fee queda **editable** (override manual gana sobre la zona). Takeaway ignora zona (envío 0). Gestión de zonas en **Configuración → Zonas de envío** (`ZonasManager`, gateada por `delivery_enabled`); selector de zona en el alta (`DeliveryOrderModal`, sólo si hay zonas cargadas — si no, el fee manual sigue como antes); zona/eta visibles en la tarjeta del board y en la cuenta. **Sigue follow-up (NO en este PR):** geocoding/mapa, detección automática de zona por dirección/GPS, polígonos, tarifa por distancia/peso, mínimos por zona.*
-  - [~] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado. — *Delivery: recibido → preparando → en_camino → entregado (+ cancelado). Takeaway: recibido → preparando → listo → entregado (+ cancelado). "Aceptado" fino → follow-up.*
+  - [~] Estados: recibido, aceptado, en preparación, listo, en camino, entregado, cancelado. — *Delivery: recibido → preparando → en_camino → entregado (+ cancelado). Takeaway: recibido → preparando → listo → entregado (+ cancelado). "Aceptado" fino → follow-up. Los pedidos de apps (ADR-102) tienen además su estado externo: nuevo, aceptado, listo, retirado, entregado, rechazado y cancelado.*
   - [~] Comanda a cocina y ticket/etiqueta para despacho. — *A cocina vía KDS unificado (el pedido aparece con su identificador delivery). **Comanda IMPRESA de delivery/takeaway hecha (local, pendiente de push):** botón "Imprimir comanda" en la cuenta del pedido (`DeliveryAccountModal`) → reusa `ComandaModal` generalizado (`source="delivery"`) con `delivery_comanda_items` + `mark_delivery_comanda_printed`; encabezado "DELIVERY/TAKEAWAY #1234" + cliente/teléfono/dirección/horario/cadete, agrupado por estación, sin precios, "sólo lo nuevo"/"reimprimir todo" + anti-reimpresión idempotente. Etiqueta de despacho específica → follow-up.*
-  - [ ] Integración futura con PedidosYa, Rappi, Mercado Libre/Tienda Nube cuando aplique. — *Follow-up.*
+  - [~] Integración con PedidosYa, Rappi, Uber Eats y Mercado Pago Delivery. *Núcleo y simulador hechos (ADR-102, `feat/canales-delivery`, migraciones `20261110200000` a `20261110200300` sin aplicar): conexiones por negocio y sucursal, webhook firmado (`delivery_channel_webhook`) con ingesta idempotente por evento y por pedido, comanda automática en el KDS (auto-aceptar o Aceptar con tiempo de preparación), aceptar, rechazar, listo y retirado avisados a la app por una cola con reintentos, cancelación que anula la comanda y la venta (nota de crédito por la cola fiscal), repartidor con ETA y mapa en el tablero, facturación automática o manual con el medio "plataforma" sin movimiento de caja, mapeo de productos con sugerencias, reconciliación de webhooks perdidos y simulador de PedidosYa, Rappi y Uber Eats para probar en cualquier negocio. Feature `canales_delivery` (Pro+). **Falta:** adaptadores reales (requieren el alta comercial con cada app, ver [`36-canales-delivery.md`](./36-canales-delivery.md)), sync de menú y disponibilidad, liquidaciones reales. Mercado Libre/Tienda Nube siguen como follow-up.*
   - [x] *Criterio:* una rotisería toma pedido telefónico, cocina lo prepara, despacho lo marca en camino y caja lo concilia. — *Alta telefónica → KDS prepara → board marca "en camino" → cobro atómico desde el pedido (caja). Probado por SQL.*
 
 - [~] **H50 — Inventario gastronómico, recetas y merma básica.** — *Hechos: receta/escandallo + costo y margen por plato, y **merma tipada** (ver sub-ítems). Falta descuento de insumos al vender, producción/batch y alertas.*
@@ -1544,7 +1558,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
 | **F4** | 12/29 | 10 | 7 | 41% | 59% |
-| **F5** | 16/38 | 9 | 13 | 42% | 54% |
+| **F5** | 23/49 | 10 | 16 | 47% | 57% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 18/56 | 21 | 17 | 32% | 51% |
@@ -1552,7 +1566,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F10** | 31/47 | 13 | 3 | 66% | 80% |
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
-| **F13** | 41/74 | 24 | 9 | 55% | 72% |
+| **F13** | 41/74 | 25 | 8 | 55% | 72% |
 | **F14** | 5/61 | 39 | 17 | 8% | 40% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
@@ -1560,7 +1574,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F18** | 42/113 | 53 | 18 | 37% | 61% |
 | **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 575/1039 | 299 | 165 | 55% | 70% |
+| **Total** | 582/1050 | 301 | 167 | 55% | 70% |
 <!-- roadmap-progress:end -->
 
 ---

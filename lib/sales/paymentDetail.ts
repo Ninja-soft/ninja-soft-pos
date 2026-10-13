@@ -44,6 +44,7 @@ const METHOD_LABEL: Record<string, string> = {
   store_credit: "Saldo a favor",
   directo: "Directo",
   sena: "Seña del turno",
+  plataforma: "App de delivery",
   other: "Otro medio",
 };
 

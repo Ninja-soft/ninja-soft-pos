@@ -166,6 +166,10 @@ const ArcaSettings = dynamic(
 );
 
 // Integraciones (ADR-062).
+const ChannelsSettings = dynamic(
+  () => import("@/components/deliveryChannels/ChannelsSettings").then((m) => m.ChannelsSettings),
+  { loading },
+);
 const NubceoSettings = dynamic(
   () => import("@/components/integrations/nubceo/NubceoSettings").then((m) => m.NubceoSettings),
   { loading },
@@ -180,6 +184,11 @@ const ApiSettings = dynamic(
 // Envíos y logística (ADR-103): conexiones por negocio o sucursal.
 const ShippingSettings = dynamic(
   () => import("@/components/shipping/ShippingSettings").then((m) => m.ShippingSettings),
+  { loading },
+);
+// Mercado Libre (H87 · ADR-104): cuentas y configuración por cuenta.
+const MlSettings = dynamic(
+  () => import("@/components/integrations/mercadolibre/MlSettings").then((m) => m.MlSettings),
   { loading },
 );
 
@@ -417,6 +426,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <ApiSettings />;
     case "envios":
       return <ShippingSettings />;
+    case "mercadolibre":
+      return <MlSettings />;
+    // Canales de delivery (ADR-102): dueño o encargado, feature en el plan.
+    case "canales-delivery":
+      return <ChannelsSettings />;
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;

@@ -19,6 +19,7 @@ import {
   ScanLine,
   Landmark,
   ShieldCheck,
+  ShoppingBag,
   SlidersHorizontal,
   KeyRound,
   Store,
@@ -68,6 +69,8 @@ export type SettingsSectionKey =
   | "nubceo"
   | "api"
   | "envios"
+  | "mercadolibre"
+  | "canales-delivery"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -387,6 +390,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "integracion_nubceo",
         keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
       },
+      // Canales de delivery (ADR-102): PedidosYa, Rappi, Uber Eats y simulador.
+      {
+        key: "canales-delivery",
+        label: "Canales de delivery",
+        title: "Canales de delivery",
+        description:
+          "Pedidos de PedidosYa, Rappi y Uber Eats que entran solos, van a cocina, se facturan y muestran al repartidor. Con simulador para probar.",
+        icon: Bike,
+        feature: "canales_delivery",
+        requiresDelivery: true,
+        keywords: "pedidosya rappi uber eats mp apps marketplace webhook simulador repartidor comanda mapeo",
+      },
       // API pública v1 (ADR-094): credenciales OAuth2 por negocio, sólo el dueño.
       {
         key: "api",
@@ -408,6 +423,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Truck,
         feature: "envios",
         keywords: "envios logistica andreani correo argentino oca pickit hop andesmar bluemail cabify enviopack etiqueta despacho carrier courier seguimiento tracking",
+      },
+      // Mercado Libre (H87 · ADR-104): cuentas conectadas y su sincronización.
+      {
+        key: "mercadolibre",
+        label: "Mercado Libre",
+        title: "Mercado Libre",
+        description:
+          "Conectá tus cuentas de Mercado Libre: stock y precio de las publicaciones desde el POS, ventas que entran solas, facturación y etiquetas.",
+        icon: ShoppingBag,
+        feature: "mercadolibre",
+        keywords: "mercado libre mercadolibre meli publicaciones ventas online marketplace sincronizar stock precio etiquetas envios preguntas canal ecommerce",
       },
     ],
   },
@@ -468,10 +494,15 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   pin: "seguridad",
   supervisor: "seguridad",
   integraciones: "nubceo",
+  meli: "mercadolibre",
+  "mercado-libre": "mercadolibre",
   "api-publica": "api",
   logistica: "envios",
   logisticas: "envios",
   andreani: "envios",
+  pedidosya: "canales-delivery",
+  rappi: "canales-delivery",
+  "apps-delivery": "canales-delivery",
   credenciales: "api",
   conciliacion: "nubceo",
   fiscal: "impuestos",

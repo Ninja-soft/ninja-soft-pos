@@ -14,7 +14,8 @@ import type { SaleLineModifierGroup } from "@/modules/products/modifiers";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
-// Canal de entrada del pedido (lista fija; marketplace = follow-up).
+// Canal de entrada del pedido. 'app' = pedido de una app de delivery
+// (PedidosYa, Rappi, Uber Eats); lo crea sólo la ingesta (ADR-102), no el alta.
 export const DELIVERY_CHANNELS = [
   "mostrador",
   "telefono",
@@ -22,7 +23,7 @@ export const DELIVERY_CHANNELS = [
   "qr",
   "delivery_propio",
 ] as const;
-export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number];
+export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number] | "app";
 
 export const DELIVERY_CHANNEL_LABELS: Record<DeliveryChannel, string> = {
   mostrador: "Mostrador",
@@ -30,6 +31,7 @@ export const DELIVERY_CHANNEL_LABELS: Record<DeliveryChannel, string> = {
   whatsapp: "WhatsApp",
   qr: "QR",
   delivery_propio: "Delivery propio",
+  app: "App de delivery",
 };
 
 export type DeliveryOrderType = "delivery" | "takeaway" | "mostrador";

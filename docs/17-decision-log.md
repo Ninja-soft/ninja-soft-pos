@@ -2166,6 +2166,20 @@ El dueño pidió (1) ver en el detalle de la venta todo lo de cada cobro: proces
 
 **Fuentes:** [Mercado Pago, búsqueda de pagos](https://www.mercadopago.com.ar/developers/es/reference/online-payments/checkout-api-payments/search-payments/get) · [Mercado Pago, reporte de liberaciones](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro/additional-content/reports/released-money/introduction) · [Payway ventas online (SDK oficial)](https://github.com/decidir/sdk-php-v2) · base de la API de Payway en uso: `https://ventasonline.payway.com.ar/api/v2` (sandbox `https://developers.decidir.com/api/v2`).
 
+### Adenda (2026-10-12): rediseño de la pantalla de Conciliación (hub)
+
+**Contexto.** El dueño pidió "que se entienda mejor, con logos, más linda y visual, que se pueda bajar todo lindo en Excel y conciliar varios a la vez". La pantalla tenía dos vistas separadas (Tarjetas por lote y Procesadores, un procesador por vez) y la acción era cobro por cobro o lote por lote.
+
+**Decisión.**
+- **Un solo hub** en `/reportes/conciliacion` (`components/reports/conciliacion/*`): encabezado con una frase, resumen del período (Vendiste, Te cobraron comisiones e impuestos, Te acreditaron, Falta acreditar con la próxima fecha, En riesgo), período y sucursal compartidos, y tres vistas por URL (`?vista=procesadores|tarjetas|pendientes`, `&p=<procesador>` para el detalle; el link de los avisos `?vista=procesadores&filtro=disputas` abre Pendientes con disputas). Sin `conciliacion_procesadores` o para el cajero, el resumen es el de tarjetas y no hay Por procesador ni Pendientes.
+- **Por procesador:** lee `settlement_lines` de todos los procesadores en una consulta (misma RLS) y corre el cruce de cada uno con datos (misma clave de caché que su detalle). Tarjeta por procesador con logo, plata y barra de estados; el catálogo suma Directo, GO Cuotas, MODO y Transferencias por archivo (`settlement_import_lines` acepta cualquier `provider_key`). Filtro por sucursal: línea de la credencial de la sucursal o cruzada con una venta de esa sucursal. Gráficos ECharts (apilado por día: acreditado, por acreditar, comisiones; dona por procesador) y calendario de acreditaciones (14 días, lo de después y lo sin fecha). El detalle es el componente de siempre (`ProcessorReconciliation`) embebido.
+- **Pendientes de revisar:** bandeja pura (`lib/reports/reconciliationHub.ts`, `buildInbox`) con disputas abiertas o sin ver, cobros sin venta, ventas sin cobro, diferencias y lotes de tarjeta de días anteriores con cobros pendientes.
+- **Acciones en lote** sin RPC nueva: `set_payments_reconciled` en tandas de 200 ids, `settlement_line_resolve` (`ignore`) y `payment_dispute_ack` de a una con 4 en paralelo; `runInBatches` sigue ante errores y el toast dice cuántas salieron. Cada RPC valida rol, plan y negocio: la selección sólo aparece para dueño o encargado, y el cajero sigue editando el cupón de sus turnos.
+- **Excel:** `lib/utils/xlsxWorkbook.ts` suma bajada combinada, tipos `datetime` y `percent`, formato propio por columna, alineación, relleno por valor (columna Estado), filas de subtotal y varias tablas en una hoja (Resumen). Hojas: Resumen, Por procesador, Detalle de cobros, Por lote, Cupones, Pendientes y Disputas; fechas reales de Excel (`xlsxDate` con la hora local).
+- **Visual:** chips de estado neutros con ícono de color (nunca relleno ni borde de color), franja arriba para alertas, logos de procesadores en placa neutra, de tarjetas con `CardBrandLogo`, de adquirentes en el comercio y de bancos en Transferencias.
+
+**Consecuencias.** Sin migraciones. Tests: `tests/unit/reconciliationHub.test.ts`, `reconciliationSelection.test.ts` y `xlsxWorkbookExtras.test.ts`. Pendiente: atajos de teclado más allá de Esc, rango con Shift en la selección y presets de columnas por adquirente para los nuevos procesadores por archivo.
+
 ---
 
 ## ADR-062: Integración con NubCeo: envío de ventas con sus cobros, monitor y asientos contables

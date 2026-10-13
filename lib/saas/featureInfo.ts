@@ -522,6 +522,41 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, el negocio opera con una sola sucursal (la primera siempre está incluida).",
     minPlan: "Business",
   },
+  // ── Envíos y logística (ADR-103) ──────────────────────────────────────────
+  envios: {
+    desc: "Envíos con etiquetas de logísticas integradas: creás el envío desde una venta del POS, un pedido o a mano, cotizás entre las logísticas que conectaste (con tu contrato, por negocio o por sucursal), imprimís la etiqueta en PDF o la mandás a la térmica (ZPL), y el estado se actualiza solo con su línea de tiempo. Cancelación, reintentos sin duplicar envíos, impresión por lote y un simulador para probar sin contrato.",
+    impact: "Desactivado, no se cotizan ni se crean envíos y el servidor rechaza cada operación; los envíos ya creados se pueden seguir mirando.",
+    minPlan: "Pro",
+    needs: "Contrato con cada logística (usuario y clave de su API). El simulador no necesita nada.",
+  },
+  andreani: {
+    desc: "Andreani con tu contrato: cotización a domicilio y a sucursal, alta de la orden, etiqueta PDF térmica, sucursales de retiro por código postal y seguimiento automático. Credenciales por negocio o por sucursal, ambiente de prueba y producción.",
+    impact: "Desactivado, Andreani no aparece para cotizar ni crear envíos (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["envios"],
+    needs: "Usuario y contraseña de la API de Andreani, número de cliente y un contrato por servicio (los da tu ejecutivo de cuentas).",
+  },
+  correo_argentino: {
+    desc: "Correo Argentino (MiCorreo para pymes o PAQ.AR para empresas). Próximamente: se pueden dejar cargadas las credenciales.",
+    impact: "Desactivado, no se puede conectar Correo Argentino.",
+    minPlan: "Pro",
+    requires: ["envios"],
+    needs: "Cuenta MiCorreo con credenciales de API, o Agreement y API key de PAQ.AR.",
+  },
+  oca: {
+    desc: "OCA e-Pak. Próximamente: se pueden dejar cargadas las credenciales.",
+    impact: "Desactivado, no se puede conectar OCA.",
+    minPlan: "Pro",
+    requires: ["envios"],
+    needs: "Cuenta e-Pak con CUIT y una operativa por servicio.",
+  },
+  enviopack: {
+    desc: "Envíopack, agregador con varios carriers en una sola cuenta (útil sin contrato propio con cada logística). Próximamente: se pueden dejar cargadas las credenciales.",
+    impact: "Desactivado, no se puede conectar Envíopack.",
+    minPlan: "Business",
+    requires: ["envios"],
+    needs: "Cuenta Envíopack con API key y secret key.",
+  },
   api_publica: {
     desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría.",
     impact: "Desactivado, no se emiten tokens y la API rechaza cada pedido (el servidor lo exige); las credenciales existentes se pueden ver y revocar.",

@@ -144,6 +144,9 @@ Notación: ✅ puede · ❌ la base lo rechaza · ⚠️ con condición.
 | Planes de cuotas | ✅ | ✅ | ❌ | ❌ | policies de `payment_plans` |
 | Configuración del POS (`pos_settings`) | ✅ | ⚠️ sólo la política de venta offline | ❌ | ❌ | policies de `pos_settings`; `offline_policy_save` acepta dueño o encargado (ADR-077) |
 | Medios de pago y cuentas de transferencia | ✅ | ✅ | ❌ | ❌ | policies de `transfer_accounts`, `payment_terminals` (ADR-055) |
+| Conectar logísticas de envío (credenciales) | ✅ | ✅ | ❌ | ❌ | Edge `shipping` + `shipping_access_check` (modo `manage`; por sucursal con `multi_sucursal`), ADR-103 |
+| Crear envíos, cotizar e imprimir etiquetas | ✅ | ✅ | ✅ | ❌ | `shipment_create` + `role_write_guard` (modo `operate`), ADR-103 |
+| Cancelar un envío ya creado en la logística, reintentar | ✅ | ✅ | ⚠️ sólo si todavía no está en la logística | ❌ | `shipment_cancel` / `shipment_retry`, ADR-103 |
 | Seguridad y PIN de supervisor | ✅ | ❌ | ❌ | ❌ | `security_settings_save` exige dueño |
 | Impuestos (regímenes, exenciones) | ✅ | ✅ | ❌ | ❌ | `tax_can_write()` (ADR-068) |
 | Contabilidad | ✅ | ✅ (reabrir: sólo owner) | ❌ | ❌ | `acc_assert()`, `acc_period_reopen` (ADR-066) |

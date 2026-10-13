@@ -30,6 +30,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 En curso (primer corte ADR-091: cockpit, reservas con retiro en tienda, riesgo operativo y runbooks; parciales previos por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079) |
+| **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1341,6 +1342,28 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
 
 ---
 
+### F19 · Envíos y logística
+
+Objetivo: gestionar envíos con etiquetas de logísticas integradas (Andreani, Correo Argentino, OCA, Andesmar, Pickit, HOP, Bluemail, Cabify Logistics y otras) sin salir de NinjaSoft, con las credenciales del contrato de cada negocio (por negocio o por sucursal). Sale del informe de investigación de logísticas (2026-10-13) y de [ADR-103](./17-decision-log.md). Guía para el dueño: [`37-envios.md`](./37-envios.md). Features `envios` (OPTIONAL, Pro) y una key por carrier igual a `shipping_providers.key`.
+
+- [~] **H120 · Fase 0: descubrimiento comercial.** Pedir documentación y credenciales de prueba a Andreani, Correo (MiCorreo y PAQ.AR), OCA, Envíopack, Zipnova y Pickit. *Andreani verificado contra su QA público (login, sucursales, alta a domicilio y a sucursal, etiqueta PDF, trazas); su tarifa necesita un contrato real. El resto sigue A CONFIRMAR.*
+  - [ ] Ficha confirmada por carrier (auth, endpoints, etiqueta, webhooks, costos) y agregador elegido (Envíopack o Zipnova) en el decision-log.
+- [~] **H121 · Fase 1: núcleo, Andreani y simulador (ADR-103).**
+  - [x] Datos: `shipping_providers`, `shipping_connections` (negocio o sucursal con herencia, ADR-057), `shipping_secrets` (sólo service_role), `shipments` (idempotency_key única), `shipment_events` (append-only, dedupe) y `shipping_jobs` (cola con SKIP LOCKED y reintentos). Migraciones `20261110300000` a `20261110300300`.
+  - [x] Interfaz `CarrierAdapter` (cotizar, puntos, crear, etiqueta PDF/ZPL, seguimiento, cancelar, webhook) con capacidades y estados normalizados; Edge `shipping` con acciones y worker; polling con pg_cron.
+  - [x] Adaptador real de Andreani y simulador completo; esqueletos documentados de Correo Argentino, OCA y Envíopack.
+  - [x] Configuración > Envíos (conectar, probar, por sucursal, qué pedir a cada carrier) y pantalla Envíos (desde una venta o a mano, cotizar entre carriers, etiqueta PDF y ZPL a la cola de impresión, seguimiento, cancelar, filtros e impresión por lote).
+  - [x] Gating en la base y en la Edge, secretos ilegibles desde el cliente, auditoría en alta, cancelación y credenciales.
+  - [ ] *Criterio:* cotizar en el sandbox de Andreani en menos de 3 s desde una venta (bloqueado: el contrato de prueba no devuelve tarifa) y el ciclo completo con un contrato real de un negocio piloto.
+- [ ] **H122 · Fase 2: Correo Argentino, OCA y un agregador.** MiCorreo (cotización e importación, con el aviso de que la etiqueta se termina en la web), PAQ.AR si hay un negocio corporativo, OCA e-Pak (SOAP) y el agregador elegido con webhooks (Edge pública `shipping_webhook` con firma y dedupe).
+  - [ ] *Criterio:* las mismas de la fase 1 por carrier según sus capacidades; webhook del agregador con firma verificada; comparación de tarifas multi-carrier en una pantalla.
+- [ ] **H123 · Fase 3: puntos de retiro y Mercado Libre.** Selector de puntos (Pickit, HOP por agregador o nativo), sink `meli_me1` (seller_notifications) y etiquetas Flex. Depende de la integración OAuth con Mercado Libre.
+  - [ ] *Criterio:* un envío de una orden ME1 actualiza el estado en Mercado Libre sin acción manual; `not_delivered` sólo con confirmación explícita.
+- [ ] **H124 · Fase 4: impresión local y operación.** ZPL por el conector local (F10) sin diálogo del navegador, manifiesto diario por carrier y sucursal, retiro programado y reportes de costo de envío.
+  - [ ] *Criterio:* 50 etiquetas en lote en una Zebra sin diálogo; manifiesto PDF del día por carrier y sucursal.
+
+---
+
 ## TX — Mejoras transversales (UX y datos)
 
 Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de forma continua en todo el producto. No son una fase con fin: son estándar del proyecto.
@@ -1527,8 +1550,9 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 36/106 | 53 | 17 | 34% | 59% |
+| **F19** | 5/15 | 2 | 8 | 33% | 40% |
 | **TX** | 22/27 | 5 | 0 | 81% | 91% |
-| **Total** | 564/1017 | 297 | 156 | 55% | 70% |
+| **Total** | 569/1032 | 299 | 164 | 55% | 70% |
 <!-- roadmap-progress:end -->
 
 ---

@@ -57,6 +57,7 @@ import {
   PackageSearch,
   Radar,
   ShieldAlert,
+  Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -258,6 +259,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
         { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
+        // Envíos con etiquetas de logísticas integradas (ADR-103).
+        { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },

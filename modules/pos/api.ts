@@ -6,6 +6,7 @@ import { parseRules, type CardVoucherRules } from "@/lib/payments/voucherRules";
 import { withSupervisor } from "@/modules/security/supervisor";
 import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import { effectivePlans } from "@/lib/payments/planScope";
+import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -654,6 +655,22 @@ async function edgeError(error: unknown): Promise<Error> {
   return error instanceof Error ? error : new Error("edge_error");
 }
 
+/**
+ * ¿Está habilitado el checkout propio de Getnet? (ADR-069 adenda). La Edge
+ * getnet (action capabilities) devuelve sólo un booleano del flag PCI, nunca
+ * el secret. Cualquier error = apagado.
+ */
+async function fetchGetnetOwnCheckout(): Promise<boolean> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("getnet", { body: { action: "capabilities" } });
+    if (error) return false;
+    return (data as { own_checkout_enabled?: unknown } | null)?.own_checkout_enabled === true;
+  } catch {
+    return false;
+  }
+}
+
 export const posApi = {
   // Turno abierto de una caja. Sin caja (no hay ninguna operable) cae al
   // criterio histórico: el último turno abierto visible para el usuario.
@@ -782,6 +799,11 @@ export const posApi = {
       surcharge_pct: number;
       merchant_numbers: Partial<Record<string, string>>;
       plan_mode: string | null;
+      /** Sólo 'getnet' (ADR-069): Web Checkout y Checkout API cargados. */
+      web_checkout_connected?: boolean;
+      checkout_api_connected?: boolean;
+      /** Sólo 'getnet' (ADR-069 adenda): checkout propio habilitado (flag PCI). */
+      own_checkout_enabled?: boolean;
       /** Sólo 'transfer' (ADR-055): base del negocio de la pantalla y el n° de operación. */
       transfer_show_screen?: boolean;
       transfer_require_reference?: boolean;
@@ -792,7 +814,7 @@ export const posApi = {
       .from("tenant_payment_methods")
       .select("provider_key, enabled, config, surcharge_pct")
       .order("sort");
-    return (data ?? []).map((r) => ({
+    const rows = (data ?? []).map((r) => ({
       provider_key: r.provider_key as string,
       enabled: Boolean(r.enabled),
       connected: Boolean((r.config as { connected?: boolean } | null)?.connected),
@@ -800,6 +822,12 @@ export const posApi = {
       merchant_numbers:
         ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
       plan_mode: (r.config as { plan_mode?: string } | null)?.plan_mode ?? null,
+      ...(r.provider_key === "getnet"
+        ? (() => {
+            const slots = getnetSlotsOf(r.config as Record<string, unknown> | null);
+            return { web_checkout_connected: slots.web_checkout, checkout_api_connected: slots.checkout_api };
+          })()
+        : {}),
       ...(r.provider_key === "transfer"
         ? {
             transfer_show_screen:
@@ -809,7 +837,18 @@ export const posApi = {
           }
         : {}),
     }));
+    // Getnet (ADR-069 adenda): el tender "Link (checkout propio)" sólo con el
+    // checkout propio habilitado. Se pregunta a la Edge sólo si hay Checkout
+    // API cargada; ante cualquier duda queda apagado.
+    const getnet = rows.find((r) => r.provider_key === "getnet") as { checkout_api_connected?: boolean } | undefined;
+    if (!getnet?.checkout_api_connected) return rows;
+    const own = await fetchGetnetOwnCheckout();
+    return rows.map((r) => (r.provider_key === "getnet" ? { ...r, own_checkout_enabled: own } : r));
   },
+
+  /** ¿Está habilitado el checkout propio de Getnet? (ADR-069 adenda). */
+  getnetOwnCheckoutEnabled: () => fetchGetnetOwnCheckout(),
+
 
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   // Incluye los settings de la pantalla del cliente (H25): mostrar precios
@@ -1086,13 +1125,22 @@ export const posApi = {
   // ── Getnet (H18): Checkout hosted de Getnet AR (Geopagos) ─────────────────
   // create devuelve el checkout de la orden como init_point (QR + link). El
   // estado se sondea vía la Edge, que re-consulta la orden en Getnet.
+  // mode 'own' (ADR-069): checkout PROPIO /pagar/{intent}?p=getnet con la
+  // Checkout API; el cliente elige tarjeta y cuotas ahí, como en Payway.
   createGetnetLink: async (
     amount: number,
     title: string,
+    mode?: "own",
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
-      body: { action: "create", amount, title, ...posStoreBody() },
+      body: {
+        action: "create",
+        amount,
+        title,
+        ...(mode === "own" ? { mode: "own", origin: appOrigin() } : {}),
+        ...posStoreBody(),
+      },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1103,7 +1151,7 @@ export const posApi = {
 
   getnetIntentStatus: async (
     id: string,
-  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+  ): Promise<{ status: string; mp_payment_id: string | null; amount?: number }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
       body: { action: "status", intent_id: id },

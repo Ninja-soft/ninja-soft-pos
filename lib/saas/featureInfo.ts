@@ -221,10 +221,17 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
   getnet: {
-    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente: el cliente paga con tarjeta en el checkout de Getnet y la venta se cierra sola al aprobarse. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente: el cliente paga con tarjeta en la página de Getnet (Web Checkout) y la venta se cierra sola al aprobarse. El checkout propio con tu marca y el Point (terminal) son funciones aparte.",
     impact: "Desactivado, no se puede cobrar con Getnet desde el POS.",
     minPlan: "Pro",
-    needs: "Conectar la cuenta de Getnet con el Client ID y Client Secret del Portal Getnet (no hay ambiente de prueba: los cobros son reales).",
+    needs: "Conectar Getnet con las credenciales que dicen Web Checkout / Plugin Magento / Plugin WooCommerce (Client ID y Client Secret). Se pueden probar en el ambiente de prueba de Getnet antes de cobrar de verdad.",
+  },
+  getnet_checkout_propio: {
+    desc: "Checkout propio con Getnet: el QR o el link abren tu página de pago de NinjaPOS, con tu logo y tu color. El cliente elige la tarjeta y las cuotas de tus Planes (con el interés de cada opción a la vista), carga la tarjeta y paga; Getnet procesa el cobro y la venta se cierra sola. Es lo mismo que el checkout de Payway.",
+    impact: "Desactivado, con Getnet sólo se cobra con la página de Getnet (QR y link de Web Checkout).",
+    minPlan: "Pro",
+    requires: ["getnet"],
+    needs: "Las credenciales que dicen Checkout API / Plugin VTEX cargadas en Getnet (no son las de Web Checkout) y planes de cuotas de Getnet. Se habilita cuando NinjaPOS completa la certificación PCI que pide Getnet para cargar la tarjeta en una página propia.",
   },
   nave: {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",

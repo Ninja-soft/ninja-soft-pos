@@ -217,6 +217,7 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
           open
           provider={t.qrProvider}
           providerName={t.brandLabel}
+          mode={t.qrMode}
           channel={t.channel === "link" ? "link" : "qr"}
           customerId={customerId}
           prefetched={prefetched}

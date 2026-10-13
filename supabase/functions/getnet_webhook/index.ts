@@ -23,8 +23,8 @@ import {
   extractWebhookOrderId,
   fetchGetnetOrderFor,
 } from "../_shared/getnet.ts";
-import { getnetAuth } from "../_shared/getnet_server.ts";
-import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { getnetAuth, loadGetnetSlot } from "../_shared/getnet_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
 import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const html = (body: string) =>
@@ -94,7 +94,8 @@ Deno.serve(withWebhookLog("getnet", "getnet_webhook", async (req: Request, wh) =
     if (row.status === "approved") return ok(); // idempotente
     const orderId = String(row.preference_id);
 
-    const secretRow = await loadProviderSecret(admin, row.tenant_id, "getnet", {
+    // Slot Web Checkout (ADR-069): el checkout propio no usa este webhook.
+    const secretRow = await loadGetnetSlot(admin, row.tenant_id, "web_checkout", {
       scopeStoreId: await intentSecretScope(admin, row.id),
     });
     const sec = (secretRow?.secrets ?? {}) as { client_id?: string; client_secret?: string };

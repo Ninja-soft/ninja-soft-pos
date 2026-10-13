@@ -49,7 +49,7 @@ export const CHANNEL_SUMMARY: Record<string, string> = {
   mercadopago_point: "Tarjeta, contactless y cuotas en tu lector Point",
   payway: "Checkout de Payway con tus planes de cuotas",
   payway_point: "Terminal Payway integrada al POS",
-  getnet: "Checkout de Getnet con crédito o débito",
+  getnet: "QR y link con el checkout de Getnet, con crédito o débito",
   getnet_point: "Terminal Getnet integrada al POS",
   nave: "QR interoperable: lo paga cualquier billetera",
   nave_point: "Tarjeta, contactless o QR en tu terminal Nave",
@@ -111,9 +111,10 @@ export const CHANNEL_INFO: Record<string, Explain> = {
     ],
   },
   getnet: {
-    activa: "El cliente paga con crédito o débito en el checkout de Getnet, desde el QR o el link.",
+    activa:
+      "Con las credenciales de Web Checkout / Plugin Magento / Plugin WooCommerce el cliente paga en la página de Getnet desde el QR o el link.",
     pasos: [
-      "En el POS elegís cobrar con Getnet.",
+      "En el POS elegís Getnet: QR o Link.",
       "El cliente escanea el QR o abre el link y paga.",
       "Al aprobarse, la venta se cierra sola.",
     ],
@@ -304,14 +305,15 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
   getnet: {
     steps: [
       { icon: "login", text: "Entrá al Portal Getnet o pedíselas a tu ejecutivo." },
-      { icon: "key", text: "Copiá el Client ID y el Client Secret de cobros online." },
-      { icon: "paste", text: "Pegalos acá y, en el paso siguiente, tocá Probar credenciales." },
+      {
+        icon: "key",
+        text: "Buscá las que dicen Web Checkout, Plugin Magento o Plugin WooCommerce y copiá su Client ID y Client Secret.",
+      },
+      { icon: "paste", text: "Pegalos acá y, en el paso siguiente, tocá Probar credenciales. Si no pasan la prueba, no se guardan." },
     ],
     where: "Portal Getnet › Credenciales",
-    warning: {
-      title: "Getnet tiene dos APIs",
-      text: "Sus credenciales son de la API Getnet Argentina (la del plugin de WooCommerce, sólo producción) o de Web Checkout (sandbox, homologación o producción). Al probarlas detectamos cuál es.",
-    },
+    // El aviso de Checkout API / Plugin VTEX lo pone el asistente debajo de la
+    // tarjeta de Web Checkout (ADR-069 adenda).
   },
   pagos360: {
     steps: [

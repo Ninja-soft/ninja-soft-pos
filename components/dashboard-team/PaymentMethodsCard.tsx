@@ -24,6 +24,12 @@ import {
   type ConnectSave,
 } from "@/components/dashboard-team/payments/ConnectProviderModal";
 import type { GetnetProbeResult } from "@/lib/payments/getnetProbe";
+import {
+  getnetSlotClearKeys,
+  getnetSlotsFromKeys,
+  getnetSlotsOf,
+  type GetnetSlot,
+} from "@/lib/payments/getnetSlots";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
@@ -31,6 +37,7 @@ import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSe
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
 import { useBranchContext } from "@/modules/branches/hooks";
+import { posApi } from "@/modules/pos/api";
 
 // Alcances con credencial propia (F17 · ADR-057). Sin la migración la RPC no
 // existe: no hay credenciales por sucursal.
@@ -44,20 +51,32 @@ type SecretScope = { provider_key: string; store_id: string | null; keys: string
 async function invokeSecret(body: Record<string, unknown>) {
   const supabase = createClient();
   const { data, error } = await supabase.functions.invoke("set_payment_secret", { body });
-  if (error) throw error;
+  if (error) {
+    // Non-2xx: el código estable viene en el cuerpo (p. ej. Getnet rechaza
+    // credenciales de Checkout API / Plugin VTEX, ADR-069 adenda).
+    const ctx = (error as { context?: Response }).context;
+    const code = ctx ? ((await ctx.json().catch(() => null)) as { error?: string } | null)?.error : undefined;
+    throw code ? new Error(code) : error;
+  }
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
 }
 
-// "Probar credenciales" de Getnet (ADR-065): la Edge prueba cada API y no
-// guarda nada. Sin secrets prueba la credencial guardada del alcance.
+// "Probar credenciales" de Getnet (ADR-065, ADR-069): la Edge prueba el slot
+// pedido (Web Checkout o Checkout API) y no guarda nada. Sin secrets prueba
+// la credencial guardada del alcance (con su propio ambiente).
 async function probeGetnet(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
   const supabase = createClient();
+  const api = v.slot === "checkout_api";
+  const id = api ? v.secrets?.api_client_id : v.secrets?.client_id;
+  const secret = api ? v.secrets?.api_client_secret : v.secrets?.client_secret;
   const { data, error } = await supabase.functions.invoke("getnet", {
     body: {
       action: "probe",
-      environment: v.env,
-      ...(v.secrets?.client_id ? { client_id: v.secrets.client_id } : {}),
-      ...(v.secrets?.client_secret ? { client_secret: v.secrets.client_secret } : {}),
+      slot: v.slot ?? "web_checkout",
+      // Credencial guardada del slot Checkout API: la Edge usa su ambiente.
+      ...(api && !id ? {} : { environment: v.env }),
+      ...(id ? { client_id: id } : {}),
+      ...(secret ? { client_secret: secret } : {}),
       ...(storeId ? { store_id: storeId } : {}),
     },
   });
@@ -220,6 +239,15 @@ export function PaymentMethodsCard() {
       }),
   });
 
+  // Checkout propio de Getnet habilitado (flag PCI como booleano de la Edge,
+  // ADR-069 adenda). Apagado: el asistente muestra sólo Web Checkout.
+  const { data: getnetOwnCheckout = false } = useQuery({
+    queryKey: ["getnet-own-checkout"],
+    queryFn: () => posApi.getnetOwnCheckoutEnabled(),
+    enabled: connectBrand !== null && connectionKeyOf(connectBrand) === "getnet",
+    staleTime: 5 * 60_000,
+  });
+
   if (!ctx || !ctx.canManage) return null;
 
   const brand = connectBrand ? BRAND_BY_KEY[connectBrand] : undefined;
@@ -241,6 +269,8 @@ export function PaymentMethodsCard() {
     await invokeSecret({
       provider_key: key,
       secrets: v.secrets ?? { access_token: v.token },
+      // Getnet (ADR-069): cada slot se guarda sin pisar el otro.
+      ...(v.merge ? { merge: true, remove: v.remove ?? [] } : {}),
       ...(storeId ? { store_id: storeId } : {}),
     });
     if (!storeId && v.env && SANDBOX_PROVIDERS.has(key)) await upsertMethod(key, { sandbox: v.env === "test" });
@@ -270,6 +300,24 @@ export function PaymentMethodsCard() {
           },
         } as Method)
       : tenantMethod;
+  // Getnet: slots cargados en el alcance que se edita (ADR-069).
+  const getnetSlots: Record<GetnetSlot, boolean> | undefined =
+    connKey !== "getnet"
+      ? undefined
+      : connectScope
+        ? getnetSlotsFromKeys(ownScopes.find((s) => s.store_id === connectScope)?.keys ?? [])
+        : getnetSlotsOf(tenantMethod?.config ?? null);
+  const clearGetnetSlot = async (slot: GetnetSlot) => {
+    await invokeSecret({
+      provider_key: "getnet",
+      merge: true,
+      secrets: {},
+      remove: getnetSlotClearKeys(slot),
+      ...(connectScope ? { store_id: connectScope } : {}),
+    });
+    await invalidate();
+    await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
+  };
   const scopeSel: ScopeSel = connectScope ? { scope: "store", id: connectScope } : { scope: "tenant" };
   const scopeSlot =
     liveBranches.length > 1 ? (
@@ -369,6 +417,9 @@ export function PaymentMethodsCard() {
             await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
           }}
           onProbe={connKey === "getnet" ? (v) => probeGetnet(v, connectScope) : undefined}
+          getnetSlots={getnetSlots}
+          getnetOwnCheckout={getnetOwnCheckout}
+          onClearSlot={connKey === "getnet" ? clearGetnetSlot : undefined}
           onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate(connectScope) : undefined}
           oauthPending={oauthStart.isPending}
           // El ambiente y el token de prueba son del negocio.

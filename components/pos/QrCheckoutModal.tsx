@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getnetSlotError } from "@/lib/payments/getnetSlots";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -132,6 +133,9 @@ function qrErrorCopy(code: string, providerName: string, detail?: string): strin
     return `Getnet no aceptó las credenciales. ${detail} Probalas en Configuración → Medios de pago → Getnet.`;
   }
   if (code === "getnet_error" && detail) return `Getnet no pudo crear el cobro: ${detail}`;
+  // Getnet (ADR-069): credenciales del juego equivocado o checkout propio apagado.
+  const slotMsg = getnetSlotError(code);
+  if (slotMsg) return slotMsg;
   switch (code) {
     case "payment_method_disabled_in_store":
       return `${providerName} está apagado en esta sucursal o caja (Configuración → Medios de pago).`;
@@ -188,6 +192,7 @@ export function QrCheckoutModal({
   customerId = null,
   prefetched,
   park,
+  mode,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -222,7 +227,12 @@ export function QrCheckoutModal({
   prefetched?: { plans: PaymentPlan[]; mode: string; pct: number } | null;
   // Cobros en espera: compartir el link y seguir cobrando.
   park?: QrParkOptions | null;
+  // Getnet (ADR-069): "own" = checkout PROPIO /pagar con la Checkout API.
+  mode?: "own";
 }) {
+  // Checkout propio (Payway y Getnet con Checkout API): el cliente elige
+  // cuotas con recargo en /pagar y el total final viene en el poll.
+  const ownCheckout = provider === "payway" || (provider === "getnet" && mode === "own");
   // Proveedor que maneja su propia selección de cuotas en su app (MODO): las
   // cuotas las define el cliente en la app de MODO, así que el POS no muestra la
   // pantalla de planes y auto-arranca con el monto base. Mercado Pago y Mobbex
@@ -389,7 +399,7 @@ export function QrCheckoutModal({
             : provider === "payway"
               ? posApi.createPaywayLink
               : provider === "getnet"
-                ? posApi.createGetnetLink
+                ? (a: number, t: string) => posApi.createGetnetLink(a, t, mode)
                 : provider === "nave"
                   ? posApi.createNaveQr
                   : provider === "gocuotas"
@@ -566,13 +576,14 @@ export function QrCheckoutModal({
     if (firedRef.current) return;
     firedRef.current = true;
     setPhase("approved");
-    // Payway (checkout propio): el cliente pudo elegir cuotas con recargo →
-    // el total final viene en el poll y la venta se registra por ese monto.
+    // Checkout propio (Payway, Getnet Checkout API): el cliente pudo elegir
+    // cuotas con recargo → el total final viene en el poll y la venta se
+    // registra por ese monto.
     const finalAmount =
-      provider === "payway" && typeof polled === "number" ? polled : amount;
+      ownCheckout && typeof polled === "number" ? polled : amount;
     const c = chosenRef.current;
     const extras =
-      provider === "payway" && finalAmount > amount
+      ownCheckout && finalAmount > amount
         ? [
             {
               name: "Recargo cuotas",

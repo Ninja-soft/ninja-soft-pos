@@ -40,6 +40,11 @@ describe("registro de tenders", () => {
 
   it("la feature de cada proveedor sale de providerFeature (espejo del server)", () => {
     for (const t of TENDERS) {
+      // El checkout propio de Getnet tiene su feature (ADR-069).
+      if (t.qrMode === "own") {
+        expect(t.featureKey, t.id).toBe("getnet_checkout_propio");
+        continue;
+      }
       if (t.flow === "qr" || t.flow === "point" || t.flow === "terminal") {
         expect(t.featureKey, t.id).toBe(PROVIDER_FEATURE[t.provider ?? ""] ?? null);
       }

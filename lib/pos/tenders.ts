@@ -91,6 +91,13 @@ export interface TenderDef {
   pointProvider?: PointProviderKey;
   /** Ayuda corta debajo del rótulo. */
   hint?: string;
+  /**
+   * Getnet (ADR-069): juego de credenciales que exige el canal. QR y link
+   * hosted usan Web Checkout; el checkout propio, Checkout API.
+   */
+  connectionSlot?: "web_checkout" | "checkout_api";
+  /** QR / link del checkout PROPIO de NinjaPos (/pagar) en vez del hosted. */
+  qrMode?: "own";
   /** Exige un número de operación (viaja como reference del pago). */
   requiresReference?: boolean;
   /** Monto mínimo que acepta el proveedor. */
@@ -279,8 +286,19 @@ export const TENDERS: TenderDef[] = [
     flow: "terminal",
     hint: "Cobrás en la terminal",
   },
-  qr("getnet", "Getnet", "getnet", "qr", "Checkout Getnet"),
-  qr("getnet", "Getnet", "getnet", "link", "Para mandar por mensaje"),
+  { ...qr("getnet", "Getnet", "getnet", "qr", "Checkout Getnet"), connectionSlot: "web_checkout" },
+  { ...qr("getnet", "Getnet", "getnet", "link", "Para mandar por mensaje"), connectionSlot: "web_checkout" },
+  {
+    // Checkout propio con la Checkout API (ADR-069): link + QR a /pagar con la
+    // marca del negocio y sus planes de cuotas, como Payway.
+    ...qr("getnet", "Getnet", "getnet", "link", "Tu checkout con tu marca y tus cuotas"),
+    id: "getnet:own",
+    label: "Link (checkout propio)",
+    // Feature propia (gating real en las Edges getnet y getnet_checkout).
+    featureKey: "getnet_checkout_propio",
+    connectionSlot: "checkout_api",
+    qrMode: "own",
+  },
   qr("nave", "Nave", "nave", "qr", "QR interoperable"),
   qr("nave", "Nave", "nave", "link", "Para mandar por mensaje"),
   {
@@ -401,6 +419,14 @@ export interface ProviderStatus {
   provider_key: string;
   enabled: boolean;
   connected: boolean;
+  /** Getnet (ADR-069): slots cargados. Sin flags, `connected` = Web Checkout. */
+  web_checkout_connected?: boolean;
+  checkout_api_connected?: boolean;
+  /**
+   * Getnet (ADR-069 adenda): checkout propio habilitado (flag PCI que expone
+   * la Edge). Sin él, "Link (checkout propio)" no aparece.
+   */
+  own_checkout_enabled?: boolean;
   surcharge_pct?: number;
   /** config.plan_mode del medio: "global" = recargo único. */
   plan_mode?: string | null;
@@ -443,6 +469,16 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
   // Efectivo y transferencia sin fila cuentan como habilitados (lib/payments/defaults).
   const enabled = { has: (key: string) => isProviderEnabled(key, byKey.get(key)) };
   const connected = (key: string) => rows.some((r) => r.provider_key === key && r.connected);
+  // Getnet: el canal exige su juego de credenciales (una conexión vieja sin
+  // flags sólo tenía Web Checkout). El checkout propio, además, el flag PCI.
+  const slotConnected = (key: string, slot: "web_checkout" | "checkout_api") =>
+    rows.some(
+      (r) =>
+        r.provider_key === key &&
+        (slot === "checkout_api"
+          ? r.checkout_api_connected === true && r.own_checkout_enabled === true
+          : (r.web_checkout_connected ?? (r.checkout_api_connected === undefined ? r.connected : false)) === true),
+    );
   // Sin ninguna configuración: sólo los medios manuales básicos (como antes).
   const noConfig = !rows.some((r) => r.enabled);
 
@@ -466,6 +502,9 @@ export function tenderReady(t: TenderDef, ctx: TenderContext): boolean {
       return enabled.has(t.provider ?? "");
     case "qr":
     case "point":
+      if (t.connectionSlot) {
+        return enabled.has(t.provider ?? "") && slotConnected(t.connection ?? t.provider ?? "", t.connectionSlot);
+      }
       return enabled.has(t.provider ?? "") && connected(t.connection ?? t.provider ?? "");
     case "store_credit":
       return ctx.hasCustomer && ctx.storeCreditBalance > 0;

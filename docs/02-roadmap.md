@@ -26,7 +26,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
-| **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
+| **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066) |
@@ -907,11 +907,11 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
 
 Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela interna, recorridos guiados, checklist por rubro, ayuda contextual y configuración desde internal para cambiar qué se enseña, cuándo y a quién. Ver [`28-school-onboarding.md`](./28-school-onboarding.md).
 
-- [ ] **H69 — Escuela NinjaSoft por módulos.**
-  - [ ] Biblioteca de cursos: primeros pasos, POS, caja, productos, clientes, reportes, hardware, AFIP, retail, servicios, gastronomía, internal para staff.
-  - [ ] Cada lección tiene objetivo, pasos, capturas/video, demo interactiva, errores comunes, checklist y prueba corta.
-  - [ ] Progreso por usuario, rol, tenant y rubro.
-  - [ ] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico.
+- [~] **H69 — Escuela NinjaSoft por módulos.** — *Primer corte (ADR-086, `feat/f15-escuela`, migraciones sin aplicar): `/escuela` con cuatro cursos (POS básico, Caja y arqueo, Primeros pasos, Facturación ARCA), lecciones = artículos de ayuda, checklist, prueba corta puntuada en el servidor y certificado "POS básico". Feature `escuela` BASE.*
+  - [~] Biblioteca de cursos: primeros pasos, POS, caja, productos, clientes, reportes, hardware, AFIP, retail, servicios, gastronomía, internal para staff. *Hechos: primeros pasos, POS, caja, AFIP. Faltan hardware, retail, servicios, gastronomía e internal.*
+  - [~] Cada lección tiene objetivo, pasos, capturas/video, demo interactiva, errores comunes, checklist y prueba corta. *Pasos, nota por rol, errores comunes, checklist y prueba; faltan capturas, video y demo.*
+  - [~] Progreso por usuario, rol, tenant y rubro. *Por usuario y negocio (`school_progress`, RLS); dueño y encargado ven a su equipo. Falta por rubro.*
+  - [x] *Criterio:* un cajero completa "Cobrar una venta" y queda certificado para operar POS básico. *Curso POS básico con certificado imprimible y auditado.*
 
 - [ ] **H70 — Tours y recorridos guiados configurables.**
   - [ ] Internal define tours por plan, rubro, rol, feature flag, país, estado del tenant y evento disparador.
@@ -919,17 +919,17 @@ Objetivo: que cada cliente aprenda el sistema sin depender de soporte: escuela i
   - [ ] Versionado de tours, draft/publicado, A/B test y métricas de finalización.
   - [ ] *Criterio:* al registrar una heladería, el sistema guía por productos favoritos, sabores, medios de pago y primer cobro.
 
-- [ ] **H71 — Checklist de activación y health de adopción.**
-  - [ ] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique.
+- [~] **H71 — Checklist de activación y health de adopción.** — *Parcial (ADR-086): Puesta en marcha dinámica por rubro y plan.*
+  - [~] Checklist dinámico por rubro: cargar productos, abrir caja, configurar ticket, invitar cajero, medio de pago, prueba de impresión, AFIP cuando aplique. *Todo menos la prueba de impresión (no hay registro de impresión de prueba); suma salón para gastronomía, agenda para servicios y certificar al cajero.*
   - [ ] Score de activación: setup, primera venta, uso de caja, usuarios activos, configuración crítica completa, soporte pendiente.
   - [ ] Internal ve cuentas trabadas y puede disparar ayuda específica.
   - [ ] *Criterio:* sales/support identifica tenants que no llegaron a primera venta y lanza recorrido correctivo.
 
-- [ ] **H72 — Ayuda contextual y base de conocimiento.**
-  - [ ] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
-  - [ ] Buscador, etiquetas, contenido relacionado, feedback útil/no útil y sugerencia de artículo desde soporte.
+- [~] **H72 — Ayuda contextual y base de conocimiento.** — *Primer corte (ADR-086): 29 artículos versionados en `content/help/`, panel Ayuda en el shell, buscador con sinónimos y feedback.*
+  - [x] Panel de ayuda dentro de cada pantalla con artículos filtrados por módulo, rol y acción actual.
+  - [~] Buscador, etiquetas, contenido relacionado, feedback útil/no útil y sugerencia de artículo desde soporte. *Falta la sugerencia desde soporte.*
   - [ ] Modo "mostrarme con mis datos" usando demo segura o datos anonimizados.
-  - [ ] *Criterio:* desde `/pos`, un cajero busca "anular venta" y ve guía exacta para su rol.
+  - [x] *Criterio:* desde `/pos`, un cajero busca "anular venta" y ve guía exacta para su rol. *Test unitario del criterio.*
 
 - [ ] **H73 — Laboratorio/demo segura.**
   - [ ] Sandbox por tenant con datos de ejemplo para practicar sin afectar caja/stock/facturación real.

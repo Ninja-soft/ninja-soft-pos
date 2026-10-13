@@ -39,6 +39,8 @@ export interface SampleTicketData {
      * vencimiento y QR fiscal) o el aviso de pendiente de autorización.
      */
     fiscal?: TicketFiscal | null;
+    /** ADR-074: cada promoción aplicada (descuentos y regalos). */
+    promotions?: { label: string; kind: "discount" | "gift"; amount: number }[];
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];

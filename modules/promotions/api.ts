@@ -1,10 +1,9 @@
 "use client";
 
-// Promociones (F9 · H53). CRUD por tabla directa con RLS (escritura sólo owner/
-// manager, enforced server-side). El tipo `Promotion` (registro completo) lo
-// define el motor puro en lib/promotions/engine.ts; acá se agregan el input de
-// alta/edición y el acceso a datos. La tabla `promotions` no está en los tipos
-// generados (no se regeneran): cast del nombre de tabla / payload. La DB valida.
+// Promociones (F9, ADR-074). CRUD por tabla con RLS (dueño o encargado, con la
+// feature `promociones` y alcance de sucursal; lo valida la base). El tipo
+// `Promotion` lo define el motor puro (lib/promotions/engine.ts). La tabla no
+// está en los tipos generados: cast del nombre de tabla y del payload.
 
 import { createClient } from "@/lib/supabase/client";
 import type {
@@ -12,10 +11,12 @@ import type {
   PromoScope,
   PromoActionType,
   PromoVolumeTier,
+  PromoBundleItem,
+  PromoUsage,
   SimSale,
 } from "@/lib/promotions/engine";
 
-export type { Promotion, PromoScope, PromoActionType, PromoVolumeTier, SimSale };
+export type { Promotion, PromoScope, PromoActionType, PromoVolumeTier, PromoBundleItem, PromoUsage, SimSale };
 
 export interface PromotionInput {
   name: string;
@@ -30,80 +31,109 @@ export interface PromotionInput {
   scope: PromoScope;
   scope_category_id?: string | null;
   scope_product_id?: string | null;
+  scope_brand_id?: string | null;
+  scope_ids?: string[] | null;
   action_type: PromoActionType;
   action_value: number;
-  // Sólo para NxM (H54): N (lleva) y M (paga).
   buy_qty?: number | null;
   pay_qty?: number | null;
-  // Sólo para % por volumen escalonado (H54): tramos cantidad → %.
   volume_tiers?: PromoVolumeTier[] | null;
-  // Condición por medio de pago (H54): si está seteado, la promo sólo aplica con
-  // ese medio. null/"" = cualquier medio.
+  bundle_items?: PromoBundleItem[] | null;
   payment_method?: string | null;
-  // Sólo para action_type='gift' (H54): producto a regalar y cantidad.
+  card_brands?: string[] | null;
+  banks?: string[] | null;
+  store_ids?: string[] | null;
+  price_list_ids?: string[] | null;
+  stackable?: boolean;
+  max_discount?: number | null;
+  max_uses_total?: number | null;
+  max_uses_per_customer?: number | null;
+  ticket_label?: string | null;
   gift_product_id?: string | null;
   gift_qty?: number | null;
 }
 
 const COLS =
-  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, action_type, action_value, buy_qty, pay_qty, volume_tiers, payment_method, gift_product_id, gift_qty";
+  "id, name, is_active, priority, valid_from, valid_to, days_of_week, time_from, time_to, min_amount, scope, scope_category_id, scope_product_id, scope_brand_id, scope_ids, action_type, action_value, buy_qty, pay_qty, volume_tiers, bundle_items, payment_method, card_brands, banks, store_ids, price_list_ids, stackable, max_discount, max_uses_total, max_uses_per_customer, ticket_label, gift_product_id, gift_qty";
 
-// Normaliza el input al payload de la tabla (limpia el alcance no usado).
-function toRow(input: PromotionInput): Record<string, unknown> {
-  const scope = input.scope;
+const list = <T>(v: T[] | null | undefined): T[] | null => (v && v.length > 0 ? v : null);
+const posInt = (v: unknown): number | null => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 1 ? n : null;
+};
+
+/** Normaliza el input al payload de la tabla (limpia lo que el tipo no usa). */
+export function promotionRow(input: PromotionInput): Record<string, unknown> {
+  const t = input.action_type;
+  const scope: PromoScope = t === "bundle" ? "cart" : input.scope;
+  const ids = list((input.scope_ids ?? []).filter(Boolean));
+  const maxDiscount = Number(input.max_discount);
   return {
     name: input.name.trim() || "Promoción",
     is_active: input.is_active ?? true,
-    priority: input.priority ?? 0,
+    priority: Math.trunc(Number(input.priority) || 0),
     valid_from: input.valid_from || null,
     valid_to: input.valid_to || null,
-    days_of_week:
-      input.days_of_week && input.days_of_week.length > 0 ? input.days_of_week : null,
+    days_of_week: list(input.days_of_week),
     time_from: input.time_from ?? null,
     time_to: input.time_to ?? null,
     min_amount: Math.max(0, Number(input.min_amount) || 0),
     scope,
-    scope_category_id: scope === "category" ? input.scope_category_id ?? null : null,
-    scope_product_id: scope === "product" ? input.scope_product_id ?? null : null,
-    action_type: input.action_type,
+    scope_ids: scope === "cart" ? null : ids,
+    scope_category_id: scope === "category" && !ids ? (input.scope_category_id ?? null) : null,
+    scope_product_id: scope === "product" && !ids ? (input.scope_product_id ?? null) : null,
+    scope_brand_id: scope === "brand" && !ids ? (input.scope_brand_id ?? null) : null,
+    action_type: t,
     action_value: Math.max(0, Number(input.action_value) || 0),
-    // NxM: sólo si el tipo es 'nxm'; si no, null (coherencia con el CHECK).
-    buy_qty: input.action_type === "nxm" ? input.buy_qty ?? null : null,
-    pay_qty: input.action_type === "nxm" ? input.pay_qty ?? null : null,
-    // Volumen escalonado: sólo si el tipo es 'volume_tier'. Sanitiza cada tramo
-    // (min_qty entero ≥ 1, pct en (0, 100]) y los ordena por min_qty asc; si no
-    // queda ninguno válido, null (la DB rechaza el array vacío para este tipo).
-    volume_tiers:
-      input.action_type === "volume_tier"
-        ? sanitizeTiers(input.volume_tiers)
-        : null,
-    // Condición por medio de pago: "" o ausente → null (cualquier medio).
+    buy_qty: t === "nxm" ? (input.buy_qty ?? null) : null,
+    pay_qty: t === "nxm" ? (input.pay_qty ?? null) : null,
+    volume_tiers: t === "volume_tier" ? sanitizeTiers(input.volume_tiers) : null,
+    bundle_items: t === "bundle" ? sanitizeBundle(input.bundle_items) : null,
     payment_method: input.payment_method ? input.payment_method : null,
-    // Regalo: sólo si el tipo es 'gift'. Producto + cantidad (≥ 1).
-    gift_product_id:
-      input.action_type === "gift" ? input.gift_product_id ?? null : null,
-    gift_qty:
-      input.action_type === "gift"
-        ? Math.max(1, Math.trunc(Number(input.gift_qty) || 1))
-        : null,
+    card_brands: list(input.card_brands),
+    banks: list(input.banks),
+    store_ids: list(input.store_ids),
+    price_list_ids: list(input.price_list_ids),
+    stackable: Boolean(input.stackable),
+    max_discount: Number.isFinite(maxDiscount) && maxDiscount > 0 ? maxDiscount : null,
+    max_uses_total: posInt(input.max_uses_total),
+    max_uses_per_customer: posInt(input.max_uses_per_customer),
+    ticket_label: input.ticket_label?.trim() ? input.ticket_label.trim().slice(0, 40) : null,
+    gift_product_id: t === "gift" ? (input.gift_product_id ?? null) : null,
+    gift_qty: t === "gift" ? Math.max(1, Math.trunc(Number(input.gift_qty) || 1)) : null,
   };
 }
 
-function sanitizeTiers(
-  tiers: PromoVolumeTier[] | null | undefined,
-): PromoVolumeTier[] | null {
+export function sanitizeTiers(tiers: PromoVolumeTier[] | null | undefined): PromoVolumeTier[] | null {
   const clean = (tiers ?? [])
-    .map((t) => ({
-      min_qty: Math.trunc(Number(t?.min_qty) || 0),
-      pct: Number(t?.pct) || 0,
-    }))
+    .map((t) => ({ min_qty: Math.trunc(Number(t?.min_qty) || 0), pct: Number(t?.pct) || 0 }))
     .filter((t) => t.min_qty >= 1 && t.pct > 0 && t.pct <= 100)
     .sort((a, b) => a.min_qty - b.min_qty);
   return clean.length > 0 ? clean : null;
 }
 
+export function sanitizeBundle(items: PromoBundleItem[] | null | undefined): PromoBundleItem[] | null {
+  const seen = new Set<string>();
+  const clean: PromoBundleItem[] = [];
+  for (const b of items ?? []) {
+    const qty = Math.trunc(Number(b?.qty) || 0);
+    if (!b?.product_id || qty < 1 || seen.has(b.product_id)) continue;
+    seen.add(b.product_id);
+    clean.push({ product_id: b.product_id, qty });
+  }
+  return clean.length > 0 ? clean.slice(0, 10) : null;
+}
+
+/** Promo aplicada en una venta (ticket y detalle). */
+export interface SalePromotion {
+  id: string;
+  promotion_id: string | null;
+  label: string;
+  kind: "discount" | "gift";
+  discount: number;
+}
+
 export const promotionsApi = {
-  // Todas las promos del tenant (no borradas), por prioridad desc y nombre.
   list: async (): Promise<Promotion[]> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -116,8 +146,6 @@ export const promotionsApi = {
     return (data ?? []) as unknown as Promotion[];
   },
 
-  // Sólo las ACTIVAS (lo que el POS evaluaría). La vigencia por fecha/día/hora la
-  // resuelve el motor con el contexto; acá filtramos el flag para no traer de más.
   listActive: async (): Promise<Promotion[]> => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -134,7 +162,7 @@ export const promotionsApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("promotions" as never)
-      .insert(toRow(input) as never)
+      .insert(promotionRow(input) as never)
       .select("id")
       .single();
     if (error) throw error;
@@ -145,12 +173,20 @@ export const promotionsApi = {
     const supabase = createClient();
     const { error } = await supabase
       .from("promotions" as never)
-      .update(toRow(input) as never)
+      .update(promotionRow(input) as never)
       .eq("id", id);
     if (error) throw error;
   },
 
-  // Baja lógica (deleted_at).
+  setActive: async (id: string, active: boolean): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("promotions" as never)
+      .update({ is_active: active } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
   remove: async (id: string): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase
@@ -160,8 +196,29 @@ export const promotionsApi = {
     if (error) throw error;
   },
 
-  // Datos históricos para el simulador (F9 · H56): ventas del período (las más
-  // recientes, hasta `limit`) con su contexto AR + líneas, listas para el motor.
+  /** Usos por promo con tope (total y del cliente), para la vista previa del POS. */
+  usage: async (customerId: string | null): Promise<Record<string, PromoUsage>> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("promotion_usage" as never, { p_customer: customerId } as never);
+    if (error) throw error;
+    const raw = (data ?? {}) as Record<string, { total: number | string; customer: number | string }>;
+    const out: Record<string, PromoUsage> = {};
+    for (const [k, v] of Object.entries(raw)) out[k] = { total: Number(v.total) || 0, customer: Number(v.customer) || 0 };
+    return out;
+  },
+
+  /** Promos aplicadas en una venta (descuentos y regalos). */
+  forSale: async (saleId: string): Promise<SalePromotion[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("sale_promotions" as never)
+      .select("id, promotion_id, label, kind, discount")
+      .eq("sale_id", saleId)
+      .order("created_at");
+    if (error) throw error;
+    return ((data ?? []) as unknown as SalePromotion[]).map((r) => ({ ...r, discount: Number(r.discount) || 0 }));
+  },
+
   simData: async (fromISO: string, toISO: string, limit = 1000): Promise<SimSale[]> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("promotion_sim_data" as never, {
@@ -173,8 +230,6 @@ export const promotionsApi = {
     return (data ?? []) as unknown as SimSale[];
   },
 
-  // Reporte de performance (F9 · H56): por promo de DESCUENTO que aplicó en el
-  // período, ventas que la usaron + descuento otorgado + facturación. Read-only.
   performance: async (fromISO: string, toISO: string): Promise<PromotionPerfReport> => {
     const supabase = createClient();
     const { data, error } = await supabase.rpc("promotion_performance" as never, {
@@ -189,6 +244,7 @@ export const promotionsApi = {
 export interface PromotionPerfRow {
   promo_id: string;
   promo_name: string;
+  kind?: "discount" | "gift";
   count: number;
   total_discount: number;
   total_sold: number;

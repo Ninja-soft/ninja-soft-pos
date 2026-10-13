@@ -58,6 +58,9 @@ import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
+import { Select } from "@/components/ui/Select";
+import { bankBySlug } from "@/lib/payments/banks";
+import type { PromoPayment } from "@/lib/promotions/engine";
 import { IntegratedCardPanel } from "./IntegratedCardPanel";
 import { acquirerOfProvider, plansForAcquirer, type AcquirerDef } from "@/lib/payments/acquirers";
 import {
@@ -156,6 +159,13 @@ export interface CheckoutSheetProps {
   deliveryFee?: number;
   cartPromo?: Promo | null;
   promoForMethod?: (method: string) => Promo | null;
+  /**
+   * Promos según los pagos (medio, marca de tarjeta y banco), con el mismo
+   * motor que create_sale (ADR-074). Si falta, se usa promoForMethod.
+   */
+  promoForPayments?: (pays: PromoPayment[]) => Promo | null;
+  /** Bancos (slug) que piden las promos activas: el cobro con tarjeta los ofrece. */
+  promoBanks?: string[];
   tenders: ResolvedTender[];
   prefs?: TenderPrefs;
   initialTenderId?: string | null;
@@ -241,6 +251,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     deliveryFee = 0,
     cartPromo = null,
     promoForMethod,
+    promoForPayments,
+    promoBanks = [],
     tenders,
     prefs,
     initialTenderId,
@@ -302,6 +314,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // asistente (1 terminal, 2 entidad, 3 tipo y cuotas, 4 datos del cupón).
   const [cardAcq, setCardAcq] = useState<string | null>(null);
   const [cardBrand, setCardBrand] = useState<string | null>(null);
+  // Banco emisor de la tarjeta: sólo se pide si una promo activa lo usa.
+  const [cardBank, setCardBank] = useState<string | null>(null);
   const [cardStep, setCardStep] = useState<CardStep>(1);
   const [planId, setPlanId] = useState("");
   const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
@@ -363,6 +377,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setCardKind("debit");
     setCardAcq(presetAcquirer());
     setCardBrand(null);
+    setCardBank(null);
     setCardStep(initialStep(presetAcquirer()));
     setPlanId("");
     setVoucher(EMPTY_VOUCHER);
@@ -391,11 +406,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const isPosnet = active?.flow === "card" && !integrated;
   const activeMethod: SaleMethod | null = active ? (isCard ? cardKind : active.method) : null;
 
-  // ── Promo por medio de pago (sólo si se paga TODO con un único medio) ─────────
-  const pfm = useCallback(
-    (m: string): Promo | null => (promoForMethod ? promoForMethod(m) : cartPromo),
-    [promoForMethod, cartPromo],
+  // ── Promo por pago (ADR-074): todos los pagos deben cumplir la condición ─────
+  const pfp = useCallback(
+    (pays: PromoPayment[]): Promo | null =>
+      promoForPayments
+        ? promoForPayments(pays)
+        : pays.length === 1 && promoForMethod
+          ? promoForMethod(pays[0]!.method)
+          : cartPromo,
+    [promoForPayments, promoForMethod, cartPromo],
   );
+  const pfm = useCallback((m: string): Promo | null => pfp([{ method: m }]), [pfp]);
 
   const wplan = warrantyPlans.find((p) => p.id === warrantyId) ?? null;
   const warranty = wplan
@@ -423,20 +444,33 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     (ls: PaidLine[], method: SaleMethod | null, tip: number, typed?: number | null): Promo | null => {
       if (ls.length === 0) {
         if (!method || active?.flow === "point") return cartPromo;
-        const p = pfm(method);
+        const p = pfp([
+          {
+            method,
+            cardBrand: isPosnet ? (cardBrandByKey(cardBrand)?.label ?? null) : null,
+            bank: isPosnet ? cardBank : null,
+          },
+        ]);
         // Un primer pago parcial no lleva la promo por medio (sólo aplica si
         // se paga TODO con ese medio).
         if (typed != null && typed < totalsFor(ls, p, tip).grandTotal - 0.005) return cartPromo;
         return p;
       }
-      const only = ls[0];
-      if (ls.length === 1 && only && only.promoEligible) {
-        const p = pfm(only.method);
+      // Todos los pagos cuentan (como en create_sale). Un pago que no se pudo
+      // evaluar (Point) deja sólo las promos sin condición de cobro.
+      if (ls.every((l) => l.promoEligible)) {
+        const p = pfp(
+          ls.map((l) => ({
+            method: l.method,
+            cardBrand: l.card_voucher?.marca ?? null,
+            bank: l.card_voucher?.banco ?? null,
+          })),
+        );
         if (totalsFor(ls, p, tip).settled) return p;
       }
       return cartPromo;
     },
-    [pfm, cartPromo, totalsFor, active?.flow],
+    [pfp, cartPromo, totalsFor, active?.flow, isPosnet, cardBrand, cardBank],
   );
 
   // Propina: % sobre el total de productos (sin propina) o monto libre.
@@ -635,6 +669,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       const acq = cardAcq ?? presetAcquirer();
       setCardAcq(acq);
       setCardBrand(null);
+    setCardBank(null);
       setCardStep(initialStep(acq));
     }
     // En mobile el editor queda debajo: lo traemos a la vista.
@@ -661,6 +696,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ...(l.reference ? { reference: l.reference } : {}),
       ...(l.card_voucher ? { card_voucher: l.card_voucher } : {}),
       ...(l.transfer ? { transfer: l.transfer } : {}),
+      // El medio real se supo al final (Point): sin promos por medio.
+      ...(!l.promoEligible ? { promo_ineligible: true } : {}),
     }));
     return { payments, extras, change: tt.change, promo: finalPromo, settled: tt.settled };
   }
@@ -681,6 +718,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setVoucher(EMPTY_VOUCHER);
     setOpRef("");
     setCardBrand(null);
+    setCardBank(null);
     // El adquirente queda: el resto se suele cobrar en la misma terminal.
     setCardStep(initialStep(cardAcq));
     const t = tipFor(next, null);
@@ -772,6 +810,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             ...(typed("comercio") ? { comercio: typed("comercio") } : {}),
             ...(Number(typed("cuotas")) > 0 ? { cuotas: Number(typed("cuotas")) } : {}),
             ...(voucherAcq ? { adquirente: voucherAcq } : {}),
+            ...(isPosnet && cardBank ? { banco: cardBank } : {}),
           }
         : undefined,
       locked: false,
@@ -1248,6 +1287,21 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       voucher={voucher}
       onVoucher={setVoucher}
       onEnter={onCta}
+      bankSlot={
+        promoBanks.length > 0 ? (
+          <Select
+            aria-label="Banco de la tarjeta"
+            label="Banco de la tarjeta"
+            hint="Hay promociones por banco"
+            value={cardBank ?? "otro"}
+            onChange={(v) => setCardBank(v === "otro" ? null : v)}
+            options={[
+              ...promoBanks.map((slug) => ({ value: slug, label: bankBySlug(slug)?.shortName ?? slug })),
+              { value: "otro", label: "Otro banco" },
+            ]}
+          />
+        ) : null
+      }
     />
   ) : // Terminal de la marca sin integración: débito / crédito + cuotas + voucher.
   active ? (

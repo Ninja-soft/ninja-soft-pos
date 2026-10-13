@@ -11,6 +11,7 @@ import type { SampleTicketData } from "@/lib/tickets/sample";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 import { ticketLocationText } from "@/lib/tickets/location";
 import { FISCAL_PENDING_TEXT, fiscalApproved } from "@/lib/arca/ticket";
+import { ticketPromoLabel, ticketPromoLines } from "@/lib/promotions/ticket";
 
 export type TicketData = SampleTicketData;
 
@@ -59,6 +60,7 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
   const fiscal = sale.fiscal ?? null;
   const approved = fiscalApproved(fiscal);
   const fiscalPending = fiscal != null && fiscal.status !== "aprobado";
+  const promoLines = ticketPromoLines(sale.discount_total, sale.promotions);
   const width = paper === "58" ? "58mm" : paper === "80" ? "80mm" : "210mm";
 
   const renderBlock = (b: TicketBlock) => {
@@ -140,10 +142,16 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
               <span>Subtotal</span>
               <span>{formatCurrency(sale.subtotal)}</span>
             </div>
-            {sale.discount_total > 0 && (
+            {promoLines.promos.map((p, i) => (
+              <div key={`pr${i}`} className="flex justify-between gap-2 text-xs">
+                <span className="truncate">{ticketPromoLabel(p)}</span>
+                {p.kind === "discount" && <span className="shrink-0">-{formatCurrency(p.amount)}</span>}
+              </div>
+            ))}
+            {promoLines.otherDiscount > 0 && (
               <div className="flex justify-between text-xs">
                 <span>Descuento</span>
-                <span>-{formatCurrency(sale.discount_total)}</span>
+                <span>-{formatCurrency(promoLines.otherDiscount)}</span>
               </div>
             )}
             {(sale.perceptions ?? []).map((p, i) => (

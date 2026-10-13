@@ -110,9 +110,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         key: "rubro",
         label: "Rubro",
         title: "Rubro del negocio",
-        description: "Tu actividad define qué funciones del POS se adaptan a cómo trabajás.",
+        description: "Tu actividad define qué funciones del POS se adaptan a cómo trabajás. Cambiá el perfil por rubro con vista previa.",
         icon: Tag,
-        keywords: "actividad vertical kiosco textil restaurante catalogo vaciar",
+        keywords: "actividad vertical kiosco textil restaurante catalogo vaciar perfil cambiar rubro almacen ferreteria farmacia verduleria libreria",
       },
       {
         key: "marca",

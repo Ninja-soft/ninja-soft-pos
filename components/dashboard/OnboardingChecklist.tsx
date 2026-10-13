@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
+import { ProfileOnboardingPrompt } from "@/components/profiles/ProfileOnboardingPrompt";
 import { cn } from "@/lib/utils/cn";
 
 type StatusKey = "fiscal" | "mp" | "producto" | "ticket" | "venta";
@@ -418,6 +419,10 @@ export function OnboardingChecklist() {
               );
             })}
           </ul>
+
+          {/* Perfil por rubro (F5 · ADR-075): al crear el negocio, el dueño elige
+              el perfil de su rubro con vista previa de lo que cambia. */}
+          <ProfileOnboardingPrompt />
 
           {/* Configuración rápida por rubro (F12 · H35): atajo para sembrar un
               catálogo de muestra cuando todavía no se cargaron productos. Deja

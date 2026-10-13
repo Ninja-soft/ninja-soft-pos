@@ -80,6 +80,10 @@ const RubroCard = dynamic(
   () => import("@/components/dashboard-team/RubroCard").then((m) => m.RubroCard),
   { loading },
 );
+const BusinessProfileCard = dynamic(
+  () => import("@/components/profiles/BusinessProfileCard").then((m) => m.BusinessProfileCard),
+  { loading },
+);
 const ProfessionalsManager = dynamic(
   () => import("@/components/agenda/ProfessionalsManager").then((m) => m.ProfessionalsManager),
   { loading },
@@ -213,7 +217,13 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <AppearanceSettings />;
     // Rubro y Marca: sólo owner/manager (los componentes se auto-ocultan).
     case "rubro":
-      return <RubroCard />;
+      // Perfil por rubro (F5 · ADR-075) arriba; el selector de rubro de siempre abajo.
+      return (
+        <div className="space-y-4">
+          <BusinessProfileCard />
+          <RubroCard />
+        </div>
+      );
     case "marca":
       return (
         <ScopedSection

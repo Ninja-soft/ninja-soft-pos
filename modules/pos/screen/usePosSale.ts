@@ -10,6 +10,9 @@ import { usePriceRefresh } from "@/modules/pos/screen/usePriceRefresh";
 import type { CartLine } from "@/modules/pos/store";
 import { formatCurrency } from "@/lib/utils/format";
 import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
+import { toSalePayments } from "@/modules/pos/api";
+import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
+import { isNetworkError, type OfflinePos } from "@/modules/pos/offline/useOfflinePos";
 
 // Registro de la venta (create_sale) del POS. Movido tal cual desde la página:
 // mismos ítems, extras, packs, promo, cupón, mesa/delivery atómicos y el mismo
@@ -139,6 +142,10 @@ export function usePosSale(ctx: {
   couponId: string | null;
   /** hadCash: la venta tuvo un cobro en efectivo (cajón, ADR-063). */
   onSuccess: (r: { saleId: string; change: number; hadCash: boolean }) => void;
+  /** Venta offline (ADR-077): cola local, conectividad y reglas. */
+  offline?: Pick<OfflinePos, "isOffline" | "saveSale" | "markServerDown"> | null;
+  /** La venta quedó guardada sin conexión (ticket provisorio). */
+  onOfflineSuccess?: (r: { entry: OfflineQueueEntry; change: number; hadCash: boolean }) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -151,6 +158,11 @@ export function usePosSale(ctx: {
     change?: number,
     appliedPromo?: Promo | null,
   ) {
+    const deviceOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    if (ctx.offline && (ctx.offline.isOffline || deviceOffline)) {
+      await handleOfflineSale(payments, extras, change, appliedPromo);
+      return;
+    }
     try {
       // Mismo mapeo que el cobro en espera (ADR-048): la venta diferida es
       // idéntica a la inmediata. Recargo (H27) y garantía (H28) entran como
@@ -190,6 +202,17 @@ export function usePosSale(ctx: {
         hadCash: payments.some((p) => p.method === "cash" && p.amount > 0),
       });
     } catch (e) {
+      // ADR-077: no llegó a NinjaSoft. No se guarda sola (pudo haber entrado):
+      // el POS pasa a offline y el cajero confirma de nuevo.
+      if (ctx.offline && isNetworkError(e)) {
+        ctx.offline.markServerDown();
+        toast({
+          title: "Se cortó la conexión con NinjaSoft",
+          description: "Revisá en Ventas si la venta entró. Si no, confirmá de nuevo y se guarda sin conexión.",
+          variant: "error",
+        });
+        return;
+      }
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : "";
@@ -202,6 +225,60 @@ export function usePosSale(ctx: {
         variant: "error",
       });
     }
+  }
+
+  // ADR-077: venta sin conexión. Mismo payload que create_sale, a la cola local.
+  async function handleOfflineSale(
+    payments: CheckoutPayment[],
+    extras?: PaymentExtra[],
+    change?: number,
+    appliedPromo?: Promo | null,
+  ) {
+    if (!ctx.offline) return;
+    const { items, extras: saleExtras } = buildSaleItemsAndExtras(cartToSaleLines(ctx.lines), extras);
+    const promo = ctx.salePromo(appliedPromo);
+    const promoDisc = promo && promo.discount > 0 ? promo.discount : 0;
+    const gross = items.reduce((a, it) => a + it.unit_price * it.quantity - (it.discount ?? 0), 0);
+    const total = Math.max(gross - ctx.discountTotal - promoDisc, 0);
+    const res = await ctx.offline.saveSale({
+      total,
+      change: change ?? 0,
+      payments,
+      extraKinds: saleExtras.map((e) => e.kind),
+      anyPriceOverride: ctx.lines.some((l) => l.priceOverride),
+      hasServerOrigin: Boolean(ctx.tableOrderId || ctx.deliveryOrderId || ctx.couponId || ctx.appointmentId),
+      payload: {
+        items: items as unknown as Record<string, unknown>[],
+        payments: toSalePayments(payments as never),
+        discount_total: ctx.discountTotal,
+        customer_id: ctx.customerId,
+        notes: null,
+        extras: saleExtras as unknown as Record<string, unknown>[],
+        promo_discount: promoDisc,
+        promo_id: promoDisc > 0 ? (promo?.id ?? null) : null,
+        promo_name: promoDisc > 0 ? (promo?.name ?? null) : null,
+      },
+      lines: items.map((it, i) => ({
+        name: it.name ?? ctx.lines[i]?.name ?? "Producto",
+        quantity: it.quantity,
+        unitPrice: it.unit_price,
+        discount: it.discount ?? 0,
+      })),
+    });
+    if (!res.ok) {
+      toast({ title: res.message, variant: "error" });
+      return;
+    }
+    toast({
+      title: `Venta guardada sin conexión (${res.entry.provisional})`,
+      description: `Total ${formatCurrency(res.entry.total)}. Se envía sola cuando vuelve la conexión.`,
+      variant: "success",
+    });
+    ctx.onOfflineSuccess?.({
+      entry: res.entry,
+      change: change ?? 0,
+      hadCash: payments.some((p) => p.method === "cash" && p.amount > 0),
+    });
   }
 
   return { handleSale, saving: sale.isPending };

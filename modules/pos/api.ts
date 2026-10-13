@@ -8,6 +8,7 @@ import { withSupervisor } from "@/modules/security/supervisor";
 import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import { effectivePlans } from "@/lib/payments/planScope";
 import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
+import { parseOfflinePolicy, type OfflinePolicy } from "@/lib/pos/offline/policy";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -587,6 +588,8 @@ export interface PosSettingsView {
   allowNegativeStock: boolean;
   // Reglas del cupón del posnet offline (ADR-054), ya normalizadas.
   cardVoucherRules: CardVoucherRules;
+  // Venta sin conexión (ADR-077): pos_settings.offline_policy con defaults.
+  offlinePolicy: OfflinePolicy;
 }
 
 export function mapPosSettings(raw: Record<string, unknown> | null): PosSettingsView | null {
@@ -615,6 +618,7 @@ export function mapPosSettings(raw: Record<string, unknown> | null): PosSettings
     posLayout: data.pos_layout ?? null,
     allowNegativeStock: (data.allow_negative_stock as boolean | undefined) ?? true,
     cardVoucherRules: parseRules(data.card_voucher_rules),
+    offlinePolicy: parseOfflinePolicy(data.offline_policy),
   };
 }
 

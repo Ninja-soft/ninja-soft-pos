@@ -152,9 +152,12 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Errores recientes con código AFIP.
   - [x] Última conexión al webservice AFIP.
 - [x] Modo **homologación** vs **producción** por tenant, con certificados separados, checklist de habilitación y bloqueo de cambio si faltan pruebas. *(asistente paso a paso; producción sólo el dueño con checklist completo)*
-- [ ] **Venta offline / AFIP offline:**
-  - [x] La venta no se bloquea si no hay internet o AFIP no responde. *(ARCA caído: cola y contingencia CAEA; sin internet en el POS depende de la venta offline del POS)*
+- [~] **Venta offline / AFIP offline:** *(base conservadora en `feat/venta-offline`, ADR-077, [`34-venta-offline.md`](./34-venta-offline.md); migración `20261103200000_venta_offline` sin aplicar. Lo completo sigue en F14 · H65.)*
+  - [x] La venta no se bloquea si no hay internet: con el POS abierto y la caja abierta sigue cobrando en efectivo, transferencia manual y tarjeta en posnet con cupón (nunca QR, link ni terminal integrada), con límites del dueño (monto, ventas por turno, plazo). *Si ARCA no responde, lo cubre la cola fiscal con CAEA (rama ARCA).*
+  - [x] ARCA caído no bloquea la venta. *(ARCA caído: cola y contingencia CAEA; sin internet en el POS depende de la venta offline del POS)*
+  - [x] Se emite ticket provisorio (`OFF-XXXXXXXX`, no válido como factura) y la venta queda en una cola local (IndexedDB) con `client_sale_id` idempotente, asociada a usuario y turno.
   - [x] Se emite comprobante interno/provisorio y la factura queda en cola fiscal. *(ticket "Comprobante pendiente de autorización ARCA")*
+  - [~] Al reconectar, el POS sincroniza solo (`sync_offline_sale`, wrapper de `create_sale`, idempotente): precio cambiado se respeta y se audita, stock negativo se permite y se marca, lo inválido queda en **Ventas offline** para el dueño. *Pedir el CAE con la fecha real de la venta y actualizar el ticket: rama ARCA.*
   - [ ] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *(ARCA: sí, la cola reintenta y el ticket muestra el CAE; falta la venta offline del POS sin conexión a NinjaSoft)*
   - [x] El POS muestra estado fiscal claro: `pendiente`, `enviando`, `aprobado`, `rechazado`, `requiere acción`. *(detalle de la venta, ticket e indicador de contingencia)*
 - [x] Numeración de comprobantes por punto de venta. *(caja o sucursal; serie CAEA propia)*
@@ -164,7 +167,7 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 - [ ] 100 comprobantes consecutivos en homologación sin error de integración.
 - [ ] Recuperación automática si AFIP devuelve error transitorio.
 - [ ] El cashier nunca ve un error de AFIP que lo bloquee — la venta se completa, la factura se reintenta en segundo plano.
-- [ ] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable.
+- [~] Una venta offline queda registrada localmente, se sincroniza al volver la conexión y termina con CAE o error fiscal accionable. *(Registro local y sincronización hechos, ADR-077; CAE con la rama ARCA.)*
 - [ ] El cambio de homologación a producción solo se habilita después de certificados válidos, numeración verificada y prueba exitosa.
 
 ---

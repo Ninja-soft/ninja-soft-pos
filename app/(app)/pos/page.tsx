@@ -70,6 +70,11 @@ import {
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
 import { pinnedTenders } from "@/lib/pos/tenders";
+import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
+import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
+import { useOfflinePos } from "@/modules/pos/offline/useOfflinePos";
+import { OfflineBanner } from "@/components/pos/offline/OfflineBanner";
+import { OfflineTicketModal } from "@/components/pos/offline/OfflineTicketModal";
 import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
@@ -275,8 +280,44 @@ function PosPageInner() {
     [menuFilter, menuProductIds],
   );
 
+  // Venta offline (ADR-077): conectividad, foto local, cola y sincronización.
+  const { data: offShift } = useOpenShift();
+  const { data: offSettings } = usePosSettings();
+  const [offlineTicket, setOfflineTicket] = useState<OfflineQueueEntry | null>(null);
+  const offline = useOfflinePos({
+    tenantId: bootScope?.tenantId ?? null,
+    userId: currentUserId,
+    shiftId: offShift?.id ?? null,
+    storeId: register?.store_id ?? null,
+    policy: offSettings?.offlinePolicy,
+    onSynced: (r) => {
+      if (r.stopped === "auth") {
+        toast({ title: "Iniciá sesión de nuevo para enviar las ventas offline", variant: "error" });
+        return;
+      }
+      const parts = [
+        r.synced > 0 ? `${r.synced} registrada${r.synced === 1 ? "" : "s"}` : null,
+        r.conflicts > 0 ? `${r.conflicts} con diferencias` : null,
+        r.review > 0 ? `${r.review} para revisar` : null,
+        r.held > 0 ? `${r.held} retenida${r.held === 1 ? "" : "s"} en este dispositivo` : null,
+      ].filter(Boolean);
+      toast({
+        title: "Ventas offline sincronizadas",
+        description: parts.join(", "),
+        variant: r.review > 0 || r.held > 0 ? "info" : "success",
+      });
+    },
+  });
+
   // Filtro por rubro = sub-árbol (en cliente); el de menú combina encima.
-  const { data: allProducts, isFetching: productsLoading } = useProducts(search);
+  // Sin conexión, la búsqueda sale de la foto local del catálogo.
+  const { data: liveProducts, isFetching: productsLoading } = useProducts(search);
+  const { isOffline: posOffline, searchProducts: searchOffline } = offline;
+  const offlineProducts = useMemo(
+    () => (posOffline ? searchOffline(search) : null),
+    [posOffline, searchOffline, search],
+  );
+  const allProducts = offlineProducts ?? liveProducts;
   const products = useMemo(() => {
     if (!categoryFilter && !menuProductSet) return allProducts;
     let list = allProducts ?? [];
@@ -714,7 +755,12 @@ function PosPageInner() {
       addWeighed({ id: p.id, name: p.name, sku: p.sku, price, categoryId: p.category_id }, line.quantityKg);
       return true;
     }
-    const res = await productsApi.findByCode(code);
+    const offlineHit = offline.isOffline ? offline.findByCode(code) : null;
+    const res = offline.isOffline
+      ? offlineHit
+        ? { product: offlineHit, variant: undefined }
+        : null
+      : await productsApi.findByCode(code);
     if (!res) return false;
     const { product: p, variant } = res;
     if (variant) {
@@ -871,8 +917,9 @@ function PosPageInner() {
       setPendingOpen(true);
     },
   });
-  const parkBlockedReason =
-    parkFeature === false
+  const parkBlockedReason = offline.isOffline
+    ? "Sin conexión no se puede dejar un cobro en espera"
+    : parkFeature === false
       ? PARK_BLOCK_COPY.feature_off
       : !hasShift
         ? PARK_BLOCK_COPY.no_shift
@@ -972,6 +1019,18 @@ function PosPageInner() {
       setTicketId(saleId);
       setTicketOpen(true);
     },
+    // ADR-077: sin conexión la venta va a la cola local con ticket provisorio.
+    offline,
+    onOfflineSuccess: ({ entry, change }) => {
+      setCheckoutOpen(false);
+      clear();
+      setCustomer(null);
+      setOfferedWarrantyId("");
+      pricing.clearCoupon();
+      origins.afterSale();
+      flashPaidScreen(change);
+      setOfflineTicket(entry);
+    },
   });
 
   // Packs (H41): saldo restante por crédito descontando las líneas que ya lo cubren.
@@ -1004,7 +1063,12 @@ function PosPageInner() {
   }
 
   // ── Cobro ──────────────────────────────────────────────────────────────────
-  const tenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
+  const liveTenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
+  // ADR-077: sin conexión sólo efectivo, transferencia y tarjeta en posnet.
+  const tenders = useMemo(
+    () => (offline.isOffline ? liveTenders.filter(isTenderAllowedOffline) : liveTenders),
+    [offline.isOffline, liveTenders],
+  );
   const livePinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
   const tendersReady = useTendersReady();
   const pinned = useReconciled(
@@ -1210,6 +1274,14 @@ function PosPageInner() {
 
   const banners = (
     <>
+      <OfflineBanner
+        isOffline={offline.isOffline}
+        pending={offline.pending}
+        held={offline.held}
+        syncing={offline.syncing}
+        enabled={offline.policy.enabled}
+        onRetry={() => void (offline.held > 0 ? offline.releaseHeld() : offline.syncNow())}
+      />
       <ForeignShiftBanner shift={shift} />
       {/* F3 · ADR-072: ARCA caído, facturando en contingencia (no bloquea). */}
       <ArcaPosIndicator />
@@ -1327,7 +1399,20 @@ function PosPageInner() {
               />
             }
             onOpenShift={() => setOpenShiftModal(true)}
-            onCloseShift={() => setCloseShiftModal(true)}
+            onCloseShift={() => {
+              // ADR-077: las ventas offline del turno se envían antes del cierre.
+              if (offline.isOffline || offline.pending > 0) {
+                toast({
+                  title: offline.isOffline
+                    ? "Sin conexión no se puede cerrar la caja"
+                    : "Enviá las ventas offline antes de cerrar la caja",
+                  variant: "error",
+                });
+                if (!offline.isOffline) void offline.syncNow();
+                return;
+              }
+              setCloseShiftModal(true);
+            }}
             onCustomerDisplay={openCustomerDisplay}
             drawerSlot={
               posHw.hasDrawer ? (
@@ -1468,6 +1553,7 @@ function PosPageInner() {
           promoForPayments={pricing.promoForPayments}
           promoBanks={pricing.promoBanks}
           tenders={tenders}
+          offline={offline.isOffline}
           customerId={customer?.id ?? null}
           taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}
           prefs={layout.payments}
@@ -1499,6 +1585,7 @@ function PosPageInner() {
         />
       </MountWhenOpened>
 
+      <OfflineTicketModal entry={offlineTicket} onOpenChange={(o) => !o && setOfflineTicket(null)} />
       <MountWhenOpened open={ticketOpen}>
         <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} autoPrint={autoPrint} />
       </MountWhenOpened>

@@ -20,6 +20,7 @@
 // (payload inválido / intent ajeno); 5xx ante fallas transitorias de Nave para
 // que Nave reintente (10 s, 70 s, 490 s, …).
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { parseNotification, resolvePaymentCheckUrl } from "../_shared/nave.ts";
 import {
@@ -31,6 +32,7 @@ import {
   type IntentRow,
 } from "../_shared/nave_server.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,7 +44,7 @@ const html = (body: string) =>
 const ok = () => new Response("ok", { status: 200 });
 const retry = () => new Response("retry", { status: 503 });
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("nave", "nave_webhook", async (req: Request, wh) => {
   if (req.method === "GET") {
     return html(
       "<h1>Listo</h1><p>Si el pago se aprobó, la venta se registra sola en el mostrador. Podés cerrar esta pantalla.</p>",
@@ -52,12 +54,13 @@ Deno.serve(async (req: Request) => {
 
   let raw: unknown = null;
   try {
-    raw = await req.json();
+    raw = await readJsonLimited(req);
   } catch {
     return ok();
   }
   const n = parseNotification(raw);
   if (!n || !UUID.test(n.externalPaymentId)) return ok();
+  wh.ref(n.externalPaymentId);
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -74,19 +77,28 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
   if (!data) return ok();
   const row = data as IntentRow;
+  wh.tenant(row.tenant_id);
 
   // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
   const conn = await loadNaveConnection(admin, row.tenant_id, {
     scopeStoreId: await intentSecretScope(admin, row.id),
   });
-  if (!conn) return ok();
+  if (!conn) {
+    wh.fail("sin conexión de Nave");
+    return ok();
+  }
 
   try {
     if (n.kind === "payment_request") {
       // La baja tiene que ser de NUESTRA payment_request.
       if (n.paymentRequestId !== row.preference_id) return ok();
       const res = await syncIntent(admin, conn, row, "webhook");
-      return "error" in res ? retry() : ok();
+      if ("error" in res) {
+        wh.fail(`Nave: error ${String(res.error)} al sincronizar`);
+        return retry();
+      }
+      wh.done();
+      return ok();
     }
 
     const url = resolvePaymentCheckUrl(n, conn.env, channelOf(row.provider_key));
@@ -94,11 +106,15 @@ Deno.serve(async (req: Request) => {
     const res = await verifyAndApply(admin, conn, row, url, "webhook");
     if ("error" in res) {
       // 404: pago inexistente para este comercio (o forjado) → descartar.
-      return res.error === 404 || res.error === 400 ? ok() : retry();
+      if (res.error === 404 || res.error === 400) return ok();
+      wh.fail(`Nave: error ${String(res.error)} al verificar el pago`);
+      return retry();
     }
+    wh.done();
     return ok();
-  } catch {
+  } catch (e) {
     // Red / auth de Nave caída: que Nave reintente.
+    wh.fail(e);
     return retry();
   }
-});
+}));

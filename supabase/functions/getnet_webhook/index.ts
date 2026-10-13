@@ -16,6 +16,7 @@
 //   approved si Getnet lo confirma (queda en la conciliación como cobro sin
 //   venta). Siempre responde 200 para que Getnet no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
   decideFor,
@@ -23,8 +24,9 @@ import {
   extractWebhookOrderId,
   fetchGetnetOrderFor,
 } from "../_shared/getnet.ts";
-import { getnetAuth } from "../_shared/getnet_server.ts";
-import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { getnetAuth, loadGetnetSlot } from "../_shared/getnet_server.ts";
+import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const html = (body: string) =>
   new Response(
@@ -38,7 +40,7 @@ const ok = () => new Response("ok", { status: 200 });
 type Row = { id: string; tenant_id: string; status: string; amount: number | string; preference_id: string | null };
 const COLS = "id, tenant_id, status, amount, preference_id";
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("getnet", "getnet_webhook", async (req: Request, wh) => {
   const reqUrl = new URL(req.url);
 
   if (req.method === "GET") {
@@ -56,12 +58,13 @@ Deno.serve(async (req: Request) => {
   try {
     let body: unknown = null;
     try {
-      body = await req.json();
+      body = await readJsonLimited(req);
     } catch {
       /* cuerpo no-JSON: se ignora (igual re-consultamos) */
     }
     const hinted = extractWebhookOrderId(body) ?? extractWebhookIntentId(body);
     const intentParam = reqUrl.searchParams.get("intent") ?? "";
+    wh.ref(hinted ?? intentParam);
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -88,17 +91,25 @@ Deno.serve(async (req: Request) => {
       row = ((data as Row[] | null) ?? [])[0] ?? null;
     }
     if (!row || !row.preference_id) return ok();
+    wh.tenant(row.tenant_id);
     if (row.status === "approved") return ok(); // idempotente
     const orderId = String(row.preference_id);
 
-    const secretRow = await loadProviderSecret(admin, row.tenant_id, "getnet", {
+    // Slot Web Checkout (ADR-069): el checkout propio no usa este webhook.
+    const secretRow = await loadGetnetSlot(admin, row.tenant_id, "web_checkout", {
       scopeStoreId: await intentSecretScope(admin, row.id),
     });
     const sec = (secretRow?.secrets ?? {}) as { client_id?: string; client_secret?: string };
-    if (!secretRow || !sec.client_id || !sec.client_secret) return ok();
+    if (!secretRow || !sec.client_id || !sec.client_secret) {
+      wh.fail("sin credenciales de Getnet");
+      return ok();
+    }
 
     const auth = await getnetAuth(admin, row.tenant_id, secretRow, "getnet_webhook");
-    if (!auth.ok) return ok();
+    if (!auth.ok) {
+      wh.fail("Getnet rechazó la autenticación");
+      return ok();
+    }
     const res = await fetchGetnetOrderFor(auth.profile, auth.token, orderId);
     if (!res.ok) {
       console.error(JSON.stringify({
@@ -108,12 +119,14 @@ Deno.serve(async (req: Request) => {
         status: res.httpStatus,
         detail: res.detail.slice(0, 200),
       }));
+      wh.fail(`Getnet respondió ${res.httpStatus} al consultar la orden`);
       return ok();
     }
 
     const d = decideFor(auth.profile, res.order, Number(row.amount));
     if (d.status === "pending") return ok();
 
+    wh.done();
     // approved puede venir después de que el POS lo dio por rechazado; el
     // resto de los estados sólo resuelve intents pendientes.
     const from = d.status === "approved" ? ["pending", "rejected"] : ["pending"];
@@ -148,6 +161,7 @@ Deno.serve(async (req: Request) => {
     }
   } catch (e) {
     console.error(JSON.stringify({ fn: "getnet_webhook", step: "unhandled", error: String(e).slice(0, 300) }));
+    wh.fail(e);
   }
   return ok();
-});
+}));

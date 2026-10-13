@@ -13,10 +13,12 @@
 //     Idempotente (updates condicionales; un intent approved no se toca).
 //     Siempre 200 para que GO Cuotas no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractWebhookHint } from "../_shared/gocuotas.ts";
 import { INTENT_COLS, loadApiKey, syncIntent, type IntentRow } from "../_shared/gocuotas_server.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const html = (body: string) =>
   new Response(
@@ -27,7 +29,7 @@ const html = (body: string) =>
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ok = () => new Response("ok", { status: 200 });
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("gocuotas", "gocuotas_webhook", async (req: Request, wh) => {
   const reqUrl = new URL(req.url);
 
   if (req.method === "GET") {
@@ -43,10 +45,11 @@ Deno.serve(async (req: Request) => {
   try {
     const intentId = reqUrl.searchParams.get("intent") ?? "";
     if (!UUID_RE.test(intentId)) return ok();
+    wh.ref(intentId);
 
     let hint = { orderId: null as string | null, reference: null as string | null };
     try {
-      hint = extractWebhookHint(await req.json());
+      hint = extractWebhookHint(await readJsonLimited(req));
     } catch {
       /* cuerpo no-JSON: se ignora (igual re-consultamos) */
     }
@@ -63,18 +66,28 @@ Deno.serve(async (req: Request) => {
       .eq("provider_key", "gocuotas")
       .maybeSingle();
     const row = data as IntentRow | null;
+    if (row) wh.tenant(row.tenant_id);
     if (!row || row.status === "approved") return ok(); // idempotente
 
     // ADR-057: la API Key (negocio o sucursal) con la que se creó el cobro.
     const apiKey = await loadApiKey(admin, row.tenant_id, {
       scopeStoreId: await intentSecretScope(admin, row.id),
     });
-    if (!apiKey) return ok();
+    if (!apiKey) {
+      wh.fail("sin API Key de GO Cuotas");
+      return ok();
+    }
 
     const res = await syncIntent(admin, row, apiKey, "webhook", hint.orderId, null);
-    if ("error" in res) console.error("gocuotas_webhook", res.detail);
+    if ("error" in res) {
+      console.error("gocuotas_webhook", res.detail);
+      wh.fail(`GO Cuotas: ${String(res.error)}`);
+    } else {
+      wh.done();
+    }
   } catch (e) {
     console.error("gocuotas_webhook", e);
+    wh.fail(e);
   }
   return ok();
-});
+}));

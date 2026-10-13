@@ -175,6 +175,7 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
       await admin.from("payment_plans").delete().eq("tenant_id", t);
       await admin.from("subscription_addons").delete().eq("tenant_id", t);
       await admin.from("audit_logs").delete().eq("tenant_id", t);
+      await admin.from("webhook_events" as never).delete().eq("tenant_id", t);
       await admin.from("customers").delete().eq("tenant_id", t);
       await admin.from("products").delete().eq("tenant_id", t);
       await admin.from("tenant_users").delete().eq("tenant_id", t);
@@ -545,6 +546,45 @@ describe.skipIf(!enabled)("RLS — aislamiento multi-tenant", () => {
     const { data, error } = await ctx.admin.rpc("rls_internal_scope_leaks" as never);
     expect(error).toBeNull();
     expect(data).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // ADR-070: webhook_events (log técnico de webhooks). El dueño ve sólo lo de
+  // su negocio, el cajero nada, y nadie escribe desde el cliente.
+  // ---------------------------------------------------------------------------
+  it("webhook_events: el tenant A no ve los de B, el cajero no ve nada y nadie inserta", async () => {
+    const { admin, ownerA, ownerB, cashierA } = ctx;
+    const ref = `${STAMP}-wh`;
+    const { error: insErr } = await admin.from("webhook_events" as never).insert([
+      { tenant_id: ctx.tenantA, provider: "modo", function_name: "modo_webhook", status: "ok", http_status: 200, payload_ref: ref },
+      { tenant_id: ctx.tenantB, provider: "modo", function_name: "modo_webhook", status: "error", http_status: 200, error: "x", payload_ref: ref },
+    ] as never);
+    expect(insErr).toBeNull();
+
+    const seen = async (c: SupabaseClient) => {
+      const { data, error } = await c
+        .from("webhook_events" as never)
+        .select("tenant_id")
+        .eq("payload_ref", ref);
+      expect(error).toBeNull();
+      return ((data ?? []) as { tenant_id: string }[]).map((r) => r.tenant_id);
+    };
+    expect(await seen(ownerA)).toEqual([ctx.tenantA]);
+    expect(await seen(ownerB)).toEqual([ctx.tenantB]);
+    expect(await seen(cashierA)).toEqual([]);
+
+    // El resumen respeta la RLS de quien llama.
+    const { data: health } = await ownerA.rpc("webhook_health" as never, { p_hours: 24 } as never);
+    const modo = ((health ?? []) as { provider: string; error_count: number }[]).find((h) => h.provider === "modo");
+    expect(modo?.error_count ?? 0).toBe(0);
+
+    const { error: forged } = await ownerA.from("webhook_events" as never).insert({
+      tenant_id: ctx.tenantA,
+      provider: "modo",
+      function_name: "modo_webhook",
+      status: "ok",
+    } as never);
+    expect(forged).not.toBeNull();
   });
 
   describe("cuenta corriente v2", () => {

@@ -61,6 +61,7 @@ import {
   maxMpAmount,
   mpRefundAvailable,
   mpRefundErrorMessage,
+  mpRefundReceipt,
   mpRefundUnavailableReason,
   usablePayments,
   type MpRefundablePayment,
@@ -1351,6 +1352,7 @@ function ReturnResult({
   const isVoucher = result.refund === "store_credit" && Boolean(result.voucher_code);
   const mpAmount = Number(result.mp_amount ?? 0);
   const restAmount = Math.max(0, Math.round((result.total - mpAmount) * 100) / 100);
+  const mpReceipt = mpRefundReceipt(mpRefund);
 
   const fallbackBlocks = useMemo(
     () =>
@@ -1431,6 +1433,18 @@ function ReturnResult({
           data={ticketData}
           paperOverride={paper}
         />
+        {/* H21h (ADR-099): el comprobante lleva el id de la devolución de
+            Mercado Pago para que el cliente la reclame si no la ve. */}
+        {mpReceipt && (
+          <div className="mx-auto mt-1 max-w-[80mm] px-3 pb-3 text-center font-mono">
+            <div className="border-t border-dashed border-neutral-400 pt-2 text-xs font-bold uppercase tracking-wide">
+              {mpReceipt.title}
+            </div>
+            <div className="mt-1 text-sm font-bold">{formatCurrency(mpReceipt.amount)}</div>
+            <div className="mt-0.5 text-[11px]">N° de devolución {mpReceipt.id}</div>
+            <div className="text-[11px] text-neutral-500">{mpReceipt.note}</div>
+          </div>
+        )}
         {/* Panel del vale (código + vencimiento): info del vale, no un layout
             alternativo del ticket (ese lo provee la plantilla activa de arriba). */}
         {isVoucher && (

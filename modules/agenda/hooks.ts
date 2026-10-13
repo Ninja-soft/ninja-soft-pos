@@ -4,10 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   professionalsApi,
   appointmentsApi,
+  resourcesApi,
+  waitlistApi,
+  agendaDemoApi,
+  type AgendaResourceInput,
+  type WaitlistInput,
   type ProfessionalInput,
   type AppointmentInput,
   type AppointmentStatus,
 } from "./api";
+import { depositsApi, type DepositMethod } from "./deposits";
 
 // ── Profesionales ─────────────────────────────────────────────────────────────
 
@@ -81,5 +87,99 @@ export function useAppointmentMutations() {
       }) => appointmentsApi.setStatus(v.id, v.status, v.cancelReason),
       onSuccess: inv,
     }),
+  };
+}
+
+// ── Señas de turnos (ADR-088) ─────────────────────────────────────────────────
+
+export function useAppointmentDeposits(appointmentId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["appointment-deposits", appointmentId],
+    enabled: Boolean(appointmentId) && enabled,
+    queryFn: () => depositsApi.list(appointmentId!),
+  });
+}
+
+export function useAppointmentDepositMutations() {
+  const qc = useQueryClient();
+  const inv = () => {
+    void qc.invalidateQueries({ queryKey: ["appointment-deposits"] });
+    void qc.invalidateQueries({ queryKey: ["cash"] });
+  };
+  return {
+    register: useMutation({
+      mutationFn: (v: { appointmentId: string; amount: number; method: DepositMethod; reference?: string | null }) =>
+        depositsApi.register(v),
+      onSuccess: inv,
+    }),
+    refund: useMutation({
+      mutationFn: (v: { depositId: string; reason: string }) => depositsApi.refund(v.depositId, v.reason),
+      onSuccess: inv,
+    }),
+  };
+}
+
+// ── Recursos (ADR-082) ────────────────────────────────────────────────────────
+
+export function useAgendaResources(activeOnly = false, enabled = true) {
+  return useQuery({
+    queryKey: ["agenda-resources", activeOnly],
+    enabled,
+    queryFn: () => resourcesApi.list(activeOnly),
+  });
+}
+
+export function useAgendaResourceMutations() {
+  const qc = useQueryClient();
+  const inv = () => qc.invalidateQueries({ queryKey: ["agenda-resources"] });
+  return {
+    create: useMutation({ mutationFn: (input: AgendaResourceInput) => resourcesApi.create(input), onSuccess: inv }),
+    update: useMutation({
+      mutationFn: (v: { id: string; patch: Partial<AgendaResourceInput> }) => resourcesApi.update(v.id, v.patch),
+      onSuccess: inv,
+    }),
+    remove: useMutation({ mutationFn: (id: string) => resourcesApi.softDelete(id), onSuccess: inv }),
+  };
+}
+
+// ── Lista de espera (ADR-082) ─────────────────────────────────────────────────
+
+export function useWaitlist(enabled = true) {
+  return useQuery({
+    queryKey: ["agenda-waitlist"],
+    enabled,
+    queryFn: () => waitlistApi.listOpen(),
+  });
+}
+
+export function useWaitlistMutations() {
+  const qc = useQueryClient();
+  const inv = () => {
+    qc.invalidateQueries({ queryKey: ["agenda-waitlist"] });
+    qc.invalidateQueries({ queryKey: ["appointments"] });
+  };
+  return {
+    create: useMutation({ mutationFn: (input: WaitlistInput) => waitlistApi.create(input), onSuccess: inv }),
+    cancel: useMutation({ mutationFn: (id: string) => waitlistApi.cancel(id), onSuccess: inv }),
+    schedule: useMutation({ mutationFn: waitlistApi.schedule, onSuccess: inv }),
+  };
+}
+
+// ── Datos de ejemplo (H42 · ADR-082) ──────────────────────────────────────────
+
+export function useAgendaDemo(enabled = true) {
+  return useQuery({ queryKey: ["agenda-demo"], enabled, queryFn: () => agendaDemoApi.hasDemo() });
+}
+
+export function useAgendaDemoMutations() {
+  const qc = useQueryClient();
+  const inv = () => {
+    for (const key of ["agenda-demo", "appointments", "professionals", "agenda-resources", "agenda-waitlist", "customers"]) {
+      qc.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  return {
+    seed: useMutation({ mutationFn: () => agendaDemoApi.seed(), onSuccess: inv }),
+    clear: useMutation({ mutationFn: () => agendaDemoApi.clear(), onSuccess: inv }),
   };
 }

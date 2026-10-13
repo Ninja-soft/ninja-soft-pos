@@ -9,6 +9,7 @@
 //
 // verify_jwt = false (se setea al desplegar).
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 
 const APPROVED = new Set(["approved", "authorized"]);
@@ -35,7 +36,7 @@ Deno.serve(async (req: Request) => {
       reqUrl.searchParams.get("type") || reqUrl.searchParams.get("topic") || "";
     if (req.method === "POST") {
       try {
-        const body = (await req.json()) as {
+        const body = (await readJsonLimited(req)) as {
           type?: string;
           topic?: string;
           data?: { id?: string };

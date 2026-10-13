@@ -80,12 +80,20 @@ const RubroCard = dynamic(
   () => import("@/components/dashboard-team/RubroCard").then((m) => m.RubroCard),
   { loading },
 );
+const BusinessProfileCard = dynamic(
+  () => import("@/components/profiles/BusinessProfileCard").then((m) => m.BusinessProfileCard),
+  { loading },
+);
 const ProfessionalsManager = dynamic(
   () => import("@/components/agenda/ProfessionalsManager").then((m) => m.ProfessionalsManager),
   { loading },
 );
 const SalonesManager = dynamic(
   () => import("@/components/dining/SalonesManager").then((m) => m.SalonesManager),
+  { loading },
+);
+const KdsSlaCard = dynamic(
+  () => import("@/components/dining/KdsSlaCard").then((m) => m.KdsSlaCard),
   { loading },
 );
 const MenusManager = dynamic(
@@ -145,12 +153,35 @@ const SupervisorPinCard = dynamic(
   { loading },
 );
 
+// Impuestos (ADR-068): datos fiscales, agente de percepción y padrones.
+const TaxSettings = dynamic(
+  () => import("@/components/tax/TaxSettings").then((m) => m.TaxSettings),
+  { loading },
+);
+
+// Facturación electrónica ARCA (F3 · ADR-072).
+const ArcaSettings = dynamic(
+  () => import("@/components/arca/ArcaSettings").then((m) => m.ArcaSettings),
+  { loading },
+);
+
 // Integraciones (ADR-062).
 const NubceoSettings = dynamic(
   () => import("@/components/integrations/nubceo/NubceoSettings").then((m) => m.NubceoSettings),
   { loading },
 );
 
+// API pública v1 (ADR-094): credenciales del dueño.
+const ApiSettings = dynamic(
+  () => import("@/components/integrations/api/ApiSettings").then((m) => m.ApiSettings),
+  { loading },
+);
+
+// Venta sin conexión (ADR-077): política del dueño.
+const OfflinePolicyCard = dynamic(
+  () => import("@/components/config/OfflinePolicyCard").then((m) => m.OfflinePolicyCard),
+  { loading },
+);
 // Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
 const PosnetVoucherCard = dynamic(
   () => import("@/components/config/PosnetVoucherCard").then((m) => m.PosnetVoucherCard),
@@ -201,7 +232,13 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <AppearanceSettings />;
     // Rubro y Marca: sólo owner/manager (los componentes se auto-ocultan).
     case "rubro":
-      return <RubroCard />;
+      // Perfil por rubro (F5 · ADR-075) arriba; el selector de rubro de siempre abajo.
+      return (
+        <div className="space-y-4">
+          <BusinessProfileCard />
+          <RubroCard />
+        </div>
+      );
     case "marca":
       return (
         <ScopedSection
@@ -240,9 +277,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     case "pagos":
       return (
         <Suspense fallback={null}>
-          <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
-            <PaymentMethodsCard />
-          </ScopedSection>
+          <div data-tour="config-medios-pago">
+            <ScopedSection domain="payment_method" scopedExtra={(s) => <TransferScopedAccounts scope={s} />}>
+              <PaymentMethodsCard />
+            </ScopedSection>
+          </div>
         </Suspense>
       );
     // ADR-054: terminales y datos del cupón del posnet offline (heredables).
@@ -256,9 +295,12 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <TerminalsManager />;
     case "operacion":
       return (
-        <ScopedSection domain="pos_settings" fields={OPERACION_FIELDS}>
-          <OperationSettingsCard view="operacion" />
-        </ScopedSection>
+        <div className="space-y-8">
+          <ScopedSection domain="pos_settings" fields={OPERACION_FIELDS}>
+            <OperationSettingsCard view="operacion" />
+          </ScopedSection>
+          <OfflinePolicyCard />
+        </div>
       );
     // Diseño del POS: preset, grilla, carrito, medios fijados y teclas rápidas.
     case "diseno-pos":
@@ -267,9 +309,15 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // el modo gastronómico activo (H43). Escritura RLS por tenant.
     case "salones":
       return (
-        <SettingsCard padded>
-          <SalonesManager />
-        </SettingsCard>
+        <div className="space-y-4">
+          <SettingsCard padded>
+            <SalonesManager />
+          </SettingsCard>
+          {/* SLA del KDS por estación (F13 · H46). Escritura: sólo el dueño. */}
+          <SettingsCard padded>
+            <KdsSlaCard />
+          </SettingsCard>
+        </div>
       );
     // Menús por horario (F13 · H47). Escritura RLS owner/manager.
     case "menus":
@@ -348,6 +396,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       );
     case "precios":
       return <PriceListsCard />;
+    case "impuestos":
+      return <TaxSettings />;
     case "garantias":
       return (
         <SettingsCard padded>
@@ -357,6 +407,11 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
     // Integración NubCeo (ADR-062): dueño o encargado, feature en el plan.
     case "nubceo":
       return <NubceoSettings />;
+    case "api":
+      return <ApiSettings />;
+    // Facturación electrónica ARCA (ADR-072): dueño o encargado.
+    case "facturacion":
+      return <ArcaSettings />;
   }
 }
 

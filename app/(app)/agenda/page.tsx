@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
+  Armchair,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ListOrdered,
   Plus,
+  Sparkles,
   UserCog,
   Zap,
 } from "lucide-react";
@@ -13,7 +16,19 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { useToast } from "@/components/ui/Toast";
-import { useProfessionals, useAppointments } from "@/modules/agenda/hooks";
+import {
+  useProfessionals,
+  useAppointments,
+  useAgendaResources,
+  useWaitlist,
+  useAgendaDemo,
+  useAgendaDemoMutations,
+} from "@/modules/agenda/hooks";
+import { useFeature } from "@/modules/saas/gating";
+import { useBranchScope } from "@/modules/branches/hooks";
+import { agendaErrorMessage } from "@/modules/agenda/overlap";
+import { ResourcesManager } from "@/components/agenda/ResourcesManager";
+import { WaitlistPanel } from "@/components/agenda/WaitlistPanel";
 import type { Appointment } from "@/modules/agenda/api";
 import {
   addDays,
@@ -44,12 +59,29 @@ export default function AgendaPage() {
   const [newInitial, setNewInitial] = useState<{
     startsAt?: Date;
     professionalId?: string | null;
+    resourceId?: string | null;
   }>({});
+  const [showResources, setShowResources] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [groupBy, setGroupBy] = useState<"professional" | "resource">("professional");
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [detail, setDetail] = useState<Appointment | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
 
   const { data: professionals } = useProfessionals(true);
+
+  // Recursos y lista de espera (ADR-082): gating por plan + rol.
+  const resourcesOn = useFeature("agenda_recursos") === true;
+  const depositsOn = useFeature("agenda_senas") === true;
+  const waitlistOn = useFeature("lista_espera") === true;
+  const role = useBranchScope().data?.role ?? null;
+  const canManage = role === "owner" || role === "manager";
+  const canFrontDesk = canManage || role === "cashier";
+  const { data: resources } = useAgendaResources(true, resourcesOn);
+  const { data: waitlist } = useWaitlist(waitlistOn);
+  const { data: hasDemo } = useAgendaDemo(canManage);
+  const demo = useAgendaDemoMutations();
+  const byResource = resourcesOn && groupBy === "resource" && (resources ?? []).length > 0;
 
   // Rango [from, to) de la consulta según el modo.
   const { from, to, weekList } = useMemo(() => {
@@ -82,8 +114,8 @@ export default function AgendaPage() {
       ? (professionals ?? []).find((p) => p.id === detail.professional_id)?.name ?? null
       : null;
 
-  function openNewAt(startsAt: Date, professionalId: string | null) {
-    setNewInitial({ startsAt, professionalId });
+  function openNewAt(startsAt: Date, professionalId: string | null, resourceId?: string | null) {
+    setNewInitial({ startsAt, professionalId, resourceId: resourceId ?? null });
     setEditing(null);
     setNewOpen(true);
   }
@@ -100,6 +132,41 @@ export default function AgendaPage() {
 
   const hasProfessionals = (professionals ?? []).length > 0;
 
+  async function seedDemo() {
+    try {
+      const r = await demo.seed.mutateAsync();
+      toast({
+        title: r.already ? "Ya tenés datos de ejemplo cargados" : "Datos de ejemplo cargados",
+        description: r.already ? undefined : "Profesionales, clientes y turnos de hoy para probar la agenda.",
+        variant: "success",
+      });
+      goToday();
+    } catch (e) {
+      toast({
+        title: "No se pudieron cargar",
+        description: agendaErrorMessage(e instanceof Error ? e.message : null),
+        variant: "error",
+      });
+    }
+  }
+  async function clearDemo() {
+    try {
+      const r = await demo.clear.mutateAsync();
+      toast({
+        title: "Datos de ejemplo quitados",
+        description:
+          r.appointments_kept > 0 ? `${r.appointments_kept} turnos de ejemplo ya cobrados se conservan.` : undefined,
+        variant: "success",
+      });
+    } catch (e) {
+      toast({
+        title: "No se pudieron quitar",
+        description: agendaErrorMessage(e instanceof Error ? e.message : null),
+        variant: "error",
+      });
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
       <PageHeader
@@ -112,6 +179,21 @@ export default function AgendaPage() {
           <Button variant="secondary" size="sm" onClick={() => setShowProfessionals((s) => !s)}>
             <UserCog size={16} /> Profesionales
           </Button>
+          {resourcesOn && (
+            <Button variant="secondary" size="sm" onClick={() => setShowResources((s) => !s)}>
+              <Armchair size={16} /> Recursos
+            </Button>
+          )}
+          {waitlistOn && (
+            <Button variant="secondary" size="sm" onClick={() => setShowWaitlist((s) => !s)}>
+              <ListOrdered size={16} /> Espera
+              {(waitlist ?? []).length > 0 && (
+                <span className="rounded bg-ninja-flame/15 px-1.5 text-xs font-semibold text-ninja-flameSoft">
+                  {(waitlist ?? []).length}
+                </span>
+              )}
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setWalkInOpen(true)}>
             <Zap size={16} /> Walk-in
           </Button>
@@ -129,6 +211,34 @@ export default function AgendaPage() {
             <ProfessionalsManager />
           </CardContent>
         </Card>
+      )}
+
+      {showResources && resourcesOn && (
+        <Card className="mb-5">
+          <CardContent className="p-5">
+            <ResourcesManager canEdit={canManage} />
+          </CardContent>
+        </Card>
+      )}
+
+      {showWaitlist && waitlistOn && (
+        <Card className="mb-5">
+          <CardContent className="p-5">
+            <WaitlistPanel canWrite={canFrontDesk} resources={resourcesOn ? resources ?? [] : []} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Datos de ejemplo (H42): la agenda funcionando en minutos para una demo */}
+      {canManage && hasDemo && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border border-t-2 border-t-ninja-flame bg-card p-3">
+          <p className="text-sm text-muted-foreground">
+            Estás viendo datos de ejemplo (profesionales, clientes y turnos marcados como ejemplo).
+          </p>
+          <Button size="sm" variant="secondary" onClick={clearDemo} loading={demo.clear.isPending}>
+            Quitar datos de ejemplo
+          </Button>
+        </div>
       )}
 
       {/* Barra de control: navegación + vista + filtro de profesional */}
@@ -178,6 +288,16 @@ export default function AgendaPage() {
               ))}
             </select>
           )}
+          {mode === "day" && resourcesOn && (resources ?? []).length > 0 && (
+            <Segmented
+              value={groupBy}
+              onChange={(v) => setGroupBy(v as "professional" | "resource")}
+              options={[
+                { value: "professional", label: "Profesional" },
+                { value: "resource", label: "Recurso" },
+              ]}
+            />
+          )}
           <Segmented
             value={mode}
             onChange={(v) => setMode(v as ViewMode)}
@@ -196,9 +316,16 @@ export default function AgendaPage() {
             Agregá a tus profesionales (quienes prestan los servicios) para
             organizar la agenda por columnas y calcular comisiones.
           </p>
-          <Button size="sm" variant="secondary" onClick={() => setShowProfessionals(true)}>
-            <UserCog size={15} /> Agregar profesionales
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setShowProfessionals(true)}>
+              <UserCog size={15} /> Agregar profesionales
+            </Button>
+            {canManage && hasDemo === false && (
+              <Button size="sm" variant="ghost" onClick={seedDemo} loading={demo.seed.isPending}>
+                <Sparkles size={15} /> Cargar datos de ejemplo
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -212,6 +339,8 @@ export default function AgendaPage() {
         appointments={appointments ?? []}
         onPick={setDetail}
         onNewAt={openNewAt}
+        groupBy={byResource ? "resource" : "professional"}
+        resources={resources ?? []}
       />
 
       <p className="mt-3 text-center text-xs text-muted-foreground">
@@ -228,12 +357,14 @@ export default function AgendaPage() {
         }}
         appointment={editing}
         initial={newInitial}
+        resourcesEnabled={resourcesOn}
       />
       <AppointmentDetailModal
         appointment={detail}
         professionalName={detailProfName}
         onClose={() => setDetail(null)}
         onEdit={openEdit}
+        depositsEnabled={depositsOn}
       />
       <WalkInModal
         open={walkInOpen}

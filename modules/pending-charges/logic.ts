@@ -424,6 +424,8 @@ export interface SaleArgsLine {
   priceOverride?: boolean;
   overrideReason?: string | null;
   listPrice?: number | null;
+  /** Id local de la línea del carrito (ADR-096: la garantía la referencia). */
+  lineId?: string;
 }
 
 export interface SaleArgsExtra {
@@ -432,6 +434,9 @@ export interface SaleArgsExtra {
   amount?: number;
   method?: string;
   id?: string;
+  /** ADR-096 (kind='warranty'): plan elegido y línea del carrito que cubre. */
+  planId?: string;
+  forLineId?: string;
 }
 
 export interface SaleArgsItem {
@@ -449,6 +454,9 @@ export interface SaleArgsItem {
   price_override?: boolean;
   override_reason?: string;
   list_price?: number;
+  // ADR-096: garantía extendida enlazada a la línea que cubre.
+  warranty_plan_id?: string;
+  warranty_for?: number;
 }
 
 export interface SaleArgsExtraOut {
@@ -490,7 +498,14 @@ export function buildSaleItemsAndExtras(
   }));
   for (const ex of extras ?? []) {
     if ((ex.kind === "warranty" || ex.kind === "surcharge") && (ex.amount ?? 0) > 0) {
-      items.push({ product_id: null, name: ex.name ?? "Recargo", quantity: 1, unit_price: ex.amount ?? 0, discount: 0 });
+      items.push({
+        product_id: null,
+        name: ex.name ?? "Recargo",
+        quantity: 1,
+        unit_price: ex.amount ?? 0,
+        discount: 0,
+        ...(ex.kind === "warranty" ? warrantyLink(lines, ex) : {}),
+      });
     }
   }
   const out: SaleArgsExtraOut[] = (extras ?? [])
@@ -510,6 +525,21 @@ export function buildSaleItemsAndExtras(
     if (l.packCreditId) out.push({ kind: "pack_session", id: l.packCreditId });
   }
   return { items, extras: out };
+}
+
+/**
+ * ADR-096: vínculo de la garantía extendida con la línea que cubre (índice en
+ * p_items). Sin plan o sin una línea con producto, va sin vínculo y
+ * serial_lookup cae al nombre de la línea, como antes.
+ */
+export function warrantyLink(
+  lines: SaleArgsLine[],
+  ex: Pick<SaleArgsExtra, "planId" | "forLineId">,
+): { warranty_plan_id: string; warranty_for: number } | Record<string, never> {
+  if (!ex.planId || !ex.forLineId) return {};
+  const i = lines.findIndex((l) => l.lineId === ex.forLineId);
+  if (i < 0 || !lines[i]!.productId) return {};
+  return { warranty_plan_id: ex.planId, warranty_for: i };
 }
 
 /** Líneas para mostrar en el detalle (sólo display: la plata la valida el server). */

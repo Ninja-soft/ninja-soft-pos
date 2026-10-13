@@ -1,0 +1,152 @@
+[
+  {
+    "id": "caja-abrir",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Abrir la caja",
+    "summary": "La caja se abre desde el punto de venta, eligiendo sucursal y caja del dispositivo y cargando el monto inicial.",
+    "module": "caja",
+    "routes": ["/pos", "/caja"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["abrir caja", "apertura de caja", "empezar el turno", "monto inicial", "fondo de caja"],
+    "tags": ["turno", "efectivo"],
+    "steps": [
+      "Entrá a Punto de venta. Arriba vas a ver el estado de la caja: un punto con \"Cerrada\".",
+      "Si tenés más de una sucursal o caja, tocá el chip de ubicación del encabezado (\"Sucursal y caja de este dispositivo\") y elegí dónde vendés hoy. El dispositivo lo recuerda.",
+      "Tocá el botón de estado de la caja (\"Abrir caja\").",
+      "En \"Monto inicial\" cargá el efectivo con el que arrancás (el cambio). Puede ser 0.",
+      "Tocá \"Abrir\". Vas a ver el aviso \"Caja abierta\" y ya podés cobrar."
+    ],
+    "roleNotes": {
+      "cashier": "Abrís tu propia caja. Cada persona puede tener una sola caja abierta a la vez y cada caja un solo turno abierto.",
+      "manager": "Podés abrir tu caja y, desde Cajas abiertas, ver las de tu equipo.",
+      "owner": "Si querés más de una caja por sucursal necesitás la función Multi-caja (plan Pro)."
+    },
+    "errors": [
+      { "problem": "\"Ya tenés una caja abierta. Cerrala antes de abrir otra.\"", "fix": "Cerrá el turno que tenés abierto (puede estar en otra caja) y volvé a abrir." },
+      { "problem": "\"Esa caja ya está abierta.\"", "fix": "Otra persona tiene esa caja. Elegí otra caja libre en el chip de ubicación o pedile que la cierre." },
+      { "problem": "\"No hay caja configurada\"", "fix": "El dueño tiene que crear una caja en Configuración, Sucursales y cajas." },
+      { "problem": "\"Estás de licencia\" o \"Tu acceso está suspendido\"", "fix": "Tu usuario no puede operar la caja hoy. Hablá con el dueño o el encargado." }
+    ],
+    "tips": ["En Caja, si no hay turno abierto, el botón \"Ir al punto de venta\" te lleva directo a abrirla."],
+    "feature": "caja",
+    "related": ["caja-cerrar", "caja-movimientos", "pos-cobrar-venta"]
+  },
+  {
+    "id": "caja-movimientos",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Ingresos y retiros de efectivo",
+    "summary": "Registrá la plata que entra o sale de la caja sin ser una venta: cambio que traen, compras chicas, retiros.",
+    "module": "caja",
+    "routes": ["/caja"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["retiro de caja", "egreso", "ingreso de efectivo", "sacar plata de la caja", "gasto de caja"],
+    "tags": ["efectivo", "movimientos"],
+    "steps": [
+      "Entrá a Caja con tu turno abierto.",
+      "Tocá \"Ingreso\" si entra plata (por ejemplo, un aporte de cambio) o \"Egreso\" si sale (una compra chica, un retiro).",
+      "Completá \"Monto\" y \"Motivo\" (por ejemplo, \"Compra de bolsas\").",
+      "Tocá \"Registrar\". Vas a ver \"Movimiento registrado\" y el movimiento aparece en la lista Movimientos."
+    ],
+    "roleNotes": {
+      "cashier": "Sólo podés registrar movimientos en tu propio turno. Si el negocio lo configuró, un retiro o ingreso desde cierto monto te pide el PIN de un supervisor.",
+      "owner": "En Configuración, Seguridad y auditoría podés pedir PIN de supervisor para retiros e ingresos desde el monto que elijas (viene apagado)."
+    },
+    "errors": [
+      { "problem": "\"Monto inválido\"", "fix": "El monto tiene que ser mayor a cero." },
+      { "problem": "\"Esa caja la tiene abierta otra persona. Abrí la tuya para operar.\"", "fix": "Los movimientos los registra quien abrió la caja. Abrí tu propio turno." },
+      { "problem": "Me equivoqué en un movimiento", "fix": "Los movimientos de caja no se editan ni se borran. Registrá el movimiento contrario con un motivo claro." }
+    ],
+    "tips": ["En el monitor de cajas los egresos figuran como \"Retiro\"."],
+    "feature": "caja",
+    "related": ["caja-arqueo", "caja-cerrar"]
+  },
+  {
+    "id": "caja-arqueo",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Arqueo: contar el efectivo y ver la diferencia",
+    "summary": "El arqueo es el conteo del efectivo al cerrar la caja. El sistema compara lo contado con el efectivo esperado y muestra la diferencia.",
+    "module": "caja",
+    "routes": ["/caja", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["arqueo de caja", "contar el efectivo", "diferencia de caja", "faltante", "sobrante"],
+    "tags": ["cierre", "efectivo"],
+    "steps": [
+      "Antes de cerrar, mirá en Caja las tarjetas: Apertura, Ventas netas, Ingresos manuales, Egresos manuales y \"Efectivo esperado\".",
+      "Contá el efectivo del cajón.",
+      "En el punto de venta, tocá el estado de la caja (\"Cerrar caja (arqueo)\").",
+      "Cargá lo que contaste en \"Efectivo contado\" y, si querés, una nota.",
+      "Al cerrar vas a ver \"Caja cerrada\" con la diferencia: contado menos esperado. Negativa es faltante, positiva es sobrante."
+    ],
+    "roleNotes": {
+      "cashier": "Contá con calma: la diferencia queda registrada en el cierre Z y no se puede editar.",
+      "owner": "En Configuración, Operación y productos, la opción \"Exigir motivo en el cierre\" pide un motivo cuando la diferencia supera la tolerancia que elijas."
+    },
+    "errors": [
+      { "problem": "\"Escribí un motivo: la diferencia supera la tolerancia\"", "fix": "Explicá en las notas por qué falta o sobra plata y volvé a cerrar." }
+    ],
+    "tips": ["Ventas por medio de pago, en Caja, te ayuda a separar el efectivo de tarjeta y QR antes de contar."],
+    "feature": "caja",
+    "related": ["caja-cerrar", "caja-cierre-z", "caja-movimientos"]
+  },
+  {
+    "id": "caja-cerrar",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cerrar la caja",
+    "summary": "Cerrás tu turno desde el punto de venta con el efectivo contado. Al cerrar se genera el cierre Z.",
+    "module": "caja",
+    "routes": ["/pos", "/caja"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["cerrar caja", "cierre de caja", "cerrar el turno", "terminar el dia"],
+    "tags": ["turno", "cierre"],
+    "steps": [
+      "En Punto de venta, tocá el estado de la caja (\"Cerrar caja (arqueo)\").",
+      "Cargá el \"Efectivo contado\" y una nota si hace falta.",
+      "Si tenés cobros en espera, elegí qué hacer: \"Pasarlos a la próxima apertura\" o \"Cancelar todos los cobros en espera\". Hasta que elijas, el botón queda deshabilitado.",
+      "Tocá \"Cerrar caja\". Vas a ver \"Caja cerrada\" con la diferencia y el cierre Z queda guardado."
+    ],
+    "roleNotes": {
+      "cashier": "Cerrás sólo tu propia caja. Si te fuiste sin cerrar, avisale al encargado: él puede hacer un cierre forzado.",
+      "manager": "Para cerrar la caja de otra persona entrá a Cajas abiertas y usá \"Cierre forzado\": cargás el efectivo contado y un motivo, y queda en la auditoría.",
+      "owner": "Desde Cajas abiertas ves los turnos largos (más de 10 horas) y podés hacer un cierre forzado con motivo."
+    },
+    "errors": [
+      { "problem": "\"No se pudo cerrar\"", "fix": "Revisá la conexión y probá de nuevo. Si sigue, avisale al encargado." }
+    ],
+    "tips": ["Los cobros en espera no entran en el arqueo porque todavía no se cobraron."],
+    "feature": "caja",
+    "related": ["caja-arqueo", "caja-cierre-z", "pos-cobros-en-espera"]
+  },
+  {
+    "id": "caja-cierre-z",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Cierre Z: qué es y dónde verlo",
+    "summary": "Cada cierre de caja genera un cierre Z inmutable con el resumen del turno. Se consulta, imprime y exporta desde Caja.",
+    "module": "caja",
+    "routes": ["/caja"],
+    "roles": ["owner", "manager", "cashier", "viewer"],
+    "keywords": ["cierre z", "reporte z", "historial de cierres", "imprimir z"],
+    "tags": ["cierre", "historial"],
+    "steps": [
+      "Entrá a Caja y bajá hasta \"Cierres Z\".",
+      "Filtrá por fechas y, si elegiste una sucursal, por caja.",
+      "Tocá \"Ver\" en un cierre para abrir el detalle: apertura, ventas, descuentos, anulaciones, ingresos y egresos, efectivo esperado y contado, diferencia y totales por medio de pago.",
+      "Desde el detalle podés \"Imprimir\" o \"Exportar XLSX\".",
+      "Con el turno todavía abierto, en Caja tenés \"Exportar Z (XLSX)\" e \"Imprimir Z\" para ver cómo viene el día."
+    ],
+    "roleNotes": {
+      "cashier": "Ves los cierres Z de las sucursales a las que tenés acceso.",
+      "owner": "Cada Z tiene número del negocio, de la sucursal y de la caja (por ejemplo, \"Norte Z 5 · Caja 1 Z 3\")."
+    },
+    "errors": [
+      { "problem": "Quiero corregir un cierre Z", "fix": "No se puede: es un registro contable inmutable. Las correcciones se hacen con movimientos en el turno siguiente." }
+    ],
+    "tips": [],
+    "feature": "caja",
+    "related": ["caja-cerrar", "reportes"]
+  }
+]

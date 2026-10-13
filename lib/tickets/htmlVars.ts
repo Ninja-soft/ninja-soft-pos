@@ -2,18 +2,18 @@
 // Toda data de tenant/venta va HTML-escapeada; las vars `*_html` ya traen
 // HTML seguro pre-armado (filas de tabla con valores escapeados).
 //
-// SAAS — Datos fiscales (factura legal AR): la app todavía NO integra
-// facturación electrónica (AFIP/ARCA), así que CAE, vencimiento de CAE, punto
-// de venta, número fiscal, letra de comprobante, Ingresos Brutos, inicio de
-// actividades y el documento/condición IVA del receptor NO existen como dato
-// real. Esas variables se exponen igual (para que la plantilla A4 legal quede
-// armada) pero rinden el placeholder `s/d` hasta que exista la integración. No se
-// inventan valores: ver FISCAL_PLACEHOLDER y los TODO de abajo.
+// Datos fiscales (factura legal AR): con la factura electrónica autorizada
+// (F3 · ADR-072) el tipo, la letra, el código, el punto de venta, el número,
+// el CAE o CAEA, su vencimiento y el QR salen de `sale.fiscal`. Sin factura
+// autorizada (o datos que todavía no existen, como Ingresos Brutos) rinden el
+// placeholder `s/d`. No se inventan valores: ver FISCAL_PLACEHOLDER.
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 import { ticketLocationText } from "@/lib/tickets/location";
+import { fiscalApproved } from "@/lib/arca/ticket";
+import { ticketPromoLabel, ticketPromoLines } from "@/lib/promotions/ticket";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -44,6 +44,7 @@ export const HTML_TEMPLATE_VARS: { key: string; label: string }[] = [
   { key: "items_fiscal_html", label: "Filas de ítems fiscales: cód./desc./cant./precio/IVA/subtotal (HTML)" },
   { key: "subtotal", label: "Subtotal" },
   { key: "descuento", label: "Descuento" },
+  { key: "promociones_html", label: "Promociones aplicadas (filas de tabla)" },
   { key: "total", label: "Total" },
   { key: "pagos_html", label: "Medios de pago (HTML)" },
   { key: "pie", label: "Pie del ticket" },
@@ -66,8 +67,8 @@ export const HTML_TEMPLATE_VARS: { key: string; label: string }[] = [
   { key: "iva_total", label: "IVA total discriminado (s/d si no discriminado)" },
   { key: "cliente_doc", label: "CUIT/DNI del receptor (s/d si falta)" },
   { key: "cliente_iva", label: "Condición IVA del receptor" },
-  { key: "cae", label: "CAE (s/d hasta integrar AFIP/ARCA)" },
-  { key: "cae_vto", label: "Vencimiento del CAE (s/d hasta integrar AFIP/ARCA)" },
+  { key: "cae", label: "CAE o CAEA de ARCA (s/d si la venta no tiene factura autorizada)" },
+  { key: "cae_vto", label: "Vencimiento del CAE (s/d si la venta no tiene factura autorizada)" },
 ];
 
 export function buildHtmlVars(data: TicketData): Record<string, string> {
@@ -101,8 +102,11 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
         `<tr><td>${esc(PAYMENT_METHOD_LABELS[p.method] ?? p.method)}</td><td style="text-align:right">${esc(formatCurrency(p.amount))}</td></tr>`,
     )
     .join("");
+  // F3 · ADR-072: con la factura autorizada, el QR es el fiscal de ARCA.
+  const fiscal = fiscalApproved(sale.fiscal) ? sale.fiscal : null;
   const qrUrl = qrSvgDataUrl(
-    `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
+    fiscal?.qrUrl ??
+      `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
   );
 
   // Condición IVA del emisor (si el branding la tiene cargada).
@@ -124,6 +128,13 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     items_fiscal_html: itemsFiscalHtml,
     subtotal: esc(formatCurrency(sale.subtotal)),
     descuento: sale.discount_total > 0 ? esc(`-${formatCurrency(sale.discount_total)}`) : "",
+    // ADR-074: una fila por promoción aplicada.
+    promociones_html: ticketPromoLines(sale.discount_total, sale.promotions)
+      .promos.map(
+        (p) =>
+          `<tr><td>${esc(ticketPromoLabel(p))}</td><td style="text-align:right">${p.kind === "discount" ? esc(`-${formatCurrency(p.amount)}`) : ""}</td></tr>`,
+      )
+      .join(""),
     total: esc(formatCurrency(sale.total)),
     pagos_html: pagosHtml,
     pie: esc(brand?.ticket_footer || "¡Gracias por su compra!"),
@@ -139,13 +150,13 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     // TODO(AFIP): no existen como columnas todavía → placeholder honesto.
     ingresos_brutos: FISCAL_PLACEHOLDER,
     inicio_actividades: FISCAL_PLACEHOLDER,
-    comprobante_tipo: esc(brand?.ticket_title || "Comprobante no fiscal"),
+    comprobante_tipo: esc(fiscal ? fiscal.cbteLabel.toUpperCase() : brand?.ticket_title || "Comprobante no fiscal"),
     // Sin facturación electrónica el comprobante no es fiscal: letra "X".
-    comprobante_letra: "X",
-    comprobante_cod: FISCAL_PLACEHOLDER,
+    comprobante_letra: esc(fiscal?.letter ?? "X"),
+    comprobante_cod: esc(fiscal?.codigo ?? FISCAL_PLACEHOLDER),
     // Punto de venta por defecto hasta que exista configuración fiscal.
-    punto_venta: "0001",
-    comprobante_nro: esc(sale.numberLabel.replace(/^#/, "").padStart(8, "0")),
+    punto_venta: esc(fiscal?.ptoVta ?? "0001"),
+    comprobante_nro: esc(fiscal?.numero?.split("-")[1] ?? sale.numberLabel.replace(/^#/, "").padStart(8, "0")),
     // Sin alícuotas por línea no se puede discriminar IVA → placeholder.
     neto_gravado: FISCAL_PLACEHOLDER,
     iva_total: FISCAL_PLACEHOLDER,
@@ -153,7 +164,7 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     cliente_doc: FISCAL_PLACEHOLDER,
     cliente_iva: "Consumidor Final",
     // CAE y su vencimiento los devuelve AFIP/ARCA al autorizar (no integrado).
-    cae: FISCAL_PLACEHOLDER,
-    cae_vto: FISCAL_PLACEHOLDER,
+    cae: esc(fiscal?.cae ?? FISCAL_PLACEHOLDER),
+    cae_vto: esc(fiscal?.caeVto ?? FISCAL_PLACEHOLDER),
   };
 }

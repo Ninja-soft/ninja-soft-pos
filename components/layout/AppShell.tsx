@@ -10,6 +10,7 @@ import {
   Bike,
   Building2,
   CalendarClock,
+  CloudOff,
   CalendarDays,
   ChevronDown,
   CreditCard,
@@ -26,6 +27,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  ClipboardCheck,
   ShoppingBag,
   ShoppingCart,
   Sun,
@@ -34,6 +36,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  Warehouse,
   Hourglass,
   X,
   ArrowLeftRight,
@@ -44,6 +47,16 @@ import {
   Undo2,
   Boxes,
   Landmark,
+  BookOpenCheck,
+  BookText,
+  FileArchive,
+  ListTree,
+  FileSpreadsheet,
+  Stamp,
+  GraduationCap,
+  PackageSearch,
+  Radar,
+  ShieldAlert,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -72,17 +85,32 @@ import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
+import { ReadOnlyBanner } from "@/components/permissions/RoleGate";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
+import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { usePrefetchPos } from "@/modules/pos/layoutHooks";
 import { BranchSwitcher } from "@/components/branches/BranchSwitcher";
+import { useBranchTabTitle, useCrossContextNotice } from "@/modules/branches/crossContext";
 import { SupervisorPinHost } from "@/components/security/SupervisorPinHost";
 import { StaffAccessGate, TenantClaimHealer } from "@/components/staff/StaffAccessGate";
+import { HelpButton } from "@/components/help/HelpPanel";
 
 // Burbuja del asistente IA en su propio chunk: no pesa en la primera carga.
 const AssistantBubble = dynamic(
   () => import("@/components/ai/AssistantBubble").then((m) => m.AssistantBubble),
+  { ssr: false },
+);
+
+// Recorridos guiados y sugerencias (F15 · H70, H74 · ADR-089): chunks aparte,
+// sin SSR (miden el DOM y usan sessionStorage).
+const TourHost = dynamic(
+  () => import("@/components/onboarding/TourHost").then((m) => m.TourHost),
+  { ssr: false },
+);
+const NudgeHost = dynamic(
+  () => import("@/components/onboarding/NudgeHost").then((m) => m.NudgeHost),
   { ssr: false },
 );
 
@@ -123,10 +151,13 @@ function SellQuickAction({
 }) {
   const count = useCartStore((s) => s.lines.length);
   const prefetchPos = usePrefetchPos();
+  // F17 · H90: el panel mira una sucursal y la venta sería en otra.
+  const cross = useCrossContextNotice();
   const href = count > 0 ? "/pos?cobrar=1" : "/pos";
   const label = count > 0 ? "Cobrar" : "Vender";
-  const hint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
-  return (
+  const baseHint = count > 0 ? `Ir al cobro (${SELL_SHORTCUT})` : `Ir a vender (${SELL_SHORTCUT})`;
+  const hint = cross ? `${baseHint}. ${cross.hint}` : baseHint;
+  const link = (
     <Link
       href={href as never}
       onClick={onNavigate}
@@ -153,7 +184,18 @@ function SellQuickAction({
           {SELL_SHORTCUT}
         </kbd>
       )}
+      {compact && cross && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-warning" />}
     </Link>
+  );
+  if (compact || !cross) return link;
+  return (
+    <div>
+      {link}
+      <p role="status" className="mt-1 flex items-start gap-1.5 px-1 text-[11px] leading-snug text-warning">
+        <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+        <span>{cross.message}</span>
+      </p>
+    </div>
   );
 }
 
@@ -190,6 +232,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
   top: [
     { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
     { href: "/dashboard-team", label: "Panel del dueño", icon: Building2 },
+    // F15 · H69 (ADR-086): Escuela NinjaSoft, BASE con key `escuela`.
+    { href: "/escuela", label: "Escuela", icon: GraduationCap, feature: "escuela" },
   ],
   groups: [
     {
@@ -212,10 +256,14 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Cobros en espera (ADR-048): QR y links compartidos que esperan el
         // pago. Con candado si el plan no la incluye.
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
+        // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
+        { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
         { href: "/ventas", label: "Ventas", icon: Receipt },
+        // Ventas offline con problemas (ADR-077, FLAG-OPERATIVO): dueño y encargado.
+        { href: "/ventas-offline", label: "Ventas offline", icon: CloudOff, managersOnly: true },
         {
           href: "/devoluciones",
           label: "Devoluciones",
@@ -229,6 +277,10 @@ const NAV: { top: Item[]; groups: Group[] } = {
       items: [
         { href: "/productos", label: "Productos", icon: Package },
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
+        // Depósitos internos de la sucursal (F11 · H33, ADR-085).
+        { href: "/depositos", label: "Depósitos", icon: Warehouse, feature: "depositos" },
+        // Inventario PRO (F14 · H64, ADR-092): conteo cíclico ABC y garantías por serie.
+        { href: "/inventario", label: "Inventario PRO", icon: ClipboardCheck, feature: "conteo_ciclico" },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
@@ -244,8 +296,28 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
         { href: "/compras/lotes", label: "Lotes y despachos", icon: Boxes, feature: "compras" },
         { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
+        // Retenciones practicadas como agente (F18 · H106, ADR-079).
+        { href: "/compras/retenciones", label: "Retenciones practicadas", icon: Stamp, feature: "percepciones_retenciones", managersOnly: true },
         // Tesorería (F18 · H111, ADR-059): cuentas, cheques y flujo de fondos.
         { href: "/tesoreria", label: "Tesorería", icon: Landmark, feature: "tesoreria", managersOnly: true },
+      ],
+    },
+    {
+      // Contabilidad (F18 · H109, ADR-066): asientos, libros, plan de cuentas,
+      // mapeos y cierres. Dueño o encargado; con candado sin la feature.
+      label: "Contabilidad",
+      items: [
+        { href: "/contabilidad", label: "Contabilidad", icon: BookOpenCheck, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/asientos", label: "Asientos", icon: FileText, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/libros", label: "Libros", icon: BookText, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/plan-de-cuentas", label: "Plan de cuentas", icon: ListTree, feature: "contabilidad", managersOnly: true },
+        // Libro IVA Digital (F18 · H108, ADR-076): va con la facturación
+        // electrónica, no con la contabilidad.
+        { href: "/contabilidad/libro-iva", label: "Libro IVA Digital", icon: FileArchive, feature: "facturacion_afip", managersOnly: true },
+        // Impuestos como sujeto (F18 · H106, ADR-095): retenciones sufridas y
+        // liquidación de Ingresos Brutos.
+        { href: "/impuestos/sufridas", label: "Retenciones sufridas", icon: Receipt, feature: "percepciones_retenciones", managersOnly: true },
+        { href: "/impuestos/iibb", label: "Ingresos Brutos", icon: Landmark, feature: "percepciones_retenciones", managersOnly: true },
       ],
     },
     {
@@ -255,8 +327,16 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Cuenta corriente v2: tablero de cobranza. Con candado si el plan no la incluye.
         { href: "/clientes/cuentas", label: "Cuentas corrientes", icon: HandCoins, feature: "cuenta_corriente" },
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
+        // Cockpit de comercio unificado y riesgo operativo (F16 · H76, H82, ADR-091).
+        { href: "/cockpit", label: "Cockpit", icon: Radar, feature: "cockpit_comercio", managersOnly: true },
+        { href: "/riesgo", label: "Riesgo operativo", icon: ShieldAlert, feature: "prevencion_fraude", managersOnly: true },
         // Conciliación de tarjetas (ADR-044) y de procesadores (ADR-061, pestaña). Con candado si el plan no trae la de tarjetas.
         { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
+        // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el
+        // plan se chequea por importación (importacion_excel / export_xlsx).
+        // Control comercial (F14 · H63, H67, ADR-092): aprobaciones y márgenes.
+        { href: "/comercial", label: "Control comercial", icon: ShieldCheck, managersOnly: true },
+        { href: "/importaciones", label: "Importar y exportar", icon: FileSpreadsheet, managersOnly: true },
         { href: "/configuracion", label: "Configuración", icon: Settings },
       ],
     },
@@ -454,6 +534,8 @@ export function AppShell({
   const canOwnerPanel = shell?.role === "owner" || shell?.role === "manager";
   const canSell = SELL_ROLES.has(shell?.role ?? "");
   const onPos = isPosRoute(pathname);
+  // F17 · H90: la sucursal del chip en el título de la pestaña.
+  useBranchTabTitle();
 
   // Precarga del POS en idle: entrar a Vender ya encuentra el diseño, los
   // overrides y los medios en caché (sin esqueleto ni salto de diseño).
@@ -524,7 +606,9 @@ export function AppShell({
         </Link>
         {/* Campana en la barra lateral (desktop): flotando sobre el contenido
             tapaba botones de la pantalla de cobro. En mobile vive en el header. */}
-        <div className="hidden lg:block">
+        <div className="hidden items-center gap-1 lg:flex">
+          {/* Ayuda contextual (F15 · H72): artículos de la pantalla y el rol. */}
+          <HelpButton role={shell?.role ?? null} />
           <NotificationBell align="start" />
         </div>
       </div>
@@ -548,7 +632,7 @@ export function AppShell({
             <NavLink
               key={it.href}
               item={it}
-              active={pathname === it.href}
+              active={pathname === it.href || (it.href === "/escuela" && pathname.startsWith("/escuela/"))}
               onNavigate={() => setDrawer(false)}
             />
           ))}
@@ -660,6 +744,7 @@ export function AppShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
+        <ImpersonationBanner />
         <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />
@@ -668,6 +753,7 @@ export function AppShell({
           <BranchSwitcher compact />
           <div className="ml-auto flex items-center gap-2">
             {canSell && !onPos && <SellQuickAction compact />}
+            <HelpButton role={shell?.role ?? null} />
             <NotificationBell />
           </div>
         </header>
@@ -682,6 +768,7 @@ export function AppShell({
         >
           <PastDueBanner />
           <BlockingNotificationBanner />
+          <ReadOnlyBanner />
           {children}
         </main>
       </div>
@@ -693,6 +780,8 @@ export function AppShell({
         <MembershipProfileModal open={pfOpen} onOpenChange={setPfOpen} />
       </MountWhenOpened>
       {!onPos && <AssistantBubble />}
+      {shell?.role && <TourHost role={shell.role} />}
+      {shell?.role && <NudgeHost role={shell.role} />}
     </div>
   );
 }

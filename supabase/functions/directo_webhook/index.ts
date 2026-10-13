@@ -14,10 +14,12 @@
 //     Idempotente (updates condicionales; un intent approved no se toca).
 //     Siempre 200 para que Directo no reintente en loop.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { extractNotificationId } from "../_shared/directo.ts";
 import { INTENT_COLS, loadCreds, syncIntent, type IntentRow } from "../_shared/directo_server.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const html = (body: string) =>
   new Response(
@@ -28,7 +30,7 @@ const html = (body: string) =>
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ok = () => new Response("ok", { status: 200 });
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("directo", "directo_webhook", async (req: Request, wh) => {
   const reqUrl = new URL(req.url);
 
   if (req.method === "GET") {
@@ -44,14 +46,16 @@ Deno.serve(async (req: Request) => {
   try {
     const intentId = reqUrl.searchParams.get("intent") ?? "";
     if (!UUID_RE.test(intentId)) return ok();
+    wh.ref(intentId);
 
     let notificationId: string | null = null;
     try {
-      notificationId = extractNotificationId(await req.json());
+      notificationId = extractNotificationId(await readJsonLimited(req));
     } catch {
       /* cuerpo no-JSON: sin id no hay nada que re-consultar */
     }
     if (!notificationId) return ok();
+    wh.ref(notificationId);
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -64,18 +68,28 @@ Deno.serve(async (req: Request) => {
       .eq("provider_key", "directo")
       .maybeSingle();
     const row = data as IntentRow | null;
+    if (row) wh.tenant(row.tenant_id);
     if (!row || row.status === "approved") return ok(); // idempotente
 
     // ADR-057: la conexión (negocio o sucursal) con la que se creó el cobro.
     const creds = await loadCreds(admin, row.tenant_id, {
       scopeStoreId: await intentSecretScope(admin, row.id),
     });
-    if (!creds) return ok();
+    if (!creds) {
+      wh.fail("sin credenciales de Directo");
+      return ok();
+    }
 
     const res = await syncIntent(admin, row, creds, "webhook", notificationId, null);
-    if ("error" in res) console.error("directo_webhook", res.error, res.detail ?? "");
+    if ("error" in res) {
+      console.error("directo_webhook", res.error, res.detail ?? "");
+      wh.fail(`Directo: ${String(res.error)}`);
+    } else {
+      wh.done();
+    }
   } catch (e) {
     console.error("directo_webhook", e);
+    wh.fail(e);
   }
   return ok();
-});
+}));

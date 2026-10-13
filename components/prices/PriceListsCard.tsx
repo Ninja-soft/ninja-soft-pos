@@ -1,14 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Download, Pencil, Plus, Tags, Trash2, TrendingUp, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Switch";
 import { Segmented } from "@/components/ui/Segmented";
-import { Modal } from "@/components/ui/Modal";
-import { Callout } from "@/components/ui/Callout";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FeatureGate } from "@/components/saas/FeatureGate";
@@ -22,7 +20,10 @@ import {
   usePriceProMutations,
   usePriceSettings,
 } from "@/modules/prices/proHooks";
-import { exportPriceLists, parsePricesXlsx, planPriceImport, type PriceImportPlan } from "@/modules/prices/xlsx";
+import { exportPriceLists } from "@/modules/prices/xlsx";
+import { GatedButton } from "@/components/saas/GatedAction";
+import { ImportWizard } from "@/components/import/ImportWizard";
+import { priceListImportDefinition } from "@/modules/imports/entities";
 import { describeRounding } from "@/lib/prices/rounding";
 import { PriceListEditorModal } from "@/components/prices/PriceListEditorModal";
 import { PriceListFormModal } from "@/components/prices/PriceListFormModal";
@@ -61,9 +62,8 @@ export function PriceListsCard() {
   const [pricing, setPricing] = useState<ProList | null>(null);
   const [toDelete, setToDelete] = useState<ProList | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [importPlan, setImportPlan] = useState<(PriceImportPlan & { invalid: number }) | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const all = lists ?? [];
 
@@ -85,43 +85,6 @@ export function PriceListsCard() {
     }
   }
 
-  async function onFile(f: File | undefined) {
-    if (!f) return;
-    setBusy(true);
-    try {
-      const parsed = await parsePricesXlsx(await f.arrayBuffer());
-      if (parsed.fatalError) {
-        toast({ title: parsed.fatalError, variant: "error" });
-        return;
-      }
-      const valid = parsed.rows.filter((r) => r.errors.length === 0).map((r) => r.data);
-      const plan = await planPriceImport(valid, all);
-      setImportPlan({ ...plan, invalid: parsed.rows.length - valid.length });
-    } catch {
-      toast({ title: "No se pudo leer el archivo", variant: "error" });
-    } finally {
-      setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  async function confirmImport() {
-    if (!importPlan) return;
-    let applied = 0;
-    let scheduled = 0;
-    try {
-      for (const [listId, rows] of importPlan.byList) {
-        const r = await m.importList.mutateAsync({ listId, rows });
-        applied += r.applied;
-        scheduled += r.scheduled;
-      }
-      toast({ title: `Importado: ${applied} precios${scheduled ? `, ${scheduled} programados` : ""}`, variant: "success" });
-      setImportPlan(null);
-    } catch (e) {
-      toast({ title: friendlyPriceError(e), variant: "error" });
-    }
-  }
-
   const tabs: { value: Tab; label: string }[] = [
     { value: "lists", label: "Listas" },
     { value: "changes", label: "Cambios" },
@@ -134,7 +97,6 @@ export function PriceListsCard() {
       : []),
   ];
   const activeTab = tabs.some((t) => t.value === tab) ? tab : "lists";
-  const importCount = importPlan ? [...importPlan.byList.values()].reduce((a, r) => a + r.length, 0) : 0;
 
   return (
     <Card>
@@ -156,16 +118,17 @@ export function PriceListsCard() {
             <Button variant="secondary" size="sm" onClick={onExport} loading={busy}>
               <Download size={15} /> Exportar
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>
+            {/* Importación con el asistente único (TX-4): revisión en el servidor y confirmación. */}
+            <GatedButton
+              feature="importacion_excel"
+              featureLabel="Importación Excel"
+              variant="secondary"
+              size="sm"
+              onClick={() => setImportOpen(true)}
+              disabled={busy}
+            >
               <Upload size={15} /> Importar
-            </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={(e) => void onFile(e.target.files?.[0])}
-            />
+            </GatedButton>
             <Button size="sm" onClick={() => setBulkOpen(true)}>
               <TrendingUp size={15} /> Actualizar precios
             </Button>
@@ -238,6 +201,7 @@ export function PriceListsCard() {
                       </Badge>
                     )}
                     {l.pos_selectable && <Badge tone="neutral">En el POS</Badge>}
+                    {l.prices_include_tax === false && <Badge tone="neutral">Sin IVA</Badge>}
                   </div>
                   {(l.valid_from || l.valid_to || (pro && l.rounding)) && (
                     <div className="text-xs text-muted-foreground">
@@ -310,36 +274,12 @@ export function PriceListsCard() {
         requireApproval={pro && (settings?.require_approval ?? false) && !isOwner}
       />
 
-      <Modal
-        open={importPlan !== null}
-        onOpenChange={(o) => !o && setImportPlan(null)}
-        title="Importar precios"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setImportPlan(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmImport} loading={m.importList.isPending} disabled={importCount === 0}>
-              Importar {importCount}
-            </Button>
-          </div>
-        }
-      >
-        {importPlan && (
-          <div className="space-y-3 text-sm">
-            <p>
-              {importCount} precios para cargar en {importPlan.byList.size} lista
-              {importPlan.byList.size === 1 ? "" : "s"}. Los que tienen fecha futura quedan programados.
-            </p>
-            {(importPlan.unknownList > 0 || importPlan.unknownProduct > 0 || importPlan.invalid > 0) && (
-              <Callout tone="warning">
-                Se omiten: {importPlan.invalid} filas con errores, {importPlan.unknownList} con una lista que no existe y{" "}
-                {importPlan.unknownProduct} sin producto con ese SKU o código.
-              </Callout>
-            )}
-          </div>
-        )}
-      </Modal>
+      <ImportWizard
+        definition={priceListImportDefinition}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        context={{ priceLists: all.map((l) => l.name) }}
+      />
 
       <ConfirmDialog
         open={toDelete !== null}

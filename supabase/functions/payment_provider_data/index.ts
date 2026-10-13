@@ -34,7 +34,8 @@ import { envOfIntent as goEnvOf, loadApiKeyScoped as goKey } from "../_shared/go
 import { loadConnectionForIntent as cloverConn } from "../_shared/clover_server.ts";
 import { cloverApiBase, isSafeCloverId } from "../_shared/clover.ts";
 import { fetchGetnetOrderFor } from "../_shared/getnet.ts";
-import { getnetAuth } from "../_shared/getnet_server.ts";
+import { getnetAuth, loadGetnetSlot } from "../_shared/getnet_server.ts";
+import { API_INFO_PATH, apiCredsOf, apiHeaders, isApiPaymentId, requestApiToken } from "../_shared/getnet_api.ts";
 import { type ProcessorPaymentData, normalizeProcessorPayment } from "../_shared/processorData.ts";
 
 const cors = {
@@ -158,9 +159,22 @@ async function fetchClover(admin: Admin, it: Intent): Promise<Fetched> {
 }
 
 async function fetchGetnet(admin: Admin, it: Intent): Promise<Fetched> {
-  const row = await loadProviderSecret(admin, it.tenant_id, "getnet", { scopeStoreId: it.secret_store_id });
-  const sec = row?.secrets as { client_id?: string; client_secret?: string } | undefined;
-  if (!row || !sec?.client_id || !sec.client_secret) return { ok: false, error: "not_connected" };
+  // Checkout propio (Checkout API, ADR-069): sin orden hosted, con el
+  // payment_id que guardó getnet_checkout.
+  if (!it.preference_id && isApiPaymentId(it.mp_payment_id)) {
+    const apiRow = await loadGetnetSlot(admin, it.tenant_id, "checkout_api", { scopeStoreId: it.secret_store_id });
+    const creds = apiCredsOf(apiRow?.secrets);
+    if (!creds) return { ok: false, error: "not_connected" };
+    const auth = await requestApiToken(creds);
+    if (!auth.ok) return { ok: false, error: "provider_auth_failed" };
+    const r = await fetch(`${auth.host}${API_INFO_PATH}/${it.mp_payment_id}`, {
+      headers: apiHeaders(auth.token, { sellerId: creds.sellerId ?? auth.claims.sellerId }),
+    }).catch(() => null);
+    if (!r || !r.ok) return { ok: false, error: "provider_error", detail: `getnet ${r?.status ?? 0}` };
+    return { ok: true, externalId: it.mp_payment_id, raw: await r.json().catch(() => null) };
+  }
+  const row = await loadGetnetSlot(admin, it.tenant_id, "web_checkout", { scopeStoreId: it.secret_store_id });
+  if (!row) return { ok: false, error: "not_connected" };
   if (!it.preference_id) return { ok: false, error: "no_external_id" };
   const auth = await getnetAuth(admin, it.tenant_id, row, "payment_provider_data");
   if (!auth.ok) return { ok: false, error: "provider_auth_failed", detail: auth.detail };

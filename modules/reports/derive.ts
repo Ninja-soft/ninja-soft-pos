@@ -80,7 +80,7 @@ export function byHour(totals: number[][]): number[] {
   return out;
 }
 
-export type CashMovementLite = { type: string; amount: number; created_at: string };
+export type CashMovementLite = { type: string; amount: number; created_at: string; payment_method?: string | null };
 
 /**
  * Flujo de caja diario a partir de cash_movements:
@@ -100,6 +100,8 @@ export function cashFlowByDay(
     const i = idx.get(key);
     if (i == null) continue;
     const amt = Number(m.amount) || 0;
+    // ADR-088: la parte de una venta pagada con la seña ya entró al cobrarla.
+    if (m.type === "sale" && m.payment_method === "sena") continue;
     if (m.type === "sale" || m.type === "income") inflow[i]! += amt;
     else if (m.type === "expense" || m.type === "sale_void") outflow[i]! += amt;
   }

@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bike, CalendarDays, Hourglass, Utensils } from "lucide-react";
+import { Bike, CalendarDays, Hourglass, PackageCheck, Utensils } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   useProducts,
@@ -31,6 +31,7 @@ import { branchQty, branchStockCheck, branchShortfalls, otherBranchesStock, othe
 import { formatQty } from "@/lib/utils/format";
 import { branchErrorMessage, liveRegisters, locationLabel } from "@/modules/branches/logic";
 import { PosLocationPicker } from "@/components/branches/PosLocationPicker";
+import { useRegisterHeartbeat } from "@/modules/branches/heartbeat";
 import { ForeignShiftBanner, useShiftOwnership } from "@/components/branches/ForeignShiftBanner";
 import {
   usePosBootSnapshot,
@@ -44,6 +45,8 @@ import { useReconciled } from "@/hooks/useReconciled";
 import { PosBootSkeleton } from "@/components/pos/screen/PosBootSkeleton";
 import { useScanner } from "@/modules/pos/useScanner";
 import { useFeature } from "@/modules/saas/gating";
+import { useAppointmentDeposits } from "@/modules/agenda/hooks";
+import { depositAvailable } from "@/modules/agenda/deposits";
 import { useFeatureGate } from "@/components/saas/GatedAction";
 import { WarrantyOfferCard } from "@/components/pos/WarrantyOfferCard";
 import { useProductsWithModifiers } from "@/modules/products/modifiers";
@@ -70,10 +73,17 @@ import {
 } from "@/lib/pos/customerDisplay";
 import { lineSubtotal } from "@/modules/pos/store";
 import { pinnedTenders } from "@/lib/pos/tenders";
+import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
+import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
+import { useOfflinePos } from "@/modules/pos/offline/useOfflinePos";
+import { OfflineBanner } from "@/components/pos/offline/OfflineBanner";
+import { OfflineTicketModal } from "@/components/pos/offline/OfflineTicketModal";
+import { SwUpdateBanner } from "@/components/pwa/SwUpdateBanner";
 import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
+import { ArcaPosIndicator } from "@/components/arca/ArcaPosIndicator";
 import { ProductPane } from "@/components/pos/screen/ProductPane";
 import { CartLines, CartSummary } from "@/components/pos/screen/CartPane";
 import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickScanPane";
@@ -91,13 +101,14 @@ import {
 import { toPick, type PickInput, type ResolvedQuickKey } from "@/components/pos/screen/types";
 import { usePosOrigins } from "@/modules/pos/screen/usePosOrigins";
 import { usePosPricing } from "@/modules/pos/screen/usePosPricing";
-import { usePosSale } from "@/modules/pos/screen/usePosSale";
+import { cartToSaleLines, usePosSale } from "@/modules/pos/screen/usePosSale";
 import { formatCurrency } from "@/lib/utils/format";
 import { usePosPark, type EditingCharge } from "@/modules/pos/screen/usePosPark";
 import { usePendingChargesWatcher } from "@/components/pending-charges/usePendingChargesWatcher";
 import { usePendingChargeMutations } from "@/modules/pending-charges/hooks";
 import { pendingChargesApi, cancelAtProvider } from "@/modules/pending-charges/api";
 import {
+  buildSaleItemsAndExtras,
   closeShiftDecision,
   PARK_BLOCK_COPY,
   pendingChargeErrorCopy,
@@ -273,8 +284,44 @@ function PosPageInner() {
     [menuFilter, menuProductIds],
   );
 
+  // Venta offline (ADR-077): conectividad, foto local, cola y sincronización.
+  const { data: offShift } = useOpenShift();
+  const { data: offSettings } = usePosSettings();
+  const [offlineTicket, setOfflineTicket] = useState<OfflineQueueEntry | null>(null);
+  const offline = useOfflinePos({
+    tenantId: bootScope?.tenantId ?? null,
+    userId: currentUserId,
+    shiftId: offShift?.id ?? null,
+    storeId: register?.store_id ?? null,
+    policy: offSettings?.offlinePolicy,
+    onSynced: (r) => {
+      if (r.stopped === "auth") {
+        toast({ title: "Iniciá sesión de nuevo para enviar las ventas offline", variant: "error" });
+        return;
+      }
+      const parts = [
+        r.synced > 0 ? `${r.synced} registrada${r.synced === 1 ? "" : "s"}` : null,
+        r.conflicts > 0 ? `${r.conflicts} con diferencias` : null,
+        r.review > 0 ? `${r.review} para revisar` : null,
+        r.held > 0 ? `${r.held} retenida${r.held === 1 ? "" : "s"} en este dispositivo` : null,
+      ].filter(Boolean);
+      toast({
+        title: "Ventas offline sincronizadas",
+        description: parts.join(", "),
+        variant: r.review > 0 || r.held > 0 ? "info" : "success",
+      });
+    },
+  });
+
   // Filtro por rubro = sub-árbol (en cliente); el de menú combina encima.
-  const { data: allProducts, isFetching: productsLoading } = useProducts(search);
+  // Sin conexión, la búsqueda sale de la foto local del catálogo.
+  const { data: liveProducts, isFetching: productsLoading } = useProducts(search);
+  const { isOffline: posOffline, searchProducts: searchOffline } = offline;
+  const offlineProducts = useMemo(
+    () => (posOffline ? searchOffline(search) : null),
+    [posOffline, searchOffline, search],
+  );
+  const allProducts = offlineProducts ?? liveProducts;
   const products = useMemo(() => {
     if (!categoryFilter && !menuProductSet) return allProducts;
     let list = allProducts ?? [];
@@ -300,6 +347,8 @@ function PosPageInner() {
   }, [categories, categoryFilter]);
 
   const { data: shift, isFetched: shiftFetched } = useOpenShift();
+  // F17 · H99: señal de esta caja para el monitor de sucursales.
+  useRegisterHeartbeat(register?.id ?? null, shift?.id ?? null);
   const { open, close } = usePosMutations();
   const { data: myTenant, isFetched: myTenantFetched } = useMyTenant();
   // Rubro y rol cambian piezas visibles (frecuentes, venta libre): hasta que
@@ -522,18 +571,32 @@ function PosPageInner() {
 
   // ── Orígenes (turno, recompra, mesa, delivery) y precios ────────────────────
   const origins = usePosOrigins({ setCustomer, priceFor });
-  const pricing = usePosPricing({ rounding, customerId: customer?.id ?? null });
+  // Lista con la que se vende (misma regla que el servidor): la usan las promos por lista.
+  const appliedList = useMemo(() => {
+    const w = priceResolver.world;
+    return w ? selectList(w, Date.now(), null, priceResolver.listId) : null;
+  }, [priceResolver.world, priceResolver.listId]);
+  const pricing = usePosPricing({
+    rounding,
+    customerId: customer?.id ?? null,
+    storeId: register?.store_id ?? null,
+    priceListId: appliedList?.id ?? null,
+  });
   // Repreciado al cambiar lista, condición, cliente o cantidad (no en mesa ni delivery).
   const cartReprice = useCartReprice({
     enabled: Boolean(priceResolver.world) && !origins.tableActive && !origins.deliveryActive,
     resolve: priceResolver.resolve,
   });
-  const appliedListName = useMemo(() => {
-    const w = priceResolver.world;
-    if (!w) return null;
-    return selectList(w, Date.now(), null, priceResolver.listId)?.name ?? null;
-  }, [priceResolver.world, priceResolver.listId]);
+  const appliedListName = appliedList?.name ?? null;
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+  // ADR-088: seña del turno que se cobra. Entra como pago fijo en la hoja y
+  // create_sale exige ese pago 'sena' (sin cobrar dos veces).
+  const { data: apptDeposits } = useAppointmentDeposits(origins.appointmentId);
+  const apptAvailable = depositAvailable(apptDeposits ?? []);
+  const apptPrepaid = useMemo(
+    () => (apptAvailable > 0 ? { amount: apptAvailable, label: "Seña del turno" } : null),
+    [apptAvailable],
+  );
 
   // ── Stock de la sucursal del POS (F17 · H94) ───────────────────────────────
   // Con 2+ sucursales y stock_sucursales, la grilla muestra el saldo de ESTA
@@ -621,6 +684,18 @@ function PosPageInner() {
 
   // Si ya no queda un producto elegible, descartá la garantía pre-seleccionada.
   const hasEligibleWarranty = lines.some((l) => (l.warrantyMonths ?? 0) > 0);
+  // ADR-096: la garantía extendida se enlaza a una de estas líneas (con serie primero).
+  const warrantyTargets = useMemo(
+    () =>
+      lines
+        .filter((l) => l.productId && (l.warrantyMonths ?? 0) > 0)
+        .sort((a, b) => Number(Boolean(b.serial)) - Number(Boolean(a.serial)))
+        .map((l) => ({
+          lineId: l.lineId,
+          label: `${l.name}${l.variantLabel ? ` (${l.variantLabel})` : ""}${l.serial ? ` · ${l.serial}` : ""}`,
+        })),
+    [lines],
+  );
   useEffect(() => {
     if (!hasEligibleWarranty && offeredWarrantyId) setOfferedWarrantyId("");
   }, [hasEligibleWarranty, offeredWarrantyId]);
@@ -706,7 +781,12 @@ function PosPageInner() {
       addWeighed({ id: p.id, name: p.name, sku: p.sku, price, categoryId: p.category_id }, line.quantityKg);
       return true;
     }
-    const res = await productsApi.findByCode(code);
+    const offlineHit = offline.isOffline ? offline.findByCode(code) : null;
+    const res = offline.isOffline
+      ? offlineHit
+        ? { product: offlineHit, variant: undefined }
+        : null
+      : await productsApi.findByCode(code);
     if (!res) return false;
     const { product: p, variant } = res;
     if (variant) {
@@ -863,8 +943,9 @@ function PosPageInner() {
       setPendingOpen(true);
     },
   });
-  const parkBlockedReason =
-    parkFeature === false
+  const parkBlockedReason = offline.isOffline
+    ? "Sin conexión no se puede dejar un cobro en espera"
+    : parkFeature === false
       ? PARK_BLOCK_COPY.feature_off
       : !hasShift
         ? PARK_BLOCK_COPY.no_shift
@@ -872,7 +953,9 @@ function PosPageInner() {
           ? PARK_BLOCK_COPY.table_or_delivery
           : origins.appointmentId
             ? PARK_BLOCK_COPY.appointment
-            : null;
+            : origins.reservationId
+              ? "Los retiros de reservas se cobran en el momento."
+              : null;
   const parker = usePosPark({
     lines,
     discountTotal,
@@ -916,6 +999,19 @@ function PosPageInner() {
   const editRef = useRef(editPendingCharge);
   editRef.current = editPendingCharge;
 
+  // ADR-068: ítems para la vista previa de percepciones (los mismos de create_sale).
+  const taxPreviewItems = useMemo(
+    () =>
+      buildSaleItemsAndExtras(cartToSaleLines(lines), []).items.map((i) => ({
+        product_id: i.product_id,
+        variant_id: i.variant_id ?? null,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        discount: i.discount,
+      })),
+    [lines],
+  );
+
   const { handleSale, saving } = usePosSale({
     lines,
     discountTotal,
@@ -923,6 +1019,7 @@ function PosPageInner() {
     tableOrderId: origins.tableOrderId,
     deliveryOrderId: origins.deliveryOrderId,
     appointmentId: origins.appointmentId,
+    reservationId: origins.reservationId,
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
     onSuccess: ({ saleId, change, hadCash }) => {
@@ -950,6 +1047,18 @@ function PosPageInner() {
       flashPaidScreen(change);
       setTicketId(saleId);
       setTicketOpen(true);
+    },
+    // ADR-077: sin conexión la venta va a la cola local con ticket provisorio.
+    offline,
+    onOfflineSuccess: ({ entry, change }) => {
+      setCheckoutOpen(false);
+      clear();
+      setCustomer(null);
+      setOfferedWarrantyId("");
+      pricing.clearCoupon();
+      origins.afterSale();
+      flashPaidScreen(change);
+      setOfflineTicket(entry);
     },
   });
 
@@ -983,7 +1092,12 @@ function PosPageInner() {
   }
 
   // ── Cobro ──────────────────────────────────────────────────────────────────
-  const tenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
+  const liveTenders = useResolvedTenders({ hasCustomer: customer !== null, storeCreditBalance: scBalance ?? 0 });
+  // ADR-077: sin conexión sólo efectivo, transferencia y tarjeta en posnet.
+  const tenders = useMemo(
+    () => (offline.isOffline ? liveTenders.filter(isTenderAllowedOffline) : liveTenders),
+    [offline.isOffline, liveTenders],
+  );
   const livePinned = useMemo(() => pinnedTenders(tenders, layout.payments), [tenders, layout.payments]);
   const tendersReady = useTendersReady();
   const pinned = useReconciled(
@@ -1110,6 +1224,7 @@ function PosPageInner() {
   const cartLines = (
     <CartLines
       lines={lines}
+      promoByLine={pricing.promoByLine}
       dense={preset === "caja_rapida"}
       onQty={setQuantity}
       onRemove={removeLine}
@@ -1142,11 +1257,7 @@ function PosPageInner() {
       discountLocked={discountGate.locked}
       onDiscount={handleDiscountChange}
       onDiscountLocked={() => discountGate.run(() => {})}
-      promo={
-        pricing.promoActive && pricing.promoResult && pricing.promoDiscount > 0
-          ? { name: pricing.promoResult.name ?? "Promoción", amount: pricing.promoDiscount }
-          : null
-      }
+      promos={(pricing.cartPromo?.applied ?? []).map((a) => ({ label: a.label, amount: a.discount }))}
       coupon={pricing.appliedCoupon ? { code: pricing.appliedCoupon.code, amount: pricing.couponDiscount } : null}
       couponInput={pricing.couponInput}
       onCouponInput={pricing.setCouponInput}
@@ -1192,7 +1303,19 @@ function PosPageInner() {
 
   const banners = (
     <>
+      <OfflineBanner
+        isOffline={offline.isOffline}
+        pending={offline.pending}
+        held={offline.held}
+        syncing={offline.syncing}
+        enabled={offline.policy.enabled}
+        onRetry={() => void (offline.held > 0 ? offline.releaseHeld() : offline.syncNow())}
+      />
+      {/* H65 (ADR-087): versión nueva; no recarga con carrito o cobro en curso. */}
+      <SwUpdateBanner busy={checkoutOpen || saving || lines.length > 0} />
       <ForeignShiftBanner shift={shift} />
+      {/* F3 · ADR-072: ARCA caído, facturando en contingencia (no bloquea). */}
+      <ArcaPosIndicator />
       {editingCharge && (
         <ModeBanner
           tone="info"
@@ -1212,16 +1335,29 @@ function PosPageInner() {
         <ModeBanner
           icon={<CalendarDays size={18} />}
           title={`Cobrando turno: ${origins.pendingAppt.service_name}`}
-          text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
+          text={`${origins.pendingAppt.customers?.name ? `Cliente: ${origins.pendingAppt.customers.name}. ` : ""}${apptAvailable > 0 ? `Seña cobrada: ${formatCurrency(apptAvailable)} (se descuenta sola). ` : ""}Sumá productos extra si hace falta y cobrá normalmente.`}
           exitLabel="Cancelar cobro del turno"
           onExit={origins.exitAppointmentMode}
+        />
+      )}
+      {origins.reservation && (
+        <ModeBanner
+          icon={<PackageCheck size={18} />}
+          title={`Retiro de la reserva #${origins.reservation.number}`}
+          text={`Cliente: ${origins.reservation.customer_name}. Cobrá los productos reservados: al confirmar, la reserva queda entregada con esta venta.`}
+          exitLabel="Cancelar retiro"
+          onExit={origins.exitReservationMode}
         />
       )}
       {origins.tableActive && (
         <ModeBanner
           icon={<Utensils size={18} />}
-          title="Cobrando mesa"
-          text="Pedido cargado desde el Salón. Al confirmar, la mesa queda libre."
+          title={origins.tableOrder?.split_label ? `Cobrando mesa · ${origins.tableOrder.split_label}` : "Cobrando mesa"}
+          text={
+            origins.tableOrder?.parent_order_id
+              ? "Cuenta separada: se emite un ticket propio. La mesa sigue abierta hasta cobrar lo último."
+              : "Pedido cargado desde el Salón. Al confirmar, la mesa queda libre."
+          }
           exitLabel="Cancelar cobro de la mesa"
           onExit={origins.exitTableMode}
         />
@@ -1307,7 +1443,20 @@ function PosPageInner() {
               />
             }
             onOpenShift={() => setOpenShiftModal(true)}
-            onCloseShift={() => setCloseShiftModal(true)}
+            onCloseShift={() => {
+              // ADR-077: las ventas offline del turno se envían antes del cierre.
+              if (offline.isOffline || offline.pending > 0) {
+                toast({
+                  title: offline.isOffline
+                    ? "Sin conexión no se puede cerrar la caja"
+                    : "Enviá las ventas offline antes de cerrar la caja",
+                  variant: "error",
+                });
+                if (!offline.isOffline) void offline.syncNow();
+                return;
+              }
+              setCloseShiftModal(true);
+            }}
             onCustomerDisplay={openCustomerDisplay}
             drawerSlot={
               posHw.hasDrawer ? (
@@ -1445,11 +1594,17 @@ function PosPageInner() {
           deliveryFee={origins.deliveryFee}
           cartPromo={pricing.cartPromo}
           promoForMethod={pricing.promoForMethod}
+          promoForPayments={pricing.promoForPayments}
+          promoBanks={pricing.promoBanks}
           tenders={tenders}
+          offline={offline.isOffline}
           customerId={customer?.id ?? null}
+          taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}
+          prepaid={origins.appointmentId ? apptPrepaid : null}
           prefs={layout.payments}
           initialTenderId={checkoutTender}
           initialWarrantyId={offeredWarrantyId}
+          warrantyTargets={warrantyTargets}
           storeCreditBalance={scBalance ?? 0}
           splitItems={pricing.splitItems}
           tipPresets={layout.tipPresets}
@@ -1476,6 +1631,7 @@ function PosPageInner() {
         />
       </MountWhenOpened>
 
+      <OfflineTicketModal entry={offlineTicket} onOpenChange={(o) => !o && setOfflineTicket(null)} />
       <MountWhenOpened open={ticketOpen}>
         <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} autoPrint={autoPrint} />
       </MountWhenOpened>

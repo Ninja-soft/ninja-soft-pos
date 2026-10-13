@@ -9,6 +9,7 @@ import { upgradeCanvas } from "@/lib/tickets/canvasCompat";
 import type { TicketData } from "@/components/tickets/TicketRenderer";
 import { Barcode, alignCls, sizeCls } from "@/components/tickets/TicketRenderer";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
+import { fiscalApproved } from "@/lib/arca/ticket";
 
 interface Props {
   content: CanvasContent["canvas"];
@@ -62,7 +63,9 @@ export function CanvasElementView({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={qrSvgDataUrl(
-              `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
+              fiscalApproved(sale.fiscal) && sale.fiscal.qrUrl
+                ? sale.fiscal.qrUrl
+                : `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
             )}
             alt="QR del comprobante"
             className="h-full w-full object-contain"

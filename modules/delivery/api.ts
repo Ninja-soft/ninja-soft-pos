@@ -129,6 +129,8 @@ export interface DeliveryOrder {
   sale_id: string | null;
   notes: string | null;
   created_at: string;
+  // Prioridad en cocina (ADR-097): normal o urgente.
+  priority: "normal" | "urgente";
 }
 
 export interface DeliveryOrderItem {
@@ -144,6 +146,11 @@ export interface DeliveryOrderItem {
   allergens: string | null;
   course: number;
   fired_at: string | null;
+  // Enviado a cocina (comanda impresa o tocado por el KDS): sólo baja con
+  // anulación con motivo (ADR-097).
+  printed_at: string | null;
+  kds_status: "pendiente" | "preparando" | "listo" | "entregado";
+  station: string | null;
 }
 
 // ── Comanda impresa por estación (F13 · H49, espeja H45) ───────────────────────
@@ -172,6 +179,8 @@ export interface DeliveryComandaItem {
   customer_name: string | null;
   address: string | null;
   opened_at: string;
+  // Prioridad del pedido (ADR-097).
+  priority: "normal" | "urgente";
 }
 
 // Input para crear un pedido (alta desde el board).
@@ -217,7 +226,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_orders" as never)
       .select(
-        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at",
+        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at, priority",
       )
       .is("deleted_at", null)
       .neq("status", "cancelado")
@@ -231,7 +240,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_orders" as never)
       .select(
-        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at",
+        "id, channel, order_type, customer_id, customer_name, customer_phone, address, address_reference, promised_at, courier_name, delivery_fee, zone_id, status, sale_id, notes, created_at, priority",
       )
       .eq("id", orderId)
       .maybeSingle();
@@ -244,7 +253,7 @@ export const deliveryApi = {
     const { data, error } = await supabase
       .from("delivery_order_items" as never)
       .select(
-        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at",
+        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at, printed_at, kds_status, station",
       )
       .eq("order_id", orderId)
       .order("created_at");
@@ -325,6 +334,33 @@ export const deliveryApi = {
 
   removeItem: async (itemId: string): Promise<void> => {
     return deliveryApi.setItemQty(itemId, 0);
+  },
+
+  // Anula (total o parcial) un ítem ya enviado a cocina, con motivo (ADR-097).
+  voidItem: async (
+    itemId: string,
+    qty: number | null,
+    reason: string,
+  ): Promise<{ void_id: string; removed: boolean; voided_qty: number; remaining_qty: number }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("void_delivery_order_item" as never, {
+      p_item_id: itemId,
+      p_qty: qty,
+      p_reason: reason,
+    } as never);
+    if (error) throw error;
+    return data as unknown as { void_id: string; removed: boolean; voided_qty: number; remaining_qty: number };
+  },
+
+  // Prioridad en cocina (ADR-097). Audita.
+  setPriority: async (orderId: string, priority: "normal" | "urgente"): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_order_priority" as never, {
+      p_source: "delivery",
+      p_order_id: orderId,
+      p_priority: priority,
+    } as never);
+    if (error) throw error;
   },
 
   setStatus: async (orderId: string, status: DeliveryStatus): Promise<void> => {

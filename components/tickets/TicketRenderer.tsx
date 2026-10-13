@@ -10,6 +10,8 @@ import { styleProps } from "@/lib/tickets/blocks";
 import type { SampleTicketData } from "@/lib/tickets/sample";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 import { ticketLocationText } from "@/lib/tickets/location";
+import { FISCAL_PENDING_TEXT, fiscalApproved } from "@/lib/arca/ticket";
+import { ticketPromoLabel, ticketPromoLines } from "@/lib/promotions/ticket";
 
 export type TicketData = SampleTicketData;
 
@@ -54,6 +56,11 @@ interface Props {
 export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }: Props) {
   const { sale, items, payments, customer, brand } = data;
   const location = ticketLocationText(data.location);
+  // F3 · ADR-072: factura electrónica autorizada (CAE o CAEA) o pendiente.
+  const fiscal = sale.fiscal ?? null;
+  const approved = fiscalApproved(fiscal);
+  const fiscalPending = fiscal != null && fiscal.status !== "aprobado";
+  const promoLines = ticketPromoLines(sale.discount_total, sale.promotions);
   const width = paper === "58" ? "58mm" : paper === "80" ? "80mm" : "210mm";
 
   const renderBlock = (b: TicketBlock) => {
@@ -78,6 +85,16 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
           </div>
         );
       case "title":
+        if (approved) {
+          return (
+            <div key={b.id} className={`${alignCls(b.align)} text-neutral-700`} style={styleProps(b)}>
+              <div className="text-base font-bold">{fiscal.cbteLabel}</div>
+              <div className="text-xs">N° {fiscal.numero}</div>
+              {fiscal.codigo && <div className="text-[10px] text-neutral-500">Cód. {fiscal.codigo}</div>}
+              {fiscal.homologacion && <div className="text-[10px] text-neutral-500">Modo prueba: sin validez fiscal</div>}
+            </div>
+          );
+        }
         return (
           <div
             key={b.id}
@@ -85,6 +102,9 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
             style={styleProps(b)}
           >
             {b.text || brand?.ticket_title || "Comprobante no fiscal"}
+            {fiscalPending && (
+              <div className="text-[10px] font-normal">{FISCAL_PENDING_TEXT}</div>
+            )}
           </div>
         );
       case "saleInfo":
@@ -122,16 +142,55 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
               <span>Subtotal</span>
               <span>{formatCurrency(sale.subtotal)}</span>
             </div>
-            {sale.discount_total > 0 && (
+            {promoLines.promos.map((p, i) => (
+              <div key={`pr${i}`} className="flex justify-between gap-2 text-xs">
+                <span className="truncate">{ticketPromoLabel(p)}</span>
+                {p.kind === "discount" && <span className="shrink-0">-{formatCurrency(p.amount)}</span>}
+              </div>
+            ))}
+            {promoLines.otherDiscount > 0 && (
               <div className="flex justify-between text-xs">
                 <span>Descuento</span>
-                <span>-{formatCurrency(sale.discount_total)}</span>
+                <span>-{formatCurrency(promoLines.otherDiscount)}</span>
               </div>
             )}
+            {(sale.perceptions ?? []).map((p, i) => (
+              <div key={i} className="flex justify-between text-xs">
+                <span>{p.name}</span>
+                <span>{formatCurrency(p.amount)}</span>
+              </div>
+            ))}
             <div className="mt-1 flex justify-between text-base font-bold">
               <span>TOTAL</span>
               <span>{formatCurrency(sale.total)}</span>
             </div>
+            {sale.transparency && sale.transparency.iva + sale.transparency.others > 0 && (
+              <div className="mt-1 text-[10px] leading-tight">
+                <p>Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)</p>
+                <div className="flex justify-between">
+                  <span>IVA contenido</span>
+                  <span>{formatCurrency(sale.transparency.iva)}</span>
+                </div>
+                {sale.transparency.others > 0 && (
+                  <div className="flex justify-between">
+                    <span>Otros impuestos nacionales indirectos</span>
+                    <span>{formatCurrency(sale.transparency.others)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {approved && (
+              <div className="mt-1 text-[10px] leading-tight">
+                <div className="flex justify-between">
+                  <span>{fiscal.emissionType}</span>
+                  <span>{fiscal.cae}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Vto. {fiscal.emissionType}</span>
+                  <span>{fiscal.caeVto}</span>
+                </div>
+              </div>
+            )}
           </div>
         );
       case "payments":
@@ -151,9 +210,11 @@ export function TicketRenderer({ blocks, data, paper, showNinjaLogo, className }
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={qrSvgDataUrl(
-                `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
+                approved && fiscal.qrUrl
+                  ? fiscal.qrUrl
+                  : `${brand?.legal_name || "NinjaPos"} | ${sale.numberLabel} | ${formatCurrency(sale.total)} | ${new Date(sale.created_at).toLocaleString("es-AR")}`,
               )}
-              alt="QR del comprobante"
+              alt={approved ? "QR fiscal de ARCA" : "QR del comprobante"}
               width={110}
               height={110}
               className="h-[110px] w-[110px]"

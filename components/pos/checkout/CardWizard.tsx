@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, CreditCard } from "lucide-react";
 import { choiceClass } from "@/components/ui/ChoiceCard";
 import { CardBrandLogo } from "@/components/ui/ThemedLogo";
@@ -81,6 +81,7 @@ export function CardWizard({
   voucher,
   onVoucher,
   onEnter,
+  bankSlot,
 }: {
   acquirers: AcquirerDef[];
   acquirer: string | null;
@@ -106,6 +107,8 @@ export function CardWizard({
   voucher: CardVoucherDraft;
   onVoucher: (v: CardVoucherDraft) => void;
   onEnter: () => void;
+  /** Banco emisor (promos por banco, ADR-074): sólo si alguna promo lo usa. */
+  bankSlot?: ReactNode;
 }) {
   const info = cardBrandByKey(brand);
   const acq = acquirers.find((a) => a.key === acquirer) ?? null;
@@ -283,6 +286,7 @@ export function CardWizard({
 
       {step === 4 && (
         <div className="space-y-4">
+          {bankSlot}
           <VoucherFields rules={rules} values={voucher} onChange={onVoucher} onDone={onEnter} />
 
           {/* Resumen tipo cupón */}

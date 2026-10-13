@@ -67,6 +67,7 @@ export function PosTopBar({
           type="button"
           onClick={shiftPending ? undefined : hasShift ? onCloseShift : onOpenShift}
           aria-busy={shiftPending || undefined}
+          data-tour="pos-caja"
           className="mr-auto flex h-11 min-w-0 items-center gap-2.5 rounded-lg bg-fg-4 pl-3 pr-3.5 text-[13px] transition-colors hover:bg-fg-6 sm:mr-0"
           title={shiftPending ? "Cargando el estado de la caja" : hasShift ? "Cerrar caja (arqueo)" : "Abrir caja"}
         >

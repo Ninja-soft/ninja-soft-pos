@@ -5,9 +5,9 @@
 // a cuenta lo no imputado. Medios: efectivo de la caja propia abierta,
 // transferencia (desde una cuenta bancaria de tesorería o sólo con la
 // referencia), cheque o e-cheq propio, cheque de terceros en cartera,
-// depósito, tarjeta u otro. Retenciones de IVA, Ganancias e IIBB con n° de
-// certificado (placeholder hasta H106). Lo valida el servidor
-// (supplier_payment_order_create).
+// depósito, tarjeta u otro. Retenciones como agente calculadas por el
+// servidor con su certificado (H106, ADR-079) y retenciones manuales. Lo
+// valida el servidor (supplier_payment_order_create).
 
 import { useEffect, useMemo, useState } from "react";
 import { Info as InfoIcon, Plus, Trash2, Wand2 } from "lucide-react";
@@ -36,6 +36,9 @@ import {
   useTreasuryEnabled,
 } from "@/modules/purchases/hooks";
 import { useCheques, useMyOpenShift, useTreasuryAccounts } from "@/modules/treasury/hooks";
+import { useFeature } from "@/modules/saas/gating";
+import { retentionErrorMessage } from "@/lib/tax/retentions";
+import { AgentRetentionsSection, useAgentRetentions } from "./AgentRetentions";
 import { ErrorList, FormField, SectionTitle, fmtDate, inputCls, parseNum, selectCls, textareaCls, today } from "./shared";
 
 interface LineRow {
@@ -141,7 +144,19 @@ export function PaymentOrderModal({
   const allocations = Object.entries(alloc)
     .map(([invoice_id, v]) => ({ invoice_id, amount: parseNum(v) }))
     .filter((a) => a.amount > 0);
-  const totals = paymentOrderTotals(draftLines, withholdings, allocations);
+  // ADR-079: retenciones como agente calculadas por el servidor.
+  const agentRet = useFeature("percepciones_retenciones") === true;
+  const manualWh = withholdings.reduce((t, w) => t + w.amount, 0);
+  const linesTotal = draftLines.reduce((t, l) => t + (Number(l.amount) || 0), 0);
+  const agent = useAgentRetentions({
+    enabled: open && agentRet,
+    supplierId: supplier,
+    date,
+    allocations,
+    amount: linesTotal + manualWh,
+  });
+  const agentLines = agent.active && agent.preview ? [{ amount: agent.total }] : [];
+  const totals = paymentOrderTotals(draftLines, [...withholdings, ...agentLines], allocations);
   const chequesInWallet = useMemo(() => new Map(wallet.map((c) => [c.id, c.amount])), [wallet]);
 
   const errors = [
@@ -150,6 +165,8 @@ export function PaymentOrderModal({
       { lines: draftLines, withholdings, allocations },
       { openDocs: docs, hasTreasury: treasury, hasOpenShift: Boolean(shift), chequesInWallet },
     ),
+    ...(agent.active && supplier && agent.error ? [agent.error] : []),
+    ...(agent.active && supplier && !agent.error && agent.loading ? ["Esperá a que se calculen las retenciones."] : []),
   ];
 
   const setLine = (key: number, patch: Partial<LineRow>) =>
@@ -161,15 +178,27 @@ export function PaymentOrderModal({
     setAlloc(next);
   }
 
-  function payAll() {
-    const debt = docs.reduce((t, d) => t + d.open_ars, 0);
-    const whTotal = withholdings.reduce((t, w) => t + w.amount, 0);
-    const target = Math.max(Math.round((debt - whTotal) * 100) / 100, 0);
+  // "Pagar todo": imputa todo y el medio único queda en deuda menos retenciones
+  // (con agente, cuando el servidor termina de calcularlas para esa imputación).
+  const [fillPending, setFillPending] = useState(false);
+  const debt = docs.reduce((t, d) => t + d.open_ars, 0);
+  function fillNet(agentTotal: number) {
+    const target = Math.max(Math.round((debt - manualWh - agentTotal) * 100) / 100, 0);
     setLines((p) => (p.length === 1 ? [{ ...p[0]!, amount: fmtInput(target) }] : p));
+  }
+  function payAll() {
     const next: Record<string, string> = {};
     for (const d of docs) next[d.invoice_id] = fmtInput(d.open_ars);
     setAlloc(next);
+    if (agent.active) setFillPending(true);
+    else fillNet(0);
   }
+  useEffect(() => {
+    if (!fillPending || agent.loading || !agent.preview) return;
+    fillNet(agent.total);
+    setFillPending(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fillPending, agent.loading, agent.preview, agent.total]);
 
   async function save() {
     if (errors.length > 0) return;
@@ -181,12 +210,25 @@ export function PaymentOrderModal({
         lines: draftLines,
         withholdings,
         allocations,
+        ...(agent.active
+          ? {
+              agent_retentions: true,
+              agent_expected_total: agent.total,
+              retention_options: { ...agent.options, save_profile: agent.saveProfile },
+            }
+          : {}),
       });
       toast({ title: "Orden de pago registrada", variant: "success" });
       onOpenChange(false);
       onCreated?.(id);
     } catch (e) {
-      toast({ title: "No se pudo registrar la orden de pago", description: purchaseErrorMessage(e), variant: "error" });
+      const msg = e instanceof Error ? e.message : String(e ?? "");
+      if (msg.includes("retentions_changed")) agent.refetch();
+      toast({
+        title: "No se pudo registrar la orden de pago",
+        description: retentionErrorMessage(msg) ?? purchaseErrorMessage(e),
+        variant: "error",
+      });
     }
   }
 
@@ -466,21 +508,26 @@ export function PaymentOrderModal({
         <section className="space-y-2">
           <SectionTitle
             action={
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setWh((p) => [...p, { key: seq++, kind: "iibb", certificate: "", amount: "" }])}
-              >
-                <Plus size={14} /> Agregar retención
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setWh((p) => [...p, { key: seq++, kind: "iibb", certificate: "", amount: "" }])}
+                >
+                  <Plus size={14} /> Agregar retención
+                </Button>
+              </div>
             }
           >
-            Retenciones practicadas
+            {agent.active ? "Otras retenciones (manuales)" : "Retenciones practicadas"}
           </SectionTitle>
           {wh.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado. El cálculo automático
-              llega con Retenciones (H106).
+              {agent.active
+                ? "Sólo si tenés que cargar una retención que NinjaSoft no calcula, con su n° de certificado."
+                : agentRet
+                  ? "Si sos agente de retención, configurá tus regímenes en Configuración > Impuestos y NinjaSoft las calcula con su certificado. Mientras tanto podés cargarlas a mano."
+                  : "Si sos agente de retención, cargá IVA, Ganancias o IIBB con su n° de certificado. El cálculo automático con certificado viene con Percepciones y retenciones (plan Business)."}
             </p>
           )}
           {wh.map((w) => (
@@ -527,6 +574,8 @@ export function PaymentOrderModal({
             </div>
           ))}
         </section>
+
+        {agent.active && supplier && <AgentRetentionsSection state={agent} />}
 
         <FormField label="Notas (opcional)">
           <textarea className={textareaCls} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />

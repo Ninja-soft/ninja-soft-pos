@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FISCAL_CONDITIONS, FISCAL_CONDITION_LABEL } from "@/lib/tax/catalog";
 
 export const DOC_TYPES = ["cuit", "dni", "cuil", "passport", "other"] as const;
 export const DOC_TYPE_LABELS: Record<(typeof DOC_TYPES)[number], string> = {
@@ -9,20 +10,10 @@ export const DOC_TYPE_LABELS: Record<(typeof DOC_TYPES)[number], string> = {
   other: "Otro",
 };
 
-export const IVA_CONDITIONS = [
-  "consumidor_final",
-  "responsable_inscripto",
-  "monotributo",
-  "exento",
-  "no_responsable",
-] as const;
-export const IVA_LABELS: Record<(typeof IVA_CONDITIONS)[number], string> = {
-  consumidor_final: "Consumidor final",
-  responsable_inscripto: "Responsable inscripto",
-  monotributo: "Monotributo",
-  exento: "Exento",
-  no_responsable: "No responsable",
-};
+// Condición fiscal ampliada (ADR-068): mismo catálogo que lib/tax/catalog.ts
+// y el check de customers.iva_condition.
+export const IVA_CONDITIONS = FISCAL_CONDITIONS;
+export const IVA_LABELS: Record<(typeof IVA_CONDITIONS)[number], string> = FISCAL_CONDITION_LABEL;
 
 /** Valida dígito verificador de CUIT/CUIL (11 dígitos). */
 export function isValidCuit(value: string): boolean {
@@ -51,6 +42,14 @@ export const CustomerSchema = z
     document_type: z.enum(DOC_TYPES).nullable().optional(),
     document_number: optional(20),
     iva_condition: z.enum(IVA_CONDITIONS).nullable().optional(),
+    // Jurisdicción de IIBB del domicilio fiscal (ADR-068). "" → null.
+    iibb_jurisdiction: z
+      .string()
+      .regex(/^9\d{2}$/)
+      .or(z.literal(""))
+      .nullable()
+      .optional()
+      .transform((v) => (v ? v : null)),
     email: z
       .string()
       .email("Email inválido")

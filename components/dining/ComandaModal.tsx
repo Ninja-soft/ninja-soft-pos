@@ -79,6 +79,9 @@ type ComandaHeaderInfo =
       tableLabel: string | null;
       areaName: string | null;
       waiterName: string | null;
+      // Cuenta separada (ADR-097): "Comensal 2", "Parte 1 de 3".
+      splitLabel: string | null;
+      urgent: boolean;
     }
   | {
       kind: "delivery";
@@ -89,6 +92,7 @@ type ComandaHeaderInfo =
       address: string | null;
       promisedAt: string | null;
       courierName: string | null;
+      urgent: boolean;
     };
 
 interface StationGroup {
@@ -208,6 +212,7 @@ export function ComandaModal(props: ComandaModalProps) {
         address: h?.address ?? deliveryOrder?.address ?? null,
         promisedAt: deliveryOrder?.promised_at ?? null,
         courierName: h?.courier_name ?? deliveryOrder?.courier_name ?? null,
+        urgent: (h?.priority ?? deliveryOrder?.priority) === "urgente",
       };
     }
     const h = (tableData.data ?? [])[0] ?? null;
@@ -216,6 +221,8 @@ export function ComandaModal(props: ComandaModalProps) {
       tableLabel: h?.table_label ?? null,
       areaName: h?.area_name ?? null,
       waiterName: h?.waiter_name ?? null,
+      splitLabel: h?.split_label ?? null,
+      urgent: h?.priority === "urgente",
     };
   }, [isDelivery, deliveryData.data, tableData.data, deliveryOrder]);
 
@@ -439,6 +446,13 @@ function ComandaSheet({
         {stationLabel(group.station)}
       </div>
 
+      {/* Prioridad (ADR-097): en térmica B/N "urgente" = fondo negro y letra blanca. */}
+      {header?.urgent && (
+        <div className="mt-1 bg-black py-0.5 text-center text-base font-extrabold uppercase tracking-widest text-white">
+          Urgente
+        </div>
+      )}
+
       {/* Datos del pedido + hora. Difiere por fuente. */}
       <div className="mt-2 space-y-0.5 text-[13px] leading-tight">
         {header?.kind === "delivery" ? (
@@ -499,7 +513,10 @@ function TableHeaderBlock({
   return (
     <>
       <div className="flex items-baseline justify-between">
-        <span className="text-base font-bold">Mesa {header?.tableLabel ?? "s/d"}</span>
+        <span className="text-base font-bold">
+          Mesa {header?.tableLabel ?? "s/d"}
+          {header?.splitLabel ? ` · ${header.splitLabel}` : ""}
+        </span>
         {header?.areaName && <span className="text-neutral-600">{header.areaName}</span>}
       </div>
       <div className="flex items-baseline justify-between text-neutral-600">

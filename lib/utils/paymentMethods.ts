@@ -10,4 +10,5 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   account: "Cuenta corriente",
   other: "Otro",
   directo: "Directo",
+  sena: "Seña",
 };

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { emitirVentaEnSegundoPlano } from "@/modules/arca/api";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId, useBranchStore } from "@/modules/branches/store";
@@ -6,6 +7,8 @@ import { parseRules, type CardVoucherRules } from "@/lib/payments/voucherRules";
 import { withSupervisor } from "@/modules/security/supervisor";
 import { priceDeviationPct } from "@/lib/pos/priceMismatch";
 import { effectivePlans } from "@/lib/payments/planScope";
+import { getnetSlotsOf } from "@/lib/payments/getnetSlots";
+import { parseOfflinePolicy, type OfflinePolicy } from "@/lib/pos/offline/policy";
 
 export type CashShift = Tables<"cash_shifts">;
 export type CashRegister = Tables<"cash_registers">;
@@ -89,11 +92,19 @@ export interface SaleItemInput {
   price_override?: boolean;
   override_reason?: string;
   list_price?: number;
+  // ADR-096: línea de garantía extendida enlazada (plan e índice en p_items
+  // de la línea que cubre).
+  warranty_plan_id?: string;
+  warranty_for?: number;
 }
 export interface CreateSaleResult {
   sale_id: string;
   number: number;
   total: number;
+  /** ADR-088: lo que salió de la reserva porque el salón no alcanzaba (aviso). */
+  reserve_taken?: { product_id: string; taken: number; from: { name: string; qty: number }[] }[];
+  /** ADR-088: seña del turno aplicada. */
+  deposit_applied?: number;
 }
 
 // Descriptor de un extra del cobro. Viaja en `p_extras` y create_sale lo
@@ -114,8 +125,14 @@ export interface CreateSaleResult {
 //   * 'pack_session' (consumir sesión · H41): descuenta una sesión del crédito.
 //     `id` = customer_pack_credits.id. La línea cubierta ya entra en 0 (en
 //     `items`); este extra es la señal para consumir la sesión.
+//   * 'appointment' (cobro de un turno · ADR-088): `id` = appointments.id.
+//     create_sale enlaza el turno en la misma transacción y exige que la seña
+//     disponible venga como pago 'sena' (sin doble cobro).
+//   * 'reservation' (retiro de una reserva de stock · ADR-096): `id` =
+//     stock_reservations.id, con la identidad ya validada. create_sale exige
+//     que la venta cubra sus renglones y la entrega en la misma transacción.
 export interface SaleExtraInput {
-  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session";
+  kind: "warranty" | "surcharge" | "tip" | "professional" | "pack" | "pack_session" | "appointment" | "reservation";
   amount?: number;
   method?: string;
   id?: string;
@@ -585,6 +602,8 @@ export interface PosSettingsView {
   allowNegativeStock: boolean;
   // Reglas del cupón del posnet offline (ADR-054), ya normalizadas.
   cardVoucherRules: CardVoucherRules;
+  // Venta sin conexión (ADR-077): pos_settings.offline_policy con defaults.
+  offlinePolicy: OfflinePolicy;
 }
 
 export function mapPosSettings(raw: Record<string, unknown> | null): PosSettingsView | null {
@@ -613,6 +632,7 @@ export function mapPosSettings(raw: Record<string, unknown> | null): PosSettings
     posLayout: data.pos_layout ?? null,
     allowNegativeStock: (data.allow_negative_stock as boolean | undefined) ?? true,
     cardVoucherRules: parseRules(data.card_voucher_rules),
+    offlinePolicy: parseOfflinePolicy(data.offline_policy),
   };
 }
 
@@ -652,6 +672,22 @@ async function edgeError(error: unknown): Promise<Error> {
     // body no JSON: se usa el error original.
   }
   return error instanceof Error ? error : new Error("edge_error");
+}
+
+/**
+ * ¿Está habilitado el checkout propio de Getnet? (ADR-069 adenda). La Edge
+ * getnet (action capabilities) devuelve sólo un booleano del flag PCI, nunca
+ * el secret. Cualquier error = apagado.
+ */
+async function fetchGetnetOwnCheckout(): Promise<boolean> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke("getnet", { body: { action: "capabilities" } });
+    if (error) return false;
+    return (data as { own_checkout_enabled?: unknown } | null)?.own_checkout_enabled === true;
+  } catch {
+    return false;
+  }
 }
 
 export const posApi = {
@@ -782,6 +818,11 @@ export const posApi = {
       surcharge_pct: number;
       merchant_numbers: Partial<Record<string, string>>;
       plan_mode: string | null;
+      /** Sólo 'getnet' (ADR-069): Web Checkout y Checkout API cargados. */
+      web_checkout_connected?: boolean;
+      checkout_api_connected?: boolean;
+      /** Sólo 'getnet' (ADR-069 adenda): checkout propio habilitado (flag PCI). */
+      own_checkout_enabled?: boolean;
       /** Sólo 'transfer' (ADR-055): base del negocio de la pantalla y el n° de operación. */
       transfer_show_screen?: boolean;
       transfer_require_reference?: boolean;
@@ -792,7 +833,7 @@ export const posApi = {
       .from("tenant_payment_methods")
       .select("provider_key, enabled, config, surcharge_pct")
       .order("sort");
-    return (data ?? []).map((r) => ({
+    const rows = (data ?? []).map((r) => ({
       provider_key: r.provider_key as string,
       enabled: Boolean(r.enabled),
       connected: Boolean((r.config as { connected?: boolean } | null)?.connected),
@@ -800,6 +841,12 @@ export const posApi = {
       merchant_numbers:
         ((r.config as { merchant_numbers?: Partial<Record<string, string>> } | null)?.merchant_numbers) ?? {},
       plan_mode: (r.config as { plan_mode?: string } | null)?.plan_mode ?? null,
+      ...(r.provider_key === "getnet"
+        ? (() => {
+            const slots = getnetSlotsOf(r.config as Record<string, unknown> | null);
+            return { web_checkout_connected: slots.web_checkout, checkout_api_connected: slots.checkout_api };
+          })()
+        : {}),
       ...(r.provider_key === "transfer"
         ? {
             transfer_show_screen:
@@ -809,7 +856,18 @@ export const posApi = {
           }
         : {}),
     }));
+    // Getnet (ADR-069 adenda): el tender "Link (checkout propio)" sólo con el
+    // checkout propio habilitado. Se pregunta a la Edge sólo si hay Checkout
+    // API cargada; ante cualquier duda queda apagado.
+    const getnet = rows.find((r) => r.provider_key === "getnet") as { checkout_api_connected?: boolean } | undefined;
+    if (!getnet?.checkout_api_connected) return rows;
+    const own = await fetchGetnetOwnCheckout();
+    return rows.map((r) => (r.provider_key === "getnet" ? { ...r, own_checkout_enabled: own } : r));
   },
+
+  /** ¿Está habilitado el checkout propio de Getnet? (ADR-069 adenda). */
+  getnetOwnCheckoutEnabled: () => fetchGetnetOwnCheckout(),
+
 
   // Settings operativos del POS (H30): descuento máximo por rol y redondeo.
   // Incluye los settings de la pantalla del cliente (H25): mostrar precios
@@ -1086,13 +1144,22 @@ export const posApi = {
   // ── Getnet (H18): Checkout hosted de Getnet AR (Geopagos) ─────────────────
   // create devuelve el checkout de la orden como init_point (QR + link). El
   // estado se sondea vía la Edge, que re-consulta la orden en Getnet.
+  // mode 'own' (ADR-069): checkout PROPIO /pagar/{intent}?p=getnet con la
+  // Checkout API; el cliente elige tarjeta y cuotas ahí, como en Payway.
   createGetnetLink: async (
     amount: number,
     title: string,
+    mode?: "own",
   ): Promise<{ intent_id: string; init_point: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
-      body: { action: "create", amount, title, ...posStoreBody() },
+      body: {
+        action: "create",
+        amount,
+        title,
+        ...(mode === "own" ? { mode: "own", origin: appOrigin() } : {}),
+        ...posStoreBody(),
+      },
     });
     if (error) throw error;
     if ((data as { error?: string })?.error) {
@@ -1103,7 +1170,7 @@ export const posApi = {
 
   getnetIntentStatus: async (
     id: string,
-  ): Promise<{ status: string; mp_payment_id: string | null }> => {
+  ): Promise<{ status: string; mp_payment_id: string | null; amount?: number }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke("getnet", {
       body: { action: "status", intent_id: id },
@@ -1559,6 +1626,10 @@ export const posApi = {
     if (error) throw error;
     return data as unknown as CreateSaleResult;
     };
-    return withSupervisor(run, { discount_over: discountPct, cambio_precio: priceDev });
+    const res = await withSupervisor(run, { discount_over: discountPct, cambio_precio: priceDev });
+    // F3 · ADR-072: la factura electrónica se pide en segundo plano. Nunca
+    // frena ni avisa al cajero; si falla, la cola fiscal la toma con el cron.
+    emitirVentaEnSegundoPlano(res?.sale_id);
+    return res;
   },
 };

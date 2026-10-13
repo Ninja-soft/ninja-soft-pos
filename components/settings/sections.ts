@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   CreditCard,
+  FileCheck2,
   LayoutTemplate,
   Mail,
   MonitorSmartphone,
@@ -16,8 +17,10 @@ import {
   ReceiptText,
   RotateCcw,
   ScanLine,
+  Landmark,
   ShieldCheck,
   SlidersHorizontal,
+  KeyRound,
   Store,
   Tag,
   Users,
@@ -59,8 +62,11 @@ export type SettingsSectionKey =
   | "hardware"
   | "precios"
   | "garantias"
+  | "impuestos"
   | "promociones"
-  | "nubceo";
+  | "nubceo"
+  | "api"
+  | "facturacion";
 
 export type SettingsSectionDef = {
   key: SettingsSectionKey;
@@ -106,9 +112,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         key: "rubro",
         label: "Rubro",
         title: "Rubro del negocio",
-        description: "Tu actividad define qué funciones del POS se adaptan a cómo trabajás.",
+        description: "Tu actividad define qué funciones del POS se adaptan a cómo trabajás. Cambiá el perfil por rubro con vista previa.",
         icon: Tag,
-        keywords: "actividad vertical kiosco textil restaurante catalogo vaciar",
+        keywords: "actividad vertical kiosco textil restaurante catalogo vaciar perfil cambiar rubro almacen ferreteria farmacia verduleria libreria",
       },
       {
         key: "marca",
@@ -240,8 +246,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: CreditCard,
         keywords: "point clover nave posnet lector terminal caja qr sucursal numero de comercio",
       },
-      // Promociones (F9 · H53): por ahora SIN gating de plan, es sólo la
-      // DEFINICIÓN. El gating por `promociones` se suma con la aplicación.
+      // Promociones y cupones (F9, ADR-074). La sección no se gatea entera
+      // porque los cupones no dependen del plan: la tarjeta de Promociones
+      // muestra el bloqueo si falta `promociones` (gating real en la base).
       {
         key: "promociones",
         label: "Promociones y cupones",
@@ -249,7 +256,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description:
           "Promos por condiciones que el POS aplica solas y códigos de descuento que el cajero ingresa al cobrar.",
         icon: Percent,
-        keywords: "descuento cupon codigo 2x1 oferta",
+        keywords: "descuento cupon codigo 2x1 3x2 oferta combo banco tarjeta segunda unidad",
       },
       {
         key: "cuenta-corriente",
@@ -285,6 +292,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: ShieldCheck,
         feature: "garantias",
         keywords: "garantia extendida prima",
+      },
+      {
+        key: "impuestos",
+        label: "Impuestos",
+        title: "Impuestos",
+        description:
+          "Condición fiscal del negocio, IVA de los ítems sin producto, agente de percepción y retención, jurisdicciones y padrones.",
+        icon: Landmark,
+        feature: "impuestos_iva",
+        keywords: "iva alicuota afip arca cuit iibb ingresos brutos arba agip percepcion retencion padron monotributo responsable inscripto fiscal",
       },
     ],
   },
@@ -325,6 +342,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         keywords: "ticket comprobante plantilla diseño",
       },
       {
+        key: "facturacion",
+        label: "Facturación electrónica",
+        title: "Facturación electrónica ARCA",
+        description:
+          "Facturas A, B y C con CAE de ARCA, paso a paso: certificado, punto de venta, prueba y paso a real.",
+        icon: FileCheck2,
+        feature: "facturacion_afip",
+        keywords: "arca afip cae caea factura electronica certificado punto de venta homologacion produccion contingencia wsfe qr",
+      },
+      {
         key: "impresion",
         label: "Impresión",
         title: "Impresión",
@@ -357,6 +384,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Plug,
         feature: "integracion_nubceo",
         keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
+      },
+      // API pública v1 (ADR-094): credenciales OAuth2 por negocio, sólo el dueño.
+      {
+        key: "api",
+        label: "API",
+        title: "API pública",
+        description:
+          "Credenciales para conectar tu tienda online, ERP o planillas: productos, stock, precios, ventas y clientes por API.",
+        icon: KeyRound,
+        feature: "api_publica",
+        keywords: "api rest oauth token credencial client id secret integracion erp ecommerce tienda sincronizar webhook desarrollador",
       },
     ],
   },
@@ -402,6 +440,9 @@ export const SETTINGS_SECTIONS: SettingsSectionDef[] = SETTINGS_GROUPS.flatMap(
 /** Nombres alternativos aceptados en `?seccion=`. */
 export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   cupones: "promociones",
+  arca: "facturacion",
+  afip: "facturacion",
+  "factura-electronica": "facturacion",
   diagnostico: "hardware",
   pantalla: "pantalla-cliente",
   cuenta: "cuenta-corriente",
@@ -414,7 +455,13 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   pin: "seguridad",
   supervisor: "seguridad",
   integraciones: "nubceo",
+  "api-publica": "api",
+  credenciales: "api",
   conciliacion: "nubceo",
+  fiscal: "impuestos",
+  iva: "impuestos",
+  percepciones: "impuestos",
+  padrones: "impuestos",
 };
 
 export const DEFAULT_SECTION: SettingsSectionKey = "apariencia";

@@ -18,6 +18,7 @@
 // Siempre 200 (salvo auth inválida: 401) para que Clover no desactive la URL;
 // el poll del POS sigue siendo el respaldo.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { parseCloverWebhook, safeEqual } from "../_shared/clover.ts";
 import {
@@ -28,6 +29,7 @@ import {
   syncIntent,
   type IntentRow,
 } from "../_shared/clover_server.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const ok = () => new Response("ok", { status: 200 });
 
@@ -35,12 +37,12 @@ const ok = () => new Response("ok", { status: 200 });
 const MAX_INTENTS = 20;
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("clover", "clover_webhook", async (req: Request, wh) => {
   if (req.method !== "POST") return new Response("method_not_allowed", { status: 405 });
 
   let raw: unknown = null;
   try {
-    raw = await req.json();
+    raw = await readJsonLimited(req);
   } catch {
     return ok();
   }
@@ -61,6 +63,8 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   });
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
+  wh.ref(hook.merchants.map((m) => m.merchantId).join(","));
+  const seenTenants = new Set<string>();
 
   for (const m of hook.merchants) {
     // Tenants con esa conexión Fiserv (el merchant_id vive en el secreto).
@@ -73,6 +77,7 @@ Deno.serve(async (req: Request) => {
     // sucursal del mismo negocio: un recorrido por negocio.
     const tenantIds = [...new Set(((conns ?? []) as { tenant_id: string }[]).map((c) => c.tenant_id))];
     for (const tenantId of tenantIds) {
+      seenTenants.add(tenantId);
       const { data: rows } = await admin
         .from("mp_payment_intents")
         .select(INTENT_COLS)
@@ -86,11 +91,14 @@ Deno.serve(async (req: Request) => {
         try {
           const conn = await loadConnectionForIntent(admin, row);
           if (conn) await syncIntent(admin, conn, row, "webhook");
-        } catch {
+        } catch (e) {
           // Transitorio: el poll del POS lo resuelve.
+          wh.fail(e);
         }
       }
     }
   }
+  if (seenTenants.size === 1) wh.tenant([...seenTenants][0]);
+  if (seenTenants.size > 0) wh.done();
   return ok();
-});
+}));

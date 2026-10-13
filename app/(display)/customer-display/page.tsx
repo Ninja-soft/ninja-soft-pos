@@ -17,6 +17,7 @@ import { BankLogo, BankWordmark } from "@/components/payments/BankLogo";
 import { formatCbu, formatCuit } from "@/lib/payments/transfer";
 import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import { locationLabel } from "@/modules/branches/logic";
+import { useDisplayPresenceBeacon } from "@/modules/branches/heartbeat";
 
 // =============================================================================
 // Pantalla del cliente / segunda pantalla (F10 · H25)
@@ -39,6 +40,8 @@ const DEFAULT_THANKS = "¡Gracias por tu compra!";
 
 export default function CustomerDisplayPage() {
   const live = useCustomerDisplayState();
+  // F17 · H99: el POS del mismo equipo informa "pantalla conectada".
+  useDisplayPresenceBeacon();
   // Caja de ESTE dispositivo (la misma que usa el POS) y, con 2+ sucursales,
   // "Centro · Caja 1" (F17 · H90). Antes era la primera caja del negocio.
   const branchCtx = useBranchContext();

@@ -6,6 +6,7 @@ de pago, reportes, Tiendita, asistente IA y chequeo visual.
 ```bash
 pnpm test:e2e                      # todo (o modo smoke si no hay sesión)
 pnpm test:e2e tests/e2e/pos.spec.ts --no-deps   # un spec, sin el teardown de logout
+pnpm test:smoke                    # smoke de piloto post-deploy (docs/13-deployment.md §11.2)
 pnpm exec playwright show-report   # reporte HTML (playwright-report/)
 ```
 
@@ -27,6 +28,7 @@ Otro path: `E2E_CHROME_PATH`.
 | `E2E_QA_TENANT_ID` | Id del **tenant QA**. Guardarraíl: si el `current_tenant_id` del JWT no coincide, el suite aborta antes de tocar nada. |
 | `E2E_CUSTOMER_NAME` | Cliente de prueba del tenant QA para cuenta corriente. Default `E2E Cliente QA`. |
 | `E2E_AI=1` | Permite mandar un mensaje al asistente (gasta cuota). Sin esto sólo abre el panel y el historial. |
+| `E2E_PWA=1` | `pwa-offline.spec.ts` (`@pwa`, H65): POS sin conexión con service worker. Sólo contra un build de producción LOCAL (`pnpm build && pnpm start -p 3005`); nunca en CI ni contra producción. Prende `PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS` para que `setOffline` alcance al SW. |
 
 **Modo smoke:** sin `E2E_ACCESS_TOKEN` / `E2E_REFRESH_TOKEN` / `E2E_SUPABASE_REF` sólo corren
 las páginas públicas (`/login`, `/signup`, `/recover`, `/auth/callback`, redirect de
@@ -96,7 +98,11 @@ Todo lo que crea el suite lleva el prefijo `E2E-<timestamp>` (un id por corrida)
 - Diseño del POS: se vuelve al del negocio.
 - Compras (`compras.spec.ts`): un proveedor `E2E-… Proveedor` que termina **archivado**
   y una orden de compra en borrador que se **cancela** (motivo `E2E-… limpieza e2e`).
-- Cobros en espera, precio validado, conciliación: no escriben nada (ver abajo).
+- Devoluciones (`devoluciones.spec.ts`): una venta en efectivo de prueba que se
+  **anula** al final; el wizard se recorre hasta Reintegro y se cierra (nunca se
+  confirma una devolución ni se pide un reintegro a Mercado Pago).
+- Cobros en espera, precio validado, conciliación (incluida la selección masiva
+  sobre cobros simulados), ficha 360: no escriben nada (ver abajo).
 - Terminales, Mis PINes, transferencias, listas de precios, hardware: sólo lectura
   o wizard recorrido y cancelado.
 

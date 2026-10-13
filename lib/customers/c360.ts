@@ -9,6 +9,8 @@
 //  * Filas para exportar a XLSX.
 // =============================================================================
 
+import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
+
 export type TimelineKind =
   | "sale"
   | "return"
@@ -252,7 +254,17 @@ const DISPUTE_SUB: Record<string, string> = {
   claim: "Reclamo",
 };
 
-export type ItemTone = "success" | "warning" | "danger" | "neutral" | "info" | "brand";
+/** "cash, account" (string_agg de payments.method) → "Efectivo, Cuenta corriente". */
+export function methodsLabel(raw: string): string {
+  return raw
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean)
+    .map((m) => PAYMENT_METHOD_LABELS[m] ?? m)
+    .join(", ");
+}
+
+export type ItemTone ="success" | "warning" | "danger" | "neutral" | "info" | "brand";
 
 /** Título, detalle y tono de un movimiento. */
 export function describeItem(it: TimelineItem): { title: string; detail: string | null; tone: ItemTone } {
@@ -260,7 +272,7 @@ export function describeItem(it: TimelineItem): { title: string; detail: string 
     case "sale":
       return {
         title: `Venta #${it.ref ?? ""}${it.status === "voided" ? " (anulada)" : ""}`,
-        detail: it.detail ? `Cobro: ${it.detail}` : null,
+        detail: it.detail ? `Cobro: ${methodsLabel(it.detail)}` : null,
         tone: it.status === "voided" ? "neutral" : "success",
       };
     case "return":

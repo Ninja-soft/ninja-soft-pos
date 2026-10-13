@@ -7,13 +7,16 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
+  BookOpenCheck,
   Boxes,
   Building2,
   ChevronDown,
+  Compass,
   CreditCard,
   KeyRound,
   LayoutDashboard,
   LogOut,
+  FileCheck2,
   Mail,
   Menu,
   Moon,
@@ -25,6 +28,7 @@ import {
   Tag,
   UserCog,
   Users,
+  Webhook,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -64,8 +68,13 @@ const NAV = [
   { href: "/internal/pagos", label: "Pagos", icon: CreditCard },
   { href: "/internal/planes", label: "Planes", icon: Tag },
   { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
+  { href: "/internal/onboarding", label: "Onboarding", icon: Compass },
   { href: "/internal/addons", label: "Complementos", icon: Sparkles },
   { href: "/internal/catalogos", label: "Catálogos", icon: Boxes },
+  { href: "/internal/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/internal/arca", label: "ARCA", icon: FileCheck2 },
+  // Runbooks de soporte (F16 · H85, ADR-091).
+  { href: "/internal/runbooks", label: "Runbooks", icon: BookOpenCheck },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {

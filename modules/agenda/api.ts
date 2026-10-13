@@ -13,6 +13,7 @@
 // modifiers.ts y modules/sales/api.ts). La DB + RLS validan.
 
 import { createClient } from "@/lib/supabase/client";
+import type { WaitlistEntry, WaitlistSlot } from "./waitlist";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,8 @@ export interface Appointment {
   sale_id: string | null;
   cancel_reason: string | null;
   created_at: string;
+  // Silla, cabina o equipo (feature agenda_recursos, ADR-082).
+  resource_id: string | null;
   // joins (best-effort): nombre del cliente y nº de venta enlazada.
   customers?: { name: string } | null;
   sales?: { number: number } | null;
@@ -76,6 +79,7 @@ export interface AppointmentInput {
   status?: AppointmentStatus;
   notes: string | null;
   is_walk_in?: boolean;
+  resource_id?: string | null;
 }
 
 // ── Profesionales ─────────────────────────────────────────────────────────────
@@ -142,7 +146,7 @@ export const appointmentsApi = {
     const { data, error } = await supabase
       .from("appointments" as never)
       .select(
-        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at, customers(name), sales(number)",
+        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at, resource_id, customers(name), sales(number)",
       )
       .gte("starts_at", from.toISOString())
       .lt("starts_at", to.toISOString())
@@ -157,7 +161,7 @@ export const appointmentsApi = {
     const { data, error } = await supabase
       .from("appointments" as never)
       .select(
-        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at, customers(name), sales(number)",
+        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at, resource_id, customers(name), sales(number)",
       )
       .eq("id", id)
       .maybeSingle();
@@ -181,9 +185,10 @@ export const appointmentsApi = {
         status: input.status ?? "reservado",
         notes: input.notes,
         is_walk_in: input.is_walk_in ?? false,
+        ...(input.resource_id ? { resource_id: input.resource_id } : {}),
       } as never)
       .select(
-        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at",
+        "id, professional_id, customer_id, service_product_id, service_name, service_price, commission_pct, starts_at, duration_min, status, notes, is_walk_in, sale_id, cancel_reason, created_at, resource_id",
       )
       .single();
     if (error) throw error;
@@ -204,6 +209,7 @@ export const appointmentsApi = {
         | "starts_at"
         | "duration_min"
         | "notes"
+        | "resource_id"
       >
     >,
   ): Promise<void> => {
@@ -242,6 +248,165 @@ export const appointmentsApi = {
       p_sale_id: saleId,
     } as never);
     if (error) throw error;
+  },
+};
+
+// ── Recursos (silla, cabina, box, equipo · ADR-082) ──────────────────────────
+
+export type ResourceKind = "silla" | "cabina" | "box" | "equipo" | "otro";
+
+export interface AgendaResource {
+  id: string;
+  name: string;
+  kind: ResourceKind;
+  color: string;
+  is_active: boolean;
+  sort: number;
+}
+
+export interface AgendaResourceInput {
+  name: string;
+  kind: ResourceKind;
+  color: string;
+  is_active: boolean;
+}
+
+export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
+  silla: "Silla",
+  cabina: "Cabina",
+  box: "Box",
+  equipo: "Equipo",
+  otro: "Otro",
+};
+
+const RESOURCE_COLS = "id, name, kind, color, is_active, sort";
+
+export const resourcesApi = {
+  list: async (activeOnly = false): Promise<AgendaResource[]> => {
+    const supabase = createClient();
+    let q = supabase
+      .from("agenda_resources" as never)
+      .select(RESOURCE_COLS)
+      .is("deleted_at", null)
+      .order("sort")
+      .order("name");
+    if (activeOnly) q = (q as unknown as { eq: (c: string, v: unknown) => typeof q }).eq("is_active", true);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data ?? []) as unknown as AgendaResource[];
+  },
+
+  create: async (input: AgendaResourceInput): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("agenda_resources" as never).insert(input as never);
+    if (error) throw error;
+  },
+
+  update: async (id: string, patch: Partial<AgendaResourceInput>): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("agenda_resources" as never).update(patch as never).eq("id", id);
+    if (error) throw error;
+  },
+
+  // Baja lógica: los turnos pasados conservan el recurso.
+  softDelete: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("agenda_resources" as never)
+      .update({ deleted_at: new Date().toISOString(), is_active: false } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+};
+
+// ── Lista de espera (ADR-082) ─────────────────────────────────────────────────
+
+export interface WaitlistInput {
+  customer_id: string | null;
+  customer_name: string | null;
+  phone: string | null;
+  service_product_id: string | null;
+  service_name: string | null;
+  professional_id: string | null;
+  preferred_date: string | null;
+  preferred_slot: WaitlistSlot;
+  notes: string | null;
+}
+
+const WAITLIST_COLS =
+  "id, customer_id, customer_name, phone, service_product_id, service_name, professional_id, preferred_date, preferred_slot, notes, status, appointment_id, created_at, customers(name, phone)";
+
+export const waitlistApi = {
+  listOpen: async (): Promise<WaitlistEntry[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("agenda_waitlist" as never)
+      .select(WAITLIST_COLS)
+      .eq("status", "esperando")
+      .order("created_at");
+    if (error) throw error;
+    return (data ?? []) as unknown as WaitlistEntry[];
+  },
+
+  create: async (input: WaitlistInput): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from("agenda_waitlist" as never).insert(input as never);
+    if (error) throw error;
+  },
+
+  cancel: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("agenda_waitlist" as never)
+      .update({ status: "cancelado" } as never)
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // Pasa la entrada a turno (RPC atómica: crea el turno y la marca agendada).
+  schedule: async (v: {
+    entryId: string;
+    startsAt: string;
+    professionalId: string | null;
+    resourceId: string | null;
+    durationMin: number | null;
+  }): Promise<{ appointment_id: string }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("agenda_waitlist_schedule" as never, {
+      p_entry_id: v.entryId,
+      p_starts_at: v.startsAt,
+      p_professional_id: v.professionalId,
+      p_resource_id: v.resourceId,
+      p_duration_min: v.durationMin,
+    } as never);
+    if (error) throw error;
+    return data as unknown as { appointment_id: string };
+  },
+};
+
+// ── Datos de ejemplo de la agenda (H42 · ADR-082) ─────────────────────────────
+
+export const agendaDemoApi = {
+  // ¿El negocio tiene datos de ejemplo cargados?
+  hasDemo: async (): Promise<boolean> => {
+    const supabase = createClient();
+    const { count, error } = await supabase
+      .from("agenda_demo_rows" as never)
+      .select("id", { count: "exact", head: true });
+    if (error) throw error;
+    return (count ?? 0) > 0;
+  },
+  seed: async (): Promise<{ seeded: boolean; already: boolean; appointments?: number }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("agenda_demo_seed" as never);
+    if (error) throw error;
+    return data as unknown as { seeded: boolean; already: boolean; appointments?: number };
+  },
+  clear: async (): Promise<{ appointments_deleted: number; appointments_kept: number }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("agenda_demo_clear" as never);
+    if (error) throw error;
+    return data as unknown as { appointments_deleted: number; appointments_kept: number };
   },
 };
 

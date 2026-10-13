@@ -83,7 +83,7 @@ export function usePendingChargeMutations() {
     regenerate: useMutation({
       mutationFn: async (v: { charge: PendingCharge; expiresMinutes: number }) => {
         const c = v.charge;
-        const created = await createProviderCharge(c.provider_key, c.channel, c.amount, c.customer_id);
+        const created = await createProviderCharge(c.provider_key, c.channel, c.amount, c.customer_id, c.share_url);
         try {
           const r = await pendingChargesApi.replace({
             id: c.id,

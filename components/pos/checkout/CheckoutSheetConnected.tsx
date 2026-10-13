@@ -18,6 +18,7 @@ import { useBranchContext, useCurrentRegister } from "@/modules/branches/hooks";
 import { pickIntegratedTerminal } from "@/lib/payments/terminals";
 import { parseIntegration } from "@/lib/payments/terminal/config";
 import { INTEGRATED_CARD_TENDER_ID, integratedCardTender, normalizeTenderId } from "@/lib/pos/tenders";
+import { isTenderAllowedOffline } from "@/lib/pos/offline/policy";
 import { CheckoutSheet, type CheckoutSheetProps } from "./CheckoutSheet";
 import type { AccountPayRequest, ElectronicRequest, TerminalChargeRequest } from "./types";
 
@@ -60,11 +61,23 @@ type Connected = Omit<
    * cuenta corriente lee su saldo, disponible, vencido, cuotas y bloqueo).
    */
   customerId?: string | null;
+  /**
+   * Sin conexión (ADR-077): sólo medios manuales sin integración (efectivo,
+   * transferencia y tarjeta en posnet); sin terminal integrada ni detección
+   * automática de transferencias.
+   */
+  offline?: boolean;
 };
 
 // Hoja de cobro con sus datos (planes de cuotas, garantías, vendedores,
 // voucher) y los modales de QR / link / Point de cada proveedor.
-export function CheckoutSheetConnected({ onQrState, onTransferState, customerId = null, ...props }: Connected) {
+export function CheckoutSheetConnected({
+  onQrState,
+  onTransferState,
+  customerId = null,
+  offline = false,
+  ...props
+}: Connected) {
   // Cuentas de transferencia de la caja (herencia por sucursal y caja).
   const transferCfg = usePosTransferConfig();
   // Detección automática de transferencias de Mercado Pago (ADR-061).
@@ -81,13 +94,13 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
             defaultAccountId: transferCfg.defaultAccountId,
             onDisplay: onTransferState,
             autoDetect: {
-              enabled: transferAuto === true,
+              enabled: transferAuto === true && !offline,
               storeId: posBranch.posStoreId ?? null,
               registerId: posRegister.data?.id ?? null,
             },
           }
         : null,
-    [transferCfg, onTransferState, transferAuto, posBranch.posStoreId, posRegister.data?.id],
+    [transferCfg, onTransferState, transferAuto, offline, posBranch.posStoreId, posRegister.data?.id],
   );
   const { data: allPlans } = usePaymentPlans();
   const { data: wplans } = useWarrantyPlans(true);
@@ -149,14 +162,15 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
   const branchCtx = useBranchContext();
   const currentRegister = useCurrentRegister();
   const integratedTerminal = useMemo(() => {
-    if (hasIntegrated === false) return null;
+    if (hasIntegrated === false || offline) return null;
     return pickIntegratedTerminal({
       terminals: terminals ?? [],
       storeId: branchCtx.posStoreId,
       registerId: currentRegister.data?.id ?? null,
     }).terminal;
-  }, [hasIntegrated, terminals, branchCtx.posStoreId, currentRegister.data?.id]);
+  }, [hasIntegrated, offline, terminals, branchCtx.posStoreId, currentRegister.data?.id]);
   const tenders = useMemo(() => {
+    if (offline) return props.tenders.filter(isTenderAllowedOffline);
     const card = props.tenders.find((t) => t.flow === "card");
     if (!integratedTerminal || !card) return props.tenders;
     const cfg = parseIntegration(integratedTerminal.external_meta);
@@ -169,12 +183,14 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
     });
     const i = props.tenders.indexOf(card);
     return [...props.tenders.slice(0, i), integrated, ...props.tenders.slice(i)];
-  }, [props.tenders, integratedTerminal]);
+  }, [props.tenders, integratedTerminal, offline]);
   // "Tarjeta" fijada en el carrito abre la terminal integrada si hay una.
   const initialTenderId =
     integratedTerminal && props.initialTenderId && normalizeTenderId(props.initialTenderId) === "card"
       ? INTEGRATED_CARD_TENDER_ID
-      : props.initialTenderId;
+      : offline && props.initialTenderId && !tenders.some((t) => t.id === props.initialTenderId)
+        ? null
+        : props.initialTenderId;
   const renderTerminal = (req: TerminalChargeRequest) =>
     integratedTerminal ? <TerminalChargeModal terminal={integratedTerminal} req={req} /> : null;
 
@@ -217,6 +233,7 @@ export function CheckoutSheetConnected({ onQrState, onTransferState, customerId 
           open
           provider={t.qrProvider}
           providerName={t.brandLabel}
+          mode={t.qrMode}
           channel={t.channel === "link" ? "link" : "qr"}
           customerId={customerId}
           prefetched={prefetched}

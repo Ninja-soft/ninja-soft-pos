@@ -20,6 +20,7 @@ import {
   type Category,
   type CategoryTreeNode,
 } from "@/modules/products/api";
+import { errorDescription } from "@/lib/permissions/errors";
 
 // Gestión de categorías con hasta 10 niveles (rubro → sub-rubro → …).
 // El árbol sale de parent_id; se muestra como un listado anidado y desglosable
@@ -120,7 +121,7 @@ export function CategoriesModal({
           nameRef.current?.focus();
           toast({ title: "Categoría creada", variant: "success" });
         },
-        onError: () => toast({ title: "No se pudo crear", variant: "error" }),
+        onError: (e) => toast({ title: "No se pudo crear", description: errorDescription(e), variant: "error" }),
       },
     );
   }
@@ -134,7 +135,7 @@ export function CategoriesModal({
         setDelTarget(null);
         toast({ title: "Categoría eliminada", variant: "success" });
       },
-      onError: () => toast({ title: "No se pudo eliminar", variant: "error" }),
+      onError: (e) => toast({ title: "No se pudo eliminar", description: errorDescription(e), variant: "error" }),
     });
   }
 

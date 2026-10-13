@@ -1,0 +1,93 @@
+[
+  {
+    "id": "arca-facturacion",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "Facturación electrónica ARCA paso a paso",
+    "summary": "El asistente de 8 pasos: datos del negocio, certificado, autorización del servicio, punto de venta, prueba y paso a producción.",
+    "module": "facturacion",
+    "routes": ["/configuracion", "/ventas"],
+    "roles": ["owner", "manager"],
+    "keywords": ["facturacion electronica", "arca", "afip", "factura electronica", "certificado arca", "punto de venta arca", "cae"],
+    "tags": ["fiscal", "wsfe"],
+    "steps": [
+      "Entrá a Configuración, Facturación electrónica, pestaña \"Asistente\". Necesitás clave fiscal nivel 3.",
+      "Paso 1, Datos del negocio: la CUIT y la condición frente al IVA se cargan en Configuración, Impuestos.",
+      "Paso 2, Cómo vas a facturar: elegí \"Certificado propio\" (recomendado). La clave se genera y se guarda cifrada en NinjaSoft.",
+      "Paso 3, Certificado: tocá \"Generar pedido\", copiá el pedido y pedí el certificado de prueba en WSASS (\"Nuevo certificado\"). Pegá lo que te devuelve ARCA y tocá \"Validar y guardar\" (o \"Subir archivo .crt\").",
+      "Paso 4, Autorizar el servicio: en WSASS, \"Crear autorización a servicio\" con el alias, la CUIT y el servicio wsfe.",
+      "Paso 5, Punto de venta: elegí el punto de venta Web Services de cada sucursal (si ARCA no lo lista, escribilo a mano).",
+      "Paso 6, Probar y activar: \"Probar conexión\" y activá. En modo prueba las facturas no tienen validez fiscal; hacen falta 3 facturas de prueba aprobadas.",
+      "Paso 7 es opcional (contingencia CAEA) y el paso 8 es pasar a facturar en real."
+    ],
+    "roleNotes": {
+      "manager": "Podés hacer el asistente y revisar el Monitor, pero pasar a facturar en real lo hace sólo el dueño.",
+      "owner": "Facturación electrónica es del plan Pro. El certificado propio vence cada 2 años y te avisamos 30 días antes."
+    },
+    "errors": [
+      { "problem": "\"Primero cargá la CUIT y la condición frente al IVA en Configuración > Impuestos.\"", "fix": "Completá esos datos y volvé al asistente." },
+      { "problem": "\"ARCA no listó puntos de venta Web Services.\"", "fix": "Dalo de alta en ARCA (A/B/M de Puntos de venta, sistema \"Factura Electrónica - Monotributo - Web Services\" o \"RECE para aplicativo y web services\") o escribí el número a mano." }
+    ],
+    "tips": ["La venta nunca espera a ARCA: la factura entra en una cola y se reintenta sola. En el Monitor ves lo pendiente y lo rechazado (\"Reprocesar\")."],
+    "feature": "facturacion_afip",
+    "related": ["arca-homologacion-produccion", "arca-caea"]
+  },
+  {
+    "id": "arca-homologacion-produccion",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "ARCA: de modo prueba (homologación) a facturar en real (producción)",
+    "summary": "Qué cambia entre homologación y producción y la lista que tiene que estar completa para pasar a facturar en real.",
+    "module": "facturacion",
+    "routes": ["/configuracion"],
+    "roles": ["owner", "manager"],
+    "keywords": ["homologacion", "produccion", "pasar a produccion", "facturar en real", "modo prueba", "certificado de produccion"],
+    "tags": ["fiscal"],
+    "steps": [
+      "En homologación (\"Modo prueba\") las facturas salen pero no tienen validez fiscal. Sirve para probar todo antes.",
+      "Para producción necesitás un certificado real: en ARCA, Administración de Certificados Digitales, \"Agregar alias\", pegá el pedido y bajá el .crt. Cargalo en el paso 8.",
+      "Autorizá el servicio en el Administrador de Relaciones: \"Nueva relación\", Facturación Electrónica, representante \"Computador Fiscal\".",
+      "La lista para pasar tiene que estar completa: datos fiscales, certificado de producción válido, facturas de prueba aprobadas, prueba de conexión real OK (de los últimos 7 días) y puntos de venta verificados.",
+      "Tocá \"Pasar a facturar en real\" y confirmá con \"Sí, facturar en real\". Vas a ver \"Listo: estás facturando en real\"."
+    ],
+    "roleNotes": {
+      "manager": "Sólo el dueño puede pasar a facturar en real. Podés dejar todo listo para que él confirme.",
+      "owner": "Si necesitás cambiar de camino o de certificado, primero tocá \"Volver al modo prueba\"."
+    },
+    "errors": [
+      { "problem": "\"Todavía falta completar la lista para facturar en real.\"", "fix": "Revisá qué ítem de la lista está sin tilde en el paso 8." },
+      { "problem": "\"Sólo el dueño puede pasar a facturar en real.\"", "fix": "Pedile al dueño que confirme el paso." }
+    ],
+    "tips": [],
+    "feature": "facturacion_afip",
+    "related": ["arca-facturacion", "arca-caea"]
+  },
+  {
+    "id": "arca-caea",
+    "version": 1,
+    "updated": "2026-10-13",
+    "title": "ARCA caído: contingencia con CAEA",
+    "summary": "Con la contingencia activada, si ARCA no responde se factura con CAEA en un punto de venta propio y se informa después.",
+    "module": "facturacion",
+    "routes": ["/configuracion", "/pos"],
+    "roles": ["owner", "manager", "cashier"],
+    "keywords": ["caea", "contingencia", "arca no responde", "arca caido", "facturar sin conexion a arca"],
+    "tags": ["fiscal", "contingencia"],
+    "steps": [
+      "Dá de alta en ARCA un punto de venta sólo para contingencia, con el sistema \"RECE para aplicativo y web services - CAEA\".",
+      "En el asistente, paso 7 \"Facturar sin conexión a ARCA\", cargá el \"Punto de venta de contingencia\" y cuántos segundos esperar antes de pasar a contingencia.",
+      "NinjaSoft pide el CAEA de cada quincena por adelantado.",
+      "Si ARCA no responde, vas a ver \"ARCA no responde: en contingencia\" y las facturas salen con CAEA. En el Monitor, filtro \"Con CAEA\"."
+    ],
+    "roleNotes": {
+      "cashier": "No tenés que hacer nada distinto: seguís cobrando y la factura sale igual.",
+      "owner": "El punto de venta de contingencia tiene que ser distinto del de CAE: no puede usarlo otra sucursal o caja."
+    },
+    "errors": [
+      { "problem": "\"Ese punto de venta ya lo usa una sucursal o caja. La contingencia necesita uno propio.\"", "fix": "Dá de alta otro punto de venta CAEA en ARCA." }
+    ],
+    "tips": [],
+    "feature": "facturacion_afip",
+    "related": ["arca-facturacion", "pos-venta-offline"]
+  }
+]

@@ -62,6 +62,46 @@ export interface TableOrderItem {
   // cocina; null = "en espera" (no fue al KDS/comanda todavía).
   course: number;
   fired_at: string | null;
+  // Marca de comanda impresa y estado en cocina: definen si el ítem ya está
+  // ENVIADO (sólo se baja con anulación, F13 · H45).
+  printed_at: string | null;
+  kds_status: KdsStatus;
+  station: string | null;
+  // Comensal al que pertenece la línea (ADR-097). null = compartido / sin asignar.
+  diner: number | null;
+}
+
+// Prioridad del pedido en cocina (ADR-097).
+export type OrderPriority = "normal" | "urgente";
+
+// Anulación de un ítem enviado (F13 · H45, table_order_voids).
+export interface TableOrderVoid {
+  void_id: string;
+  order_id: string;
+  table_label: string | null;
+  name: string;
+  qty: number;
+  station: string | null;
+  course: number;
+  reason: string;
+  created_at: string;
+  // ADR-097: la anulación puede venir de una mesa o de un delivery.
+  source: "mesa" | "delivery";
+}
+
+export interface VoidItemResult {
+  void_id: string;
+  item_id: string;
+  removed: boolean;
+  voided_qty: number;
+  remaining_qty: number;
+}
+
+export interface MoveTableResult {
+  mode: "moved" | "merged";
+  order_id: string;
+  table_id: string;
+  items_moved?: number;
 }
 
 // ── Estaciones de preparación (F13 · H45 ruteo + H46 KDS) ──────────────────────
@@ -124,6 +164,21 @@ export interface KdsTicketItem {
   // table_id/area_name vienen poblados; para delivery van null.
   source: "mesa" | "delivery";
   source_label: string;
+  // Prioridad del pedido (ADR-097): la columna urgente va primero.
+  priority: OrderPriority;
+}
+
+// Tiempo en espera (no disparado) de un pedido activo, para "marchar" desde el
+// KDS (ADR-097, kds_held_courses).
+export interface KdsHeldCourse {
+  source: "mesa" | "delivery";
+  order_id: string;
+  source_label: string;
+  area_name: string | null;
+  course: number;
+  held: number;
+  priority: OrderPriority;
+  first_at: string;
 }
 
 export interface TableOrder {
@@ -134,6 +189,26 @@ export interface TableOrder {
   opened_at: string;
   sale_id: string | null;
   notes: string | null;
+  // Cuenta separada (ADR-097): pedido padre y etiqueta ("Comensal 2").
+  parent_order_id: string | null;
+  split_label: string | null;
+  priority: OrderPriority;
+}
+
+// Cuenta separada abierta (hijo de un pedido de mesa) con su total.
+export interface TableSplit {
+  id: string;
+  split_label: string | null;
+  status: "abierta" | "cobrada" | "cancelada";
+  sale_id: string | null;
+  total: number;
+}
+
+export interface SplitResult {
+  order_id: string;
+  parent_order_id: string;
+  label: string;
+  total: number;
 }
 
 // ── Comanda impresa por estación (F13 · H45) ───────────────────────────────────
@@ -157,6 +232,9 @@ export interface ComandaItem {
   area_name: string | null;
   waiter_name: string | null;
   opened_at: string;
+  // ADR-097: prioridad y cuenta separada en la cabecera de la comanda.
+  priority: OrderPriority;
+  split_label: string | null;
 }
 
 export interface AreaInput {
@@ -316,6 +394,16 @@ export const tablesApi = {
     } as never);
     if (error) throw error;
   },
+
+  // Cambia el mozo de una mesa abierta (relevo). Audita 'waiter_changed'.
+  setWaiter: async (tableId: string, waiterUserId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_table_waiter" as never, {
+      p_table_id: tableId,
+      p_waiter_user_id: waiterUserId,
+    } as never);
+    if (error) throw error;
+  },
 };
 
 // ── Pedidos de mesa ────────────────────────────────────────────────────────────
@@ -327,7 +415,7 @@ export const tableOrdersApi = {
     const { data, error } = await supabase
       .from("table_order_items" as never)
       .select(
-        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at",
+        "id, order_id, product_id, name, qty, unit_price, modifiers, notes, allergens, course, fired_at, printed_at, kds_status, station, diner",
       )
       .eq("order_id", orderId)
       .order("created_at");
@@ -340,7 +428,7 @@ export const tableOrdersApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("table_orders" as never)
-      .select("id, table_id, status, opened_by, opened_at, sale_id, notes")
+      .select("id, table_id, status, opened_by, opened_at, sale_id, notes, parent_order_id, split_label, priority")
       .eq("id", orderId)
       .maybeSingle();
     if (error) throw error;
@@ -466,10 +554,134 @@ export const tableOrdersApi = {
     return tableOrdersApi.setItemQty(itemId, 0);
   },
 
+  // Mueve el pedido a otra mesa: libre → se muda entero; ocupada → se unen las
+  // cuentas (el pedido de origen queda cancelado con merged_into). Audita.
+  move: async (orderId: string, targetTableId: string): Promise<MoveTableResult> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("move_table_order" as never, {
+      p_order_id: orderId,
+      p_target_table_id: targetTableId,
+    } as never);
+    if (error) throw error;
+    return data as unknown as MoveTableResult;
+  },
+
+  // Transfiere algunas líneas a otra mesa (la abre si está libre). Audita.
+  transferItems: async (
+    itemIds: string[],
+    targetTableId: string,
+  ): Promise<{ order_id: string; items_moved: number }> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("transfer_table_order_items" as never, {
+      p_item_ids: itemIds,
+      p_target_table_id: targetTableId,
+    } as never);
+    if (error) throw error;
+    return data as unknown as { order_id: string; items_moved: number };
+  },
+
+  // Anula (total o parcial) un ítem ya enviado a cocina, con motivo. Audita.
+  voidItem: async (itemId: string, qty: number | null, reason: string): Promise<VoidItemResult> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("void_table_order_item" as never, {
+      p_item_id: itemId,
+      p_qty: qty,
+      p_reason: reason,
+    } as never);
+    if (error) throw error;
+    return data as unknown as VoidItemResult;
+  },
+
+  markVoidsPrinted: async (voidIds: string[]): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("mark_comanda_void_printed" as never, {
+      p_void_ids: voidIds,
+    } as never);
+    if (error) throw error;
+  },
+
   cancel: async (orderId: string): Promise<void> => {
     const supabase = createClient();
     const { error } = await supabase.rpc("cancel_table_order" as never, {
       p_order_id: orderId,
+    } as never);
+    if (error) throw error;
+  },
+
+  // ── Cuenta por comensal (ADR-097) ──────────────────────────────────────────
+  // Asigna líneas a un comensal (null = compartido).
+  setItemsDiner: async (itemIds: string[], diner: number | null): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_table_items_diner" as never, {
+      p_item_ids: itemIds,
+      p_diner: diner,
+    } as never);
+    if (error) throw error;
+  },
+
+  // Separa líneas (enteras o con cantidad parcial) en una cuenta hija que se
+  // cobra sola en el POS (/pos?table=<hijo>).
+  split: async (
+    orderId: string,
+    lines: { item_id: string; qty: number | null }[],
+    label: string,
+  ): Promise<SplitResult> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("split_table_order" as never, {
+      p_order_id: orderId,
+      p_lines: lines,
+      p_label: label,
+    } as never);
+    if (error) throw error;
+    return data as unknown as SplitResult;
+  },
+
+  // Deshace una cuenta separada todavía abierta: las líneas vuelven al padre.
+  unsplit: async (splitId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("unsplit_table_order" as never, {
+      p_split_id: splitId,
+    } as never);
+    if (error) throw error;
+  },
+
+  // Cuentas separadas de un pedido (abiertas y cobradas) con su total.
+  splits: async (parentOrderId: string): Promise<TableSplit[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("table_orders" as never)
+      .select("id, split_label, status, sale_id, created_at, table_order_items(qty, unit_price)")
+      .eq("parent_order_id", parentOrderId)
+      .neq("status", "cancelada")
+      .order("created_at");
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as {
+      id: string;
+      split_label: string | null;
+      status: TableSplit["status"];
+      sale_id: string | null;
+      table_order_items: { qty: number; unit_price: number }[] | null;
+    }[];
+    return rows.map((r) => ({
+      id: r.id,
+      split_label: r.split_label,
+      status: r.status,
+      sale_id: r.sale_id,
+      total: (r.table_order_items ?? []).reduce((a, i) => a + Number(i.qty) * Number(i.unit_price), 0),
+    }));
+  },
+
+  // Prioridad del pedido en cocina (mesa o delivery). Audita.
+  setPriority: async (
+    source: "mesa" | "delivery",
+    orderId: string,
+    priority: OrderPriority,
+  ): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_order_priority" as never, {
+      p_source: source,
+      p_order_id: orderId,
+      p_priority: priority,
     } as never);
     if (error) throw error;
   },
@@ -510,6 +722,46 @@ export const kdsApi = {
     const { error } = await supabase.rpc("set_item_kds_status" as never, {
       p_item_id: itemId,
       p_status: status,
+    } as never);
+    if (error) throw error;
+  },
+
+  // Anulaciones recientes sin "visto" (aviso a cocina). station null = todas.
+  recentVoids: async (station: string | null): Promise<TableOrderVoid[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("kds_recent_voids" as never, {
+      p_station: station ?? null,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as TableOrderVoid[];
+  },
+
+  // Tiempos en espera por pedido (para "marchar" el siguiente desde cocina).
+  heldCourses: async (station: string | null): Promise<KdsHeldCourse[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("kds_held_courses" as never, {
+      p_station: station ?? null,
+    } as never);
+    if (error) throw error;
+    return (data ?? []) as unknown as KdsHeldCourse[];
+  },
+
+  // Marcha (dispara) un tiempo de un pedido de mesa o de delivery.
+  fireCourse: async (source: "mesa" | "delivery", orderId: string, course: number): Promise<number> => {
+    const supabase = createClient();
+    const fn = source === "mesa" ? "fire_table_order_course" : "fire_delivery_order_course";
+    const { data, error } = await supabase.rpc(fn as never, {
+      p_order_id: orderId,
+      p_course: course,
+    } as never);
+    if (error) throw error;
+    return ((data as { fired?: number } | null)?.fired ?? 0) as number;
+  },
+
+  ackVoid: async (voidId: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("ack_comanda_void" as never, {
+      p_void_id: voidId,
     } as never);
     if (error) throw error;
   },

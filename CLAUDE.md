@@ -172,10 +172,10 @@ Toda nueva funcionalidad, módulo o medio de pago se agrega como **check en la t
 **Clasificá la función** en una de estas categorías y respetá su tratamiento:
 
 - **BASE** — siempre on; es parte de pagar cualquier plan. Se marca `is_basic=true` (entra por defecto en todo plan salvo apagado explícito `modules[key]=false`). Ej.: `pos`, `caja`, `stock`, `productos`, `clientes`, `panel_dueno`, `devoluciones`.
-- **OPTIONAL** — gateada por plan (`is_basic=false`, se activa por nivel comercial). Ej.: `garantias`, `cuenta_corriente`, `listas_precios`, `variantes`, `tickets_pro`.
+- **OPTIONAL** — gateada por plan (`is_basic=false`, se activa por nivel comercial). Ej.: `garantias`, `cuenta_corriente`, `listas_precios`, `variantes`, `tickets_pro`, `promociones` (ADR-074).
 - **ADDON** — no entra por plan; se contrata por negocio (tabla de addons). Ej.: `asistente_ia`. No se gatea por `modules`.
 - **FLAG-OPERATIVO** — elección del dueño según su rubro, gratis y sin costo de plan; es un switch operativo (`pos_settings`), no una feature de plan. Ej.: mesas/KDS/comandas, delivery propio, venta libre, PLU, scanner.
-- **MARKETING-FUTURO** — prometida en la comparación pero **la función todavía no existe**, por lo que no se puede enforce hoy (sólo copy/marketing). Ej.: `promociones`, `facturacion_afip`, `roles_permisos` (granular), `metricas_avanzadas`, `backup`, `api_publica`, `soporte_prioritario`. Documentá la deuda en el decision-log.
+- **MARKETING-FUTURO** — prometida en la comparación pero **la función todavía no existe**, por lo que no se puede enforce hoy (sólo copy/marketing). Ej.: `facturacion_afip`, `roles_permisos` (granular), `metricas_avanzadas`, `backup`, `api_publica`, `soporte_prioritario`. Documentá la deuda en el decision-log.
 
 **Fuente de verdad de la matriz:** el **editor de planes en internal** (`components/internal/plans/PlanEditorModal.tsx` → `FeatureMatrix`), que lee `features` + `plans.limits.modules`. Lo que se vea ahí es lo que el cliente recibe; `planComparison.ts` y el panel del dueño derivan de los mismos datos.
 

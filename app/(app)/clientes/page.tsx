@@ -28,9 +28,18 @@ import { exportXlsx } from "@/lib/utils/xlsx";
 import { CUSTOMER_IMPORT_COLUMNS } from "@/modules/customers/import";
 import { NoData } from "@/components/ui/NoData";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { errorDescription } from "@/lib/permissions/errors";
+import { useRolePermissions } from "@/lib/permissions/useRole";
+import { RoleButton, RoleIconButton } from "@/components/permissions/RoleGate";
 
 export default function ClientesPage() {
   const { toast } = useToast();
+  // Permisos por rol (ADR-071): el cajero da de alta y edita, no da de baja;
+  // solo lectura no escribe.
+  const perms = useRolePermissions();
+  const deniedCreate = perms.denied("customers:create");
+  const deniedUpdate = perms.denied("customers:update");
+  const deniedDelete = perms.denied("customers:delete");
   const router = useRouter();
   const pageSize = usePageSize();
   const [search, setSearch] = useState("");
@@ -96,8 +105,8 @@ export default function ClientesPage() {
       await remove.mutateAsync(delTarget.id);
       setDelTarget(null);
       toast({ title: "Cliente eliminado", variant: "success" });
-    } catch {
-      toast({ title: "No se pudo eliminar", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo eliminar", description: errorDescription(e), variant: "error" });
     }
   }
 
@@ -122,15 +131,21 @@ export default function ClientesPage() {
             >
               <Download size={16} /> Exportar XLSX
             </GatedButton>
-            <GatedButton
-              feature="importacion_excel"
-              featureLabel="Importación desde Excel"
-              variant="secondary"
-              className="shrink-0"
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload size={16} /> Importar XLSX
-            </GatedButton>
+            {deniedCreate ? (
+              <RoleButton denied={deniedCreate} variant="secondary" className="shrink-0">
+                <Upload size={16} /> Importar XLSX
+              </RoleButton>
+            ) : (
+              <GatedButton
+                feature="importacion_excel"
+                featureLabel="Importación desde Excel"
+                variant="secondary"
+                className="shrink-0"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload size={16} /> Importar XLSX
+              </GatedButton>
+            )}
             <GatedButton
               feature="cuenta_corriente"
               featureLabel="Cuenta corriente"
@@ -143,7 +158,8 @@ export default function ClientesPage() {
             <Button variant="secondary" className="shrink-0" onClick={() => setBdayOpen(true)}>
               <Cake size={16} /> Cumpleaños
             </Button>
-            <Button
+            <RoleButton
+              denied={deniedCreate}
               className="shrink-0"
               onClick={() => {
                 setSelected(null);
@@ -151,7 +167,7 @@ export default function ClientesPage() {
               }}
             >
               <Plus size={16} /> Nuevo cliente
-            </Button>
+            </RoleButton>
           </div>
         </div>
 
@@ -239,7 +255,8 @@ export default function ClientesPage() {
                       >
                         <Clock size={16} />
                       </button>
-                      <button
+                      <RoleIconButton
+                        denied={deniedUpdate}
                         onClick={() => {
                           setSelected(c);
                           setFormOpen(true);
@@ -248,14 +265,15 @@ export default function ClientesPage() {
                         className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                       >
                         <Pencil size={16} />
-                      </button>
-                      <button
+                      </RoleIconButton>
+                      <RoleIconButton
+                        denied={deniedDelete}
                         onClick={() => setDelTarget(c)}
                         title="Eliminar"
                         className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                       >
                         <Trash2 size={16} />
-                      </button>
+                      </RoleIconButton>
                     </div>
                   </td>
                 </tr>

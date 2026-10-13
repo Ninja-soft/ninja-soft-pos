@@ -24,6 +24,9 @@ import { Pagination } from "@/components/ui/Pagination";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { useToast } from "@/components/ui/Toast";
 import { GatedButton } from "@/components/saas/GatedAction";
+import { RoleButton, RoleIconButton } from "@/components/permissions/RoleGate";
+import { useRolePermissions } from "@/lib/permissions/useRole";
+import { errorDescription } from "@/lib/permissions/errors";
 import { ProductFormModal } from "@/components/products/ProductFormModal";
 import { StockAdjustModal } from "@/components/products/StockAdjustModal";
 import { MermaModal } from "@/components/products/MermaModal";
@@ -99,6 +102,14 @@ export default function ProductosPage() {
   const [selected, setSelected] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const { toast } = useToast();
+  // Permisos por rol (ADR-071): el cajero no toca catálogo ni stock; solo
+  // lectura no escribe nada. La base lo rechaza igual (role_write_guard).
+  const perms = useRolePermissions();
+  const deniedCatalog = perms.denied("catalog:write");
+  const deniedTaxonomy = perms.denied("catalog:taxonomy");
+  const deniedImport = perms.denied("catalog:import");
+  const deniedStock = perms.denied("stock:adjust");
+  const deniedFavorite = perms.denied("catalog:write");
   const debouncedSearch = useDebouncedValue(search, 350);
 
   useEffect(() => {
@@ -238,8 +249,8 @@ export default function ProductosPage() {
           : "Agregado a favoritos del POS",
         variant: "success",
       });
-    } catch {
-      toast({ title: "No se pudo actualizar el favorito", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo actualizar el favorito", description: errorDescription(e), variant: "error" });
     }
   }
 
@@ -248,8 +259,8 @@ export default function ProductosPage() {
     try {
       await remove.mutateAsync(deleteTarget.id);
       toast({ title: "Producto eliminado", variant: "success" });
-    } catch {
-      toast({ title: "No se pudo eliminar", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo eliminar", description: errorDescription(e), variant: "error" });
     } finally {
       setDeleteTarget(null);
     }
@@ -274,21 +285,37 @@ export default function ProductosPage() {
             >
               <Download size={16} /> Exportar XLSX
             </GatedButton>
-            <GatedButton
-              feature="importacion_excel"
-              featureLabel="Importación desde Excel"
+            {deniedImport ? (
+              <RoleButton denied={deniedImport} variant="secondary" className="shrink-0">
+                <Upload size={16} /> Importar XLSX
+              </RoleButton>
+            ) : (
+              <GatedButton
+                feature="importacion_excel"
+                featureLabel="Importación desde Excel"
+                variant="secondary"
+                className="shrink-0"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload size={16} /> Importar XLSX
+              </GatedButton>
+            )}
+            <RoleButton
+              denied={deniedTaxonomy}
               variant="secondary"
               className="shrink-0"
-              onClick={() => setImportOpen(true)}
+              onClick={() => setCategoriesOpen(true)}
             >
-              <Upload size={16} /> Importar XLSX
-            </GatedButton>
-            <Button variant="secondary" className="shrink-0" onClick={() => setCategoriesOpen(true)}>
               <FolderTree size={16} /> Categorías
-            </Button>
-            <Button variant="secondary" className="shrink-0" onClick={() => setBrandsOpen(true)}>
+            </RoleButton>
+            <RoleButton
+              denied={deniedTaxonomy}
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => setBrandsOpen(true)}
+            >
               <Tag size={16} /> Marcas
-            </Button>
+            </RoleButton>
             <GatedButton
               feature="garantias"
               featureLabel="Garantías"
@@ -298,9 +325,9 @@ export default function ProductosPage() {
             >
               <ShieldCheck size={16} /> Garantías
             </GatedButton>
-            <Button className="shrink-0" onClick={openNew}>
+            <RoleButton denied={deniedCatalog} className="shrink-0" onClick={openNew} data-tour="productos-nuevo">
               <Plus size={16} /> Nuevo producto
-            </Button>
+            </RoleButton>
           </div>
           }
         />
@@ -389,9 +416,11 @@ export default function ProductosPage() {
                       title="Todavía no cargaste productos"
                       description="Creá el primero y empezá a vender."
                       action={
-                        <Button size="sm" onClick={openNew}>
-                          <Plus size={16} /> Nuevo producto
-                        </Button>
+                        deniedCatalog ? undefined : (
+                          <Button size="sm" onClick={openNew}>
+                            <Plus size={16} /> Nuevo producto
+                          </Button>
+                        )
                       }
                     />
                   )}
@@ -492,7 +521,8 @@ export default function ProductosPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1">
-                          <button
+                          <RoleIconButton
+                            denied={deniedFavorite}
                             onClick={() => toggleFavorite(p)}
                             title={
                               p.is_favorite
@@ -510,28 +540,31 @@ export default function ProductosPage() {
                               size={16}
                               className={p.is_favorite ? "fill-ninja-flameSoft" : ""}
                             />
-                          </button>
-                          <button
+                          </RoleIconButton>
+                          <RoleIconButton
+                            denied={deniedStock}
                             onClick={() => openAdjust(p)}
                             title="Ajustar stock"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                           >
                             <SlidersHorizontal size={16} />
-                          </button>
-                          <button
+                          </RoleIconButton>
+                          <RoleIconButton
+                            denied={deniedStock}
                             onClick={() => openMerma(p)}
                             title="Registrar merma"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-amber-400/15 hover:text-warning"
                           >
                             <PackageMinus size={16} />
-                          </button>
-                          <button
+                          </RoleIconButton>
+                          <RoleIconButton
+                            denied={deniedStock}
                             onClick={() => openProduction(p)}
                             title="Registrar producción"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-emerald-400/15 hover:text-success"
                           >
                             <PackagePlus size={16} />
-                          </button>
+                          </RoleIconButton>
                           <button
                             onClick={() => openHistory(p)}
                             title="Historial de stock"
@@ -539,20 +572,22 @@ export default function ProductosPage() {
                           >
                             <History size={16} />
                           </button>
-                          <button
+                          <RoleIconButton
+                            denied={deniedCatalog}
                             onClick={() => openEdit(p)}
                             title="Editar"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                           >
                             <Pencil size={16} />
-                          </button>
-                          <button
+                          </RoleIconButton>
+                          <RoleIconButton
+                            denied={deniedCatalog}
                             onClick={() => onDelete(p)}
                             title="Eliminar"
                             className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                           >
                             <Trash2 size={16} />
-                          </button>
+                          </RoleIconButton>
                         </div>
                       </td>
                     </tr>

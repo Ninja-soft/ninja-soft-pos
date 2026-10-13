@@ -956,6 +956,16 @@ export interface PaymentOrderInput {
   lines: PaymentLineDraft[];
   withholdings: WithholdingLine[];
   allocations: AllocationDraft[];
+  /** ADR-079: el servidor calcula las retenciones como agente y numera los certificados. */
+  agent_retentions?: boolean;
+  /** Total que vio el usuario; si el servidor calcula otro, `retentions_changed`. */
+  agent_expected_total?: number;
+  retention_options?: {
+    ganancias_concept?: string | null;
+    ganancias_condition?: string | null;
+    suss_code?: string | null;
+    save_profile?: boolean;
+  };
 }
 
 export interface InvoiceOpenRow extends OpenInvoice {

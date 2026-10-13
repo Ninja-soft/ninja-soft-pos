@@ -35,6 +35,13 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
+import { useSaleTaxLines } from "@/modules/tax/hooks";
+import { saleTaxTicket } from "@/lib/tax/ticket";
+import { useSaleFiscalDocuments } from "@/modules/arca/hooks";
+import { ticketFiscal } from "@/lib/arca/ticket";
+import { FiscalStatus } from "@/components/arca/FiscalStatus";
+import { useSalePromotions } from "@/modules/promotions/hooks";
+import type { SalePromotion } from "@/modules/promotions/api";
 
 export type DetailTab = "ticket" | "cobros";
 const TABS: { value: DetailTab; label: string }[] = [
@@ -53,6 +60,13 @@ interface Props {
 
 export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
+  // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
+  const taxLines = useSaleTaxLines(open ? saleId : null);
+  // F3 · ADR-072: factura electrónica de la venta (CAE + QR en el ticket).
+  const fiscalDocs = useSaleFiscalDocuments(open ? saleId : null);
+  const saleFiscalDoc = (fiscalDocs.data ?? []).find((d) => d.origin === "sale") ?? null;
+  // ADR-074: promociones aplicadas, una línea por promo en el ticket.
+  const salePromos = useSalePromotions(open ? saleId : null);
   // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
   const { data: brand } = useTicketBranding(
     open,
@@ -208,6 +222,9 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           discount_total: data.sale.discount_total,
           total: data.sale.total,
           status: data.sale.status,
+          ...saleTaxTicket(data.sale, taxLines.data ?? []),
+          fiscal: ticketFiscal(saleFiscalDoc),
+          promotions: salePromotionsForTicket(data.sale, salePromos.data ?? []),
         },
         items: data.items.map((it) => ({
           id: it.id,
@@ -334,6 +351,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           )}
 
           <div className="no-print mt-4 space-y-3">
+            {/* Estado fiscal (ADR-072): factura, CAE, QR y reproceso. */}
+            <FiscalStatus saleId={data.sale.id} docs={fiscalDocs.data ?? []} saleStatus={data.sale.status} />
             {/* Estado de envío + hint SMTP + formulario inline (bloque propio). */}
             <SendReceiptEmail
               saleId={data.sale.id}
@@ -393,4 +412,13 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
       )}
     </Modal>
   );
+}
+
+// Promos del ticket: las de sale_promotions o, en ventas anteriores a
+// ADR-074, la única promo guardada en la venta.
+function salePromotionsForTicket(sale: unknown, rows: SalePromotion[]) {
+  if (rows.length > 0) return rows.map((r) => ({ label: r.label, kind: r.kind, amount: r.discount }));
+  const s = sale as { promo_name?: string | null; promo_discount?: number | string | null };
+  const amount = Number(s.promo_discount) || 0;
+  return amount > 0 ? [{ label: s.promo_name || "Promoción", kind: "discount" as const, amount }] : [];
 }

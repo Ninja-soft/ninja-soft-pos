@@ -25,6 +25,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
+import { WaitlistNoticesBanner } from "@/components/dining/WaitlistNoticesBanner";
 
 const ALL_AREAS = "__todos";
 
@@ -189,6 +190,9 @@ export default function SalonPage() {
           </>
         }
       />
+
+      {/* Lista de espera (ADR-097): se liberó una mesa y entra el primero de la fila. */}
+      <WaitlistNoticesBanner className="mb-4" />
 
       {/* Filtro por salón (control segmentado). Sólo si hay más de un salón. */}
       {(areas ?? []).length > 1 && (

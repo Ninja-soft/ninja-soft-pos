@@ -13,6 +13,7 @@
 //   * Responde 200 enseguida (MP corta a los 22 s y reintenta): el trabajo
 //     corre en segundo plano con EdgeRuntime.waitUntil cuando está disponible.
 // =============================================================================
+import { readJsonLimited } from "../_shared/requestGuard.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { runInBackground, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
@@ -23,6 +24,7 @@ import {
   type OrderIntentRow,
 } from "../_shared/mpIntents.ts";
 import { parseOrderNotification } from "../_shared/mpOrders.ts";
+import { withWebhookLog, type WebhookCtx } from "../_shared/webhookLog.ts";
 
 const ok = () =>
   new Response(JSON.stringify({ ok: true }), {
@@ -30,7 +32,7 @@ const ok = () =>
     headers: { "Content-Type": "application/json" },
   });
 
-async function handle(orderId: string): Promise<void> {
+async function handle(orderId: string, wh: WebhookCtx): Promise<void> {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
@@ -42,42 +44,52 @@ async function handle(orderId: string): Promise<void> {
     .maybeSingle();
   const row = rowRaw as OrderIntentRow | null;
   if (!row) return; // order que no es nuestra (u otra integración de la cuenta).
+  wh.tenant(row.tenant_id);
   if (row.status === "approved") return; // ya acreditado: idempotente.
 
   // ADR-057: la credencial (negocio o sucursal) con la que se creó el cobro.
   const cred = await tenantMpCredential(admin, row.tenant_id, row.mp_env ?? "prod", {
     scopeStoreId: await intentSecretScope(admin, row.id),
   });
-  if (!cred) return;
+  if (!cred) {
+    wh.fail("sin credencial de Mercado Pago");
+    return;
+  }
   const got = await fetchOrder(cred.token, orderId);
   if (!got.ok) {
     console.error("[mp_orders_webhook] no se pudo leer la order", {
       orderId,
       status: got.status,
     });
+    wh.fail(`no se pudo leer la order (${got.status})`);
     return;
   }
   await applyOrderToIntent(admin, row, got.order, { userId: null, source: "webhook" });
+  wh.done();
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("mercadopago_orders", "mp_orders_webhook", async (req: Request, wh) => {
   try {
     const reqUrl = new URL(req.url);
     let body: unknown = null;
     if (req.method === "POST") {
       try {
-        body = await req.json();
+        body = await readJsonLimited(req);
       } catch {
         body = null;
       }
     }
     const n = parseOrderNotification(reqUrl, body);
     if (n.type !== "order" || !n.orderId) return ok();
+    wh.ref(n.orderId);
 
-    const pending = runInBackground(handle(n.orderId));
+    const work = handle(n.orderId, wh);
+    wh.defer(work);
+    const pending = runInBackground(work);
     if (pending) await pending;
     return ok();
-  } catch {
+  } catch (e) {
+    wh.fail(e);
     return ok();
   }
-});
+}));

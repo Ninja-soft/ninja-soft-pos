@@ -1,21 +1,34 @@
 "use client";
 
-// F8 · H17b — Checkout PROPIO de la tienda (Payway transparente).
+// F8 · H17b: checkout PROPIO de la tienda (Payway transparente) y, desde
+// ADR-069, Getnet con la Checkout API (/pagar/{intent}?p=getnet).
 // El cliente llega acá escaneando el QR del POS (/pagar/{intent}): ve la marca
 // del negocio, elige tarjeta y cuotas (Planes del negocio, con el interés de
-// cada opción), carga la tarjeta y paga. PCI: el PAN viaja del navegador
-// DIRECTO a Payway (POST tokens con la API Key pública); nuestro backend solo
-// recibe el token de un solo uso y cobra server-side recalculando el monto.
+// cada opción), carga la tarjeta y paga. El backend cobra server-side
+// recalculando el monto. Tokenización por procesador
+// (lib/payments/checkoutProviders.ts):
+//   * Payway: el PAN viaja del navegador DIRECTO a Payway (POST tokens con la
+//     API Key pública); nuestro backend solo recibe el token de un solo uso.
+//   * Getnet: no hay tokenización desde el navegador; la tarjeta va a la Edge
+//     getnet_checkout, que la tokeniza en Getnet y la descarta.
 //
 // Página pública SIEMPRE clara (es del cliente final, fuera del tema del POS).
 // El color de acento sale del branding del negocio, ajustado a contraste AA
 // (lib/payments/paywayCheckout.ts).
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cardAppIcon, paymentWordmark } from "@/lib/payments/logos";
 import { paywayPayMessage, paywayTokenMessage } from "@/lib/payments/paywayMessages";
+import {
+  buildGetnetPayBody,
+  CHECKOUT_EDGE,
+  checkoutProviderOf,
+  PROCESSOR_NAME,
+  SECURE_COPY,
+  type CheckoutProvider,
+} from "@/lib/payments/checkoutProviders";
 import {
   accentPalette,
   availablePlans,
@@ -39,8 +52,11 @@ type Info = {
   plans: CheckoutPlan[];
   brands: string[];
   debit_brands?: string[];
-  public_apikey: string;
-  tokens_url: string;
+  /** Payway: tokenización en el navegador. */
+  public_apikey?: string;
+  tokens_url?: string;
+  /** Getnet: false = el checkout propio todavía no está habilitado. */
+  available?: boolean;
 };
 
 type PayRes = { ok?: boolean; status?: string; error?: string; reason?: string };
@@ -58,12 +74,15 @@ const BRAND_LABELS: Record<string, string> = {
 
 const fmt = (n: number) => n.toLocaleString("es-AR", { style: "currency", currency: "ARS" });
 
-type Phase = "form" | "paying" | "done" | "review" | "unavailable";
+type Phase = "form" | "paying" | "done" | "review" | "unavailable" | "disabled";
 type Field = keyof CardFieldErrors;
 
 export default function PagarPage() {
   const params = useParams<{ id: string }>();
   const intentId = String(params?.id ?? "");
+  const search = useSearchParams();
+  const provider: CheckoutProvider = checkoutProviderOf(search?.get("p"));
+  const edge = CHECKOUT_EDGE[provider];
   const supabase = useMemo(() => createClient(), []);
 
   const [info, setInfo] = useState<Info | null>(null);
@@ -86,7 +105,7 @@ export default function PagarPage() {
   useEffect(() => {
     if (!intentId) return;
     supabase.functions
-      .invoke("payway_checkout", { body: { action: "info", intent_id: intentId } })
+      .invoke(edge, { body: { action: "info", intent_id: intentId } })
       .then(({ data, error }) => {
         if (error || (data as { error?: string })?.error) setLoadError(true);
         else {
@@ -96,10 +115,11 @@ export default function PagarPage() {
             setPaid({ total: i.amount, installments: 0 });
             setPhase("done");
           } else if (i.status !== "pending") setPhase("unavailable");
+          else if (i.available === false) setPhase("disabled");
         }
       })
       .catch(() => setLoadError(true));
-  }, [intentId, supabase]);
+  }, [intentId, supabase, edge]);
 
   const pal = useMemo(() => accentPalette(info?.accent), [info?.accent]);
   const offered = useMemo(() => info?.brands ?? [], [info]);
@@ -142,6 +162,18 @@ export default function PagarPage() {
     const cardDigits = cardNumber.replace(/\D/g, "");
     const [expMonth, expYear] = exp.split("/");
     try {
+      if (provider === "getnet") {
+        // Getnet: un solo paso; la Edge tokeniza en Getnet y cobra.
+        const { data, error } = await supabase.functions.invoke(edge, {
+          body: buildGetnetPayBody(intentId, brand, chosen.installments, { number: cardNumber, exp, cvv, holder, dni }),
+        });
+        await handlePayResult(data, error);
+        return;
+      }
+      if (!info.tokens_url || !info.public_apikey) {
+        fail({ title: "No se pudo completar el pago", text: paywayPayMessage({}) });
+        return;
+      }
       // 1) Token: PAN directo del navegador a Payway (API Key PÚBLICA).
       const tokRes = await fetch(info.tokens_url, {
         method: "POST",
@@ -161,7 +193,7 @@ export default function PagarPage() {
         return;
       }
       // 2) Cobro server-side (el monto se recalcula en el backend).
-      const { data, error } = await supabase.functions.invoke("payway_checkout", {
+      const { data, error } = await supabase.functions.invoke(edge, {
         body: {
           action: "pay",
           intent_id: intentId,
@@ -171,34 +203,41 @@ export default function PagarPage() {
           installments: chosen.installments,
         },
       });
-      const res = (data ?? {}) as PayRes;
-      if (!error && res.ok) {
-        setPaid({ total: quote.total, installments: quote.installments });
-        setPhase("done");
-        return;
-      }
-      // FunctionsHttpError: leer el cuerpo real (402 = rechazo del emisor,
-      // 502 payway_error = falla del procesador, 202 = en revisión).
-      let result: PayRes = res;
-      const ctx = (error as { context?: Response } | null)?.context;
-      if (ctx) {
-        const body = (await ctx.json().catch(() => null)) as PayRes | null;
-        if (body) result = body;
-      }
-      const text = paywayPayMessage(result);
-      if (result.status === "pending_review" || result.error === "payment_in_review") {
-        setPayError({ title: "Pago en revisión", text });
-        setPhase("review");
-      } else if (result.error === "intent_not_pending") {
-        setPhase("unavailable");
-      } else {
-        fail({
-          title: result.status === "rejected_attempt" ? "Pago rechazado" : "No se pudo completar el pago",
-          text,
-        });
-      }
+      await handlePayResult(data, error);
     } catch {
       fail({ title: "Sin conexión", text: "No se pudo procesar el pago. Revisá tu conexión." });
+    }
+  }
+
+  // Respuesta del cobro (mismo contrato en payway_checkout y getnet_checkout).
+  async function handlePayResult(data: unknown, error: unknown) {
+    const res = (data ?? {}) as PayRes;
+    if (!error && res.ok) {
+      setPaid({ total: quote.total, installments: quote.installments });
+      setPhase("done");
+      return;
+    }
+    // FunctionsHttpError: leer el cuerpo real (402 = rechazo del emisor,
+    // 502 = falla del procesador, 202 = en revisión).
+    let result: PayRes = res;
+    const ctx = (error as { context?: Response } | null)?.context;
+    if (ctx) {
+      const body = (await ctx.json().catch(() => null)) as PayRes | null;
+      if (body) result = body;
+    }
+    const text = paywayPayMessage(result);
+    if (result.status === "pending_review" || result.error === "payment_in_review") {
+      setPayError({ title: "Pago en revisión", text });
+      setPhase("review");
+    } else if (result.error === "intent_not_pending") {
+      setPhase("unavailable");
+    } else if (result.error === "checkout_api_unavailable") {
+      setPhase("disabled");
+    } else {
+      fail({
+        title: result.status === "rejected_attempt" ? "Pago rechazado" : "No se pudo completar el pago",
+        text,
+      });
     }
   }
 
@@ -255,6 +294,12 @@ export default function PagarPage() {
             </StateCard>
           ) : phase === "review" ? (
             <StateCard tone="warning" title="Pago en revisión" text={payError?.text ?? ""} />
+          ) : phase === "disabled" ? (
+            <StateCard
+              tone="neutral"
+              title="El pago con tarjeta no está disponible"
+              text="Este comercio todavía no puede cobrar con tarjeta por acá. Pedile al cajero otro medio de pago."
+            />
           ) : (
             <StateCard
               tone="neutral"
@@ -262,7 +307,7 @@ export default function PagarPage() {
               text={paywayPayMessage({ error: "intent_not_pending" })}
             />
           )}
-          <SecureFooter />
+          <SecureFooter provider={provider} />
         </div>
       </main>
     );
@@ -342,14 +387,14 @@ export default function PagarPage() {
                   </dl>
                 </div>
                 <div className="border-t border-neutral-200 bg-neutral-50 p-6">
-                  <SecureNote />
+                  <SecureNote provider={provider} />
                 </div>
               </div>
             ) : (
               <div className="h-[460px] animate-pulse rounded-lg bg-white" />
             )}
             <div className="mt-5 px-1">
-              <PoweredBy />
+              <PoweredBy provider={provider} />
               <Legal className="mt-4 text-left" />
             </div>
           </aside>
@@ -623,7 +668,7 @@ export default function PagarPage() {
         </div>
 
         <div className="lg:hidden">
-          <SecureFooter />
+          <SecureFooter provider={provider} />
         </div>
       </div>
     </main>
@@ -814,29 +859,30 @@ function LoadingSkeleton() {
   );
 }
 
-function SecureNote() {
+function SecureNote({ provider }: { provider: CheckoutProvider }) {
   return (
     <div className="flex gap-3">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700">
         <LockIcon className="h-4 w-4" />
       </span>
       <p className="text-[13px] leading-relaxed text-neutral-700">
-        <span className="font-semibold text-neutral-900">Pago seguro.</span> Tus datos de tarjeta
-        van cifrados directo a Payway. NinjaPOS y el comercio no los ven ni los guardan.
+        <span className="font-semibold text-neutral-900">Pago seguro.</span> {SECURE_COPY[provider]}
       </p>
     </div>
   );
 }
 
-function PoweredBy() {
-  const payway = paymentWordmark("payway");
+function PoweredBy({ provider }: { provider: CheckoutProvider }) {
+  const mark = paymentWordmark(provider);
   return (
     <div className="flex items-end justify-between gap-3">
       <span className="flex flex-col items-start gap-1.5 text-[11px] text-neutral-600">
         Procesado por
-        {payway && (
+        {mark ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={payway} alt="Payway" className="h-4 w-auto" />
+          <img src={mark} alt={PROCESSOR_NAME[provider]} className="h-4 w-auto" />
+        ) : (
+          <span className="font-semibold text-neutral-800">{PROCESSOR_NAME[provider]}</span>
         )}
       </span>
       <a
@@ -862,13 +908,13 @@ function Legal({ className = "" }: { className?: string }) {
   );
 }
 
-function SecureFooter() {
+function SecureFooter({ provider }: { provider: CheckoutProvider }) {
   return (
     <footer className="mt-auto pb-8 pt-6">
       <div className="rounded-lg border border-neutral-200 bg-white/70 p-5">
-        <SecureNote />
+        <SecureNote provider={provider} />
         <div className="mt-4 border-t border-neutral-200 pt-4">
-          <PoweredBy />
+          <PoweredBy provider={provider} />
         </div>
       </div>
       <Legal className="mt-4 text-center" />

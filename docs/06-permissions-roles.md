@@ -58,7 +58,7 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Vender productos | ✅ | ✅ | ✅ | ❌ |
 | Aplicar descuento ≤ 10% | ✅ | ✅ | ✅ | ❌ |
 | Aplicar descuento > 10% | ✅ | ✅ | ⚠️ (requiere PIN de manager) | ❌ |
-| Anular venta del día | ✅ | ✅ | ⚠️ (requiere PIN) | ❌ |
+| Anular venta del día | ✅ | ✅ | ⚠️ (PIN de supervisor sólo si el dueño prende la regla "Anular una venta"; apagada por defecto) | ❌ |
 | Anular venta días anteriores | ✅ | ✅ | ❌ | ❌ |
 | Ver ventas propias | ✅ | ✅ | ✅ | ✅ |
 | Ver ventas de otros cajeros | ✅ | ✅ | ❌ | ✅ |
@@ -70,7 +70,7 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Abrir turno propio | ✅ | ✅ | ✅ | ❌ |
 | Cerrar turno propio | ✅ | ✅ | ✅ | ❌ |
 | Cerrar turno de otro | ✅ | ✅ | ❌ | ❌ |
-| Movimientos de caja (retiros, ingresos) | ✅ | ✅ | ⚠️ (solo ingresos < $10k) | ❌ |
+| Movimientos de caja (retiros, ingresos) | ✅ | ✅ | ⚠️ (sólo en su turno; PIN de supervisor desde el monto que fije el dueño en las reglas "Retiro de caja" e "Ingreso de caja", apagadas por defecto) | ❌ |
 | Ver arqueo histórico | ✅ | ✅ | ✅ (solo el propio) | ✅ |
 
 ### 4.3 Productos y stock
@@ -111,9 +111,57 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Acción | Owner | Manager | Cashier | Viewer |
 |---|---|---|---|---|
 | Reporte del día (propio) | ✅ | ✅ | ✅ | ✅ |
-| Reporte completo del negocio | ✅ | ✅ | ❌ | ✅ |
+| Reporte completo del negocio | ✅ | ✅ | ⚠️ (ve Reportes, acotado a sus sucursales) | ✅ (sus sucursales) |
 | Exportar reportes | ✅ | ✅ | ❌ | ✅ |
 | Ver audit_logs | ✅ | ✅ | ❌ | ✅ |
+
+### 4.7 Qué garantiza la base (ADR-071)
+
+Las matrices de arriba son la regla de negocio. Esta tabla dice qué parte la hace cumplir **la base** (RLS, triggers y RPC), o sea lo que vale aunque alguien llame a la API sin pasar por la UI. La cubre `tests/integration/roles.test.ts`.
+
+Notación: ✅ puede · ❌ la base lo rechaza · ⚠️ con condición.
+
+| Acción | Owner | Manager | Cashier | Viewer | Dónde se hace cumplir |
+|---|---|---|---|---|---|
+| Ver productos, stock, ventas, clientes | ✅ | ✅ | ✅ (sus sucursales) | ✅ (sus sucursales) | RLS por negocio + alcance por sucursal (ADR-045) |
+| Crear, editar o dar de baja productos y variantes | ✅ | ✅ | ❌ | ❌ | trigger `role_write_guard` (modo `manage`) + policy de `product_variants` |
+| Cambiar precio de producto | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `manage`) |
+| Categorías y marcas | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `manage`) |
+| Ajuste manual de stock, merma, producción | ✅ | ✅ | ❌ | ❌ | `role_write_guard` en `products` y `stock_movements`; `adjust_store_stock` exige owner/manager |
+| Mover stock al vender, anular o devolver | ✅ | ✅ | ✅ | ❌ | RPC SECURITY DEFINER (`create_sale`, `void_sale`, `return_sale`) |
+| Alta de cliente y edición de contacto | ✅ | ✅ | ✅ | ❌ | `role_write_guard` (modo `customers`) |
+| Baja de cliente | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `customers`) |
+| Abrir turno de caja | ✅ | ✅ | ✅ | ❌ | `open_cash_shift` + `role_write_guard` en `cash_shifts` |
+| Cerrar turno propio / ajeno | ✅ / ⚠️ forzado | ✅ / ⚠️ forzado | ✅ / ❌ | ❌ | `cash_shifts_guard`, `cash_force_close` (ADR-051) |
+| Ingresos y retiros de caja | ✅ | ✅ | ⚠️ turno propio, PIN por política | ❌ | `cash_movements_guard` (ADR-051) |
+| Vender | ✅ | ✅ | ✅ (turno propio) | ❌ | `create_sale` + `role_write_guard` en `sales` |
+| Descuento sobre el tope | ✅ | ✅ | ⚠️ PIN | ❌ | `sales_supervisor` (ADR-051) |
+| Anular venta del día | ✅ | ✅ | ⚠️ PIN por política | ❌ | `void_sale` (SECURITY DEFINER) + `sales_supervisor` |
+| Anular venta de días anteriores | ✅ | ✅ | ❌ | ❌ | `void_sale`: el cajero (rol efectivo en la sucursal) sólo anula ventas del día, hora de Argentina |
+| Cambiar `sales.status` por REST | ❌ | ❌ | ❌ | ❌ | `role_write_guard` (modo `sales`): se anula con `void_sale` |
+| Devoluciones y reintegros | ✅ | ✅ | ⚠️ PIN por política | ❌ | `return_sale` / `return_sale_v2` + `sale_returns_supervisor` (ADR-067) |
+| Listas de precios, condiciones de pago, escalas | ✅ | ✅ | ❌ | ❌ | `price_can_write()` / `price_pro_can_write()` (ADR-058) |
+| Planes de cuotas | ✅ | ✅ | ❌ | ❌ | policies de `payment_plans` |
+| Configuración del POS (`pos_settings`) | ✅ | ⚠️ sólo la política de venta offline | ❌ | ❌ | policies de `pos_settings`; `offline_policy_save` acepta dueño o encargado (ADR-077) |
+| Medios de pago y cuentas de transferencia | ✅ | ✅ | ❌ | ❌ | policies de `transfer_accounts`, `payment_terminals` (ADR-055) |
+| Seguridad y PIN de supervisor | ✅ | ❌ | ❌ | ❌ | `security_settings_save` exige dueño |
+| Impuestos (regímenes, exenciones) | ✅ | ✅ | ❌ | ❌ | `tax_can_write()` (ADR-068) |
+| Contabilidad | ✅ | ✅ (reabrir: sólo owner) | ❌ | ❌ | `acc_assert()`, `acc_period_reopen` (ADR-066) |
+| Compras, proveedores, tesorería | ✅ | ✅ | ❌ | ❌ | `purchase_can_write()`, `treasury_can_write()` (ADR-050, ADR-059) |
+
+Reglas del trigger `role_write_guard` (migración `20261031200000_permisos_por_rol.sql`):
+
+- Toma el rol del usuario del JWT **en el negocio de la fila** (`member_role_in`). Sin usuario (cron, `service_role`) o sin membresía (staff interno, acotado por `internal_scope()` en RLS) no aplica.
+- `viewer` no escribe nunca en las tablas operativas, ni por REST ni a través de una RPC.
+- `cashier` no escribe catálogo ni stock por REST ni por RPC `SECURITY INVOKER`; las RPC `SECURITY DEFINER` (vender, anular, devolver, recibir compras, traslados) siguen moviendo stock en su nombre.
+
+Notas sobre lo que hace cumplir la base (diferencias detectadas en ADR-086):
+
+- **Anular venta del día:** el cajero anula ventas del día sin PIN salvo que el dueño prenda la regla "Anular una venta" (`security_settings.pin_policy.sale_void`, apagada por defecto).
+- **Reportes:** no hay corte por rol. Todos los roles ven Reportes; la base limita ventas, turnos, movimientos y cierres Z por sucursal (`user_allowed_store_ids()`, ADR-045).
+- **Ingresos de caja del cajero:** no hay un tope fijo de $10k. Lo reemplaza la regla configurable "Ingreso de caja" (`pin_policy.cash_in`, con umbral en pesos, apagada por defecto): sobre el umbral, quien no es supervisor necesita PIN (`require_supervisor` en `trg_cash_movements_guard`). Un tope nominal fijo no se implementó a propósito: en pesos queda viejo enseguida y bloquearía cajas que hoy operan. Deuda: si se quiere un tope duro por rol, sumarlo como umbral configurable por rol en `security_settings`.
+
+Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de contacto para el cajero, importación masiva con confirmación para el encargado y el cambio de rol de usuarios (lo hacen las Edge Functions `member_admin` e `invite_user`, sin test de integración en esta suite).
 
 ## 5. Matriz de permisos — Internos NinjaSoft
 
@@ -317,6 +365,9 @@ Reglas:
 - [ ] El profesional puede quedar limitado a su propia agenda y ventas.
 - [ ] La recepción puede cobrar sin modificar comisiones ni reportes globales.
 - [ ] Cambios de comisión, propina o profesional asignado quedan auditados.
+- [x] **Recursos de agenda** (sillas, cabinas, `agenda_resources`): los cargan y editan dueño y encargado (policy + feature `agenda_recursos`); el resto los ve para agendar. ADR-082.
+- [x] **Lista de espera** (`agenda_waitlist`): anotan, cancelan y pasan a turno dueño, encargado y cajero (recepción); solo lectura sólo mira. El paso a turno es sólo por RPC (`agenda_waitlist_schedule`). ADR-082.
+- [x] **Datos de ejemplo de la agenda** (`agenda_demo_seed` / `agenda_demo_clear`): dueño y encargado. ADR-082.
 
 ## 9.3 Roles gastronómicos
 
@@ -336,6 +387,26 @@ Reglas:
 - [ ] Mozo no anula ítems ya enviados a cocina sin autorización.
 - [ ] Cambios de mesa, transferencia de mozo, reimpresión y cancelación de comanda quedan auditados.
 - [ ] El manager puede configurar estaciones e impresoras/KDS, pero no cambiar plan del tenant.
+
+## 9.4 Rol de integración: API pública (ADR-094)
+
+La API pública no usa una sesión de persona: actúa con una **credencial del negocio** (OAuth2 client_credentials) que crea el dueño. Equivale a un encargado recortado por los alcances de la credencial:
+
+| Área | Qué puede |
+|---|---|
+| Productos | Leer (`products:read`); crear y editar por SKU (`products:write`). |
+| Precios | Cambiar precio y costo por SKU (`prices:write`). |
+| Stock | Leer sucursales y stock (`stock:read`); ajustar y contar con motivo (`stock:write`). |
+| Ventas | Sólo lectura por rango (`sales:read`). |
+| Clientes | Leer (`customers:read`); crear y editar datos de contacto y fiscales (`customers:write`). |
+| Nunca | Caja, cobros, anulaciones, devoluciones, personal, permisos, plan, cuenta corriente del cliente. |
+
+Reglas:
+
+- [x] Crear, editar, rotar y revocar credenciales: **sólo el dueño**, auditado (`api_client_*`).
+- [x] El negocio sale de la credencial, nunca del pedido; cada operación es una RPC SECURITY DEFINER que filtra por ese negocio.
+- [x] Alcance insuficiente, credencial revocada o rotada y plan sin `api_publica` se rechazan en la base.
+- [x] Cada lote queda en `audit_logs` con el id de la credencial (`entity_type = 'api_client'`); las filas tocadas, por los triggers de cada tabla.
 
 ## 10. Anti-patrones
 

@@ -19,6 +19,12 @@ export interface ProcessorFee {
   label: string;
   amount: number;
   kind: ProcessorFeeKind;
+  /**
+   * Nombre original del concepto en la API (p. ej. el `name` de
+   * charges_details de Mercado Pago). Lo usa la clasificación de
+   * retenciones sufridas (ADR-095) junto con la etiqueta.
+   */
+  code?: string;
 }
 
 export interface ProcessorTimelineEvent {
@@ -250,7 +256,7 @@ export function mpFees(p: Obj): ProcessorFee[] {
       const name = str(c.name) ?? type;
       const kind: ProcessorFeeKind =
         type === "tax" ? "tax" : /financ/i.test(name) ? "financing" : type === "fee" ? "fee" : "other";
-      out.push({ label: mpChargeLabel(name, kind), amount, kind });
+      out.push({ label: mpChargeLabel(name, kind), amount, kind, ...(kind === "tax" && name ? { code: name } : {}) });
     }
     return out;
   }
@@ -536,10 +542,39 @@ function normalizeGetnetIntent(root: Record<string, unknown>): ProcessorPaymentD
   return finish(d);
 }
 
+// Checkout API (ADR-069): GET /dpm/hub-payment-info/v1/payments/info/{id}.
+// Estados en mayúscula (APPROVED, DENIED…); montos en centavos.
+function normalizeGetnetApiPayment(root: Record<string, unknown>): ProcessorPaymentData {
+  const d = empty("getnet");
+  d.external_id = str(root.payment_id);
+  d.order_id = str(root.order_id) ?? d.external_id;
+  const status = (str(root.status) ?? "unknown").toUpperCase();
+  d.status = ["APPROVED", "CAPTURED", "PAID"].includes(status)
+    ? "approved"
+    : status === "DENIED"
+      ? "rejected"
+      : status.toLowerCase();
+  d.status_detail = str(root.status);
+  const pay = obj(root.payment);
+  const cents = num(pay?.amount) ?? num(root.amount);
+  d.gross = cents === null ? null : round2(cents / 100);
+  d.currency = str(root.currency) ?? str(pay?.currency);
+  d.installments = num(pay?.number_installments);
+  d.payment_method = str(pay?.payment_method) ?? str(root.payment_method);
+  d.authorization = str(root.authorization_code);
+  const brand = str(root.brand) ?? str(obj(pay?.card)?.brand);
+  d.card = brand ? { brand: brandLabel(brand), last4: null, first6: null, holder: null } : null;
+  d.operation_at = isoOrNull(root.authorized_at) ?? isoOrNull(root.received_at);
+  if (d.status === "approved") d.approved_at = d.operation_at;
+  if (d.operation_at) d.timeline.push({ at: d.operation_at, label: statusLabel(d.status) });
+  return finish(d);
+}
+
 export function normalizeGetnetOrder(raw: unknown): ProcessorPaymentData {
   const d = empty("getnet");
   const root = obj(raw);
   if (root && str(root.payment_intent_id)) return normalizeGetnetIntent(root);
+  if (root && str(root.payment_id) && !obj(root.data)) return normalizeGetnetApiPayment(root);
   const o = obj(root?.data) ?? root;
   if (!o) return d;
   const attrs = obj(o.attributes) ?? o;

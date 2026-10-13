@@ -11,6 +11,7 @@ import {
   Search,
   Settings2,
   Store,
+  Truck,
 } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -52,6 +53,7 @@ import {
 import { TransferDetailModal } from "@/components/stock/transfers/TransferDetailModal";
 import { TransferSuggestModal } from "@/components/stock/transfers/TransferSuggestModal";
 import { TransferSettingsModal } from "@/components/stock/transfers/TransferSettingsModal";
+import { InTransitReportModal } from "@/components/stock/transfers/InTransitReportModal";
 
 type Tab = "open" | "dispatch" | "transit" | "history" | "all";
 
@@ -113,6 +115,8 @@ export default function TrasladosPage() {
     initial: null,
   });
   const [suggestOpen, setSuggestOpen] = useState(false);
+  // F17 · H95: reporte de artículos en tránsito.
+  const [transitOpen, setTransitOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -205,6 +209,9 @@ export default function TrasladosPage() {
                 <Lightbulb size={16} /> Sugerir traslados
               </Button>
             )}
+            <Button variant="secondary" onClick={() => setTransitOpen(true)}>
+              <Truck size={16} /> En tránsito
+            </Button>
             <Button
               variant="secondary"
               onClick={exportList}
@@ -469,6 +476,12 @@ export default function TrasladosPage() {
         open={suggestOpen}
         onOpenChange={setSuggestOpen}
         stores={stores}
+      />
+      <InTransitReportModal
+        open={transitOpen}
+        onOpenChange={setTransitOpen}
+        stores={stores}
+        currentStoreId={currentStoreId}
       />
       <TransferSettingsModal
         open={settingsOpen}

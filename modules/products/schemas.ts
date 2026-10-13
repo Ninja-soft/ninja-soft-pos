@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { IVA_CODES } from "@/lib/tax/catalog";
 
 const optionalText = (max: number) =>
   z
@@ -35,6 +36,21 @@ export const ProductSchema = z.object({
   stock_min: z.coerce.number().nonnegative().default(0),
   unit: z.string().min(1).max(10).default("un"),
   tax_rate: z.coerce.number().min(0).max(100).default(21),
+  // F18 · H103 (ADR-068): alícuota del catálogo (manda sobre tax_rate, que
+  // queda como espejo numérico), servicio (concepto de WSFE) e internos.
+  tax_rate_code: z.enum(IVA_CODES).default("21"),
+  is_service: z.boolean().default(false),
+  internal_tax_mode: z.enum(["none", "pct", "fixed"]).default("none"),
+  internal_tax_base: z.enum(["price", "cost"]).default("price"),
+  internal_tax_rate: z
+    .union([z.coerce.number().min(0).lt(100), z.literal(""), z.null()])
+    .transform((v) => (v === "" || v == null ? null : v))
+    .optional(),
+  internal_tax_amount: z
+    .union([z.coerce.number().min(0), z.literal(""), z.null()])
+    .transform((v) => (v === "" || v == null ? null : v))
+    .optional(),
+  internal_tax_included: z.boolean().default(true),
   season: optionalText(60),
   tags: optionalText(300), // coma-separado en el form; el api lo pasa a array
   image_url: optionalText(600),

@@ -1,4 +1,5 @@
 // Venta ficticia para el preview del editor de tickets (H9b).
+import type { TicketFiscal } from "@/lib/arca/ticket";
 export interface SampleBrand {
   logo_url: string | null;
   legal_name: string | null;
@@ -26,6 +27,20 @@ export interface SampleTicketData {
     discount_total: number;
     total: number;
     status: string;
+    /** ADR-068: percepciones cobradas (líneas aparte, antes del total). */
+    perceptions?: { name: string; amount: number }[];
+    /**
+     * ADR-068: Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido
+     * y otros impuestos nacionales indirectos (internos) en el comprobante B.
+     */
+    transparency?: { iva: number; others: number } | null;
+    /**
+     * F3 · ADR-072: factura electrónica de la venta (tipo, número, CAE o CAEA,
+     * vencimiento y QR fiscal) o el aviso de pendiente de autorización.
+     */
+    fiscal?: TicketFiscal | null;
+    /** ADR-074: cada promoción aplicada (descuentos y regalos). */
+    promotions?: { label: string; kind: "discount" | "gift"; amount: number }[];
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];

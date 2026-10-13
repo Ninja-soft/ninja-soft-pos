@@ -70,24 +70,27 @@ async function switchTenant(targetTenantId: string) {
 
 ## 3. La función `current_tenant_id()`
 
-Está en cada migración inicial. Toda policy de RLS la usa.
+Toda policy de RLS la usa. Definición vigente: `20261106200000_seguridad_tenant_membresia_auditoria_inmutable` (ADR-083, H118).
 
 ```sql
-create or replace function current_tenant_id()
+create or replace function public.current_tenant_id()
 returns uuid
-language sql stable
+language sql stable security definer
+set search_path = ''
 as $$
-  select coalesce(
-    (auth.jwt() -> 'app_metadata' ->> 'current_tenant_id')::uuid,
-    null
-  );
+  -- negocio del JWT (app_metadata.current_tenant_id, sólo lo escribe el servidor)
+  -- que vale sólo con membresía activa o, para el staff, bajo internal_scope()
+  ...
 $$;
 ```
 
 **Comportamiento:**
-- Si no hay JWT (anónimo): retorna `null`. Las policies `using (tenant_id = current_tenant_id())` se convierten en `using (tenant_id = null)` que nunca matchea — bloqueo total.
-- Si el JWT tiene `current_tenant_id`: filtra correctamente.
-- Si un usuario interno está "impersonando" un tenant: el JWT contiene el `current_tenant_id` del tenant impersonado + un marcador `impersonating: true` que se audita.
+- Sin JWT (anónimo) o sin `current_tenant_id`: `null`. Las policies `tenant_id = current_tenant_id()` nunca matchean: bloqueo total.
+- Con `current_tenant_id` en el JWT: lo devuelve **sólo si** el usuario tiene una fila en `tenant_users` de ese negocio con `status = 'active'`. Un miembro dado de baja o suspendido, o un JWT con un negocio que no es suyo, recibe `null` en el acto, sin esperar a que venza el token.
+- Staff interno sin membresía: sólo dentro del panel interno (`internal_scope()`, ADR-052). En el panel del negocio necesita ser miembro como cualquiera.
+- `user_metadata` (lo que el usuario puede editar de su perfil) no se lee nunca.
+- **Rendimiento:** las policies la llaman como `(select current_tenant_id())` para que se evalúe una vez por consulta (initplan). Toda policy nueva debe usar ese patrón; `rls_bare_current_tenant_policies()` (service_role) lista las que no.
+- `ensure_current_tenant()` corrige un negocio activo inválido por la primera membresía activa (lo usa `TenantClaimHealer` al entrar).
 
 ## 4. Estructura de tabla operativa
 
@@ -139,26 +142,11 @@ Tablas que **no** son de un tenant específico:
 
 `audit_logs` tiene `tenant_id` pero también permite registros con `tenant_id = null` para acciones del sistema (rotación de claves, jobs internos).
 
-Policy de `audit_logs`:
-
-```sql
-create policy audit_logs_select on audit_logs
-  for select using (
-    -- Usuarios ven logs de su tenant
-    tenant_id = current_tenant_id()
-    or
-    -- Internos ven todo
-    (auth.jwt() -> 'app_metadata' ->> 'is_internal')::boolean = true
-  );
-
-create policy audit_logs_insert on audit_logs
-  for insert with check (
-    -- Cualquiera puede escribir un log de su tenant (a través de funciones)
-    tenant_id = current_tenant_id() or current_tenant_id() is null
-  );
-
--- DELETE y UPDATE: ningún rol tiene permiso. audit_logs es append-only.
-```
+- **Lectura:** miembros del negocio (dueño y encargado todo; el resto lo propio, policy RESTRICTIVE de ADR-051) y staff en `internal_scope()`.
+- **Insert desde el cliente:** sólo en su negocio validado por membresía, o registros sin negocio si no tiene ninguno. `created_at` lo pone el servidor.
+- **Inmutable (ADR-083, H117):** sin UPDATE, DELETE ni TRUNCATE para `anon`, `authenticated` ni `service_role`, y un trigger que los rechaza para cualquier rol salvo el sellado de la cadena (`audit_chain_seal`) y la retención (`audit_retention_run`), funciones internas sin execute para clientes.
+- **Hash encadenado por negocio:** `row_hash` al insertar; `chain_seq`, `prev_hash` y `hash` los completa el cron `audit-chain-seal` (cada 5 minutos). `audit_chain_verify(tenant)` la recorre (panel interno o service_role).
+- **Retención:** 24 meses por defecto (`audit_retention_policy`), override por plan con `plans.limits.audit_retention_months` (mínimo 12). Cron diario `audit-retention`. Lo que coincide con `audit_fiscal_rules` (ventas, cobros, caja, ARCA, IVA, contabilidad, compras, cuenta corriente) **no se borra**. Lo borrado deja una lápida en `audit_log_tombstones`.
 
 ## 7. Edge Functions con service_role
 

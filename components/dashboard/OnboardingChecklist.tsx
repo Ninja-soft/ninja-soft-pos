@@ -15,67 +15,47 @@ import {
   ShoppingCart,
   Store,
   X,
+  Utensils,
+  CalendarDays,
+  Wallet,
+  Users,
+  GraduationCap,
+  FileText,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IndustryPresetButton } from "@/components/onboarding/IndustryPresetButton";
+import { ProfileOnboardingPrompt } from "@/components/profiles/ProfileOnboardingPrompt";
 import { cn } from "@/lib/utils/cn";
+import { useGating } from "@/modules/saas/gating";
+import { useProfileContext } from "@/modules/profiles/hooks";
+import { useOnboardingActivation } from "@/modules/help/hooks";
+import {
+  buildActivationChecklist,
+  checklistProfile,
+  type ChecklistKey,
+  type ChecklistStatus,
+} from "@/lib/onboarding/activationChecklist";
 
-type StatusKey = "fiscal" | "mp" | "producto" | "ticket" | "venta";
+// Pasos dinámicos por rubro y plan (F15 · H71 · ADR-086): la lista sale de
+// lib/onboarding/activationChecklist.ts con el perfil por rubro (ADR-075).
+type BaseKey = "fiscal" | "mp" | "producto" | "ticket" | "venta";
 
-type OnboardingStatus = Record<StatusKey, boolean>;
-
-const STEPS: {
-  key: StatusKey;
-  label: string;
-  desc: string;
-  icon: React.ElementType;
-  cta: string;
-  href: Route;
-}[] = [
-  {
-    key: "fiscal",
-    label: "Datos del negocio",
-    desc: "Razón social, CUIT y condición de IVA para tus comprobantes.",
-    icon: Store,
-    cta: "Completar",
-    href: "/configuracion?seccion=marca" as Route,
-  },
-  {
-    key: "mp",
-    label: "Medios de pago",
-    desc: "Conectá Mercado Pago y cobrá con QR desde el POS.",
-    icon: CreditCard,
-    cta: "Conectar",
-    href: "/configuracion?seccion=pagos" as Route,
-  },
-  {
-    key: "producto",
-    label: "Cargá productos",
-    desc: "Sumá tu primer artículo para empezar a vender.",
-    icon: Package,
-    cta: "Cargar",
-    href: "/productos",
-  },
-  {
-    key: "ticket",
-    label: "Diseño de ticket",
-    desc: "Elegí cómo se ve el comprobante que entregás.",
-    icon: Receipt,
-    cta: "Elegir",
-    href: "/configuracion?seccion=tickets" as Route,
-  },
-  {
-    key: "venta",
-    label: "Primera venta",
-    desc: "Cerrá una venta de prueba y dejá todo listo.",
-    icon: ShoppingCart,
-    cta: "Vender",
-    href: "/pos",
-  },
-];
+const ICONS: Record<ChecklistKey, React.ElementType> = {
+  fiscal: Store,
+  producto: Package,
+  mp: CreditCard,
+  ticket: Receipt,
+  mesas: Utensils,
+  agenda: CalendarDays,
+  caja: Wallet,
+  equipo: Users,
+  escuela: GraduationCap,
+  arca: FileText,
+  venta: ShoppingCart,
+};
 
 const COLLAPSE_KEY = "onboarding-checklist-collapsed";
 
@@ -146,10 +126,10 @@ export function OnboardingChecklist() {
     queryKey: ["onboarding-status"],
     enabled: !!tenantId,
     staleTime: 30_000,
-    queryFn: async (): Promise<OnboardingStatus> => {
+    queryFn: async (): Promise<Record<BaseKey, boolean>> => {
       const { data, error } = await supabase.rpc("onboarding_status");
       if (error) throw error;
-      const r = (data ?? {}) as Partial<Record<StatusKey, boolean>>;
+      const r = (data ?? {}) as Partial<Record<BaseKey, boolean>>;
       return {
         fiscal: !!r.fiscal,
         mp: !!r.mp,
@@ -189,7 +169,20 @@ export function OnboardingChecklist() {
     }
   };
 
-  const done = status ? STEPS.filter((s) => status[s.key]).length : 0;
+  // Señales extra (caja, equipo, salón, agenda, ARCA, Escuela) y pasos según
+  // el perfil por rubro aplicado (o el sugerido por el rubro del alta).
+  // Sin la migración nueva la RPC falla: el checklist sigue con los pasos base.
+  const { data: extra, isFetched: extraFetched } = useOnboardingActivation(!!tenantId);
+  const { tenant, applied } = useProfileContext();
+  const { data: gating } = useGating();
+  const STEPS = buildActivationChecklist({
+    profile: checklistProfile(applied?.profile_key, tenant?.industry),
+    features: gating?.features ?? {},
+  });
+  const merged: ChecklistStatus | null = status && extraFetched && gating ? { ...(extra ?? {}), ...status } : null;
+
+  const ready = merged !== null;
+  const done = merged ? STEPS.filter((s) => merged[s.key] === true).length : 0;
   const total = STEPS.length;
   const allDone = done === total;
   const pct = Math.round((done / total) * 100);
@@ -200,7 +193,7 @@ export function OnboardingChecklist() {
   const [celebrate, setCelebrate] = useState(false);
 
   useEffect(() => {
-    if (!status) return;
+    if (!ready) return;
     if (wasComplete.current === null) {
       wasComplete.current = allDone;
       return;
@@ -214,7 +207,7 @@ export function OnboardingChecklist() {
       });
     }
     wasComplete.current = allDone;
-  }, [allDone, status, toast]);
+  }, [allDone, ready, toast]);
 
   const dismiss = useMutation({
     mutationFn: async () => {
@@ -234,7 +227,7 @@ export function OnboardingChecklist() {
   });
 
   // Sin datos o descartado: no renderiza nada.
-  if (!status || dismissed) return null;
+  if (!merged || dismissed) return null;
 
   // Estado de logro efímero (una vez completado dentro de la sesión).
   if (allDone) {
@@ -340,8 +333,8 @@ export function OnboardingChecklist() {
           {/* Pasos */}
           <ul className="mt-5 space-y-1.5">
             {STEPS.map((step, i) => {
-              const ok = status[step.key];
-              const Icon = step.icon;
+              const ok = merged?.[step.key] === true;
+              const Icon = ICONS[step.key];
               return (
                 <li
                   key={step.key}
@@ -403,7 +396,7 @@ export function OnboardingChecklist() {
                       Listo
                     </span>
                   ) : (
-                    <Link href={step.href} className="shrink-0">
+                    <Link href={step.href as Route} className="shrink-0">
                       <Button
                         variant="secondary"
                         size="sm"
@@ -419,10 +412,14 @@ export function OnboardingChecklist() {
             })}
           </ul>
 
+          {/* Perfil por rubro (F5 · ADR-075): al crear el negocio, el dueño elige
+              el perfil de su rubro con vista previa de lo que cambia. */}
+          <ProfileOnboardingPrompt />
+
           {/* Configuración rápida por rubro (F12 · H35): atajo para sembrar un
               catálogo de muestra cuando todavía no se cargaron productos. Deja
               el negocio listo para cobrar sin Excel ni SQL. */}
-          {!status.producto && (
+          {!merged.producto && (
             <div className="mt-4 flex flex-col gap-3 rounded-md border border-border/70 bg-muted/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">

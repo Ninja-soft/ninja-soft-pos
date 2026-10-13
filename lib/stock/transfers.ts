@@ -5,6 +5,8 @@
 // UI la usa para mostrar sólo las acciones posibles, pero la barrera real es
 // el servidor. Sin React ni Supabase: testeable.
 
+import { roleErrorMessage } from "@/lib/permissions/errors";
+
 export type TransferStatus =
   | "draft"
   | "pending_approval"
@@ -403,6 +405,8 @@ export function transferErrorMessage(e: unknown): string {
       : typeof e === "object" && e && "message" in e
         ? String((e as { message: unknown }).message)
         : String(e ?? "");
+  const byRole = roleErrorMessage(msg);
+  if (byRole) return byRole;
   for (const [re, text] of ERROR_MESSAGES) if (re.test(msg)) return text;
   return msg || "No se pudo completar la acción.";
 }

@@ -68,6 +68,25 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["caja"],
     needs: "Un cajón enchufado a la impresora térmica de la caja (pulso ESC/POS por USB, serie o el puente local).",
   },
+  impuestos_iva: {
+    desc: "IVA por alícuota y condición fiscal: catálogo cerrado (21, 10,5, 27, 5, 2,5, 0 %, exento y no gravado) por producto y variante, listas con o sin IVA, datos fiscales del negocio y del cliente con CUIT o DNI validado, desglose de neto e IVA en cada venta, tipo de comprobante que corresponde (A, B, C, M o E), IVA contenido en el ticket B y reporte de IVA ventas.",
+    impact: "Desactivado, el IVA queda fijo en 21 % y no se pueden cargar los datos fiscales del negocio (las ventas siguen funcionando).",
+    minPlan: "Start",
+  },
+  impuestos_internos: {
+    desc: "Impuestos internos por producto: monto fijo por unidad, porcentaje sobre el precio (tasa nominal, que integra su propia base) o sobre el costo, incluido en el precio o adicional, discriminados en cada venta y fuera de la base del IVA.",
+    impact: "Desactivado, los internos no se discriminan: todo el precio se toma como neto más IVA (el servidor rechaza cargarlos).",
+    minPlan: "Pro",
+    requires: ["impuestos_iva"],
+    needs: "Para bebidas alcohólicas, tabaco, electrónica y otros rubros alcanzados por la Ley 24.674.",
+  },
+  percepciones_retenciones: {
+    desc: "Agente de percepción y retención: regímenes de IVA e IIBB por jurisdicción (ARBA, AGIP y otras), padrones importados con la alícuota de cada CUIT y su vigencia, exclusiones con certificado, mínimos de base y de monto; la percepción se suma a la venta como línea aparte. Como agente de retención, la orden de pago calcula Ganancias (RG 830, con acumulado mensual, mínimo no sujeto y escala), IVA, IIBB y SUSS, emite el certificado en PDF y arma los archivos para SICORE y ARBA. Como sujeto, registra las retenciones y percepciones sufridas (Mercado Pago y otras liquidaciones, SIRCREB, SIRTAC, clientes, Mis Retenciones) con su asiento y liquida Ingresos Brutos por jurisdicción con el saldo a favor.",
+    impact: "Desactivado, no se perciben ni se calculan retenciones (el servidor no las calcula ni numera certificados), no se pueden importar padrones y no se registran retenciones sufridas ni se liquida Ingresos Brutos.",
+    minPlan: "Business",
+    requires: ["impuestos_iva"],
+    needs: "Estar designado agente por ARCA o la provincia y descargar el padrón del organismo (ARBA lo entrega con la clave CIT del agente).",
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",
@@ -108,9 +127,14 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Configurar el email del negocio (Configuración, sección Email) para enviar recordatorios.",
   },
   promociones: {
-    desc: "Promociones y combos: arma ofertas (2x1, packs, precios promocionales) que el POS aplica automáticamente.",
-    impact: "Sin promociones el POS no aplica combos ni descuentos automáticos por campaña.",
+    desc: "Promociones: 2x1 y NxM, segunda unidad al %, descuentos por cantidad, combos a precio fijo y promos por medio de pago, tarjeta o banco con días y horarios, por categoría, marca, producto, lista o sucursal, con topes y combinables. El POS las aplica solas, el servidor las vuelve a calcular al cobrar y el ticket muestra cada una.",
+    impact: "Sin promociones el POS no aplica combos ni descuentos automáticos por campaña y el servidor rechaza descuentos de promoción. Los cupones siguen funcionando.",
     minPlan: "Pro",
+  },
+  aprobaciones_comerciales: {
+    desc: "Aprobación de cambios comerciales: lo que un encargado cambia en promociones de alto impacto (por porcentaje o por monto) y en recargos o planes de cuotas queda pendiente hasta que el dueño lo aprueba, con vencimiento, aviso y todo el circuito auditado.",
+    impact: "Desactivado, los cambios de los encargados se aplican directo, sin aprobación del dueño.",
+    minPlan: "Business",
   },
   descuentos: {
     desc: "Descuentos manuales en la venta: permite al cajero/encargado aplicar un descuento puntual al total o al ítem.",
@@ -130,6 +154,24 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     // Igual que agenda: hoy básica; candidata a Pro+ en el rediseño de planes
     // (ver ADR-026).
     minPlan: "Start",
+  },
+  agenda_recursos: {
+    desc: "Recursos de agenda: cargá sillas, cabinas, boxes o equipos, asigná cada turno a un recurso, mirá la agenda del día por recurso y evitá dos turnos en el mismo lugar a la misma hora (el sistema lo bloquea).",
+    impact: "Desactivada, la agenda se organiza sólo por profesional y no se controla la doble reserva de sillas o cabinas.",
+    minPlan: "Pro",
+    requires: ["agenda"],
+  },
+  agenda_senas: {
+    desc: "Señas de turnos: cobrá una seña al reservar (en efectivo, transferencia, tarjeta o QR, entra a tu caja) y el POS la descuenta sola al cobrar el turno, sin cobrarla dos veces. Lo que sobra o la seña de un turno cancelado se devuelve con motivo.",
+    impact: "Desactivada, no se pueden cobrar señas al reservar; el turno se cobra entero en el momento (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["agenda"],
+  },
+  lista_espera: {
+    desc: "Lista de espera: anotá a quien quiere un turno que hoy no tenés libre (servicio, profesional preferido, fecha y franja), avisale por WhatsApp cuando se libera y pasalo a turno con un toque.",
+    impact: "Desactivada, no se puede anotar clientes en espera; los huecos se llenan a mano.",
+    minPlan: "Start",
+    requires: ["agenda"],
   },
   pos_quick_keys_pro: {
     desc: "Teclas rápidas Pro: hasta 48 botones de un toque en la pantalla de venta, con color por tecla para encontrarlos al instante. El diseño del POS (presets, grilla, carrito, acento) es gratis en todos los planes.",
@@ -161,6 +203,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["transferencia"],
     needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
+  },
+  comisiones_estimadas: {
+    desc: "Comisiones estimadas por medio de pago: cargás lo que te cobra cada procesador (por medio, por procesador y por cuotas, en % más un fijo por cobro y con o sin IVA) y Reportes te muestra, para el período y la sucursal, cuánto cobraste con cada medio, cuánto se lleva el procesador y cuánto te queda. Suma las propinas por medio. No hace falta conectar ninguna cuenta.",
+    impact: "Desactivado, Reportes muestra el total por medio de pago sin comisiones ni neto, y el servidor rechaza cargar comisiones o pedir el reporte.",
+    minPlan: "Pro",
   },
   alertas_contracargos: {
     desc: "Alertas de contracargos y devoluciones de Mercado Pago: todos los días (y al instante si Mercado Pago avisa) revisa tus cobros y te avisa a vos y a tus encargados cuando un comprador desconoce un pago (contracargo), abre un reclamo o cuando se hace una devolución desde Mercado Pago que no está registrada en el POS. Marca esas ventas en Ventas (\"Contracargo\", \"Devuelto por MP\", filtro \"Con alertas\") y muestra el plazo para presentar la documentación. Con la conciliación de procesadores, además, suma estados, totales y neto efectivo por devoluciones y contracargos.",
@@ -202,10 +249,17 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
   getnet: {
-    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente: el cliente paga con tarjeta en el checkout de Getnet y la venta se cierra sola al aprobarse. El Point (terminal) es una función aparte.",
+    desc: "Cobros con Getnet (Santander) por link de pago y QR desde el celular del cliente: el cliente paga con tarjeta en la página de Getnet (Web Checkout) y la venta se cierra sola al aprobarse. El checkout propio con tu marca y el Point (terminal) son funciones aparte.",
     impact: "Desactivado, no se puede cobrar con Getnet desde el POS.",
     minPlan: "Pro",
-    needs: "Conectar la cuenta de Getnet con el Client ID y Client Secret del Portal Getnet (no hay ambiente de prueba: los cobros son reales).",
+    needs: "Conectar Getnet con las credenciales que dicen Web Checkout / Plugin Magento / Plugin WooCommerce (Client ID y Client Secret). Se pueden probar en el ambiente de prueba de Getnet antes de cobrar de verdad.",
+  },
+  getnet_checkout_propio: {
+    desc: "Checkout propio con Getnet: el QR o el link abren tu página de pago de NinjaPOS, con tu logo y tu color. El cliente elige la tarjeta y las cuotas de tus Planes (con el interés de cada opción a la vista), carga la tarjeta y paga; Getnet procesa el cobro y la venta se cierra sola. Es lo mismo que el checkout de Payway.",
+    impact: "Desactivado, con Getnet sólo se cobra con la página de Getnet (QR y link de Web Checkout).",
+    minPlan: "Pro",
+    requires: ["getnet"],
+    needs: "Las credenciales que dicen Checkout API / Plugin VTEX cargadas en Getnet (no son las de Web Checkout) y planes de cuotas de Getnet. Se habilita cuando NinjaPOS completa la certificación PCI que pide Getnet para cargar la tarjeta en una página propia.",
   },
   nave: {
     desc: "Cobros con Nave (Banco Galicia) por QR interoperable y link de pago. El Point (terminal) es una función aparte.",
@@ -302,6 +356,36 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["stock_sucursales"],
     needs: "Al menos dos sucursales activas.",
   },
+  depositos: {
+    desc: "Depósitos internos: dentro de cada sucursal, el salón de ventas y los depósitos que quieras (reserva, devoluciones, merma) con su stock, movimientos internos que quedan en tránsito, recepción parcial con faltantes y sobrantes con motivo, conteo por depósito, reposición del salón sugerida por mínimos e importación desde Excel.",
+    impact: "Desactivado, el stock de cada sucursal es un solo número: no se distingue lo que está en el salón de lo que está en el depósito (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["stock"],
+  },
+  reservas_stock: {
+    desc: "Reservas de stock y retiro en tienda: apartá productos para un cliente en cualquier sucursal (también desde otra, con su stock), con vencimiento, preparación y entrega validada con código de 6 dígitos o documento contra la venta cobrada en el POS. Lo reservado se resta del disponible para reservar y se ve en el cockpit.",
+    impact: "Desactivado, no se puede apartar stock para un cliente ni registrar retiros en tienda (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["stock"],
+  },
+  alertas_margen: {
+    desc: "Alertas de margen: productos que se venden bajo costo, bajo el precio mínimo o con margen menor al mínimo del negocio, con el precio sugerido para volver al mínimo y aviso en la campana cuando un costo nuevo deja un producto debajo.",
+    impact: "Desactivado, no hay lista de márgenes bajos ni aviso cuando sube un costo (el servidor lo rechaza).",
+    minPlan: "Start",
+    requires: ["productos"],
+  },
+  conteo_ciclico: {
+    desc: "Conteo cíclico: cada día el sistema propone qué contar por sucursal según la clase ABC (lo que más vende se cuenta más seguido), ajusta las diferencias y mide la exactitud de cada conteo.",
+    impact: "Desactivado, el stock se cuenta a mano o por importación, sin rotación ABC ni exactitud por conteo (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["stock"],
+  },
+  garantias_serie: {
+    desc: "Garantías por número de serie: buscás un IMEI o una serie y ves la venta, el cliente, la garantía de fábrica y la extendida con su vencimiento, y abrís y seguís el reclamo de posventa.",
+    impact: "Desactivado, no se consulta la garantía por serie ni se registran reclamos (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["productos"],
+  },
   compras: {
     desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",
     impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes, devoluciones, órdenes de pago ni cuenta corriente de proveedores (el servidor lo rechaza).",
@@ -319,6 +403,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, las órdenes de pago sólo registran efectivo de la caja y transferencias con su referencia; no hay cuentas, cheques ni flujo de fondos (el servidor lo rechaza).",
     minPlan: "Business",
     requires: ["compras"],
+  },
+  contabilidad: {
+    desc: "Contabilidad: plan de cuentas con plantilla argentina y centros de costo por sucursal; asientos automáticos desde ventas por medio de cobro, cobranzas de cuenta corriente, devoluciones, cierres de caja, compras, órdenes de pago, tesorería, liquidaciones de procesadores y contracargos, con mapeos configurables; asientos manuales, cierre mensual que bloquea el período, Libro Diario, Mayor, sumas y saldos, estado de resultados, IVA ventas y compras, y export para el estudio (Tango, Holistor, Xubio, Colppy o CSV a medida).",
+    impact: "Desactivado, no se generan asientos ni se puede cargar ni exportar la contabilidad (el servidor lo rechaza). Lo ya generado queda guardado y se ve al volver a activarla.",
+    minPlan: "Business",
   },
   variantes: {
     desc: "Variantes de producto (talle, color, etc.): un producto con múltiples combinaciones y stock por variante.",
@@ -348,8 +437,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
   },
   importacion_excel: {
-    desc: "Importación desde Excel: carga masiva de productos y precios a partir de una planilla.",
-    impact: "Sin esto la carga de productos es sólo manual, uno por uno.",
+    desc: "Importación desde Excel: carga y actualización masiva de productos, clientes, stock por sucursal, listas de precios, sucursales, garantías y motivos de devolución con plantilla, revisión previa (qué se crea, qué se actualiza y qué filas tienen errores), confirmación y auditoría. Lo que cada importación escribe sigue pidiendo su propia función del plan.",
+    impact: "Sin esto la carga de productos, clientes, stock y precios es sólo manual, uno por uno.",
     minPlan: "Pro",
   },
 
@@ -411,6 +500,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
   },
+  cockpit_comercio: {
+    desc: "Cockpit de comercio unificado: en una pantalla, qué canal vende (mostrador, salón, delivery, WhatsApp, links de pago, retiro en tienda, sin conexión) por sucursal, qué pedidos, reservas y traslados faltan surtir, qué cobros fallaron o no se concilian, qué facturas están bloqueadas, cuánto stock está reservado o en camino, y alertas con plazo (pedido demorado, quiebre de stock, caja sin señal).",
+    impact: "Desactivado, cada dato se mira en su pantalla (ventas, delivery, cobros, facturación, stock) sin una vista central ni alertas cruzadas (el servidor lo rechaza).",
+    minPlan: "Business",
+  },
+  prevencion_fraude: {
+    desc: "Prevención de fraude: señales por persona (anulaciones, descuentos altos, devoluciones, cobros rechazados y diferencias de caja), reglas con los umbrales del negocio y marca automática de las devoluciones y anulaciones de riesgo para revisarlas con nota, todo en la auditoría.",
+    impact: "Desactivado, las devoluciones y anulaciones no se puntúan ni se marcan, y no hay vista de riesgo por persona (el servidor lo rechaza). El PIN de supervisor sigue funcionando.",
+    minPlan: "Business",
+  },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",
     impact: "Sin esto sólo quedan los reportes básicos; no hay dashboards avanzados.",
@@ -424,9 +523,10 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
   },
   api_publica: {
-    desc: "API pública: acceso programático a los datos del negocio para integraciones externas a medida.",
-    impact: "Sin esto no se puede integrar el sistema con software de terceros vía API.",
+    desc: "API pública v1: API REST versionada para conectar tu tienda online, ERP o planillas. Credenciales OAuth2 por integración con permisos por alcance (productos, stock, precios, ventas y clientes), secreto que se muestra una vez, rotación, revocación y último uso. Productos y precios en lote hasta 500 por pedido con Idempotency-Key, stock por sucursal con motivo, ventas por rango (sólo lectura), límite de pedidos por minuto y todo en la auditoría.",
+    impact: "Desactivado, no se emiten tokens y la API rechaza cada pedido (el servidor lo exige); las credenciales existentes se pueden ver y revocar.",
     minPlan: "Enterprise",
+    needs: "Un sistema que se integre por HTTP y guarde el client_id y el secreto de forma segura.",
   },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
@@ -435,9 +535,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Credenciales de la API de NubCeo (API key, API secret y tenant) y el código de sucursal cabecera de cada sucursal.",
   },
   facturacion_afip: {
-    desc: "Facturación electrónica AFIP/ARCA: emite comprobantes fiscales (factura A/B/C) integrados con AFIP.",
-    impact: "Desactivado, el sistema sólo emite comprobantes no fiscales; no factura ante AFIP.",
+    desc: "Facturación electrónica con ARCA (ex AFIP): factura A, B y C y notas de crédito con CAE por cada venta, devolución o anulación, con el tipo de comprobante según la condición fiscal del negocio y del cliente. Asistente paso a paso (certificado generado en NinjaSoft, punto de venta, prueba en homologación y paso a producción con checklist), cola con reintentos que nunca frena la venta, contingencia con CAEA si ARCA no responde, QR fiscal en el ticket, monitor de comprobantes y Libro IVA Digital del mes (archivos de ventas y compras para importar en el Portal IVA, con revisión previa).",
+    impact: "Desactivado, el sistema sólo emite comprobantes no fiscales, el servidor no encola ni emite facturas y no genera el Libro IVA Digital (lo ya emitido se puede seguir consultando).",
     minPlan: "Pro",
+    requires: ["impuestos_iva"],
+    needs: "Clave fiscal de ARCA nivel 3 del titular para autorizar el certificado y dar de alta un punto de venta Web Services.",
   },
 
   // ── Extras ──────────────────────────────────────────────────────────────────
@@ -475,6 +577,21 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Panel del dueño: vista exclusiva para el dueño con indicadores y controles de alto nivel del negocio.",
     impact: "Sin esto el dueño no tiene su panel dedicado de gestión y métricas.",
     minPlan: "Pro",
+  },
+  escuela: {
+    desc: "Escuela NinjaSoft: cursos cortos por rol (POS básico, caja y arqueo, primeros pasos, facturación ARCA) con lecciones, checklist, prueba corta y certificado. El dueño ve el avance de su equipo.",
+    impact: "Desactivada, el equipo sigue teniendo la ayuda de cada pantalla pero no puede hacer cursos ni certificarse.",
+    minPlan: "Start",
+  },
+  tours: {
+    desc: "Recorridos guiados: pasos sobre la pantalla (primer cobro, recorrido por rubro como heladería) con foco en el botón a tocar y \"hacer ahora\". NinjaSoft los actualiza sin que el negocio tenga que hacer nada.",
+    impact: "Desactivado, nadie del negocio ve recorridos; la ayuda y la Escuela siguen disponibles.",
+    minPlan: "Start",
+  },
+  sugerencias: {
+    desc: "Sugerencias de uso: avisos cortos según lo que pasa en el negocio (sin productos, caja cerrada, prueba por vencer, cobro fallido), con límite por día para no molestar.",
+    impact: "Desactivado, el negocio no recibe sugerencias en pantalla; los anuncios de la campana siguen llegando.",
+    minPlan: "Start",
   },
 };
 

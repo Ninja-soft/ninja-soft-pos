@@ -96,4 +96,12 @@ describe("dependencias de features", () => {
     expect(FEATURE_INFO.compras_importacion?.desc).toMatch(/no se suma al costo/);
     expect(FEATURE_INFO.compras_importacion?.needs).toMatch(/modo profesional/);
   });
+
+  it("impuestos (ADR-068): IVA BASE, internos Pro y percepciones Business", () => {
+    expect(FEATURE_INFO.impuestos_iva?.minPlan).toBe("Start");
+    expect(FEATURE_INFO.impuestos_internos?.minPlan).toBe("Pro");
+    expect(FEATURE_INFO.percepciones_retenciones?.minPlan).toBe("Business");
+    expect(featureRequires("percepciones_retenciones")).toEqual(["impuestos_iva"]);
+    expect(FEATURE_INFO.percepciones_retenciones?.needs).toMatch(/designado agente/);
+  });
 });

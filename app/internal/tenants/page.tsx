@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, X, Building2 } from "lucide-react";
+import { Search, X, Building2, Plus } from "lucide-react";
 import {
   DateRangePicker,
   type DateRange,
@@ -11,8 +11,11 @@ import {
   useFeatureFlagsCatalog,
   useFlagOverrides,
   useInternalTenants,
+  useMyStaffLevel,
   useTenantHealth,
 } from "@/modules/internal/hooks";
+import { Button } from "@/components/ui/Button";
+import { CreateTenantModal } from "@/components/internal/CreateTenantModal";
 import { formatRelative } from "@/lib/utils/format";
 import { NoData } from "@/components/ui/NoData";
 import { Spinner } from "@/components/ui/Spinner";
@@ -27,6 +30,9 @@ const STATUS_LABELS: Record<string, string> = {
   suspended: "Suspendido",
   cancelled: "Cancelado",
 };
+// Filtro extra: negocios dados de baja (baja lógica, ADR-073). Por defecto se
+// ocultan del listado.
+const DELETED_FILTER = "deleted";
 
 export default function InternalTenantsPage() {
   const { data: tenants, isLoading } = useInternalTenants();
@@ -38,6 +44,8 @@ export default function InternalTenantsPage() {
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const { data: flagsCatalog } = useFeatureFlagsCatalog();
   const { data: flagOverrides } = useFlagOverrides(flag || null);
+  const { loaded: levelLoaded, level } = useMyStaffLevel();
+  const [createOpen, setCreateOpen] = useState(false);
 
   const plans = useMemo(() => {
     const map = new Map<string, string>();
@@ -52,7 +60,12 @@ export default function InternalTenantsPage() {
     // CUIT/teléfono se comparan solo por dígitos (ignora guiones y espacios).
     const qDigits = q.replace(/\D/g, "");
     return (tenants ?? []).filter((t) => {
-      if (status && (t.subStatus ?? t.status) !== status) return false;
+      if (status === DELETED_FILTER) {
+        if (!t.deletedAt) return false;
+      } else {
+        if (t.deletedAt) return false;
+        if (status && (t.subStatus ?? t.status) !== status) return false;
+      }
       if (plan && t.planKey !== plan) return false;
       if (flag) {
         // Flag efectivo del tenant: override si existe, si no el default.
@@ -98,7 +111,15 @@ export default function InternalTenantsPage() {
             suscripción.
           </>
         }
+        actions={
+          levelLoaded && level !== "support" ? (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus size={15} /> Nuevo negocio
+            </Button>
+          ) : null
+        }
       />
+      <CreateTenantModal open={createOpen} onOpenChange={setCreateOpen} />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
@@ -124,6 +145,9 @@ export default function InternalTenantsPage() {
               {label}
             </option>
           ))}
+          <option value={DELETED_FILTER} className="bg-popover text-popover-foreground">
+            Dados de baja
+          </option>
         </select>
         <select
           value={plan}
@@ -234,7 +258,9 @@ export default function InternalTenantsPage() {
                 <td className="px-4 py-3 text-muted-foreground">{t.planName ?? <NoData />}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold">
-                    {STATUS_LABELS[t.subStatus ?? t.status] ?? t.subStatus ?? t.status}
+                    {t.deletedAt
+                      ? "Dado de baja"
+                      : STATUS_LABELS[t.subStatus ?? t.status] ?? t.subStatus ?? t.status}
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">

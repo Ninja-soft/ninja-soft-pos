@@ -237,6 +237,8 @@ export async function createProviderCharge(
   channel: "qr" | "link",
   amount: number,
   customerId: string | null,
+  /** Link anterior: Getnet con /pagar = checkout propio (ADR-069). */
+  previousShareUrl: string | null = null,
 ): Promise<ProviderCharge> {
   const title = "Venta NinjaPos";
   switch (provider) {
@@ -251,7 +253,7 @@ export async function createProviderCharge(
     case "payway":
       return posApi.createPaywayLink(amount, title);
     case "getnet":
-      return posApi.createGetnetLink(amount, title);
+      return posApi.createGetnetLink(amount, title, previousShareUrl?.includes("/pagar/") ? "own" : undefined);
     case "nave":
       return posApi.createNaveQr(amount, title);
     case "gocuotas":

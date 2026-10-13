@@ -1,0 +1,242 @@
+[
+  {
+    "key": "kiosco",
+    "version": 1,
+    "label": "Kiosco",
+    "tagline": "Venta rápida de golosinas, bebidas y cigarrillos.",
+    "vertical": "kiosco",
+    "flags": ["allow_free_sale"],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["Golosinas", "Bebidas", "Cigarrillos", "Snacks", "Almacén"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago"],
+    "planFeatures": ["pos_quick_keys_pro"],
+    "shortcuts": [
+      "F2 para buscar un producto y F12 para cobrar.",
+      "Marcá como favoritos lo que más vendés: quedan como botones grandes arriba de la grilla.",
+      "Venta libre para cobrar un monto sin cargar el producto."
+    ],
+    "tips": [
+      "Con un lector de código de barras no hace falta configurar nada: escaneás y el producto entra al carrito.",
+      "Los cigarrillos suelen tener precio fijo: cargalos con su código y actualizalos desde Productos."
+    ]
+  },
+  {
+    "key": "almacen",
+    "version": 1,
+    "label": "Almacén / minimercado",
+    "tagline": "Almacén de barrio con fiambres por peso y fiado.",
+    "vertical": "kiosco",
+    "flags": ["allow_free_sale", "scale_enabled", "plu_enabled"],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["Almacén", "Bebidas", "Lácteos", "Fiambres", "Limpieza", "Perfumería"],
+    "units": ["un", "kg"],
+    "payments": ["efectivo", "transferencia", "mercado_pago", "cuenta_corriente"],
+    "planFeatures": ["cuenta_corriente"],
+    "shortcuts": [
+      "F2 para buscar y F12 para cobrar.",
+      "Los productos por kilo tienen botones de ½ kg y 1 kg en el carrito.",
+      "El PLU es un código corto para tipear fiambres y quesos sin buscarlos."
+    ],
+    "tips": [
+      "Si tenés balanza etiquetadora, el POS lee las etiquetas con precio o peso.",
+      "El fiado se lleva con la cuenta corriente de clientes."
+    ]
+  },
+  {
+    "key": "textil",
+    "version": 1,
+    "label": "Textil / indumentaria",
+    "tagline": "Ropa y calzado con talles y colores.",
+    "vertical": "textil",
+    "flags": [],
+    "scanner": true,
+    "posPreset": "boutique",
+    "categories": ["Remeras", "Pantalones", "Abrigos", "Calzado", "Accesorios"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago", "mercadopago_point"],
+    "planFeatures": ["variantes"],
+    "shortcuts": [
+      "El diseño Boutique muestra fotos grandes y las categorías a un costado.",
+      "F2 para buscar por nombre o código y F12 para cobrar."
+    ],
+    "tips": [
+      "Con variantes, cada talle y color tiene su propio stock y código.",
+      "Los cambios de talle se hacen desde Devoluciones, sin anular la venta."
+    ]
+  },
+  {
+    "key": "ferreteria",
+    "version": 1,
+    "label": "Ferretería / corralón",
+    "tagline": "Muchos artículos chicos, por metro, kilo o unidad.",
+    "vertical": "retail",
+    "flags": ["allow_free_sale"],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["Herramientas", "Tornillería", "Electricidad", "Plomería", "Pinturas"],
+    "units": ["un", "m", "kg", "l"],
+    "payments": ["efectivo", "transferencia", "mercado_pago", "cuenta_corriente"],
+    "planFeatures": ["medidas_bultos", "cuenta_corriente"],
+    "shortcuts": [
+      "F2 para buscar por nombre o código del proveedor y F12 para cobrar.",
+      "Venta libre para cobrar un artículo suelto que no tenés cargado."
+    ],
+    "tips": [
+      "Cargá la unidad de cada artículo (metro, kilo, litro) para vender cantidades con decimales.",
+      "Con medidas y bultos vendés por caja o por unidad el mismo producto."
+    ]
+  },
+  {
+    "key": "farmacia",
+    "version": 1,
+    "label": "Farmacia / perfumería",
+    "tagline": "Perfumería, cuidado personal y venta libre.",
+    "vertical": "retail",
+    "flags": [],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["Perfumería", "Cuidado personal", "Bebés", "Dermocosmética", "Venta libre"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago", "mercadopago_point"],
+    "planFeatures": [],
+    "shortcuts": [
+      "Escaneá el código de barras del envase y F12 para cobrar."
+    ],
+    "tips": [
+      "NinjaSoft no valida recetas ni obras sociales: usalo para el mostrador de perfumería y venta libre.",
+      "Controlá vencimientos desde Compras si cargás lotes."
+    ]
+  },
+  {
+    "key": "gastronomia",
+    "version": 1,
+    "label": "Gastronomía / restaurante",
+    "tagline": "Mesas, comandas a cocina y delivery propio.",
+    "vertical": "restaurante",
+    "flags": ["dining_enabled", "delivery_enabled"],
+    "scanner": false,
+    "posPreset": "salon",
+    "categories": ["Entradas", "Principales", "Postres", "Bebidas", "Cafetería"],
+    "units": ["un", "porción"],
+    "payments": ["efectivo", "transferencia", "mercado_pago", "mercadopago_point"],
+    "planFeatures": [],
+    "shortcuts": [
+      "El diseño Salón muestra las mesas, la carta y la cuenta en una sola pantalla.",
+      "Los pedidos se mandan a cocina (KDS) al confirmar la comanda."
+    ],
+    "tips": [
+      "Armá tus salones y mesas en Configuración, Salones y mesas.",
+      "El delivery propio usa la sección Delivery: cargá zonas y costo de envío."
+    ]
+  },
+  {
+    "key": "cafeteria",
+    "version": 1,
+    "label": "Cafetería / take away",
+    "tagline": "Mostrador rápido de café, pastelería y para llevar.",
+    "vertical": "cafeteria",
+    "flags": ["allow_free_sale"],
+    "scanner": false,
+    "posPreset": "mostrador",
+    "categories": ["Café", "Pastelería", "Sándwiches", "Bebidas frías"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago"],
+    "planFeatures": [],
+    "shortcuts": [
+      "Marcá los cafés como favoritos para cobrarlos con un toque.",
+      "Usá modificadores para tamaño y agregados (leche, extra shot)."
+    ],
+    "tips": [
+      "Si también tenés mesas, prendé el modo gastronómico en Operación y productos.",
+      "Los modificadores se cargan en la ficha de cada producto."
+    ]
+  },
+  {
+    "key": "verduleria",
+    "version": 1,
+    "label": "Verdulería / carnicería",
+    "tagline": "Venta por peso con balanza y códigos PLU.",
+    "vertical": "kiosco",
+    "flags": ["scale_enabled", "plu_enabled", "allow_free_sale"],
+    "scanner": false,
+    "posPreset": "caja_rapida",
+    "categories": ["Frutas", "Verduras", "Carnes", "Achuras", "Almacén"],
+    "units": ["kg", "un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago"],
+    "planFeatures": [],
+    "shortcuts": [
+      "Caja rápida: teclado numérico primero para tipear el PLU y el peso.",
+      "Botones de ½ kg y 1 kg en cada producto por peso."
+    ],
+    "tips": [
+      "Conectá la balanza a la caja para leer el peso en vivo, o leé las etiquetas de la balanza etiquetadora.",
+      "Cargá los productos con unidad kg para que el precio sea por kilo."
+    ]
+  },
+  {
+    "key": "libreria",
+    "version": 1,
+    "label": "Librería / papelería",
+    "tagline": "Artículos escolares, de oficina y libros.",
+    "vertical": "retail",
+    "flags": ["allow_free_sale"],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["Escolar", "Oficina", "Libros", "Fotocopias", "Regalería"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia", "mercado_pago"],
+    "planFeatures": ["listas_precios"],
+    "shortcuts": [
+      "Escaneá el ISBN o el código del artículo y F12 para cobrar.",
+      "Venta libre para fotocopias e impresiones."
+    ],
+    "tips": [
+      "En temporada escolar, las listas de precios te permiten un precio mayorista para colegios."
+    ]
+  },
+  {
+    "key": "servicios",
+    "version": 1,
+    "label": "Servicios",
+    "tagline": "Turnos, servicios por hora y abonos, sin stock.",
+    "vertical": "servicios",
+    "flags": ["allow_free_sale"],
+    "scanner": false,
+    "posPreset": "caja_rapida",
+    "categories": ["Servicios", "Abonos"],
+    "units": ["un", "h"],
+    "payments": ["efectivo", "transferencia", "mercado_pago"],
+    "planFeatures": ["agenda", "packs"],
+    "shortcuts": [
+      "Marcá tus servicios como favoritos para cobrarlos con un toque.",
+      "Venta libre para cobrar un trabajo con monto a medida."
+    ],
+    "tips": [
+      "Cargá los servicios sin control de stock: no descuentan inventario.",
+      "La agenda de turnos vincula al cliente con el profesional y el cobro."
+    ]
+  },
+  {
+    "key": "otro",
+    "version": 1,
+    "label": "Otro rubro",
+    "tagline": "Configuración general, sin adaptaciones específicas.",
+    "vertical": "otro",
+    "flags": [],
+    "scanner": true,
+    "posPreset": "mostrador",
+    "categories": ["General"],
+    "units": ["un"],
+    "payments": ["efectivo", "transferencia"],
+    "planFeatures": [],
+    "shortcuts": [
+      "F2 para buscar un producto y F12 para cobrar."
+    ],
+    "tips": [
+      "Podés prender cada función a mano en Configuración, Operación y productos."
+    ]
+  }
+]

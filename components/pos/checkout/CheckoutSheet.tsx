@@ -58,6 +58,9 @@ import { TenderLogo, tenderFallback } from "../ui/TenderLogo";
 import { POS_CTA, money } from "../ui/posStyles";
 import { TenderPicker, type TenderPickerVariant } from "./TenderPicker";
 import { CardWizard, EMPTY_VOUCHER, PlanChip, VoucherFields, type CardStep } from "./CardWizard";
+import { Select } from "@/components/ui/Select";
+import { bankBySlug } from "@/lib/payments/banks";
+import type { PromoPayment } from "@/lib/promotions/engine";
 import { IntegratedCardPanel } from "./IntegratedCardPanel";
 import { acquirerOfProvider, plansForAcquirer, type AcquirerDef } from "@/lib/payments/acquirers";
 import {
@@ -69,7 +72,10 @@ import {
 } from "@/lib/payments/voucherRules";
 import { choosablePlans, ctaNext, initialStep } from "@/lib/pos/posnetWizard";
 import { TransferPanel } from "./TransferPanel";
+import { useSalePerceptions } from "@/modules/tax/hooks";
+import type { PreviewItem } from "@/modules/tax/api";
 import { TransferAutoDetect } from "./TransferAutoDetect";
+import { depositToApply } from "@/modules/agenda/deposits";
 import { displayDataOf, isMpCvuAccount, type TransferAccount } from "@/lib/payments/transfer";
 import type { DisplayTransfer } from "@/lib/pos/customerDisplay";
 import type {
@@ -154,6 +160,13 @@ export interface CheckoutSheetProps {
   deliveryFee?: number;
   cartPromo?: Promo | null;
   promoForMethod?: (method: string) => Promo | null;
+  /**
+   * Promos según los pagos (medio, marca de tarjeta y banco), con el mismo
+   * motor que create_sale (ADR-074). Si falta, se usa promoForMethod.
+   */
+  promoForPayments?: (pays: PromoPayment[]) => Promo | null;
+  /** Bancos (slug) que piden las promos activas: el cobro con tarjeta los ofrece. */
+  promoBanks?: string[];
   tenders: ResolvedTender[];
   prefs?: TenderPrefs;
   initialTenderId?: string | null;
@@ -173,6 +186,11 @@ export interface CheckoutSheetProps {
   voucherRules?: CardVoucherRules | null;
   warrantyPlans: CheckoutWarrantyPlan[];
   initialWarrantyId?: string;
+  /**
+   * ADR-096: líneas del carrito que puede cubrir la garantía extendida
+   * (garantía de fábrica > 0). La garantía queda enlazada a la elegida.
+   */
+  warrantyTargets?: { lineId: string; label: string }[];
   professionals: CheckoutProfessional[];
   voucherRequired: boolean;
   storeCreditBalance: number;
@@ -206,6 +224,17 @@ export interface CheckoutSheetProps {
    * "card:terminal". Lo provee CheckoutSheetConnected.
    */
   renderTerminal?: (req: TerminalChargeRequest) => React.ReactNode;
+  /**
+   * Percepciones (ADR-068): ítems del carrito y cliente para sale_tax_preview.
+   * Sólo consulta si el negocio es agente y hay cliente; el total a cobrar las
+   * suma después del redondeo, igual que create_sale.
+   */
+  taxPreview?: { items: PreviewItem[]; customerId: string | null } | null;
+  /**
+   * Seña del turno que se cobra (ADR-088): entra como primer pago fijo
+   * (método 'sena', hasta el total). create_sale exige exactamente ese monto.
+   */
+  prepaid?: { amount: number; label: string } | null;
 }
 
 const PLAN_BASE: Record<string, string> = { debit: "debito", credit: "credito" };
@@ -223,6 +252,7 @@ const SPLITS = [
 ];
 let keySeq = 0;
 const NO_ACQUIRERS: AcquirerDef[] = [];
+const NO_TARGETS: { lineId: string; label: string }[] = [];
 
 export function CheckoutSheet(props: CheckoutSheetProps) {
   const {
@@ -233,6 +263,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     deliveryFee = 0,
     cartPromo = null,
     promoForMethod,
+    promoForPayments,
+    promoBanks = [],
     tenders,
     prefs,
     initialTenderId,
@@ -244,6 +276,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     voucherRules = null,
     warrantyPlans,
     initialWarrantyId = "",
+    warrantyTargets = NO_TARGETS,
     professionals,
     voucherRequired,
     storeCreditBalance,
@@ -260,7 +293,12 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     park,
     transfer = null,
     renderTerminal,
+    taxPreview = null,
+    prepaid = null,
   } = props;
+
+  // ADR-068: percepciones de la venta (se recalculan con el total sin ellas).
+  const [perc, setPerc] = useState(0);
 
   const [lines, setLines] = useState<PaidLine[]>([]);
   // Cuenta corriente: una sola línea por venta (el cargo, sus cuotas y el token
@@ -290,6 +328,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   // asistente (1 terminal, 2 entidad, 3 tipo y cuotas, 4 datos del cupón).
   const [cardAcq, setCardAcq] = useState<string | null>(null);
   const [cardBrand, setCardBrand] = useState<string | null>(null);
+  // Banco emisor de la tarjeta: sólo se pide si una promo activa lo usa.
+  const [cardBank, setCardBank] = useState<string | null>(null);
   const [cardStep, setCardStep] = useState<CardStep>(1);
   const [planId, setPlanId] = useState("");
   const [voucher, setVoucher] = useState(EMPTY_VOUCHER);
@@ -304,6 +344,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const [tipPct, setTipPct] = useState<number | null>(null);
   const [tipCustom, setTipCustom] = useState("");
   const [warrantyId, setWarrantyId] = useState("");
+  const [warrantyLineId, setWarrantyLineId] = useState("");
   const [professionalId, setProfessionalId] = useState("");
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [electronic, setElectronic] = useState<{ tender: ResolvedTender; amount: number } | null>(null);
@@ -342,7 +383,30 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       visible.find((t) => t.id === "cash") ||
       visible[0] ||
       null;
-    setLines([]);
+    // ADR-088: la seña del turno ya cobrada va como pago fijo (no se quita).
+    const prepaidAmount =
+      prepaid && prepaid.amount > 0
+        ? depositToApply(prepaid.amount, checkoutTotals({ base, rounding, deliveryFee, lines: [] }).grandTotal)
+        : 0;
+    setLines(
+      prepaidAmount > 0
+        ? [
+            {
+              key: "sena",
+              tenderId: "sena",
+              title: prepaid?.label ?? "Seña",
+              detail: "Cobrada al reservar el turno",
+              logo: null,
+              method: "sena",
+              amount: prepaidAmount,
+              surcharge: 0,
+              surchargeItems: [],
+              locked: true,
+              promoEligible: true,
+            },
+          ]
+        : [],
+    );
     setActiveId(initial?.id ?? null);
     setView(initialTenderId && initial ? "editor" : "tenders");
     setPortionStr("");
@@ -351,6 +415,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setCardKind("debit");
     setCardAcq(presetAcquirer());
     setCardBrand(null);
+    setCardBank(null);
     setCardStep(initialStep(presetAcquirer()));
     setPlanId("");
     setVoucher(EMPTY_VOUCHER);
@@ -359,12 +424,14 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setTipPct(null);
     setTipCustom("");
     setWarrantyId(initialWarrantyId);
+    setWarrantyLineId("");
     setProfessionalId("");
     setExtrasOpen(Boolean(initialWarrantyId));
     setElectronic(null);
     setTerminalCharge(null);
     setConfirmLeave(false);
     setTransferAccId(transfer?.defaultAccountId ?? null);
+    setPerc(0);
     // Sólo al abrir: no re-resetear si cambian los tenders mientras se cobra.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -378,11 +445,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const isPosnet = active?.flow === "card" && !integrated;
   const activeMethod: SaleMethod | null = active ? (isCard ? cardKind : active.method) : null;
 
-  // ── Promo por medio de pago (sólo si se paga TODO con un único medio) ─────────
-  const pfm = useCallback(
-    (m: string): Promo | null => (promoForMethod ? promoForMethod(m) : cartPromo),
-    [promoForMethod, cartPromo],
+  // ── Promo por pago (ADR-074): todos los pagos deben cumplir la condición ─────
+  const pfp = useCallback(
+    (pays: PromoPayment[]): Promo | null =>
+      promoForPayments
+        ? promoForPayments(pays)
+        : pays.length === 1 && promoForMethod
+          ? promoForMethod(pays[0]!.method)
+          : cartPromo,
+    [promoForPayments, promoForMethod, cartPromo],
   );
+  const pfm = useCallback((m: string): Promo | null => pfp([{ method: m }]), [pfp]);
 
   const wplan = warrantyPlans.find((p) => p.id === warrantyId) ?? null;
   const warranty = wplan
@@ -400,29 +473,43 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         promoExtra: Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0)),
         warranty,
         tip,
+        perceptions: perc,
         lines: ls,
       }),
-    [base, rounding, deliveryFee, cartPromo, warranty],
+    [base, rounding, deliveryFee, cartPromo, warranty, perc],
   );
 
   const promoFor = useCallback(
     (ls: PaidLine[], method: SaleMethod | null, tip: number, typed?: number | null): Promo | null => {
       if (ls.length === 0) {
         if (!method || active?.flow === "point") return cartPromo;
-        const p = pfm(method);
+        const p = pfp([
+          {
+            method,
+            cardBrand: isPosnet ? (cardBrandByKey(cardBrand)?.label ?? null) : null,
+            bank: isPosnet ? cardBank : null,
+          },
+        ]);
         // Un primer pago parcial no lleva la promo por medio (sólo aplica si
         // se paga TODO con ese medio).
         if (typed != null && typed < totalsFor(ls, p, tip).grandTotal - 0.005) return cartPromo;
         return p;
       }
-      const only = ls[0];
-      if (ls.length === 1 && only && only.promoEligible) {
-        const p = pfm(only.method);
+      // Todos los pagos cuentan (como en create_sale). Un pago que no se pudo
+      // evaluar (Point) deja sólo las promos sin condición de cobro.
+      if (ls.every((l) => l.promoEligible)) {
+        const p = pfp(
+          ls.map((l) => ({
+            method: l.method,
+            cardBrand: l.card_voucher?.marca ?? null,
+            bank: l.card_voucher?.banco ?? null,
+          })),
+        );
         if (totalsFor(ls, p, tip).settled) return p;
       }
       return cartPromo;
     },
-    [pfm, cartPromo, totalsFor, active?.flow],
+    [pfp, cartPromo, totalsFor, active?.flow, isPosnet, cardBrand, cardBank],
   );
 
   // Propina: % sobre el total de productos (sin propina) o monto libre.
@@ -441,6 +528,28 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   const totals = totalsFor(lines, promo, tip);
   const remaining = Math.max(0, totals.remaining);
   const promoExtra = Math.max(0, (promo?.discount ?? 0) - (cartPromo?.discount ?? 0));
+
+  // Mismos ítems que viajan a create_sale: el carrito más la garantía y los
+  // recargos como ítems sin producto (van a la alícuota del negocio).
+  const taxItems = useMemo<PreviewItem[]>(() => {
+    if (!taxPreview) return [];
+    const extra: PreviewItem[] = [];
+    if (warranty > 0) extra.push({ product_id: null, quantity: 1, unit_price: warranty });
+    for (const l of lines) {
+      for (const it of l.surchargeItems) extra.push({ product_id: null, quantity: 1, unit_price: it.amount });
+    }
+    return [...taxPreview.items, ...extra];
+  }, [taxPreview, warranty, lines]);
+  const percQ = useSalePerceptions({
+    items: taxItems,
+    total: round2(totals.productsTotal - perc),
+    customerId: taxPreview?.customerId ?? null,
+    enabled: open && Boolean(taxPreview),
+  });
+  useEffect(() => {
+    if (!percQ.loading) setPerc(percQ.total);
+  }, [percQ.loading, percQ.total]);
+  const percLines = percQ.data?.perceptions ?? [];
 
   // ── Editor del tender activo ───────────────────────────────────────────────
   // Tarjeta en posnet: planes del adquirente (los suyos y los genéricos) de la
@@ -481,9 +590,10 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       promoExtra,
       warranty,
       tip,
+      perceptions: perc,
       lines,
     }),
-    [base, rounding, deliveryFee, promoExtra, warranty, tip, lines],
+    [base, rounding, deliveryFee, promoExtra, warranty, tip, lines, perc],
   );
   const settle = settleLine(settleInput, portion, surchargePct);
   const received = receivedStr.trim() === "" ? null : keypadNumber(receivedStr);
@@ -598,6 +708,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       const acq = cardAcq ?? presetAcquirer();
       setCardAcq(acq);
       setCardBrand(null);
+    setCardBank(null);
       setCardStep(initialStep(acq));
     }
     // En mobile el editor queda debajo: lo traemos a la vista.
@@ -610,7 +721,17 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     const finalPromo = promoFor(ls, null, t);
     const tt = totalsFor(ls, finalPromo, t);
     const extras: PaymentExtra[] = [];
-    if (warranty > 0 && wplan) extras.push({ kind: "warranty", name: `Garantía ${wplan.label}`, amount: warranty });
+    if (warranty > 0 && wplan) {
+      // ADR-096: la garantía queda enlazada al producto que cubre.
+      const target = warrantyTargets.find((t) => t.lineId === warrantyLineId) ?? warrantyTargets[0];
+      extras.push({
+        kind: "warranty",
+        name: `Garantía ${wplan.label}`,
+        amount: warranty,
+        planId: wplan.id,
+        ...(target ? { forLineId: target.lineId } : {}),
+      });
+    }
     for (const l of ls) {
       for (const s of l.surchargeItems) {
         if (s.amount > 0) extras.push({ kind: "surcharge", name: s.name, amount: s.amount });
@@ -624,6 +745,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       ...(l.reference ? { reference: l.reference } : {}),
       ...(l.card_voucher ? { card_voucher: l.card_voucher } : {}),
       ...(l.transfer ? { transfer: l.transfer } : {}),
+      // El medio real se supo al final (Point): sin promos por medio.
+      ...(!l.promoEligible ? { promo_ineligible: true } : {}),
     }));
     return { payments, extras, change: tt.change, promo: finalPromo, settled: tt.settled };
   }
@@ -644,6 +767,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
     setVoucher(EMPTY_VOUCHER);
     setOpRef("");
     setCardBrand(null);
+    setCardBank(null);
     // El adquirente queda: el resto se suele cobrar en la misma terminal.
     setCardStep(initialStep(cardAcq));
     const t = tipFor(next, null);
@@ -735,6 +859,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
             ...(typed("comercio") ? { comercio: typed("comercio") } : {}),
             ...(Number(typed("cuotas")) > 0 ? { cuotas: Number(typed("cuotas")) } : {}),
             ...(voucherAcq ? { adquirente: voucherAcq } : {}),
+            ...(isPosnet && cardBank ? { banco: cardBank } : {}),
           }
         : undefined,
       locked: false,
@@ -848,7 +973,8 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
         },
       })
     : null;
-  const readyToConfirm = lines.length > 0 && totals.settled;
+  // Con percepciones en cálculo no se confirma (el servidor exige cubrirlas).
+  const readyToConfirm = lines.length > 0 && totals.settled && !percQ.loading;
   let ctaLabel = "Elegí cómo paga";
   if (readyToConfirm) ctaLabel = `Confirmar venta ${money(totals.grandTotal)}`;
   else if (active) {
@@ -897,7 +1023,7 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
 
   const quick = quickCashAmounts(settle.amount, { custom: quickCash });
   const roundingAdj = round2(
-    totals.productsTotal - deliveryFee - (base - promoExtra + warranty + totals.surcharges),
+    totals.productsTotal - deliveryFee - perc - (base - promoExtra + warranty + totals.surcharges),
   );
 
   const keypadTarget = keypadFieldFor(active?.flow, keypadChoice);
@@ -957,7 +1083,13 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
   );
 
   const hasBreakdown =
-    deliveryFee > 0 || warranty > 0 || totals.surcharges > 0 || promoExtra > 0 || Math.abs(roundingAdj) >= 0.01 || tip > 0;
+    deliveryFee > 0 ||
+    warranty > 0 ||
+    totals.surcharges > 0 ||
+    promoExtra > 0 ||
+    Math.abs(roundingAdj) >= 0.01 ||
+    tip > 0 ||
+    perc > 0;
   const breakdown = hasBreakdown ? (
     <dl className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
       {deliveryFee > 0 && <Row label="Envío" value={`+${money(deliveryFee)}`} />}
@@ -969,6 +1101,9 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       {Math.abs(roundingAdj) >= 0.01 && (
         <Row label="Redondeo" value={`${roundingAdj > 0 ? "+" : "-"}${money(Math.abs(roundingAdj))}`} />
       )}
+      {percLines.map((p) => (
+        <Row key={p.regime_id} label={`${p.name} ${String(p.rate).replace(".", ",")} %`} value={`+${money(p.amount)}`} />
+      ))}
       {tip > 0 && <Row label="Propina" value={`+${money(tip)}`} />}
     </dl>
   ) : null;
@@ -1201,6 +1336,21 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
       voucher={voucher}
       onVoucher={setVoucher}
       onEnter={onCta}
+      bankSlot={
+        promoBanks.length > 0 ? (
+          <Select
+            aria-label="Banco de la tarjeta"
+            label="Banco de la tarjeta"
+            hint="Hay promociones por banco"
+            value={cardBank ?? "otro"}
+            onChange={(v) => setCardBank(v === "otro" ? null : v)}
+            options={[
+              ...promoBanks.map((slug) => ({ value: slug, label: bankBySlug(slug)?.shortName ?? slug })),
+              { value: "otro", label: "Otro banco" },
+            ]}
+          />
+        ) : null
+      }
     />
   ) : // Terminal de la marca sin integración: débito / crédito + cuotas + voucher.
   active ? (
@@ -1428,6 +1578,18 @@ export function CheckoutSheet(props: CheckoutSheetProps) {
                     ...warrantyPlans.map((w) => ({ value: w.id, label: `${w.label} · ${w.months} meses` })),
                   ]}
                 />
+                {warrantyId && warrantyTargets.length > 1 && (
+                  <div className="mt-2">
+                    <p className={cn(LABEL, "mb-1.5")}>Cubre a</p>
+                    <Segmented
+                      size="sm"
+                      aria-label="Producto que cubre la garantía"
+                      value={warrantyTargets.some((t) => t.lineId === warrantyLineId) ? warrantyLineId : warrantyTargets[0]!.lineId}
+                      onChange={setWarrantyLineId}
+                      options={warrantyTargets.map((t) => ({ value: t.lineId, label: t.label }))}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {professionals.length > 0 && (

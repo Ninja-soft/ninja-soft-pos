@@ -185,7 +185,9 @@ export async function resetPosPreset(page: Page) {
     await openPresetPopover(page);
     const reset = page.getByRole("button", { name: "Volver al del negocio" });
     if (await appears(reset, 1_000)) {
-      await reset.click();
+      // El popover se re-renderiza mientras llegan datos del POS: clic corto
+      // para que toPass reintente en vez de agotar el timeout en un solo intento.
+      await reset.click({ timeout: 3_000 });
       await expect(page.getByText("Diseño de esta pantalla")).toHaveCount(0);
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       await openPresetPopover(page);
@@ -237,6 +239,36 @@ export async function voidSale(page: Page, saleNumber: string | null, reason: st
   await confirm.getByLabel("Motivo de anulación").fill(reason);
   await confirm.getByRole("button", { name: "Anular venta" }).click();
   await expect(page.getByText(/Venta #\d+ anulada/).first()).toBeVisible();
+}
+
+/**
+ * En /pos: cierra el turno con arqueo. Cuenta "0" y deja una nota (si la
+ * diferencia supera la tolerancia del negocio, la nota es el motivo). Si hay
+ * cobros en espera, los pasa a la próxima apertura (no cancela nada).
+ * Devuelve la diferencia que informa el toast ("Diferencia: $ …").
+ */
+export async function closeShift(page: Page, note: string): Promise<string | null> {
+  if (!page.url().includes("/pos")) await gotoClean(page, "/pos");
+  const closeBtn = page.getByTitle("Cerrar caja (arqueo)");
+  await expect(closeBtn.first()).toBeVisible();
+  await closeBtn.first().click();
+  const d = dialog(page, "Cerrar caja (arqueo)");
+  await expect(d).toBeVisible();
+  await d.getByLabel("Efectivo contado").fill("0");
+  await d.getByLabel("Notas (opcional)").fill(note);
+  const carry = d.getByRole("radio", { name: /Pasarlos a la próxima apertura/ });
+  if (await appears(carry, 1_000)) await carry.check();
+  await d.getByRole("button", { name: "Cerrar caja", exact: true }).click();
+  const toast = page.getByText("Caja cerrada", { exact: true }).first();
+  await expect(toast).toBeVisible({ timeout: 30_000 });
+  await expect(d).toHaveCount(0);
+  await expect(page.getByTitle("Abrir caja").first()).toBeVisible();
+  const diff = await page
+    .getByText(/^Diferencia: /)
+    .first()
+    .innerText()
+    .catch(() => null);
+  return diff;
 }
 
 export function escapeRe(s: string) {

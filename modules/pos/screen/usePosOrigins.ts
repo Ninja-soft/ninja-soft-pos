@@ -8,10 +8,13 @@ import { useCustomerLastSaleItems } from "@/modules/customers/hooks";
 import { useTableOrder, useTableOrderItems } from "@/modules/dining/hooks";
 import { useDeliveryOrder, useDeliveryOrderItems } from "@/modules/delivery/hooks";
 import { productsApi } from "@/modules/products/api";
-import { useCartStore } from "@/modules/pos/store";
+import { useCartStore, type CartLine } from "@/modules/pos/store";
+import { useStockReservation } from "@/modules/stock/reservations";
+import { isOpen as reservationIsOpen } from "@/lib/stock/reservations";
 
 // Orígenes de una venta del POS además del mostrador: cobro de turno (H38),
-// recompra (H40), mesa (H44) y delivery (H49). Cada uno carga sus ítems en el
+// recompra (H40), mesa (H44), delivery (H49) y retiro de una reserva de stock
+// (ADR-096). Cada uno carga sus ítems en el
 // carrito UNA sola vez y expone su salida. Lógica movida tal cual desde la
 // página del POS (sin cambios de negocio).
 
@@ -51,6 +54,12 @@ export function usePosOrigins({
   const { data: deliveryOrder } = useDeliveryOrder(deliveryOrderId);
   const { data: deliveryItems } = useDeliveryOrderItems(deliveryOrderId);
   const loadedDeliveryRef = useRef<string | null>(null);
+  // Retiro de una reserva (ADR-096): /pos?reservation=<id>, después de validar
+  // al cliente en Reservas. La venta viaja con {kind: 'reservation', id} y
+  // create_sale entrega la reserva en la misma transacción.
+  const reservationId = searchParams.get("reservation");
+  const { data: reservation } = useStockReservation(reservationId);
+  const loadedReservationRef = useRef<string | null>(null);
 
   // Turno: cargá su servicio UNA vez y seleccioná el cliente. Si el turno ya
   // tiene venta o está cancelado, no se carga.
@@ -141,6 +150,58 @@ export function usePosOrigins({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliveryOrder, deliveryItems, clear, addProduct, addFreeAmount]);
+
+  // Reserva: cargá sus renglones UNA vez (precio actual) y el cliente.
+  useEffect(() => {
+    const r = reservation;
+    if (!r) return;
+    if (loadedReservationRef.current === r.id) return;
+    loadedReservationRef.current = r.id;
+    if (!reservationIsOpen(r)) return;
+    let cancelled = false;
+    (async () => {
+      let current: Awaited<ReturnType<typeof productsApi.getByIds>> = [];
+      try {
+        current = await productsApi.getByIds(r.items.map((it) => it.product_id));
+      } catch {
+        /* sin datos frescos se usa el renglón de la reserva */
+      }
+      if (cancelled) return;
+      const byId = new Map(current.map((p) => [p.id, p]));
+      const lines: CartLine[] = r.items.map((it) => {
+        const p = byId.get(it.product_id);
+        const base = it.variant_id ? Number(it.unit_price) : Number(p?.price ?? it.unit_price);
+        return {
+          lineId: crypto.randomUUID(),
+          productId: it.product_id,
+          categoryId: p?.category_id ?? null,
+          name: p?.name ?? it.product_name,
+          sku: p?.sku ?? it.sku,
+          unitPrice: priceFor(it.product_id, it.variant_id, base),
+          quantity: Number(it.qty),
+          discount: 0,
+          unit: p?.unit ?? it.unit ?? "un",
+          variantId: it.variant_id,
+          ...(it.variant_label ? { variantLabel: it.variant_label } : {}),
+          warrantyMonths: p?.warranty_months ?? 0,
+        };
+      });
+      useCartStore.setState({ lines, discountTotal: 0 });
+      if (r.customer_id) setCustomer({ id: r.customer_id, name: r.customer_name });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // priceFor y setCustomer: se usan una sola vez por reserva.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservation]);
+
+  function exitReservationMode() {
+    loadedReservationRef.current = null;
+    clear();
+    setCustomer(null);
+    router.replace("/pos");
+  }
 
   // Costo de envío a cobrar: sólo delivery activo, abierto y con fee > 0.
   const deliveryFee = useMemo(() => {
@@ -234,7 +295,8 @@ export function usePosOrigins({
     if (appointmentId) loadedApptRef.current = null;
     if (tableOrderId) loadedTableRef.current = null;
     if (deliveryOrderId) loadedDeliveryRef.current = null;
-    if (appointmentId || tableOrderId || deliveryOrderId) router.replace("/pos");
+    if (reservationId) loadedReservationRef.current = null;
+    if (appointmentId || tableOrderId || deliveryOrderId || reservationId) router.replace("/pos");
   }
 
   const apptActive = Boolean(
@@ -248,7 +310,12 @@ export function usePosOrigins({
       deliveryOrder.status !== "cancelado",
   );
 
+  const reservationActive = Boolean(reservation && reservationIsOpen(reservation));
+
   return {
+    reservationId: reservationActive ? reservationId : null,
+    reservation: reservationActive ? (reservation ?? null) : null,
+    exitReservationMode,
     appointmentId,
     pendingAppt,
     apptActive,

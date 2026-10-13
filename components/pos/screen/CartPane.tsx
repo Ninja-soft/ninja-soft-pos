@@ -56,6 +56,8 @@ export interface CartLinesProps {
   // Cambio manual de precio (ADR-056). Sin handler no se ofrece.
   onEditPrice?: (lineId: string) => void;
   emptyHint?: string;
+  /** Promos que tocan cada línea (F9, ADR-074): etiqueta y monto. */
+  promoByLine?: Record<string, { label: string; amount: number }[]>;
 }
 
 export function CartLines({
@@ -68,6 +70,7 @@ export function CartLines({
   onUncover,
   onEditPrice,
   emptyHint = "Tocá un producto o escaneá un código para empezar.",
+  promoByLine,
 }: CartLinesProps) {
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -132,6 +135,16 @@ export function CartLines({
                   )}
                 </span>
                 <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
+                {(promoByLine?.[l.lineId] ?? []).map((pr) => (
+                  <span
+                    key={pr.label}
+                    className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-medium tabular-nums text-success"
+                  >
+                    <Tag size={12} className="shrink-0" aria-hidden />
+                    <span className="truncate">{pr.label}</span>
+                    <span className="shrink-0">−{money(pr.amount)}</span>
+                  </span>
+                ))}
               </button>
               {editable && l.unit !== "kg" && (
                 <div className="flex shrink-0 items-center rounded-lg bg-fg-6 p-0.5">
@@ -250,7 +263,8 @@ export interface CartSummaryProps {
   discountLocked: boolean;
   onDiscount: (v: number) => void;
   onDiscountLocked: () => void;
-  promo: { name: string; amount: number } | null;
+  /** Promos aplicadas (F9, ADR-074): una fila por promo, como en el ticket. */
+  promos: { label: string; amount: number }[];
   coupon: { code: string; amount: number } | null;
   couponInput: string;
   onCouponInput: (v: string) => void;
@@ -278,7 +292,7 @@ export interface CartSummaryProps {
 
 export function CartSummary(p: CartSummaryProps) {
   const [adjustOpen, setAdjustOpen] = useState(false);
-  const hasAdjust = p.discountTotal > 0 || Boolean(p.coupon) || Boolean(p.promo);
+  const hasAdjust = p.discountTotal > 0 || Boolean(p.coupon) || p.promos.length > 0;
   const grand = p.total + p.deliveryFee;
   const missingCustomer = p.requireCustomer && !p.customer;
 
@@ -395,15 +409,15 @@ export function CartSummary(p: CartSummaryProps) {
                 )}
               </div>
             )}
-            {p.promo && (
-              <div className="flex items-center justify-between gap-2 text-success">
+            {p.promos.map((pr) => (
+              <div key={pr.label} className="flex items-center justify-between gap-2 text-success">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <Tag size={14} className="shrink-0" aria-hidden />
-                  <span className="truncate">{p.promo.name}</span>
+                  <span className="truncate">{pr.label}</span>
                 </span>
-                <span className="shrink-0 font-price font-medium tabular-nums">−{money(p.promo.amount)}</span>
+                <span className="shrink-0 font-price font-medium tabular-nums">−{money(pr.amount)}</span>
               </div>
-            )}
+            ))}
             {p.coupon ? (
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5 text-success">
@@ -497,6 +511,7 @@ export function CartSummary(p: CartSummaryProps) {
             type="button"
             disabled={!p.canCheckout || p.checkingOut}
             onClick={() => p.onCheckout()}
+            data-tour="pos-cobrar"
             className={cn("flex h-14 w-full items-center justify-between rounded-lg px-4 text-[17px] font-semibold", POS_CTA)}
           >
             <span className="flex items-center gap-2">

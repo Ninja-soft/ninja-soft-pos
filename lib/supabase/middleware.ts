@@ -14,6 +14,11 @@ const PUBLIC_PATHS = [
   "/recover",
   "/reset-password",
   "/auth/callback",
+  // Acceso del staff como el negocio (ADR-084): inicia sesión con el link.
+  "/auth/impersonate",
+  // Shell estático del POS sin conexión (H65, ADR-087): anónimo, sin datos.
+  // El service worker lo baja sin cookies; no puede redirigir a /login.
+  "/pos-offline",
 ];
 
 // Refresca la sesión y aplica redirecciones de auth. Ver docs/05-security.md §3.

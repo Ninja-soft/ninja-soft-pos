@@ -54,6 +54,11 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [28](./28-school-onboarding.md) | **Escuela y onboarding guiado** — cursos, tours, sugerencias, laboratorio y certificaciones configurables desde internal | Producto, soporte, operaciones |
 | [29](./29-napse-unified-commerce-benchmark.md) | **Benchmark Napse/TOTVS** — comercio unificado, VTOL, Fiscal Flow, Promo, Omni, OMS y cockpit enterprise | Producto, estrategia, backend |
 | [30](./30-nubceo.md) | **Integración NubCeo**: envío de ventas para conciliar cobros, monitor y asientos contables (API y CSV) | Producto, backend, soporte |
+| [31](./31-contabilidad.md) | **Contabilidad**: plan de cuentas, asientos automáticos, mapeos, cierres, libros y export a estudios (Tango, Holistor, Xubio, Colppy, CSV) | Producto, backend, soporte |
+
+| [32](./32-impuestos.md) | **Impuestos**: IVA por alícuota, internos, condición fiscal, comprobante, percepciones, padrones (diseños de registro) y retenciones | Producto, backend, soporte |
+| [33](./33-facturacion-arca.md) | **Facturación electrónica ARCA**: WSFEv1, cola fiscal, certificados, homologación y producción, contingencia CAEA, asistente, errores frecuentes y smoke test | Producto, backend, soporte |
+| [34](./34-venta-offline.md) | **Venta offline**: qué se vende sin conexión, límites del dueño, cola local, sincronización idempotente, conflictos y revisión | Producto, backend, soporte |
 | [Auditoría Napse vs NinjaPOS](./auditoria-napse-vs-ninjapos.md) | **Multi-sucursal:** sucursal y caja como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal (F17) | Producto, backend, UI |
 | [Auditoría fiscal y contable](./auditoria-fiscal-contable-precios.md) | **Fiscal, contable, precios y compras (Argentina):** listas PRO, importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos (F18) | Producto, backend, contable |
 | [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |

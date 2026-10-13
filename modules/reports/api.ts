@@ -46,6 +46,31 @@ export interface GastroTablesReport {
   by_waiter: { waiter: string; total: number; orders: number; avg_ticket: number }[];
 }
 
+// Rotación de mesas (turnover) y mozos con propinas (gastro_turnover_report,
+// migración 20261105200400). Minutos con un decimal; null = sin dato.
+export interface GastroTurnoverReport {
+  orders: number;
+  avg_seated_min: number;
+  avg_first_item_min: number;
+  avg_bill_to_close_min: number;
+  tips_total: number;
+  by_table: {
+    table_label: string;
+    area: string;
+    orders: number;
+    avg_seated_min: number | null;
+    avg_first_item_min: number | null;
+    avg_bill_to_close_min: number | null;
+  }[];
+  by_waiter: {
+    waiter: string;
+    orders: number;
+    total: number;
+    tips: number;
+    avg_seated_min: number | null;
+  }[];
+}
+
 export interface GastroKitchenReport {
   items: number;
   avg_seconds: number;
@@ -239,6 +264,22 @@ export const reportsApi = {
     return data as unknown as GastroTablesReport;
   },
 
+  // Rotación de mesas + mozos y propinas (F13 · H51/H52).
+  gastroTurnover: async (
+    fromISO: string,
+    toISO: string,
+    storeId: string | null = null,
+  ): Promise<GastroTurnoverReport> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("gastro_turnover_report" as never, {
+      p_from: fromISO,
+      p_to: toISO,
+      p_store_id: storeId,
+    } as never);
+    if (error) throw error;
+    return data as unknown as GastroTurnoverReport;
+  },
+
   gastroKitchen: async (
     fromISO: string,
     toISO: string,
@@ -319,16 +360,20 @@ export const reportsApi = {
     fromISO: string,
     toISO: string,
     storeId: string | null = null,
-  ): Promise<{ type: string; amount: number; created_at: string }[]> => {
+  ): Promise<{ type: string; amount: number; created_at: string; payment_method: string | null }[]> => {
     const supabase = createClient();
-    const out: { type: string; amount: number; created_at: string }[] = [];
+    const out: { type: string; amount: number; created_at: string; payment_method: string | null }[] = [];
     const PAGE = 1000;
     for (let page = 0; page < MAX_PAGES; page++) {
       // Con sucursal: los movimientos de los turnos de esa sucursal
       // (cash_shifts.store_id, desnormalizado en F17).
       let q = supabase
         .from("cash_movements")
-        .select(storeId ? "type, amount, created_at, cash_shifts!inner(store_id)" : "type, amount, created_at")
+        .select(
+          storeId
+            ? "type, amount, created_at, payment_method, cash_shifts!inner(store_id)"
+            : "type, amount, created_at, payment_method",
+        )
         .gte("created_at", fromISO)
         .lt("created_at", toISO);
       if (storeId) q = q.eq("cash_shifts.store_id" as never, storeId as never);
@@ -337,9 +382,9 @@ export const reportsApi = {
         .range(page * PAGE, page * PAGE + PAGE - 1);
       if (error) throw error;
       out.push(
-        ...((data ?? []) as unknown as { type: string; amount: number; created_at: string }[]).map(
-          (m) => ({ type: m.type, amount: m.amount, created_at: m.created_at }),
-        ),
+        ...(
+          (data ?? []) as unknown as { type: string; amount: number; created_at: string; payment_method: string | null }[]
+        ).map((m) => ({ type: m.type, amount: m.amount, created_at: m.created_at, payment_method: m.payment_method })),
       );
       if (!data || data.length < PAGE) break;
     }

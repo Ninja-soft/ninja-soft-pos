@@ -13,6 +13,7 @@ import {
   Phone,
   Plus,
   ShoppingBag,
+  Siren,
   Trash2,
   Truck,
   X,
@@ -23,6 +24,8 @@ import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ComandaModal } from "@/components/dining/ComandaModal";
+import { VoidItemModal } from "@/components/dining/VoidItemModal";
+import { diningErrorMessage, isItemSent } from "@/lib/gastro/tableOps";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import {
   useDeliveryOrderItems,
@@ -57,7 +60,10 @@ export function DeliveryAccountModal({
   const orderId = order?.id ?? null;
   const open = order !== null;
   const { data: items } = useDeliveryOrderItems(orderId);
-  const { setItemQty, removeItem, cancel, assignCourier } = useDeliveryMutations();
+  const { setItemQty, removeItem, cancel, assignCourier, setPriority } = useDeliveryMutations();
+  // Anulación con motivo de un ítem ya enviado a cocina (ADR-097).
+  const [voiding, setVoiding] = useState<DeliveryOrderItem | null>(null);
+  const urgent = order?.priority === "urgente";
   // Nombre del local para la cabecera (opcional) de la comanda de cocina (H49).
   const { data: brand } = useTicketBranding(open);
 
@@ -89,14 +95,42 @@ export function DeliveryAccountModal({
   );
 
   async function changeQty(itemId: string, qty: number) {
+    // Un ítem ya enviado a cocina no se baja con el "-": se anula con motivo.
+    const it = (items ?? []).find((x) => x.id === itemId);
+    if (it && qty < it.qty && isItemSent(it)) {
+      setVoiding(it);
+      return;
+    }
     try {
       await setItemQty.mutateAsync({ itemId, qty: Math.max(0, qty) });
     } catch (e) {
       toast({
         title: "No se pudo actualizar",
-        description: e instanceof Error ? e.message : undefined,
+        description: diningErrorMessage(e),
         variant: "error",
       });
+    }
+  }
+
+  function removeLine(it: DeliveryOrderItem) {
+    if (isItemSent(it)) {
+      setVoiding(it);
+      return;
+    }
+    removeItem.mutate(it.id, {
+      onError: (e) =>
+        toast({ title: "No se pudo quitar", description: diningErrorMessage(e), variant: "error" }),
+    });
+  }
+
+  // Prioridad en cocina (ADR-097): la comanda y el KDS la muestran.
+  async function toggleUrgent() {
+    if (!orderId) return;
+    try {
+      await setPriority.mutateAsync({ orderId, priority: urgent ? "normal" : "urgente" });
+      toast({ title: urgent ? "Prioridad normal" : "Pedido marcado urgente", variant: "success" });
+    } catch (e) {
+      toast({ title: "No se pudo cambiar la prioridad", description: diningErrorMessage(e), variant: "error" });
     }
   }
 
@@ -226,6 +260,21 @@ export function DeliveryAccountModal({
             </div>
           )}
 
+          {/* Prioridad en cocina (ADR-097) */}
+          {!closed && (
+            <button
+              type="button"
+              onClick={toggleUrgent}
+              disabled={setPriority.isPending}
+              aria-pressed={urgent}
+              className={`flex min-h-10 w-full items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-semibold uppercase tracking-wide transition disabled:opacity-50 ${
+                urgent ? "border-danger bg-danger/15 text-danger" : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Siren size={14} /> {urgent ? "Urgente en cocina" : "Marcar urgente"}
+            </button>
+          )}
+
           {/* Líneas del pedido */}
           <div className="max-h-[40vh] space-y-2 overflow-y-auto">
             {(items ?? []).length === 0 ? (
@@ -246,7 +295,7 @@ export function DeliveryAccountModal({
                   item={it}
                   readOnly={closed}
                   onQty={changeQty}
-                  onRemove={(id) => removeItem.mutate(id)}
+                  onRemove={() => removeLine(it)}
                 />
               ))
             )}
@@ -352,6 +401,17 @@ export function DeliveryAccountModal({
         loading={cancel.isPending}
         onConfirm={doCancel}
       />
+      {/* Anulación con motivo de un ítem enviado (ADR-097) */}
+      <VoidItemModal
+        item={voiding}
+        source="delivery"
+        orderLabel={
+          order
+            ? `${order.order_type.toUpperCase()} #${order.id.replace(/-/g, "").slice(-4).toUpperCase()}`
+            : null
+        }
+        onClose={() => setVoiding(null)}
+      />
     </>
   );
 }
@@ -424,7 +484,8 @@ function ItemRow({
           type="button"
           onClick={() => onRemove(item.id)}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
-          aria-label="Quitar"
+          aria-label={isItemSent(item) ? "Anular (ya en cocina)" : "Quitar"}
+          title={isItemSent(item) ? "Ya está en cocina: anular con motivo" : "Quitar"}
         >
           <Trash2 size={15} />
         </button>

@@ -119,3 +119,11 @@ verify_jwt = false
 
 [functions.send_password_recovery]
 verify_jwt = false
+
+# -----------------------------------------------------------------------------
+# Edge Functions con JWT declaradas explícitamente (no van en PUBLIC_FUNCTIONS).
+# catalog_sync (ADR-106): la llama el cron con X-Cron-Secret (anon key como
+# Bearer para pasar el gateway) o el staff interno con su JWT.
+# -----------------------------------------------------------------------------
+[functions.catalog_sync]
+verify_jwt = true

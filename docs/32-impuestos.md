@@ -1,6 +1,6 @@
 # Impuestos: IVA, internos, condición fiscal, percepciones, retenciones y padrones
 
-Decisión: [ADR-068](./17-decision-log.md) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
+Decisión: [ADR-068](./17-decision-log.md) y [ADR-079](./17-decision-log.md) (retenciones como agente) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
 
 > **Aviso normativo.** Alícuotas, topes, mínimos, códigos de ARCA y diseños de padrón son **orientativos**. Se modelan como datos (catálogos, `tax_parameters`, regímenes cargados por el negocio), nunca como constantes del código, y hay que validarlos con el contador del negocio y la norma vigente.
 
@@ -17,7 +17,9 @@ Decisión: [ADR-068](./17-decision-log.md) · Hitos: F18 · H103 a H106 ([roadma
 | Impuestos internos por producto | Ficha del producto | `impuestos_internos` (Pro) |
 | Regímenes de percepción y retención, padrones, exclusiones | Configuración > Impuestos, ficha del cliente | `percepciones_retenciones` (Business) |
 | Percepciones en el cobro y en el ticket | POS | `percepciones_retenciones` |
-| Retenciones sugeridas en la orden de pago | Compras > Orden de pago | `percepciones_retenciones` |
+| Retenciones como agente calculadas en la orden de pago (Ganancias RG 830 con acumulado mensual, IVA, IIBB, SUSS) con certificado PDF | Compras > Orden de pago | `percepciones_retenciones` |
+| Valores de retención (conceptos de la RG 830 y actividades de SUSS, ajustables) | Configuración > Impuestos | `percepciones_retenciones` |
+| Retenciones practicadas del mes, certificados, archivos SICORE y ARBA | Compras > Retenciones practicadas | `percepciones_retenciones` |
 
 ## 2. Cálculo
 
@@ -93,7 +95,9 @@ Líneas con CUIT inválido, fechas al revés o alícuota ilegible se informan (l
 - Venta: `sales.cbte_letter`, `fiscal_snapshot`, `net_taxed`, `net_exempt`, `net_untaxed`, `iva_total`, `internal_tax_total`, `perception_total` (`tax_total` = IVA + internos + percepciones); `sale_items.tax_rate_code`, `iva_rate`, `taxed_total`, `net_amount`, `iva_amount`, `internal_tax_amount`; `sale_tax_lines` (AlicIva, internos y percepciones con id de ARCA).
 - Vista `tax_suffered`: percepciones y tributos sufridos en comprobantes de compra.
 
-RPC: `tax_settings_get`, `tax_settings_save`, `sale_tax_preview`, `tax_padron_import_start | _rows | _finish | _delete`, `tax_padron_lookup`, `tax_retention_suggest`, `report_iva_ventas`, `cbte_letter_infer`, `tax_param`.
+RPC: `tax_settings_get`, `tax_settings_save`, `sale_tax_preview`, `tax_padron_import_start | _rows | _finish | _delete`, `tax_padron_lookup`, `tax_retention_suggest` (reemplazada en la orden de pago por `tax_retention_preview`), `report_iva_ventas`, `cbte_letter_infer`, `tax_param`.
+
+Retenciones como agente (ADR-079): `tax_ret_concepts` y `tax_ret_scales` (globales, sólo lectura), `tax_ret_concept_settings` y `supplier_tax_profiles` (por negocio), `tax_withholdings` (registro); RPC `tax_retention_preview`, `tax_ret_concepts_list`, `tax_withholdings_list`, `tax_withholdings_export`; `supplier_payment_order_create` recreada.
 
 ## 6. Deploy
 
@@ -101,4 +105,45 @@ Migraciones `20261028100000` a `20261028100300` en orden, **antes del front** (e
 
 ## 7. Pendiente
 
-Notas de crédito con reversa proporcional de impuestos (con F3), alícuota por operación según receptor, internos por sucursal y con vigencia, Convenio Multilateral con coeficientes, constancia de ARCA por CUIT, descarga programada de padrones, Ganancias (RG 830) y SUSS, certificados de retención, SICORE, SIRE, Libro IVA Digital y DDJJ de IIBB (H108).
+Notas de crédito con reversa proporcional de impuestos (con F3), alícuota por operación según receptor, internos por sucursal y con vigencia, Convenio Multilateral con coeficientes, constancia de ARCA por CUIT, descarga programada de padrones, SIRE, DDJJ de IIBB de AGIP (e-ARCIBA) y del resto de las provincias, retenciones y percepciones sufridas como sujeto (SIRTAC, SIRCREB, "Mis Retenciones").
+
+## 8. Retenciones como agente (ADR-079)
+
+### Cómo se calcula
+
+En la orden de pago, con la imputación (o el importe, si es a cuenta), el servidor arma las bases del pago: **neto sin IVA** (neto gravado + exento + no gravado en proporción a lo imputado), **neto gravado**, **total** y el **IVA facturado**. Después, por cada régimen de retención activo del negocio (`tax_regimes`, rol retención):
+
+- **Ganancias (RG 830)**, por **concepto** (bienes, servicios, honorarios, alquileres, fletes):
+  1. Monotributista: no se retiene. Exento o no alcanzado según la ficha: no se retiene. Sin concepto: se pide elegirlo.
+  2. **Acumulado del mes** = pagos anteriores del mes al mismo proveedor por el mismo concepto (registrados en `tax_withholdings`, aunque no hayan retenido) + la base de este pago.
+  3. **Sujeto** = acumulado − **mínimo no sujeto mensual** (a los **no inscriptos** no se les descuenta, salvo que el concepto diga lo contrario).
+  4. **Retención del mes** = sujeto × alícuota (inscripto o no inscripto) o, para honorarios de inscriptos, la **escala** del Anexo VIII (fijo + excedente × %).
+  5. **Ahora** = retención del mes − lo ya retenido en el mes. Si da cero o menos, no se retiene. **Exclusión** con certificado: 100 % no retiene; parcial, reduce.
+  6. Si lo de ahora es menor que la **retención mínima**, no se retiene y el pago queda registrado para acumular con el próximo del mes.
+- **SUSS**: sólo si el proveedor tiene cargada una actividad alcanzada (construcción, limpieza, seguridad, eventuales); alícuota de la actividad (o la general del régimen) sobre la base del régimen, con pago y retención mínimos.
+- **IVA e IIBB**: alícuota del padrón, de la condición del proveedor o la general; base del régimen (`vat` = el IVA facturado, para la retención de IVA de agentes designados); mínimos de base y de importe; exclusión.
+
+Todo en centavos con redondeo mitad hacia arriba. Espejo exacto en `lib/tax/retentions.ts` (paridad con `tests/fixtures/retentionMatrix.ts`). La condición en Ganancias vacía se toma como **inscripto** y la orden de pago lo avisa.
+
+### Registro, certificados y asiento
+
+Al registrar la orden de pago con `agent_retentions = true` el servidor **vuelve a calcular** (si el total no coincide con el que vio el usuario, `retentions_changed`), numera un **certificado correlativo por régimen** (`GAN-00000001`, `IVA-…`, `IIBB902-…`, `SUSS-…`), guarda cada cálculo en `tax_withholdings` con la foto del agente y del sujeto y deja cada retención en `supplier_payments.withholdings`: el asiento contable (ADR-066) las acredita en "Retenciones a depositar" sin cambios en el motor. Anular la orden de pago anula sus retenciones (el número no se reutiliza). El certificado se descarga o imprime en PDF desde el detalle de la orden de pago o desde Retenciones practicadas.
+
+### Valores normativos: fuente y cómo actualizarlos
+
+| Dato | Dónde vive | Fuente sembrada | Cómo se actualiza |
+|---|---|---|---|
+| Conceptos de Ganancias (mínimo no sujeto mensual, alícuotas, retención mínima, códigos de SICORE 217 / 078, 094, 116, 031, 095) | `tax_ret_concepts` (`verify = true`) | RG 830 Anexo VIII con montos de la RG 5423/2023, vigencia 01/07/2023 | Migración nueva que **agrega una fila** con la nueva `valid_from` (nunca se pisa la anterior: los pagos se calculan con lo vigente a su fecha). Mientras tanto, el negocio lo ajusta en Configuración > Impuestos > Valores de retención (`tax_ret_concept_settings`). |
+| Escala del Anexo VIII | `tax_ret_scales` | RG 830 Anexo VIII (tramos de 0 a 96.000) | Migración con filas nuevas para la nueva `valid_from`. |
+| Actividades de SUSS (alícuota, retención mínima) | `tax_ret_concepts` con `tax = 'suss'` | RG 4052 (construcción 1,2 %), RG 1556 (limpieza 6 %), RG 1769 (seguridad 6 %), RG 3983 (eventuales 8 %); retención mínima $ 400; código de régimen de SICORE **vacío** | Igual que Ganancias; el código de régimen de SICORE lo carga el negocio con su contador. |
+| Regímenes del negocio (alícuota general, padrón, n° de agente, código de régimen de IVA) | `tax_regimes` | Plantillas orientativas en la pantalla | El negocio. |
+
+**Todos los valores sembrados son orientativos y están marcados para verificar con el contador.**
+
+### Archivos
+
+- **SICORE** (`lib/tax/sicore.ts`): Ganancias (217), IVA (767) y SUSS (353); registro de 144 posiciones: código de comprobante 06 (orden de pago), fecha, número y total de la OP, impuesto, régimen, operación 1, base, fecha de retención, condición (01 inscripto, 02 no inscripto), sujeto suspendido 0, importe, % de exclusión, fecha de boletín vacía, tipo 80 y CUIT del retenido, certificado original en ceros. Importes con coma decimal, fechas dd/mm/aaaa, CRLF. En Ganancias con acumulado la base informada es la parte del sujeto del mes que corresponde a ese pago. Golden files en `tests/fixtures/sicore/`.
+- **ARBA** (IIBB Buenos Aires, actividad 6): 47 posiciones (CUIT con guiones, fecha, sucursal 0001, n° de certificado, importe con punto decimal, operación A). Nombre `AR-CUIT-AAAAMM0-6-LOTE1.txt`.
+- **AGIP (e-ARCIBA)** y otras provincias: **deuda** (se cargan con los datos de la lista).
+
+Los diseños son **orientativos**: validar con una importación real en SICORE y en ARBA antes de presentar. Cada descarga queda en `audit_logs` (`tax_withholdings_exported`).

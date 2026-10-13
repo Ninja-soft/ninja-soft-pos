@@ -18,6 +18,7 @@ export function ReasonDialog({
   danger = false,
   loading = false,
   typeToConfirm,
+  extra,
   onConfirm,
 }: {
   open: boolean;
@@ -29,6 +30,8 @@ export function ReasonDialog({
   loading?: boolean;
   /** Si viene, hay que escribirlo tal cual para confirmar. */
   typeToConfirm?: string;
+  /** Campos extra antes del motivo (p. ej. la duración del acceso). */
+  extra?: React.ReactNode;
   onConfirm: (reason: string) => void;
 }) {
   const [reason, setReason] = useState("");
@@ -69,6 +72,7 @@ export function ReasonDialog({
     >
       <div className="space-y-4">
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        {extra}
         <div>
           <label htmlFor="reason-dialog-text" className="mb-2 block text-sm font-medium text-muted-foreground">
             Motivo (queda en la auditoría)

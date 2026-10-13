@@ -81,6 +81,7 @@ import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
 import { ReadOnlyBanner } from "@/components/permissions/RoleGate";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
+import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
 import { usePrefetchPos } from "@/modules/pos/layoutHooks";
@@ -706,6 +707,7 @@ export function AppShell({
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
+        <ImpersonationBanner />
         <header className="sticky top-0 z-40 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-3 border-b border-border bg-background/70 px-4 pt-[env(safe-area-inset-top)] glass-blur lg:hidden">
           <button onClick={() => setDrawer(true)} aria-label="Abrir menú">
             <Menu size={20} />

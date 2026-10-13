@@ -29,8 +29,45 @@ import { SpinnerBlock } from "@/components/ui/Spinner";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { VERTICALS, VERTICAL_LABELS } from "@/lib/verticals/config";
+import { useDeleteNotificationBatch, useNotifySegment } from "@/modules/internal/opsHooks";
+import {
+  EMPTY_SEGMENT,
+  SEGMENT_PLANS,
+  SEGMENT_PLAN_LABELS,
+  SEGMENT_STATUSES,
+  SEGMENT_STATUS_LABELS,
+  fromRpcSegment,
+  groupByBatch,
+  segmentError,
+  segmentSummary,
+  segmentTenants,
+  toRpcSegment,
+  toggleValue,
+  type Segment,
+} from "@/lib/internal/segments";
 
-type Audience = "all" | "tenant";
+type Audience = "all" | "tenant" | "segment";
+
+const INDUSTRY_LABELS = VERTICAL_LABELS as Record<string, string>;
+
+function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={cn(
+        "rounded-md border px-2.5 py-1 text-xs transition",
+        on
+          ? "border-ninja-flameSoft bg-ninja-flame/10 text-ninja-flameSoft"
+          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 const TYPE_OPTIONS: { value: NotificationType; label: string }[] = [
   { value: "news", label: "Novedad" },
@@ -91,7 +128,9 @@ export default function InternalNotificacionesPage() {
   const { data: tenants = [] } = useInternalTenants();
   const { data: sent = [], isLoading: sentLoading } = useSentNotifications();
   const send = useSendNotification();
+  const sendSegment = useNotifySegment();
   const del = useDeleteNotification();
+  const delBatch = useDeleteNotificationBatch();
 
   // Nivel del staff actual: solo no-support puede borrar (el RPC también lo
   // bloquea server-side; esto solo oculta la acción en la UI).
@@ -109,7 +148,8 @@ export default function InternalNotificacionesPage() {
   });
   const canDelete = myLevel !== "support";
 
-  const [toDelete, setToDelete] = useState<SentNotification | null>(null);
+  const [toDelete, setToDelete] = useState<{ row: SentNotification; count: number } | null>(null);
+  const [segment, setSegment] = useState<Segment>(EMPTY_SEGMENT);
 
   const [audience, setAudience] = useState<Audience>("all");
   const [tenantId, setTenantId] = useState<string>("");
@@ -145,16 +185,25 @@ export default function InternalNotificacionesPage() {
 
   const broadcast = audience === "all";
   const tenantMissing = audience === "tenant" && !tenantId;
+  const segmentErr = audience === "segment" ? segmentError(segment) : null;
+  const segmentMatches = useMemo(
+    () => (audience === "segment" ? segmentTenants(tenants, segment) : []),
+    [audience, tenants, segment],
+  );
+  const segmentInvalid = audience === "segment" && (segmentErr !== null || segmentMatches.length === 0);
+  const sending = send.isPending || sendSegment.isPending;
 
   const canSend =
     title.trim().length > 0 &&
     !actionMismatch &&
     !actionUrlInvalid &&
     !tenantMissing &&
-    !send.isPending;
+    !segmentInvalid &&
+    !sending;
 
   function resetForm() {
     setAudience("all");
+    setSegment(EMPTY_SEGMENT);
     setTenantId("");
     setTenantSearch("");
     setRole("");
@@ -170,6 +219,39 @@ export default function InternalNotificacionesPage() {
   }
 
   function doSend() {
+    if (audience === "segment") {
+      sendSegment.mutate(
+        {
+          segment: toRpcSegment(segment),
+          role: role || null,
+          type,
+          severity,
+          title: title.trim(),
+          body: body.trim(),
+          actionLabel: actionLabel.trim(),
+          actionUrl: actionUrl.trim(),
+          requiresAck,
+          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+          displayUntil: displayUntil ? new Date(displayUntil).toISOString() : "",
+        },
+        {
+          onSuccess: (r) => {
+            setConfirmOpen(false);
+            resetForm();
+            toast({ title: `Enviada a ${r.sent} negocios`, variant: "success" });
+          },
+          onError: (e) => {
+            setConfirmOpen(false);
+            toast({
+              title: "No se pudo enviar",
+              description: e instanceof Error ? e.message : undefined,
+              variant: "error",
+            });
+          },
+        },
+      );
+      return;
+    }
     send.mutate(
       {
         tenantId: broadcast ? null : tenantId,
@@ -205,7 +287,10 @@ export default function InternalNotificacionesPage() {
 
   const selectedTenant = tenants.find((t) => t.id === tenantId);
   const roleLabel = ROLE_OPTIONS.find((r) => r.value === role)?.label ?? "";
-  const audienceSummary = broadcast
+  const audienceSummary =
+    audience === "segment"
+      ? `${segmentSummary(segment, INDUSTRY_LABELS)} (${segmentMatches.length} negocios)${role ? ` · ${roleLabel}` : ""}`
+      : broadcast
     ? role
       ? `TODOS los negocios · ${roleLabel}`
       : "TODOS los negocios"
@@ -243,8 +328,102 @@ export default function InternalNotificacionesPage() {
               options={[
                 { value: "all", label: "Todos los negocios" },
                 { value: "tenant", label: "Un negocio" },
+                { value: "segment", label: "Segmento" },
               ]}
             />
+            {audience === "segment" && (
+              <div className="space-y-3 rounded-md border border-border p-4">
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Plan
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SEGMENT_PLANS.map((p) => (
+                      <Chip
+                        key={p}
+                        on={segment.plans.includes(p)}
+                        label={SEGMENT_PLAN_LABELS[p] ?? p}
+                        onClick={() => setSegment((s) => ({ ...s, plans: toggleValue(s.plans, p) }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Estado
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SEGMENT_STATUSES.map((x) => (
+                      <Chip
+                        key={x}
+                        on={segment.statuses.includes(x)}
+                        label={SEGMENT_STATUS_LABELS[x] ?? x}
+                        onClick={() => setSegment((s) => ({ ...s, statuses: toggleValue(s.statuses, x) }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                    Rubro
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {VERTICALS.map((v) => (
+                      <Chip
+                        key={v}
+                        on={segment.industries.includes(v)}
+                        label={INDUSTRY_LABELS[v] ?? v}
+                        onClick={() => setSegment((s) => ({ ...s, industries: toggleValue(s.industries, v) }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Input
+                    label="Alta desde"
+                    type="date"
+                    value={segment.createdFrom}
+                    onChange={(e) => setSegment((s) => ({ ...s, createdFrom: e.target.value }))}
+                  />
+                  <Input
+                    label="Alta hasta"
+                    type="date"
+                    value={segment.createdTo}
+                    onChange={(e) => setSegment((s) => ({ ...s, createdTo: e.target.value }))}
+                  />
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-muted-foreground">Rol (opcional)</label>
+                    <select className={selectCls} value={role} onChange={(e) => setRole(e.target.value)}>
+                      {ROLE_OPTIONS.map((r) => (
+                        <option key={r.value} value={r.value}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-sm" role="status">
+                  {segmentErr ? (
+                    <span className="text-muted-foreground">{segmentErr}</span>
+                  ) : segmentMatches.length === 0 ? (
+                    <span className="text-warning">Ningún negocio coincide con este segmento.</span>
+                  ) : (
+                    <>
+                      <span className="font-medium text-foreground">Llega a {segmentMatches.length} negocios</span>
+                      <span className="text-muted-foreground">
+                        {": "}
+                        {segmentMatches
+                          .slice(0, 6)
+                          .map((t) => t.name)
+                          .join(", ")}
+                        {segmentMatches.length > 6 ? ` y ${segmentMatches.length - 6} más` : ""}. Los dados de baja
+                        no entran.
+                      </span>
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
             {audience === "tenant" && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
@@ -455,7 +634,7 @@ export default function InternalNotificacionesPage() {
             <Button
               onClick={() => setConfirmOpen(true)}
               disabled={!canSend}
-              loading={send.isPending}
+              loading={sending}
             >
               <Send size={16} /> Enviar
             </Button>
@@ -492,12 +671,16 @@ export default function InternalNotificacionesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {sent.map((n) => (
+                  {groupByBatch(sent).map(({ row: n, count }) => (
                     <tr key={n.id}>
                       <td className="whitespace-nowrap py-2.5 pr-4 text-muted-foreground">
                         {formatRelative(n.createdAt)}
                       </td>
-                      <td className="py-2.5 pr-4">{n.audience}</td>
+                      <td className="py-2.5 pr-4">
+                        {n.segmentBatchId
+                          ? `Segmento: ${segmentSummary(fromRpcSegment(n.segment), INDUSTRY_LABELS)} (${count} negocios)`
+                          : n.audience}
+                      </td>
                       <td className="py-2.5 pr-4">
                         <span className="flex items-center gap-1.5">
                           <span
@@ -527,7 +710,7 @@ export default function InternalNotificacionesPage() {
                             type="button"
                             title="Borrar notificación"
                             aria-label="Borrar notificación"
-                            onClick={() => setToDelete(n)}
+                            onClick={() => setToDelete({ row: n, count })}
                             className="inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-danger"
                           >
                             <Trash2 size={15} />
@@ -550,7 +733,7 @@ export default function InternalNotificacionesPage() {
         description={`Audiencia: ${audienceSummary}. Título: “${title.trim()}”.`}
         confirmLabel="Enviar"
         danger={broadcast}
-        loading={send.isPending}
+        loading={sending}
         onConfirm={doSend}
       />
 
@@ -562,15 +745,35 @@ export default function InternalNotificacionesPage() {
         title="¿Borrar notificación?"
         description={
           toDelete
-            ? `Se dará de baja “${toDelete.title}”. Dejará de mostrarse a los usuarios.`
+            ? `Se dará de baja “${toDelete.row.title}”${
+                toDelete.row.segmentBatchId ? ` en los ${toDelete.count} negocios del segmento` : ""
+              }. Dejará de mostrarse a los usuarios.`
             : undefined
         }
         confirmLabel="Borrar"
         danger
-        loading={del.isPending}
+        loading={del.isPending || delBatch.isPending}
         onConfirm={() => {
           if (!toDelete) return;
-          const id = toDelete.id;
+          const batch = toDelete.row.segmentBatchId;
+          if (batch) {
+            delBatch.mutate(batch, {
+              onSuccess: () => {
+                setToDelete(null);
+                toast({ title: "Notificaciones borradas", variant: "success" });
+              },
+              onError: (e) => {
+                setToDelete(null);
+                toast({
+                  title: "No se pudo borrar",
+                  description: e instanceof Error ? e.message : undefined,
+                  variant: "error",
+                });
+              },
+            });
+            return;
+          }
+          const id = toDelete.row.id;
           del.mutate(id, {
             onSuccess: () => {
               setToDelete(null);

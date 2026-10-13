@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Plus } from "lucide-react";
-import type { Appointment, Professional } from "@/modules/agenda/api";
+import type { AgendaResource, Appointment, Professional } from "@/modules/agenda/api";
 import { STATUS_LABELS } from "@/modules/agenda/api";
 import {
   atTime,
@@ -86,6 +86,8 @@ export function AgendaBoard({
   appointments,
   onPick,
   onNewAt,
+  groupBy = "professional",
+  resources = [],
 }: {
   mode: "day" | "week";
   day: Date;
@@ -94,7 +96,10 @@ export function AgendaBoard({
   selectedProfessionalId: string | null; // week view: filtra por profesional
   appointments: Appointment[];
   onPick: (a: Appointment) => void;
-  onNewAt: (startsAt: Date, professionalId: string | null) => void;
+  onNewAt: (startsAt: Date, professionalId: string | null, resourceId?: string | null) => void;
+  // Vista día: columnas por profesional o por recurso (ADR-082).
+  groupBy?: "professional" | "resource";
+  resources?: AgendaResource[];
 }) {
   // Horas del eje (8..20 → etiquetas, 21 es el borde inferior).
   const hours = useMemo(
@@ -104,6 +109,24 @@ export function AgendaBoard({
 
   // Columnas según el modo.
   const columns: Column[] = useMemo(() => {
+    if (mode === "day" && groupBy === "resource") {
+      // Una columna por recurso activo + una "Sin recurso".
+      const resCols: Column[] = resources.map((r) => ({
+        key: r.id,
+        label: r.name,
+        color: r.color,
+        day,
+        filter: (a) => a.resource_id === r.id,
+      }));
+      resCols.push({
+        key: "__none__",
+        label: "Sin recurso",
+        color: "#6b7280",
+        day,
+        filter: (a) => !a.resource_id,
+      });
+      return resCols;
+    }
     if (mode === "day") {
       // Una columna por profesional activo + una "Sin asignar".
       const profCols: Column[] = professionals.map((p) => ({
@@ -138,7 +161,7 @@ export function AgendaBoard({
         },
       };
     });
-  }, [mode, professionals, day, weekDaysList, selectedProfessionalId]);
+  }, [mode, groupBy, resources, professionals, day, weekDaysList, selectedProfessionalId]);
 
   // Color de un turno (por su profesional) para los bloques de la vista semana.
   const profColor = useMemo(() => {
@@ -156,6 +179,10 @@ export function AgendaBoard({
     const hour = START_HOUR + Math.floor(snapped / 60);
     const min = snapped % 60;
     const startsAt = atTime(col.day, hour, min);
+    if (mode === "day" && groupBy === "resource") {
+      onNewAt(startsAt, null, col.key === "__none__" ? null : col.key);
+      return;
+    }
     const profId = mode === "day" ? (col.key === "__none__" ? null : col.key) : selectedProfessionalId;
     onNewAt(startsAt, profId);
   }
@@ -240,6 +267,7 @@ export function AgendaBoard({
                     <AppointmentBlock
                       a={a}
                       color={
+                        (groupBy === "resource" && a.professional_id ? profColor.get(a.professional_id) : undefined) ??
                         col.color ??
                         (a.professional_id ? profColor.get(a.professional_id) ?? "#6b7280" : "#6b7280")
                       }

@@ -128,6 +128,12 @@ describe.skipIf(!enabled)("ADR-106 · pausar venta", () => {
     ctx.tenantA = tenants[0]!.id;
     ctx.tenantB = tenants[1]!.id;
 
+    // El cobro QR de la pausada es de Pagos360: el plan debe incluirlo (payment_method_plan_key).
+    const { error: addonErr } = await admin.from("subscription_addons").insert([
+      { tenant_id: ctx.tenantA, addon_key: "pagos360", status: "active", source: "granted" },
+    ]);
+    if (addonErr) throw addonErr;
+
     const ownerA = await makeUser(admin, `pv-owner-a-${STAMP}@test.local`, ctx.tenantA, "owner");
     const cashierA = await makeUser(admin, `pv-cashier-a-${STAMP}@test.local`, ctx.tenantA, "cashier");
     const cashier2A = await makeUser(admin, `pv-cashier2-a-${STAMP}@test.local`, ctx.tenantA, "cashier");
@@ -175,6 +181,7 @@ describe.skipIf(!enabled)("ADR-106 · pausar venta", () => {
     for (const t of [ctx.tenantA, ctx.tenantB].filter(Boolean)) {
       await admin.from("paused_sale_payments").delete().eq("tenant_id", t);
       await admin.from("paused_sales").delete().eq("tenant_id", t);
+      await admin.from("subscription_addons").delete().eq("tenant_id", t);
       await admin.from("audit_logs").delete().eq("tenant_id", t);
       await admin.from("tenants").delete().eq("id", t);
     }

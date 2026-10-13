@@ -19,6 +19,7 @@ import {
   ScanLine,
   Landmark,
   ShieldCheck,
+  ShoppingBag,
   SlidersHorizontal,
   KeyRound,
   Store,
@@ -66,6 +67,7 @@ export type SettingsSectionKey =
   | "promociones"
   | "nubceo"
   | "api"
+  | "mercadolibre"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -396,6 +398,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "api_publica",
         keywords: "api rest oauth token credencial client id secret integracion erp ecommerce tienda sincronizar webhook desarrollador",
       },
+      // Mercado Libre (H87 · ADR-104): cuentas conectadas y su sincronización.
+      {
+        key: "mercadolibre",
+        label: "Mercado Libre",
+        title: "Mercado Libre",
+        description:
+          "Conectá tus cuentas de Mercado Libre: stock y precio de las publicaciones desde el POS, ventas que entran solas, facturación y etiquetas.",
+        icon: ShoppingBag,
+        feature: "mercadolibre",
+        keywords: "mercado libre mercadolibre meli publicaciones ventas online marketplace sincronizar stock precio etiquetas envios preguntas canal ecommerce",
+      },
     ],
   },
   {
@@ -455,6 +468,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   pin: "seguridad",
   supervisor: "seguridad",
   integraciones: "nubceo",
+  meli: "mercadolibre",
+  "mercado-libre": "mercadolibre",
   "api-publica": "api",
   credenciales: "api",
   conciliacion: "nubceo",

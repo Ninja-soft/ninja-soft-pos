@@ -363,6 +363,9 @@ export default function VentasPage() {
                       ) : (
                         <Badge tone="success">Completada</Badge>
                       )}
+                      {(s as { channel?: string | null }).channel === "mercadolibre" && (
+                        <Badge tone="info">Mercado Libre</Badge>
+                      )}
                       {saleAlertBadges(disputesBySale.get(s.id) ?? []).map((a) => (
                         <button
                           key={a.key}

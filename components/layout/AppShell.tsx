@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  Handshake,
   Bike,
   Building2,
   CalendarClock,
@@ -282,6 +283,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Inventario PRO (F14 · H64, ADR-092): conteo cíclico ABC y garantías por serie.
         { href: "/inventario", label: "Inventario PRO", icon: ClipboardCheck, feature: "conteo_ciclico" },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
+        // Mercado Libre (H87 · ADR-104): publicaciones, ventas, preguntas y envíos.
+        { href: "/mercadolibre", label: "Mercado Libre", icon: Handshake, feature: "mercadolibre", managersOnly: true },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
     },

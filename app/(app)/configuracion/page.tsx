@@ -177,6 +177,12 @@ const ApiSettings = dynamic(
   { loading },
 );
 
+// Mercado Libre (H87 · ADR-104): cuentas y configuración por cuenta.
+const MlSettings = dynamic(
+  () => import("@/components/integrations/mercadolibre/MlSettings").then((m) => m.MlSettings),
+  { loading },
+);
+
 // Venta sin conexión (ADR-077): política del dueño.
 const OfflinePolicyCard = dynamic(
   () => import("@/components/config/OfflinePolicyCard").then((m) => m.OfflinePolicyCard),
@@ -409,6 +415,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <NubceoSettings />;
     case "api":
       return <ApiSettings />;
+    case "mercadolibre":
+      return <MlSettings />;
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;

@@ -80,6 +80,12 @@ verify_jwt = false
 [functions.gocuotas_webhook]
 verify_jwt = false
 
+[functions.ml_oauth_callback]
+verify_jwt = false
+
+[functions.ml_webhook]
+verify_jwt = false
+
 [functions.mobbex_webhook]
 verify_jwt = false
 

@@ -69,6 +69,7 @@ as $$
 declare
   v_mode   text := coalesce(tg_argv[0], 'operate');
   v_row    jsonb;
+  v_old    jsonb;
   v_tenant uuid;
   v_role   text;
   v_client boolean := current_user in ('authenticated', 'anon');
@@ -77,10 +78,16 @@ begin
     if tg_op = 'DELETE' then return old; end if;
     return new;
   end if;
+  -- Todo por jsonb: el trigger se instala en tablas con columnas distintas
+  -- y una referencia directa a new.status / new.deleted_at falla con 42703
+  -- en las que no la tienen.
   if tg_op = 'DELETE' then
     v_row := to_jsonb(old);
   else
     v_row := to_jsonb(new);
+  end if;
+  if tg_op = 'UPDATE' then
+    v_old := to_jsonb(old);
   end if;
   v_tenant := coalesce(nullif(v_row ->> 'tenant_id', '')::uuid, current_tenant_id());
   v_role := member_role_in(v_tenant);
@@ -95,13 +102,14 @@ begin
 
   if v_mode = 'customers' and v_client and v_role = 'cashier' then
     if tg_op = 'DELETE'
-       or (tg_op = 'UPDATE' and new.deleted_at is distinct from old.deleted_at) then
+       or (tg_op = 'UPDATE'
+           and (v_row ->> 'deleted_at') is distinct from (v_old ->> 'deleted_at')) then
       raise exception 'forbidden_role' using errcode = '42501';
     end if;
   end if;
 
   if v_mode = 'sales' and v_client and tg_op = 'UPDATE'
-     and new.status is distinct from old.status then
+     and (v_row ->> 'status') is distinct from (v_old ->> 'status') then
     raise exception 'use_void_sale' using errcode = '42501';
   end if;
 

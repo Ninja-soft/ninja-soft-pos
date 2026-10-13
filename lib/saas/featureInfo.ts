@@ -148,6 +148,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["transferencia"],
     needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
   },
+  alertas_contracargos: {
+    desc: "Alertas de contracargos y devoluciones de Mercado Pago: todos los días (y al instante si Mercado Pago avisa) revisa tus cobros y te avisa a vos y a tus encargados cuando un comprador desconoce un pago (contracargo), abre un reclamo o cuando se hace una devolución desde Mercado Pago que no está registrada en el POS. Marca esas ventas en Ventas (\"Contracargo\", \"Devuelto por MP\", filtro \"Con alertas\") y muestra el plazo para presentar la documentación. Con la conciliación de procesadores, además, suma estados, totales y neto efectivo por devoluciones y contracargos.",
+    impact: "Desactivado, los contracargos y las devoluciones hechas desde Mercado Pago sólo se ven entrando a la cuenta de Mercado Pago; se puede perder el plazo para presentar la documentación.",
+    minPlan: "Start",
+    needs: "Mercado Pago conectado en Medios de pago. Para el aviso al instante, conexión por OAuth (por token manual llega con la revisión diaria).",
+  },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
     impact: "Sin esto MODO no aparece como medio de pago disponible al cobrar.",

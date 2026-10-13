@@ -36,6 +36,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   afip: "AFIP",
   maintenance: "Mantenimiento",
   support: "Soporte",
+  cobros: "Cobros",
+  disputas: "Contracargos y devoluciones",
 };
 
 function severityBorder(severity: string): string {

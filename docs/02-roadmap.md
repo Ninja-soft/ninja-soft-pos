@@ -1030,7 +1030,7 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Enforcement server-side de `max_stores` y de cajas por plan (`max_registers_per_store`, `multi_caja`) con triggers en `stores` y `cash_registers` (`tenant_limit_for` + `tenant_has_feature_for`), no sólo en la UI.
   - [x] Plantilla de sucursal nueva: hereda todo por defecto, "Copiar de otra sucursal" o "Usar una plantilla" guardada, eligiendo partes (operación y ticket, medios, impresoras y perfiles, planes propios y personal). Terminales y credenciales no se copian. *(2026-10-12, ADR-057)*
   - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
-  - [ ] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón).
+  - [x] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón). *(Auditoría 2026-11-05: cubierto por `tests/integration/rls-sucursales.test.ts`, "sin multi_sucursal el servidor rechaza la segunda sucursal".)*
 
 - [~] **H90: Contexto de sucursal y caja activa ("dónde estoy").** *(2026-10-12, ADR-045: fix P0, chip, cabecera del POS, selector de caja y filtros de ventas y Z hechos)* · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
   - [x] **Fix P0 independiente:** `create_sale`, `exchange_sale`, `return_sale_*` y cobros de cuenta corriente derivan `store_id` del turno (`resolve_sale_shift`), no de `stores.is_default`. Test RLS con 2 sucursales y turnos abiertos en ambas. *(Los RPC de stock, ajuste, merma y producción, van con H94 en `feat/stock-sucursales`.)*
@@ -1047,7 +1047,7 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [~] RLS restrictiva de lectura con `user_allowed_store_ids()` en `sales`, `cash_shifts` (con `store_id` desnormalizado), `cash_movements` y `cash_z_closures`, más `payment_terminals` y `printers` por sucursal; reportes SECURITY DEFINER acotados a las sucursales del usuario (`report_store_filter`); tests RLS por rol y sucursal. *(Pendiente: `payments`, `product_stock`, `stock_transfers` y `EXPLAIN` sobre datos reales.)*
   - [x] `store_id` en `audit_logs` (trigger `audit_logs_fill_store`) para filtrar la auditoría por sucursal.
   - [x] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas"). Perfiles y vendedores del POS filtrados por la sucursal del POS.
-  - [ ] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo.
+  - [x] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo. *(Auditoría 2026-11-05: `tests/integration/rls-sucursales.test.ts`, "el cajero asignado a Norte sólo ve ventas y turnos de Norte".)*
 
 - [~] **H92: Configuración heredable negocio → grupo → sucursal → caja ("compartir configuración").** *(2026-10-12, ADR-049: tabla, resolución en el servidor, selector de alcance, copia y diferencias hechos)* · *OPTIONAL dentro de `multi_sucursal` (nivel caja: `multi_caja`). Primer corte concreto de F14/H57; la clonación con diff es parte de F14/H62.*
   - [x] Tabla `config_overrides(scope, scope_id, domain, domain_key, patch)` con override **por campo**, whitelist de campos por dominio, auditoría y escritura por RPC owner/manager con acceso a la sucursal.
@@ -1064,7 +1064,7 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Registro de terminales `payment_terminals` (sucursal, caja, proveedor, tipo `point` / `qr_caja` / `clover` / `posnet_manual`, id externo, ambiente, etiqueta, adquirente, **n° de comercio**, default por caja, activa, `last_seen_at`). Migra el lector de `localStorage` (respaldo), la caja QR de MP, `point_pos_ids` de Nave y las series de Clover.
   - [~] Las Edges (`mp_point`, `nave_point`, `clover_point`, `mp_qr`) validan que la terminal sea del negocio y de la sucursal; el POS registra el lector elegido con un tilde. *("Detectar lectores" desde la sección Terminales: pendiente.)*
   - [x] Caja QR de Mercado Pago **por caja** (`mp_qr setup` con `cash_register_id`), con la única de siempre como respaldo.
-  - [~] N° de comercio por marca con override por sucursal (`merchant_numbers` efectivo) y n° por terminal. *(Autocompletar desde la terminal integrada en el cupón: pendiente.)*
+  - [x] N° de comercio por marca con override por sucursal (`merchant_numbers` efectivo) y n° por terminal. Autocompletar desde la terminal integrada en el cupón: `lib/payments/terminal/normalize.ts` completa `card_voucher.comercio` con el de la terminal o el del registro (ADR-053). *(Auditoría 2026-11-05.)*
   - [x] **Cuentas de transferencia** (ADR-055): banco o billetera del catálogo con logo (o propia con logo subido), titular, CUIT, CBU / CVU validados con detección de la entidad, alias, tipo, moneda y nota; pantalla de transferencia en el POS y en la pantalla del cliente (o cierre directo), n° de operación opcional u obligatorio, cuentas y cuenta por defecto por grupo o sucursal y pantalla por caja. Snapshot de la cuenta en `payments.metadata.transfer`. BASE una cuenta; OPTIONAL `transferencia_multicuenta` (Pro).
   - [x] Planes de cuotas y recargos por sucursal: la sucursal pisa u oculta planes del negocio y hereda el resto; el POS cobra con los de su sucursal. *(2026-10-12, ADR-057; recargo único y n° de comercio por sucursal ya estaban en ADR-049)*
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
@@ -1074,9 +1074,9 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Stock mínimo, máximo y ubicación por sucursal; desglose en Productos y en la ficha; ajuste y conteo por sucursal. *(ADR-046)*
   - [x] Venta en negativo por sucursal: aviso o bloqueo en el POS y control en `create_sale` (`insufficient_stock_branch`), con la venta sin stock efectiva de la sucursal (ADR-049).
   - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
-  - [ ] Listas de precios asignables a sucursal o grupo (`price_list_assignments`, ver F18/H100).
+  - [x] Listas de precios asignables a sucursal o grupo (`price_list_assignments` con alcance `store` y `store_group`, migración `20261021100100_listas_precios_pro`, ADR-058). *(Auditoría 2026-11-05.)*
   - [x] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
-  - [ ] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34).
+  - [~] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34). *(Auditoría 2026-11-05: ajuste y conteo por sucursal con `adjust_store_stock` (ADR-046) y merma con `register_stock_waste(p_store_id)` (`20261015200000`) hechos; producción e import pendientes.)*
   - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
 
 - [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
@@ -1090,7 +1090,8 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Cliente único a nivel negocio (`customers` por tenant) y cuenta corriente v2 cobrable en cualquier sucursal. *(ADR-037)*
   - [x] Vales con sucursales permitidas (`store_credit_vouchers.allowed_branch_ids`). *(F11/H29)*
   - [x] Sucursal de alta (`customers.store_id_alta`, por trigger) e historial de compras filtrable por sucursal con estadísticas por sucursal. *(2026-10-12, ADR-057; deuda por sucursal: pendiente)*
-  - [ ] Límite de crédito global con opción de tope por sucursal; cobros de cuenta corriente registrados en la sucursal de la caja.
+  - [x] Cobros de cuenta corriente registrados en la sucursal de la caja: `account_open_shift` usa `resolve_sale_shift` (turno propio de la caja, `20261013120000`). *(Auditoría 2026-11-05.)*
+  - [ ] Límite de crédito global con opción de tope por sucursal.
   - [ ] Fidelización (puntos, cupones, gift cards) compartida: se cubre en F9/H55 y F16/H80.
   - [ ] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte.
 
@@ -1125,7 +1126,7 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Tablero visual por sucursal con avatares y chips de estado, filtros por estado, ficha con timeline (estados y traslados).
   - [x] Invitar desde el Panel del dueño (fix del acceso rápido) con sucursal base, adicionales y rol por sucursal; reinvitar a alguien de baja es un reingreso explícito.
   - [x] Fixes: el encargado no degrada ni suspende al dueño (`member_admin`), invitar no pisa el rol de un miembro existente, el invitado recibe el negocio activo (`app_metadata.current_tenant_id`) y se autocura al entrar.
-  - [ ] *Criterio:* el dueño da de baja a un cajero; ese cajero no puede abrir caja, vender ni leer datos del negocio después de su próximo refresh de sesión; la historia y sus ventas quedan.
+  - [x] *Criterio:* el dueño da de baja a un cajero; ese cajero no puede abrir caja, vender ni leer datos del negocio después de su próximo refresh de sesión; la historia y sus ventas quedan. *(Auditoría 2026-11-05: `tests/integration/rls-personal-cajas.test.ts`, "baja revoca el negocio activo y la membresía".)*
 
 - [x] **H114: Propiedad de la caja.** *(2026-10-12, ADR-051)* · *BASE (control interno, sin key nueva) + FLAG-OPERATIVO `shared_shift` (caja compartida, apagado).*
   - [x] `assert_shift_owner(shift)`: sólo quien abrió el turno vende, retira, ingresa o cierra. `resolve_sale_shift` lo exige (ventas, devoluciones y cambios) sin recrear `create_sale`.
@@ -1133,7 +1134,7 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] Guarda en `cash_shifts` (cierre sólo del dueño del turno o por `cash_force_close`; sin inserts ni borrados directos) y en `cash_movements` (desde el cliente sólo ingreso, retiro o contramovimiento de una anulación real; sin UPDATE ni DELETE).
   - [x] `cash_force_close(shift, monto contado, motivo)` para supervisores (sesión o PIN), con Z y auditoría.
   - [x] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
-  - [ ] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja.
+  - [x] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja. *(Auditoría 2026-11-05: `tests/integration/rls-personal-cajas.test.ts`, casos H114.)*
 
 - [~] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas y heartbeat en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
   - [x] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
@@ -1164,7 +1165,7 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [ ] Pendiente: `current_tenant_id()` que valide la membresía activa como initplan (raíz de S-07, medir con `EXPLAIN`), helper `tenantScoped()` y regla de lint para lecturas del panel del negocio sin filtro por negocio (lista en la auditoría §9).
 
 - [ ] **H119: Más acciones bajo PIN (pendiente).** · *BASE `pin_supervisor`. Requiere H116.*
-  - [ ] Cambio de precio en la línea con precio resuelto en el servidor (hoy `create_sale` confía en `unit_price`).
+  - [x] Cambio de precio en la línea con precio resuelto en el servidor: `create_sale` valida el precio y el cambio manual pide PIN de `cambio_precio` (`20261019100000_precio_servidor`, ADR-056). *(Auditoría 2026-11-05.)*
   - [ ] Borrar ítem después de un cobro parcial y cancelar cobros en espera (coordinar con `feat/cobros-en-espera`).
   - [ ] Reapertura de turno cerrado (hoy no existe) con PIN y motivo.
   - [x] Abrir el cajón sin venta con PIN opcional. · *ADR-063: política por negocio o sucursal (`drawer_no_sale`: permitido, con PIN o prohibido), acción de PIN `abrir_cajon`, RPC `cash_drawer_open` que decide, registra en `cash_drawer_events` y audita; botón Abrir cajón en el POS y apertura al cobrar en efectivo.*

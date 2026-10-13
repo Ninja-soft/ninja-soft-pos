@@ -356,17 +356,22 @@ describe.skipIf(!enabled)("seguridad H117 y H118 · membresía y auditoría inmu
         .eq("tenant_id", ctx.tenantB)
         .not("chain_seq", "is", null)
         .order("chain_seq", { ascending: true });
-      const list = (chain ?? []) as Record<string, unknown>[];
-      expect(list.length).toBeGreaterThanOrEqual(3);
+      // Sólo las 3 filas de esta prueba (consecutivas en la cadena): otras filas
+      // del negocio traen numéricos en jsonb (p. ej. 0.00) que JavaScript
+      // reescribe al ir y volver, y eso cambiaría su hash fuera de la base.
+      const list = ((chain ?? []) as Record<string, unknown>[]).filter((r) =>
+        String(r.action).endsWith(`_${STAMP}`) && String(r.action).startsWith("chain_"),
+      );
+      expect(list.length).toBe(3);
+      expect(Number(list[2]!.chain_seq) - Number(list[0]!.chain_seq)).toBe(2);
 
       const ok = await rpc(ctx.admin, "audit_chain_check", { p_rows: list });
       expect(ok.error).toBeNull();
       expect(ok.data).toMatchObject({ ok: true });
 
       // Contenido alterado.
-      const target = list.findIndex((r) => r.action === `chain_2_${STAMP}`);
-      expect(target).toBeGreaterThan(0);
-      const altered = list.map((r, i) => (i === target ? { ...r, reason: "cadena 2 (editada)" } : r));
+      const target = 1;
+      const altered = list.map((r, i) => (i === target ? { ...r, reason: "cadena (editada)" } : r));
       const bad = await rpc(ctx.admin, "audit_chain_check", { p_rows: altered });
       const badData = bad.data as { ok: boolean; issues: { seq: number; kind: string }[] };
       expect(badData.ok).toBe(false);

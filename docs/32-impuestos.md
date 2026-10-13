@@ -1,6 +1,6 @@
 # Impuestos: IVA, internos, condición fiscal, percepciones, retenciones y padrones
 
-Decisión: [ADR-068](./17-decision-log.md) y [ADR-079](./17-decision-log.md) (retenciones como agente) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
+Decisión: [ADR-068](./17-decision-log.md), [ADR-079](./17-decision-log.md) (retenciones como agente) y [ADR-095](./17-decision-log.md) (como sujeto e IIBB) · Hitos: F18 · H103 a H106 ([roadmap](./02-roadmap.md)) · Auditoría: [`auditoria-fiscal-contable-precios.md`](./auditoria-fiscal-contable-precios.md)
 
 > **Aviso normativo.** Alícuotas, topes, mínimos, códigos de ARCA y diseños de padrón son **orientativos**. Se modelan como datos (catálogos, `tax_parameters`, regímenes cargados por el negocio), nunca como constantes del código, y hay que validarlos con el contador del negocio y la norma vigente.
 
@@ -20,6 +20,8 @@ Decisión: [ADR-068](./17-decision-log.md) y [ADR-079](./17-decision-log.md) (re
 | Retenciones como agente calculadas en la orden de pago (Ganancias RG 830 con acumulado mensual, IVA, IIBB, SUSS) con certificado PDF | Compras > Orden de pago | `percepciones_retenciones` |
 | Valores de retención (conceptos de la RG 830 y actividades de SUSS, ajustables) | Configuración > Impuestos | `percepciones_retenciones` |
 | Retenciones practicadas del mes, certificados, archivos SICORE y ARBA | Compras > Retenciones practicadas | `percepciones_retenciones` |
+| Retenciones y percepciones sufridas (procesadores, SIRCREB, SIRTAC, clientes, Mis Retenciones) con asiento | Contabilidad > Retenciones sufridas | `percepciones_retenciones` |
+| Liquidación mensual de Ingresos Brutos por jurisdicción (actividades, Convenio Multilateral, saldo a favor) | Contabilidad > Ingresos Brutos | `percepciones_retenciones` |
 
 ## 2. Cálculo
 
@@ -105,7 +107,7 @@ Migraciones `20261028100000` a `20261028100300` en orden, **antes del front** (e
 
 ## 7. Pendiente
 
-Notas de crédito con reversa proporcional de impuestos (con F3), alícuota por operación según receptor, internos por sucursal y con vigencia, Convenio Multilateral con coeficientes, constancia de ARCA por CUIT, descarga programada de padrones, SIRE, DDJJ de IIBB de AGIP (e-ARCIBA) y del resto de las provincias, retenciones y percepciones sufridas como sujeto (SIRTAC, SIRCREB, "Mis Retenciones").
+Notas de crédito con reversa proporcional de impuestos (con F3), alícuota por operación según receptor, internos por sucursal y con vigencia, Convenio Multilateral con coeficientes, constancia de ARCA por CUIT, descarga programada de padrones, SIRE, archivos de DDJJ de IIBB (ARBA como contribuyente, e-ARCIBA, SIFERE, SIRCAR) y cálculo del coeficiente CM05, import del extracto bancario y consulta automática de Mis Retenciones y de COMARB (retenciones sufridas y liquidación mensual de IIBB hechas en ADR-095, § 9).
 
 ## 8. Retenciones como agente (ADR-079)
 
@@ -147,3 +149,73 @@ Al registrar la orden de pago con `agent_retentions = true` el servidor **vuelve
 - **AGIP (e-ARCIBA)** y otras provincias: **deuda** (se cargan con los datos de la lista).
 
 Los diseños son **orientativos**: validar con una importación real en SICORE y en ARBA antes de presentar. Cada descarga queda en `audit_logs` (`tax_withholdings_exported`).
+
+## 9. Como sujeto: retenciones sufridas e Ingresos Brutos (ADR-095)
+
+### Retenciones y percepciones sufridas
+
+Contabilidad > **Retenciones sufridas** (`/impuestos/sufridas`, feature `percepciones_retenciones`, dueño o encargado). Una fila por retención, percepción o pago a cuenta que le hacen al negocio, en `tax_suffered_entries`:
+
+| Origen | Cómo entra | Documento vinculado (asiento) |
+|---|---|---|
+| Procesadores (Mercado Pago `charges_details`, liquidaciones por archivo) | Solo, al importar o sincronizar la liquidación (trigger) o con "Traer de las liquidaciones" | La línea de liquidación: se reclasifica desde "impuestos de procesadores" |
+| Bancos (SIRCREB, débitos y créditos) | "Registrar" con origen Banco: crea el débito en la cuenta de tesorería o vincula uno cargado | El débito de tesorería |
+| Clientes agentes de retención | "Registrar" con origen Cliente y el recibo de cuenta corriente (cobrado con el medio Otro) | El recibo |
+| Mis Retenciones (ARCA), consulta de SIRCREB o SIRTAC (COMARB), planilla | "Importar archivo" (CSV o TXT con encabezado) | Ninguno (sin asiento hasta vincularla) |
+| Proveedores | Percepciones de la factura de compra (vista `tax_suffered`, ADR-068) | La factura (su asiento ya las lleva) |
+
+Clasificación de los impuestos de procesadores (`classifyTaxText` = `_tax_suffered_classify`): débitos y créditos (Ley 25.413) como pago a cuenta; IIBB (también por SIRTAC, SIRCREB, ARBA, AGIP); Ganancias; IVA; SUSS. El **IVA sobre la comisión** no es retención y se saltea. Jurisdicción por nombre o código (901 a 924); si no figura, la del negocio y queda **para revisar**. Las de IIBB sin jurisdicción no entran en la liquidación hasta asignarla.
+
+Cada fila tiene un **mes de imputación** (por defecto el de la fecha) que decide en qué DDJJ se toma como saldo a favor. Importe, fecha y origen no se cambian: se anula con motivo y se carga de nuevo. Un mes de IIBB liquidado bloquea altas, cambios y anulaciones de esa jurisdicción.
+
+**Asiento** (con Contabilidad): debe la cuenta de retenciones sufridas del impuesto (`retencion_sufrida`, detalle `iibb:902` o el impuesto; por defecto Percepciones de IIBB, IVA o Ganancias sufridas y "Retenciones e impuestos sufridos en cobros" para el resto) / haber la cuenta del documento vinculado. Sin documento no hay asiento.
+
+### Liquidación mensual de Ingresos Brutos
+
+Contabilidad > **Ingresos Brutos** (`/impuestos/iibb`):
+
+1. **Actividades** por jurisdicción: código NAES, alícuota, impuesto mínimo mensual y categorías de productos; una principal toma lo que no tenga categoría asignada. Hay plantillas orientativas (`iibb_activity_templates`, `verify = true`).
+2. **Base** de cada actividad = neto sin IVA, internos ni percepciones de los ítems de las ventas completadas del mes de las sucursales de la jurisdicción (provincia de la sucursal; sin provincia, la del negocio) − ventas de meses anteriores anuladas en el mes − devoluciones del mes (en proporción a lo vendido de cada actividad en esa venta). Ventas sin desglose: subtotal / (1 + alícuota del ítem), con aviso.
+3. **Convenio Multilateral** (si está marcado en Configuración > Impuestos): base de todo el país × coeficiente unificado vigente de la jurisdicción (pestaña Convenio Multilateral; lo calcula el contador con el CM05; la suma de coeficientes no pasa de 1).
+4. **Impuesto** = base × alícuota (centavos, mitad hacia arriba); base cero o negativa, cero; con mínimo, el mínimo si da menos.
+5. **Deducciones**: retenciones, percepciones (más las de facturas de proveedor del mes), SIRCREB y SIRTAC imputadas al mes y a la jurisdicción, más el saldo a favor de la última liquidación confirmada (o el inicial, en la primera).
+6. **Saldo a pagar** = impuesto − lo usado; **saldo a favor** para el mes siguiente = lo disponible − lo usado.
+
+Confirmar (sólo meses terminados) recalcula en el servidor, guarda la foto y bloquea el mes. Asiento: debe Impuesto sobre los ingresos brutos / haber retenciones sufridas de IIBB (lo usado), percepciones de compras usadas e Ingresos brutos a pagar. Se anula sólo la última confirmada de la jurisdicción (contra-asiento). El XLSX tiene la liquidación y la base por actividad. **No se generan los archivos de ARBA, e-ARCIBA ni SIFERE**: los importes se cargan en el sistema del organismo.
+
+### Valores sembrados (orientativos, verificar con el contador)
+
+| Dato | Dónde | Valor sembrado |
+|---|---|---|
+| Comercio minorista y servicios, CABA | `iibb_activity_templates` | 3 % (Ley Tarifaria, alícuota general) |
+| Comercio minorista y servicios, Provincia de Buenos Aires | `iibb_activity_templates` | 3,5 % (Ley Impositiva) |
+| Clasificación de textos de procesadores | `_tax_suffered_classify` | Reglas por palabra clave (sección anterior) |
+
+## Preguntas para el contador
+
+Preguntas abiertas que dejan los hitos de F18. Hasta tener respuesta, el sistema usa lo indicado entre paréntesis.
+
+**Retenciones como agente (ADR-079)**
+
+1. ¿Los montos de la RG 830 (mínimos no sujetos, alícuotas, retención mínima $ 240) y la escala del Anexo VIII siguen vigentes o hubo una resolución posterior a la RG 5423/2023? (se usan los de la RG 5423/2023)
+2. Para Ganancias con comprobantes B o C del proveedor, ¿la base es el total facturado? (se toma el neto cargado)
+3. Proveedor sin condición en Ganancias cargada: ¿inscripto o no inscripto? (inscripto, con aviso)
+4. Códigos de régimen de SICORE para SUSS por actividad (vacíos: los carga el negocio).
+
+**Retenciones y percepciones sufridas (ADR-095)**
+
+5. Las retenciones de IIBB que hace Mercado Pago sin indicar la provincia, ¿se imputan a la jurisdicción del domicilio fiscal del negocio? (sí, y quedan para revisar)
+6. ¿Qué porcentaje del impuesto a los débitos y créditos computa el negocio como pago a cuenta de Ganancias (33 % o 20 % según el caso) y cómo se contabiliza el resto? (se registra entero como pago a cuenta en "Retenciones e impuestos sufridos en cobros")
+7. Retención de IVA o Ganancias sufrida en un mes y tomada en otro: ¿hay límite de períodos? (el mes de imputación lo elige el usuario)
+8. ¿El IVA sobre la comisión de los procesadores se toma como crédito fiscal en el Libro IVA de compras? (hoy no se registra como retención ni entra en compras: va con la acreditación a "impuestos de procesadores")
+9. ¿Las columnas del CSV de Mis Retenciones y de las consultas de SIRCREB y SIRTAC que reciben coinciden con las que lee el importador (fecha, importe, impuesto, régimen, jurisdicción, CUIT del agente, certificado)? Pedimos un archivo real.
+
+**Ingresos Brutos (ADR-095)**
+
+10. Base imponible: ¿se excluyen IVA, impuestos internos y percepciones y se incluyen las ventas exentas y no gravadas de IVA? (sí)
+11. Ventas anuladas después de cerrado el mes y devoluciones: ¿se descuentan en el mes en que ocurren? (sí, prorrateando las devoluciones por actividad)
+12. ¿El impuesto mínimo se aplica por actividad o por jurisdicción, y corresponde con ventas cero? (por actividad, también con ventas cero)
+13. Alícuotas de comercio minorista y servicios de CABA (3 %) y Provincia de Buenos Aires (3,5 %) sembradas como plantilla: ¿cuál corresponde al negocio según sus ingresos del año anterior y su código NAES?
+14. Convenio Multilateral: ¿la base de cada jurisdicción es la base total del país × coeficiente unificado, sin regímenes especiales (art. 6 a 13)? (sí; los especiales quedan afuera)
+15. ¿La jurisdicción de cada venta se define por la provincia de la sucursal? (sí; sin provincia, la del negocio)
+16. Saldo a favor inicial al empezar a usar el sistema: ¿cuál es por jurisdicción? (se carga en la primera liquidación)

@@ -146,6 +146,20 @@ export function useDeliveryMutations() {
       mutationFn: (orderId: string) => deliveryApi.cancel(orderId),
       onSuccess: invKitchen,
     }),
+    // Anulación con motivo de un ítem enviado (ADR-097).
+    voidItem: useMutation({
+      mutationFn: (v: { itemId: string; qty: number | null; reason: string }) =>
+        deliveryApi.voidItem(v.itemId, v.qty, v.reason),
+      onSuccess: () => {
+        invKitchen();
+        qc.invalidateQueries({ queryKey: ["dining", "kds-voids"] });
+      },
+    }),
+    setPriority: useMutation({
+      mutationFn: (v: { orderId: string; priority: "normal" | "urgente" }) =>
+        deliveryApi.setPriority(v.orderId, v.priority),
+      onSuccess: invKitchen,
+    }),
   };
 }
 

@@ -88,7 +88,13 @@ export function waitlistWhatsappLink(phone: string | null | undefined, message: 
   return `https://wa.me/${n}?text=${encodeURIComponent(message)}`;
 }
 
-export function waitlistReadyMessage(name: string, businessName?: string | null): string {
+// Mismo texto que _waitlist_message en SQL (ADR-097).
+export function waitlistReadyMessage(
+  name: string,
+  businessName?: string | null,
+  tableLabel?: string | null,
+): string {
   const local = businessName ? ` en ${businessName}` : "";
-  return `Hola ${name}, tu mesa${local} ya está lista. Te esperamos.`;
+  const mesa = tableLabel ? ` (mesa ${tableLabel})` : "";
+  return `Hola ${name.trim()}, tu mesa${local} ya está lista${mesa}. Te esperamos.`;
 }

@@ -13,8 +13,10 @@ import {
   CircleDot,
   Clock,
   Flame,
+  Play,
   Printer,
   RefreshCw,
+  Siren,
   Undo2,
   Utensils,
 } from "lucide-react";
@@ -22,12 +24,20 @@ import { useToast } from "@/components/ui/Toast";
 import {
   useAckKdsVoid,
   useDiningEnabled,
+  useKdsHeldCourses,
   useKdsRecentVoids,
   useKdsSla,
   useKdsTickets,
   useKdsMutations,
 } from "@/modules/dining/hooks";
 import { kdsTone, resolveKdsSla, type KdsSlaRule } from "@/lib/gastro/kdsSla";
+import {
+  courseColumns,
+  groupByCourse,
+  heldOnlyOrders,
+  nextHeldCourse,
+  orderColumns,
+} from "@/lib/gastro/kdsGroups";
 import { ComandaModal } from "@/components/dining/ComandaModal";
 import {
   COURSE_LABELS,
@@ -35,6 +45,7 @@ import {
   KDS_STATION_LABELS,
   KDS_STATUS_LABELS,
   KDS_NEXT_STATUS,
+  type KdsHeldCourse,
   type KdsStatus,
   type KdsTicketItem,
 } from "@/modules/dining/api";
@@ -101,9 +112,11 @@ function TicketCard({
   onBack,
   busy,
   sla,
+  showOrder = false,
 }: {
   item: KdsTicketItem;
   sla: KdsSlaRule;
+  showOrder?: boolean;
   now: number;
   showStation: boolean;
   onAdvance: (item: KdsTicketItem) => void;
@@ -129,6 +142,16 @@ function TicketCard({
             </span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            {showOrder && (
+              <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
+                {item.source_label}
+              </span>
+            )}
+            {item.priority === "urgente" && (
+              <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-danger">
+                <Siren size={11} /> Urgente
+              </span>
+            )}
             {/* Tiempo (course): la cocina ve la secuencia entrada→principal→postre. */}
             <span
               className="inline-block rounded bg-ninja-flame/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-ninja-flameSoft"
@@ -222,8 +245,13 @@ function KdsInner() {
   const activeStation =
     stationParam && stationParam !== "all" ? stationParam : null;
 
+  // Vista: por pedido (default) o por curso (?vista=curso), ADR-097.
+  const byCourse = searchParams.get("vista") === "curso";
+
   const { data: items, isFetching, refetch } = useKdsTickets(activeStation);
-  const { setStatus } = useKdsMutations();
+  const { setStatus, fireCourse } = useKdsMutations();
+  // Tiempos en espera (no disparados) por pedido: "Marchar" el siguiente.
+  const { data: held } = useKdsHeldCourses(activeStation);
   const { data: slaConfig } = useKdsSla();
   // Anulaciones recientes (H45): aviso a cocina hasta que tocan "Visto".
   const { data: voids } = useKdsRecentVoids(activeStation, Boolean(diningEnabled));
@@ -240,8 +268,32 @@ function KdsInner() {
     return () => clearInterval(id);
   }, []);
 
+  function go(station: string | null, course: boolean) {
+    const q = new URLSearchParams();
+    if (station) q.set("station", station);
+    if (course) q.set("vista", "curso");
+    const qs = q.toString();
+    router.replace((qs ? `/kds?${qs}` : "/kds") as Route);
+  }
+
   function setStation(s: string | null) {
-    router.replace((s ? `/kds?station=${s}` : "/kds") as Route);
+    go(s, byCourse);
+  }
+
+  async function march(h: KdsHeldCourse) {
+    try {
+      const fired = await fireCourse.mutateAsync({ source: h.source, orderId: h.order_id, course: h.course });
+      toast({
+        title: fired > 0 ? `Marcha ${COURSE_LABELS[h.course] ?? `Tiempo ${h.course}`} · ${h.source_label}` : "No quedaba nada en espera",
+        variant: fired > 0 ? "success" : "info",
+      });
+    } catch (e) {
+      toast({
+        title: "No se pudo marchar",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "error",
+      });
+    }
   }
 
   async function advance(item: KdsTicketItem) {
@@ -280,31 +332,28 @@ function KdsInner() {
   // que ya trae la RPC: la primera vez que aparece un pedido fija su posición.
   // El pedido puede ser de MESA o de DELIVERY/TAKEAWAY (F13 · H49): `source` y
   // `source_label` ("Mesa 5" / "DELIVERY #1234") vienen de la RPC unificada.
-  const groups = useMemo(() => {
-    const byOrder = new Map<
-      string,
-      {
-        label: string;
-        areaName: string | null;
-        source: "mesa" | "delivery";
-        items: KdsTicketItem[];
-      }
-    >();
-    for (const it of items ?? []) {
-      const g = byOrder.get(it.order_id);
-      if (g) {
-        g.items.push(it);
-      } else {
-        byOrder.set(it.order_id, {
-          label: it.source_label,
-          areaName: it.area_name,
-          source: it.source,
-          items: [it],
-        });
-      }
-    }
-    return [...byOrder.entries()];
-  }, [items]);
+  // Urgentes primero (ADR-097), después FIFO.
+  const groups = useMemo(
+    () =>
+      orderColumns(items ?? []).map((c) => {
+        const first = c.items[0]!;
+        return {
+          orderId: c.orderId,
+          urgent: c.urgent,
+          label: first.source_label,
+          areaName: first.area_name,
+          source: first.source,
+          items: c.items,
+        };
+      }),
+    [items],
+  );
+  const courseCols = useMemo(() => courseColumns(items ?? []), [items]);
+  // Pedidos que sólo tienen tiempos en espera: la cocina ve qué viene.
+  const waitingOnly = useMemo(
+    () => heldOnlyOrders(held ?? [], new Set((items ?? []).map((i) => i.order_id))),
+    [held, items],
+  );
 
   // Modo gastronómico apagado → aviso (mismo criterio que /salon).
   if (!loadingFlag && !diningEnabled) {
@@ -326,6 +375,7 @@ function KdsInner() {
   }
 
   const totalActive = (items ?? []).length;
+  const nothing = totalActive === 0 && waitingOnly.length === 0;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -346,10 +396,28 @@ function KdsInner() {
               {totalActive}
             </span>
           </h1>
+          <div className="ml-auto flex items-center rounded-md border border-border p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => go(activeStation, false)}
+              aria-pressed={!byCourse}
+              className={`min-h-8 rounded px-2.5 ${!byCourse ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+            >
+              Por pedido
+            </button>
+            <button
+              type="button"
+              onClick={() => go(activeStation, true)}
+              aria-pressed={byCourse}
+              className={`min-h-8 rounded px-2.5 ${byCourse ? "bg-muted text-foreground" : "text-muted-foreground"}`}
+            >
+              Por curso
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => refetch()}
-            className="ml-auto grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label="Actualizar ahora"
             title="Actualizar ahora"
           >
@@ -395,7 +463,11 @@ function KdsInner() {
                   <span className="font-semibold">
                     {formatQty(v.qty)}× {v.name}
                   </span>
-                  {v.table_label ? ` · Mesa ${v.table_label}` : ""}
+                  {v.table_label
+                    ? v.source === "delivery"
+                      ? ` · ${v.table_label}`
+                      : ` · Mesa ${v.table_label}`
+                    : ""}
                   <span className="block truncate text-xs text-muted-foreground">
                     {v.reason}
                   </span>
@@ -412,7 +484,7 @@ function KdsInner() {
             ))}
           </div>
         )}
-        {totalActive === 0 ? (
+        {nothing ? (
           <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
             <Check size={34} className="text-success" />
             <p className="text-sm text-muted-foreground">
@@ -422,11 +494,51 @@ function KdsInner() {
             </p>
           </div>
         ) : (
+          byCourse ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {courseCols.map((col) => (
+              <section
+                key={col.course}
+                className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-2.5"
+              >
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-base font-bold">
+                    T{col.course}
+                    {COURSE_LABELS[col.course] ? ` · ${COURSE_LABELS[col.course]}` : ""}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{col.items.length}</span>
+                </div>
+                {col.items.map((it) => (
+                  <TicketCard
+                    key={it.item_id}
+                    item={it}
+                    now={now}
+                    showStation={activeStation === null}
+                    showOrder
+                    onAdvance={advance}
+                    onBack={back}
+                    busy={setStatus.isPending}
+                    sla={resolveKdsSla(slaConfig, it.station)}
+                  />
+                ))}
+              </section>
+            ))}
+            {waitingOnly.length > 0 && (
+              <WaitingColumn held={waitingOnly} onMarch={march} busy={fireCourse.isPending} />
+            )}
+          </div>
+          ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {groups.map(([orderId, g]) => (
+            {groups.map((g) => {
+              const orderId = g.orderId;
+              const nextHeld = nextHeldCourse(held ?? [], orderId);
+              const courses = groupByCourse(g.items);
+              return (
               <section
                 key={orderId}
-                className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-2.5"
+                className={`flex flex-col gap-2 rounded-md border bg-muted/20 p-2.5 ${
+                  g.urgent ? "border-border border-t-2 border-t-red-500" : "border-border"
+                }`}
               >
                 <div className="flex items-center justify-between px-1">
                   <span className="flex items-center gap-1.5 text-base font-bold">
@@ -436,6 +548,11 @@ function KdsInner() {
                       <Utensils size={15} className="text-ninja-flameSoft" />
                     )}
                     {g.label}
+                    {g.urgent && (
+                      <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-danger">
+                        <Siren size={11} /> Urgente
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     {g.areaName && (
@@ -459,21 +576,40 @@ function KdsInner() {
                     )}
                   </div>
                 </div>
-                {g.items.map((it) => (
-                  <TicketCard
-                    key={it.item_id}
-                    item={it}
-                    now={now}
-                    showStation={activeStation === null}
-                    onAdvance={advance}
-                    onBack={back}
-                    busy={setStatus.isPending}
-                    sla={resolveKdsSla(slaConfig, it.station)}
-                  />
+                {courses.map((c) => (
+                  <div key={c.course} className="flex flex-col gap-2">
+                    {courses.length > 1 && (
+                      <span className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        T{c.course}
+                        {COURSE_LABELS[c.course] ? ` · ${COURSE_LABELS[c.course]}` : ""}
+                      </span>
+                    )}
+                    {c.items.map((it) => (
+                      <TicketCard
+                        key={it.item_id}
+                        item={it}
+                        now={now}
+                        showStation={activeStation === null}
+                        onAdvance={advance}
+                        onBack={back}
+                        busy={setStatus.isPending}
+                        sla={resolveKdsSla(slaConfig, it.station)}
+                      />
+                    ))}
+                  </div>
                 ))}
+                {/* Próximo tiempo en espera: la cocina lo marcha cuando corresponde. */}
+                {nextHeld && (
+                  <MarchRow h={nextHeld} onMarch={march} busy={fireCourse.isPending} />
+                )}
               </section>
-            ))}
+              );
+            })}
+            {waitingOnly.length > 0 && (
+              <WaitingColumn held={waitingOnly} onMarch={march} busy={fireCourse.isPending} />
+            )}
           </div>
+          )
         )}
       </main>
 
@@ -487,6 +623,59 @@ function KdsInner() {
         initialStation={activeStation}
       />
     </div>
+  );
+}
+
+// "En espera: T2 · Principal (3)" + Marchar.
+function MarchRow({
+  h,
+  onMarch,
+  busy,
+  showLabel = false,
+}: {
+  h: KdsHeldCourse;
+  onMarch: (h: KdsHeldCourse) => void;
+  busy: boolean;
+  showLabel?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-border px-2.5 py-2">
+      <span className="min-w-0 text-sm">
+        {showLabel && <span className="block truncate font-semibold">{h.source_label}</span>}
+        <span className="text-muted-foreground">
+          En espera: T{h.course}
+          {COURSE_LABELS[h.course] ? ` · ${COURSE_LABELS[h.course]}` : ""} ({h.held})
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={() => onMarch(h)}
+        disabled={busy}
+        className="flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+      >
+        <Play size={14} /> Marchar
+      </button>
+    </div>
+  );
+}
+
+// Pedidos sin nada en preparación pero con tiempos en espera.
+function WaitingColumn({
+  held,
+  onMarch,
+  busy,
+}: {
+  held: KdsHeldCourse[];
+  onMarch: (h: KdsHeldCourse) => void;
+  busy: boolean;
+}) {
+  return (
+    <section className="flex flex-col gap-2 rounded-md border border-dashed border-border p-2.5">
+      <span className="px-1 text-sm font-bold">Próximos tiempos</span>
+      {held.map((h) => (
+        <MarchRow key={`${h.order_id}-${h.course}`} h={h} onMarch={onMarch} busy={busy} showLabel />
+      ))}
+    </section>
   );
 }
 

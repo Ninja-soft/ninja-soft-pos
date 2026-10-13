@@ -12,6 +12,7 @@ import {
   type TableStatus,
   type AddItemInput,
   type KdsStatus,
+  type OrderPriority,
 } from "./api";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { KdsSlaConfigSchema, parseKdsSla, type KdsSlaConfig } from "@/lib/gastro/kdsSla";
@@ -182,7 +183,43 @@ export function useTableOrderMutations() {
     markVoidsPrinted: useMutation({
       mutationFn: (voidIds: string[]) => tableOrdersApi.markVoidsPrinted(voidIds),
     }),
+    // Cuenta por comensal (ADR-097).
+    setItemsDiner: useMutation({
+      mutationFn: (v: { itemIds: string[]; diner: number | null }) =>
+        tableOrdersApi.setItemsDiner(v.itemIds, v.diner),
+      onSuccess: inv,
+    }),
+    split: useMutation({
+      mutationFn: (v: { orderId: string; lines: { item_id: string; qty: number | null }[]; label: string }) =>
+        tableOrdersApi.split(v.orderId, v.lines, v.label),
+      onSuccess: () => {
+        invKitchen();
+        qc.invalidateQueries({ queryKey: ["dining", "splits"] });
+      },
+    }),
+    unsplit: useMutation({
+      mutationFn: (splitId: string) => tableOrdersApi.unsplit(splitId),
+      onSuccess: () => {
+        invKitchen();
+        qc.invalidateQueries({ queryKey: ["dining", "splits"] });
+      },
+    }),
+    // Prioridad en cocina (ADR-097).
+    setPriority: useMutation({
+      mutationFn: (v: { orderId: string; priority: OrderPriority }) =>
+        tableOrdersApi.setPriority("mesa", v.orderId, v.priority),
+      onSuccess: invKitchen,
+    }),
   };
+}
+
+// ── Cuentas separadas de un pedido (ADR-097) ───────────────────────────────────
+export function useTableSplits(parentOrderId: string | null) {
+  return useQuery({
+    queryKey: ["dining", "splits", parentOrderId],
+    enabled: Boolean(parentOrderId),
+    queryFn: () => tableOrdersApi.splits(parentOrderId!),
+  });
 }
 
 // ── Relevo de mozo (F13 · H44) ─────────────────────────────────────────────────
@@ -265,9 +302,29 @@ export function useKdsTickets(station: string | null) {
   });
 }
 
+// Tiempos en espera por pedido (ADR-097): la cocina ve qué viene y lo marcha.
+export function useKdsHeldCourses(station: string | null) {
+  return useQuery({
+    queryKey: ["dining", "kds-held", station ?? "all"],
+    queryFn: () => kdsApi.heldCourses(station),
+    refetchInterval: 8_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useKdsMutations() {
   const qc = useQueryClient();
   return {
+    fireCourse: useMutation({
+      mutationFn: (v: { source: "mesa" | "delivery"; orderId: string; course: number }) =>
+        kdsApi.fireCourse(v.source, v.orderId, v.course),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ["dining", "kds"] });
+        qc.invalidateQueries({ queryKey: ["dining", "kds-held"] });
+        qc.invalidateQueries({ queryKey: ["dining", "order-items"] });
+        qc.invalidateQueries({ queryKey: ["delivery", "order-items"] });
+      },
+    }),
     setStatus: useMutation({
       mutationFn: (v: { itemId: string; status: KdsStatus }) =>
         kdsApi.setStatus(v.itemId, v.status),

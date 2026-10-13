@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 import { useDiningTables } from "@/modules/dining/hooks";
+import { WaitlistNoticesBanner } from "./WaitlistNoticesBanner";
 import {
   WAITLIST_STATUS_LABELS,
   useWaitlist,
@@ -41,7 +42,7 @@ export function WaitlistPanel() {
   const router = useRouter();
   const { data: tables } = useDiningTables();
   const { data: brand } = useTicketBranding(true);
-  const { create, setStatus, seat } = useWaitlistMutations();
+  const { create, setStatus, seat, notify: notifyEntry } = useWaitlistMutations();
 
   const since = useMemo(() => {
     const d = new Date();
@@ -96,12 +97,12 @@ export function WaitlistPanel() {
     }
   }
 
+  // Aviso manual: abre WhatsApp en el mismo toque (sin bloqueo de ventanas) y
+  // deja el aviso registrado en el servidor (ADR-097).
   function notify(e: WaitlistEntry) {
     const link = waitlistWhatsappLink(e.customer_phone, waitlistReadyMessage(e.customer_name, brand?.legal_name));
     if (link) window.open(link, "_blank", "noopener,noreferrer");
-    if (e.status === "esperando") {
-      setStatus.mutate({ id: e.id, status: "avisado" }, { onError: (x) => err("No se pudo marcar", x) });
-    }
+    notifyEntry.mutate({ entryId: e.id, tableId: null }, { onError: (x) => err("No se pudo registrar el aviso", x) });
   }
 
   function doSeat(tableId: string) {
@@ -121,6 +122,9 @@ export function WaitlistPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Avisos automáticos: se liberó una mesa y entra el primero de la fila. */}
+      <WaitlistNoticesBanner />
+
       {/* Alta rápida */}
       <Card className="space-y-3 p-4">
         <div className="grid gap-3 sm:grid-cols-2">

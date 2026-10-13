@@ -12,8 +12,17 @@
 //   * Cron diario (X-Cron-Secret == platform_secrets('internal_cron').token):
 //       { mode: "cron" }  para cada negocio con Mercado Pago conectado, la
 //          feature y la sincronización automática prendida: últimos 7 días
-//          por fecha de creación + acreditaciones de los últimos 3 días, y
-//          cruce de los últimos 40 días.
+//          por fecha de creación + acreditaciones y pagos actualizados de los
+//          últimos 3 días, y cruce de los últimos 40 días. Los negocios con
+//          Mercado Pago y sin la conciliación (o con la automática apagada)
+//          igual pasan por el barrido de contracargos, reclamos y devoluciones
+//          (ADR-064, feature BASE alertas_contracargos): pagos actualizados en
+//          los últimos 3 días.
+//
+// Contracargos, reclamos y devoluciones (ADR-064): de cada pago traído se
+// arman las disputas (_shared/paymentDisputes.ts), se completan los
+// contracargos con GET /v1/chargebacks/{id} y se guardan con
+// _payment_disputes_upsert, que vincula con la venta, audita y avisa.
 //
 // Mercado Pago: GET /v1/payments/search (range=date_created o
 // money_release_date, sort asc, limit 100, offset) con la credencial de cada
@@ -34,6 +43,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { MP_API, mpHeaders, tenantMpCredential } from "../_shared/mpAuth.ts";
 import { mpSettlementLine, type SettlementLineInput } from "../_shared/processorData.ts";
 import { type MatchLine, type PosCandidate, matchChanged, matchSettlement } from "../_shared/settlementMatch.ts";
+import { type DisputeSyncResult, disputesEnabled, scanRecentPayments, syncDisputes } from "../_shared/disputesSync.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -84,7 +94,15 @@ const chunk = <T>(xs: T[], n: number): T[][] => {
 
 // ── Mercado Pago: traer pagos ────────────────────────────────────────────────
 
-type SyncOutcome = { scope: string | null; fetched: number; saved: number; truncated: boolean; error?: string };
+type SyncOutcome = {
+  scope: string | null;
+  fetched: number;
+  saved: number;
+  truncated: boolean;
+  error?: string;
+  disputes?: DisputeSyncResult;
+};
+type SearchRange = "date_created" | "money_release_date" | "date_last_updated";
 
 async function mpScopes(admin: Admin, tenantId: string): Promise<(string | null)[]> {
   const { data, error } = await admin
@@ -102,7 +120,7 @@ async function mpScopes(admin: Admin, tenantId: string): Promise<(string | null)
 
 async function searchMp(
   token: string,
-  range: "date_created" | "money_release_date",
+  range: SearchRange,
   from: Date,
   to: Date,
 ): Promise<{ results: unknown[]; truncated: boolean; error?: string }> {
@@ -154,8 +172,9 @@ async function saveLines(
 async function syncMercadoPago(
   admin: Admin,
   tenantId: string,
-  windows: { range: "date_created" | "money_release_date"; from: Date; to: Date }[],
+  windows: { range: SearchRange; from: Date; to: Date }[],
   actor: string | null,
+  withDisputes = false,
 ): Promise<SyncOutcome[]> {
   const out: SyncOutcome[] = [];
   for (const scope of await mpScopes(admin, tenantId)) {
@@ -178,6 +197,7 @@ async function syncMercadoPago(
       continue;
     }
     const byId = new Map<string, SettlementLineInput>();
+    const rawById = new Map<string, unknown>();
     let fetched = 0;
     let truncated = false;
     let error: string | undefined;
@@ -187,6 +207,8 @@ async function syncMercadoPago(
       truncated ||= res.truncated;
       if (res.error) error = res.error;
       for (const raw of res.results) {
+        const rid = (raw as { id?: unknown } | null)?.id;
+        if (rid != null) rawById.set(String(rid), raw);
         const line = mpSettlementLine(raw);
         if (line) byId.set(line.line_key, line);
       }
@@ -227,7 +249,30 @@ async function syncMercadoPago(
       },
       { onConflict: "tenant_id,provider_key,scope_store_id" },
     );
-    out.push({ scope, fetched, saved, truncated, ...(error ? { error } : {}) });
+    // Contracargos, reclamos y devoluciones de estos pagos (ADR-064).
+    let disputes: DisputeSyncResult | undefined;
+    if (withDisputes) {
+      disputes = await syncDisputes(admin, tenantId, scope, cred.token, [...rawById.values()], actor).catch(
+        (e): DisputeSyncResult => ({ items: 0, inserted: 0, updated: 0, notified: 0, error: String(e).slice(0, 200) }),
+      );
+    }
+    out.push({ scope, fetched, saved, truncated, ...(error ? { error } : {}), ...(disputes ? { disputes } : {}) });
+  }
+  return out;
+}
+
+/**
+ * Sólo contracargos, reclamos y devoluciones (negocios sin la conciliación):
+ * pagos actualizados en la ventana, con cada credencial del negocio.
+ */
+async function scanDisputesOnly(admin: Admin, tenantId: string, from: Date, to: Date): Promise<DisputeSyncResult[]> {
+  const out: DisputeSyncResult[] = [];
+  for (const scope of await mpScopes(admin, tenantId)) {
+    const cred = await tenantMpCredential(admin, tenantId, undefined, { scopeStoreId: scope });
+    if (!cred) continue;
+    const res = await scanRecentPayments(cred.token, from, to);
+    const r = await syncDisputes(admin, tenantId, scope, cred.token, res.results, null);
+    out.push(res.error ? { ...r, error: r.error ?? res.error } : r);
   }
   return out;
 }
@@ -468,39 +513,57 @@ async function runCron(admin: Admin) {
   let synced = 0;
   let skipped = 0;
   let failed = 0;
+  let disputesOnly = 0;
   const now = new Date();
+  const recent = new Date(now.getTime() - 3 * DAY_MS);
   for (const tenantId of tenants) {
     if (performance.now() - t0 > 100_000) break; // presupuesto de la corrida
-    if (off.has(tenantId)) {
-      skipped++;
-      continue;
+    const alerts = await disputesEnabled(admin, tenantId);
+    let conc = false;
+    if (!off.has(tenantId)) {
+      const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
+        p_tenant: tenantId,
+        p_key: "conciliacion_procesadores",
+      });
+      conc = allowed === true;
     }
-    const { data: allowed } = await admin.rpc("tenant_has_feature_for", {
-      p_tenant: tenantId,
-      p_key: "conciliacion_procesadores",
-    });
-    if (allowed !== true) {
+    if (!conc && !alerts) {
       skipped++;
       continue;
     }
     try {
-      await syncMercadoPago(
-        admin,
-        tenantId,
-        [
-          { range: "date_created", from: new Date(now.getTime() - 7 * DAY_MS), to: now },
-          { range: "money_release_date", from: new Date(now.getTime() - 3 * DAY_MS), to: now },
-        ],
-        null,
-      );
-      await runMatch(admin, tenantId, "mercadopago", new Date(now.getTime() - 40 * DAY_MS), now, null);
-      synced++;
+      if (conc) {
+        await syncMercadoPago(
+          admin,
+          tenantId,
+          [
+            { range: "date_created", from: new Date(now.getTime() - 7 * DAY_MS), to: now },
+            { range: "money_release_date", from: recent, to: now },
+            // Contracargos, reclamos y devoluciones de ventas viejas (ADR-064).
+            { range: "date_last_updated", from: recent, to: now },
+          ],
+          null,
+          alerts,
+        );
+        await runMatch(admin, tenantId, "mercadopago", new Date(now.getTime() - 40 * DAY_MS), now, null);
+        synced++;
+      } else {
+        await scanDisputesOnly(admin, tenantId, recent, now);
+        disputesOnly++;
+      }
     } catch (e) {
       failed++;
       console.error(JSON.stringify({ fn: "settlements", tenant: tenantId, error: String(e).slice(0, 200) }));
     }
   }
-  const out = { tenants: tenants.length, synced, skipped, failed, ms: Math.round(performance.now() - t0) };
+  const out = {
+    tenants: tenants.length,
+    synced,
+    disputes_only: disputesOnly,
+    skipped,
+    failed,
+    ms: Math.round(performance.now() - t0),
+  };
   console.log(JSON.stringify({ fn: "settlements", mode: "cron", ...out }));
   return out;
 }
@@ -569,6 +632,7 @@ Deno.serve(async (req: Request) => {
         tenantId,
         [{ range: "date_created", from: range.from, to: range.to }],
         user.id,
+        await disputesEnabled(admin, tenantId),
       );
       if (scopes.every((s) => s.error === "not_connected")) {
         return json({ error: "not_connected", scopes }, 400);

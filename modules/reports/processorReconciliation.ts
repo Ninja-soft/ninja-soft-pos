@@ -173,6 +173,8 @@ export function useSettlementSync() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["settlements"] });
       qc.invalidateQueries({ queryKey: ["reports", "card-payments"] });
+      // La sincronización también trae contracargos y devoluciones (ADR-064).
+      qc.invalidateQueries({ queryKey: ["disputes"] });
       void v;
     },
   });

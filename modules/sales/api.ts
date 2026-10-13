@@ -166,7 +166,7 @@ export interface SalesPageParams {
   page: number; // 1-based
   pageSize: number;
   search?: string;
-  status?: string; // 'completed' | 'voided' | ''
+  status?: string; // 'completed' | 'voided' | 'alerts' (ADR-064) | ''
   range?: { from?: Date; to?: Date };
   // F17 · H90: sucursal (null/undefined = todas las que el usuario ve por RLS).
   storeId?: string | null;
@@ -178,6 +178,30 @@ function searchToNumber(search: string): number | null {
   if (!digits) return null;
   const n = Number(digits);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Ventas con alertas (ADR-064, filtro "Con alertas"): contracargos, reclamos
+ * y devoluciones hechas desde Mercado Pago (no las registradas en el POS).
+ * RLS: sólo dueño o encargado; para el resto (o sin la migración) no hay.
+ * Tope de 1.000 ventas, las más recientes.
+ */
+async function saleIdsWithAlerts(): Promise<string[]> {
+  const tenantId = await getCurrentTenantId();
+  let q = createClient()
+    .from("payment_disputes" as never)
+    .select("sale_id, kind, origin, status")
+    .not("sale_id", "is", null)
+    .is("deleted_at", null);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { data, error } = await q.order("first_seen_at", { ascending: false }).limit(1000);
+  if (error) return [];
+  const rows = (data ?? []) as unknown as { sale_id: string; kind: string; origin: string; status: string }[];
+  return [
+    ...new Set(
+      rows.filter((r) => !(r.kind === "refund" && (r.origin === "pos" || r.status === "closed"))).map((r) => r.sale_id),
+    ),
+  ];
 }
 
 export const salesApi = {
@@ -202,7 +226,11 @@ export const salesApi = {
       })
       .order("created_at", { ascending: false });
 
-    if (status) query = query.eq("status", status);
+    if (status === "alerts") {
+      const ids = await saleIdsWithAlerts();
+      if (ids.length === 0) return { rows: [], total: 0 };
+      query = query.in("id", ids);
+    } else if (status) query = query.eq("status", status);
     if (storeId) query = query.eq("store_id", storeId);
     if (range?.from) query = query.gte("created_at", range.from.toISOString());
     if (range?.to) {

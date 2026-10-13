@@ -36,7 +36,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
 
-type DetailTab = "ticket" | "cobros";
+export type DetailTab = "ticket" | "cobros";
 const TABS: { value: DetailTab; label: string }[] = [
   { value: "ticket", label: "Ticket" },
   { value: "cobros", label: "Cobros" },
@@ -47,9 +47,11 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   saleId: string | null;
   autoPrint?: boolean;
+  /** Pestaña con la que abre (los avisos de contracargo abren en Cobros, ADR-064). */
+  initialTab?: DetailTab;
 }
 
-export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
+export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab }: Props) {
   const { data, isLoading } = useSaleDetail(saleId, open);
   // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
   const { data: brand } = useTicketBranding(
@@ -85,11 +87,12 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint }: Props) {
   const emailedRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
   // Detalle de la venta (ADR-061): el ticket queda montado aunque se vea la
-  // pestaña Cobros (imprimir y el email lo usan). Cada apertura arranca en Ticket.
-  const [tab, setTab] = useState<DetailTab>("ticket");
+  // pestaña Cobros (imprimir y el email lo usan). Cada apertura arranca en Ticket
+  // (o en la pestaña pedida).
+  const [tab, setTab] = useState<DetailTab>(initialTab ?? "ticket");
   useEffect(() => {
-    if (open) setTab("ticket");
-  }, [open, saleId]);
+    if (open) setTab(initialTab ?? "ticket");
+  }, [open, saleId, initialTab]);
 
   // Sucursal y caja de la venta (F17 · H90): sólo con 2+ sucursales.
   const { data: branches } = useBranches();

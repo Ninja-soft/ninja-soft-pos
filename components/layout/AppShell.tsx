@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  ClipboardCheck,
   ShoppingBag,
   ShoppingCart,
   Sun,
@@ -273,6 +274,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/traslados", label: "Traslados", icon: ArrowLeftRight, feature: "traslados", requiresMultiStore: true },
         // Depósitos internos de la sucursal (F11 · H33, ADR-085).
         { href: "/depositos", label: "Depósitos", icon: Warehouse, feature: "depositos" },
+        // Inventario PRO (F14 · H64, ADR-092): conteo cíclico ABC y garantías por serie.
+        { href: "/inventario", label: "Inventario PRO", icon: ClipboardCheck, feature: "conteo_ciclico" },
         { href: "/tiendita", label: "Tiendita", icon: ShoppingBag },
         { href: "/etiquetas", label: "Etiquetas", icon: Tag },
       ],
@@ -319,6 +322,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
         // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el
         // plan se chequea por importación (importacion_excel / export_xlsx).
+        // Control comercial (F14 · H63, H67, ADR-092): aprobaciones y márgenes.
+        { href: "/comercial", label: "Control comercial", icon: ShieldCheck, managersOnly: true },
         { href: "/importaciones", label: "Importar y exportar", icon: FileSpreadsheet, managersOnly: true },
         { href: "/configuracion", label: "Configuración", icon: Settings },
       ],

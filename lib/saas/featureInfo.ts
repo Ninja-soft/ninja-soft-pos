@@ -54,6 +54,20 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["pin_supervisor"],
   },
+  balanza: {
+    desc: "Balanza y códigos pesables: el POS lee las etiquetas de la balanza etiquetadora (EAN-13 con prefijo 20 a 29 y precio o peso embebido, con el formato de cada sucursal) y el peso en vivo de la balanza conectada a la caja (Web Serial o puente local), con peso estable y tara.",
+    impact: "Desactivado, los productos por kilo se cargan tipeando el peso y las etiquetas de balanza no se reconocen.",
+    minPlan: "Start",
+    requires: ["pos"],
+    needs: "Para el peso en vivo: una balanza con salida a PC y Chrome o Edge de escritorio (o el puente local).",
+  },
+  cajon_dinero: {
+    desc: "Cajón de dinero: se abre solo al cobrar en efectivo y con el botón Abrir cajón según la política de la sucursal (permitido, con PIN de supervisor o prohibido). Cada apertura queda auditada con usuario, caja, turno y motivo.",
+    impact: "Desactivado, el cajón no se abre desde el sistema (queda la llave).",
+    minPlan: "Start",
+    requires: ["caja"],
+    needs: "Un cajón enchufado a la impresora térmica de la caja (pulso ESC/POS por USB, serie o el puente local).",
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",

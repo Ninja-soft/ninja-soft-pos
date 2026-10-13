@@ -25,6 +25,7 @@ export function PosTopBar({
   onCloseShift,
   onCustomerDisplay,
   pendingSlot,
+  drawerSlot,
   preset,
   usingOwn,
   diningEnabled,
@@ -43,6 +44,8 @@ export function PosTopBar({
   onCustomerDisplay: () => void;
   // Botón "Cobros en espera" con su contador (ADR-048).
   pendingSlot?: React.ReactNode;
+  // Botón "Abrir cajón" sin venta (ADR-063); null si la caja no tiene cajón.
+  drawerSlot?: React.ReactNode;
   preset: PosPreset;
   usingOwn: boolean;
   diningEnabled: boolean;
@@ -90,6 +93,7 @@ export function PosTopBar({
           </span>
         </button>
         {pendingSlot}
+        {drawerSlot}
         <button
           type="button"
           onClick={onCustomerDisplay}

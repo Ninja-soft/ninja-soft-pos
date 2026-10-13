@@ -11,7 +11,7 @@
 // variables que tests/integration/rls.test.ts). Sin ellas la suite se salta.
 // NUNCA apuntar estas variables a producción: crea y borra datos.
 //
-// Escenario: negocio A con `reintegro_mp` (addon otorgado), dueño, encargado y
+// Escenario: negocio A con `reintegro_mp` y `mercado_pago` (addons), dueño, encargado y
 // cajero; una venta de $1000 (2 x $500) cobrada con QR de Mercado Pago.
 // Negocio B sin la feature.
 // =============================================================================
@@ -97,9 +97,15 @@ describe.skipIf(!enabled)("reintegro por Mercado Pago · RLS y RPC", () => {
     ctx.tenantA = tenants[0]!.id;
     ctx.tenantB = tenants[1]!.id;
 
-    const { error: addErr } = await admin
-      .from("subscription_addons")
-      .insert({ tenant_id: ctx.tenantA, addon_key: "reintegro_mp", status: "active", source: "granted" });
+    // mercado_pago: el trigger de payments valida el medio del intent contra el plan.
+    const { error: addErr } = await admin.from("subscription_addons").insert(
+      ["reintegro_mp", "mercado_pago"].map((addon_key) => ({
+        tenant_id: ctx.tenantA,
+        addon_key,
+        status: "active",
+        source: "granted",
+      })),
+    );
     if (addErr) throw addErr;
 
     ctx.owner = await makeUser(admin, `owner-${STAMP}@test.local`, ctx.tenantA, "owner");

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { pausedSalesApi, isNetworkFailure } from "./api";
-import { localKey, mergePaused, parseLocal, serializeLocal, type PausedSale } from "./logic";
+import { isPausedVisible, localKey, mergePaused, parseLocal, serializeLocal, type PausedSale } from "./logic";
 
 // Ventas pausadas de la sucursal del POS (ADR-106): servidor + las que se
 // pausaron sin conexión en este equipo (localStorage por negocio y usuario),
@@ -40,7 +40,19 @@ export function usePausedSales(opts: {
   const qc = useQueryClient();
   const key = opts.tenantId && opts.userId ? localKey(opts.tenantId, opts.userId) : null;
   const [local, setLocal] = useState<PausedSale[]>([]);
-  useEffect(() => setLocal(readStore(key)), [key]);
+  // Reloj de la lista: el vencimiento a las 24 h (ADR-108) se ve sin recargar.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+  // Las pausadas sin conexión también vencen: sin pagos, se borran de este equipo.
+  useEffect(() => {
+    const all = readStore(key);
+    const alive = all.filter((s) => isPausedVisible(s));
+    if (alive.length !== all.length) writeStore(key, alive);
+    setLocal(alive);
+  }, [key]);
 
   const q = useQuery({
     queryKey: pausedSalesKey(opts.storeId),
@@ -115,16 +127,15 @@ export function usePausedSales(opts: {
     })();
   }, [opts.offline, opts.storeId, local, syncErrors, removeLocal, qc]);
 
-  const list = useMemo(
-    () =>
-      mergePaused(
-        q.data ?? [],
-        local.filter((s) => s.status === "paused" && (!opts.storeId || s.store_id === opts.storeId)),
-      ),
-    [q.data, local, opts.storeId],
-  );
+  const list = useMemo(() => {
+    const at = new Date(now);
+    return mergePaused(
+      q.data ?? [],
+      local.filter((s) => s.status === "paused" && (!opts.storeId || s.store_id === opts.storeId)),
+    ).filter((s) => isPausedVisible(s, at));
+  }, [q.data, local, opts.storeId, now]);
 
   const refresh = useCallback(() => qc.invalidateQueries({ queryKey: ["paused-sales"] }), [qc]);
 
-  return { list, local, saveLocal, removeLocal, refresh, loading: q.isLoading, syncErrors };
+  return { list, now, local, saveLocal, removeLocal, refresh, loading: q.isLoading, syncErrors };
 }

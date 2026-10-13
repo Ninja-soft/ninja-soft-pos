@@ -14,7 +14,7 @@
 import type { CartLine } from "@/modules/pos/store";
 import type { CheckoutSnapshot, LiveIntent, PaidLine } from "@/components/pos/checkout/types";
 
-export type PausedStatus = "paused" | "resumed" | "completed" | "discarded";
+export type PausedStatus = "paused" | "resumed" | "completed" | "discarded" | "expired";
 export type PausedPaymentKind = "line" | "intent";
 export type PausedPaymentStatus =
   | "confirmed"
@@ -78,6 +78,10 @@ export interface PausedSale {
   source: "online" | "offline";
   paused_at: string;
   resumed_at: string | null;
+  /** Vencimiento del servidor (ADR-108): último movimiento + 24 h. */
+  expires_at?: string | null;
+  /** Venció con pagos vivos: no se vence sola, hay que resolverla. */
+  expiry_held_at?: string | null;
   version: number;
   payments: PausedPayment[];
   /** Sólo en este equipo: se pausó sin conexión y falta subirla. */
@@ -447,6 +451,100 @@ export function pausedBadges(s: PausedSale): PausedBadge[] {
   return out;
 }
 
+// ── Vencimiento (ADR-108) ────────────────────────────────────────────────────
+
+/** Vida de una venta pausada. Espejo de paused_sale_ttl() (SQL). */
+export const PAUSED_TTL_HOURS = 24;
+/** Desde cuándo se resalta como "vence pronto". */
+export const PAUSED_SOON_HOURS = 2;
+const HOUR = 3_600_000;
+
+/** ¿Tiene pagos vivos? Espejo de _paused_sale_has_live_payments (SQL). */
+export function hasLivePayments(payments: Pick<PausedPayment, "status">[]): boolean {
+  return payments.some((p) => ["confirmed", "pending", "approved", "used"].includes(p.status));
+}
+
+/** Vencimiento: el del servidor o, si no vino, último movimiento + 24 h. */
+export function pausedExpiresAt(s: Pick<PausedSale, "expires_at" | "paused_at" | "resumed_at">): Date {
+  if (s.expires_at) {
+    const d = new Date(s.expires_at);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  const paused = new Date(s.paused_at).getTime();
+  const resumed = s.resumed_at ? new Date(s.resumed_at).getTime() : paused;
+  return new Date(Math.max(paused || 0, resumed || 0) + PAUSED_TTL_HOURS * HOUR);
+}
+
+export type PausedExpiry =
+  /** Falta más de PAUSED_SOON_HOURS. */
+  | { kind: "ok"; msLeft: number; label: string }
+  /** Vence pronto: se resalta. */
+  | { kind: "soon"; msLeft: number; label: string }
+  /** Venció con pagos: no se borra, hay que resolverla. */
+  | { kind: "held"; msLeft: number; label: string }
+  /** Venció sin pagos: el servidor ya no la lista ni la retoma. */
+  | { kind: "expired"; msLeft: number; label: string };
+
+/** "en 5 h", "en 1 h 20 min", "en 12 min", "en menos de 1 min". */
+export function leftLabel(ms: number): string {
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "en menos de 1 min";
+  if (min < 60) return `en ${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h < PAUSED_SOON_HOURS && m > 0 ? `en ${h} h ${m} min` : `en ${h} h`;
+}
+
+export function pausedExpiry(
+  s: Pick<PausedSale, "expires_at" | "paused_at" | "resumed_at" | "payments">,
+  now: Date = new Date(),
+): PausedExpiry {
+  const msLeft = pausedExpiresAt(s).getTime() - now.getTime();
+  if (msLeft <= 0) {
+    return hasLivePayments(s.payments ?? [])
+      ? { kind: "held", msLeft, label: "Venció: tiene pagos, resolvela" }
+      : { kind: "expired", msLeft, label: "Venció" };
+  }
+  const label = `Vence ${leftLabel(msLeft)}`;
+  return msLeft <= PAUSED_SOON_HOURS * HOUR ? { kind: "soon", msLeft, label } : { kind: "ok", msLeft, label };
+}
+
+/** ¿Se muestra en el POS? Abierta y sin vencer (o vencida con pagos). */
+export function isPausedVisible(s: PausedSale, now: Date = new Date()): boolean {
+  if (s.status !== "paused" && s.status !== "resumed") return false;
+  return pausedExpiry(s, now).kind !== "expired";
+}
+
+// ── Contenido para la tarjeta ────────────────────────────────────────────────
+
+export interface PausedPreviewLine {
+  lineId: string;
+  productId: string | null;
+  name: string;
+  detail: string | null;
+  quantity: number;
+  unit: string;
+  subtotal: number;
+}
+
+/** Líneas para mostrar: las primeras `max` y el resto aparte ("+N más"). */
+export function pausedPreview(
+  lines: CartLine[],
+  max = 3,
+): { shown: PausedPreviewLine[]; hidden: PausedPreviewLine[]; units: number } {
+  const all = lines.map((l) => ({
+    lineId: l.lineId,
+    productId: l.productId,
+    name: l.name,
+    detail: [l.variantLabel, l.modifiersLabel].filter((x) => x && x.trim()).join(" · ") || null,
+    quantity: Number(l.quantity) || 0,
+    unit: l.unit || "un",
+    subtotal: round2(l.packCreditId ? 0 : l.unitPrice * l.quantity - (l.discount || 0)),
+  }));
+  const units = round2(all.reduce((a, l) => a + (l.unit === "un" ? l.quantity : 1), 0));
+  return { shown: all.slice(0, max), hidden: all.slice(max), units };
+}
+
 // ── Copia local (sin conexión) ───────────────────────────────────────────────
 
 export const LOCAL_KEY_PREFIX = "ninja_paused_sales_v1";
@@ -490,6 +588,7 @@ export function pausedErrorCopy(msg: string): string {
   if (msg.includes("paused_sale_in_use")) return "Otra persona está cobrando esta venta.";
   if (msg.includes("paused_sale_closed")) return "Esta venta ya se cobró o se descartó.";
   if (msg.includes("paused_sale_already_charged")) return "Esta venta ya se registró con su QR.";
+  if (msg.includes("paused_sale_expired")) return "Esta venta pausada venció (pasaron 24 h) y ya no se puede retomar.";
   if (msg.includes("paused_sale_not_found")) return "No encontramos la venta pausada.";
   if (msg.includes("paused_sale_other_store")) return "La venta se pausó en otra sucursal: retomala desde allá.";
   if (msg.includes("too_many_paused_sales")) return "Hay demasiadas ventas pausadas en la sucursal: retomá o descartá alguna.";

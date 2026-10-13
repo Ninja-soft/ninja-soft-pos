@@ -74,6 +74,7 @@ import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
+import { ArcaPosIndicator } from "@/components/arca/ArcaPosIndicator";
 import { ProductPane } from "@/components/pos/screen/ProductPane";
 import { CartLines, CartSummary } from "@/components/pos/screen/CartPane";
 import { QuickKeypadPanel, QuickScanPane } from "@/components/pos/screen/QuickScanPane";
@@ -1207,6 +1208,8 @@ function PosPageInner() {
   const banners = (
     <>
       <ForeignShiftBanner shift={shift} />
+      {/* F3 · ADR-072: ARCA caído, facturando en contingencia (no bloquea). */}
+      <ArcaPosIndicator />
       {editingCharge && (
         <ModeBanner
           tone="info"

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { emitirVentaEnSegundoPlano } from "@/modules/arca/api";
 import type { Json, Tables } from "@/types/database";
 import { appOrigin } from "@/lib/site";
 import { getActiveShiftId, useBranchStore } from "@/modules/branches/store";
@@ -1607,6 +1608,10 @@ export const posApi = {
     if (error) throw error;
     return data as unknown as CreateSaleResult;
     };
-    return withSupervisor(run, { discount_over: discountPct, cambio_precio: priceDev });
+    const res = await withSupervisor(run, { discount_over: discountPct, cambio_precio: priceDev });
+    // F3 · ADR-072: la factura electrónica se pide en segundo plano. Nunca
+    // frena ni avisa al cajero; si falla, la cola fiscal la toma con el cron.
+    emitirVentaEnSegundoPlano(res?.sale_id);
+    return res;
   },
 };

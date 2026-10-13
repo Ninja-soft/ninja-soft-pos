@@ -14,6 +14,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  FileCheck2,
   Mail,
   Menu,
   Moon,
@@ -68,6 +69,7 @@ const NAV = [
   { href: "/internal/addons", label: "Complementos", icon: Sparkles },
   { href: "/internal/catalogos", label: "Catálogos", icon: Boxes },
   { href: "/internal/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/internal/arca", label: "ARCA", icon: FileCheck2 },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {

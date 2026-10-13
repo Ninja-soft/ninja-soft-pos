@@ -2,7 +2,7 @@
 
 Diseño y reglas para la facturación electrónica en Argentina. Fase 3 del roadmap. Documento de referencia: no se implementa hasta haber leído y discutido este doc completo.
 
-> **Estado actual:** diseño. No implementado. Esto es la base sobre la que se construirá en F3.
+> **Estado actual (2026-10-13):** implementado en `feat/arca-wsfe` ([ADR-072](./17-decision-log.md), [`33-facturacion-arca.md`](./33-facturacion-arca.md)). Este documento queda como diseño original; donde difieran, mandan el ADR y el doc 33.
 
 ## 1. Alcance
 

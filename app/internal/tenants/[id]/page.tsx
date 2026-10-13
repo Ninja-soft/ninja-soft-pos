@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
+import { ActivationCard } from "@/components/internal/ActivationCard";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Display, Heading } from "@/components/ui/Typography";
@@ -284,6 +285,11 @@ export default function InternalTenantDetail({
           </Card>
         ))}
       </div>
+
+      <Heading className="mt-8" as="h2">
+        Activación
+      </Heading>
+      <ActivationCard tenantId={params.id} />
 
       <Heading className="mt-8" as="h2">
         Cobro de suscripción

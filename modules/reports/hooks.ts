@@ -8,12 +8,14 @@ import { reportsApi } from "./api";
 export function useSalesReport(
   fromISO: string,
   toISO: string,
-  opts: { enabled?: boolean; storeId?: string | null } = {},
+  opts: { enabled?: boolean; storeId?: string | null; method?: string | null; categoryId?: string | null } = {},
 ) {
   const storeId = opts.storeId ?? null;
+  const method = opts.method ?? null;
+  const categoryId = opts.categoryId ?? null;
   return useQuery({
-    queryKey: ["reports", "sales", fromISO, toISO, storeId],
-    queryFn: () => reportsApi.sales(fromISO, toISO, storeId),
+    queryKey: ["reports", "sales", fromISO, toISO, storeId, method, categoryId],
+    queryFn: () => reportsApi.sales(fromISO, toISO, storeId, { method, categoryId }),
     enabled: opts.enabled ?? true,
   });
 }

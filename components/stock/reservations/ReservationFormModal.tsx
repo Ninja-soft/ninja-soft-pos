@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus, Search, Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { ProductSearchCombobox } from "@/components/products/ProductSearchCombobox";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { formatQty } from "@/lib/utils/format";
@@ -15,10 +16,12 @@ import {
   validateReservationDraft,
   type ReservationChannel,
 } from "@/lib/stock/reservations";
-import { variantsApi, variantLabel, type Product, type ProductVariant } from "@/modules/products/api";
-import { useProducts } from "@/modules/products/hooks";
+import { variantLabel, type Product, type ProductVariant } from "@/modules/products/api";
 import { useReservationAvailability, useReservationMutations } from "@/modules/stock/reservations";
 import { selectCls } from "@/components/stock/transfers/shared";
+
+// Se reservan productos con stock controlado y que no son kits.
+const reservable = (p: Product) => p.track_stock !== false && !p.is_kit;
 
 interface Line {
   key: string;
@@ -64,8 +67,6 @@ export function ReservationFormModal({
   const [hours, setHours] = useState(48);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [search, setSearch] = useState("");
-  const [variantsOf, setVariantsOf] = useState<{ product: Product; variants: ProductVariant[] } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -77,15 +78,8 @@ export function ReservationFormModal({
     setHours(48);
     setNotes("");
     setLines([]);
-    setSearch("");
-    setVariantsOf(null);
   }, [open, defaultStoreId]);
 
-  const { data: found = [] } = useProducts(open ? search : "");
-  const results = useMemo(
-    () => (search.trim().length >= 2 ? found.filter((p) => p.track_stock !== false && !p.is_kit).slice(0, 8) : []),
-    [found, search],
-  );
   const productIds = useMemo(() => [...new Set(lines.map((l) => l.product_id))], [lines]);
   const { data: avail = [] } = useReservationAvailability(open ? storeId : null, productIds);
   const availableOf = (l: Line) =>
@@ -105,15 +99,6 @@ export function ReservationFormModal({
         { key, product_id: p.id, variant_id: v?.id ?? null, name: v ? `${p.name} (${variantLabel(v)})` : p.name, qty: 1 },
       ];
     });
-  }
-
-  async function pick(p: Product) {
-    if (p.has_variants) {
-      setVariantsOf({ product: p, variants: await variantsApi.list(p.id) });
-      return;
-    }
-    addLine(p);
-    setSearch("");
   }
 
   const setQty = (key: string, qty: number) =>
@@ -232,55 +217,15 @@ export function ReservationFormModal({
           </p>
         )}
 
-        <div>
-          <div className="relative">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar producto por nombre, SKU o código"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          {variantsOf ? (
-            <div className="mt-2 space-y-1">
-              <p className="text-xs text-muted-foreground">Elegí la variante de {variantsOf.product.name}</p>
-              <div className="flex flex-wrap gap-2">
-                {variantsOf.variants.map((v) => (
-                  <Button
-                    key={v.id}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      addLine(variantsOf.product, v);
-                      setVariantsOf(null);
-                      setSearch("");
-                    }}
-                  >
-                    {variantLabel(v)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            results.length > 0 && (
-              <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-                {results.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => void pick(p)}
-                      className="flex min-h-11 w-full items-center justify-between px-3 text-left text-sm hover:bg-muted/50"
-                    >
-                      <span className="truncate">{p.name}</span>
-                      <span className="text-xs text-muted-foreground">{p.sku}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )
-          )}
-        </div>
+        <ProductSearchCombobox
+          enabled={open}
+          storeId={storeId}
+          filter={reservable}
+          rejectMessage={(p) => `${p.name} no se reserva (kit o sin control de stock)`}
+          emptyHint="Los kits y los productos sin control de stock no se reservan."
+          placeholder="Buscar producto por nombre, SKU, EAN o PLU"
+          onPick={(p, v) => addLine(p, v)}
+        />
 
         {lines.length > 0 && (
           <ul className="divide-y divide-border">

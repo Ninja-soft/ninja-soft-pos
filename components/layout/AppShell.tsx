@@ -57,6 +57,7 @@ import {
   PackageSearch,
   Radar,
   ShieldAlert,
+  Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -258,6 +259,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/cobros-en-espera", label: "Cobros en espera", icon: Hourglass, feature: "cobros_en_espera" },
         // Reservas de stock y retiro en tienda (F16 · H77, ADR-091).
         { href: "/reservas-stock", label: "Reservas y retiros", icon: PackageSearch, feature: "reservas_stock" },
+        // Envíos con etiquetas de logísticas integradas (ADR-103).
+        { href: "/envios", label: "Envíos", icon: Send, feature: "envios" },
         { href: "/caja", label: "Caja", icon: Wallet },
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
@@ -599,14 +602,15 @@ export function AppShell({
         <Link
           href="/dashboard"
           onClick={() => setDrawer(false)}
-          className="flex min-w-0 flex-1 items-center gap-2.5"
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden"
         >
-          <Isotype className="h-9 w-auto" priority />
-          <WordmarkPos className="h-7 w-auto" priority />
+          <Isotype className="h-9 w-auto shrink-0" priority />
+          {/* El wordmark se achica para no quedar debajo de Ayuda y la campana. */}
+          <WordmarkPos className="h-7 w-auto min-w-0 max-w-full object-contain object-left" priority />
         </Link>
         {/* Campana en la barra lateral (desktop): flotando sobre el contenido
             tapaba botones de la pantalla de cobro. En mobile vive en el header. */}
-        <div className="hidden items-center gap-1 lg:flex">
+        <div className="hidden shrink-0 items-center gap-0.5 lg:flex">
           {/* Ayuda contextual (F15 · H72): artículos de la pantalla y el rol. */}
           <HelpButton role={shell?.role ?? null} />
           <NotificationBell align="start" />

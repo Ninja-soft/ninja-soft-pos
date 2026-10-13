@@ -82,6 +82,8 @@ import { SwUpdateBanner } from "@/components/pwa/SwUpdateBanner";
 import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
+import { PosShortcutsHelp } from "@/components/pos/PosShortcutsHelp";
+import { matchPosShortcut } from "@/lib/pos/shortcuts";
 import { ModeBanner } from "@/components/pos/screen/ModeBanner";
 import { ArcaPosIndicator } from "@/components/arca/ArcaPosIndicator";
 import { ProductPane } from "@/components/pos/screen/ProductPane";
@@ -1183,17 +1185,42 @@ function PosPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editParam]);
 
-  // Atajos: F2 busca, F12 cobra.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F2") {
-        e.preventDefault();
+  // Atajos de teclado (TX-3, lib/pos/shortcuts.ts): F2 busca, F4 cliente,
+  // F8 cobros en espera, F9 (o F12) cobra y "?" abre la ayuda. Con un diálogo
+  // abierto sólo se atiende la ayuda: el resto queda para ese diálogo.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutRef = useRef<(a: ReturnType<typeof matchPosShortcut>) => boolean>(() => false);
+  shortcutRef.current = (action) => {
+    switch (action) {
+      case "search":
         searchRef.current?.focus();
         searchRef.current?.select();
-      } else if (e.key === "F12") {
-        e.preventDefault();
+        return true;
+      case "checkout":
         startCheckoutRef.current();
-      }
+        return true;
+      case "customer":
+        setCustOpen(true);
+        return true;
+      case "pending":
+        if (parkFeature === false && pendingWatch.open.length === 0) return false;
+        setPendingInitialId(null);
+        setPendingOpen(true);
+        return true;
+      case "help":
+        setShortcutsOpen(true);
+        return true;
+      default:
+        return false;
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const action = matchPosShortcut(e, e.target as HTMLElement | null);
+      if (!action) return;
+      const dialogOpen = Boolean(document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'));
+      if (dialogOpen && action !== "help") return;
+      if (shortcutRef.current(action)) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1458,6 +1485,7 @@ function PosPageInner() {
               setCloseShiftModal(true);
             }}
             onCustomerDisplay={openCustomerDisplay}
+            onShortcuts={() => setShortcutsOpen(true)}
             drawerSlot={
               posHw.hasDrawer ? (
                 <PosDrawerButton hw={posHw.hw} decision={posHw.noSaleDecision} open={posHw.opener} />
@@ -1525,6 +1553,7 @@ function PosPageInner() {
         checkoutOpen={checkoutOpen}
       />
 
+      <PosShortcutsHelp open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <CustomerPickerDialog
         open={custOpen}
         onOpenChange={(o) => {

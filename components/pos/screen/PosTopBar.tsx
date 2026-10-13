@@ -2,7 +2,7 @@
 
 import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
-import { LayoutTemplate, Lock, MonitorSmartphone, Settings2, Undo2 } from "lucide-react";
+import { Keyboard, LayoutTemplate, Lock, MonitorSmartphone, Settings2, Undo2 } from "lucide-react";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { choiceClass } from "@/components/ui/ChoiceCard";
 import { POS_PRESETS, PRESET_INFO, type PosPreset } from "@/lib/pos/layout";
@@ -24,6 +24,7 @@ export function PosTopBar({
   onOpenShift,
   onCloseShift,
   onCustomerDisplay,
+  onShortcuts,
   pendingSlot,
   drawerSlot,
   preset,
@@ -42,6 +43,8 @@ export function PosTopBar({
   onOpenShift: () => void;
   onCloseShift: () => void;
   onCustomerDisplay: () => void;
+  // Ayuda de atajos de teclado (TX-3). Sin teclado físico (celular) no se muestra.
+  onShortcuts?: () => void;
   // Botón "Cobros en espera" con su contador (ADR-048).
   pendingSlot?: React.ReactNode;
   // Botón "Abrir cajón" sin venta (ADR-063); null si la caja no tiene cajón.
@@ -104,6 +107,18 @@ export function PosTopBar({
         >
           <MonitorSmartphone size={18} aria-hidden />
         </button>
+        {onShortcuts && (
+          <button
+            type="button"
+            onClick={onShortcuts}
+            className={cn(iconBtn, "hidden md:grid")}
+            aria-label="Atajos de teclado"
+            aria-keyshortcuts="?"
+            title="Atajos de teclado (?)"
+          >
+            <Keyboard size={18} aria-hidden />
+          </button>
+        )}
         <Popover.Root>
           <Popover.Trigger asChild>
             <button

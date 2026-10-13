@@ -12,6 +12,9 @@
 //   Diseños orientativos: se detectan las columnas por el nombre.
 // - groupSuffered: totales para la declaración jurada por impuesto,
 //   jurisdicción, tipo y régimen.
+// - classifyWithRules: reglas propias del negocio (ADR-105) antes de la
+//   clasificación de NinjaSoft. ESPEJO de _tax_suffered_classify_for
+//   (migración 20261110100100).
 
 import { isValidCuit, jurisdictionName, normalizeDigits } from "./catalog";
 import { parsePadronDate } from "./padron";
@@ -164,6 +167,75 @@ export function classifyTaxText(
 }
 
 // ---------------------------------------------------------------------------
+// Reglas del negocio (ADR-105)
+// ---------------------------------------------------------------------------
+export interface SufferedRule {
+  /** Texto normalizado que tiene que aparecer (normalizeRulePattern). */
+  pattern: string;
+  /** Ignorar la línea (no es una retención). */
+  skip?: boolean;
+  tax?: SufferedTax;
+  kind?: SufferedKind;
+  regime?: SufferedRegime | null;
+  jurisdiction?: string | null;
+}
+
+export type RuleClassification = TaxClassification & { rule?: string };
+
+/** Mismo normalizado que la base: minúsculas, sin tildes y espacios simples. */
+export function normalizeRulePattern(s: string | null | undefined): string {
+  return normalizeTaxText(s).replace(/\s+/g, " ").trim();
+}
+
+/** La regla que aplica a un texto: la de patrón más largo (empate: la primera). */
+export function matchSufferedRule(text: string | null | undefined, rules: readonly SufferedRule[]): SufferedRule | null {
+  const t = normalizeRulePattern(text);
+  if (!t) return null;
+  let best: SufferedRule | null = null;
+  for (const r of rules) {
+    const p = normalizeRulePattern(r.pattern);
+    if (!p || !t.includes(p)) continue;
+    if (!best || p.length > normalizeRulePattern(best.pattern).length) best = r;
+  }
+  return best;
+}
+
+/**
+ * Clasificación con las reglas del negocio: si una regla coincide, manda
+ * (ignorar la línea o impuesto, tipo, régimen y jurisdicción); si no, la de
+ * NinjaSoft. Sin jurisdicción en la regla ni en el texto, IIBB toma la del
+ * negocio y queda para revisar.
+ */
+export function classifyWithRules(
+  text: string | null | undefined,
+  defaultJurisdiction: string | null = null,
+  defaultRegime: SufferedRegime = "procesador",
+  rules: readonly SufferedRule[] = [],
+): RuleClassification {
+  const base = classifyTaxText(text, defaultJurisdiction, defaultRegime);
+  const r = matchSufferedRule(text, rules);
+  if (!r) return base;
+  const pattern = normalizeRulePattern(r.pattern);
+  if (r.skip) return { ...base, skip: true, rule: pattern };
+  const tax: SufferedTax = r.tax ?? "otro";
+  let found: string | null = null;
+  let jurisdiction: string | null = null;
+  if (tax === "iibb") {
+    found = r.jurisdiction || jurisdictionFromText(normalizeRulePattern(text));
+    jurisdiction = found ?? defaultJurisdiction;
+  }
+  return {
+    skip: false,
+    tax,
+    kind: r.kind ?? (tax === "debitos_creditos" ? "pago_a_cuenta" : "retencion"),
+    regime: r.regime || base.regime,
+    jurisdiction,
+    needs_review: tax === "otro" || (tax === "iibb" && !found),
+    rule: pattern,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Importación (Mis Retenciones, SIRCREB, SIRTAC o planilla propia)
 // ---------------------------------------------------------------------------
 export interface SufferedImportRow {
@@ -288,6 +360,7 @@ export function parseSufferedFile(
   text: string,
   defaultJurisdiction: string | null = null,
   hint: "sircreb" | "sirtac" | null = null,
+  rules: readonly SufferedRule[] = [],
 ): SufferedParseResult {
   const lines = text.replace(/^﻿/, "").split(/\r?\n/);
   const errors: SufferedParseError[] = [];
@@ -343,12 +416,22 @@ export function parseSufferedFile(
     const kindRaw = get(cells, "kind");
     const jurRaw = get(cells, "jurisdiction");
     const textAll = [taxRaw, regimeRaw, kindRaw, hint ?? ""].join(" ");
-    const c = classifyTaxText(textAll, null, "general");
+    const rule = matchSufferedRule(textAll, rules);
+    const c = classifyWithRules(textAll, null, "general", rules);
+    if (c.skip && rule) {
+      skipped++;
+      continue;
+    }
     let tax = c.tax;
     const code = normalizeDigits(taxRaw);
-    if (tax === "otro" && code && ARCA_TAX_CODES[code]) tax = ARCA_TAX_CODES[code]!;
-    if (hint) tax = "iibb";
-    let jurisdiction = tax === "iibb" ? jurisdictionFromText(jurRaw) ?? (c.tax === "iibb" ? c.jurisdiction : null) : null;
+    if (!rule && tax === "otro" && code && ARCA_TAX_CODES[code]) tax = ARCA_TAX_CODES[code]!;
+    if (hint && !rule) tax = "iibb";
+    let jurisdiction =
+      tax !== "iibb"
+        ? null
+        : rule?.jurisdiction
+          ? rule.jurisdiction
+          : (jurisdictionFromText(jurRaw) ?? (c.tax === "iibb" ? c.jurisdiction : null));
     let review = tax === "otro";
     if (tax === "iibb" && !jurisdiction) {
       jurisdiction = defaultJurisdiction;

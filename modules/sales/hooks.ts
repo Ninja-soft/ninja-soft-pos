@@ -44,6 +44,7 @@ export function useSalesPaged(params: SalesPageParams) {
       params.range?.from?.toISOString() ?? null,
       params.range?.to?.toISOString() ?? null,
       params.storeId ?? null,
+      params.method ?? null,
     ],
     queryFn: () => salesApi.listPaged(params),
     placeholderData: keepPreviousData,

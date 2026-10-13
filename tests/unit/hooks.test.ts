@@ -10,6 +10,10 @@ describe("webhookTarget", () => {
     );
   });
 
+  it("Mercado Libre usa /ml (mercadolibre es Mercado Pago)", () => {
+    expect(webhookTarget(HOOKS_HOST, "/ml", "", SB)).toBe(`${SB}/functions/v1/ml_webhook`);
+  });
+
   it("conserva la query", () => {
     expect(webhookTarget(HOOKS_HOST, "/mercadopago", "?topic=payment&id=1", SB)).toBe(
       `${SB}/functions/v1/mp_webhook?topic=payment&id=1`,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, Pencil, Scale, Trash2 } from "lucide-react";
+import { CalendarClock, History, Lock, Pencil, Scale, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -25,11 +25,16 @@ import {
   type TaxSettings,
 } from "@/modules/tax/api";
 import { useTaxRegimeMutations, useTaxRegimes } from "@/modules/tax/hooks";
+import { REGIME_VALUE_FIELDS, parseDecimal, resolveCustom } from "@/lib/tax/custom";
+import { useCustomValues, versionsOf } from "@/modules/tax/customHooks";
+import { CustomValueModal, HistoryModal, StateBadge, fmtDate, todayAr } from "./custom/CustomValueKit";
 
 // Regímenes en los que el negocio es agente (ADR-068): jurisdicción ×
 // impuesto × condición del cliente → alícuota del padrón o general, base y
-// mínimos. Las percepciones se suman a la venta; las retenciones se sugieren
-// en las órdenes de pago a proveedores.
+// mínimos. Las percepciones se suman a la venta; las retenciones se calculan
+// en las órdenes de pago a proveedores. ADR-105: vigencia del régimen,
+// alícuota por condición y cambios de valores con vigencia (sin perder la
+// numeración de los certificados).
 
 const TAX_LABEL: Record<RegimeTax, string> = { iva: "IVA", iibb: "IIBB", ganancias: "Ganancias", suss: "SUSS" };
 const ROLE_LABEL: Record<RegimeRole, string> = { perception: "Percepción", retention: "Retención" };
@@ -62,6 +67,8 @@ const EMPTY: TaxRegimeInput = {
   min_amount: 0,
   applies_to: ["responsable_inscripto", "monotributo", "exento"],
   notes: null,
+  valid_from: null,
+  valid_to: null,
 };
 
 // Plantillas de arranque (valores orientativos: confirmalos con tu contador y
@@ -135,19 +142,35 @@ const TEMPLATES: { label: string; value: TaxRegimeInput }[] = [
   },
 ];
 
-export function TaxRegimes({ settings }: { settings: TaxSettings }) {
+export function TaxRegimes({ settings, role }: { settings: TaxSettings; role?: RegimeRole }) {
   const enabled = settings.features.percepciones;
   const q = useTaxRegimes(enabled);
+  const values = useCustomValues(enabled);
   const { remove } = useTaxRegimeMutations();
   const { toast } = useToast();
   const [edit, setEdit] = useState<{ id?: string; value: TaxRegimeInput } | null>(null);
   const [del, setDel] = useState<TaxRegime | null>(null);
+  const [plan, setPlan] = useState<TaxRegime | null>(null);
+  const [hist, setHist] = useState<TaxRegime | null>(null);
   const ro = !settings.can_write;
+  const today = todayAr();
+  const list = (q.data ?? []).filter((r) => !role || r.role === role);
+  const templates = TEMPLATES.map((t, i) => ({ ...t, i })).filter((t) => !role || t.value.role === role);
 
   return (
     <SettingsCard
-      title="Agente de percepción y retención"
-      description="Sólo si ARCA o una provincia te designó agente. Cada régimen dice a quién, cuánto y desde qué monto."
+      title={
+        role === "retention"
+          ? "Regímenes de retención"
+          : role === "perception"
+            ? "Regímenes de percepción"
+            : "Agente de percepción y retención"
+      }
+      description={
+        role === "retention"
+          ? "Sólo si te designaron agente de retención. Se calculan en cada orden de pago a proveedores."
+          : "Sólo si ARCA o una provincia te designó agente. Cada régimen dice a quién, cuánto y desde qué monto."
+      }
       icon={Scale}
       actions={
         enabled &&
@@ -156,7 +179,7 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
             value={null}
             placeholder="Agregar régimen"
             onChange={(i) => setEdit({ value: TEMPLATES[Number(i)]!.value })}
-            options={TEMPLATES.map((t, i) => ({ value: String(i), label: t.label }))}
+            options={templates.map((t) => ({ value: String(t.i), label: t.label }))}
             aria-label="Agregar régimen"
           />
         )
@@ -168,29 +191,26 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
           Percepciones de IVA e IIBB con padrones por CUIT, mínimos y exclusiones, y retenciones de Ganancias, IVA, IIBB
           y SUSS calculadas en las órdenes de pago con su certificado.
         </Callout>
-      ) : (q.data ?? []).length === 0 ? (
+      ) : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No sos agente en ningún régimen. Si te designaron, agregalo con el botón de arriba.
         </p>
       ) : (
         <ul className="divide-y divide-border">
-          {(q.data ?? []).map((r) => (
+          {list.map((r) => (
             <li key={r.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                  {r.name}
-                  <Badge tone={r.role === "perception" ? "info" : "gold"}>{ROLE_LABEL[r.role]}</Badge>
-                  {!r.is_active && <Badge tone="neutral">Pausado</Badge>}
-                </p>
-                <p className="mt-0.5 text-[13px] text-muted-foreground">
-                  {TAX_LABEL[r.tax]}
-                  {r.jurisdiction ? ` · ${jurisdictionName(r.jurisdiction)}` : ""} · {SOURCE_LABEL[r.padron_source]}
-                  {r.default_rate != null ? ` · general ${r.default_rate} %` : ""}
-                  {r.min_amount > 0 ? ` · mínimo $${r.min_amount}` : ""}
-                </p>
-              </div>
+              <RegimeSummary r={r} versions={versionsOf(values.data, "regime_values", r.id)} today={today} />
+              <div className="flex shrink-0 gap-1">
+                <Button variant="ghost" size="sm" aria-label="Historial" onClick={() => setHist(r)}>
+                  <History size={15} />
+                </Button>
+                {!ro && (
+                  <Button variant="ghost" size="sm" aria-label="Cambios con vigencia" onClick={() => setPlan(r)}>
+                    <CalendarClock size={15} />
+                  </Button>
+                )}
               {!ro && (
-                <div className="flex shrink-0 gap-1">
+                <>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -205,14 +225,29 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
                   <Button variant="ghost" size="sm" aria-label="Quitar" onClick={() => setDel(r)}>
                     <Trash2 size={15} />
                   </Button>
-                </div>
+                </>
               )}
+              </div>
             </li>
           ))}
         </ul>
       )}
 
       {edit && <RegimeModal initial={edit} onClose={() => setEdit(null)} />}
+      {plan && (
+        <CustomValueModal
+          title={`Cambios con vigencia · ${plan.name}`}
+          description="Para un cambio de alícuota o de mínimos que rige desde una fecha. El régimen y la numeración de sus certificados siguen siendo los mismos."
+          catalog="regime_values"
+          itemKey={plan.id}
+          fields={REGIME_VALUE_FIELDS}
+          template={{ default_rate: plan.default_rate, min_base: plan.min_base, min_amount: plan.min_amount }}
+          versions={versionsOf(values.data, "regime_values", plan.id)}
+          allowDisable
+          onClose={() => setPlan(null)}
+        />
+      )}
+      {hist && <HistoryModal catalog="regime_values" itemKey={hist.id} title={hist.name} onClose={() => setHist(null)} />}
       <ConfirmDialog
         open={Boolean(del)}
         onOpenChange={(o) => !o && setDel(null)}
@@ -233,6 +268,45 @@ export function TaxRegimes({ settings }: { settings: TaxSettings }) {
   );
 }
 
+function RegimeSummary({
+  r,
+  versions,
+  today,
+}: {
+  r: TaxRegime;
+  versions: ReturnType<typeof versionsOf>;
+  today: string;
+}) {
+  const eff = resolveCustom(
+    { default_rate: r.default_rate, min_base: r.min_base, min_amount: r.min_amount } as Record<string, unknown>,
+    versions,
+    today,
+  );
+  const expired = r.valid_to != null && r.valid_to < today;
+  const future = r.valid_from != null && r.valid_from > today;
+  const nCond = Object.keys(r.rates_by_condition).length;
+  return (
+    <div className="min-w-0">
+      <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+        {r.name}
+        <Badge tone={r.role === "perception" ? "info" : "gold"}>{ROLE_LABEL[r.role]}</Badge>
+        {!r.is_active && <Badge tone="neutral">Pausado</Badge>}
+        {expired && <Badge tone="warning">Vencido</Badge>}
+        {future && <Badge tone="info">Empieza el {fmtDate(r.valid_from)}</Badge>}
+        {versions.length > 0 && <StateBadge state={eff.active ? "custom" : "disabled"} />}
+      </p>
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
+        {TAX_LABEL[r.tax]}
+        {r.jurisdiction ? ` · ${jurisdictionName(r.jurisdiction)}` : ""} · {SOURCE_LABEL[r.padron_source]}
+        {eff.values.default_rate != null ? ` · general ${String(eff.values.default_rate)} %` : ""}
+        {Number(eff.values.min_amount) > 0 ? ` · mínimo $${String(eff.values.min_amount)}` : ""}
+        {nCond > 0 ? ` · ${nCond} alícuotas por condición` : ""}
+        {r.valid_to ? ` · hasta ${fmtDate(r.valid_to)}` : ""}
+      </p>
+    </div>
+  );
+}
+
 function num(v: string): number | null {
   const s = v.trim().replace(",", ".");
   if (!s) return null;
@@ -247,6 +321,9 @@ function RegimeModal({ initial, onClose }: { initial: { id?: string; value: TaxR
   const [rate, setRate] = useState(v.default_rate == null ? "" : String(v.default_rate));
   const [minBase, setMinBase] = useState(String(v.min_base || ""));
   const [minAmount, setMinAmount] = useState(String(v.min_amount || ""));
+  const [byCond, setByCond] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(v.rates_by_condition ?? {}).map(([k, x]) => [k, String(x).replace(".", ",")])),
+  );
   const set = (p: Partial<TaxRegimeInput>) => setV((x) => ({ ...x, ...p }));
   const iibb = v.tax === "iibb";
 
@@ -266,7 +343,19 @@ function RegimeModal({ initial, onClose }: { initial: { id?: string; value: TaxR
       default_rate: num(rate),
       min_base: num(minBase) ?? 0,
       min_amount: num(minAmount) ?? 0,
+      rates_by_condition: Object.fromEntries(
+        Object.entries(byCond)
+          .filter(([k, x]) => v.applies_to.includes(k) && x.trim() !== "")
+          .map(([k, x]) => [k, parseDecimal(x)] as const)
+          .filter((e): e is readonly [string, number] => e[1] != null && Number.isFinite(e[1])),
+      ),
+      valid_from: v.valid_from || null,
+      valid_to: v.valid_to || null,
     };
+    if (payload.valid_from && payload.valid_to && payload.valid_to < payload.valid_from) {
+      toast({ title: "La fecha de fin no puede ser anterior al inicio", variant: "error" });
+      return;
+    }
     save.mutate(
       { id: initial.id, ...payload },
       {
@@ -368,6 +457,42 @@ function RegimeModal({ initial, onClose }: { initial: { id?: string; value: TaxR
               </label>
             ))}
           </div>
+        </div>
+        {v.applies_to.length > 0 && (
+          <div>
+            <p className="mb-1 text-sm font-medium text-muted-foreground">Alícuota por condición (opcional)</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Si el CUIT no figura en el padrón, se usa la de su condición; si no cargás ninguna, la general.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {v.applies_to.map((c) => (
+                <Input
+                  key={c}
+                  label={`${FISCAL_CONDITION_LABEL[c as keyof typeof FISCAL_CONDITION_LABEL] ?? c} %`}
+                  inputMode="decimal"
+                  value={byCond[c] ?? ""}
+                  placeholder={rate || "general"}
+                  onChange={(e) => setByCond((x) => ({ ...x, [c]: e.target.value }))}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Vigente desde (opcional)"
+            type="date"
+            value={v.valid_from ?? ""}
+            hint="Vacío: desde siempre. Por ejemplo, la fecha de tu designación como agente."
+            onChange={(e) => set({ valid_from: e.target.value || null })}
+          />
+          <Input
+            label="Vigente hasta (opcional)"
+            type="date"
+            value={v.valid_to ?? ""}
+            hint="Vacío: sin fin. Por ejemplo, si te dieron de baja como agente."
+            onChange={(e) => set({ valid_to: e.target.value || null })}
+          />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Input

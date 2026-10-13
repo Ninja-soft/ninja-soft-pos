@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
@@ -54,7 +55,11 @@ export function HelpButton({ role, className }: { role: string | null; className
       >
         <CircleHelp size={18} />
       </button>
-      {open && <HelpPanel role={normalizeRole(role)} onClose={() => setOpen(false)} />}
+      {/* Portal al body: la barra lateral tiene transform/overflow y un "fixed"
+          adentro quedaba recortado al ancho de la barra. */}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(<HelpPanel role={normalizeRole(role)} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }

@@ -3,6 +3,8 @@
 // ESPEJO del SQL: shift_owner_ok(), assert_shift_owner(), open_cash_shift() y
 // cash_force_close() en supabase/migrations/20261017120000_propiedad_caja.sql.
 
+import { roleErrorMessage } from "@/lib/permissions/errors";
+
 export interface ShiftLite {
   id: string;
   opened_by: string;
@@ -84,6 +86,8 @@ export function shiftAgeTone(fromIso: string, now: Date = new Date()): "ok" | "l
 /** Mensaje del error del servidor sobre la caja. */
 export function cashErrorMessage(err: unknown): string | null {
   const msg = err instanceof Error ? err.message : String((err as { message?: string } | null)?.message ?? err ?? "");
+  const byRole = roleErrorMessage(msg);
+  if (byRole) return byRole;
   if (/shift_not_owned/.test(msg)) return "Esa caja la tiene abierta otra persona. Abrí la tuya para operar.";
   if (/user_has_open_shift/.test(msg)) return "Ya tenés una caja abierta. Cerrala antes de abrir otra.";
   if (/shift_already_open/.test(msg)) return "Esa caja ya está abierta.";

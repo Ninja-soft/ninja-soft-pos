@@ -115,6 +115,48 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Exportar reportes | ✅ | ✅ | ❌ | ✅ |
 | Ver audit_logs | ✅ | ✅ | ❌ | ✅ |
 
+### 4.7 Qué garantiza la base (ADR-071)
+
+Las matrices de arriba son la regla de negocio. Esta tabla dice qué parte la hace cumplir **la base** (RLS, triggers y RPC), o sea lo que vale aunque alguien llame a la API sin pasar por la UI. La cubre `tests/integration/roles.test.ts`.
+
+Notación: ✅ puede · ❌ la base lo rechaza · ⚠️ con condición.
+
+| Acción | Owner | Manager | Cashier | Viewer | Dónde se hace cumplir |
+|---|---|---|---|---|---|
+| Ver productos, stock, ventas, clientes | ✅ | ✅ | ✅ (sus sucursales) | ✅ (sus sucursales) | RLS por negocio + alcance por sucursal (ADR-045) |
+| Crear, editar o dar de baja productos y variantes | ✅ | ✅ | ❌ | ❌ | trigger `role_write_guard` (modo `manage`) + policy de `product_variants` |
+| Cambiar precio de producto | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `manage`) |
+| Categorías y marcas | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `manage`) |
+| Ajuste manual de stock, merma, producción | ✅ | ✅ | ❌ | ❌ | `role_write_guard` en `products` y `stock_movements`; `adjust_store_stock` exige owner/manager |
+| Mover stock al vender, anular o devolver | ✅ | ✅ | ✅ | ❌ | RPC SECURITY DEFINER (`create_sale`, `void_sale`, `return_sale`) |
+| Alta de cliente y edición de contacto | ✅ | ✅ | ✅ | ❌ | `role_write_guard` (modo `customers`) |
+| Baja de cliente | ✅ | ✅ | ❌ | ❌ | `role_write_guard` (modo `customers`) |
+| Abrir turno de caja | ✅ | ✅ | ✅ | ❌ | `open_cash_shift` + `role_write_guard` en `cash_shifts` |
+| Cerrar turno propio / ajeno | ✅ / ⚠️ forzado | ✅ / ⚠️ forzado | ✅ / ❌ | ❌ | `cash_shifts_guard`, `cash_force_close` (ADR-051) |
+| Ingresos y retiros de caja | ✅ | ✅ | ⚠️ turno propio, PIN por política | ❌ | `cash_movements_guard` (ADR-051) |
+| Vender | ✅ | ✅ | ✅ (turno propio) | ❌ | `create_sale` + `role_write_guard` en `sales` |
+| Descuento sobre el tope | ✅ | ✅ | ⚠️ PIN | ❌ | `sales_supervisor` (ADR-051) |
+| Anular venta del día | ✅ | ✅ | ⚠️ PIN por política | ❌ | `void_sale` (SECURITY DEFINER) + `sales_supervisor` |
+| Anular venta de días anteriores | ✅ | ✅ | ❌ | ❌ | `void_sale`: el cajero (rol efectivo en la sucursal) sólo anula ventas del día, hora de Argentina |
+| Cambiar `sales.status` por REST | ❌ | ❌ | ❌ | ❌ | `role_write_guard` (modo `sales`): se anula con `void_sale` |
+| Devoluciones y reintegros | ✅ | ✅ | ⚠️ PIN por política | ❌ | `return_sale` / `return_sale_v2` + `sale_returns_supervisor` (ADR-067) |
+| Listas de precios, condiciones de pago, escalas | ✅ | ✅ | ❌ | ❌ | `price_can_write()` / `price_pro_can_write()` (ADR-058) |
+| Planes de cuotas | ✅ | ✅ | ❌ | ❌ | policies de `payment_plans` |
+| Configuración del POS (`pos_settings`) | ✅ | ❌ | ❌ | ❌ | policies de `pos_settings` |
+| Medios de pago y cuentas de transferencia | ✅ | ✅ | ❌ | ❌ | policies de `transfer_accounts`, `payment_terminals` (ADR-055) |
+| Seguridad y PIN de supervisor | ✅ | ❌ | ❌ | ❌ | `security_settings_save` exige dueño |
+| Impuestos (regímenes, exenciones) | ✅ | ✅ | ❌ | ❌ | `tax_can_write()` (ADR-068) |
+| Contabilidad | ✅ | ✅ (reabrir: sólo owner) | ❌ | ❌ | `acc_assert()`, `acc_period_reopen` (ADR-066) |
+| Compras, proveedores, tesorería | ✅ | ✅ | ❌ | ❌ | `purchase_can_write()`, `treasury_can_write()` (ADR-050, ADR-059) |
+
+Reglas del trigger `role_write_guard` (migración `20261031200000_permisos_por_rol.sql`):
+
+- Toma el rol del usuario del JWT **en el negocio de la fila** (`member_role_in`). Sin usuario (cron, `service_role`) o sin membresía (staff interno, acotado por `internal_scope()` en RLS) no aplica.
+- `viewer` no escribe nunca en las tablas operativas, ni por REST ni a través de una RPC.
+- `cashier` no escribe catálogo ni stock por REST ni por RPC `SECURITY INVOKER`; las RPC `SECURITY DEFINER` (vender, anular, devolver, recibir compras, traslados) siguen moviendo stock en su nombre.
+
+Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de contacto para el cajero, tope de $10k en ingresos del cajero (hoy es PIN por política), importación masiva con confirmación para el encargado y el cambio de rol de usuarios (lo hacen las Edge Functions `member_admin` e `invite_user`, sin test de integración en esta suite).
+
 ## 5. Matriz de permisos — Internos NinjaSoft
 
 | Acción | super_admin | admin | support | sales | billing | developer |

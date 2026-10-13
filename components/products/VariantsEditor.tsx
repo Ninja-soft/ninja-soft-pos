@@ -17,6 +17,7 @@ import {
   useRemoveVariant,
 } from "@/modules/products/hooks";
 import type { VariantRow } from "@/modules/products/api";
+import { errorDescription } from "@/lib/permissions/errors";
 
 interface Props {
   productId: string;
@@ -135,8 +136,8 @@ export function VariantsEditor({
           setRows((rs) => rs.filter((r) => r.key !== row.key));
           toast({ title: "Variante eliminada", variant: "success" });
         },
-        onError: () =>
-          toast({ title: "No se pudo eliminar", variant: "error" }),
+        onError: (e) =>
+          toast({ title: "No se pudo eliminar", description: errorDescription(e), variant: "error" }),
       });
       return;
     }
@@ -164,7 +165,7 @@ export function VariantsEditor({
         onError: (e) =>
           toast({
             title: "No se pudo guardar",
-            description: e instanceof Error ? e.message : undefined,
+            description: errorDescription(e),
             variant: "error",
           }),
       },

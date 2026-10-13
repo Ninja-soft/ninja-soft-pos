@@ -2503,3 +2503,44 @@ Cuando un webhook de un procesador falla (credencial vencida, API del proveedor 
 - Volumen: una fila por aviso POST; con la retención de 30 días queda acotado. Índices por fecha, proveedor y negocio.
 - **Deuda:** alertas activas (mail o campana interna cuando un proveedor pasa a "Con errores"); instrumentar los crons (`settlements`, `nubceo_sync`, `pending_charges_sync`) y `mp_billing_webhook` y `catalog_purchase_webhook` con el mismo helper; vista para el dueño en Configuración > Medios de pago.
 - Tests: `tests/unit/webhookLog.test.ts` (estado, saneo del error, fila, respuesta intacta, registro que falla, excepción, diferido, GET), `tests/unit/webhookHealth.test.ts` y caso en `tests/integration/rls.test.ts` (A no ve los de B, el cajero no ve nada, `webhook_health` respeta la RLS, nadie inserta desde el cliente).
+---
+
+## ADR-071: Permisos por rol en la base: solo lectura no escribe, el cajero no toca catálogo ni stock a mano y anula sólo ventas del día
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `test/permisos-roles`; migración `20261031200000_permisos_por_rol.sql` sin aplicar) · **Base:** docs/06-permissions-roles.md §4, ADR-045 (alcance por sucursal), ADR-051 (caja propia y PIN), ADR-052 (`internal_scope`). **Numeración:** 069 y 070 reservadas por otras ramas.
+
+### Contexto
+
+La suite nueva `tests/integration/roles.test.ts` recorre la matriz de docs/06 rol por rol contra la base. Las tablas del núcleo (H1/H2: `products`, `stock_movements`, `categories`, `brands`, `customers`, `sales`, `payments`, `cash_*` y las de salón, delivery y agenda) tienen una sola policy `tenant_id = current_tenant_id()` para todo: cualquier miembro activo podía escribir por REST, y las RPC `SECURITY INVOKER` (`adjust_product_stock`, `register_stock_waste`, `register_production`, `void_sale`) no miraban el rol. Huecos encontrados:
+
+1. **viewer** (solo lectura) podía crear y editar productos, ajustar stock, dar de alta y de baja clientes, abrir un turno (`open_cash_shift`), vender y anular ventas.
+2. **cashier** podía crear, editar y borrar productos, cambiar precios, editar variantes, categorías y marcas, y ajustar stock a mano (RPC o `INSERT` directo en `stock_movements`, o `UPDATE products.stock`).
+3. **cashier** podía dar de baja o borrar clientes.
+4. **cashier** podía anular ventas de días anteriores, y cualquiera podía cambiar `sales.status` por REST sin revertir stock ni caja.
+
+Los módulos nuevos (listas PRO, compras, tesorería, impuestos, contabilidad, cuotas, transferencias, terminales) ya tenían gating por rol y la suite lo confirma.
+
+### Decisión
+
+1. **Trigger `role_write_guard`** (`trg_role_write_guard`, SECURITY INVOKER) BEFORE INSERT/UPDATE/DELETE en las tablas operativas, con un modo por tabla. Lee el rol con `member_role_in(tenant)` (SECURITY DEFINER) en el negocio **de la fila**:
+   - `viewer`: `forbidden_read_only` siempre, también dentro de una RPC.
+   - modo `manage` (`products`, `product_variants`, `categories`, `brands`, `stock_movements`): `cashier` recibe `forbidden_role` cuando `current_user` es cliente (REST o RPC INVOKER). Las RPC SECURITY DEFINER (`create_sale`, `void_sale`, `return_sale`, compras, traslados) siguen moviendo stock en su nombre.
+   - modo `customers`: `cashier` no da de baja (`deleted_at`) ni borra.
+   - modo `sales`: nadie cambia `status` por REST (`use_void_sale`).
+   - Sin `auth.uid()` (cron, `service_role`) o sin membresía (staff interno, ya acotado por `internal_scope()` en RLS) no aplica. No se agrega ninguna policy con `OR is_internal()`.
+2. **`void_sale` pasa a SECURITY DEFINER** (copia de la única definición, `20260530170000`) con chequeos explícitos: miembro no viewer, `assert_staff_operational()`, acceso a la sucursal de la venta (antes lo hacía la RLS restrictiva) y, si el rol efectivo en esa sucursal (`user_store_role`) es `cashier`, sólo ventas del día en hora de Argentina (`forbidden_void_past_day`). El PIN por política (`sales_supervisor`) no cambia.
+3. **Merma y producción quedan para dueño y encargado** (son ajustes manuales de stock según docs/06 §4.3; sus pantallas viven en Productos). Si un rubro necesita que cocina registre merma, se resuelve con una RPC SECURITY DEFINER con su propio permiso, no abriendo `stock_movements`.
+
+### Alternativas descartadas
+
+- **Policies RESTRICTIVE por rol en cada tabla:** bloquean también a las RPC INVOKER legítimas y no distinguen REST de RPC DEFINER; el viewer seguiría pudiendo escribir a través de una RPC DEFINER (`open_cash_shift`, `create_sale`).
+- **Reescribir `create_sale`, `open_cash_shift` y compañía con chequeo de rol:** copiar funciones enormes (la de `create_sale` es la de `20261028100300`) para un chequeo que el trigger hace en un solo lugar.
+- **Gatear sólo en la UI:** viola CLAUDE.md §3 y docs/06 §10.
+
+### Consecuencias
+
+- Deploy: migración `20261031200000_permisos_por_rol.sql`, después de `20261030100200`. Sin Edges ni cambios de front.
+- UX: un cajero que hoy entra a Productos y edita verá el error del servidor (`forbidden_role`). Deuda de front: ocultar en `/productos` las acciones de edición, merma, producción y ajuste para cajero y solo lectura, y mapear `forbidden_role`, `forbidden_read_only` y `forbidden_void_past_day` a mensajes.
+- Costo: una búsqueda por clave en `tenant_users` por fila escrita.
+- Pendiente (no lo hace cumplir la base): edición de clientes limitada a contacto para el cajero, tope de ingresos del cajero, confirmación de importación masiva del encargado y cambio de rol de usuarios (Edge Functions sin test de integración acá).
+- Tests: `tests/integration/roles.test.ts` (owner, manager, cashier y viewer: catálogo, precios, stock manual, clientes, caja, venta, anulación, configuración, contabilidad). Corre en el job `rls` de CI (`pnpm test:rls` = `vitest run tests/integration`).

@@ -17,6 +17,7 @@ import type { Product } from "@/modules/products/api";
 import { useProductMutations } from "@/modules/products/hooks";
 import { formatQty } from "@/lib/utils/format";
 import { useCurrentStoreId, useMultiStoreStock } from "@/modules/stock/hooks";
+import { errorDescription } from "@/lib/permissions/errors";
 
 // F13 · H50 — Registrar merma (pérdida de stock) de un producto, con su motivo
 // (vencido/roto/preparación fallida/devolución/otro). Siempre es un EGRESO:
@@ -70,7 +71,7 @@ export function MermaModal({ open, onOpenChange, product }: Props) {
     } catch (e) {
       toast({
         title: "No se pudo registrar la merma",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     }

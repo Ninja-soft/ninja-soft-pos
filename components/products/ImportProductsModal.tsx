@@ -21,6 +21,7 @@ import {
   type ParseXlsxResult,
 } from "@/lib/utils/xlsxImport";
 import { formatCurrency } from "@/lib/utils/format";
+import { errorDescription } from "@/lib/permissions/errors";
 
 // Columnas mostradas en la tabla de preview (subset legible).
 const PREVIEW_COLS: PreviewColumn<ParsedProduct>[] = [
@@ -69,7 +70,7 @@ export function ImportProductsModal({
     onError: (e) =>
       toast({
         title: "Error al importar",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       }),
   });

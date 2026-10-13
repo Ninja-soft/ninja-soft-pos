@@ -325,6 +325,9 @@ describe.skipIf(!enabled)("F14 · gobierno comercial, márgenes, conteo cíclico
 
   // ── H64 · garantías por serie ─────────────────────────────────────────────
   it("garantía por serie: el cajero vende en su turno, consulta y abre el reclamo; el dueño lo resuelve", async () => {
+    // Las promos de carrito de los tests anteriores (30% y 5%) aplicarían a esta venta: se apagan para
+    // que el escenario de serie no dependa del motor de promociones (create_sale exige promo_discount).
+    await ctx.admin.from("promotions").update({ is_active: false } as never).eq("tenant_id", ctx.tenant);
     const serial = `IMEI${STAMP}`.toUpperCase();
     const stock = await rpc(ctx.owner.client, "adjust_store_stock", {
       p_store_id: ctx.store,

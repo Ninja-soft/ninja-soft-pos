@@ -53,17 +53,6 @@
   }
 }
 
-/* Punto "en vivo": parpadeo de opacidad, sin halo. */
-.live {
-  animation: live 1.8s ease-in-out infinite;
-}
-
-@keyframes live {
-  50% {
-    opacity: 0.25;
-  }
-}
-
 /* Pastilla de días de prueba: su lugar ya está reservado; sólo aparece. */
 .fadeIn {
   animation: fade-in 320ms ease-out both;
@@ -79,8 +68,7 @@
   .fadeIn,
   .piece,
   .bar,
-  .stamp,
-  .live {
+  .stamp {
     animation: none;
     opacity: 1;
   }

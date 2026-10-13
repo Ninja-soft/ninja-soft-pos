@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Hourglass,
   Link2,
+  Pause,
   Share2,
   XCircle,
 } from "lucide-react";
@@ -73,6 +74,23 @@ export interface QrParkOptions {
   /** Email del servidor sobre el cobro ya estacionado. */
   onEmail?: (chargeId: string, to: string, note: string) => Promise<void>;
 }
+/** Pausar la venta con este cobro abierto (ADR-106). */
+export interface QrPauseOptions {
+  blockedReason: string | null;
+  /** null = no quedó un intent vivo (se canceló el QR de la caja). */
+  onPause: (
+    live: {
+      intentId: string;
+      provider: string;
+      channel: "qr" | "link";
+      amount: number;
+      surcharges: { name: string; amount: number }[];
+      shareUrl: string | null;
+    } | null,
+  ) => void;
+  registerPause?: (fn: (() => void) | null) => void;
+}
+
 // Canal de Mercado Pago (ADR-032): "order" = QR dinámico de la caja (Orders
 // API, se escanea en el local); "link" = Checkout Pro (link compartible).
 type MpChannel = "order" | "link";
@@ -193,6 +211,7 @@ export function QrCheckoutModal({
   prefetched,
   park,
   mode,
+  pause,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -229,6 +248,8 @@ export function QrCheckoutModal({
   park?: QrParkOptions | null;
   // Getnet (ADR-069): "own" = checkout PROPIO /pagar con la Checkout API.
   mode?: "own";
+  // Pausar la venta (ADR-106): el QR o link sigue vivo y queda con la venta.
+  pause?: QrPauseOptions | null;
 }) {
   // Checkout propio (Payway y Getnet con Checkout API): el cliente elige
   // cuotas con recargo en /pagar y el total final viene en el poll.
@@ -662,6 +683,66 @@ export function QrCheckoutModal({
     }
   }
 
+  // ── Pausar venta (ADR-106) ─────────────────────────────────────────────────
+  // El intent queda con la venta pausada y su webhook la sigue conciliando.
+  // El QR de la caja de Mercado Pago (Orders API) bloquea la caja para la
+  // venta siguiente: se da de baja y, si el cliente justo pagó, entra el cobro.
+  const [pausing, setPausing] = useState(false);
+  const pausingRef = useRef(false);
+  async function pauseNow() {
+    if (!pause || pause.blockedReason || pausingRef.current || parkingRef.current || switching) return;
+    if (phase === "creating") return;
+    if (phase !== "waiting" || !intentId) {
+      parkedRef.current = true;
+      onQrState?.(null);
+      pause.onPause(null);
+      return;
+    }
+    pausingRef.current = true;
+    setPausing(true);
+    try {
+      if (provider === "mercadopago" && mpChannel === "order") {
+        await posApi.cancelMpOrder(intentId).catch(() => null);
+        const last = await posApi.mpOrderStatus(intentId).catch(() => null);
+        if (last?.status === "approved") {
+          pausingRef.current = false;
+          fireApproved();
+          return;
+        }
+        if (!last || last.status === "pending") {
+          toast({ title: "No se pudo liberar el QR de la caja. Probá de nuevo.", variant: "error" });
+          return;
+        }
+        parkedRef.current = true;
+        onQrState?.(null);
+        pause.onPause(null);
+        return;
+      }
+      const c = chosenRef.current;
+      parkedRef.current = true;
+      onQrState?.(null);
+      pause.onPause({
+        intentId,
+        provider,
+        channel: /^https?:\/\//.test(initPoint) ? "link" : "qr",
+        amount,
+        surcharges: c && c.surcharge > 0 ? [{ name: `Recargo ${c.label}`, amount: c.surcharge }] : [],
+        shareUrl: /^https?:\/\//.test(initPoint) ? initPoint : null,
+      });
+    } finally {
+      pausingRef.current = false;
+      setPausing(false);
+    }
+  }
+  const pauseNowRef = useRef(pauseNow);
+  pauseNowRef.current = pauseNow;
+  const pauseRegister = pause?.registerPause;
+  useEffect(() => {
+    if (!pauseRegister) return;
+    pauseRegister(() => void pauseNowRef.current());
+    return () => pauseRegister(null);
+  }, [pauseRegister]);
+
   async function doPark(): Promise<{ id: string } | null> {
     if (!park || park.blockedReason || parkingRef.current) return null;
     const target = await ensureLink();
@@ -1041,6 +1122,19 @@ export function QrCheckoutModal({
             {(phase === "creating" || phase === "waiting" || selecting) && (
               <Button variant="ghost" className="w-full md:w-auto" onClick={close}>
                 Cancelar
+              </Button>
+            )}
+            {pause && (phase === "waiting" || selecting || phase === "error" || phase === "rejected") && (
+              <Button
+                variant="secondary"
+                className="w-full md:w-auto"
+                disabled={Boolean(pause.blockedReason) || switching || parking}
+                loading={pausing}
+                title={pause.blockedReason ?? "Guarda la venta con este cobro y deja el POS libre"}
+                aria-keyshortcuts="Shift+F8 Pause"
+                onClick={() => void pauseNow()}
+              >
+                <Pause size={16} aria-hidden /> Pausar venta
               </Button>
             )}
             {(phase === "rejected" || phase === "error") && (

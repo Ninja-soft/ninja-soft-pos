@@ -19,6 +19,12 @@ export interface ProcessorFee {
   label: string;
   amount: number;
   kind: ProcessorFeeKind;
+  /**
+   * Nombre original del concepto en la API (p. ej. el `name` de
+   * charges_details de Mercado Pago). Lo usa la clasificación de
+   * retenciones sufridas (ADR-095) junto con la etiqueta.
+   */
+  code?: string;
 }
 
 export interface ProcessorTimelineEvent {
@@ -250,7 +256,7 @@ export function mpFees(p: Obj): ProcessorFee[] {
       const name = str(c.name) ?? type;
       const kind: ProcessorFeeKind =
         type === "tax" ? "tax" : /financ/i.test(name) ? "financing" : type === "fee" ? "fee" : "other";
-      out.push({ label: mpChargeLabel(name, kind), amount, kind });
+      out.push({ label: mpChargeLabel(name, kind), amount, kind, ...(kind === "tax" && name ? { code: name } : {}) });
     }
     return out;
   }

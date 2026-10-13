@@ -81,8 +81,8 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Para bebidas alcohólicas, tabaco, electrónica y otros rubros alcanzados por la Ley 24.674.",
   },
   percepciones_retenciones: {
-    desc: "Agente de percepción y retención: regímenes de IVA e IIBB por jurisdicción (ARBA, AGIP y otras), padrones importados con la alícuota de cada CUIT y su vigencia, exclusiones con certificado, mínimos de base y de monto; la percepción se suma a la venta como línea aparte. Como agente de retención, la orden de pago calcula Ganancias (RG 830, con acumulado mensual, mínimo no sujeto y escala), IVA, IIBB y SUSS, emite el certificado en PDF y arma los archivos para SICORE y ARBA.",
-    impact: "Desactivado, no se perciben ni se calculan retenciones (el servidor no las calcula ni numera certificados) y no se pueden importar padrones.",
+    desc: "Agente de percepción y retención: regímenes de IVA e IIBB por jurisdicción (ARBA, AGIP y otras), padrones importados con la alícuota de cada CUIT y su vigencia, exclusiones con certificado, mínimos de base y de monto; la percepción se suma a la venta como línea aparte. Como agente de retención, la orden de pago calcula Ganancias (RG 830, con acumulado mensual, mínimo no sujeto y escala), IVA, IIBB y SUSS, emite el certificado en PDF y arma los archivos para SICORE y ARBA. Como sujeto, registra las retenciones y percepciones sufridas (Mercado Pago y otras liquidaciones, SIRCREB, SIRTAC, clientes, Mis Retenciones) con su asiento y liquida Ingresos Brutos por jurisdicción con el saldo a favor.",
+    impact: "Desactivado, no se perciben ni se calculan retenciones (el servidor no las calcula ni numera certificados), no se pueden importar padrones y no se registran retenciones sufridas ni se liquida Ingresos Brutos.",
     minPlan: "Business",
     requires: ["impuestos_iva"],
     needs: "Estar designado agente por ARCA o la provincia y descargar el padrón del organismo (ARBA lo entrega con la clave CIT del agente).",

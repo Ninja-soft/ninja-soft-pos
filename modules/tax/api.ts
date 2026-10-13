@@ -3,6 +3,7 @@ import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { EmitterCondition, IvaCode } from "@/lib/tax/catalog";
 import type { PadronFormat, PadronRow } from "@/lib/tax/padron";
 import { retentionErrorMessage, type GananciasCondition, type RetLine } from "@/lib/tax/retentions";
+import { sufferedErrorMessage } from "@/lib/tax/suffered";
 import type { CertificateRow } from "@/lib/tax/retentionCertificate";
 import type { ExportAgent, WithholdingExportRow } from "@/lib/tax/sicore";
 
@@ -577,6 +578,8 @@ export function taxErrorMessage(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e ?? "");
   const ret = retentionErrorMessage(m);
   if (ret) return ret;
+  const suf = sufferedErrorMessage(m);
+  if (suf) return suf;
   if (m.includes("tax_ret_concept_settings_key")) return "Ese concepto ya tiene un ajuste: editalo.";
   if (m.includes("feature_not_in_plan: percepciones_retenciones"))
     return "Percepciones y retenciones vienen desde el plan Business.";

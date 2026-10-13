@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Landmark, Lock } from "lucide-react";
+import { ArrowLeft, Download, FileArchive, Landmark, Lock } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -72,6 +72,9 @@ export function IvaVentasReport() {
         <Button size="sm" variant="secondary" onClick={download} disabled={!r}>
           <Download size={15} /> Exportar CSV
         </Button>
+        <Link href="/contabilidad/libro-iva" className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}>
+          <FileArchive size={15} /> Libro IVA Digital
+        </Link>
       </div>
 
       <div className="mt-6 space-y-6">

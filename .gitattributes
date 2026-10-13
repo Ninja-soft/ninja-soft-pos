@@ -7,3 +7,6 @@
 *.png binary
 *.jpg binary
 *.ico binary
+
+# Golden files del Libro IVA Digital: CRLF exacto (formato de ARCA).
+tests/fixtures/libroIva/*.txt -text

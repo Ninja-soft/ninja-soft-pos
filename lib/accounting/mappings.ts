@@ -159,6 +159,7 @@ export const CONCEPTS: ConceptDef[] = [
       { value: "percepcion_iva", label: "Percepción de IVA" },
       { value: "percepcion_iibb", label: "Percepción de IIBB" },
       { value: "percepcion_ganancias", label: "Percepción de Ganancias" },
+      { value: "percepcion_municipal", label: "Percepción municipal" },
       { value: "impuesto_interno", label: "Impuestos internos" },
       { value: "otro", label: "Otro tributo" },
     ],

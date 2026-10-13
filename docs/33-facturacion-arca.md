@@ -99,6 +99,18 @@ Un comprobante en el worker: foto de la venta → importes (`sale_tax_lines`) �
   Hace WSAA (o usa el ticket guardado junto a la clave), FEDummy, `FECompUltimoAutorizado` y una Factura B de $121 en el punto de venta 1, y la consulta. `ARCA_SMOKE_ONLY=dummy` prueba sólo FEDummy. Necesita Node 22.18 o superior (ejecuta TypeScript sin compilar).
 - **Delegación:** cuando NinjaSoft tenga CUIT, el staff la carga en `/internal/arca` (CUIT, generar pedido, pegar certificado por ambiente). Recién ahí el camino A se habilita para los clientes.
 
-## 8. Pendiente
+## 8. Libro IVA Digital (ADR-076)
+
+Contabilidad > **Libro IVA Digital** (`/contabilidad/libro-iva`, dueño o encargado, feature `facturacion_afip`). Elegís el mes, "Revisar el mes" y, si no hay errores, "Descargar ZIP".
+
+- **Ventas:** comprobantes de `fiscal_documents` aprobados en **producción** (CAE o CAEA) con fecha en el mes. Importes recalculados desde `sale_tax_lines` con `breakdownFromSale` / `scaleBreakdown` (lo mismo que se mandó a ARCA) y verificados contra `imp_total`.
+- **Compras:** `supplier_invoices` vigentes del mes (`vat_lines`, exento, no gravado, `other_taxes`), en pesos al tipo de cambio cargado.
+- **Archivos** (ancho fijo, CRLF, ASCII): `LIBRO_IVA_DIGITAL_VENTAS_CBTE.txt` (266), `..._VENTAS_ALICUOTAS.txt` (62), `..._COMPRAS_CBTE.txt` (325), `..._COMPRAS_ALICUOTAS.txt` (84) y `LEEME.txt`. Notas de crédito en positivo; comprobantes sin IVA con alícuota 0 % en cero y código de operación E o N; compras B y C como no gravado.
+- **Bloquean:** comprobantes del mes sin CAE, negocio o proveedor sin CUIT, A o M sin CUIT del cliente, CUIT inválido, alícuota inválida, totales que no cierran, IVA de compra que no corresponde al neto.
+- **Piezas:** RPC `libro_iva_data` y `libro_iva_log` (migración `20261103100000`), route handler `app/api/libro-iva`, formateador `lib/tax/libroIva.ts`, zip `lib/utils/zip.ts`, pantalla `components/tax/LibroIvaDigital.tsx`.
+- **Importar en el Portal IVA:** Portal IVA > Nueva declaración > período > Libro IVA > Ventas > Importar (comprobantes y alícuotas) y lo mismo en Compras. Si el Portal trae las ventas desde Mis Comprobantes, usar uno solo de los dos caminos.
+- **Validar con el contador** y con una importación real: reglas del importador, compras B y C, prorrateo (pendiente) y período de imputación de compras (hoy, la fecha de emisión).
+
+## 9. Pendiente
 
 Con certificado real: 100 comprobantes consecutivos en homologación, recuperación ante un error transitorio real, CAEA en homologación y paso a producción de un piloto. Funcional: factura E (WSFEX), FCE MiPyME, moneda extranjera, notas de débito, venta offline del POS con CAEA local, reimpresión y reenvío automático del ticket con CAE.

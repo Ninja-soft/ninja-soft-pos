@@ -23,6 +23,7 @@ export type OtherTaxKind =
   | "percepcion_iva"
   | "percepcion_iibb"
   | "percepcion_ganancias"
+  | "percepcion_municipal"
   | "impuesto_interno"
   | "otro";
 
@@ -30,6 +31,7 @@ export const OTHER_TAX_LABEL: Record<OtherTaxKind, string> = {
   percepcion_iva: "Percepción de IVA",
   percepcion_iibb: "Percepción de IIBB",
   percepcion_ganancias: "Percepción de Ganancias",
+  percepcion_municipal: "Percepción municipal",
   impuesto_interno: "Impuestos internos",
   otro: "Otro tributo",
 };

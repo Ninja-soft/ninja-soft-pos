@@ -93,7 +93,23 @@ export async function closeDialogs(page: Page) {
 }
 
 /** Navega de cero a `path`: espera la carga y cierra modales que hayan quedado. */
+// Los recorridos guiados y las sugerencias de onboarding (ADR-089) aparecen por
+// sesión y por día: en E2E abrían ventanas que robaban el foco y cerraban
+// popovers a mitad del test. Se silencian sólo en los tests.
+const muted = new WeakSet<Page>();
+async function muteOnboarding(page: Page) {
+  if (muted.has(page)) return;
+  muted.add(page);
+  await page.route(/\/rest\/v1\/rpc\/nudge_next/, (r) =>
+    r.fulfill({ status: 200, contentType: "application/json", body: "null" }),
+  );
+  await page.route(/\/rest\/v1\/rpc\/tours_for_me/, (r) =>
+    r.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+}
+
 export async function gotoClean(page: Page, path: string) {
+  await muteOnboarding(page);
   await page.goto(path);
   await settle(page);
   await closeDialogs(page);

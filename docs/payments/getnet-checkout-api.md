@@ -2,6 +2,8 @@
 
 > Investigación del 2026-10-12 sobre la "Checkout API" de Getnet (credenciales "Checkout API / Plugin VTEX") y cómo se usa en NinjaPOS. Complementa ADR-065 (Web Checkout, QR y link) y ADR-031.
 
+> **Decisión del dueño (2026-10-13, ADR-069 adenda):** al cliente se le pide **sólo** "Web Checkout / Plugin Magento / Plugin WooCommerce". Las de "Checkout API / Plugin VTEX" dan error al generar el QR y no sirven sin certificación PCI: mientras el checkout propio esté apagado no se muestran, no se pueden guardar y, si alguien las pega en Web Checkout, se rechazan. El código de la Checkout API queda en el repo, apagado. Ver sección 3.
+
 ## 1. Las dos credenciales de Getnet
 
 Getnet le da al comercio dos juegos de credenciales. **No son intercambiables**:
@@ -13,7 +15,7 @@ Getnet le da al comercio dos juegos de credenciales. **No son intercambiables**:
 
 Por qué el QR fallaba con las de Checkout API: el QR y el link necesitan una página de pago de Getnet (`POST /dpy/web-checkout/v1/payment-intent` → `redirect_url`). La Checkout API no tiene esa página: es un cobro directo de tarjeta. Con esas credenciales el token puede salir, pero Web Checkout no es su producto.
 
-"Probar credenciales" prueba las dos APIs y avisa si una credencial está en el lugar equivocado (Web Checkout falla en el token o en `GET /sellers` y la Checkout API da token, o al revés).
+"Probar credenciales" prueba las dos APIs y detecta si una credencial es del otro juego (Web Checkout falla en el token o en `GET /sellers` y la Checkout API da token, o al revés). En Web Checkout, unas de Checkout API / Plugin VTEX se rechazan con "Estas credenciales son de Checkout API / Plugin VTEX. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce." y no se guardan.
 
 ## 2. Checkout API: lo que verificamos
 
@@ -71,6 +73,16 @@ Fuente principal: el OpenAPI **"Global API GetNet" v1.0.4** publicado en el port
   - `tokens/card` o `payments` con Bearer inválido: `401 {"statusCode":401,"message":"Invalid token"}`.
 
 ## 3. Cómo quedó en NinjaPOS
+
+### Lo que ve el cliente hoy (checkout propio apagado)
+
+- **Asistente de conexión:** una sola tarjeta, **"Web Checkout / Plugin Magento / Plugin WooCommerce"**, con el texto "Estas son las credenciales que tenés que cargar. Las encontrás en el portal de Getnet como Web Checkout, Plugin Magento o Plugin WooCommerce." y el aviso "No uses las de Checkout API / Plugin VTEX: no funcionan para cobrar con QR ni link desde NinjaSoft." La guía de conexión pide buscar esas credenciales en el portal.
+- **Probar y guardar:** "Conectar" corre la prueba si no se hizo y **no guarda** si falla (el resultado queda en rojo). `set_payment_secret` vuelve a probar un Client ID / Secret nuevo de Web Checkout antes de guardarlo y responde `getnet_checkout_api_credentials` (422) si es de Checkout API / Plugin VTEX o `getnet_invalid_credentials` (422) si Getnet lo rechaza en todas sus APIs. Un corte de Getnet (red o 5xx) no bloquea el guardado.
+- **Slot Checkout API:** la tarjeta no aparece; `set_payment_secret` rechaza cualquier clave `api_*` con `checkout_api_unavailable` (409) y la Edge `getnet` no prueba ese slot.
+- **POS:** "Link (checkout propio)" no aparece. Getnet QR y Link siguen con Web Checkout.
+- **Flag:** la Edge `getnet` (action `capabilities`) devuelve `{ own_checkout_enabled }`, un booleano derivado de `GETNET_CHECKOUT_API_PCI_ATTESTED`; nunca el valor del secret. Lo leen el asistente y el POS (este último sólo si hay Checkout API cargada). Ante error, apagado.
+
+### Cuando se habilite el checkout propio
 
 - **Conexión:** Getnet guarda dos slots en la misma credencial (por ambiente y por sucursal, ADR-057): Web Checkout (`client_id`, `client_secret`, `api_profile`, `environment`) y Checkout API (`api_client_id`, `api_client_secret`, `api_environment`, `api_seller_id`, `api_channel_entry`). Cada slot se guarda sin pisar el otro y se hereda por separado (sucursal → negocio). `tenant_payment_methods.config` marca `web_checkout_connected` y `checkout_api_connected`.
 - **POS:** Getnet QR y Link exigen Web Checkout; **"Link (checkout propio)"** exige Checkout API y la feature `getnet_checkout_propio`. Comparte link, QR y cobros en espera como Payway.

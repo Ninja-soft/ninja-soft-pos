@@ -2477,7 +2477,7 @@ Ley de IVA (texto ordenado 1997), art. 10 (internos discriminados fuera del prec
 
 ## ADR-069: Getnet con dos juegos de credenciales y checkout propio con la Checkout API
 
-**Fecha:** 2026-10-12 · **Estado:** aceptada con el cobro APAGADO hasta resolver PCI (código en `feat/getnet-checkout-api`; migración `20261031200000` sin aplicar; Edges sin desplegar) · **Base:** ADR-029 y H17b (checkout propio de Payway), ADR-031, ADR-057 (credenciales por sucursal), ADR-065 (Getnet con dos APIs) · **Numeración:** si otra rama tomó el 069, renumerar al mergear.
+**Fecha:** 2026-10-12 · **Estado:** aceptada con el cobro APAGADO hasta resolver PCI (código en `feat/getnet-checkout-api`; migración `20261031300000` sin aplicar; Edges sin desplegar; adenda 2026-10-13: sólo Web Checkout para el cliente) · **Base:** ADR-029 y H17b (checkout propio de Payway), ADR-031, ADR-057 (credenciales por sucursal), ADR-065 (Getnet con dos APIs) · **Numeración:** si otra rama tomó el 069, renumerar al mergear.
 
 ### Contexto
 
@@ -2504,7 +2504,21 @@ El dueño tiene dos juegos de credenciales de Getnet: "Web Checkout / Plugin Mag
 ### Consecuencias
 
 - **Lo que tiene que decidir el dueño:** encarar la validación PCI DSS (SAQ D de proveedor de servicios, con un QSA) para prender el checkout propio de Getnet, o quedarse con Web Checkout (QR y link, y si interesa, iframe embebido). Sin eso el tender propio responde "todavía no está habilitado" y la prueba lo avisa.
-- **Deploy:** migración `20261031200000_feature_getnet_checkout_propio.sql`; Edges `getnet`, `getnet_checkout` (nueva, **`verify_jwt = false`**), `getnet_webhook` (pública), `payment_provider_data` y `set_payment_secret`. El front tolera la base sin la migración (la feature falta = tender oculto).
+- **Deploy:** migración `20261031300000_feature_getnet_checkout_propio.sql`; Edges `getnet`, `getnet_checkout` (nueva, **`verify_jwt = false`**), `getnet_webhook` (pública), `payment_provider_data` y `set_payment_secret`. El front tolera la base sin la migración (la feature falta = tender oculto).
 - **Supuestos a validar con el primer cobro real:** bóveda y cuotas habilitadas en la Checkout API, `INSTALL_NO_INTEREST` con cotización `no_interest` para nuestro recargo, `x-transaction-channel-entry`, forma del monto en `GET /payments/info`, datos del comprador para antifraude.
 - **Deuda:** anular y devolver un cobro del checkout propio desde el POS (endpoints `cancellation` / `refund` legacy en AR); 3DS si Getnet lo exige; TTL de cobros en espera de Getnet propio (hoy 30 minutos como el hosted).
 - **Tests:** `tests/unit/getnetCheckoutApi.test.ts` (token Basic, JWT, hosts, errores sin secretos, detección de slot, tarjeta, cotización, payload, respuestas, estados, normalización, slots del wizard y del POS, body de `/pagar`), `tests/unit/posTenders.test.ts`; `deno check` de las Edges tocadas.
+
+### Adenda 2026-10-13: sólo Web Checkout para el cliente
+
+**Contexto.** Las credenciales que le funcionan al dueño son las de "Web Checkout / Plugin Magento / Plugin WooCommerce". Las de "Checkout API / Plugin VTEX" dan error al generar el QR y no sirven sin certificación PCI. Con dos tarjetas en el asistente el cliente podía cargar las equivocadas.
+
+**Decisión.** Se deja el código de la Checkout API, pero al cliente se le pide una sola credencial y la otra no se toma:
+
+1. **Asistente:** una sola tarjeta activa, "Web Checkout / Plugin Magento / Plugin WooCommerce", con "Estas son las credenciales que tenés que cargar. Las encontrás en el portal de Getnet como Web Checkout, Plugin Magento o Plugin WooCommerce." y el aviso "No uses las de Checkout API / Plugin VTEX: no funcionan para cobrar con QR ni link desde NinjaSoft." (`visibleGetnetSlots`, `GETNET_VTEX_WARNING` en `lib/payments/getnetSlots.ts`).
+2. **La tarjeta Checkout API sólo con el checkout propio habilitado.** La Edge `getnet` expone el flag como booleano (`action: "capabilities"` → `{ own_checkout_enabled }`), nunca el secret. Apagado: no se muestra, la Edge no prueba ese slot y `set_payment_secret` rechaza cualquier clave `api_*` con `checkout_api_unavailable` (409).
+3. **Credenciales de Checkout API / Plugin VTEX en Web Checkout se rechazan** con "Estas credenciales son de Checkout API / Plugin VTEX. Cargá las de Web Checkout / Plugin Magento / Plugin WooCommerce.", en "Probar" y al guardar. Se eligió **no guardar** (y no guardar marcadas como no verificadas): el asistente prueba antes de "Conectar" y no guarda si la prueba falla; `set_payment_secret` repite la detección (`assessGetnetCredential` + `webCheckoutSaveVerdict`) y responde 422 `getnet_checkout_api_credentials` o `getnet_invalid_credentials`. Un corte de Getnet (red, 5xx) no bloquea el guardado del servidor.
+4. **POS:** "Link (checkout propio)" exige además `own_checkout_enabled` (ProviderStatus de Getnet); `paymentMethodsStatus` sólo pregunta a la Edge si hay Checkout API cargada y ante error lo deja apagado.
+5. **Migración renumerada** a `20261031300000_feature_getnet_checkout_propio.sql` (el `20261031200000` lo usa otra rama).
+
+**Consecuencias.** Guardar Web Checkout tarda un poco más (el servidor llama a Getnet: token de Web Checkout, `GET /sellers` y token de la Checkout API). La detección depende de `classifyCredential`: si una credencial de Checkout API también obtiene token y `GET /sellers` de Web Checkout, no se distingue (no se vio con las del dueño). Para prender el checkout propio basta cargar `GETNET_CHECKOUT_API_PCI_ATTESTED=true`: vuelven la segunda tarjeta y el tender, sin deploy de front. Tests: `tests/unit/getnetCheckoutApi.test.ts` (tarjeta única, textos, veredicto del guardado, errores, tender con y sin flag).

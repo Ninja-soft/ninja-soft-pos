@@ -1,27 +1,17 @@
 "use client";
 
-// Export / import XLSX de listas de precios (F18 · H100, ADR-058). Una hoja
-// "Precios": Lista (desplegable con las listas y "Precio de venta"), SKU,
-// Código de barras, Producto, Precio y Vigente desde (vacío = ahora). El
-// import busca el producto por SKU o código de barras y manda todo a
-// price_list_import (servidor: plan, rol, programado e historial "import").
+// Export XLSX de listas de precios (F18 · H100, ADR-058). Una hoja "Precios":
+// Lista (desplegable con las listas y "Precio de venta"), SKU, Código de
+// barras, Producto, Precio y Vigente desde. La importación del mismo archivo
+// va por el asistente único (TX-4, ADR-078: modules/imports/entities.ts →
+// import_price_lists, con revisión en el servidor y confirmación).
 
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import { exportXlsx, type XlsxColumn } from "@/lib/utils/xlsx";
-import { parseXlsx, type ImportColumn, type ParseXlsxResult } from "@/lib/utils/xlsxImport";
 import type { ProList } from "./proApi";
 
 export const BASE_LIST_LABEL = "Precio de venta";
-
-export interface PriceImportRow {
-  list: string;
-  sku: string | null;
-  barcode: string | null;
-  name: string | null;
-  price: number;
-  effective: string | null;
-}
 
 export function priceColumns(lists: ProList[]): XlsxColumn[] {
   return [
@@ -32,39 +22,6 @@ export function priceColumns(lists: ProList[]): XlsxColumn[] {
     { header: "Precio", key: "price", type: "money", width: 14 },
     { header: "Vigente desde", key: "effective", width: 16 },
   ];
-}
-
-const SPEC: ImportColumn[] = [
-  { header: "Lista", key: "list", required: true, aliases: ["list", "lista"] },
-  { header: "SKU", key: "sku", aliases: ["sku"] },
-  { header: "Código de barras", key: "barcode", aliases: ["barcode", "codigo de barras", "ean"] },
-  { header: "Producto", key: "name", aliases: ["name", "nombre"] },
-  {
-    header: "Precio",
-    key: "price",
-    type: "number",
-    required: true,
-    aliases: ["price", "precio"],
-    transform: (v: number | null) => (v != null && v >= 0 ? { value: v } : { error: "El precio tiene que ser 0 o más." }),
-  },
-  {
-    header: "Vigente desde",
-    key: "effective",
-    aliases: ["effective_at", "desde", "vigencia"],
-    transform: (v: string | null, raw: string) => {
-      const s = (raw ?? v ?? "").trim();
-      if (!s) return { value: null };
-      // dd/mm/aaaa o aaaa-mm-dd.
-      const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
-      const iso = m ? `${m[3]}-${m[2]!.padStart(2, "0")}-${m[1]!.padStart(2, "0")}` : s.slice(0, 10);
-      const d = new Date(`${iso}T00:00:00-03:00`);
-      return Number.isNaN(d.getTime()) ? { error: `Fecha inválida ("${s}").` } : { value: d.toISOString() };
-    },
-  },
-];
-
-export function parsePricesXlsx(buffer: ArrayBuffer): Promise<ParseXlsxResult<PriceImportRow>> {
-  return parseXlsx<PriceImportRow>(buffer, SPEC);
 }
 
 interface ProductRow {
@@ -147,40 +104,4 @@ export async function exportPriceLists(lists: ProList[]): Promise<void> {
     }
   }
   await exportXlsx("listas-de-precios", [{ name: "Precios", title: "Listas de precios", columns: priceColumns(lists), rows }]);
-}
-
-export interface PriceImportPlan {
-  byList: Map<string | null, { product_id: string; price: number; effective_at: string | null }[]>;
-  unknownList: number;
-  unknownProduct: number;
-}
-
-/** Arma lo que se manda al servidor: producto por SKU o código, lista por nombre. */
-export async function planPriceImport(rows: PriceImportRow[], lists: ProList[]): Promise<PriceImportPlan> {
-  const products = await allProducts();
-  const bySku = new Map(products.filter((p) => p.sku).map((p) => [p.sku!.trim().toLowerCase(), p.id]));
-  const byCode = new Map(products.filter((p) => p.barcode).map((p) => [p.barcode!.trim(), p.id]));
-  const listByName = new Map(lists.map((l) => [l.name.trim().toLowerCase(), l.id]));
-  const byList = new Map<string | null, { product_id: string; price: number; effective_at: string | null }[]>();
-  let unknownList = 0;
-  let unknownProduct = 0;
-  for (const r of rows) {
-    const ln = (r.list ?? "").trim().toLowerCase();
-    const listId = ln === BASE_LIST_LABEL.toLowerCase() ? null : (listByName.get(ln) ?? undefined);
-    if (listId === undefined) {
-      unknownList++;
-      continue;
-    }
-    const pid =
-      (r.sku ? bySku.get(String(r.sku).trim().toLowerCase()) : undefined) ??
-      (r.barcode ? byCode.get(String(r.barcode).trim()) : undefined);
-    if (!pid) {
-      unknownProduct++;
-      continue;
-    }
-    const arr = byList.get(listId) ?? [];
-    arr.push({ product_id: pid, price: r.price, effective_at: r.effective });
-    byList.set(listId, arr);
-  }
-  return { byList, unknownList, unknownProduct };
 }

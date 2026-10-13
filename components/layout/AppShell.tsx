@@ -49,6 +49,7 @@ import {
   BookText,
   FileArchive,
   ListTree,
+  FileSpreadsheet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -279,6 +280,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/reportes", label: "Reportes", icon: BarChart3 },
         // Conciliación de tarjetas (ADR-044) y de procesadores (ADR-061, pestaña). Con candado si el plan no trae la de tarjetas.
         { href: "/reportes/conciliacion", label: "Conciliación", icon: CreditCard, feature: "conciliacion_tarjetas" },
+        // Importar y exportar en Excel (TX-4, ADR-078). Dueño o encargado; el
+        // plan se chequea por importación (importacion_excel / export_xlsx).
+        { href: "/importaciones", label: "Importar y exportar", icon: FileSpreadsheet, managersOnly: true },
         { href: "/configuracion", label: "Configuración", icon: Settings },
       ],
     },

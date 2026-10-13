@@ -634,16 +634,16 @@ Objetivo: cubrir configuraciones de retail profesional inspiradas en POS lídere
   - [ ] Depósito default por tipo de entrega/devolución.
   - [ ] *Criterio:* se transfiere stock de depósito central a sucursal, queda en tránsito y luego recibido.
 
-- [~] **H34 — Importación masiva por Excel.** — *Productos y clientes hechos (parsers `exceljs`, plantilla descargable, preview con errores, import por lote en `/productos` y `/clientes`). Faltan depósitos/stock/listas (dependen de F4) y reversión. Auditoría hecha (2026-06-07): cada import de productos/clientes deja entrada en audit_logs con el total importado (best-effort, no bloquea el import).*
+- [~] **H34 — Importación masiva por Excel.** — *TX-4 completo (2026-10-13, ADR-078): productos, clientes, sucursales, stock por sucursal, listas, garantías y motivos con dry-run en el servidor, confirmación, errores por fila descargables y auditoría por lote. Faltan transferencias por archivo, depósitos internos (H33) y reversión.*
   - [x] Importar productos por XLSX (parser `parseProductsXlsx` + `ImportProductsModal`).
   - [x] Importar clientes por XLSX (parser `parseCustomersXlsx` + `ImportCustomersModal`).
-  - [ ] Importar depósitos/sucursales por XLSX. *(depende de F4 multi-depósito)*
-  - [ ] Importar stock inicial y transferencias por XLSX. *(depende de F4)*
-  - [ ] Importar listas de precios, medios de pago/planes, garantías extendidas y motivos de devolución por XLSX.
+  - [~] Importar depósitos/sucursales por XLSX. *(Sucursales hechas, `import_stores`; depósitos dentro de la sucursal dependen de H33.)*
+  - [~] Importar stock inicial y transferencias por XLSX. *(Stock por sucursal hecho, `import_stock` como conteo auditado; transferencias pendientes.)*
+  - [x] Importar listas de precios, medios de pago/planes, garantías extendidas y motivos de devolución por XLSX. *(Listas, garantías y motivos con `import_*`; planes de cuotas por medio desde H27.)*
   - [x] Plantillas descargables por entidad con columnas obligatorias y ejemplos.
   - [x] Preview antes de confirmar: filas válidas, errores.
-  - [ ] Modo dry-run formal y archivo de errores descargable. *(el preview ya muestra errores)*
-  - [ ] Importaciones auditadas y reversibles cuando sea posible.
+  - [x] Modo dry-run formal y archivo de errores descargable. *(ADR-078)*
+  - [~] Importaciones auditadas y reversibles cuando sea posible. *(Auditadas por lote; reversión pendiente.)*
   - [ ] *Criterio:* un tenant carga productos, clientes, depósitos y stock inicial desde Excel sin tocar SQL.
 
 ### F12 — Comercios simples y servicios
@@ -1344,13 +1344,13 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
   - [x] Helper único `exportXlsx()` reutilizable.
   - [x] *Criterio:* descargar "Ventas del mes" da un .xlsx con encabezado de marca, totales, autofilter y header congelado.
 
-- [~] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).** — *Productos y clientes hechos; depósitos/stock/listas dependen de F4/F11.*
-  - [~] **Productos y clientes se importan SIEMPRE en XLSX**: **productos ✅** (`ImportProductsModal`) y **clientes ✅** (`ImportCustomersModal`). Resto (depósitos, stock, listas, medios, garantías, motivos) pendiente.
-  - [x] **Descargar plantilla de muestra XLSX** (productos y clientes: hoja de datos + ejemplo + ayuda). *(Planes de pago también: plantilla por medio en el grid H27.)*
-  - [x] **Exportar toda la base** en XLSX (productos y clientes, botón "Exportar XLSX" en cada página).
-  - [ ] Toda importación: validación previa, preview, dry-run, confirmación, reporte de errores por fila y auditoría. Sin imports silenciosos.
-  - [ ] Helper único de import (parse XLSX con `exceljs`) + reuso del `exportXlsx` (TX-2) para plantillas y export de base.
-  - [ ] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.
+- [x] **TX-4 — Importaciones masivas XLSX como estándar (reemplaza CSV).** — *Completado (2026-10-13, ADR-078): motor único, revisión en el servidor (dry-run), confirmación y auditoría para productos, clientes, stock por sucursal, listas de precios, sucursales, garantías y motivos; página `/importaciones` con export de la base completa. Migraciones `20261104100000` y `20261104100100` sin aplicar.*
+  - [x] **Todo se importa en XLSX** con el asistente único de 3 pasos (`components/import/ImportWizard.tsx`): productos, clientes, **stock por sucursal**, **listas de precios**, **sucursales** (locales o depósitos), **garantías extendidas** y **motivos de devolución**. *(Medios de pago: los planes de cuotas ya se importan por medio en H27; las credenciales nunca van en un archivo. Depósitos internos de una sucursal dependen de H33.)*
+  - [x] **Plantillas XLSX** generadas con `exportXlsx`: hoja de datos con ejemplo, obligatorias con `*`, listas desplegables donde aplica y hoja **Instrucciones**.
+  - [x] **Exportar toda la base** en un XLSX (productos, clientes, stock por sucursal, listas, sucursales, garantías y motivos) desde `/importaciones`, con los encabezados de las plantillas para reimportar; se mantiene "Exportar XLSX" en productos y clientes.
+  - [x] Toda importación: validación previa (Zod por fila), preview, **dry-run en el servidor** (misma lógica, revertida), conteos crear / actualizar / omitir, confirmación, **errores por fila descargables en XLSX** y auditoría por lote. Sin imports silenciosos.
+  - [x] Helper único de import (`lib/utils/xlsxImport.ts` + `lib/import/`: encabezados tolerantes a mayúsculas y acentos, fila de encabezados detectada, tipos, duplicados, filas vacías) + `exportXlsx` (TX-2) para plantillas, errores y export de base. RPC `import_*` SECURITY DEFINER (dueño o encargado, `importacion_excel` y la feature de cada entidad).
+  - [x] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.
 
 - [~] **TX-5 — Reportes PRO configurables por usuario.** — *Base hecha (PR #46): mostrar/ocultar reportes persistido. Falta orden, más reportes y filtros guardables.*
   - [~] **Tablero de reportes configurable**: cada usuario **muestra/oculta** reportes con "Personalizar"; persistido en `users.settings.reports` (cross-device, merge sin pisar apariencia). **Orden (drag) pendiente.**

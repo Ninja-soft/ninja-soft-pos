@@ -1,5 +1,5 @@
 // =============================================================================
-// Edge Function: catalog_sync (ADR-106). Sincroniza el catálogo precargado
+// Edge Function: catalog_sync (ADR-107). Sincroniza el catálogo precargado
 // "Tiendita" (catalog_stores / catalog_products) desde el feed del scraper del
 // dueño en Railway (GET /api/feed/stores y /api/feed/products, Bearer).
 // Lógica pura en ../_shared/catalogSync.ts (con tests).

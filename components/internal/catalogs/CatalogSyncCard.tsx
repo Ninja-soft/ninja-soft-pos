@@ -1,6 +1,6 @@
 "use client";
 
-// Sincronización del catálogo Tiendita con el feed del scraper (ADR-106):
+// Sincronización del catálogo Tiendita con el feed del scraper (ADR-107):
 // estado de la última corrida, próxima automática y "Sincronizar ahora" con
 // progreso (polling de catalog_sync_runs mientras haya una corrida abierta).
 import { useEffect, useRef } from "react";

@@ -72,7 +72,7 @@ export function useRevokeCatalog() {
   });
 }
 
-// Sincronización con el feed (ADR-106): mientras haya una corrida abierta se
+// Sincronización con el feed (ADR-107): mientras haya una corrida abierta se
 // consulta cada 4 s para mostrar el progreso.
 export function useCatalogSyncRuns() {
   return useQuery({

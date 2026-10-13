@@ -1,6 +1,6 @@
 # 39 · Sincronización del catálogo Tiendita con el scraper (Railway)
 
-> ADR-106. Reemplaza la carga por Excel (`scripts/import_catalog.cjs`), que queda como plan B en el panel interno ("Importar Excel manualmente").
+> ADR-107. Reemplaza la carga por Excel (`scripts/import_catalog.cjs`), que queda como plan B en el panel interno ("Importar Excel manualmente").
 
 ## Cómo funciona
 

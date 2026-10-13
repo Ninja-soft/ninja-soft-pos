@@ -1,4 +1,4 @@
-// ADR-106: sync del catálogo Tiendita desde el feed del scraper. Mapeo
+// ADR-107: sync del catálogo Tiendita desde el feed del scraper. Mapeo
 // feed → fila de catalog_products (misma semántica que import_catalog.cjs),
 // cursor por tienda, since incremental y presupuesto de tiempo.
 import { describe, it, expect } from "vitest";

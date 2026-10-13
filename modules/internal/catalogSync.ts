@@ -1,4 +1,4 @@
-// Tiendita: estado de la sincronización con el feed del scraper (ADR-106).
+// Tiendita: estado de la sincronización con el feed del scraper (ADR-107).
 // Lee catalog_sync_runs (RLS: sólo staff interno en /internal) y dispara la
 // Edge catalog_sync. catalog_sync_runs no está en types/database.ts (no se
 // regenera): cliente "destipado" sólo para esta tabla, como catalogs.ts.

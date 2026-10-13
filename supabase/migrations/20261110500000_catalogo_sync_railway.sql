@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261110500000_catalogo_sync_railway  (ADR-106)
+-- 20261110500000_catalogo_sync_railway  (ADR-107)
 --
 -- Tiendita: el catálogo precargado deja de cargarse con el Excel por script
 -- (scripts/import_catalog.cjs) y pasa a sincronizarse solo desde el feed del

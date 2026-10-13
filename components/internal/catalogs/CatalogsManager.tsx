@@ -309,7 +309,7 @@ export function CatalogsManager() {
         </div>
       </section>
 
-      {/* Sincronización con el catálogo (ADR-106) */}
+      {/* Sincronización con el catálogo (ADR-107) */}
       <section>
         <Heading as="h2" className="flex items-center gap-2 text-base">
           <RefreshCw size={18} /> Sincronización con el catálogo

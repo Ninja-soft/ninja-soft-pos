@@ -3796,7 +3796,7 @@ El dueño pidió que los pedidos de PedidosYa, Rappi y Uber Eats entren solos, c
 
 ---
 
-## ADR-106: Catálogo Tiendita sincronizado desde el feed del scraper en Railway (reemplaza el import por Excel)
+## ADR-107: Catálogo Tiendita sincronizado desde el feed del scraper en Railway (reemplaza el import por Excel)
 
 **Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/catalogo-sync-railway`; migración `20261110500000_catalogo_sync_railway` sin aplicar; Edge `catalog_sync` sin desplegar; secrets sin setear) · **Base:** ADR-052 (`internal_scope()`), ADR-062 (patrón de cron interno con `X-Cron-Secret`), ADR-083 (`audit_logs`), ADR-090 (auditoría de rendimiento), ADR-093 (`catalog_search` sobre `catalog_products`).
 

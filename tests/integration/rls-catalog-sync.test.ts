@@ -1,6 +1,6 @@
 // @vitest-environment node
 // =============================================================================
-// ADR-106: sincronización del catálogo Tiendita desde el feed del scraper.
+// ADR-107: sincronización del catálogo Tiendita desde el feed del scraper.
 //
 // catalog_sync_runs: sólo lectura para staff interno en el panel interno
 // ((select internal_scope()), header x-ninja-scope); nadie escribe por REST.
@@ -91,7 +91,7 @@ const row = (ean: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-describe.skipIf(!enabled)("ADR-106 · sync del catálogo Tiendita", () => {
+describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
   beforeAll(async () => {
     const admin = createClient(URL_!, SERVICE!, { auth: { persistSession: false } });
     ctx.admin = admin;

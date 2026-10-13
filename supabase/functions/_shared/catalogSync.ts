@@ -1,6 +1,6 @@
 // =============================================================================
 // Lógica pura de la sync del catálogo Tiendita desde el feed del scraper
-// (ADR-106). Sin imports: la usan la Edge `catalog_sync` (Deno) y los tests
+// (ADR-107). Sin imports: la usan la Edge `catalog_sync` (Deno) y los tests
 // (Vitest). Contrato del feed: README del scraper, "Feed para NinjaSoft POS".
 // =============================================================================
 

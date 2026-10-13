@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CalendarClock, Check, Store } from "lucide-react";
 import { LogoNinjaPos } from "@/components/brand/Logo";
 import { TechBackground } from "@/components/brand/TechBackground";
+import { BusinessOrbit, OrbitSkeleton } from "@/components/auth/BusinessOrbit";
+import { useRememberedBusiness } from "@/lib/auth/useRememberedBusiness";
 import { signupTrialDays, trialCopy, useSignupPlans } from "@/modules/saas/signupPlans";
 import { cn } from "@/lib/utils/cn";
 import s from "./ValuePanel.module.css";
@@ -18,6 +21,10 @@ import s from "./ValuePanel.module.css";
 // 1px: sin degradados, sin sombras, sin glow. Es decorativo (aria-hidden); el
 // mensaje real vive en el titular y el párrafo.
 // Fotos: public/images/demo-products (Unsplash, ver LICENSE.txt ahí).
+// En /login, si este dispositivo recuerda el negocio (lib/auth/rememberedBusiness)
+// el collage se reemplaza por el logo del negocio en órbita (BusinessOrbit).
+// Lo que tarda en aparecer (collage, logo, pastilla de prueba) muestra antes un
+// skeleton con la misma silueta y tamaño, para que no haya saltos.
 
 const MAX_SCALE = 1.25;
 // Por debajo de esta escala el collage ya no se lee: se oculta.
@@ -30,7 +37,8 @@ const SCALE_EPSILON = 0.02;
 // frente, las ventas detrás y una columna derecha con ARCA y stock alineada al
 // borde del gráfico; "narrow" (panel angosto, p. ej. signup a 1024) con ventas
 // y ticket, más apilados.
-type Box = { left: number; top: number; width: number };
+// `h`: alto aproximado de la pieza, sólo para su skeleton.
+type Box = { left: number; top: number; width: number; h: number };
 interface StageLayout {
   w: number;
   h: number;
@@ -42,16 +50,16 @@ interface StageLayout {
 const WIDE: StageLayout = {
   w: 560,
   h: 352,
-  sales: { left: 256, top: 0, width: 304 },
-  ticket: { left: 0, top: 22, width: 270 },
-  arca: { left: 290, top: 210, width: 270 },
-  stock: { left: 290, top: 282, width: 270 },
+  sales: { left: 256, top: 0, width: 304, h: 203 },
+  ticket: { left: 0, top: 22, width: 270, h: 302 },
+  arca: { left: 290, top: 210, width: 270, h: 60 },
+  stock: { left: 290, top: 282, width: 270, h: 60 },
 };
 const NARROW: StageLayout = {
   w: 404,
   h: 444,
-  sales: { left: 100, top: 0, width: 304 },
-  ticket: { left: 0, top: 140, width: 270 },
+  sales: { left: 100, top: 0, width: 304, h: 163 },
+  ticket: { left: 0, top: 140, width: 270, h: 302 },
   arca: null,
   stock: null,
 };
@@ -116,6 +124,14 @@ function useCountUp(target: number, delay: number, duration: number, enabled: bo
   return value;
 }
 
+type Fit = { layout: StageLayout; scale: number };
+
+function fitFor(width: number, height: number): Fit {
+  const scaleFor = (l: StageLayout) => Math.min(MAX_SCALE, width / l.w, height / l.h);
+  const wide = scaleFor(WIDE);
+  return wide >= WIDE_MIN_SCALE ? { layout: WIDE, scale: wide } : { layout: NARROW, scale: scaleFor(NARROW) };
+}
+
 /**
  * Escala del escenario para que entre en el espacio libre sin cortarse.
  * Estable desde el primer cuadro visible: no mide hasta que cargan las fuentes
@@ -125,7 +141,7 @@ function useCountUp(target: number, delay: number, duration: number, enabled: bo
  */
 function useStageScale() {
   const ref = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<{ layout: StageLayout; scale: number } | null>(null);
+  const [fit, setFit] = useState<Fit | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -133,9 +149,7 @@ function useStageScale() {
     let ro: ResizeObserver | null = null;
     const measure = () => {
       const { width, height } = el.getBoundingClientRect();
-      const scaleFor = (l: StageLayout) => Math.min(MAX_SCALE, width / l.w, height / l.h);
-      const wide = scaleFor(WIDE);
-      const next = wide >= WIDE_MIN_SCALE ? { layout: WIDE, scale: wide } : { layout: NARROW, scale: scaleFor(NARROW) };
+      const next = fitFor(width, height);
       setFit((prev) =>
         prev && prev.layout === next.layout && Math.abs(next.scale - prev.scale) / prev.scale < SCALE_EPSILON
           ? prev
@@ -317,21 +331,68 @@ function StockChip({ at }: { at: Box }) {
   );
 }
 
+function stageStyle(f: Fit): React.CSSProperties {
+  return {
+    width: f.layout.w,
+    height: f.layout.h,
+    "--stage-scale": f.scale,
+    marginTop: `${(-f.layout.h * f.scale) / 2}px`,
+  } as React.CSSProperties;
+}
+
+/**
+ * Skeleton del collage: un bloque plano por pieza, en su lugar y tamaño. Es un
+ * SVG con el viewBox de cada composición y `xMinYMid meet`, así escala igual
+ * que el escenario real (mín. entre MAX_SCALE, ancho y alto) sólo con CSS: se
+ * ve bien desde el HTML del server, antes de hidratar y de medir. Un container
+ * query elige la composición angosta con el mismo umbral que useStageScale.
+ */
+function SkeletonStage({ layout, className }: { layout: StageLayout; className?: string }) {
+  const boxes = [layout.sales, layout.arca, layout.stock].filter((b): b is Box => b !== null);
+  const t = layout.ticket;
+  return (
+    <svg
+      viewBox={`0 0 ${layout.w} ${layout.h}`}
+      preserveAspectRatio="xMinYMid meet"
+      className={cn(className, "absolute left-0 top-1/2 h-full w-full -translate-y-1/2")}
+      style={{ maxWidth: layout.w * MAX_SCALE, maxHeight: layout.h * MAX_SCALE }}
+    >
+      {boxes.map((b, i) => (
+        <rect key={i} className={s.skel} x={b.left} y={b.top} width={b.width} height={b.h} rx={8} />
+      ))}
+      <rect
+        className={s.skel}
+        x={t.left}
+        y={t.top}
+        width={t.width}
+        height={t.h}
+        rx={8}
+        transform={`rotate(-2 ${t.left + t.width / 2} ${t.top + t.h / 2})`}
+      />
+    </svg>
+  );
+}
+
+export function CollageSkeleton({ done = false }: { done?: boolean }) {
+  return (
+    <div aria-hidden className={cn("absolute inset-0 [container-type:size]", done && s.skelOut)}>
+      <SkeletonStage layout={WIDE} className={s.skelWide} />
+      <SkeletonStage layout={NARROW} className={s.skelNarrow} />
+    </div>
+  );
+}
+
 function ProductCollage() {
   const { ref, fit } = useStageScale();
   const visible = fit !== null && fit.scale >= MIN_SCALE;
   const total = useCountUp(TICKET_TOTAL, 650, 950, visible);
   return (
     <div ref={ref} aria-hidden className="relative min-h-0 flex-1">
+      {(fit === null || visible) && <CollageSkeleton done={visible} />}
       {visible && (
         <div
           className={cn(s.stage, "absolute left-0 top-1/2")}
-          style={{
-            width: fit.layout.w,
-            height: fit.layout.h,
-            "--stage-scale": fit.scale,
-            marginTop: `${(-fit.layout.h * fit.scale) / 2}px`,
-          } as React.CSSProperties}
+          style={stageStyle(fit)}
         >
           <SalesCard at={fit.layout.sales} compact={fit.layout === NARROW} />
           {fit.layout.arca && <ArcaChip at={fit.layout.arca} />}
@@ -345,11 +406,68 @@ function ProductCollage() {
 
 export function ValuePanel() {
   // Días de prueba según los planes configurados en internal (no hardcodeado).
-  // Mientras llegan los planes se reserva el alto de la pastilla (invisible),
-  // así el espacio del collage no cambia cuando aparece.
+  // Mientras llegan los planes se muestra un skeleton con la forma de la
+  // pastilla, así el espacio del collage no cambia cuando aparece.
   const { data: plans, isPending } = useSignupPlans();
   const trialDays = signupTrialDays(plans);
+
+  // Negocio recordado: sólo en /login (en signup siempre el panel normal).
+  const isLogin = usePathname() === "/login";
+  const remembered = useRememberedBusiness();
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const onLogoError = useCallback(() => setFailedLogo(remembered.business?.logoUrl ?? null), [remembered.business?.logoUrl]);
+  // "pending": en /login antes de leer localStorage (HTML del server y hasta
+  // hidratar): el panel resuelve la variante por CSS (ver abajo).
+  const mode: "product" | "business" | "pending" = !isLogin
+    ? "product"
+    : !remembered.ready
+      ? "pending"
+      : remembered.business && remembered.business.logoUrl !== failedLogo
+        ? "business"
+        : "product";
+  const business = mode === "business" ? remembered.business : null;
   const showTrial = trialDays > 0 || isPending;
+
+  const businessHead = (
+    <>
+      <h2 className="font-display text-[2.75rem] font-extrabold leading-[1.02] tracking-[-0.035em] xl:text-[3.5rem] 2xl:text-[4rem] [@media(max-height:780px)]:text-[2.5rem]">
+        Hola de nuevo,
+        <br />
+        <span className="text-ninja-flame">a vender.</span>
+      </h2>
+      <p className="mt-4 max-w-md text-base leading-relaxed text-ninja-lavender [@media(max-height:780px)]:mt-3 [@media(max-height:780px)]:text-[15px]">
+        Ingresá para volver a tu negocio. Ventas, caja y stock te esperan como
+        los dejaste.
+      </p>
+    </>
+  );
+  const productHead = (
+    <>
+      <h2 className="font-display text-[2.75rem] font-extrabold leading-[1.02] tracking-[-0.035em] xl:text-[3.5rem] 2xl:text-[4rem] [@media(max-height:780px)]:text-[2.5rem]">
+        Tu negocio,
+        <br />
+        <span className="text-ninja-flame">bajo control.</span>
+      </h2>
+      <p className="mt-4 max-w-md text-base leading-relaxed text-ninja-lavender [@media(max-height:780px)]:mt-3 [@media(max-height:780px)]:text-[15px]">
+        Vendé, cobrá, facturá y controlá el stock en un solo lugar, desde la
+        compu, la tablet o el celular.
+      </p>
+      {showTrial && (
+        <p
+          aria-hidden={trialDays > 0 ? undefined : true}
+          className={cn(
+            "mt-5 inline-flex h-10 items-center gap-2.5 whitespace-nowrap rounded-lg border px-3.5 text-sm font-semibold [@media(max-height:780px)]:mt-4",
+            trialDays > 0
+              ? cn(s.fadeIn, "border-white/10 bg-white/[0.06] text-ninja-softWhite")
+              : cn(s.skel, "border-transparent text-transparent [&>svg]:invisible"),
+          )}
+        >
+          <CalendarClock size={17} className="text-ninja-flameSoft" aria-hidden />
+          {trialCopy(trialDays > 0 ? trialDays : 14)}
+        </p>
+      )}
+    </>
+  );
   return (
     <aside
       data-theme="ninja-dark"
@@ -370,32 +488,37 @@ export function ValuePanel() {
         <LogoNinjaPos variant="dark" className="h-8 w-auto xl:h-9" priority />
       </Link>
 
+      {/* Antes de hidratar (mode "pending") van las dos variantes y el script
+          de AuthLayout marca <html data-last-business> si hay negocio
+          recordado: el CSS muestra la que corresponde desde el primer cuadro. */}
       <div className="mt-10 shrink-0 [@media(max-height:780px)]:mt-7">
-        <h2 className="font-display text-[2.75rem] font-extrabold leading-[1.02] tracking-[-0.035em] xl:text-[3.5rem] 2xl:text-[4rem] [@media(max-height:780px)]:text-[2.5rem]">
-          Tu negocio,
-          <br />
-          <span className="text-ninja-flame">bajo control.</span>
-        </h2>
-        <p className="mt-4 max-w-md text-base leading-relaxed text-ninja-lavender [@media(max-height:780px)]:mt-3 [@media(max-height:780px)]:text-[15px]">
-          Vendé, cobrá, facturá y controlá el stock en un solo lugar, desde la
-          compu, la tablet o el celular.
-        </p>
-        {showTrial && (
-          <p
-            aria-hidden={trialDays > 0 ? undefined : true}
-            className={cn(
-              "mt-5 inline-flex h-10 items-center gap-2.5 whitespace-nowrap rounded-lg border border-white/10 bg-white/[0.06] px-3.5 text-sm font-semibold text-ninja-softWhite [@media(max-height:780px)]:mt-4",
-              trialDays > 0 ? s.fadeIn : "invisible",
-            )}
-          >
-            <CalendarClock size={17} className="text-ninja-flameSoft" aria-hidden />
-            {trialCopy(trialDays > 0 ? trialDays : 14)}
-          </p>
+        {mode === "pending" ? (
+          <>
+            <div className="[html[data-last-business]_&]:hidden">{productHead}</div>
+            <div className="hidden [html[data-last-business]_&]:block">{businessHead}</div>
+          </>
+        ) : business ? (
+          businessHead
+        ) : (
+          productHead
         )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col py-8 [@media(max-height:780px)]:py-6">
-        <ProductCollage />
+        {mode === "pending" ? (
+          <>
+            <div className="relative min-h-0 flex-1 [html[data-last-business]_&]:hidden">
+              <CollageSkeleton />
+            </div>
+            <div className="hidden min-h-0 flex-1 flex-col [html[data-last-business]_&]:flex">
+              <OrbitSkeleton />
+            </div>
+          </>
+        ) : business ? (
+          <BusinessOrbit key={business.logoUrl} business={business} onError={onLogoError} />
+        ) : (
+          <ProductCollage />
+        )}
       </div>
 
       <div className="shrink-0 border-t border-white/10 pt-5 [@media(max-height:820px)]:hidden">

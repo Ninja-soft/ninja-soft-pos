@@ -28,7 +28,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
-| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
+| **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066) |
 
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; base fiscal ADR-068) |
@@ -1032,19 +1032,19 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Importar sucursales y cajas por XLSX (cierra el pendiente de F11/H34).
   - [x] *Criterio:* el dueño crea "Sucursal Norte" con 2 cajas; un plan Pro no puede crear la segunda sucursal (lo rechaza el servidor, no sólo el botón). *(Auditoría 2026-11-05: cubierto por `tests/integration/rls-sucursales.test.ts`, "sin multi_sucursal el servidor rechaza la segunda sucursal".)*
 
-- [~] **H90: Contexto de sucursal y caja activa ("dónde estoy").** *(2026-10-12, ADR-045: fix P0, chip, cabecera del POS, selector de caja y filtros de ventas y Z hechos)* · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
+- [x] **H90: Contexto de sucursal y caja activa ("dónde estoy").** *(2026-10-12, ADR-045: fix P0, chip, cabecera del POS, selector de caja y filtros de ventas y Z hechos; 2026-11-05, ADR-080: aviso de contexto cruzado y título de pestaña)* · *BASE (indicador y fix) + FLAG-OPERATIVO (mostrar el chip con una sola sucursal). El selector requiere H89.*
   - [x] **Fix P0 independiente:** `create_sale`, `exchange_sale`, `return_sale_*` y cobros de cuenta corriente derivan `store_id` del turno (`resolve_sale_shift`), no de `stores.is_default`. Test RLS con 2 sucursales y turnos abiertos en ambas. *(Los RPC de stock, ajuste, merma y producción, van con H94 en `feat/stock-sucursales`.)*
-  - [~] Chip de sucursal en el panel (nombre corto + color) con "Todas las sucursales"; filtra ventas, cierres Z, reportes, conciliación y stock; recordado por usuario y dispositivo (localStorage). *(Título de pestaña pendiente.)*
+  - [x] Chip de sucursal en el panel (nombre corto + color) con "Todas las sucursales"; filtra ventas, cierres Z, reportes, conciliación y stock; recordado por usuario y dispositivo (localStorage). Título de pestaña con la sucursal ("Norte · Ventas", `useBranchTabTitle`, ADR-080).
   - [x] Cabecera del POS: "Centro · Caja 1 · abierta" (mobile: "Centro · C1"). Sin cambio de sucursal con carrito o turno propio abierto.
   - [x] "¿Dónde vendés hoy?" con sucursales y cajas (libre, abierta, abierta por vos) cuando el usuario puede elegir; el dispositivo recuerda su caja. Reemplaza `posApi.defaultRegister()`.
   - [x] Apertura y cierre de caja y pantalla Caja muestran sucursal y caja; Cierres Z con columna Sucursal; ticket (variables `sucursal`, `caja`) y display de cliente con "Sucursal · Caja".
-  - [ ] Aviso de contexto cruzado: si el panel mira "Norte" y el turno abierto es en "Centro", el acceso "Vender" lo dice.
-  - [ ] *Criterio:* un cajero con turno en la Caja 2 de Norte vende y la venta, el stock y el Z quedan en Norte; en ninguna pantalla hay duda de en qué sucursal está.
+  - [x] Aviso de contexto cruzado: si el panel mira "Norte" y el turno abierto es en "Centro", el acceso "Vender" lo dice (`lib/branches/crossContext.ts`, ADR-080).
+  - [x] *Criterio:* un cajero con turno en la Caja 2 de Norte vende y la venta, el stock y el Z quedan en Norte; en ninguna pantalla hay duda de en qué sucursal está. *(`rls-sucursales.test.ts` y `rls-f17-pendientes.test.ts`: venta y Z en la sucursal y caja del turno; aviso cruzado y pestaña, ADR-080.)*
 
 - [~] **H91: Usuarios, roles y datos por sucursal.** *(2026-10-12, ADR-045: personal con vigencias, traslados programados y RLS de lectura hechos)* · *OPTIONAL dentro de `multi_sucursal`. Requiere H89.*
   - [x] `staff_branch_assignments` (en lugar de `tenant_user_stores`): base, cobertura temporal exclusiva y acceso adicional con vigencias, rol por sucursal, usuarios y perfiles sin cuenta, traslados programados con cancelación que restaura e historial. Sin asignaciones: encargado = todas, cajero = principal.
   - [ ] Alcance central vs sucursal: los maestros (productos, clientes, medios, listas) sólo los edita quien tiene alcance central.
-  - [~] RLS restrictiva de lectura con `user_allowed_store_ids()` en `sales`, `cash_shifts` (con `store_id` desnormalizado), `cash_movements` y `cash_z_closures`, más `payment_terminals` y `printers` por sucursal; reportes SECURITY DEFINER acotados a las sucursales del usuario (`report_store_filter`); tests RLS por rol y sucursal. *(Pendiente: `payments`, `product_stock`, `stock_transfers` y `EXPLAIN` sobre datos reales.)*
+  - [~] RLS restrictiva de lectura con `user_allowed_store_ids()` en `sales`, `cash_shifts` (con `store_id` desnormalizado), `cash_movements` y `cash_z_closures`, más `payment_terminals` y `printers` por sucursal; reportes SECURITY DEFINER acotados a las sucursales del usuario (`report_store_filter`); tests RLS por rol y sucursal. *(2026-11-05, ADR-080: `payments` y `stock_transfers` (con ítems y eventos) hechos; `product_stock` queda legible por decisión (Ver en otras sucursales). Pendiente: `EXPLAIN` sobre datos reales.)*
   - [x] `store_id` en `audit_logs` (trigger `audit_logs_fill_store`) para filtrar la auditoría por sucursal.
   - [x] Invitar usuario con sucursales asignadas (cumple el criterio de `01-mvp.md` "asignación de rol y sucursales permitidas"). Perfiles y vendedores del POS filtrados por la sucursal del POS.
   - [x] *Criterio:* un cajero de Norte no ve ventas ni cajas de Centro aunque consulte la API directo; el dueño ve todo. *(Auditoría 2026-11-05: `tests/integration/rls-sucursales.test.ts`, "el cajero asignado a Norte sólo ve ventas y turnos de Norte".)*
@@ -1069,22 +1069,22 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [x] Planes de cuotas y recargos por sucursal: la sucursal pisa u oculta planes del negocio y hereda el resto; el POS cobra con los de su sucursal. *(2026-10-12, ADR-057; recargo único y n° de comercio por sucursal ya estaban en ADR-049)*
   - [ ] *Criterio:* Visa con recargo 10% en todo el negocio y 0% en Norte; Norte usa su propio n° de comercio de Prisma y su Point; el cupón de cada venta sale con el n° correcto sin tipearlo.
 
-- [ ] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
+- [~] **H94: Catálogo central con stock, precio y habilitación por sucursal.** · *OPTIONAL dentro de `multi_sucursal`. Requiere H89 y H90. Depósitos dentro de la sucursal siguen en F11/H33; listas PRO en F18/H100.* · *Stock: OPTIONAL `stock_sucursales` (Business, requiere `multi_sucursal`), ADR-046.*
   - [x] `product_stock(store_id, product_id, variant_id, qty, min_qty, max_qty, location)` mantenido por trigger sobre `stock_movements`; `products.stock` sigue como total y al commit se garantiza que es la suma (sin romper pantallas). Migración de datos: el stock actual queda en la sucursal principal. En tránsito se calcula desde los traslados (`stock_by_store`). *(ADR-046; reservado queda pendiente)*
   - [x] Stock mínimo, máximo y ubicación por sucursal; desglose en Productos y en la ficha; ajuste y conteo por sucursal. *(ADR-046)*
   - [x] Venta en negativo por sucursal: aviso o bloqueo en el POS y control en `create_sale` (`insufficient_stock_branch`), con la venta sin stock efectiva de la sucursal (ADR-049).
   - [ ] `product_store_settings` (como el `itemStore` de Napse): habilitado, a la venta, precio, costo, stock mínimo, todo nullable = hereda.
   - [x] Listas de precios asignables a sucursal o grupo (`price_list_assignments` con alcance `store` y `store_group`, migración `20261021100100_listas_precios_pro`, ADR-058). *(Auditoría 2026-11-05.)*
   - [x] "Ver en otras sucursales" en el buscador del POS y en la ficha (stock por sucursal).
-  - [~] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34). *(Auditoría 2026-11-05: ajuste y conteo por sucursal con `adjust_store_stock` (ADR-046) y merma con `register_stock_waste(p_store_id)` (`20261015200000`) hechos; producción e import pendientes.)*
+  - [~] Ajustes, mermas, producción, conteos e import de stock inicial por sucursal (cierra el pendiente de F11/H34). *(Auditoría 2026-11-05: ajuste y conteo por sucursal con `adjust_store_stock` (ADR-046) y merma con `register_stock_waste(p_store_id)` (`20261015200000`) hechos; producción por sucursal con `register_production(p_store_id)` (`20261105100300`, ADR-080); import pendiente.)*
   - [ ] *Criterio:* el mismo producto cuesta $1.000 en Centro y $1.100 en el shopping, tiene stock separado y el cajero ve que en Norte quedan 3.
 
-- [ ] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
+- [x] **H95: Transferencias entre sucursales.** · *OPTIONAL `traslados` (nueva, Business, requiere `stock_sucursales`; reemplaza a la key `transferencias_stock` prevista). Requiere H94. ADR-046.*
   - [x] Documento con estados `borrador → pendiente de aprobación → programado → en tránsito → recibido parcial → recibido / cancelado`, aprobación configurable por unidades o valor (cuatro ojos) y fecha programada con "Para despachar hoy" (sin cron).
   - [x] Movimientos `transfer_out` / `transfer_in` / `transfer_return`, stock en tránsito visible, diferencias en la recepción con motivo.
   - [x] Remito interno imprimible y XLSX con número correlativo; transferencia sugerida por stock mínimo. *(Falta: tratamiento fiscal del remito y solicitud de transferencia desde la sucursal que necesita.)*
-  - [x] Auditoría y timeline por traslado. *(Falta: reporte de artículos en tránsito.)*
-  - [ ] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran.
+  - [x] Auditoría y timeline por traslado. Reporte de artículos en tránsito por traslado o producto, por sucursal y dirección, con valor y XLSX (ADR-080).
+  - [x] *Criterio:* Centro manda 10 unidades a Norte, quedan en tránsito, Norte recibe 9 con motivo "dañado" y el stock y el reporte cuadran. *(`rls.test.ts` "traslado completo con faltante" y `tests/unit/inTransit.test.ts`.)*
 
 - [ ] **H96: Clientes compartidos entre sucursales.** · *BASE (cliente único, ya existe) + OPTIONAL `cuenta_corriente` (existe) para crédito. Requiere H90 para el `store_id` de cada movimiento.*
   - [x] Cliente único a nivel negocio (`customers` por tenant) y cuenta corriente v2 cobrable en cualquier sucursal. *(ADR-037)*
@@ -1095,10 +1095,10 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Fidelización (puntos, cupones, gift cards) compartida: se cubre en F9/H55 y F16/H80.
   - [ ] *Criterio:* un cliente compra fiado en Centro y paga en Norte; la deuda baja y cada sucursal ve lo suyo en su reporte.
 
-- [ ] **H97: Reportes consolidados y por sucursal.** · *BASE (reportes de la sucursal propia) + OPTIONAL `multi_sucursal` (consolidado y comparativo) + `metricas_avanzadas` (existe, MARKETING-FUTURO) para tableros comparativos. Requiere H90.*
-  - [~] Filtro global de sucursal (el del chip de H90) en reportes, conciliación, ventas, Z, stock y export XLSX; RPC con `p_store_id` y acceso validado. *(Filtro por caja: pendiente.)*
+- [~] **H97: Reportes consolidados y por sucursal.** · *BASE (reportes de la sucursal propia) + OPTIONAL `multi_sucursal` (consolidado y comparativo) + `metricas_avanzadas` (existe, MARKETING-FUTURO) para tableros comparativos. Requiere H90.*
+  - [~] Filtro global de sucursal (el del chip de H90) en reportes, conciliación, ventas, Z, stock y export XLSX; RPC con `p_store_id` y acceso validado. *(Filtro por caja en Cierres Z hecho (ADR-080); en el resto de los reportes, pendiente.)*
   - [x] Vista consolidada con desglose por sucursal y comparativo entre sucursales (ventas, ticket promedio, medios de pago, margen, devoluciones, diferencias de caja, clientes) con XLSX de una hoja por sucursal más el consolidado. *(2026-10-12, ADR-057)*
-  - [ ] Cierres Z por sucursal y caja con correlativo propio (completa F11/H30b).
+  - [x] Cierres Z por sucursal y caja con correlativo propio (completa F11/H30b): trigger `czc_numbering` con lock, que además corrige el número del negocio repetido bajo la RLS por sucursal (`20261105100100`, ADR-080).
   - [ ] Reportes pesados en cola ("Reporte offline" de Napse) con aviso cuando el archivo está listo.
   - [ ] *Criterio:* el dueño compara las 3 sucursales del mes en una pantalla y descarga un XLSX con una hoja por sucursal más el consolidado.
 
@@ -1109,11 +1109,11 @@ Objetivo: que un negocio con 2 o más locales opere con **la sucursal y la caja 
   - [ ] Jurisdicción de IIBB por sucursal (para percepciones y Convenio Multilateral, F18/H105).
   - [ ] *Criterio:* Centro emite con PV 3 y Norte con PV 4; si ARCA cae, cada PV entra en contingencia por separado.
 
-- [~] **H99: Monitor de sucursales, cajas y terminales.** *(2026-10-12, ADR-057: vista de sucursales en el monitor de cajas con alertas, BASE `monitor_cajas`; heartbeat y key Enterprise pendientes)* · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
-  - [ ] Heartbeat de cada caja (última venta, último ping, versión de la app, impresora y display conectados).
-  - [~] Estado de terminales (`payment_terminals.last_seen_at` en la tarjeta de la sucursal; último cobro aprobado o rechazado: pendiente).
+- [~] **H99: Monitor de sucursales, cajas y terminales.** *(2026-10-12, ADR-057: vista de sucursales en el monitor de cajas con alertas, BASE `monitor_cajas`; 2026-11-05, ADR-080: heartbeat por caja y último cobro por terminal; key Enterprise `monitoreo_sucursales` para el historial y avisos push, pendiente)* · *OPTIONAL `monitoreo_sucursales` (nueva, Enterprise). Requiere H93. Se integra a F16/H85.*
+  - [x] Heartbeat de cada caja (última venta, último ping, versión de la app, display conectado; impresora y balanza quedan para el conector local): `register_heartbeats` + `register_heartbeat`, alerta de caja abierta sin señal (`20261105100200`, ADR-080).
+  - [x] Estado de terminales: `last_seen_at` y último cobro aprobado o rechazado (bitácora integrada y Point / QR) en la tarjeta de la sucursal, con alerta de rechazo (ADR-080).
   - [x] Alertas por sucursal: caja abierta hace más de N horas, diferencia de caja sobre tolerancia, terminal sin señal, sucursal sin caja o sin ventas en horario, cobros pagados sin venta y faltantes (`lib/branches/monitorAlerts.ts`, umbrales por equipo). *(ADR-057)*
-  - [ ] *Criterio:* el dueño ve en una pantalla que el Point de Centro no responde desde las 10:12 y que Norte no abrió caja.
+  - [x] *Criterio:* el dueño ve en una pantalla que el Point de Centro no responde desde las 10:12 y que Norte no abrió caja. *(Alertas `terminal_stale` y `closed_in_hours` en `lib/branches/monitorAlerts.ts`; ADR-057 y ADR-080.)*
 
 #### F17 · Personal, cajas y seguridad operativa (auditoría 2026-10-12, ADR-051)
 
@@ -1136,10 +1136,10 @@ Sale de [`auditoria-sucursales-personal-cajas.md`](./auditoria-sucursales-person
   - [x] POS: aviso "Esta caja la tiene abierta X desde HH:MM" con acceso a elegir otra caja.
   - [x] *Criterio:* un cajero no puede vender, retirar ni cerrar en el turno de otro aunque llame a la API directo; el dueño vende en Norte abriendo su propia caja. *(Auditoría 2026-11-05: `tests/integration/rls-personal-cajas.test.ts`, casos H114.)*
 
-- [~] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas y heartbeat en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
+- [x] **H115: Monitor de cajas abiertas.** *(2026-10-12, ADR-051: pantalla y widget hechos; alertas (ADR-057) y heartbeat (ADR-080) en H99)* · *BASE `monitor_cajas` (nueva). Primer corte de H99.*
   - [x] RPC `cash_monitor(store)` (respeta el alcance por sucursal del que mira): turno, caja, sucursal, usuario, desde cuándo, ventas, total, efectivo esperado, retiros e ingresos, última actividad.
   - [x] Pantalla Caja · Cajas abiertas con contador en vivo y acciones Ver detalle y Cierre forzado (PIN); widget en el Panel del dueño.
-  - [~] Pendiente (H99): heartbeat. Alertas por caja abierta hace más de N horas y terminales sin señal hechas en la vista de sucursales (ADR-057).
+  - [x] Heartbeat por caja (ADR-080). Alertas por caja abierta hace más de N horas, caja sin señal y terminales sin señal en la vista de sucursales (ADR-057, ADR-080).
 
 - [x] **H116: PIN de supervisor y políticas por acción.** *(2026-10-12, ADR-051)* · *BASE `pin_supervisor` (nueva). Reemplaza el gating por `cuenta_corriente` del PIN (las RPC `account_*` siguen).*
   - [x] `security_settings` por negocio: acciones que piden PIN con umbral (descuento sobre X %, anulación desde $Y, devolución desde $Y, retiro desde $Y, ingreso, cierre forzado), roles y usuarios supervisores, intentos y minutos de bloqueo, rotación del PIN en días, caja compartida.

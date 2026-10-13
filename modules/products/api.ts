@@ -483,9 +483,12 @@ export const productsApi = {
 
   // Registra una producción / batch (F13 · H50): SUMA `qty` al stock del producto
   // preparado vía register_production. Devuelve el nuevo stock. RPC no tipada → cast.
+  // storeId (F17 · H94): sucursal donde se produjo (null = la principal, como
+  // antes). Sólo se manda con stock por sucursal activo.
   registerProduction: async (
     productId: string,
     input: ProductionInput,
+    storeId: string | null = null,
   ): Promise<number> => {
     const supabase = createClient();
     const parsed = ProductionSchema.parse(input);
@@ -493,6 +496,7 @@ export const productsApi = {
       p_product_id: productId,
       p_qty: parsed.qty,
       p_notes: parsed.notes ?? undefined,
+      ...(storeId ? { p_store_id: storeId } : {}),
     } as never);
     if (error) throw error;
     return data as number;

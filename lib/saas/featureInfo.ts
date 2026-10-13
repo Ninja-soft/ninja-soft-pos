@@ -131,6 +131,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Sin promociones el POS no aplica combos ni descuentos automáticos por campaña y el servidor rechaza descuentos de promoción. Los cupones siguen funcionando.",
     minPlan: "Pro",
   },
+  aprobaciones_comerciales: {
+    desc: "Aprobación de cambios comerciales: lo que un encargado cambia en promociones de alto impacto (por porcentaje o por monto) y en recargos o planes de cuotas queda pendiente hasta que el dueño lo aprueba, con vencimiento, aviso y todo el circuito auditado.",
+    impact: "Desactivado, los cambios de los encargados se aplican directo, sin aprobación del dueño.",
+    minPlan: "Business",
+  },
   descuentos: {
     desc: "Descuentos manuales en la venta: permite al cajero/encargado aplicar un descuento puntual al total o al ítem.",
     impact: "Si se desactiva, no se pueden cargar descuentos manuales durante el cobro.",
@@ -357,6 +362,24 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, no se puede apartar stock para un cliente ni registrar retiros en tienda (el servidor lo rechaza).",
     minPlan: "Pro",
     requires: ["stock"],
+  },
+  alertas_margen: {
+    desc: "Alertas de margen: productos que se venden bajo costo, bajo el precio mínimo o con margen menor al mínimo del negocio, con el precio sugerido para volver al mínimo y aviso en la campana cuando un costo nuevo deja un producto debajo.",
+    impact: "Desactivado, no hay lista de márgenes bajos ni aviso cuando sube un costo (el servidor lo rechaza).",
+    minPlan: "Start",
+    requires: ["productos"],
+  },
+  conteo_ciclico: {
+    desc: "Conteo cíclico: cada día el sistema propone qué contar por sucursal según la clase ABC (lo que más vende se cuenta más seguido), ajusta las diferencias y mide la exactitud de cada conteo.",
+    impact: "Desactivado, el stock se cuenta a mano o por importación, sin rotación ABC ni exactitud por conteo (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["stock"],
+  },
+  garantias_serie: {
+    desc: "Garantías por número de serie: buscás un IMEI o una serie y ves la venta, el cliente, la garantía de fábrica y la extendida con su vencimiento, y abrís y seguís el reclamo de posventa.",
+    impact: "Desactivado, no se consulta la garantía por serie ni se registran reclamos (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["productos"],
   },
   compras: {
     desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",

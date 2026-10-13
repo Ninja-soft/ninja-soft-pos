@@ -25,7 +25,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (falta H32 y parte de H31b) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas, lista de espera y rotación; mover/unir mesas, anulaciones con motivo y SLA del KDS por estación, ADR-081) |
-| **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación (parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
+| **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 En curso (primer corte ADR-092 en `feat/f14-comercial`: aprobaciones comerciales, alertas de margen, conteo cíclico y garantías por serie; parciales por otras fases: herencia de configuración ADR-049, compras ADR-050 y ADR-059, venta offline ADR-077) |
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 En curso: ayuda contextual, Escuela mínima y checklist por rubro (H72, H69, H71 parcial, ADR-086) |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 En curso (primer corte ADR-091: cockpit, reservas con retiro en tienda, riesgo operativo y runbooks; parciales previos por otras fases: monitor de sucursales ADR-057 y ADR-080, ARCA ADR-072, simulador de promociones ADR-074) |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
@@ -853,9 +853,9 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [~] Transparencia: todo recargo aparece antes de cobrar y en ticket/comprobante cuando corresponda. *Parcial: el recargo se muestra en la hoja de cobro antes de cobrar (`lib/pos/checkoutMath.ts`, `components/pos/checkout/CheckoutSheet.tsx`); falta verificar su línea en el comprobante.*
   - [ ] *Criterio:* "Visa 6 cuotas +18%" aplica solo en sucursal A, de lunes a viernes, con simulación del total antes de cobrar.
 
-- [ ] **H60 — Motor de reglas comerciales unificado.**
-  - [ ] Condiciones/acciones para precio, descuento, recargo, comisión, límite, alerta, bloqueo o sugerencia.
-  - [ ] Prioridad, exclusividad, combinabilidad, vigencia, audiencia, test A/B y simulador con ventas históricas.
+- [~] **H60 — Motor de reglas comerciales unificado.** *Auditoría 2026-10-13: no hay un motor único; las piezas existen por separado (promociones ADR-074, listas PRO ADR-058, planes de cuotas ADR-057).*
+  - [~] Condiciones/acciones para precio, descuento, recargo, comisión, límite, alerta, bloqueo o sugerencia. *Parcial: descuento y precio con condiciones en promociones (ADR-074, `lib/promotions/engine.ts`), precio por cliente y por escala en listas PRO (`price_list_assignments`, `price_list_breaks`, ADR-058) y recargo por plan de cuotas (`payment_plans`); faltan comisión, límite, alerta, bloqueo y sugerencia como acciones de una misma regla.*
+  - [~] Prioridad, exclusividad, combinabilidad, vigencia, audiencia, test A/B y simulador con ventas históricas. *Parcial: prioridad, excluyente o acumulable, vigencia y simulador contra ventas reales en promociones (`promotions.priority`, `stackable`, `components/promotions/PromotionSimModal.tsx`, ADR-074); faltan audiencia por segmento y test A/B.*
   - [ ] Unifica promociones F9, recargos F11, planes F7/F14, comisiones F12 y reglas gastronómicas F13.
   - [ ] *Criterio:* una regla "mayorista paga transferencia sin recargo y 5% menos desde 20 unidades" se configura sin código.
 
@@ -871,17 +871,17 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [~] Versionado, diff, preview, rollback y ambiente sandbox por tenant. *Parcial: copiar de otra sucursal con vista previa campo por campo y "Diferencias por sucursal" (ADR-049); faltan versionado, rollback y sandbox.*
   - [~] *Criterio:* se clona la configuración de una sucursal a otra, se revisa diff y se revierte en un click. *Parcial: copia entre sucursales con diff y "Volver a heredar" por campo (ADR-049); falta revertir la copia entera en un click.*
 
-- [~] **H63 — Gobierno de cambios y aprobaciones.** *Parcial: PIN de supervisor por acción y auditoría con motivo; falta el circuito maker-checker.*
-  - [ ] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo.
-  - [~] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud. *Parcial: motivo y antes/después en `audit_logs` (ADR-073, ADR-083) y PIN de supervisor por acción (ADR-051, ADR-060); faltan solicitud con aprobación diferida, adjuntos y expiración.*
-  - [ ] Alertas a owner/manager/internal cuando una configuración crítica cambia.
-  - [ ] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito.
+- [~] **H63 — Gobierno de cambios y aprobaciones.** *Parcial: maker-checker de promociones de alto impacto y recargos (ADR-092), aprobación de precios masivos (ADR-058), PIN de supervisor por acción y auditoría con motivo; faltan plan, regla fiscal, permiso, suspensión, integración y export masivo.*
+  - [~] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo. *Parcial (auditoría 2026-10-13): aprobación del dueño para cambios masivos de precios (`price_bulk_batches` en `pending_approval`, `price_bulk_decide`, ADR-058), traslados con aprobación opcional (ADR-046) y, desde ADR-092, promociones de alto impacto y recargos o planes de cuotas que propone un encargado (`commercial_change_requests`, trigger `commercial_maker_checker`, `/comercial`); faltan plan, regla fiscal, permiso, suspensión, integración y export masivo.*
+  - [~] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud. *Parcial: motivo y antes/después en `audit_logs` (ADR-073, ADR-083), PIN de supervisor por acción (ADR-051, ADR-060) y, desde ADR-092, solicitud con antes y propuesto, aprobación diferida del dueño, motivo obligatorio al rechazar y vencimiento configurable; faltan adjuntos.*
+  - [~] Alertas a owner/manager/internal cuando una configuración crítica cambia. *Parcial (ADR-092): aviso al dueño cuando entra una solicitud, a quien la pidió cuando se decide y a dueño y encargado cuando un costo nuevo deja un producto bajo el margen; faltan internal y el aviso de cambios directos del dueño.*
+  - [x] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito. *Hecho (ADR-092): el plan del encargado queda inactivo y pendiente, el dueño lo aprueba en `/comercial` y `audit_logs` guarda `commercial_change_requested` y `_approved` (`tests/integration/rls-f14-comercial.test.ts`).*
 
-- [~] **H64 — Inventario PRO, compras y proveedores.** *Parcial: compras, proveedores, lotes y sugerencia de compra hechos (ADR-050, ADR-059); faltan conteos cíclicos, garantías por serie, demanda proyectada y transferencia recomendada.*
+- [~] **H64 — Inventario PRO, compras y proveedores.** *Parcial: compras, proveedores, lotes, sugerencia de compra y traslado recomendado (ADR-046, ADR-050, ADR-059), conteo cíclico ABC y garantías por serie (ADR-092); faltan inventario físico guiado y demanda proyectada.*
   > Nota 2026-10-12: *(Compras, proveedores, costos e importaciones se detallan con su tratamiento fiscal en F18/H101 y H102.)*
-  - [~] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría. *Parcial: lotes con vencimiento y consumo FEFO (ADR-050, ADR-059), series (`product_serials`), conteo e importación de stock auditados por sucursal (ADR-078); faltan garantías por serie, conteos cíclicos e inventario físico guiado.*
+  - [~] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría. *Parcial: lotes con vencimiento y consumo FEFO (ADR-050, ADR-059), series (`product_serials`), conteo e importación de stock auditados por sucursal (ADR-078), conteo cíclico por clase ABC con exactitud (`cycle_count_due`, `cycle_count_submit`, `/inventario`, ADR-092) y garantía por serie con reclamos de posventa (`serial_lookup`, `serial_warranty_claims`, ADR-092); faltan inventario físico guiado y ajustes masivos.*
   - [x] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores. *Hecho: ADR-050 y ADR-059 (proveedores, OC, recepción parcial, costos, listas del proveedor, `purchase_suggestions`, cuenta corriente de proveedores).*
-  - [~] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales. *Parcial: mínimo y máximo por sucursal con sugerencia de compra (ADR-050, `lib/purchases/suggest.ts`); faltan demanda proyectada y transferencia recomendada.*
+  - [~] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales. *Parcial: mínimo y máximo por sucursal con sugerencia de compra (ADR-050, `lib/purchases/suggest.ts`), traslado recomendado entre sucursales desde la que tiene sobrante (`lib/stock/suggest.ts`, `components/stock/transfers/TransferSuggestModal.tsx`, ADR-046) y reposición del salón desde los depósitos (ADR-085); falta demanda proyectada.*
   - [x] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote. *Hecho: la OC se arma desde la sugerencia (`components/purchases/OrderWizardModal.tsx`) y la recepción parcial actualiza costo, stock y lote (ADR-050, ADR-059).*
 
 - [~] **H65 — Offline-first completo.** *Parcial: venta offline conservadora (ADR-077) y POS instalable que abre y recarga sin conexión (ADR-087); faltan comandas, pagos integrados y stock multi-dispositivo.*
@@ -896,8 +896,8 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Mapeo de productos/modificadores/categorías por canal sin duplicar catálogo base.
   - [ ] *Criterio:* un producto cambia de precio y se sincroniza a catálogo/QR/marketplace según reglas del canal.
 
-- [ ] **H67 — BI/AI operativo y recomendaciones.**
-  - [ ] Forecast de demanda, alertas de anomalías, productos muertos, margen bajo, quiebres probables, staff necesario y horarios pico.
+- [~] **H67 — BI/AI operativo y recomendaciones.** *Parcial: horarios pico y alertas de margen bajo (ADR-092).*
+  - [~] Forecast de demanda, alertas de anomalías, productos muertos, margen bajo, quiebres probables, staff necesario y horarios pico. *Parcial: horarios pico en reportes (`peakHour` en `modules/reports/derive.ts`) y margen bajo con precio sugerido y aviso al cruzar el mínimo (`margin_alerts`, `/comercial`, ADR-092); faltan forecast, anomalías, productos muertos, quiebres probables y staff necesario.*
   - [ ] Recomendaciones accionables: subir stock, cambiar precio, crear combo, revisar cajero, reponer insumo, contactar cliente inactivo.
   - [ ] Explicabilidad: cada recomendación muestra datos usados y confianza.
   - [ ] *Criterio:* el owner recibe "te vas a quedar sin café el viernes" con evidencia y orden de compra sugerida.
@@ -1504,13 +1504,13 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
 | **F13** | 39/74 | 26 | 9 | 53% | 70% |
-| **F14** | 4/61 | 31 | 26 | 7% | 32% |
+| **F14** | 5/61 | 38 | 18 | 8% | 39% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 542/1004 | 290 | 172 | 54% | 68% |
+| **Total** | 543/1004 | 297 | 164 | 54% | 69% |
 <!-- roadmap-progress:end -->
 
 ---

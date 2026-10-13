@@ -17,6 +17,7 @@ import { useFeature } from "@/modules/saas/gating";
 import { useBrands, useCategories } from "@/modules/products/hooks";
 import { useBranches } from "@/modules/branches/hooks";
 import { usePromotions, usePromotionMutations } from "@/modules/promotions/hooks";
+import { commercialApi, useChangeRequests } from "@/modules/commercial/api";
 import type { Promotion } from "@/modules/promotions/api";
 import { arPromoClock } from "@/lib/promotions/engine";
 import {
@@ -89,6 +90,13 @@ function PromotionsList() {
     [categories, brands, branches],
   );
   const clock = arPromoClock();
+  // ADR-092: cambios de un encargado que esperan la aprobación del dueño.
+  const approvalsOn = useFeature("aprobaciones_comerciales") === true;
+  const { data: pendingReqs = [], refetch: refetchPending } = useChangeRequests("pending", approvalsOn);
+  const pendingIds = useMemo(
+    () => new Set(pendingReqs.filter((r) => r.entity_type === "promotions").map((r) => r.entity_id)),
+    [pendingReqs],
+  );
 
   async function doDelete() {
     if (!delTarget) return;
@@ -104,7 +112,16 @@ function PromotionsList() {
   async function toggle(p: Promotion, active: boolean) {
     try {
       await setActive.mutateAsync({ id: p.id, active });
-      toast({ title: active ? "Promoción activada" : "Promoción pausada", variant: "success" });
+      const held =
+        active && approvalsOn
+          ? (await commercialApi.requests("pending")).some((r) => r.entity_type === "promotions" && r.entity_id === p.id)
+          : false;
+      if (approvalsOn) void refetchPending();
+      toast({
+        title: held ? "Queda pendiente de aprobación" : active ? "Promoción activada" : "Promoción pausada",
+        description: held ? "Es de alto impacto: el dueño la revisa en Control comercial." : undefined,
+        variant: "success",
+      });
     } catch (e) {
       toast({ title: "No se pudo cambiar", description: e instanceof Error ? e.message : undefined, variant: "error" });
     }
@@ -145,6 +162,12 @@ function PromotionsList() {
                         {st.label}
                       </span>
                       {p.stackable && <span className="text-xs text-muted-foreground">· Acumulable</span>}
+                      {pendingIds.has(p.id) && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-warning">
+                          <span aria-hidden className="h-2 w-2 rounded-full bg-warning" />
+                          Pendiente de aprobación
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-xs text-foreground/80">{actionPhrase(p, names)}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">

@@ -307,12 +307,15 @@ export function PausedOnCloseDialog({
       title="Hay ventas pausadas en esta caja"
       className="max-w-md"
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Volver
+        // Tres acciones no entran en una fila del modal angosto: van apiladas,
+        // la principal arriba y "Volver" como acción discreta al pie.
+        <div className="grid w-full gap-2">
+          <Button className="w-full" onClick={onCarry}>
+            Pasarlas y cerrar
           </Button>
           {free > 0 && (
             <Button
+              className="w-full"
               variant="secondary"
               loading={busy}
               onClick={async () => {
@@ -324,8 +327,10 @@ export function PausedOnCloseDialog({
               Descartar {free === 1 ? "la que no tiene pagos" : `las ${free} sin pagos`}
             </Button>
           )}
-          <Button onClick={onCarry}>Pasarlas y cerrar</Button>
-        </>
+          <Button className="w-full" variant="ghost" onClick={onClose}>
+            Volver
+          </Button>
+        </div>
       }
     >
       <div className="space-y-3 text-sm text-muted-foreground">

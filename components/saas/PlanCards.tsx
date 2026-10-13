@@ -138,6 +138,7 @@ function PlanCardItem({
   selected,
   onSelect,
   cta,
+  diffLabel,
 }: {
   plan: PlanCardModel;
   features: ComparableFeature[];
@@ -147,6 +148,7 @@ function PlanCardItem({
   selected: boolean;
   onSelect?: () => void;
   cta?: ReactNode;
+  diffLabel: string;
 }) {
   const recommended = plan.isRecommended;
   const isContact = plan.trialDays <= 0;
@@ -189,7 +191,9 @@ function PlanCardItem({
       className={cn(
         "relative flex flex-col gap-4 rounded-lg border p-5 text-left transition",
         selected
-          ? "choice-on choice-check"
+          ? onSelect
+            ? "choice-on"
+            : "choice-on choice-check"
           : recommended
             ? "border-ninja-flame/40 bg-muted/60"
             : "border-border bg-muted/60",
@@ -259,7 +263,7 @@ function PlanCardItem({
       {hasDiff && (
         <div>
           <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-ninja-flame">
-            Sumás respecto del actual
+            {diffLabel}
           </div>
           <ul className="space-y-1.5">
             {added.slice(0, 6).map((l) => (
@@ -290,6 +294,7 @@ export function PlanCards({
   onSelect,
   comparedToKey,
   renderCta,
+  diffLabel = "Sumás respecto del actual",
   className,
   // 4 planes (Start/Pro/Business/Enterprise): 1 col mobile, 2 tablet, 4 desktop.
   // Así entran todos sin cortarse en el selector/registro.
@@ -303,6 +308,8 @@ export function PlanCards({
   comparedToKey?: string | null;
   // CTA por plan (ej. botón "Mejorar" en el panel). Recibe el plan y si es el actual.
   renderCta?: (plan: PlanCardModel, isCompared: boolean) => ReactNode;
+  // Título de la lista de diferencias (en el registro no hay "plan actual").
+  diffLabel?: string;
   className?: string;
   columnsClassName?: string;
 }) {
@@ -325,6 +332,7 @@ export function PlanCards({
           plan={p}
           features={features}
           comparedTo={compared}
+          diffLabel={diffLabel}
           selected={selectedKey === p.key}
           onSelect={onSelect ? () => onSelect(p.key) : undefined}
           cta={renderCta?.(p, compared?.key === p.key)}

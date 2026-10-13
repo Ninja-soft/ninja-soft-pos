@@ -70,6 +70,7 @@ export function SignupStepPlan({
     return rec?.key ?? null;
   }, [plans]);
 
+  const recommendedName = (plans ?? []).find((p) => p.isRecommended)?.name ?? null;
   const aiPrice = (aiCfg?.addon_price_ars ?? "").trim();
   const aiTrialDays = Number(aiCfg?.addon_trial_days ?? "") || 0;
 
@@ -83,7 +84,7 @@ export function SignupStepPlan({
 
   if (isError || !plans || plans.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-muted p-4 text-sm text-ninja-lavender">
+      <div className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
         No pudimos cargar los planes ahora. Vas a poder elegirlo desde tu panel
         después de crear la cuenta.
       </div>
@@ -92,10 +93,10 @@ export function SignupStepPlan({
 
   return (
     <div>
-      <h3 className="font-sans text-xl font-bold tracking-[-0.01em] text-ninja-softWhite">
+      <h3 className="font-sans text-xl font-bold tracking-[-0.01em] text-foreground">
         Elegí tu plan
       </h3>
-      <p className="mt-1 text-sm text-ninja-lavender">
+      <p className="mt-1 text-sm text-muted-foreground">
         Mirá qué suma cada plan. Empezá con tu prueba gratis y cambiá cuando
         quieras.
       </p>
@@ -106,6 +107,8 @@ export function SignupStepPlan({
         selectedKey={value}
         onSelect={onChange}
         comparedToKey={comparedToKey}
+        columnsClassName="gap-4 sm:grid-cols-2"
+        diffLabel={recommendedName ? `Suma sobre ${recommendedName}` : "Suma sobre el recomendado"}
       />
 
       {/* ── Add-on IA: venta + toggle ── */}
@@ -114,10 +117,10 @@ export function SignupStepPlan({
         onClick={() => onAddonAiChange(!addonAi)}
         aria-pressed={addonAi}
         className={cn(
-          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 text-left transition",
+          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 pr-10 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           addonAi
             ? "choice-on choice-check"
-            : "border-border bg-muted hover:bg-muted",
+            : "border-border bg-card hover:bg-secondary",
         )}
       >
         <div className="flex items-start justify-between gap-3">
@@ -125,11 +128,11 @@ export function SignupStepPlan({
             <AssistantMark size={40} sparkle={false} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-ninja-softWhite">
+                <span className="font-semibold text-foreground">
                   Sumar Asistente IA
                 </span>
                 {aiPrice ? (
-                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ninja-lavender">
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                     +{formatPlanPrice(Number(aiPrice))}/mes
                   </span>
                 ) : null}
@@ -139,7 +142,7 @@ export function SignupStepPlan({
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-ninja-lavender">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {aiCfg?.commercial_text?.trim() ||
                   "Inteligencia artificial que conoce tu negocio: te responde sobre ventas, stock y cómo usar cada función."}
               </p>
@@ -155,7 +158,7 @@ export function SignupStepPlan({
           {AI_BENEFITS.map((b) => (
             <li
               key={b}
-              className="flex items-start gap-1.5 text-xs text-ninja-lavender"
+              className="flex items-start gap-1.5 text-xs text-muted-foreground"
             >
               <Check size={13} className="mt-0.5 shrink-0 text-ninja-flameSoft" />
               <span>{b}</span>

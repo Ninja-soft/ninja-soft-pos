@@ -103,6 +103,20 @@ describe.skipIf(!enabled)("Libro IVA Digital · gating, RLS, período y auditor�
 
     const tax = await rpc(ctx.owner.client, "tax_settings_save", { p: { iva_condition: "responsable_inscripto", cuit: "30-50000000-3" } });
     if (tax.error) throw new Error(tax.error.message);
+    // ARCA exige un certificado activo del ambiente antes de prenderse (ADR-072).
+    const cert = await rpc(admin, "arca_certificate_store", {
+      p_tenant: ctx.tenant,
+      p_user: ctx.owner.id,
+      p: {
+        environment: "homologacion",
+        status: "active",
+        cert_pem: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+        key_enc: "v1:QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=",
+        cuit: "30500000003",
+        not_after: "2030-01-01T00:00:00Z",
+      },
+    });
+    if (cert.error) throw new Error(cert.error.message);
     const arca = await rpc(ctx.owner.client, "arca_settings_save", { p: { enabled: true } });
     if (arca.error) throw new Error(arca.error.message);
 

@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils/cn";
 import { SalePayments } from "@/components/sales/SalePayments";
 import { useSaleTaxLines } from "@/modules/tax/hooks";
 import { saleTaxTicket } from "@/lib/tax/ticket";
+import { useSalePromotions } from "@/modules/promotions/hooks";
+import type { SalePromotion } from "@/modules/promotions/api";
 
 export type DetailTab = "ticket" | "cobros";
 const TABS: { value: DetailTab; label: string }[] = [
@@ -57,6 +59,8 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
   const { data, isLoading } = useSaleDetail(saleId, open);
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
+  // ADR-074: promociones aplicadas, una línea por promo en el ticket.
+  const salePromos = useSalePromotions(open ? saleId : null);
   // Marca efectiva de la sucursal de la venta (logo y datos propios, ADR-049).
   const { data: brand } = useTicketBranding(
     open,
@@ -213,6 +217,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
           total: data.sale.total,
           status: data.sale.status,
           ...saleTaxTicket(data.sale, taxLines.data ?? []),
+          promotions: salePromotionsForTicket(data.sale, salePromos.data ?? []),
         },
         items: data.items.map((it) => ({
           id: it.id,
@@ -398,4 +403,13 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab 
       )}
     </Modal>
   );
+}
+
+// Promos del ticket: las de sale_promotions o, en ventas anteriores a
+// ADR-074, la única promo guardada en la venta.
+function salePromotionsForTicket(sale: unknown, rows: SalePromotion[]) {
+  if (rows.length > 0) return rows.map((r) => ({ label: r.label, kind: r.kind, amount: r.discount }));
+  const s = sale as { promo_name?: string | null; promo_discount?: number | string | null };
+  const amount = Number(s.promo_discount) || 0;
+  return amount > 0 ? [{ label: s.promo_name || "Promoción", kind: "discount" as const, amount }] : [];
 }

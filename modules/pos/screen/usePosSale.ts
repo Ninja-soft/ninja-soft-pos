@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/Toast";
 import type { CheckoutPayment, PaymentExtra, Promo } from "@/components/pos/checkout/types";
 import { appointmentsApi } from "@/modules/agenda/api";
@@ -17,6 +18,10 @@ import { cardVoucherErrorTitle } from "@/lib/payments/voucherRules";
 export function saleErrorTitle(msg: string): string {
   // F18 · H100 (ADR-056): precio autoritativo y venta libre.
   if (msg.includes("price_mismatch")) return "Los precios cambiaron: revisá el carrito";
+  // F9 (ADR-074): el servidor calcula las promociones.
+  if (msg.includes("promo_mismatch")) return "Las promociones cambiaron: revisá el total y volvé a cobrar";
+  if (msg.includes("promo_gift_invalid")) return "El regalo de la promo ya no corresponde: revisá el carrito";
+  if (msg.includes("feature_not_in_plan: promociones")) return "Las promociones no están incluidas en tu plan";
   if (msg.includes("price_override_reason_required")) return "Escribí el motivo del cambio de precio";
   if (msg.includes("free_sale_not_allowed")) return "La venta libre (monto manual) está apagada en esta caja";
   if (msg.includes("free_sale_exceeds_limit")) return "La venta libre supera el tope de tu rol";
@@ -136,6 +141,7 @@ export function usePosSale(ctx: {
   onSuccess: (r: { saleId: string; change: number; hadCash: boolean }) => void;
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const { sale } = usePosMutations();
   const handlePriceMismatch = usePriceRefresh();
 
@@ -187,6 +193,8 @@ export function usePosSale(ctx: {
       // ADR-056: el servidor mandó otro precio → se reprecia y se avisa.
       if (handlePriceMismatch(e, ctx.lines)) return;
       const msg = e instanceof Error ? e.message : "";
+      // Promos que cambiaron (alta, baja, tope de usos): se vuelven a leer.
+      if (msg.includes("promo_")) void qc.invalidateQueries({ queryKey: ["promotions"] });
       const title = saleErrorTitle(msg);
       toast({
         title,

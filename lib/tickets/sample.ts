@@ -33,6 +33,8 @@ export interface SampleTicketData {
      * y otros impuestos nacionales indirectos (internos) en el comprobante B.
      */
     transparency?: { iva: number; others: number } | null;
+    /** ADR-074: cada promoción aplicada (descuentos y regalos). */
+    promotions?: { label: string; kind: "discount" | "gift"; amount: number }[];
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];

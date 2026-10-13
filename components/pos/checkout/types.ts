@@ -52,7 +52,14 @@ export interface CheckoutPayment {
     origen?: "terminal";
     /** terminal_transactions.id; lo valida el trigger de payments. */
     terminal_tx?: string;
+    /** Banco emisor (slug de lib/payments/banks): promos por banco (ADR-074). */
+    banco?: string;
   };
+  /**
+   * El POS no evaluó este pago al calcular las promos (Point: el medio real se
+   * sabe al final). create_sale no le aplica promos con condición de cobro.
+   */
+  promo_ineligible?: boolean;
   /**
    * Transferencia cobrada desde el POS (ADR-055): cuenta donde transfirió el
    * cliente (null = la por defecto de la caja). El servidor guarda la cuenta y

@@ -4,19 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { useProductsByIds } from "@/modules/products/hooks";
 import type { Product } from "@/modules/products/api";
-import { useActivePromotions } from "@/modules/promotions/hooks";
+import { useActivePromotions, usePromotionUsage } from "@/modules/promotions/hooks";
 import { couponsApi } from "@/modules/coupons/api";
 import {
-  evaluateCart,
-  evaluateGifts,
+  arPromoClock,
+  evaluatePromotions,
+  r2,
+  type AppliedPromo,
+  type PromoEvaluation,
   type Promotion,
   type PromoCartLine,
   type PromoContext,
+  type PromoPayment,
 } from "@/lib/promotions/engine";
 import { cartSubtotal, lineSubtotal, useCartStore, type CartLine } from "@/modules/pos/store";
 
-// Precios del carrito del POS: promociones (H53/H54), cupón, regalos, total
-// redondeado y promo por medio de pago. Movido tal cual desde la página.
+// Precios del carrito del POS: promociones (F9, ADR-074: mismo motor que
+// create_sale), cupón, regalos, total redondeado y promo por medio de pago.
 
 // Mensajes legibles para los rechazos de validate_coupon (F9 · H54).
 export function couponReasonMsg(reason?: string): string {
@@ -42,26 +46,35 @@ export function couponReasonMsg(reason?: string): string {
   }
 }
 
-function arContext(paymentMethod?: string): PromoContext {
-  const arNow = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }),
-  );
-  return {
-    weekday: arNow.getDay(),
-    minutes: arNow.getHours() * 60 + arNow.getMinutes(),
-    date: `${arNow.getFullYear()}-${String(arNow.getMonth() + 1).padStart(2, "0")}-${String(arNow.getDate()).padStart(2, "0")}`,
-    ...(paymentMethod ? { paymentMethod } : {}),
-  };
+interface ProductMeta {
+  category_id: string | null;
+  brand_id: string | null;
 }
 
-const toPromoLines = (ls: CartLine[]): PromoCartLine[] =>
-  ls.map((l) => ({
-    productId: l.productId,
-    categoryId: l.categoryId ?? null,
-    unitPrice: l.unitPrice,
-    quantity: l.quantity,
-    lineTotal: lineSubtotal(l),
-  }));
+// Mismas líneas que arma create_sale: categoría y marca del producto, importe
+// redondeado a centavos; regalos y sesiones de pack no participan.
+function toPromoLines(ls: CartLine[], meta: Map<string, ProductMeta>): PromoCartLine[] {
+  return ls.map((l) => {
+    const m = l.productId ? meta.get(l.productId) : undefined;
+    return {
+      productId: l.productId,
+      categoryId: m ? m.category_id : (l.categoryId ?? null),
+      brandId: m?.brand_id ?? null,
+      unitPrice: l.unitPrice,
+      quantity: l.quantity,
+      lineTotal: r2(lineSubtotal(l)),
+      excluded: Boolean(l.giftPromoId || l.packCreditId),
+    };
+  });
+}
+
+/** Promo final para el cobro: total y cada promo aplicada. */
+export interface PricingPromo {
+  discount: number;
+  id: string | null;
+  name: string | null;
+  applied?: { label: string; discount: number }[];
+}
 
 export interface AppliedCoupon {
   coupon_id: string;
@@ -74,29 +87,92 @@ export interface AppliedCoupon {
 export function usePosPricing({
   rounding,
   customerId,
+  storeId = null,
+  priceListId = null,
 }: {
   rounding: number;
   customerId: string | null;
+  /** Sucursal del turno (promos por sucursal). */
+  storeId?: string | null;
+  /** Lista de precios con la que se vende (promos por lista). */
+  priceListId?: string | null;
 }) {
   const { toast } = useToast();
   const lines = useCartStore((s) => s.lines);
   const discountTotal = useCartStore((s) => s.discountTotal);
   const syncGiftLines = useCartStore((s) => s.syncGiftLines);
   const { data: activePromos } = useActivePromotions();
+  const promos = useMemo(() => activePromos ?? [], [activePromos]);
+
+  const hasCaps = promos.some((p) => p.max_uses_total != null || p.max_uses_per_customer != null);
+  const { data: usage } = usePromotionUsage(customerId, hasCaps);
+
+  // Categoría y marca de cada producto del carrito (alcance por marca).
+  const cartProductIds = useMemo(
+    () =>
+      promos.length > 0
+        ? [...new Set(lines.map((l) => l.productId).filter((x): x is string => Boolean(x)))]
+        : [],
+    [lines, promos.length],
+  );
+  const { data: cartProducts } = useProductsByIds(cartProductIds);
+  const meta = useMemo(() => {
+    const m = new Map<string, ProductMeta>();
+    for (const p of cartProducts ?? []) {
+      const r = p as Product & { brand_id?: string | null };
+      m.set(r.id, { category_id: r.category_id ?? null, brand_id: r.brand_id ?? null });
+    }
+    return m;
+  }, [cartProducts]);
+
+  // Reloj de las franjas horarias: se reevalúa cada 30 segundos.
+  const [clock, setClock] = useState(() => arPromoClock());
+  useEffect(() => {
+    const t = setInterval(() => setClock(arPromoClock()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
 
   const subtotal = cartSubtotal(lines);
+  const promoLines = useMemo(() => toPromoLines(lines, meta), [lines, meta]);
+  const baseCtx = useMemo<PromoContext>(
+    () => ({ ...clock, storeId, priceListId, customerId, usage: usage ?? null }),
+    [clock, storeId, priceListId, customerId, usage],
+  );
 
-  // Promoción aplicable (F9 · H53): mejor promo ACTIVA para el carrito.
-  const promoResult = useMemo(() => {
-    if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
-    return evaluateCart(toPromoLines(lines), activePromos, arContext());
-  }, [activePromos, lines]);
+  // Promociones del carrito sin medio de pago (F9, ADR-074).
+  const promoEval = useMemo(() => {
+    if (promos.length === 0 || lines.length === 0) return null;
+    return evaluatePromotions(promoLines, promos, baseCtx);
+  }, [promos, lines.length, promoLines, baseCtx]);
 
-  // Descuento de promo acotado a lo que queda tras el descuento manual.
-  const promoDiscount = promoResult ? Math.min(promoResult.discount, Math.max(0, subtotal - discountTotal)) : 0;
+  const cap = Math.max(0, subtotal - discountTotal);
+  const toPromo = useCallback(
+    (ev: PromoEvaluation | null): PricingPromo | null => {
+      if (!ev || ev.discount <= 0 || ev.applied.length === 0) return null;
+      const discount = r2(Math.min(ev.discount, cap));
+      if (discount <= 0) return null;
+      return {
+        discount,
+        id: ev.applied[0]!.promotionId,
+        name: ev.applied.map((a) => a.label).join(" + "),
+        applied: ev.applied.map((a) => ({ label: a.label, discount: a.discount })),
+      };
+    },
+    [cap],
+  );
+
+  const promoResult =
+    promoEval && promoEval.discount > 0 && promoEval.applied.length > 0
+      ? {
+          promotionId: promoEval.applied[0]!.promotionId,
+          name: promoEval.applied.map((a) => a.label).join(" + "),
+          discount: promoEval.discount,
+        }
+      : null;
+  const promoDiscount = promoResult ? r2(Math.min(promoResult.discount, cap)) : 0;
 
   // Cupón (H54): excluyente con la promo de descuento (los regalos conviven).
   const couponDiscount = useMemo(() => {
@@ -108,7 +184,8 @@ export function usePosPricing({
         : appliedCoupon.discount_value;
     return Math.round(Math.min(Math.max(raw, 0), Math.max(0, subtotal - discountTotal)) * 100) / 100;
   }, [appliedCoupon, subtotal, discountTotal]);
-  const promoActive = couponDiscount <= 0;
+  // Con cupón aplicado el servidor no aplica promos de descuento.
+  const promoActive = !appliedCoupon;
   const effectivePromoDiscount = promoActive ? promoDiscount : 0;
 
   async function applyCoupon() {
@@ -144,32 +221,29 @@ export function usePosPricing({
   }
 
   // Promo método-AGNÓSTICA del carrito (ya restada en rawTotal).
-  const cartPromo =
-    promoActive && promoResult && promoDiscount > 0
-      ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
-      : null;
+  const cartPromo: PricingPromo | null = promoActive ? toPromo(promoEval) : null;
 
-  // Mejor promo CONSIDERANDO el medio de pago (H54).
-  const promoForMethod = useCallback(
-    (method: string): { discount: number; id: string | null; name: string | null } | null => {
-      if (couponDiscount > 0) return null;
-      if (!activePromos || activePromos.length === 0 || lines.length === 0) return null;
-      const r = evaluateCart(toPromoLines(lines), activePromos, arContext(method));
-      if (!r) return null;
-      const capped = Math.min(r.discount, Math.max(0, subtotal - discountTotal));
-      if (capped <= 0) return null;
-      return { discount: capped, id: r.promotionId, name: r.name };
+  // Mejor combinación CONSIDERANDO los pagos (medio, marca de tarjeta y banco).
+  const promoForPayments = useCallback(
+    (pays: PromoPayment[]): PricingPromo | null => {
+      if (appliedCoupon) return null;
+      if (promos.length === 0 || lines.length === 0) return null;
+      return toPromo(evaluatePromotions(promoLines, promos, { ...baseCtx, payments: pays }));
     },
-    [activePromos, lines, subtotal, discountTotal, couponDiscount],
+    [appliedCoupon, promos, lines.length, promoLines, baseCtx, toPromo],
+  );
+  const promoForMethod = useCallback(
+    (method: string) => promoForPayments([{ method }]),
+    [promoForPayments],
   );
 
   // ── Regalo por compra (H54) ─────────────────────────────────────────────────
   const giftProductIds = useMemo(
     () =>
-      (activePromos ?? [])
+      promos
         .filter((p: Promotion) => p.action_type === "gift" && p.gift_product_id)
         .map((p: Promotion) => p.gift_product_id as string),
-    [activePromos],
+    [promos],
   );
   const { data: giftProductsData } = useProductsByIds(giftProductIds);
   const giftProductById = useMemo(() => {
@@ -179,18 +253,17 @@ export function usePosPricing({
   }, [giftProductsData]);
 
   const desiredGifts = useMemo(() => {
-    if (!activePromos || activePromos.length === 0) return [];
-    const realLines = lines.filter((l) => !l.giftPromoId);
-    if (realLines.length === 0) return [];
+    if (promos.length === 0) return [];
+    if (!lines.some((l) => !l.giftPromoId)) return [];
     const out: { promoId: string; productId: string; name: string; sku: string | null; quantity: number }[] = [];
-    for (const g of evaluateGifts(toPromoLines(realLines), activePromos, arContext())) {
+    for (const g of promoEval?.gifts ?? []) {
       const p = giftProductById.get(g.giftProductId);
       if (!p) continue;
       if (p.track_stock && Number(p.stock ?? 0) < g.giftQty) continue;
       out.push({ promoId: g.promotionId, productId: p.id, name: p.name, sku: p.sku, quantity: g.giftQty });
     }
     return out;
-  }, [activePromos, lines, giftProductById]);
+  }, [promos.length, lines, promoEval, giftProductById]);
 
   useEffect(() => {
     const current = lines
@@ -220,15 +293,26 @@ export function usePosPricing({
     [lines],
   );
 
+  // Qué promo toca cada línea del carrito y cuánto.
+  const promoByLine = useMemo(() => {
+    const out: Record<string, { label: string; amount: number }[]> = {};
+    if (!promoActive || !promoEval) return out;
+    promoEval.applied.forEach((a: AppliedPromo) =>
+      a.lines.forEach((amt, i) => {
+        const l = lines[i];
+        if (!l || amt <= 0) return;
+        (out[l.lineId] ??= []).push({ label: a.label, amount: amt });
+      }),
+    );
+    return out;
+  }, [promoActive, promoEval, lines]);
+
+  // Bancos que piden las promos activas (el cobro con tarjeta los ofrece).
+  const promoBanks = useMemo(() => [...new Set(promos.flatMap((p) => p.banks ?? []))], [promos]);
+
   // Promo final para create_sale cuando la hoja no manda una (p. ej. reintentos).
-  const salePromo = (appliedPromo?: { discount: number; id: string | null; name: string | null } | null) =>
-    !promoActive
-      ? null
-      : appliedPromo && appliedPromo.discount > 0
-        ? appliedPromo
-        : promoResult && promoDiscount > 0
-          ? { discount: promoDiscount, id: promoResult.promotionId, name: promoResult.name }
-          : null;
+  const salePromo = (appliedPromo?: PricingPromo | null): PricingPromo | null =>
+    !promoActive ? null : appliedPromo && appliedPromo.discount > 0 ? appliedPromo : cartPromo;
 
   return {
     lines,
@@ -245,6 +329,9 @@ export function usePosPricing({
     clearCoupon,
     cartPromo,
     promoForMethod,
+    promoForPayments,
+    promoByLine,
+    promoBanks,
     rawTotal,
     total,
     splitItems,

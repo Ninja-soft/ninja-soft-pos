@@ -14,6 +14,7 @@ import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { PAYMENT_METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { qrSvgDataUrl } from "@/lib/qr/qrcode";
 import { ticketLocationText } from "@/lib/tickets/location";
+import { ticketPromoLabel, ticketPromoLines } from "@/lib/promotions/ticket";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -44,6 +45,7 @@ export const HTML_TEMPLATE_VARS: { key: string; label: string }[] = [
   { key: "items_fiscal_html", label: "Filas de ítems fiscales: cód./desc./cant./precio/IVA/subtotal (HTML)" },
   { key: "subtotal", label: "Subtotal" },
   { key: "descuento", label: "Descuento" },
+  { key: "promociones_html", label: "Promociones aplicadas (filas de tabla)" },
   { key: "total", label: "Total" },
   { key: "pagos_html", label: "Medios de pago (HTML)" },
   { key: "pie", label: "Pie del ticket" },
@@ -124,6 +126,13 @@ export function buildHtmlVars(data: TicketData): Record<string, string> {
     items_fiscal_html: itemsFiscalHtml,
     subtotal: esc(formatCurrency(sale.subtotal)),
     descuento: sale.discount_total > 0 ? esc(`-${formatCurrency(sale.discount_total)}`) : "",
+    // ADR-074: una fila por promoción aplicada.
+    promociones_html: ticketPromoLines(sale.discount_total, sale.promotions)
+      .promos.map(
+        (p) =>
+          `<tr><td>${esc(ticketPromoLabel(p))}</td><td style="text-align:right">${p.kind === "discount" ? esc(`-${formatCurrency(p.amount)}`) : ""}</td></tr>`,
+      )
+      .join(""),
     total: esc(formatCurrency(sale.total)),
     pagos_html: pagosHtml,
     pie: esc(brand?.ticket_footer || "¡Gracias por su compra!"),

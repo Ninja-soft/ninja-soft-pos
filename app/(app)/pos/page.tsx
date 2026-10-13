@@ -523,17 +523,23 @@ function PosPageInner() {
 
   // ── Orígenes (turno, recompra, mesa, delivery) y precios ────────────────────
   const origins = usePosOrigins({ setCustomer, priceFor });
-  const pricing = usePosPricing({ rounding, customerId: customer?.id ?? null });
+  // Lista con la que se vende (misma regla que el servidor): la usan las promos por lista.
+  const appliedList = useMemo(() => {
+    const w = priceResolver.world;
+    return w ? selectList(w, Date.now(), null, priceResolver.listId) : null;
+  }, [priceResolver.world, priceResolver.listId]);
+  const pricing = usePosPricing({
+    rounding,
+    customerId: customer?.id ?? null,
+    storeId: register?.store_id ?? null,
+    priceListId: appliedList?.id ?? null,
+  });
   // Repreciado al cambiar lista, condición, cliente o cantidad (no en mesa ni delivery).
   const cartReprice = useCartReprice({
     enabled: Boolean(priceResolver.world) && !origins.tableActive && !origins.deliveryActive,
     resolve: priceResolver.resolve,
   });
-  const appliedListName = useMemo(() => {
-    const w = priceResolver.world;
-    if (!w) return null;
-    return selectList(w, Date.now(), null, priceResolver.listId)?.name ?? null;
-  }, [priceResolver.world, priceResolver.listId]);
+  const appliedListName = appliedList?.name ?? null;
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
 
   // ── Stock de la sucursal del POS (F17 · H94) ───────────────────────────────
@@ -1124,6 +1130,7 @@ function PosPageInner() {
   const cartLines = (
     <CartLines
       lines={lines}
+      promoByLine={pricing.promoByLine}
       dense={preset === "caja_rapida"}
       onQty={setQuantity}
       onRemove={removeLine}
@@ -1156,11 +1163,7 @@ function PosPageInner() {
       discountLocked={discountGate.locked}
       onDiscount={handleDiscountChange}
       onDiscountLocked={() => discountGate.run(() => {})}
-      promo={
-        pricing.promoActive && pricing.promoResult && pricing.promoDiscount > 0
-          ? { name: pricing.promoResult.name ?? "Promoción", amount: pricing.promoDiscount }
-          : null
-      }
+      promos={(pricing.cartPromo?.applied ?? []).map((a) => ({ label: a.label, amount: a.discount }))}
       coupon={pricing.appliedCoupon ? { code: pricing.appliedCoupon.code, amount: pricing.couponDiscount } : null}
       couponInput={pricing.couponInput}
       onCouponInput={pricing.setCouponInput}
@@ -1459,6 +1462,8 @@ function PosPageInner() {
           deliveryFee={origins.deliveryFee}
           cartPromo={pricing.cartPromo}
           promoForMethod={pricing.promoForMethod}
+          promoForPayments={pricing.promoForPayments}
+          promoBanks={pricing.promoBanks}
           tenders={tenders}
           customerId={customer?.id ?? null}
           taxPreview={customer?.id ? { items: taxPreviewItems, customerId: customer.id } : null}

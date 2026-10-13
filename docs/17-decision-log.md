@@ -3500,3 +3500,53 @@ ADR-081 dejó como deuda el ticket separado por comensal, agrupar el KDS por cur
 - Partes iguales deja cantidades fraccionarias en el ticket y en el stock (0,333 de una milanesa); es lo que se cobró.
 - Riesgo: el trigger de aviso corre dentro del cobro que libera la mesa; si fallara, frena el cobro. Sólo inserta con datos ya validados (mensaje acotado a 500, un pendiente por grupo).
 - Tests: `tests/unit/gastro-f13-r2.test.ts` (reparto por comensal, partes iguales que cuadran, KDS por curso y urgentes, mensaje del aviso, migraciones sin `create_sale`, policies con initplan y `role_write_guard`); RLS `tests/integration/rls-f13-gastronomia-r2.test.ts` (cobro por comensal en el turno del mozo, parte igual con ítem enviado, guardas y deshacer, cierre del padre y rotación, prioridad y cursos, anulación de delivery con aislamiento, aviso automático y aislamiento). Cadena completa de migraciones aplicada sobre PGlite con un humo de todas las RPCs nuevas.
+
+---
+
+## ADR-100: Reportes con filtros guardables, presets y orden por usuario; atajos del POS sin chocar con el navegador; toasts y skeletons consistentes (TX-5, TX-3)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/tx-f10` sobre `integ/tanda-ag`; migración `20261109900000_reportes_filtros_medio_categoria` sin aplicar) · **Hitos:** TX-5, TX-3 · **Base:** ADR-049 (alcance por sucursal de los reportes, `report_store_filter`), ADR-057 (vista consolidada o por sucursal), TX-1 (`DateRangePicker`).
+
+### Contexto
+
+TX-5 pedía filtros guardables (rango, sucursal, medio, categoría), presets por usuario y orden de reportes; sólo existía mostrar u ocultar en `users.settings.reports`. `sales_report` filtraba por fecha y sucursal. TX-3 pedía estados vacíos, skeletons, toasts consistentes y atajos del POS documentados; el POS tenía F2 y F12 sin ayuda, y F12 lo toma el navegador (herramientas de desarrollo).
+
+### Decisión
+
+1. **Preferencias en `users.settings`, sin tabla nueva.** `reports_order` (arreglo de claves) y `report_presets` (`{presets: [{id, name, filters}], defaultId}`) se suman a `reports`; se leen en una sola consulta (`loadReportSettings`) y se escriben con el merge existente que no pisa apariencia ni diseño del POS. Todo lo leído se sanea en `lib/reports/savedFilters.ts` (rango válido, UUID, medio `[a-z_]`, tope de 12 presets y 40 caracteres de nombre). Es preferencia de UI del propio usuario, como la visibilidad: la policy de `users` ya limita la escritura a su fila.
+2. **Rango relativo o fijo.** Un preset guarda "últimos 7 días", "este mes", "mes pasado", etc. y se recalcula cada día; si el rango elegido no coincide con uno relativo, se guarda fijo (días locales, nunca UTC: después de las 21 h en Argentina ya es mañana en UTC).
+3. **Medio y categoría en el servidor.** `sales_report` gana `p_method` y `p_category_id` (con sus subcategorías), opcionales y al final; se dropea la firma de 3 argumentos. Con categoría, el importe de cada venta es la suma de sus ítems de esa categoría y medios de pago se prorratean; con medio, se multiplica por la parte cobrada en ese medio. Mismo SECURITY DEFINER, tenant explícito y `report_store_filter` (un cajero de Norte sigue viendo sólo Norte). El front manda los parámetros nuevos sólo si hay filtro: sin filtro la llamada es la de siempre y funciona antes de aplicar la migración. Garantías, staff, stock y gastronomía no cambian con medio ni categoría (se avisa en pantalla).
+4. **Orden con el DOM real.** "Personalizar" suma subir y bajar por reporte (botones accesibles en vez de arrastrar, que no anda bien en touch ni con teclado). Las secciones se renderizan en el orden elegido, no con `order` de CSS, para que el foco con Tab siga lo que se ve. Gastronomía se ordena dentro de su bloque. Claves nuevas de versiones futuras aparecen al final.
+5. **Clasificación de plan.** No es una función nueva de plan: es parte de Reportes (BASE) y de las preferencias del usuario. No suma key en `features`.
+6. **Atajos del POS (`lib/pos/shortcuts.ts`).** Sólo F2 (buscar), F4 (cliente), F8 (cobros en espera) y F9 (cobrar); F12 sigue cobrando por costumbre pero el documentado es F9. Nada con Ctrl, Cmd o Alt. "?" abre la ayuda sólo fuera de campos de texto. Ningún atajo usa dígitos ni Enter (el lector USB). Con un diálogo abierto sólo se atiende "?". La ayuda (`PosShortcutsHelp`) sale del mismo catálogo que atiende el POS; un test verifica que coinciden. El botón de teclado se oculta en celular.
+7. **Toasts y skeletons.** El toast suma la variante `warning`; error y advertencia duran 7 s y se anuncian de inmediato (`type="foreground"`, aria-live assertive). Nuevo `Skeleton` / `SkeletonLines` (bloque tonal, `motion-safe:animate-pulse`, `aria-hidden`, el contenedor lleva `aria-busy`); Reportes lo usa en vez del spinner.
+
+### Consecuencias
+
+- Deploy: aplicar `20261109900000_reportes_filtros_medio_categoria` (después de `20261109600300`). Sin Edges ni secrets.
+- Sin la migración, elegir medio o categoría da error en Reportes; sin filtro todo sigue igual.
+- Deuda: el resto de las pantallas todavía usa spinners o `animate-pulse` propios; migrarlas a `Skeleton` es continuo (TX-3 es estándar, no un hito con fin). Sin "deshacer" al borrar un preset.
+- Tests: `tests/unit/reportSavedFilters.test.ts`, `tests/unit/posShortcuts.test.ts`, integración en `tests/integration/rls-reportes-sucursal.test.ts` (medio, categoría y alcance del cajero).
+
+---
+
+## ADR-101: Mostrador simulado: tickets ESC/POS, cola de impresión con reintentos, cajón y visor de 2 líneas sin equipos (F10 · H22, H25, H26)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/tx-f10`; sin migraciones) · **Hitos:** F10 · H22, H25, H26 · **Base:** ADR-053 (transportes Web Serial, WebUSB y puente local), ADR-063 (balanza y cajón, `DrawerSimulatorTransport`), ADR-049 (perfiles de impresión).
+
+### Contexto
+
+Faltaban en F10 la cola de impresión con reintentos, imprimir tickets por ESC/POS (densidad y corte), y el visor de cliente de 2 líneas. Sin equipos a mano no se pueden validar contra hardware, pero sí se puede construir y probar todo lo que no depende del equipo.
+
+### Decisión
+
+1. **Codificador ESC/POS puro (`lib/print/escpos.ts`).** Init, página de códigos PC850 (acentos, ñ, ¿ ¡), alineación, negrita, doble tamaño, pares ítem/importe a 32 (58 mm) o 48 (80 mm) columnas, corte total, parcial o ninguno con avance previo, densidad (Epson `GS ( K`, ignorada por las que no la entienden) y pulso de cajón al final. `decodeEscpos` hace el camino inverso para la impresora simulada.
+2. **Cola por equipo (`lib/print/queue.ts`).** Pendiente, imprimiendo, impreso, falló, cancelado. Un fallo reintenta solo con espera creciente (2, 4, 8 s, tope 30 s) hasta `maxAttempts`; después queda "falló" y el cajero reintenta, reimprime o cancela. No se cancela lo que está saliendo. Lo que quedó "imprimiendo" al cerrar la pestaña vuelve a pendiente. Una impresión a la vez por impresora, FIFO. El estado vive en `localStorage` del equipo (la impresora es de esa PC; los trabajos no viajan a la base) y se sanea al leer. La cola no sabe cómo se imprime: recibe un driver.
+3. **Simuladores.** `SimulatedPrinter` recibe los mismos bytes que la real y puede fallar a pedido (sin papel, desconectada, falla el primer intento). `lib/hardware/poleDisplay.ts` arma las 2 líneas de 20 caracteres (espera, ítem, total, vuelto, gracias) y los bytes del juego de comandos de visores Epson DM-D y compatibles.
+4. **Pantalla.** Diagnóstico de hardware suma **Mostrador simulado**: perfil (papel, corte, densidad, cajón al terminar), ticket de prueba por la cola, vista del papel, lista de la cola con reintentar, reimprimir y cancelar, prueba de cajón sobre el simulador y el visor emulado. Todo queda en el registro local de pruebas que exporta soporte.
+
+### Consecuencias
+
+- Sin equipos: no está validado contra impresoras ni visores reales. Falta el driver que manda los bytes por el puente local o Web Serial y conectar la cola a la impresión de ventas (hoy el POS sigue por web print).
+- QR de pago y de fidelización (H23) y el criterio de 100 lecturas seguidas quedan pendientes (requieren definición comercial o equipo).
+- Tests: `tests/unit/escposPrintQueue.test.ts`.

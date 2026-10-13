@@ -156,14 +156,21 @@ export const reportsApi = {
 
   // storeId: sucursal del chip (null = todas las que el usuario puede ver; el
   // servidor recorta a las permitidas, F17 · H97).
-  sales: async (fromISO: string, toISO: string, storeId: string | null = null): Promise<SalesReport> => {
+  // method / categoryId: filtros guardables de TX-5 (migración 20261109900000).
+  // Se mandan SÓLO si vienen: sin filtro, la llamada es la de siempre y anda
+  // aunque la migración todavía no esté aplicada.
+  sales: async (
+    fromISO: string,
+    toISO: string,
+    storeId: string | null = null,
+    filters: { method?: string | null; categoryId?: string | null } = {},
+  ): Promise<SalesReport> => {
     const supabase = createClient();
     // p_store_id todavía no está en los tipos generados (no se regeneran).
-    const { data, error } = await supabase.rpc("sales_report", {
-      p_from: fromISO,
-      p_to: toISO,
-      p_store_id: storeId,
-    } as never);
+    const args: Record<string, unknown> = { p_from: fromISO, p_to: toISO, p_store_id: storeId };
+    if (filters.method) args.p_method = filters.method;
+    if (filters.categoryId) args.p_category_id = filters.categoryId;
+    const { data, error } = await supabase.rpc("sales_report", args as never);
     if (error) throw error;
     return data as unknown as SalesReport;
   },

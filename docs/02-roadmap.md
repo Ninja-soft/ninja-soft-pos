@@ -494,11 +494,11 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [x] Perfiles de impresión por **tenant / sucursal / caja**: ticket 58mm, ticket 80mm, A4, etiqueta, cocina/comanda, comprobante interno. — *Por **tenant** hecho (formato 58/80/A4 por tipo, según aplique). Sucursal y caja: `print_profiles` heredable por `config_overrides` con impresora y respaldo por documento, incluidos comanda y remito (ADR-049, `lib/print/profiles.ts`).*
   - [x] Selector de destino por tipo de documento: ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, comanda, devolución, nota de crédito futura. — *5 tipos configurables (ticket de venta, cierre Z, movimiento de caja, etiqueta de producto, devolución/NC) en `pos_settings.print_profiles` (migración `20260608470000_print_profiles`). Comanda → F13.*
   - [~] Plantillas con variables: logo, datos fiscales, QR, leyendas legales, redes, promociones, cajero, caja, sucursal, medios de pago. — *Ya resuelto por el editor de plantillas de H9b (`ticket_templates`, modos bloques/canvas/HTML con variables). H22 elige formato/copias/auto sobre esa plantilla activa, sin duplicarla.*
-  - [~] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual. — *Copias (1..20), impresión automática vs manual, y ajustes básicos de **fuente y margen** por tipo. Densidad y corte de papel requieren ESC/POS → F4. Apertura de cajón por pulso ESC/POS directo a la térmica: ADR-063.*
+  - [~] Márgenes, tamaño de fuente, densidad, cantidad de copias, corte de papel, apertura de cajón, impresión automática o manual. — *Copias (1..20), impresión automática vs manual, y ajustes básicos de **fuente y margen** por tipo. Densidad y corte de papel requieren ESC/POS → F4. Apertura de cajón por pulso ESC/POS directo a la térmica: ADR-063.* *ADR-101: el codificador ESC/POS (`lib/print/escpos.ts`) ya arma densidad, corte total/parcial/ninguno y pulso de cajón, probado con la impresora simulada; falta guardarlo en el perfil por documento y validarlo con equipos.*
   - [x] Web print nativo: `window.print()` para navegador, A4 y fallback universal. — *La impresión es web; las copias se imprimen llamando a `window.print()` N veces (`lib/print/webPrint.ts`).*
-  - [~] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza. — *F4 (documentado en la UI de Impresión y en `lib/print/profiles.ts`).* *Conector local `tools/bridge` (ADR-053) ya manda ESC/POS para el pulso del cajón por serie o red 9100 (ADR-063, `lib/hardware/devices.ts`). Falta imprimir tickets por ESC/POS.*
+  - [~] ESC/POS por conector local: app/servicio local para térmicas USB/LAN/Bluetooth cuando el browser no alcanza. — *F4 (documentado en la UI de Impresión y en `lib/print/profiles.ts`).* *Conector local `tools/bridge` (ADR-053) ya manda ESC/POS para el pulso del cajón por serie o red 9100 (ADR-063, `lib/hardware/devices.ts`). Tickets en ESC/POS (PC850, 58/80 mm, pares ítem/importe) armados y probados en simulador (ADR-101, `lib/print/escpos.ts`); falta el driver que los manda por el puente sin equipo para validar.*
   - [~] QZ Tray / WebUSB / WebSerial evaluados por compatibilidad. — *F4.* *WebUSB y WebSerial evaluados y en uso para terminal integrada, balanza y cajón (ADR-053, ADR-063, `lib/hardware/capabilities.ts`). QZ Tray sin evaluar.*
-  - [ ] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar. — *F4 (documentado como límite del web print).*
+  - [~] Cola de impresión con reintentos: pendiente, impreso, fallido, reimprimir, cancelar. — *F4 (documentado como límite del web print).* *ADR-101: motor `lib/print/queue.ts` (pendiente, imprimiendo, impreso, falló, cancelado; reintento con espera creciente, reintentar, reimprimir, cancelar, recuperación al reabrir), persistida por equipo (`lib/print/usePrintQueue.ts`) y operable en Diagnóstico de hardware, Mostrador simulado, con fallas simuladas. Tests `tests/unit/escposPrintQueue.test.ts`. Falta conectarla a la impresión de ventas por un driver real.*
   - [~] *Criterio:* un tenant configura ticket 80mm para caja principal, etiqueta 58mm para productos y cierre Z A4; cada documento sale por su destino correcto. — *Cumplido a nivel **tenant** (formato + copias + auto/manual por tipo, aplicado en venta/Z/devolución). "Por caja" queda para F4.* *Por caja: impresora y perfil por documento heredables (ADR-049); la salida sigue siendo web print, falta que salga sola a la impresora.*
 
 - [~] **H23 — Scanners y captura de códigos PRO.** — *Base (PR #80) + perfil/beep/anti-dup/diagnóstico (2026-06-07) + etiquetas de balanza (ADR-063, `feat/balanza-cajon`). Quedan: QR de pago/fidelización.*
@@ -523,7 +523,7 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
 - [~] **H25 — Doble pantalla / display cliente.** — *Pantalla web del cliente sincronizada en tiempo real hecha (PR #260). Falta solo el modo hardware (display serial/USB de 2 líneas) y el branding por sucursal (multi-store → F4).*
   - [x] Ventana secundaria del navegador: el cajero abre una pantalla cliente en otro monitor (`/customer-display`), sincronizada por BroadcastChannel/local storage o Realtime. — *PR #260: ruta `app/(display)/customer-display`, hook `lib/pos/customerDisplay.ts` (`BroadcastChannel('ninja-customer-display')` + respaldo localStorage `storage`), botón “Pantalla cliente” en el POS (`window.open`).*
   - [x] Display cliente dedicado: tablet/celular en la misma caja mostrando carrito, total, promociones y QR de pago. — *Misma ruta `/customer-display`: se abre en la tablet de la caja (misma sesión/origen) y se sincroniza por el broadcast.*
-  - [ ] Modo hardware futuro: integración con display serial/USB de dos líneas para importes básicos.
+  - [~] Modo hardware futuro: integración con display serial/USB de dos líneas para importes básicos. *ADR-101: `lib/hardware/poleDisplay.ts` arma las 2 líneas de 20 (espera, ítem, total, vuelto, gracias) y los bytes de visores Epson DM-D y compatibles; visor emulado en Diagnóstico de hardware. Falta enviarlo por Web Serial o el puente y probarlo con un visor.*
   - [x] Nombre del negocio y caja en pantalla cliente. — *PR #260: logo + nombre (de `tenant_branding`) y nombre de caja (`cash_registers.name`) en el encabezado.*
   - [x] Ítems del carrito en vivo. — *PR #260: el POS publica el carrito (Zustand) en cada cambio; la pantalla lo renderiza sin recargar.*
   - [x] Subtotal, descuentos, total y vuelto. — *PR #260: totales grandes a distancia; el vuelto (efectivo) se muestra en la pantalla “Pago recibido”.*
@@ -540,6 +540,7 @@ Objetivo: que el POS opere como sistema de mostrador profesional: impresoras con
   - [x] Logs locales de hardware y errores legibles para soporte. — *`lib/hardware/diagnosticsLog.ts`: cada prueba registra qué/cuándo/resultado/detalle en `localStorage` (máx 100), listado legible con color por resultado. Sin datos sensibles.*
   - [x] Export de diagnóstico para NinjaSoft. — *`lib/hardware/export.ts`: "Exportar diagnóstico" baja XLSX (reusa `exportXlsx`: hojas Resumen/Capacidades/Entorno/Pruebas) o JSON, con tenant/caja, capacidades reales del navegador (BroadcastChannel, WebUSB, WebSerial, Web Bluetooth, BarcodeDetector, web print), entorno (userAgent, pantalla/resolución, origen seguro, etc.) y el log. **Sin tokens ni datos de clientes** (test lo verifica).*
   - [x] *Criterio:* soporte puede pedir “Exportar diagnóstico” y ver qué periférico falla sin conectarse a la máquina del cliente. ✓ — *Tests en `tests/unit/hardwareDiagnostics.test.ts`.*
+  - [x] Modo simulado sin equipos: ticket de prueba ESC/POS por la cola, cajón y visor de 2 líneas emulados, con fallas a pedido (sin papel, desconectada, primer intento). — *ADR-101, `components/hardware/SimulatedCounterPanel.tsx`; cada prueba queda en el registro local que se exporta.*
 
 ### F3 — AFIP (robustecida, se ejecuta al final de esta tanda)
 
@@ -1348,16 +1349,16 @@ Quick wins pedidos explícitamente. Se hacen **primero** y luego se aplican de f
   - [x] Helper único de import (`lib/utils/xlsxImport.ts` + `lib/import/`: encabezados tolerantes a mayúsculas y acentos, fila de encabezados detectada, tipos, duplicados, filas vacías) + `exportXlsx` (TX-2) para plantillas, errores y export de base. RPC `import_*` SECURITY DEFINER (dueño o encargado, `importacion_excel` y la feature de cada entidad).
   - [x] *Criterio:* el usuario baja la plantilla de productos, la completa, la importa con preview y errores por fila; y puede exportar toda su base de clientes/productos en XLSX.
 
-- [~] **TX-5 — Reportes PRO configurables por usuario.** — *Base hecha (PR #46): mostrar/ocultar reportes persistido. Falta orden, más reportes y filtros guardables.*
-  - [~] **Tablero de reportes configurable**: cada usuario **muestra/oculta** reportes con "Personalizar"; persistido en `users.settings.reports` (cross-device, merge sin pisar apariencia). **Orden (drag) pendiente.**
+- [~] **TX-5 — Reportes PRO configurables por usuario.** — *Mostrar/ocultar (PR #46), orden y filtros guardables con presets por usuario (ADR-100, `feat/tx-f10`). Falta margen general por producto.*
+  - [x] **Tablero de reportes configurable**: cada usuario **muestra/oculta** reportes con "Personalizar"; persistido en `users.settings.reports` (cross-device, merge sin pisar apariencia). *Orden: subir y bajar por reporte en "Personalizar" (botones accesibles en vez de arrastrar), guardado en `users.settings.reports_order`; las secciones se renderizan en ese orden en el DOM (ADR-100, `lib/reports/savedFilters.ts` `resolveOrder`/`moveInOrder`).*
   - [~] **Catálogo de reportes ampliable**: día/medio/categoría/cajero + **top productos** + **stock bajo** + **top clientes** (PR #49). Comparativo contra el período anterior hecho (`app/(app)/reportes/page.tsx`, toggle "rep-compare"); margen sólo en gastronomía por receta (F13/H52, `modules/reports/api.ts`). Falta margen general por producto.
-  - [ ] Filtros guardables (rango/sucursal/medio/categoría) y presets por usuario.
+  - [x] Filtros guardables (rango/sucursal/medio/categoría) y presets por usuario. *ADR-100: filtros de medio de pago y categoría (con subcategorías) en `sales_report` (migración `20261109900000_reportes_filtros_medio_categoria`, sin aplicar); botón "Guardados" en Reportes (`components/reports/ReportPresetsModal.tsx`) para guardar con nombre, aplicar, marcar predeterminado (se aplica al abrir) y borrar; rango relativo o fijo; en `users.settings.report_presets`. Tests `tests/unit/reportSavedFilters.test.ts` e integración en `rls-reportes-sucursal.test.ts`.*
   - [x] **Reporte Excel avanzado**: export multi-hoja con marca, totales, autofilter, header congelado, formato moneda/fecha (`exportXlsx`).
-  - [~] *Criterio:* el usuario muestra/oculta reportes y lo encuentra igual en otro dispositivo; descarga Excel. (Orden y filtros guardables pendientes.)
+  - [x] *Criterio:* el usuario muestra/oculta reportes y lo encuentra igual en otro dispositivo; descarga Excel. *Orden y filtros guardables también viajan con el usuario (ADR-100).*
 
-- [ ] **TX-3 — Pulido UX continuo.**
-  - [ ] Estados vacíos, skeletons, toasts consistentes, accesibilidad, atajos de teclado en POS.
-  - [ ] Se evalúa al cierre de cada hito como parte del gate manual.
+- [~] **TX-3 — Pulido UX continuo.** — *Estándar continuo (no tiene fin). Primer corte con base común (ADR-100, `feat/tx-f10`).*
+  - [~] Estados vacíos, skeletons, toasts consistentes, accesibilidad, atajos de teclado en POS. *ADR-100: atajos del POS en `lib/pos/shortcuts.ts` (F2 buscar, F4 cliente, F8 cobros en espera, F9 o F12 cobrar, sin Ctrl/Alt ni dígitos para no chocar con el navegador ni el lector) y ayuda "?" con botón de teclado (`components/pos/PosShortcutsHelp.tsx`), tests `tests/unit/posShortcuts.test.ts`; toast con variante `warning` y errores anunciados de inmediato; `components/ui/Skeleton.tsx` usado en Reportes; `EmptyState` en las pantallas nuevas. Falta migrar los spinners y `animate-pulse` propios del resto del producto.*
+  - [~] Se evalúa al cierre de cada hito como parte del gate manual. *Proceso: se aplica en cada tanda.*
 
 ---
 
@@ -1500,7 +1501,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
 | **F8** | 12/47 | 21 | 14 | 26% | 48% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
-| **F10** | 30/46 | 11 | 5 | 65% | 77% |
+| **F10** | 31/47 | 13 | 3 | 66% | 80% |
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
 | **F13** | 41/74 | 24 | 9 | 55% | 72% |
@@ -1509,8 +1510,8 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F16** | 4/59 | 32 | 23 | 7% | 34% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
-| **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 545/1004 | 298 | 161 | 54% | 69% |
+| **TX** | 22/27 | 5 | 0 | 81% | 91% |
+| **Total** | 549/1005 | 301 | 155 | 55% | 70% |
 <!-- roadmap-progress:end -->
 
 ---

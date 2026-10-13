@@ -94,6 +94,36 @@ export async function saveReportPrefs(prefs: ReportPrefs): Promise<void> {
   await patchRemoteSettings({ reports: prefs });
 }
 
+// --- Orden y filtros guardados de reportes (TX-5 · ADR-100). Sin sanear acá:
+// lo sanea lib/reports/savedFilters.ts (resolveOrder / sanitizePresets).
+export interface ReportSettingsRaw {
+  visibility: ReportPrefs | null;
+  order: unknown;
+  presets: unknown;
+}
+
+/** Una sola lectura de users.settings para todo lo de Reportes. */
+export async function loadReportSettings(): Promise<ReportSettingsRaw> {
+  try {
+    const s = await readRemoteSettings();
+    return {
+      visibility: (s.reports as ReportPrefs | undefined) ?? null,
+      order: s.reports_order ?? null,
+      presets: s.report_presets ?? null,
+    };
+  } catch {
+    return { visibility: null, order: null, presets: null };
+  }
+}
+
+export async function saveReportOrder(order: string[]): Promise<void> {
+  await patchRemoteSettings({ reports_order: order });
+}
+
+export async function saveReportPresets(state: { presets: unknown[]; defaultId: string | null }): Promise<void> {
+  await patchRemoteSettings({ report_presets: state });
+}
+
 // --- Diseño del POS por usuario (override de pos_settings.pos_layout). ---
 // Sin validar acá: lo sanea resolveLayout (lib/pos/layout.ts). null = usa el
 // diseño del negocio.

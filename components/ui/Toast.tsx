@@ -2,10 +2,10 @@
 
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useCallback, useContext, useState } from "react";
-import { CheckCircle2, Info, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-type ToastVariant = "success" | "error" | "info";
+type ToastVariant = "success" | "error" | "warning" | "info";
 
 // Acción del aviso (p. ej. "Imprimir ticket"). Cierra el aviso al tocarla.
 export interface ToastAction {
@@ -40,6 +40,7 @@ const VARIANT = {
     iconCls: "text-success",
   },
   error: { icon: XCircle, iconCls: "text-danger" },
+  warning: { icon: AlertTriangle, iconCls: "text-warning" },
   info: { icon: Info, iconCls: "text-ninja-flameSoft" },
 } as const;
 
@@ -67,7 +68,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <ToastPrimitive.Root
               key={item.id}
-              duration={item.duration}
+              // Errores y advertencias: más tiempo en pantalla y anunciados
+              // de inmediato por el lector (foreground = aria-live assertive).
+              duration={item.duration ?? (item.variant === "error" || item.variant === "warning" ? 7000 : undefined)}
+              type={item.variant === "error" || item.variant === "warning" ? "foreground" : "background"}
               onOpenChange={(open) => !open && remove(item.id)}
               className={cn(
                 "group pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-popover/95 p-3.5 pr-9 text-popover-foreground backdrop-blur-xl",

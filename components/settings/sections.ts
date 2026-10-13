@@ -242,8 +242,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: CreditCard,
         keywords: "point clover nave posnet lector terminal caja qr sucursal numero de comercio",
       },
-      // Promociones (F9 · H53): por ahora SIN gating de plan, es sólo la
-      // DEFINICIÓN. El gating por `promociones` se suma con la aplicación.
+      // Promociones y cupones (F9, ADR-074). La sección no se gatea entera
+      // porque los cupones no dependen del plan: la tarjeta de Promociones
+      // muestra el bloqueo si falta `promociones` (gating real en la base).
       {
         key: "promociones",
         label: "Promociones y cupones",
@@ -251,7 +252,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description:
           "Promos por condiciones que el POS aplica solas y códigos de descuento que el cajero ingresa al cobrar.",
         icon: Percent,
-        keywords: "descuento cupon codigo 2x1 oferta",
+        keywords: "descuento cupon codigo 2x1 3x2 oferta combo banco tarjeta segunda unidad",
       },
       {
         key: "cuenta-corriente",

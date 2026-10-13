@@ -2472,3 +2472,39 @@ Ley de IVA (texto ordenado 1997), art. 10 (internos discriminados fuera del prec
 - Ventas viejas: sin desglose (el reporte las cuenta aparte). Productos con `tax_rate` fuera del catálogo quedan en 21 % hasta que se editen.
 - **Deuda:** devoluciones y notas de crédito con reversa proporcional de IVA, internos y percepciones (H105, con F3); alícuota por operación según receptor (27 % a RI en ciertos servicios); internos por sucursal y con vigencia por decreto; Convenio Multilateral con coeficientes; constancia de ARCA por CUIT y alertas de CUIT dado de baja; descarga programada de padrones; retenciones de Ganancias (RG 830 con acumulado mensual) y SUSS; certificados de retención en PDF; SICORE, SIRE, Libro IVA Digital y DDJJ de IIBB (H108); un recargo de tarjeta con percepción puede dejar centavos por cobrar al cerrar el pago (el cajero agrega el resto).
 - Tests: `tests/unit/taxEngine.test.ts`, `tests/unit/taxComprobante.test.ts`, `tests/unit/taxPadron.test.ts`, `tests/unit/featureInfo.test.ts`; RLS `tests/integration/rls-impuestos.test.ts` (paridad SQL, datos fiscales por rol, regímenes y padrón por rol y plan, percepción en `create_sale` con pago insuficiente, monotributista con alícuota 0, retención sugerida, documento y gating de internos, reporte y `rls_internal_scope_leaks` = 0). Cadena completa de migraciones sobre PGlite con humo de todo lo anterior y de las policies con rol `authenticated`.
+
+---
+
+## ADR-075: Perfiles por rubro: presets versionados que prenden flags operativos y sugieren, sin otorgar features de plan
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/perfiles-rubro`; migración `20261102200000_perfiles_rubro` sin aplicar) · **Hito:** F5 (perfiles de rubro; el marketplace queda fuera) · **Base:** ADR-052 (`internal_scope`), ADR-063 (balanza), F12 · H35 (`apply_industry_preset`), F13 · H43/H47 (modo gastronómico). **Numeración:** 069 a 074 reservadas por otras ramas.
+
+### Contexto
+
+El rubro vivía en `tenants.industry` (12 verticales) y en dos lugares sueltos: el selector de Configuración → Rubro (sólo cambia el vertical y, a mano, apaga mesas y delivery) y la "configuración rápida por rubro" (siembra productos de muestra). Nadie configuraba de una vez los flags operativos que cada rubro usa (mesas, balanza, PLU, venta libre, delivery), el diseño del POS ni las categorías, y no había forma de ver qué cambiaba antes de aplicarlo.
+
+### Decisión
+
+1. **Perfil = preset de datos versionado.** Once perfiles (kiosco, almacén, textil, ferretería, farmacia/perfumería, gastronomía, cafetería, verdulería/carnicería, librería, servicios, otro) en `lib/profiles/business-profiles.json` con: rubro base (`tenants.industry`), flags operativos, diseño del POS (`pos_layout.preset`), categorías, unidades, medios de pago típicos, features de plan sugeridas, atajos y ayuda. La migración siembra la misma lista en la tabla de plataforma `business_profiles` (key, version, label, definition jsonb); un test compara las dos copias. Cambiar un perfil = migración nueva con `version + 1`.
+2. **Categoría FLAG-OPERATIVO (CLAUDE.md §6).** Un perfil no es una feature de plan ni un addon: sólo prende switches gratuitos de `pos_settings` (`dining_enabled`, `delivery_enabled`, `scale_enabled`, `plu_enabled`, `allow_free_sale`). No hay key nueva en `features`.
+3. **No otorga features de plan.** Lo que un rubro sugiere y está gateado (variantes, cuenta corriente, medidas y bultos, listas de precios, agenda, packs, teclas rápidas Pro, medios de cobro) se muestra como "incluida en tu plan" o "disponible en plan X" (`FEATURE_INFO.minPlan`) y nunca se activa. `scale_enabled` exige `balanza`: la RPC lo chequea con `tenant_has_feature_for` antes de prenderlo y lo informa como bloqueado (el trigger de ADR-063 sigue siendo la barrera).
+4. **Sólo activa y sugiere, nunca borra.** Los flags sólo pasan a `true` (cambiar de gastronomía a textil no apaga mesas ni delivery; la vista previa lo dice). El diseño del POS se fija sólo si `pos_layout` está vacío (nunca personalizado) y "Salón" sólo con mesas prendidas. Las categorías que faltan se crean (comparación sin mayúsculas, opcional); ninguna se borra ni renombra. No siembra productos (eso sigue en `apply_industry_preset`).
+5. **RPC `apply_business_profile(p_key, p_create_categories default true)`** SECURITY DEFINER con `search_path` fijo: sólo el **dueño** del negocio activo, lock por negocio, idempotente, alinea `tenants.industry`, guarda el perfil en `tenant_business_profiles` (uno por negocio, con versión, perfil anterior, fecha y quién) y escribe `audit_logs` (`business_profile_applied`, antes y después de los flags y el diseño, lo activado, bloqueado y creado). EXECUTE sólo para `authenticated`.
+6. **Vista previa = espejo puro** (`lib/profiles/preview.ts`): mismas reglas que la RPC, con el estado actual (flags, diseño, categorías, gating). "Cambiar rubro" muestra qué se activa, qué ya estaba, qué queda bloqueado y por qué plan, qué no se apaga, el diseño, las categorías nuevas, el cambio de rubro y las sugerencias; recién ahí se confirma.
+7. **RLS.** `business_profiles`: lectura para `authenticated`, sin escritura por PostgREST. `tenant_business_profiles`: lectura `tenant_id = current_tenant_id() or internal_scope()` (ADR-052), sin insert, update ni delete para clientes.
+8. **UI.** Configuración → Rubro suma la tarjeta "Perfil por rubro" (perfil actual, ayuda del rubro, "Cambiar rubro"); el onboarding (Puesta en marcha) ofrece "Elegir perfil" preseleccionado con el rubro del registro hasta que hay uno aplicado; el panel interno muestra el perfil de cada negocio (sólo lectura).
+
+### Alternativas descartadas
+
+- **Perfil sólo en TS y escritura de flags desde el front:** el servidor no sabría qué es un perfil válido ni podría auditarlo de una vez; la policy de `pos_settings` deja escribir al encargado, y el cambio de rubro es del dueño.
+- **Apagar flags que el perfil nuevo no usa:** pierde configuración del negocio sin que lo pida; se eligió informar que siguen prendidos.
+- **Activar las features sugeridas con un trial:** mezcla rubro con plan; el gating por plan queda como está.
+- **Reemplazar `apply_industry_preset` y `RubroCard`:** se mantienen (catálogo de muestra y selector de vertical); el perfil es la capa de configuración.
+
+### Consecuencias
+
+- Deploy: migración `20261102200000_perfiles_rubro` antes del front (sin ella la tarjeta queda en "Todavía no elegiste un perfil" y "Aplicar" falla con error). Sin Edges. No recrea funciones existentes.
+- Los overrides de `pos_settings` por sucursal o caja (ADR-049) pueden seguir pisando un flag que el perfil prendió a nivel negocio.
+- `tenants.industry` cambia con el perfil (almacén y verdulería usan el vertical `kiosco`; ferretería, farmacia y librería, `retail`) para que las funciones por vertical (`lib/verticals/config.ts`) sigan coherentes.
+- **Deuda:** perfiles editables desde el panel interno; medios de pago pre-ordenados en el cobro según el rubro; unidades sugeridas como opciones del alta de producto; perfiles propios para heladería, panadería y estética (hoy van a cafetería y servicios); motor de promociones y marketplace de F5.
+- Tests: `tests/unit/businessProfiles.test.ts` (datos, paridad JSON y migración, copy y planes de lo sugerido, reglas de la migración, diff de la vista previa) y `tests/integration/rls-perfiles-rubro.test.ts` (sólo dueño, flags y balanza, idempotencia, no apaga, auditoría, RLS por negocio y sin escritura directa con inserts multi-fila).

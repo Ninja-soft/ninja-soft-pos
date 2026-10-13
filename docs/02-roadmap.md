@@ -16,7 +16,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F2** | Plataforma SaaS (panel interno + suscripciones) | 4–6 semanas | 🟢 Funcional (billing self-serve + dunning + gating) |
 | **F3** | Integración AFIP y producción | 4–6 semanas | 🔴 No iniciado |
 | **F4** | Escalado: multi-sucursal, hardware, integraciones | 8–10 semanas | 🟡 Planificación |
-| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 Planificación |
+| **F5** | Perfiles por rubro y marketplace | 10–14 semanas | 🟡 En progreso (perfiles por rubro hechos, ADR-075; promociones y marketplace pendientes) |
 | **F6** | Personalización del producto (fotos, branding, tickets, catálogo) | 6–8 semanas | 🟢 Funcional (H7–H10b + Tiendita) |
 | **F7** | Panel interno PRO + comunicaciones (emails) | 5–7 semanas | 🟢 Funcional (staff, planes custom, emails Resend, notificaciones) |
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
@@ -206,15 +206,15 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 **Duración:** 10–14 semanas. **Objetivo:** el producto se siente "hecho a medida" para cada rubro sin código específico.
 
 ### Entregables
-- [ ] **Perfiles de rubro** activables por tenant:
-  - [ ] **Kiosco:** venta ultrarrápida, atajos de teclado optimizados, gestión de cigarrillos / bebidas.
-  - [ ] **Textil:** variantes (talle/color), control de prendas por SKU compuesto.
+- [x] **Perfiles de rubro** activables por tenant. *Hecho (2026-10-13, ADR-075, rama `feat/perfiles-rubro`, migración `20261102200000_perfiles_rubro` sin aplicar): 11 perfiles versionados (kiosco, almacén, textil, ferretería, farmacia/perfumería, gastronomía, cafetería, verdulería/carnicería, librería, servicios, otro) que prenden flags operativos de `pos_settings`, ajustan el diseño del POS, crean categorías sugeridas y sugieren unidades, medios de cobro y features de plan ("disponible en plan X", nunca se activan). RPC `apply_business_profile` (sólo dueño, auditada), "Cambiar rubro" con vista previa en Configuración, paso en Puesta en marcha y lectura en el panel interno.*
+  - [x] **Kiosco:** venta ultrarrápida, atajos de teclado optimizados, gestión de cigarrillos / bebidas.
+  - [x] **Textil:** variantes (talle/color), control de prendas por SKU compuesto. *Perfil textil con diseño Boutique; variantes se sugiere (feature de plan, desde Pro).*
   - [ ] **Retail:** promociones complejas (2x1, descuentos por volumen).
-  - [ ] **Restaurante / resto-bar:** mesas, salones, comandas, cocina/KDS, cursos, división de cuenta y propina.
-  - [ ] **Cafetería / take away:** mostrador rápido, nombre del cliente, comandas de barra/cocina, combos y modificadores.
-  - [ ] **Heladería:** productos por botón, tamaños, sabores/modificadores, balanza opcional y comanda de preparación.
-  - [ ] **Peluquería / estética:** servicios, agenda, profesional, comisión y venta de productos complementarios.
-  - [ ] **Pyme genérica:** módulo de cuenta corriente de clientes.
+  - [x] **Restaurante / resto-bar:** mesas, salones, comandas, cocina/KDS, cursos, división de cuenta y propina.
+  - [x] **Cafetería / take away:** mostrador rápido, nombre del cliente, comandas de barra/cocina, combos y modificadores.
+  - [~] **Heladería:** productos por botón, tamaños, sabores/modificadores, balanza opcional y comanda de preparación. *Usa el perfil cafetería; perfil propio pendiente.*
+  - [~] **Peluquería / estética:** servicios, agenda, profesional, comisión y venta de productos complementarios. *Usa el perfil servicios (agenda y packs sugeridos); perfil propio pendiente.*
+  - [~] **Pyme genérica:** módulo de cuenta corriente de clientes. *Perfil otro; la cuenta corriente se sugiere en almacén y ferretería.*
 - [ ] **Motor de promociones** configurable:
   - [ ] Reglas declarativas (no código).
   - [ ] Vigencia por fecha/horario.
@@ -268,7 +268,7 @@ Objetivo: que el producto se sienta "a medida" de cada negocio. Todo configurabl
 - [x] **H8 — Branding por tenant.** — *Parcial/base hecha (PR #29, 2026-05-31).*
   - [x] Logo del negocio (subida → WebP, bucket `tenant-assets` con RLS), color de acento (presets dentro de límites de marca), datos comerciales.
   - [x] Datos legales del comercio: razón social, CUIT, teléfono, dirección, pie de ticket. Tabla `tenant_branding` (escritura owner/manager por RLS). UI en `/dashboard-team` (BrandingCard).
-  - [ ] Modo del negocio/rubro operativo (presets por rubro) — *pendiente; se cruza con F12/F13.*
+  - [x] Modo del negocio/rubro operativo (presets por rubro). *Perfiles por rubro de F5 (ADR-075).*
   - [x] Logo en PNG/JPG/WebP → se normaliza a WebP en el navegador.
   - [x] Aplicado en **tickets** (logo + razón social + CUIT/dirección/teléfono + pie). *Emails y catálogo: cuando existan (H13/H10).*
   - [ ] (Opcional Enterprise) dominio propio para el catálogo.

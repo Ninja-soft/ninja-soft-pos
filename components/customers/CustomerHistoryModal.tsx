@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useFeature } from "@/modules/saas/gating";
-import { CalendarClock, Heart, Mail, MessageCircle, Package, RotateCcw, Wallet } from "lucide-react";
+import {
+  CalendarClock,
+  Heart,
+  Mail,
+  MessageCircle,
+  Package,
+  RotateCcw,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import {
   useCustomerBranchStats,
   useCustomerHistory,
@@ -199,6 +208,21 @@ export function CustomerHistoryModal({
               )}
             </div>
           </div>
+
+          {/* H31b: ficha completa del cliente (página propia). */}
+          {customer && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                onOpenChange(false);
+                router.push(`/clientes/${customer.id}`);
+              }}
+            >
+              <UserRound size={16} /> Ver ficha completa
+            </Button>
+          )}
 
           {/* Cuenta corriente v2: el cobro (con medio, caja, recibo e imputación),
               el estado de cuenta y la cobranza viven en la ficha de cuenta. */}

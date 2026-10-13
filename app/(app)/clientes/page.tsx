@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, Wallet } from "lucide-react";
+import { Cake, Clock, Download, Pencil, Plus, Search, Trash2, Upload, UserRound, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow, Display } from "@/components/ui/Typography";
 import { InfoHint } from "@/components/ui/InfoHint";
@@ -205,7 +206,11 @@ export default function ClientesPage() {
               )}
               {customers.map((c) => (
                 <tr key={c.id} className="transition hover:bg-muted/40">
-                  <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    <Link href={`/clientes/${c.id}`} className="hover:text-ninja-flameSoft hover:underline">
+                      {c.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {c.document_type
                       ? `${DOC_TYPE_LABELS[c.document_type as keyof typeof DOC_TYPE_LABELS] ?? c.document_type} ${c.document_number ?? ""}`
@@ -220,6 +225,13 @@ export default function ClientesPage() {
                   <td className="px-4 py-3 text-muted-foreground">{c.phone ?? <NoData />}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
+                      <Link
+                        href={`/clientes/${c.id}`}
+                        title="Ficha completa"
+                        className="rounded-md p-2 text-muted-foreground transition hover:bg-muted hover:text-ninja-flameSoft"
+                      >
+                        <UserRound size={16} />
+                      </Link>
                       <button
                         onClick={() => setHistoryCustomer(c)}
                         title="Historial"

@@ -44,6 +44,9 @@ import {
   Undo2,
   Boxes,
   Landmark,
+  BookOpenCheck,
+  BookText,
+  ListTree,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -246,6 +249,17 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
         // Tesorería (F18 · H111, ADR-059): cuentas, cheques y flujo de fondos.
         { href: "/tesoreria", label: "Tesorería", icon: Landmark, feature: "tesoreria", managersOnly: true },
+      ],
+    },
+    {
+      // Contabilidad (F18 · H109, ADR-066): asientos, libros, plan de cuentas,
+      // mapeos y cierres. Dueño o encargado; con candado sin la feature.
+      label: "Contabilidad",
+      items: [
+        { href: "/contabilidad", label: "Contabilidad", icon: BookOpenCheck, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/asientos", label: "Asientos", icon: FileText, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/libros", label: "Libros", icon: BookText, feature: "contabilidad", managersOnly: true },
+        { href: "/contabilidad/plan-de-cuentas", label: "Plan de cuentas", icon: ListTree, feature: "contabilidad", managersOnly: true },
       ],
     },
     {

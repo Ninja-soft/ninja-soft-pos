@@ -78,6 +78,7 @@ import type { OfflineQueueEntry } from "@/lib/pos/offline/queue";
 import { useOfflinePos } from "@/modules/pos/offline/useOfflinePos";
 import { OfflineBanner } from "@/components/pos/offline/OfflineBanner";
 import { OfflineTicketModal } from "@/components/pos/offline/OfflineTicketModal";
+import { SwUpdateBanner } from "@/components/pwa/SwUpdateBanner";
 import { PRESET_DEFAULTS, type PosPreset } from "@/lib/pos/layout";
 import { PosShell } from "@/components/pos/screen/PosShell";
 import { PosTopBar } from "@/components/pos/screen/PosTopBar";
@@ -1295,6 +1296,8 @@ function PosPageInner() {
         enabled={offline.policy.enabled}
         onRetry={() => void (offline.held > 0 ? offline.releaseHeld() : offline.syncNow())}
       />
+      {/* H65 (ADR-087): versión nueva; no recarga con carrito o cobro en curso. */}
+      <SwUpdateBanner busy={checkoutOpen || saving || lines.length > 0} />
       <ForeignShiftBanner shift={shift} />
       {/* F3 · ADR-072: ARCA caído, facturando en contingencia (no bloquea). */}
       <ArcaPosIndicator />

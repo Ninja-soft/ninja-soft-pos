@@ -22,6 +22,7 @@ import {
   type OfflineSnapshot,
 } from "@/lib/pos/offline/snapshot";
 import { classifySyncError, syncQueue, type SyncSummary } from "@/lib/pos/offline/sync";
+import { writeLastPos } from "@/modules/pos/offline/offlineSession";
 
 // Venta offline en el POS (ADR-077): conectividad, foto local, cola y
 // sincronización automática al volver la conexión.
@@ -68,9 +69,14 @@ export function useOfflinePos(ctx: {
   storeId: string | null;
   policy: OfflinePolicy | null | undefined;
   onSynced?: (s: SyncSummary) => void;
+  /**
+   * POS abierto sin conexión (H65): usa la foto guardada tal cual y nunca la
+   * reescribe (su turno puede no ser el actual).
+   */
+  frozenSnapshot?: boolean;
 }) {
   const qc = useQueryClient();
-  const { tenantId, userId, shiftId, storeId } = ctx;
+  const { tenantId, userId, shiftId, storeId, frozenSnapshot = false } = ctx;
   const scope = useMemo(() => (tenantId && userId ? { tenantId, userId } : null), [tenantId, userId]);
   const available = useMemo(() => (typeof window === "undefined" ? false : idbAvailable()), []);
   const queue = useMemo(() => (available ? new OfflineQueue(idbQueueStore()) : null), [available]);
@@ -139,7 +145,7 @@ export function useOfflinePos(ctx: {
   const policyRef = useRef(policy);
   policyRef.current = policy;
   useEffect(() => {
-    if (!available || !scope || isOffline) return;
+    if (!available || !scope || isOffline || frozenSnapshot) return;
     let alive = true;
     const write = async () => {
       try {
@@ -153,6 +159,8 @@ export function useOfflinePos(ctx: {
           shift: shiftId ? { id: shiftId, storeId } : null,
         });
         await idbKv.set(snapshotKey(scope.tenantId, scope.userId), snap);
+        // H65: puntero para abrir el POS sin conexión con este usuario.
+        await writeLastPos(scope.tenantId, scope.userId);
         if (alive) setSnapshot(snap);
       } catch {
         // Sin foto nueva: queda la anterior.
@@ -164,7 +172,7 @@ export function useOfflinePos(ctx: {
       alive = false;
       clearInterval(t);
     };
-  }, [available, scope, isOffline, shiftId, storeId]);
+  }, [available, scope, isOffline, shiftId, storeId, frozenSnapshot]);
 
   // ── Sincronización ───────────────────────────────────────────────────────
   const syncNow = useCallback(async () => {

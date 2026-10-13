@@ -881,7 +881,8 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote.
 
 - [ ] **H65 — Offline-first completo.**
-  - [ ] POS/PWA con cache local, cola de ventas/pagos/comandas/stock, reintentos y resolución de conflictos.
+  > Parcial 2026-10-13 ([ADR-077](./17-decision-log.md#adr-077-venta-offline-conservadora-cola-local-idempotente-sync_offline_sale-y-revisión-del-dueño), [ADR-087](./17-decision-log.md#adr-087-pos-instalable-que-abre-y-recarga-sin-conexión-service-worker-propio-shell-anónimo-y-sesión-local-h65-paso-pwa)): venta offline con cola idempotente y política del dueño; POS instalable (manifest) con service worker propio que abre y recarga `/pos` sin conexión desde un shell anónimo, sesión local sin tokens nuevos y modo sólo lectura. Falta: comandas, stock multi-dispositivo, reconciliación de caja y numeración interna offline.
+  - [ ] POS/PWA con cache local, cola de ventas/pagos/comandas/stock, reintentos y resolución de conflictos. *(PWA, cache del shell y cola de ventas: hecho. Pagos integrados, comandas y stock: pendiente.)*
   - [ ] Reconciliación al reconectar: stock, caja, numeración interna, cola fiscal, pagos y auditoría.
   - [ ] Políticas por tenant: qué se permite offline, montos máximos, usuarios autorizados, duración máxima y bloqueo preventivo.
   - [ ] *Criterio:* un local vende 3 horas sin internet y al volver sincroniza sin duplicar ventas ni romper caja/stock/AFIP.

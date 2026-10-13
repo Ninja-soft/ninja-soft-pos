@@ -1,6 +1,6 @@
 # 34 · Venta offline
 
-> Estado: entregable conservador en `feat/venta-offline` (F3 · Venta offline / AFIP offline). Migración `20261103200000_venta_offline` sin aplicar. Decisión: [ADR-077](./17-decision-log.md#adr-077-venta-offline-conservadora-cola-local-idempotente-sync_offline_sale-y-revisión-del-dueño). Lo completo (offline-first con PWA, comandas y stock) sigue en F14 · H65.
+> Estado: entregable conservador en `feat/venta-offline` (F3 · Venta offline / AFIP offline). Migración `20261103200000_venta_offline` sin aplicar. Decisión: [ADR-077](./17-decision-log.md#adr-077-venta-offline-conservadora-cola-local-idempotente-sync_offline_sale-y-revisión-del-dueño). Abrir y recargar el POS sin conexión (PWA, service worker): [ADR-087](./17-decision-log.md#adr-087-pos-instalable-que-abre-y-recarga-sin-conexión-service-worker-propio-shell-anónimo-y-sesión-local-h65-paso-pwa), §8. Lo que falta de offline-first (comandas, stock, caja) sigue en F14 · H65.
 
 ## 1. Qué resuelve
 
@@ -78,7 +78,7 @@ POS con conexión ── foto local (IndexedDB): catálogo con precios, polític
 
 ## 6. Seguridad
 
-- La foto local no guarda secretos: ni tokens, ni credenciales de medios de pago, ni costos. La sesión de Supabase sigue en su almacenamiento habitual.
+- La foto local no guarda secretos: ni tokens, ni credenciales de medios de pago, ni costos. La sesión de Supabase sigue en su almacenamiento habitual; el POS sin conexión (§8) sólo la lee para saber el id del usuario y no guarda otra copia.
 - La cola queda asociada a negocio, usuario y turno y firmada con SHA-256. La firma detecta un payload tocado en el dispositivo (va a revisión con `integrity_failed`); no es una firma criptográfica fuerte (la clave estaría en el mismo navegador). La garantía real es que **el servidor revalida todo**: usuario de la sesión, turno propio y abierto, precios contra la lista, topes de descuento, venta libre, plan, medios y política.
 - Nunca se pierde una venta: el servidor guarda la fila antes de intentar registrarla y lo que falla queda en `needs_review`; el dispositivo sólo borra una entrada cuando el servidor confirmó que la tiene.
 
@@ -86,12 +86,48 @@ POS con conexión ── foto local (IndexedDB): catálogo con precios, polític
 
 La venta offline no se factura en el momento: el ticket es **provisorio** ("no válido como factura"). Al sincronizar, `create_sale` inserta la venta y la cola fiscal la toma como cualquier otra (en la rama de ARCA, el trigger `arca_sales_enqueue`), con CAE o, si ARCA no responde, CAEA. Pendiente para esa rama: usar `sales.offline_sold_at` como fecha del comprobante dentro de la ventana que acepta WSFE y reimprimir el ticket con CAE.
 
-## 8. Fuera de alcance (H65)
+## 8. Abrir y recargar el POS sin conexión (H65, ADR-087)
 
-- Abrir el POS sin conexión (recargar la página offline): necesita service worker y app shell en caché. Hoy el POS tiene que estar abierto cuando se corta.
-- Cajón de dinero en la venta offline, impresión del ticket provisorio con la impresora configurada (hoy `window.print()`), mesas, delivery, cuenta corriente y vale offline, varios dispositivos con conflictos de stock, numeración interna offline.
+El POS se puede **instalar** (celular o tablet: "Agregar a la pantalla de inicio", abre en `/pos`) y se puede **abrir o recargar sin conexión**.
 
-## 9. Archivos
+```
+POS con conexión ── registra el service worker (/sw.js, scope /pos)
+        │            el SW guarda el shell anónimo /pos-offline y sus archivos
+        │            el POS guarda la foto local y el puntero pos.last (negocio + usuario)
+        │
+ recarga sin red ──> SW: /pos no responde ──> sirve el shell guardado (misma URL)
+                        shell: lee la sesión que Supabase ya guardó (sólo id y email)
+                               + pos.last + la foto ──> ¿vende o sólo lectura?
+```
+
+**Qué guarda el service worker y qué no**
+
+| Se guarda | Nunca se guarda |
+|---|---|
+| El shell `/pos-offline` (página estática, sin datos; se baja sin cookies) | El HTML de `/pos` (es personalizado) |
+| `/_next/static/*` (scripts, CSS y fuentes con hash) | Nada de Supabase ni de otro dominio (REST, Auth, Storage, Realtime) |
+| Íconos de `/brand/` y el manifest | `/api`, `/internal`, `/pagar`, `/auth`, webhooks, login, `/c/`, `/_next/image` |
+| | Pedidos con `Authorization`, RSC o prefetch, métodos distintos de GET |
+| | Respuestas con error, redirigidas, opacas, `no-store`, `private` o `Vary: *` |
+
+El SW sólo controla las pantallas `/pos` y `/pos-offline` (scope `/pos`): el resto del panel no pasa por él.
+
+**Cuándo se vende y cuándo es sólo lectura**
+
+Se vende sólo con un usuario identificado: hay una sesión de Supabase guardada con refresh token, es del mismo usuario que dejó la foto, no pasaron 8 horas sin uso, la foto es de ese negocio y usuario, la venta offline está prendida, la foto no es más vieja que `max_hours` y tenía la caja abierta. Un access token vencido no frena: se renueva al volver la red. Si algo no cierra, el shell queda en **sólo lectura** y dice por qué ("La sesión es de otro usuario", "No hay una caja abierta", etc.); si el usuario es el mismo, se puede consultar el catálogo.
+
+**Qué se vende en el shell:** productos simples de la foto al precio de la foto (sin variantes, series, modificadores, descuentos, clientes ni promociones), en efectivo con vuelto, transferencia o tarjeta en posnet con lote y cupón. Mismo payload, misma cola y mismas reglas que el POS abierto (§2 a §5): el servidor revalida todo al sincronizar. Cuando vuelve la conexión el shell envía la cola y ofrece **Abrir el POS completo**.
+
+**Versión nueva:** cada deploy publica un `sw.js` nuevo. El POS muestra "Hay una versión nueva" con **Recargar**; con carrito o con el cobro abierto, el botón espera. Nunca recarga solo. Emergencia: `NEXT_PUBLIC_DISABLE_SW=1` desinstala el service worker en los dispositivos.
+
+**Probarlo a mano:** `pnpm build && pnpm start -p 3005`, entrar a `/pos` con la caja abierta, esperar unos segundos (foto y service worker), en DevTools > Network marcar Offline (o cortar el wifi) y recargar.
+
+## 9. Fuera de alcance (H65)
+
+- El POS **completo** sin conexión (el shell es reducido), cajón de dinero, impresión con la impresora configurada (hoy `window.print()`), listas de precios y promociones en el shell.
+- Mesas, delivery, cuenta corriente y vale offline, comandas, varios dispositivos con conflictos de stock, reconciliación de caja y numeración interna offline.
+
+## 10. Archivos
 
 | Capa | Archivo |
 |---|---|
@@ -99,4 +135,5 @@ La venta offline no se factura en el momento: el ticket es **provisorio** ("no v
 | Lógica pura | `lib/pos/offline/{policy,queue,sync,snapshot,idb}.ts` |
 | POS | `modules/pos/offline/{api,useOfflinePos}.ts`, `modules/pos/screen/usePosSale.ts`, `app/(app)/pos/page.tsx`, `components/pos/offline/*`, `components/pos/checkout/CheckoutSheetConnected.tsx` |
 | Dueño | `app/(app)/ventas-offline/page.tsx`, `components/sales/OfflineSalesPanel.tsx`, `components/config/OfflinePolicyCard.tsx` |
-| Tests | `tests/unit/offline{Queue,Policy,Sync}.test.ts`, `tests/integration/rls-venta-offline.test.ts`, `tests/e2e/venta-offline.spec.ts` (sólo local con `E2E_OFFLINE=1`) |
+| PWA (ADR-087) | `lib/pwa/{sw.worker.js,version.ts,update.ts}`, `app/sw.js/route.ts`, `app/manifest.ts`, `app/pos-offline/page.tsx`, `components/pos/offline/PosOfflineScreen.tsx`, `components/pwa/SwUpdateBanner.tsx`, `modules/pwa/useServiceWorker.ts`, `modules/pos/offline/offlineSession.ts`, `lib/pos/offline/{session,shellCart}.ts`, `public/brand/pwa-*.png` |
+| Tests | `tests/unit/offline{Queue,Policy,Sync,Session}.test.ts`, `tests/unit/pwa{ServiceWorker,Shell}.test.ts`, `tests/integration/rls-venta-offline.test.ts`, `tests/e2e/venta-offline.spec.ts` (sólo local con `E2E_OFFLINE=1`), `tests/e2e/pwa-offline.spec.ts` (`@pwa`, sólo local con build de producción y `E2E_PWA=1`) |

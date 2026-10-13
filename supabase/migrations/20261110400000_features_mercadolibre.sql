@@ -42,10 +42,10 @@ where p.tenant_id is null
 alter table payments drop constraint if exists payments_method_check;
 alter table payments add constraint payments_method_check
   check (method in ('cash','debit','credit','transfer','qr','other','store_credit','account','directo','sena',
-                    'mercadolibre'));
+                    'plataforma', 'mercadolibre'));
 
--- Copia de 20261013300000_fiserv_clover_point (la definición más nueva) con
--- 'mercadolibre' -> feature 'mercadolibre'.
+-- Copia de la definición más nueva (20261110200100_canales_delivery_modelo, que
+-- suma 'plataforma') con 'mercadolibre' -> feature 'mercadolibre'.
 create or replace function payment_method_plan_key(p_method text)
 returns text
 language sql
@@ -76,6 +76,7 @@ as $$
     when 'directo'           then 'directo'
     when 'account'           then 'cuenta_corriente'
     when 'cuenta_corriente'  then 'cuenta_corriente'
+    when 'plataforma'        then 'canales_delivery'
     when 'mercadolibre'      then 'mercadolibre'
     else null
   end;

@@ -29,7 +29,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1271,14 +1271,14 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Exportador genérico por plantilla para otros regímenes de información provinciales o nacionales.
   - [ ] *Criterio:* a fin de mes el contador baja Libro IVA ventas y compras, SICORE y la DDJJ de ARBA y los importa sin retipear.
 
-- [ ] **H109: Contabilidad: plan de cuentas, asientos, cierres y export a estudios.** · *OPTIONAL `contabilidad` (nueva, Business) + OPTIONAL `export_contable` (Pro) + ADDON `integracion_erp` (nueva, por conector). Centros de costo requieren F17/H89.*
-  - [ ] Plan de cuentas con plantilla argentina comercial precargada, niveles y edición.
-  - [ ] Mapeos: medio de pago (+ cuotas) → cuenta y **código ERP**, caja de cada sucursal → cuenta, IVA y tributos → cuentas, CMV y stock → cuentas.
-  - [ ] Asientos automáticos por **venta**, **cobro**, **compra**, **pago**, Z, liquidación de tarjeta y movimiento bancario; resumidos (día, sucursal, medio) o detallados; inmutables, corrección por contra-asiento.
-  - [ ] Centros de costo por sucursal (y opcional por unidad de negocio).
-  - [ ] Cierre mensual (bloqueo de período, re-apertura auditada); diferencias de cambio.
-  - [ ] Libros Diario, Mayor y Balance de sumas y saldos.
-  - [ ] Export a estudios contables: Tango, Bejerman, Holistor, Xubio, Colppy y Excel con layout configurable (conectores con API: ADDON; API y webhooks en F14/H68).
+- [~] **H109: Contabilidad: plan de cuentas, asientos, cierres y export a estudios.** *(2026-10-12, ADR-066, `feat/contabilidad`, migraciones `20261029100000` a `20261029100300` sin aplicar; ver [`31-contabilidad.md`](./31-contabilidad.md))* · *OPTIONAL `contabilidad` (nueva, Business, hecha) + OPTIONAL `export_contable` (Pro, con H108) + ADDON `integracion_erp` (nueva, por conector). Centros de costo requieren F17/H89.*
+  - [x] Plan de cuentas con plantilla argentina comercial precargada, niveles y edición (árbol, imputables, código externo del estudio). *(ADR-066)*
+  - [x] Mapeos: medio de pago y adquirente → cuenta con **código ERP** (código externo de la cuenta), caja de cada sucursal → cuenta, IVA y tributos → cuentas, CMV y stock → cuentas, proveedores, tesorería y procesadores. *(ADR-066; cuotas como calificador: pendiente)*
+  - [x] Asientos automáticos por **venta**, **cobro**, devolución, **compra**, **pago**, cierre de caja, ingresos y retiros de caja, liquidación de procesadores, contracargos y movimiento de tesorería; detallados y resumidos al exportar (día o mes y sucursal); inmutables, corrección por contra-asiento; regeneración de un período abierto. *(ADR-066)*
+  - [x] Centros de costo por sucursal (y opcional por unidad de negocio). *(ADR-066)*
+  - [~] Cierre mensual (bloqueo de período, numeración del Diario, re-apertura del dueño auditada). *(ADR-066; diferencias de cambio: pendiente)*
+  - [x] Libros Diario, Mayor y Balance de sumas y saldos; estado de resultados; resumen de IVA Ventas y Compras. *(ADR-066)*
+  - [~] Export a estudios contables: Tango, Holistor, Xubio, Colppy y CSV con layout configurable, y XLSX de cada libro. *(ADR-066; layouts a validar con un estudio; Bejerman y conectores con API: ADDON; API y webhooks en F14/H68)*
   - [ ] Ajuste por inflación: el POS exporta datos con fecha y moneda homogénea; el ajuste (RT 6 contable, Título VI de Ganancias impositivo) se resuelve en el sistema contable del estudio. Evaluar cálculo propio en una etapa posterior.
   - [ ] *Criterio:* a fin de mes el estudio recibe los asientos por sucursal en el formato de su sistema y cuadran con el Libro IVA y los Z.
 

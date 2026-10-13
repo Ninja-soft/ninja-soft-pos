@@ -847,9 +847,9 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [~] Transparencia: todo recargo aparece antes de cobrar y en ticket/comprobante cuando corresponda. *Parcial: el recargo se muestra en la hoja de cobro antes de cobrar (`lib/pos/checkoutMath.ts`, `components/pos/checkout/CheckoutSheet.tsx`); falta verificar su línea en el comprobante.*
   - [ ] *Criterio:* "Visa 6 cuotas +18%" aplica solo en sucursal A, de lunes a viernes, con simulación del total antes de cobrar.
 
-- [ ] **H60 — Motor de reglas comerciales unificado.**
-  - [ ] Condiciones/acciones para precio, descuento, recargo, comisión, límite, alerta, bloqueo o sugerencia.
-  - [ ] Prioridad, exclusividad, combinabilidad, vigencia, audiencia, test A/B y simulador con ventas históricas.
+- [~] **H60 — Motor de reglas comerciales unificado.** *Auditoría 2026-10-13: no hay un motor único; las piezas existen por separado (promociones ADR-074, listas PRO ADR-058, planes de cuotas ADR-057).*
+  - [~] Condiciones/acciones para precio, descuento, recargo, comisión, límite, alerta, bloqueo o sugerencia. *Parcial: descuento y precio con condiciones en promociones (ADR-074, `lib/promotions/engine.ts`), precio por cliente y por escala en listas PRO (`price_list_assignments`, `price_list_breaks`, ADR-058) y recargo por plan de cuotas (`payment_plans`); faltan comisión, límite, alerta, bloqueo y sugerencia como acciones de una misma regla.*
+  - [~] Prioridad, exclusividad, combinabilidad, vigencia, audiencia, test A/B y simulador con ventas históricas. *Parcial: prioridad, excluyente o acumulable, vigencia y simulador contra ventas reales en promociones (`promotions.priority`, `stackable`, `components/promotions/PromotionSimModal.tsx`, ADR-074); faltan audiencia por segmento y test A/B.*
   - [ ] Unifica promociones F9, recargos F11, planes F7/F14, comisiones F12 y reglas gastronómicas F13.
   - [ ] *Criterio:* una regla "mayorista paga transferencia sin recargo y 5% menos desde 20 unidades" se configura sin código.
 
@@ -866,7 +866,7 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [~] *Criterio:* se clona la configuración de una sucursal a otra, se revisa diff y se revierte en un click. *Parcial: copia entre sucursales con diff y "Volver a heredar" por campo (ADR-049); falta revertir la copia entera en un click.*
 
 - [~] **H63 — Gobierno de cambios y aprobaciones.** *Parcial: PIN de supervisor por acción y auditoría con motivo; falta el circuito maker-checker.*
-  - [ ] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo.
+  - [~] Maker-checker para cambios sensibles: precio, plan, recargo, regla fiscal, permiso, suspensión, integración, export masivo. *Parcial (auditoría 2026-10-13): aprobación del dueño para cambios masivos de precios (`price_bulk_batches` en `pending_approval`, `price_bulk_decide`, ADR-058) y traslados con aprobación opcional (ADR-046); faltan recargo, plan, regla fiscal, permiso, suspensión, integración y export masivo.*
   - [~] Motivo obligatorio, adjuntos, antes/después, aprobación por rol y expiración de solicitud. *Parcial: motivo y antes/después en `audit_logs` (ADR-073, ADR-083) y PIN de supervisor por acción (ADR-051, ADR-060); faltan solicitud con aprobación diferida, adjuntos y expiración.*
   - [ ] Alertas a owner/manager/internal cuando una configuración crítica cambia.
   - [ ] *Criterio:* un manager crea un recargo nuevo, owner lo aprueba y el audit log conserva todo el circuito.
@@ -875,7 +875,7 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   > Nota 2026-10-12: *(Compras, proveedores, costos e importaciones se detallan con su tratamiento fiscal en F18/H101 y H102.)*
   - [~] Lotes, vencimientos, números de serie, garantías por serie, conteos cíclicos, inventario físico, ajustes masivos y auditoría. *Parcial: lotes con vencimiento y consumo FEFO (ADR-050, ADR-059), series (`product_serials`), conteo e importación de stock auditados por sucursal (ADR-078); faltan garantías por serie, conteos cíclicos e inventario físico guiado.*
   - [x] Proveedores, órdenes de compra, recepción parcial, costos, listas de proveedor, reposición sugerida y cuenta corriente de proveedores. *Hecho: ADR-050 y ADR-059 (proveedores, OC, recepción parcial, costos, listas del proveedor, `purchase_suggestions`, cuenta corriente de proveedores).*
-  - [~] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales. *Parcial: mínimo y máximo por sucursal con sugerencia de compra (ADR-050, `lib/purchases/suggest.ts`); faltan demanda proyectada y transferencia recomendada.*
+  - [~] Alertas de stock mínimo/máximo, demanda proyectada y transferencia recomendada entre depósitos/sucursales. *Parcial: mínimo y máximo por sucursal con sugerencia de compra (ADR-050, `lib/purchases/suggest.ts`), traslado recomendado entre sucursales desde la que tiene sobrante (`lib/stock/suggest.ts`, `components/stock/transfers/TransferSuggestModal.tsx`, ADR-046) y reposición del salón desde los depósitos (ADR-085); falta demanda proyectada.*
   - [x] *Criterio:* se crea una orden de compra por reposición sugerida, se recibe parcial y actualiza costo/stock/lote. *Hecho: la OC se arma desde la sugerencia (`components/purchases/OrderWizardModal.tsx`) y la recepción parcial actualiza costo, stock y lote (ADR-050, ADR-059).*
 
 - [~] **H65 — Offline-first completo.** *Parcial: venta offline conservadora (ADR-077) y POS instalable que abre y recarga sin conexión (ADR-087); faltan comandas, pagos integrados y stock multi-dispositivo.*
@@ -890,8 +890,8 @@ Objetivo: convertir la configuración comercial en un sistema central y auditado
   - [ ] Mapeo de productos/modificadores/categorías por canal sin duplicar catálogo base.
   - [ ] *Criterio:* un producto cambia de precio y se sincroniza a catálogo/QR/marketplace según reglas del canal.
 
-- [ ] **H67 — BI/AI operativo y recomendaciones.**
-  - [ ] Forecast de demanda, alertas de anomalías, productos muertos, margen bajo, quiebres probables, staff necesario y horarios pico.
+- [~] **H67 — BI/AI operativo y recomendaciones.** *Auditoría 2026-10-13: sólo horarios pico.*
+  - [~] Forecast de demanda, alertas de anomalías, productos muertos, margen bajo, quiebres probables, staff necesario y horarios pico. *Parcial: horarios pico en reportes (`peakHour` en `modules/reports/derive.ts`); falta el resto.*
   - [ ] Recomendaciones accionables: subir stock, cambiar precio, crear combo, revisar cajero, reponer insumo, contactar cliente inactivo.
   - [ ] Explicabilidad: cada recomendación muestra datos usados y confianza.
   - [ ] *Criterio:* el owner recibe "te vas a quedar sin café el viernes" con evidencia y orden de compra sugerida.
@@ -1498,13 +1498,13 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
 | **F12** | 39/51 | 7 | 5 | 76% | 83% |
 | **F13** | 39/74 | 26 | 9 | 53% | 70% |
-| **F14** | 4/61 | 31 | 26 | 7% | 32% |
+| **F14** | 4/61 | 37 | 20 | 7% | 37% |
 | **F15** | 8/35 | 19 | 8 | 23% | 50% |
 | **F16** | 0/59 | 16 | 43 | 0% | 14% |
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 536/998 | 273 | 189 | 54% | 67% |
+| **Total** | 536/998 | 279 | 183 | 54% | 68% |
 <!-- roadmap-progress:end -->
 
 ---

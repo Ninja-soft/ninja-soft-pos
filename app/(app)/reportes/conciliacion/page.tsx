@@ -13,6 +13,7 @@ import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Callout } from "@/components/ui/Callout";
+import { NubceoPromo } from "@/components/integrations/NubceoPromo";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { NoData } from "@/components/ui/NoData";
@@ -177,6 +178,7 @@ function ProcessorsPage() {
         description="Lo que cobraste con Mercado Pago, Payway y otros adquirentes, cruzado solo con tus ventas: comisiones, impuestos, lo acreditado y lo que falta."
       />
       <ViewTabs value="procesadores" />
+      <NubceoPromo className="mt-4" />
       <ProcessorReconciliation />
     </PageContainer>
   );
@@ -349,6 +351,7 @@ function ConciliacionTarjetasPage() {
       />
 
       <ViewTabs value="tarjetas" />
+      <NubceoPromo className="mt-4" />
 
       {enabled === false ? (
         <Locked />

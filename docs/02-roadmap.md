@@ -22,7 +22,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F8** | Pagos y cobros (arquitectura + pasarelas por etapas) | 6–10 semanas | 🟡 En progreso (MP + Mobbex + MODO; gating por plan) |
 | **F9** | Motor de promociones PRO | 4–6 semanas | 🟢 Núcleo completo (ADR-074, `feat/promociones-v2`, migraciones `20261102100000` a `20261102100300` sin aplicar): motor con cálculo autoritativo en `create_sale`, combinables, topes, tarjeta/banco, sucursal, lista y combos; falta H55 (segmentos y fidelización) y la aprobación de H56 |
 | **F10** | Hardware y mostrador PRO (impresoras, scanners, doble pantalla) | 5–8 semanas | 🟡 En progreso (impresión por documento H22, scanners H23, doble pantalla H25, diagnóstico H26) |
-| **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 Planificación |
+| **F11** | Configuración retail avanzada (devoluciones, garantías, cuenta corriente, despacho) | 6–8 semanas | 🟡 En curso (falta H32 y parte de H31b) |
 | **F12** | Comercios simples y servicios (catálogo chico, agenda, cobro rápido) | 5–7 semanas | 🟡 En progreso (H35 presets, H36 POS rápido, H37 modificadores, H38 agenda/turnos — core) |
 | **F13** | Gastronomía PRO (mesas, comandas, cocina, delivery/takeaway) | 7–10 semanas | 🟡 En progreso (H43 modo gastronómico, H44 mesas/pedidos, H45 ruteo + comanda impresa por estación, H46 KDS, H47 cursos/despacho por tiempos, H49 delivery/takeaway, H51 reservas — núcleo, local) |
 | **F14** | Motor comercial enterprise (planes, cuotas, recargos, reglas, inventario PRO) | 8–12 semanas | 🟡 Planificación |

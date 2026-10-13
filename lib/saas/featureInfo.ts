@@ -352,6 +352,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["stock"],
   },
+  reservas_stock: {
+    desc: "Reservas de stock y retiro en tienda: apartá productos para un cliente en cualquier sucursal (también desde otra, con su stock), con vencimiento, preparación y entrega validada con código de 6 dígitos o documento contra la venta cobrada en el POS. Lo reservado se resta del disponible para reservar y se ve en el cockpit.",
+    impact: "Desactivado, no se puede apartar stock para un cliente ni registrar retiros en tienda (el servidor lo rechaza).",
+    minPlan: "Pro",
+    requires: ["stock"],
+  },
   compras: {
     desc: "Compras y proveedores: ficha de proveedor (CUIT, condición IVA, plazo de pago, CBU), productos por proveedor con su código y último costo, órdenes de compra por sucursal con sugerencia por stock bajo, recepción parcial con diferencias, facturas y notas de crédito del proveedor, pagos y cuenta corriente con antigüedad de deuda. Cada recepción actualiza el stock de la sucursal, el último costo y el costo promedio ponderado. Incluye devoluciones al proveedor con nota de crédito, anulación de recepciones con reversa de stock y costos, órdenes de pago con imputación a facturas, pago en efectivo desde la caja propia y retenciones con certificado, trazabilidad por lote y n° de despacho hasta la venta e importación de la lista de precios del proveedor.",
     impact: "Desactivado, la mercadería se ingresa con ajustes de stock y el costo se carga a mano; no hay proveedores, órdenes, devoluciones, órdenes de pago ni cuenta corriente de proveedores (el servidor lo rechaza).",
@@ -465,6 +471,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivado, la liquidación de cada procesador se controla a mano o con un sistema aparte; los cobros con tarjeta se siguen conciliando por lote si el plan trae la conciliación de tarjetas.",
     minPlan: "Pro",
     needs: "Mercado Pago conectado (Medios de pago) para la sincronización automática; para Payway y otros, el archivo de liquidación del portal del adquirente.",
+  },
+  cockpit_comercio: {
+    desc: "Cockpit de comercio unificado: en una pantalla, qué canal vende (mostrador, salón, delivery, WhatsApp, links de pago, retiro en tienda, sin conexión) por sucursal, qué pedidos, reservas y traslados faltan surtir, qué cobros fallaron o no se concilian, qué facturas están bloqueadas, cuánto stock está reservado o en camino, y alertas con plazo (pedido demorado, quiebre de stock, caja sin señal).",
+    impact: "Desactivado, cada dato se mira en su pantalla (ventas, delivery, cobros, facturación, stock) sin una vista central ni alertas cruzadas (el servidor lo rechaza).",
+    minPlan: "Business",
+  },
+  prevencion_fraude: {
+    desc: "Prevención de fraude: señales por persona (anulaciones, descuentos altos, devoluciones, cobros rechazados y diferencias de caja), reglas con los umbrales del negocio y marca automática de las devoluciones y anulaciones de riesgo para revisarlas con nota, todo en la auditoría.",
+    impact: "Desactivado, las devoluciones y anulaciones no se puntúan ni se marcan, y no hay vista de riesgo por persona (el servidor lo rechaza). El PIN de supervisor sigue funcionando.",
+    minPlan: "Business",
   },
   metricas_avanzadas: {
     desc: "Métricas y dashboards avanzados: análisis más profundo (tendencias, comparativas, indicadores) del negocio.",

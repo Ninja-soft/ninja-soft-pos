@@ -184,6 +184,8 @@ const ApiSettings = dynamic(
 // Envíos y logística (ADR-103): conexiones por negocio o sucursal.
 const ShippingSettings = dynamic(
   () => import("@/components/shipping/ShippingSettings").then((m) => m.ShippingSettings),
+  { loading },
+);
 // Mercado Libre (H87 · ADR-104): cuentas y configuración por cuenta.
 const MlSettings = dynamic(
   () => import("@/components/integrations/mercadolibre/MlSettings").then((m) => m.MlSettings),

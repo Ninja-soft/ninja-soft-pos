@@ -423,6 +423,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Truck,
         feature: "envios",
         keywords: "envios logistica andreani correo argentino oca pickit hop andesmar bluemail cabify enviopack etiqueta despacho carrier courier seguimiento tracking",
+      },
       // Mercado Libre (H87 · ADR-104): cuentas conectadas y su sincronización.
       {
         key: "mercadolibre",

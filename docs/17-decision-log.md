@@ -3569,3 +3569,35 @@ F1.5 pide un piloto confiable, medible y recuperable. Al auditar contra el códi
 - CI corre `deploy-check` con historia completa (`fetch-depth: 0`).
 - Un cuerpo de más de 64 KB a una Edge pública deja de procesarse (ningún proveedor manda algo así).
 - Pendiente para cerrar F1.5: ejecutar una vez el restore de prueba, el seed demo (necesita Supabase local) y la primera corrida verde del smoke contra producción.
+
+---
+
+## ADR-099: Pagos sin terceros: comisiones estimadas por medio, la venta cierra su espera de transferencia y el n° de devolución de Mercado Pago en el comprobante (F8)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/f8-pagos`, migraciones no aplicadas) · **Hito:** F8 (H14, H21h, H21i)
+
+### Contexto
+
+F8 tenía pendientes que no dependen de credenciales, kits ni cobros reales de un proveedor: la detección de transferencias (ADR-061, adenda) no vinculaba la venta a su espera ni vencía las esperas abandonadas; el comprobante de devolución decía "Mercado Pago" sin el n° de la devolución (ADR-067); y el dueño no tenía cómo ver cuánto se lleva cada procesador por medio y por plan de cuotas sin conectar la conciliación de procesadores. Se auditaron además los candidatos de la tanda (recordatorios de deuda, reintentos, propinas por medio, links reutilizables, cobro de cuenta corriente por link, seña genérica).
+
+### Decisión
+
+- **La venta cierra su espera de transferencia.** Trigger `payments_link_transfer_watch` (AFTER INSERT en `payments`, `WHEN method = 'transfer' and reference is not null`, SECURITY DEFINER): si hay una espera `matched` del mismo negocio con ese movimiento de Mercado Pago, la pasa a `closed` con la venta y audita `transfer_watch_closed` (`origin: payment`). No hace falta que la hoja conozca el id de la venta ni que el navegador siga abierto. El índice único `(tenant_id, mp_payment_id)` ya existía.
+- **Barrido de esperas.** `transfer_watches_sweep()` (sólo service_role, pg_cron `transfer-watches-sweep` cada 10 minutos): `waiting` y `ambiguous` vencidas pasan a `expired`; las `matched` sin cerrar 24 h después del vencimiento se vinculan a la venta si un cobro por transferencia usó ese movimiento y, si no, se vencen y liberan el movimiento (queda en `candidates` como `released_mp_payment_id`). Todo auditado. Índice parcial `transfer_watches_open_expires_idx`.
+- **Comisiones estimadas por medio de pago** (feature `comisiones_estimadas`, OPTIONAL, grupo pagos, Pro/Business/Enterprise; planes a medida heredan `conciliacion_tarjetas`). Tabla `payment_fee_rules` (medio entre débito, crédito, QR, transferencia, otro y Directo; procesador opcional, FK a `payment_providers`; cuotas opcionales 1 a 99; % 0 a 100; fijo por cobro; IVA 21 % sobre la comisión sí o no; nota; baja lógica). Una regla viva por (medio, procesador, cuotas). RLS: lectura del negocio, alta y edición de dueño o encargado (`(select is_tenant_manager())`), sin DELETE, `role_write_guard('manage')`; trigger de gating con `tenant_has_feature_for` y trigger de auditoría (`payment_fee_rule_created/_updated/_deleted` con antes y después). RPC `payment_fees_report(p_from, p_to, p_store_id)` (dueño o encargado, con el plan, sucursal por `report_store_filter`): cobros de ventas completadas agrupados por medio, procesador (del intent cuando `reference` es su id) y cuotas (del cupón); aplica la regla más específica (procesador y cuotas > procesador > cuotas > general); comisión = bruto × % / 100 + fijo × cobros, IVA aparte, neto; y las propinas por medio (`sales.tip_method`). Espejo puro en `lib/payments/feeEstimate.ts`. UI: tarjeta "Comisiones estimadas por medio de pago" en Reportes junto a Medios de pago, con una frase para el dueño, tabla con scroll propio en mobile, propinas por medio y editor en hoja (`components/reports/PaymentFeesSection.tsx`). Copy en `featureInfo.ts`; la comparación de planes la deriva de la matriz.
+- **Comprobante de devolución.** Si Mercado Pago aceptó el reintegro, el comprobante imprime "Reintegro por Mercado Pago", el monto y el n° de devolución (`mpRefundReceipt` en `lib/payments/mpRefund.ts`).
+- **Auditoría de candidatos.** Recordatorios de deuda por WhatsApp sin API: ya estaban (ADR-037, `waLink`). Propinas por medio: se cobran por medio desde H39 y ahora se reportan. Reintentos: cobros en espera y reintegros de MP ya reintentan; falta un estado "rechazado por el proveedor" unificado (va con H21b). Links reutilizables y cobro de cuenta corriente por link: necesitan links del proveedor y credenciales de prueba; quedan pendientes. Seña genérica fuera de la agenda: obliga a recrear `create_sale`; queda para una tanda que toque esa función.
+
+### Alternativas descartadas
+
+- Guardar la comisión en `payment_plans` y `tenant_payment_methods`: los cobros no guardan el plan elegido (sólo las cuotas en el cupón) y QR, transferencia y Directo no tienen plan; una tabla de reglas con especificidad cubre todos los casos sin migrar datos.
+- Cerrar la espera desde la hoja con la action `close` de la Edge `transfer_watch`: obliga a pasar el id de la venta a la hoja y falla si se cierra el navegador; el trigger lo hace en la misma transacción del cobro.
+- Recrear `create_sale` para vincular la espera: innecesario con un trigger sobre `payments`.
+
+### Consecuencias
+
+- Deploy: `20261109800000_features_comisiones_estimadas` y `20261109800100_pagos_sin_terceros`, en orden y después de `20261109600300`. Sin Edges ni secrets. pg_cron opcional (sin la extensión, el barrido no se programa y se avisa con un notice).
+- Cambio de conducta: las esperas de transferencia emparejadas se cierran solas al registrar la venta; las abandonadas se vencen solas.
+- Riesgos: el trigger corre dentro de cada cobro por transferencia con n° de operación (una búsqueda por índice único); si el cajero carga a mano el mismo n° de operación que una espera emparejada de otra caja, esa espera se cierra con esta venta (es el mismo movimiento, no se puede usar dos veces). La comisión es una estimación con lo que cargó el dueño; lo liquidado real sigue en Conciliación.
+- Pendiente: override por sucursal y caja de la detección, validar "Probar detección" con una cuenta real, links reutilizables, cobro de cuenta corriente por link, seña genérica, estado unificado de cobros rechazados.
+- Tests: `tests/unit/pagosSinTerceros.test.ts` (especificidad de reglas, cálculo con IVA y redondeo, totales y medios sin regla, validación, comprobante de MP, migraciones con gating, policies con initplan y sin `is_internal`); RLS `tests/integration/rls-pagos-sin-terceros.test.ts` (alta de varias reglas con todas las claves, duplicada, cajero y negocio sin plan rechazados, aislamiento, baja lógica, venta del cajero en su turno que cierra la espera, reporte con crédito en 3 cuotas, cajero y negocio sin plan sin reporte, barrido).

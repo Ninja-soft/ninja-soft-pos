@@ -428,7 +428,7 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
   - [x] Habilitación y **configuración por tenant** (`tenant_payment_methods`: enabled, recargo %, sandbox; RLS owner/manager). **Secretos** en `payment_secrets` (RLS deny: solo service_role/Edge Functions). UI `PaymentMethodsCard` en `/dashboard-team`.
   - [x] **UI de cobro abstracta** en el POS: `PaymentModal` lee `tenant_payment_methods.enabled` y muestra solo los medios del tenant (fallback a todos si no hay config). Selector de planes activos para débito/crédito con recargo. Recargo global del medio si `surcharge_pct > 0`. Hook `useEnabledPaymentMethods()`.
   - [x] Medios manuales reales: **Efectivo**, **Transferencia** (en catálogo; el POS ya cobra efectivo/transferencia/mixto).
-  - [~] **Detección automática de transferencias en un CVU de Mercado Pago** (feature `transferencia_auto_mp`, Pro): mientras la pantalla de transferencia espera, el servidor busca la transferencia recibida en Mercado Pago y la empareja por monto (± tolerancia) y ventana de tiempo, sin reusar un movimiento y preguntando al cajero si hay más de una opción; avisa o cierra la venta sola. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, adenda). Pendiente: validar con una cuenta real que `payments/search` informa las transferencias entrantes a CVU ("Probar detección"), vincular la venta al watch al confirmar, override por sucursal y caja, y barrido de watches vencidos.*
+  - [~] **Detección automática de transferencias en un CVU de Mercado Pago** (feature `transferencia_auto_mp`, Pro): mientras la pantalla de transferencia espera, el servidor busca la transferencia recibida en Mercado Pago y la empareja por monto (± tolerancia) y ventana de tiempo, sin reusar un movimiento y preguntando al cajero si hay más de una opción; avisa o cierra la venta sola. *Hecho en `feat/detalle-venta-conciliacion` (ADR-061, adenda). Vincular la venta a la espera y barrido de esperas vencidas hechos (ADR-099: trigger `payments_link_transfer_watch` y `transfer_watches_sweep` cada 10 minutos). Pendiente: validar con una cuenta real que `payments/search` informa las transferencias entrantes a CVU ("Probar detección") y override por sucursal y caja.*
   - [x] *Criterio:* el POS muestra solo los medios habilitados por el tenant y aplica el recargo configurado. ✓
 
 - [~] **H15+ — Integraciones por proveedor** (un sub-hito cada uno, cableado incremental sobre la arquitectura de H14):
@@ -479,15 +479,29 @@ Objetivo: cobrar por cualquier medio, con arquitectura extensible. **Arquitectur
 
 #### F8 · Devolución de dinero por el medio original
 
-- [~] **H21h · Reintegro por Mercado Pago al hacer una devolución.** *(pedido de Lucas, 2026-10-12)* *Integrado en código (2026-10-12, rama `feat/reintegro-mp-cliente360`, ADR-067): `return_sale_v2` con pata MP, Edge `mp_refund`, respaldo en efectivo o vale, PIN `reintegro_mp`, ajuste del dueño, "Devuelto (POS)" en la conciliación. **Pasos:** aplicar `20261030100000` y `20261030100100`, deploy de `mp_refund` (verify_jwt = true), probar en sandbox de MP una devolución parcial de QR, de link y de Point. **Pendiente:** id de la devolución de MP impreso en el comprobante; Payway y otros medios.* Si la venta se cobró con Mercado Pago (QR, link o Point), al devolver se puede reintegrar el dinero **al mismo medio que usó el cliente** (tarjeta o dinero en cuenta) por la API de reembolsos de Mercado Pago, además de efectivo o vale como hoy.
+- [~] **H21h · Reintegro por Mercado Pago al hacer una devolución.** *(pedido de Lucas, 2026-10-12)* *Integrado en código (2026-10-12, rama `feat/reintegro-mp-cliente360`, ADR-067): `return_sale_v2` con pata MP, Edge `mp_refund`, respaldo en efectivo o vale, PIN `reintegro_mp`, ajuste del dueño, "Devuelto (POS)" en la conciliación. **Pasos:** aplicar `20261030100000` y `20261030100100`, deploy de `mp_refund` (verify_jwt = true), probar en sandbox de MP una devolución parcial de QR, de link y de Point. **Pendiente:** Payway y otros medios (el id de la devolución de MP ya se imprime, ADR-099).* Si la venta se cobró con Mercado Pago (QR, link o Point), al devolver se puede reintegrar el dinero **al mismo medio que usó el cliente** (tarjeta o dinero en cuenta) por la API de reembolsos de Mercado Pago, además de efectivo o vale como hoy.
   - [x] **Activable por el dueño** en Configuración → Medios de pago → Mercado Pago ("Permitir devolver el dinero por Mercado Pago"), apagado por defecto. Feature de plan con gating server-side (checklist de features de CLAUDE.md). *(`reintegro_mp` OPTIONAL desde Pro; `mp_refund_settings_save` sólo del dueño)*
   - [x] En el wizard de devolución (`ReturnModal`) aparece "Devolver a la tarjeta / cuenta de Mercado Pago" sólo si el pago original fue por MP, está aprobado y dentro del plazo que permite MP. Reintegro **total o parcial** (por el importe de los ítems devueltos), nunca mayor a lo cobrado por ese pago menos lo ya reintegrado.
   - [x] Ejecución en una Edge Function (token del negocio, nunca en el front): llamada idempotente al reembolso, guarda el id y estado del refund, y queda en `audit_logs`. La devolución en el sistema (`return_sale_v2`) se registra con medio "Mercado Pago" y referencia al refund.
-  - [~] Permiso por rol (el cajero puede necesitar autorización del encargado o PIN de supervisor), motivo obligatorio y comprobante de devolución con el dato del reintegro. *(PIN `reintegro_mp` y motivo hechos; el comprobante dice "Mercado Pago" pero todavía no imprime el id de la devolución de MP)*
+  - [x] Permiso por rol (el cajero puede necesitar autorización del encargado o PIN de supervisor), motivo obligatorio y comprobante de devolución con el dato del reintegro. *(PIN `reintegro_mp` y motivo hechos; el comprobante imprime el monto y el n° de devolución de Mercado Pago cuando MP lo acepta, ADR-099, `mpRefundReceipt` en `lib/payments/mpRefund.ts`)*
   - [x] Errores honestos: saldo insuficiente en la cuenta MP, plazo vencido, pago en disputa o ya reintegrado. En esos casos se ofrece efectivo o vale.
   - [x] Conciliación: el reintegro aparece en el detalle del pago, en el historial del cliente (H31b) y en la conciliación de Mercado Pago.
   - [ ] Después: mismo patrón para Payway y otros medios con API de devolución.
   - [ ] *Criterio:* una venta cobrada con QR de MP se devuelve parcialmente desde el wizard, el cliente ve el reintegro en su tarjeta o cuenta, y la devolución queda con el id del refund, auditada y conciliada.
+
+#### F8 · Cobros sin terceros (ADR-099)
+
+> Pendientes de F8 que no necesitan credenciales, kits ni cobros reales de un proveedor. Auditoría 2026-10-13 en la rama `feat/f8-pagos`; migraciones `20261109800000` y `20261109800100` sin aplicar.
+
+- [x] **H21i · Comisiones estimadas por medio de pago.** El dueño o un encargado cargan lo que cobra cada procesador (medio, procesador opcional y cuotas opcionales; % más fijo por cobro, con o sin IVA) en `payment_fee_rules` y Reportes muestra cobrado, comisión estimada, IVA y neto por medio, procesador y plan de cuotas (`payment_fees_report`, `components/reports/PaymentFeesSection.tsx`). Feature `comisiones_estimadas` (OPTIONAL, Pro+), gating en el trigger y en la RPC.
+- [x] **Propinas por medio de pago.** Se cobran por medio desde H39 (`sales.tip_method`) y ahora se suman por medio en el mismo reporte (ADR-099).
+- [x] **Recordatorios de deuda por WhatsApp sin API.** *Auditoría: ya hecho en cuenta corriente v2 (ADR-037): `/clientes/cuentas` y la ficha de cuenta arman el `wa.me` con el mensaje (`waLink` en `components/account/shared.tsx`) y los recordatorios por email salen de la Edge `account_reminders`.*
+- [x] **Esperas de transferencia vinculadas a la venta y barrido de vencidas** (ADR-061 adenda, cerrado en ADR-099): trigger `payments_link_transfer_watch` y `transfer_watches_sweep` (pg_cron cada 10 minutos, libera el movimiento de las emparejadas sin venta 24 h después del vencimiento).
+- [x] **Id de la devolución de Mercado Pago en el comprobante** (H21h, ADR-099).
+- [~] **Reintentos y estados claros de cobros fallidos.** *Cobros en espera: "Reintentar registrar la venta" y "Regenerar link" con el último error (ADR-048, `PendingChargeDetail`); reintegros por MP con reintentar y respaldo en efectivo o vale (ADR-067, `MpRefundPanel`). Falta un estado "rechazado por el proveedor" unificado en la hoja de cobro (va con el estado central de H21b).*
+- [ ] **Links de pago reutilizables con vencimiento.** Requiere links de varios usos del proveedor (preferencias de Mercado Pago, Pagos360) y probarlos con credenciales.
+- [ ] **Cobro de cuenta corriente por link de pago.** Requiere crear el link con el proveedor y acreditar el cobro en `account_collect` desde el webhook; necesita credenciales de prueba.
+- [ ] **Seña o pago parcial genérico fuera de la agenda.** El medio `sena` sólo existe para turnos (ADR-088) y llevarlo a cualquier venta obliga a recrear `create_sale`; queda para una tanda que toque esa función.
 
 ### F10 — Hardware y mostrador PRO
 
@@ -1501,7 +1515,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F5** | 16/38 | 9 | 13 | 42% | 54% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
-| **F8** | 12/47 | 21 | 14 | 26% | 48% |
+| **F8** | 18/56 | 21 | 17 | 32% | 51% |
 | **F9** | 12/20 | 7 | 1 | 60% | 78% |
 | **F10** | 30/46 | 11 | 5 | 65% | 77% |
 | **F11** | 65/89 | 12 | 12 | 73% | 80% |
@@ -1513,7 +1527,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 36/106 | 53 | 17 | 34% | 59% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 554/1007 | 294 | 159 | 55% | 70% |
+| **Total** | 560/1016 | 294 | 162 | 55% | 70% |
 <!-- roadmap-progress:end -->
 
 ---

@@ -204,6 +204,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     requires: ["transferencia"],
     needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
   },
+  comisiones_estimadas: {
+    desc: "Comisiones estimadas por medio de pago: cargás lo que te cobra cada procesador (por medio, por procesador y por cuotas, en % más un fijo por cobro y con o sin IVA) y Reportes te muestra, para el período y la sucursal, cuánto cobraste con cada medio, cuánto se lleva el procesador y cuánto te queda. Suma las propinas por medio. No hace falta conectar ninguna cuenta.",
+    impact: "Desactivado, Reportes muestra el total por medio de pago sin comisiones ni neto, y el servidor rechaza cargar comisiones o pedir el reporte.",
+    minPlan: "Pro",
+  },
   alertas_contracargos: {
     desc: "Alertas de contracargos y devoluciones de Mercado Pago: todos los días (y al instante si Mercado Pago avisa) revisa tus cobros y te avisa a vos y a tus encargados cuando un comprador desconoce un pago (contracargo), abre un reclamo o cuando se hace una devolución desde Mercado Pago que no está registrada en el POS. Marca esas ventas en Ventas (\"Contracargo\", \"Devuelto por MP\", filtro \"Con alertas\") y muestra el plazo para presentar la documentación. Con la conciliación de procesadores, además, suma estados, totales y neto efectivo por devoluciones y contracargos.",
     impact: "Desactivado, los contracargos y las devoluciones hechas desde Mercado Pago sólo se ven entrando a la cuenta de Mercado Pago; se puede perder el plazo para presentar la documentación.",

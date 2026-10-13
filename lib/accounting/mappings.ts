@@ -48,7 +48,7 @@ export function resolveMapping(
   return best;
 }
 
-export type ConceptGroup = "ventas" | "cobros" | "caja" | "compras" | "tesoreria" | "procesadores";
+export type ConceptGroup = "ventas" | "cobros" | "caja" | "compras" | "tesoreria" | "procesadores" | "impuestos";
 
 export const CONCEPT_GROUP_LABEL: Record<ConceptGroup, string> = {
   ventas: "Ventas",
@@ -57,6 +57,7 @@ export const CONCEPT_GROUP_LABEL: Record<ConceptGroup, string> = {
   compras: "Compras y pagos",
   tesoreria: "Tesorería",
   procesadores: "Procesadores de pago",
+  impuestos: "Impuestos como sujeto",
 };
 
 export interface QualifierOption {
@@ -229,6 +230,24 @@ export const CONCEPTS: ConceptDef[] = [
   { key: "impuestos_procesador", label: "Impuestos y retenciones de procesadores", group: "procesadores", help: "IVA sobre comisiones, retenciones y percepciones descontadas en la liquidación.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   { key: "diferencia_procesador", label: "Diferencias de liquidación", group: "procesadores", help: "Lo que no cierra entre bruto, comisión, impuestos y neto.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
   { key: "contracargos", label: "Contracargos y devoluciones", group: "procesadores", help: "Contracargos perdidos y devoluciones hechas desde el procesador.", qualifiers: PROVIDERS, qualifierLabel: "Procesador" },
+  // Impuestos como sujeto (ADR-095): retenciones sufridas y liquidación de IIBB.
+  {
+    key: "retencion_sufrida",
+    label: "Retenciones y percepciones sufridas",
+    group: "impuestos",
+    help: "Saldo a favor por impuesto. Para IIBB el detalle puede ser 'iibb:902' (jurisdicción). Se reclasifica desde la cuenta del documento (liquidación, banco o cobro).",
+    qualifiers: [
+      { value: "iibb", label: "Ingresos Brutos" },
+      { value: "iva", label: "IVA" },
+      { value: "ganancias", label: "Ganancias" },
+      { value: "suss", label: "SUSS" },
+      { value: "debitos_creditos", label: "Débitos y créditos" },
+      { value: "otro", label: "Otro" },
+    ],
+    qualifierLabel: "Impuesto",
+  },
+  { key: "iibb_impuesto", label: "Impuesto sobre los ingresos brutos", group: "impuestos", help: "Debe del impuesto determinado en la liquidación mensual. El detalle es la jurisdicción (902).", qualifierLabel: "Jurisdicción" },
+  { key: "iibb_a_pagar", label: "Ingresos brutos a pagar", group: "impuestos", help: "Haber del saldo a pagar de la liquidación mensual. El detalle es la jurisdicción (902).", qualifierLabel: "Jurisdicción" },
 ];
 
 export const CONCEPT_BY_KEY = new Map(CONCEPTS.map((c) => [c.key, c]));

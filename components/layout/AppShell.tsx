@@ -314,6 +314,10 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Libro IVA Digital (F18 · H108, ADR-076): va con la facturación
         // electrónica, no con la contabilidad.
         { href: "/contabilidad/libro-iva", label: "Libro IVA Digital", icon: FileArchive, feature: "facturacion_afip", managersOnly: true },
+        // Impuestos como sujeto (F18 · H106, ADR-095): retenciones sufridas y
+        // liquidación de Ingresos Brutos.
+        { href: "/impuestos/sufridas", label: "Retenciones sufridas", icon: Receipt, feature: "percepciones_retenciones", managersOnly: true },
+        { href: "/impuestos/iibb", label: "Ingresos Brutos", icon: Landmark, feature: "percepciones_retenciones", managersOnly: true },
       ],
     },
     {

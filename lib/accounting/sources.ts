@@ -13,6 +13,8 @@ export type SourceType =
   | "treasury_movement"
   | "settlement_line"
   | "payment_dispute"
+  | "tax_suffered"
+  | "iibb_liquidation"
   | "acc_entry";
 
 export const SOURCE_LABEL: Record<SourceType, string> = {
@@ -26,6 +28,8 @@ export const SOURCE_LABEL: Record<SourceType, string> = {
   treasury_movement: "Tesorería",
   settlement_line: "Liquidación de procesador",
   payment_dispute: "Contracargo o devolución",
+  tax_suffered: "Retención sufrida",
+  iibb_liquidation: "Liquidación de IIBB",
   acc_entry: "Reversión",
 };
 
@@ -79,6 +83,10 @@ export function sourceHref(type: string | null | undefined, id: string | null | 
       return "/reportes/conciliacion?vista=procesadores";
     case "payment_dispute":
       return "/ventas?alertas=1";
+    case "tax_suffered":
+      return "/impuestos/sufridas";
+    case "iibb_liquidation":
+      return "/impuestos/iibb";
     default:
       return null;
   }

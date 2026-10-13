@@ -73,6 +73,15 @@ const DINING_ERRORS: [string, string][] = [
   ["waiter_not_member", "Ese mozo no es parte del equipo activo"],
   ["waitlist_closed", "Ese grupo ya no está esperando"],
   ["invalid_qty", "Cantidad inválida"],
+  // Cuenta por comensal (ADR-097).
+  ["order_has_open_splits", "Hay cuentas separadas sin cobrar: cobralas o deshacelas primero"],
+  ["split_use_unsplit", "Una cuenta separada se deshace, no se cancela"],
+  ["order_is_split", "Esa ya es una cuenta separada"],
+  ["duplicated_item", "Un ítem aparece dos veces"],
+  ["invalid_diner", "Comensal inválido"],
+  ["invalid_priority", "Prioridad inválida"],
+  ["notice_closed", "Ese aviso ya se envió o se descartó"],
+  ["notice_not_found", "No se encontró el aviso"],
 ];
 
 export function diningErrorMessage(e: unknown): string | undefined {

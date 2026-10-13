@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 import { useTableOrderMutations } from "@/modules/dining/hooks";
-import { KDS_STATION_LABELS, type TableOrderItem } from "@/modules/dining/api";
+import { useDeliveryMutations } from "@/modules/delivery/hooks";
+import { KDS_STATION_LABELS } from "@/modules/dining/api";
 import { VOID_REASONS, diningErrorMessage, validateVoid } from "@/lib/gastro/tableOps";
 import { webPrintCopies } from "@/lib/print/webPrint";
 import { usePrintTarget } from "@/modules/tickets/hooks";
@@ -23,21 +24,38 @@ interface VoidDone {
   at: string;
 }
 
-// Anulación de un ítem ya enviado a cocina (F13 · H45). Pide cantidad y motivo
-// (obligatorio, queda en audit_logs y en table_order_voids). Después ofrece
-// imprimir el ticket de ANULACIÓN para la estación (sin precios), con el mismo
-// aislamiento de impresión que la comanda.
+// Lo mínimo de una línea para anularla (mesa o delivery).
+export interface VoidableItem {
+  id: string;
+  name: string;
+  qty: number;
+  station: string | null;
+}
+
+// Anulación de un ítem ya enviado a cocina (F13 · H45; delivery en ADR-097).
+// Pide cantidad y motivo (obligatorio, queda en audit_logs y en
+// table_order_voids / delivery_order_voids). Después ofrece imprimir el ticket
+// de ANULACIÓN para la estación (sin precios), con el mismo aislamiento de
+// impresión que la comanda.
 export function VoidItemModal({
   item,
-  tableLabel,
+  tableLabel = null,
+  source = "mesa",
+  orderLabel = null,
   onClose,
 }: {
-  item: TableOrderItem | null;
-  tableLabel: string | null;
+  item: VoidableItem | null;
+  tableLabel?: string | null;
+  source?: "mesa" | "delivery";
+  // Cabecera del ticket de anulación para delivery ("TAKEAWAY #AB12").
+  orderLabel?: string | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
-  const { voidItem, markVoidsPrinted } = useTableOrderMutations();
+  const tableMut = useTableOrderMutations();
+  const deliveryMut = useDeliveryMutations();
+  const voidItem = source === "delivery" ? deliveryMut.voidItem : tableMut.voidItem;
+  const { markVoidsPrinted } = tableMut;
   const kitchenTarget = usePrintTarget("kitchen", item !== null);
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState("");
@@ -130,7 +148,7 @@ export function VoidItemModal({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cargado: {formatQty(item.qty)}. Si anulás menos, el resto sigue en la mesa.
+            Cargado: {formatQty(item.qty)}. Si anulás menos, el resto sigue en el pedido.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -177,7 +195,9 @@ export function VoidItemModal({
                 Anulación · {stationName}
               </div>
               <div className="mt-2 flex items-baseline justify-between text-[13px]">
-                <span className="text-base font-bold">Mesa {tableLabel ?? "s/d"}</span>
+                <span className="text-base font-bold">
+                  {source === "delivery" ? (orderLabel ?? "Pedido") : `Mesa ${tableLabel ?? "s/d"}`}
+                </span>
                 <span>{done.at}</span>
               </div>
               <div className="my-2 border-t border-dashed border-neutral-400" />

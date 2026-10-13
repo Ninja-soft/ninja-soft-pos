@@ -1352,8 +1352,12 @@ function PosPageInner() {
       {origins.tableActive && (
         <ModeBanner
           icon={<Utensils size={18} />}
-          title="Cobrando mesa"
-          text="Pedido cargado desde el Salón. Al confirmar, la mesa queda libre."
+          title={origins.tableOrder?.split_label ? `Cobrando mesa · ${origins.tableOrder.split_label}` : "Cobrando mesa"}
+          text={
+            origins.tableOrder?.parent_order_id
+              ? "Cuenta separada: se emite un ticket propio. La mesa sigue abierta hasta cobrar lo último."
+              : "Pedido cargado desde el Salón. Al confirmar, la mesa queda libre."
+          }
           exitLabel="Cancelar cobro de la mesa"
           onExit={origins.exitTableMode}
         />

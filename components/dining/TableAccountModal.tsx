@@ -12,6 +12,8 @@ import {
   Minus,
   Plus,
   ReceiptText,
+  Siren,
+  Split,
   Trash2,
   X,
 } from "lucide-react";
@@ -21,14 +23,17 @@ import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   useSetTableWaiter,
+  useTableOrder,
   useTableOrderItems,
   useTableOrderMutations,
+  useTableSplits,
 } from "@/modules/dining/hooks";
 import { useTeamMembers } from "@/modules/customers/hooks";
 import { Select } from "@/components/ui/Select";
 import { diningErrorMessage, isItemSent } from "@/lib/gastro/tableOps";
 import { TableMoveModal } from "./TableMoveModal";
 import { VoidItemModal } from "./VoidItemModal";
+import { PendingSplits, SplitBillModal } from "./SplitBillModal";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import type { DiningTable, TableOrderItem, TableStatus } from "@/modules/dining/api";
 import {
@@ -59,8 +64,14 @@ export function TableAccountModal({
   const orderId = table?.current_order_id ?? null;
   const open = table !== null && orderId !== null;
   const { data: items } = useTableOrderItems(orderId);
-  const { setItemQty, removeItem, cancel, setItemCourse, fireCourse } =
+  const { data: order } = useTableOrder(orderId);
+  const { data: splits } = useTableSplits(orderId);
+  const { setItemQty, removeItem, cancel, setItemCourse, fireCourse, setPriority } =
     useTableOrderMutations();
+  // Ticket separado por comensal o partes iguales (ADR-097).
+  const [splitOpen, setSplitOpen] = useState(false);
+  const openSplits = (splits ?? []).filter((s) => s.status === "abierta").length;
+  const urgent = order?.priority === "urgente";
   // Nombre del local para la cabecera (opcional) de la comanda de cocina (H45).
   const { data: brand } = useTicketBranding(open);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -195,10 +206,25 @@ export function TableAccountModal({
     }
   }
 
+  // Prioridad en cocina (ADR-097): la comanda y el KDS la muestran.
+  async function toggleUrgent() {
+    if (!orderId) return;
+    try {
+      await setPriority.mutateAsync({ orderId, priority: urgent ? "normal" : "urgente" });
+      toast({ title: urgent ? "Prioridad normal" : "Pedido marcado urgente", variant: "success" });
+    } catch (e) {
+      toast({ title: "No se pudo cambiar la prioridad", description: diningErrorMessage(e), variant: "error" });
+    }
+  }
+
   // Cobrar: lleva al POS con el pedido cargado. El POS resuelve el resto (medios,
   // descuentos, cliente) y cierra la mesa al confirmar.
   function charge() {
     if (!orderId) return;
+    if (openSplits > 0) {
+      toast({ title: "Primero cobrá o deshacé las cuentas separadas", variant: "info" });
+      return;
+    }
     if ((items ?? []).length === 0) {
       toast({ title: "La mesa no tiene ítems para cobrar", variant: "info" });
       return;
@@ -222,9 +248,25 @@ export function TableAccountModal({
               <span className="text-sm text-muted-foreground">
                 {TABLE_STATUS_LABELS[table.status]} · {table.capacity} personas
               </span>
-              <Button size="sm" onClick={() => setPickerOpen(true)}>
-                <Plus size={15} /> Agregar ítem
-              </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleUrgent}
+                  disabled={setPriority.isPending}
+                  aria-pressed={urgent}
+                  className={`flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold uppercase tracking-wide transition disabled:opacity-50 ${
+                    urgent
+                      ? "border-danger bg-danger/15 text-danger"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                  title="Prioridad en cocina"
+                >
+                  <Siren size={14} /> Urgente
+                </button>
+                <Button size="sm" onClick={() => setPickerOpen(true)}>
+                  <Plus size={15} /> Agregar ítem
+                </Button>
+              </div>
             </div>
           )}
 
@@ -325,6 +367,9 @@ export function TableAccountModal({
             <ChefHat size={16} /> Imprimir comanda
           </Button>
 
+          {/* Cuentas separadas pendientes de cobro (ADR-097) */}
+          <PendingSplits orderId={orderId} onClose={onClose} />
+
           {/* Acciones */}
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={charge} className="flex-1">
@@ -347,6 +392,13 @@ export function TableAccountModal({
                 </Button>
               )
             )}
+            <Button
+              variant="secondary"
+              onClick={() => setSplitOpen(true)}
+              disabled={(items ?? []).length === 0 && openSplits === 0}
+            >
+              <Split size={15} /> Separar cuenta
+            </Button>
             <Button variant="secondary" onClick={() => setMoveOpen(true)}>
               <ArrowRightLeft size={15} /> Mover / unir
             </Button>
@@ -374,6 +426,15 @@ export function TableAccountModal({
         onOpenChange={setComandaOpen}
         orderId={orderId}
         businessName={brand?.legal_name ?? null}
+      />
+
+      {/* Ticket separado por comensal o partes iguales (ADR-097) */}
+      <SplitBillModal
+        open={splitOpen}
+        onOpenChange={setSplitOpen}
+        orderId={orderId}
+        tableLabel={table?.label ?? null}
+        items={items ?? []}
       />
 
       {/* Mover / unir / transferir ítems (H44) */}
@@ -441,6 +502,11 @@ function ItemRow({
             {formatCurrency(item.unit_price)} c/u
             {item.notes ? ` · ${item.notes}` : ""}
           </span>
+          {item.diner != null && (
+            <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
+              Comensal {item.diner}
+            </span>
+          )}
           {held && (
             <span className="inline-flex items-center gap-1 rounded bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
               <Clock size={11} /> En espera · Tiempo {item.course}

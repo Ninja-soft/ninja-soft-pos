@@ -23,6 +23,9 @@ import { ProcessorDataPanel } from "@/components/sales/ProcessorDataPanel";
 import { DisputeCard } from "@/components/disputes/DisputeCard";
 import { saleAlertBadges, type PaymentDisputeRow } from "@/lib/reports/paymentDisputes";
 import { useSaleDisputes } from "@/modules/reports/paymentDisputes";
+import { useSaleMpRefunds } from "@/modules/sales/mpRefund";
+import { MpRefundPanel } from "@/components/sales/MpRefundPanel";
+import type { MpRefundRow } from "@/lib/payments/mpRefund";
 import {
   isLocalOnly,
   methodLabel,
@@ -90,6 +93,9 @@ export function SalePayments({
   const disputes = disputesQ.data ?? [];
   const disputesFor = (paymentId: string) =>
     disputes.filter((d) => d.payment_id === paymentId || (!d.payment_id && rows.length === 1));
+  // H21h: reintegros por Mercado Pago de la venta (estado y acciones).
+  const mpRefundsQ = useSaleMpRefunds(saleId, active);
+  const mpRefunds = mpRefundsQ.data ?? [];
   const terminals = intentsQ.data?.terminals ?? {};
   const shouldPoll = needsLivePolling(intents, []);
   const fetched = intentsQ.isFetched || rows.every((r) => !r.reference);
@@ -120,6 +126,8 @@ export function SalePayments({
           canSeeFees={canSeeFees}
           live={live}
           disputes={disputesFor(p.id)}
+          mpRefunds={mpRefunds.filter((r) => r.payment_id === p.id)}
+          onMpRefundChange={() => void mpRefundsQ.refetch()}
         />
       ))}
     </div>
@@ -134,8 +142,12 @@ function PaymentCard({
   canSeeFees,
   live,
   disputes,
+  mpRefunds,
+  onMpRefundChange,
 }: {
   disputes: PaymentDisputeRow[];
+  mpRefunds: MpRefundRow[];
+  onMpRefundChange: () => void;
   payment: SalePaymentRow;
   intent: PaymentIntentRow | null;
   terminals: Record<string, string>;
@@ -221,6 +233,15 @@ function PaymentCard({
             </li>
           ))}
         </ol>
+      )}
+
+      {mpRefunds.length > 0 && (
+        <div className="space-y-2 border-t border-border p-3">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reintegros desde el POS</div>
+          {mpRefunds.map((r) => (
+            <MpRefundPanel key={r.id} refund={r} compact onChange={onMpRefundChange} />
+          ))}
+        </div>
       )}
 
       {disputes.length > 0 && (

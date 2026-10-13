@@ -27,6 +27,7 @@ import type { GetnetProbeResult } from "@/lib/payments/getnetProbe";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
+import { MpRefundSetting } from "@/components/dashboard-team/payments/MpRefundSetting";
 import type { Method, MpEnvChange } from "@/components/dashboard-team/payments/types";
 import { ScopeBar, type ScopeSel } from "@/components/config/ScopedConfig";
 import { useBranchContext } from "@/modules/branches/hooks";
@@ -322,11 +323,14 @@ export function PaymentMethodsCard() {
           onConnect: (b) => setConnectBrand(b),
           renderChannelExtra: (key, m) =>
             key === "mercadopago" && m?.config?.connected ? (
-              <MpQrPosSetup
-                method={m}
-                onReconnect={() => setConnectBrand("mercadopago")}
-                onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
-              />
+              <div className="space-y-4">
+                <MpQrPosSetup
+                  method={m}
+                  onReconnect={() => setConnectBrand("mercadopago")}
+                  onOpenPlans={() => setPlansFor({ key: "mercadopago", name: "Mercado Pago" })}
+                />
+                <MpRefundSetting enabled={m?.config?.mp_refunds_enabled === true} />
+              </div>
             ) : key === "transfer" ? (
               <TransferAccountsSetup
                 showScreen={m?.config?.transfer_show_screen !== false}

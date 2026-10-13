@@ -78,7 +78,7 @@ import {
   useSettlementSyncState,
 } from "@/modules/reports/processorReconciliation";
 import {
-  LINE_DISPUTE_LABEL,
+  lineDisputeLabel,
   indexDisputes,
   type DisputeIndex,
   type LineDisputeState,
@@ -172,9 +172,10 @@ function MatchBadge({ status }: { status: keyof typeof MATCH_LABEL }) {
   return <StatusChip label={m.label} tone={m.tone} title={m.help} icon={status === "ignored" ? "seen" : undefined} />;
 }
 
-function DisputeBadge({ state }: { state: LineDisputeState | null }) {
+function DisputeBadge({ state, disputes = [] }: { state: LineDisputeState | null; disputes?: PaymentDisputeRow[] }) {
   if (!state) return null;
-  const d = LINE_DISPUTE_LABEL[state];
+  // ADR-067: "Devuelto (POS)" si la devolución salió de una devolución del POS.
+  const d = lineDisputeLabel(state, disputes);
   return (
     <StatusChip
       label={d.label}
@@ -938,7 +939,7 @@ function LinesTable(p: LinesTableProps) {
                 </div>
               </button>
               <div className="flex flex-wrap items-center justify-end gap-1">
-                <DisputeBadge state={lineDispute(l, dIndex)} />
+                <DisputeBadge state={lineDispute(l, dIndex)} disputes={l.external_id ? (dIndex.get(l.external_id) ?? []) : []} />
                 <MatchBadge status={l.match_status} />
                 <LineActions l={l} {...p} />
               </div>
@@ -1005,7 +1006,7 @@ function LineRowDesktop({
         <td className="whitespace-nowrap px-2.5 py-2.5">
           <span className="inline-flex flex-wrap items-center gap-1">
             <MatchBadge status={l.match_status} />
-            <DisputeBadge state={lineDispute(l, p.dIndex)} />
+            <DisputeBadge state={lineDispute(l, p.dIndex)} disputes={l.external_id ? (p.dIndex.get(l.external_id) ?? []) : []} />
           </span>
         </td>
         <td className="px-2 py-2.5">

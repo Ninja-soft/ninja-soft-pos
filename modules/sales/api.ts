@@ -375,7 +375,11 @@ export const salesApi = {
     refund: "cash" | "store_credit";
     customerId?: string | null;
     allowedBranchIds?: string[] | null;
+    /** H21h: parte que se reintegra por Mercado Pago (cobro y monto). */
+    mpPaymentId?: string | null;
+    mpAmount?: number | null;
   }): Promise<ReturnV2Result> => {
+    const mp = input.mpPaymentId && (input.mpAmount ?? 0) > 0;
     const run = async (): Promise<ReturnV2Result> => {
     const { data, error } = await looseClient().rpc("return_sale_v2", {
       p_sale_id: input.saleId,
@@ -386,11 +390,16 @@ export const salesApi = {
       p_allowed_branch_ids: input.allowedBranchIds ?? undefined,
       // F17 · H90: turno de la caja en uso (si este dispositivo tiene uno).
       ...shiftArg(),
+      // Sin pata MP no se mandan: una base sin la migración de H21h no los conoce.
+      ...(mp ? { p_mp_payment_id: input.mpPaymentId, p_mp_amount: input.mpAmount } : {}),
     });
     if (error) throw error;
     return data as unknown as ReturnV2Result;
     };
-    return withSupervisor(run, async () => ({ sale_return: await saleTotal(input.saleId) }));
+    return withSupervisor(run, async () => ({
+      sale_return: await saleTotal(input.saleId),
+      ...(mp ? { reintegro_mp: input.mpAmount ?? null } : {}),
+    }));
   },
 
   // CAMBIO con diferencia (exchange_sale): orquesta devolución + venta nueva en
@@ -464,6 +473,10 @@ export interface ReturnV2Result {
   stock_destination: StockDestination;
   voucher_code: string | null;
   voucher_expires_at: string | null;
+  /** H21h: parte por Mercado Pago (0 si no hubo), fila del reintegro y resto. */
+  mp_amount?: number;
+  mp_refund_id?: string | null;
+  rest_amount?: number;
 }
 
 // Política de devolución + validez de vale (pos_settings, sección Devoluciones).

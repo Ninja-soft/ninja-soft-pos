@@ -157,6 +157,11 @@ const NubceoSettings = dynamic(
   { loading },
 );
 
+// Venta sin conexión (ADR-077): política del dueño.
+const OfflinePolicyCard = dynamic(
+  () => import("@/components/config/OfflinePolicyCard").then((m) => m.OfflinePolicyCard),
+  { loading },
+);
 // Configuración por sucursal y caja (F17 · H92/H93, ADR-049).
 const PosnetVoucherCard = dynamic(
   () => import("@/components/config/PosnetVoucherCard").then((m) => m.PosnetVoucherCard),
@@ -262,9 +267,12 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <TerminalsManager />;
     case "operacion":
       return (
-        <ScopedSection domain="pos_settings" fields={OPERACION_FIELDS}>
-          <OperationSettingsCard view="operacion" />
-        </ScopedSection>
+        <div className="space-y-8">
+          <ScopedSection domain="pos_settings" fields={OPERACION_FIELDS}>
+            <OperationSettingsCard view="operacion" />
+          </ScopedSection>
+          <OfflinePolicyCard />
+        </div>
       );
     // Diseño del POS: preset, grilla, carrito, medios fijados y teclas rápidas.
     case "diseno-pos":

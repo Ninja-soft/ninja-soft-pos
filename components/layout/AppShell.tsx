@@ -10,6 +10,7 @@ import {
   Bike,
   Building2,
   CalendarClock,
+  CloudOff,
   CalendarDays,
   ChevronDown,
   CreditCard,
@@ -219,6 +220,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         // Monitor de cajas abiertas (F17 · H115, BASE). Dueño y encargado.
         { href: "/caja/monitor", label: "Cajas abiertas", icon: MonitorDot, feature: "monitor_cajas", managersOnly: true },
         { href: "/ventas", label: "Ventas", icon: Receipt },
+        // Ventas offline con problemas (ADR-077, FLAG-OPERATIVO): dueño y encargado.
+        { href: "/ventas-offline", label: "Ventas offline", icon: CloudOff, managersOnly: true },
         {
           href: "/devoluciones",
           label: "Devoluciones",

@@ -3062,3 +3062,50 @@ Auditoría de F7 contra el código: el acceso como el negocio era un magic link 
 - **Riesgo:** `resend_invite` usa `inviteUserByEmail`, que sólo funciona con cuentas sin confirmar; con cuentas confirmadas responde `already_confirmed` y se usa Resetear acceso.
 - **Deuda:** tickets de soporte en los KPIs; ajustar módulos de un plan a medida desde el detalle del negocio (hoy por plan y flags); preferencias por canal de las notificaciones.
 - **Tests:** `tests/unit/f7Interno.test.ts`; RLS `tests/integration/rls-f7-interno.test.ts` (un tenant común nunca ve lo interno, ni con el header; el staff sin scope tampoco; canje de un uso y banner sólo en la sesión del staff; vencido y cron; cierre por nivel; reglas de miembros con auditoría; aviso por segmento que el negocio de fuera no ve; `rls_internal_scope_leaks` = 0). El cleanup no borra `audit_logs` (inmutable desde H118).
+
+---
+
+## ADR-087: POS instalable que abre y recarga sin conexión: service worker propio, shell anónimo y sesión local (H65, paso PWA)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/h65-pwa`; sin migraciones) · **Hito:** F14 · H65 (parcial) · **Base:** ADR-077 (venta offline). Diseño: [`34-venta-offline.md`](./34-venta-offline.md) §8.
+
+### Contexto
+
+Con ADR-077 el POS sigue cobrando si se corta internet **con la pantalla abierta**. Si el cajero recarga, cierra la pestaña o el navegador se reinicia sin red, el POS no abre. H65 pide un POS/PWA con caché local. El riesgo principal de un service worker en un POS multi-tenant es cachear datos: HTML personalizado, respuestas de Supabase o la sesión de un usuario que otro ve después.
+
+### Decisión
+
+1. **Service worker propio, sin dependencias** (`lib/pwa/sw.worker.js`, unas 300 líneas). Se descartó `next-pwa`/`@serwist/next`: piden tocar `next.config.mjs` (archivo sensible) y su precache por defecto incluye páginas que acá no queremos guardar; el control fino de exclusiones igual hay que escribirlo. **No se tocó `next.config.mjs`.**
+2. **Servido por una ruta estática** `app/sw.js/route.ts` (`force-static`): lee el archivo en el build y reemplaza `__SW_VERSION__` por `VERCEL_DEPLOYMENT_ID`, `VERCEL_GIT_COMMIT_SHA` o la hora del build (saneado a `[A-Za-z0-9_-]`). Cada deploy publica un `sw.js` distinto y el navegador instala la versión nueva.
+3. **Alcance `/pos`.** El SW se registra con `scope: "/pos"` (desde el POS y desde el shell): sólo controla `/pos` y `/pos-offline`. El panel interno, `/pagar`, webhooks y el resto del panel nunca pasan por él.
+4. **Shell anónimo `/pos-offline`** (página estática, en `PUBLIC_PATHS` del middleware): no lee sesión ni datos del servidor. El SW lo baja en `install` **sin cookies** (`credentials: "omit"`, `redirect: "error"`) y precachea los `/_next/static` que aparecen en su HTML (scripts, CSS y chunks del payload RSC) y las fuentes de su CSS.
+5. **Estrategias por ruta** (`classifyRequest`, función pura testeada):
+   - Navegación a `/pos`: **red primero** (timeout 8 s). La respuesta de red **nunca se guarda** (es HTML personalizado). Sin red, responde el shell guardado en la misma URL.
+   - Navegación a `/pos-offline`: red primero, respaldo al shell guardado.
+   - `/_next/static/*`, `/brand/*`, `/manifest.webmanifest`: **stale-while-revalidate** en `ninja-pos-assets-v1` (tope 400 entradas).
+   - Todo lo demás: **bypass** (el SW no responde). Explícitamente: otro origen (Supabase REST/Auth/Storage/Realtime, Mercado Pago), métodos distintos de GET, pedidos con `Authorization`, pedidos RSC o prefetch (`RSC`, `Next-Router-State-Tree`, `Next-Router-Prefetch`, `_rsc`), `/api/`, `/internal`, `/pagar`, `/auth/`, `/hooks`, `/webhooks`, login, signup y recover, `/onboarding`, `/c/`, `/_next/image` y `/sw.js`.
+   - Sólo se guarda una respuesta `200`, `type: "basic"`, no redirigida, sin `Cache-Control: no-store/private` y sin `Vary: *` (`isCacheableResponse`).
+6. **Sesión offline sin tokens nuevos.** El POS deja en IndexedDB un puntero `pos.last` (negocio, usuario, fecha) junto con la foto local de ADR-077. Al abrir sin red, el shell lee la cookie que `@supabase/ssr` ya persiste (`sb-<ref>-auth-token`), saca **sólo** el id y el email del usuario y si hay refresh token, y descarta los tokens. Vende sólo si (`resolveOfflineMode`): hay sesión con refresh token, es del mismo usuario que dejó la foto, no venció por inactividad (misma cookie `ninja_last_activity` de 8 h), la foto es del mismo negocio y usuario, la política está prendida, la foto no supera `max_hours` y tiene caja abierta. Si no, **sólo lectura** con el motivo (el catálogo se ve sólo si el usuario es el mismo). Un access token vencido no bloquea: se renueva al volver la red y el servidor revalida todo en `sync_offline_sale`.
+7. **POS reducido en el shell:** productos simples de la foto al precio de la foto (sin variantes, series, modificadores, descuentos, clientes ni promociones), efectivo con vuelto, transferencia y tarjeta en posnet con lote y cupón. Mismo payload de `create_sale`, misma cola y mismas reglas (`checkOfflineSale`) que ADR-077. El shell nunca reescribe la foto (`frozenSnapshot`): su turno puede no ser el actual.
+8. **Actualización:** sin `skipWaiting` automático. Con una versión esperando, el POS muestra "Hay una versión nueva" con **Recargar**; con la hoja de cobro abierta, guardando o con carrito, el botón espera ("Terminá el cobro en curso"). Sólo la pestaña que lo pidió recarga en `controllerchange`: otra pestaña con un cobro no se corta. Interruptor de emergencia: `NEXT_PUBLIC_DISABLE_SW=1` desinstala el SW en los dispositivos.
+9. **Manifest** (`app/manifest.ts`): instalable, `start_url: /pos`, `display: standalone`, íconos 192, 512 y maskable generados desde `public/brand/favicon.webp`.
+10. **Sólo en build de producción** y contexto seguro (en desarrollo los chunks cambian todo el tiempo).
+11. **Clasificación (CLAUDE.md §6): BASE / infraestructura.** No es una función de plan: abre la misma venta offline de ADR-077 (FLAG-OPERATIVO del dueño, `offline_policy`), cuyo gating real sigue en el servidor.
+
+### Alternativas descartadas
+
+- **Cachear el HTML de `/pos`:** lleva el email del usuario y el árbol RSC del panel; en un dispositivo compartido otro usuario lo vería. El shell anónimo no tiene nada del negocio.
+- **Persistir la caché de TanStack Query** para reabrir el POS completo: guardaría en el dispositivo clientes, ventas y configuración. Se usa sólo la foto ya acotada de ADR-077.
+- **Guardar una copia propia de la sesión o un token offline:** duplicaría secretos. Se lee lo que Supabase ya persiste y nada más.
+- **Redirigir `/pos` a `/pos-offline` desde el SW:** un salto más que, con la emulación offline de Chrome, no se pudo seguir; se sirve el shell en la misma URL.
+- **Scope `/`:** el SW vería todo el panel (incluido `/internal`); con `/pos` no puede ni verlo.
+
+### Consecuencias
+
+- Sin migraciones ni cambios en el servidor. Middleware: `/pos-offline` público y `/sw.js` fuera del matcher.
+- **Riesgo:** un SW roto puede dejar el POS con archivos viejos. Mitigación: versión por deploy, aviso de actualización, `NEXT_PUBLIC_DISABLE_SW=1` como interruptor y alcance limitado a `/pos`.
+- **Riesgo:** en un dispositivo compartido, quien conserve la sesión de Supabase del cajero anterior puede vender offline con ese usuario (igual que hoy online con la sesión abierta). Cerrar sesión borra la cookie y deja el shell en sólo lectura.
+- **Riesgo:** la ruta lee `lib/pwa/sw.worker.js` en el build (`process.cwd()`); si se mueve, el build falla (nunca queda un SW roto publicado).
+- **Pruebas:** `context.setOffline` de Playwright no alcanza a los `fetch` del service worker salvo con `PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1` (lo prende `playwright.config.ts` con `E2E_PWA=1`); sin eso el "offline" usaba la red.
+- **Deuda (H65):** comandas, stock multi-dispositivo y reconciliación de caja offline; el POS completo (no el reducido) sin conexión; impresora configurada y cajón en el shell; listas de precios y promociones en el shell; numeración interna offline.
+- Tests: `tests/unit/pwaServiceWorker.test.ts` (estrategias y exclusiones, cargando el mismo archivo que se sirve), `tests/unit/offlineSession.test.ts`, `tests/unit/pwaShell.test.ts`; e2e `tests/e2e/pwa-offline.spec.ts` (`@pwa`, sólo local con build de producción y `E2E_PWA=1`; el caso con sesión real además pide `E2E_OFFLINE=1`).

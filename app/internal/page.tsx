@@ -18,6 +18,12 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { TenantSearchTable } from "@/components/internal/TenantSearchTable";
 import { formatCurrency } from "@/lib/utils/format";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  HEALTH_LEVEL_DOT,
+  HEALTH_LEVEL_LABELS,
+  atRiskTenants,
+  tenantHealthScore,
+} from "@/lib/internal/tenantHealth";
 
 const STATUS_COLOR: Record<string, string> = {
   trial: "text-warning",
@@ -38,11 +44,11 @@ const PLAN_COLOR: Record<string, string> = {
 export default async function InternalHomePage() {
   const supabase = createClient({ scope: "internal" });
 
-  const [{ data: rawTenants }, { count: staffCount }] = await Promise.all([
+  const [{ data: rawTenants }, { count: staffCount }, { data: rawHealth }] = await Promise.all([
     supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, created_at, subscriptions(status, billing_cycle, updated_at, plans(key, name, monthly_price_ars))",
+        "id, name, slug, status, created_at, trial_ends_at, subscriptions(status, billing_cycle, updated_at, plans(key, name, monthly_price_ars))",
       )
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
@@ -50,6 +56,8 @@ export default async function InternalHomePage() {
       .from("users")
       .select("id", { count: "exact", head: true })
       .not("internal_level", "is", null),
+    // Salud por negocio (ADR-084): agregados de internal_tenant_health.
+    supabase.rpc("internal_tenant_health"),
   ]);
 
   type SubRow = {
@@ -64,6 +72,7 @@ export default async function InternalHomePage() {
     slug: string;
     status: string;
     created_at: string;
+    trial_ends_at?: string | null;
     subscriptions: SubRow | SubRow[] | null;
   };
 
@@ -137,6 +146,35 @@ export default async function InternalHomePage() {
     created_at: t.created_at,
     plan_name: sub(t)?.plans?.name ?? null,
   }));
+
+  // ── Salud por negocio (ADR-084) ─────────────────────────────────────────
+  type HealthRow = {
+    tenant_id: string;
+    active_users: number;
+    last_login_at: string | null;
+    last_sale_at: string | null;
+    sales_7d_count: number;
+  };
+  const healthBy = new Map(
+    ((rawHealth ?? []) as unknown as HealthRow[]).map((h) => [h.tenant_id, h]),
+  );
+  const atRisk = atRiskTenants(
+    list.map((t) => {
+      const h = healthBy.get(t.id);
+      return {
+        tenant: t,
+        health: tenantHealthScore({
+          status: sub(t)?.status ?? t.status,
+          createdAt: t.created_at,
+          trialEndsAt: t.trial_ends_at ?? null,
+          lastLoginAt: h?.last_login_at ?? null,
+          lastSaleAt: h?.last_sale_at ?? null,
+          sales7dCount: Number(h?.sales_7d_count ?? 0),
+          activeUsers: Number(h?.active_users ?? 0),
+        }),
+      };
+    }),
+  );
 
   return (
     <>
@@ -275,6 +313,39 @@ export default async function InternalHomePage() {
               Ver negocios
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* ── Negocios en riesgo (salud por negocio, ADR-084) ── */}
+      {atRisk.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-muted-foreground" />
+            <h2 className="font-display text-base font-bold">Negocios en riesgo</h2>
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              <ul className="divide-y divide-border">
+                {atRisk.map(({ tenant: t, health: h }) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/internal/tenants/${t.id}`}
+                      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm transition hover:bg-muted"
+                    >
+                      <span className="inline-flex min-w-[9rem] items-center gap-2 font-medium text-foreground">
+                        <span aria-hidden className={`h-2 w-2 rounded-full ${HEALTH_LEVEL_DOT[h.level]}`} />
+                        {t.name}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {HEALTH_LEVEL_LABELS[h.level]} · {h.score}/100
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">{h.reasons.join(" · ")}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
         </div>
       )}
 

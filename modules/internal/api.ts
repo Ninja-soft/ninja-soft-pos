@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
+import { appOrigin } from "@/lib/site";
+import { buildImpersonationUrl } from "@/supabase/functions/_shared/impersonation";
 import type {
   NotificationSeverity,
   NotificationType,
@@ -14,6 +16,8 @@ export interface InternalTenant {
   trial_ends_at: string | null;
   planKey: string | null;
   planName: string | null;
+  /** Familia del plan: el plan base para los planes a medida (ADR-084). */
+  planFamily: string | null;
   subStatus: string | null;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -329,7 +333,7 @@ export const internalApi = {
     const { data, error } = await supabase
       .from("tenants")
       .select(
-        "id, name, slug, status, industry, created_at, trial_ends_at, deleted_at, subscriptions(status, plans(key, name)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url, cuit, phone)",
+        "id, name, slug, status, industry, created_at, trial_ends_at, deleted_at, subscriptions(status, plans(key, name, base_plan_key)), tenant_users(role, users(full_name, email)), tenant_branding(logo_url, cuit, phone)",
       )
       .order("created_at", { ascending: false });
     if (error) throw error;
@@ -344,7 +348,7 @@ export const internalApi = {
       deleted_at: string | null;
       subscriptions: {
         status: string;
-        plans: { key: string; name: string } | null;
+        plans: { key: string; name: string; base_plan_key: string | null } | null;
       }[];
       tenant_users: {
         role: string;
@@ -372,6 +376,7 @@ export const internalApi = {
         trial_ends_at: t.trial_ends_at ?? null,
         planKey: sub?.plans?.key ?? null,
         planName: sub?.plans?.name ?? null,
+        planFamily: sub?.plans?.base_plan_key ?? sub?.plans?.key ?? null,
         subStatus: sub?.status ?? null,
         ownerName: owner?.users?.full_name ?? null,
         ownerEmail: owner?.users?.email ?? null,
@@ -693,25 +698,45 @@ export const internalApi = {
 
   // ── H11c — Impersonation ──────────────────────────────────────────────────
 
+  // ADR-084: duración elegida y link propio (/auth/impersonate#...), que ata
+  // la sesión al registro y muestra el banner con la cuenta regresiva.
   generateImpersonateLink: async (
     tenantId: string,
     reason: string,
-  ): Promise<{ actionLink: string; ownerEmail: string }> => {
+    durationMinutes: number,
+  ): Promise<{ actionLink: string; ownerEmail: string; expiresAt: string; sessionId: string }> => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke(
       "internal_impersonate",
-      { body: { tenant_id: tenantId, reason } },
+      { body: { tenant_id: tenantId, reason, duration_minutes: durationMinutes } },
     );
-    if (error) throw error;
-    const res = data as {
+    const res = (data ?? null) as {
       ok?: boolean;
-      action_link?: string;
+      token_hash?: string;
+      nonce?: string;
+      expires_at?: string;
+      session_id?: string;
       owner_email?: string;
       error?: string;
+    } | null;
+    if (error || !res?.ok || !res.token_hash || !res.nonce) {
+      let code = res?.error ?? null;
+      const ctx = (error as { context?: Response } | null)?.context;
+      if (!code && ctx && typeof ctx.json === "function") {
+        try {
+          code = ((await ctx.json()) as { error?: string }).error ?? null;
+        } catch {
+          /* cuerpo no JSON */
+        }
+      }
+      throw new Error(code ?? error?.message ?? "link_failed");
+    }
+    return {
+      actionLink: buildImpersonationUrl(appOrigin(), res.token_hash, res.nonce),
+      ownerEmail: res.owner_email ?? "",
+      expiresAt: res.expires_at ?? "",
+      sessionId: res.session_id ?? "",
     };
-    if (!res?.ok || !res.action_link)
-      throw new Error(res?.error ?? "link_failed");
-    return { actionLink: res.action_link, ownerEmail: res.owner_email ?? "" };
   },
 
   // ── H11c: ciclo de vida y alta manual (ADR-073) ─────────────────────────
@@ -1251,14 +1276,20 @@ export const internalApi = {
   // descripción legible de la audiencia (negocio / rol / usuario / todos).
   listSentNotifications: async (): Promise<SentNotification[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("notifications")
-      .select(
-        "id, type, severity, title, body, requires_ack, target_tenant_id, target_role, target_user_id, created_at, expires_at, display_until, tenants:target_tenant_id(name), users:target_user_id(full_name, email)",
-      )
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(100);
+    const base =
+      "id, type, severity, title, body, requires_ack, target_tenant_id, target_role, target_user_id, created_at, expires_at, display_until, tenants:target_tenant_id(name), users:target_user_id(full_name, email)";
+    // ADR-084: los envíos por segmento traen lote y segmento (una fila por
+    // negocio; el historial las agrupa). Sin la migración 20261107100300 se
+    // cae a las columnas de siempre.
+    const query = (cols: string) =>
+      supabase
+        .from("notifications")
+        .select(cols)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(500);
+    let { data, error } = await query(`${base}, segment_batch_id, segment`);
+    if (error && /segment/.test(error.message)) ({ data, error } = await query(base));
     if (error) throw error;
     type Row = {
       id: string;
@@ -1275,9 +1306,13 @@ export const internalApi = {
       display_until: string | null;
       tenants: { name: string } | null;
       users: { full_name: string | null; email: string } | null;
+      segment_batch_id?: string | null;
+      segment?: unknown;
     };
     return ((data ?? []) as unknown as Row[]).map((n) => ({
       id: n.id,
+      segmentBatchId: n.segment_batch_id ?? null,
+      segment: n.segment ?? null,
       type: n.type as NotificationType,
       severity: n.severity as NotificationSeverity,
       title: n.title,
@@ -1354,6 +1389,9 @@ export interface SendNotificationInput {
 
 export interface SentNotification {
   id: string;
+  /** Lote de un envío por segmento (ADR-084); null en los envíos sueltos. */
+  segmentBatchId: string | null;
+  segment: unknown;
   type: NotificationType;
   severity: NotificationSeverity;
   title: string;

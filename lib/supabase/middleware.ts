@@ -14,6 +14,8 @@ const PUBLIC_PATHS = [
   "/recover",
   "/reset-password",
   "/auth/callback",
+  // Acceso del staff como el negocio (ADR-084): inicia sesión con el link.
+  "/auth/impersonate",
 ];
 
 // Refresca la sesión y aplica redirecciones de auth. Ver docs/05-security.md §3.

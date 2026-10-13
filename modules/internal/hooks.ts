@@ -147,9 +147,12 @@ export function useInternalMutations(tenantId: string) {
 export function useImpersonateTenant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { tenantId: string; reason: string }) =>
-      internalApi.generateImpersonateLink(vars.tenantId, vars.reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["internal", "audit"] }),
+    mutationFn: (vars: { tenantId: string; reason: string; durationMinutes: number }) =>
+      internalApi.generateImpersonateLink(vars.tenantId, vars.reason, vars.durationMinutes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["internal", "audit"] });
+      qc.invalidateQueries({ queryKey: ["internal", "impersonations"] });
+    },
   });
 }
 

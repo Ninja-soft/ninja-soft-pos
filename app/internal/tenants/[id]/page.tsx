@@ -3,18 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Check,
-  Copy,
-  ExternalLink,
-  ShieldAlert,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Sparkles, Trash2 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
 import { PlanCard } from "@/components/internal/PlanCard";
-import { ReasonDialog } from "@/components/internal/ReasonDialog";
+import { ImpersonationCard } from "@/components/internal/ImpersonationCard";
+import { Tenant360Card } from "@/components/internal/Tenant360Card";
+import { TenantMembersCard } from "@/components/internal/TenantMembersCard";
 import { TenantAuditTimeline } from "@/components/internal/TenantAuditTimeline";
 import { TenantLifecycleCard } from "@/components/internal/TenantLifecycleCard";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -29,7 +23,6 @@ import {
   useTenantHealth,
   useTenantNotes,
   useTenantNoteMutations,
-  useImpersonateTenant,
   useMyStaffLevel,
   useTenantAddons,
   useGiftAiAddon,
@@ -91,14 +84,6 @@ export default function InternalTenantDetail({
     ? lifecycleState({ status: tenant.status, deletedAt: tenant.deletedAt })
     : "operating";
 
-  // Impersonation.
-  const impersonate = useImpersonateTenant();
-  const [impersonateAsk, setImpersonateAsk] = useState(false);
-  const [impersonateResult, setImpersonateResult] = useState<{
-    actionLink: string;
-    ownerEmail: string;
-  } | null>(null);
-
   // Regalar el Asistente IA a ESTE negocio (addon bonificado, sin cobro).
   const { data: tenantAddons } = useTenantAddons(params.id);
   const hasAiAddon = tenantAddons?.has(AI_ASSISTANT_ADDON_KEY) ?? false;
@@ -137,12 +122,6 @@ export default function InternalTenantDetail({
         ),
         variant: "error",
       }),
-    );
-  }
-
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text).then(() =>
-      toast({ title: "Copiado al portapapeles", variant: "success" }),
     );
   }
 
@@ -281,6 +260,21 @@ export default function InternalTenantDetail({
       </div>
 
       <Heading className="mt-8" as="h2">
+        Ficha 360
+      </Heading>
+      <Tenant360Card
+        tenantId={params.id}
+        status={tenant?.deletedAt ? "cancelled" : tenant?.subStatus ?? tenant?.status ?? null}
+        createdAt={tenant?.created_at ?? null}
+        trialEndsAt={tenant?.trial_ends_at ?? null}
+      />
+
+      <Heading className="mt-8" as="h2">
+        Miembros
+      </Heading>
+      <TenantMembersCard tenantId={params.id} />
+
+      <Heading className="mt-8" as="h2">
         Salud operativa
       </Heading>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -414,93 +408,15 @@ export default function InternalTenantDetail({
         />
       </div>
 
-      {/* ── Impersonation (solo admin / super_admin) ─────────────────────── */}
+      {/* ── Acceso como el negocio (admin / super_admin, ADR-084) ────────── */}
       {canImpersonate && (
         <>
           <Heading className="mt-8" as="h2">
             Acceder como este negocio
           </Heading>
-          <Card className="mt-3">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 px-4 py-3 text-sm text-warning">
-                <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-                <span>
-                  Esto genera un magic link de un solo uso para el dueño del negocio.{" "}
-                  <strong>Abrilo en una ventana de incógnito</strong> para no cerrar
-                  tu sesión de staff.
-                </span>
-              </div>
-
-              {!impersonateResult ? (
-                <Button
-                  disabled={impersonate.isPending}
-                  onClick={() => setImpersonateAsk(true)}
-                >
-                  {impersonate.isPending ? "Generando…" : "Generar magic link"}
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Link generado para{" "}
-                    <span className="font-medium text-foreground">
-                      {impersonateResult.ownerEmail}
-                    </span>
-                    . Expira en ~1 hora.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={impersonateResult.actionLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-md bg-ninja-flame/10 px-3 py-2 text-sm font-medium text-ninja-flameSoft transition hover:bg-ninja-flame/20"
-                    >
-                      <ExternalLink size={14} /> Abrir en nueva pestaña
-                    </a>
-                    <button
-                      onClick={() => copyToClipboard(impersonateResult.actionLink)}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    >
-                      <Copy size={14} /> Copiar link
-                    </button>
-                    <button
-                      onClick={() => setImpersonateResult(null)}
-                      className="text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      Generar nuevo
-                    </button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <ImpersonationCard tenantId={params.id} />
         </>
       )}
-
-      <ReasonDialog
-        open={impersonateAsk}
-        onOpenChange={setImpersonateAsk}
-        title="Acceder como este negocio"
-        description="Se genera un link de un solo uso para el dueño (vence en aproximadamente 1 hora). El motivo queda en la auditoría del negocio."
-        confirmLabel="Generar link"
-        loading={impersonate.isPending}
-        onConfirm={(reason) =>
-          impersonate.mutate(
-            { tenantId: params.id, reason },
-            {
-              onSuccess: (res) => {
-                setImpersonateResult(res);
-                setImpersonateAsk(false);
-              },
-              onError: (e) =>
-                toast({
-                  title: "Error al generar link",
-                  description: e instanceof Error ? e.message : undefined,
-                  variant: "error",
-                }),
-            },
-          )
-        }
-      />
 
       <Heading className="mt-8" as="h2">
         Notas internas

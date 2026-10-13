@@ -22,6 +22,7 @@ import { useMyTenant } from "@/modules/tenants/hooks";
 import { usePaymentOrder, useSupplierInvoices, useSuppliers, useTreasuryEnabled } from "@/modules/purchases/hooks";
 import { useCheques, useTreasuryAccounts } from "@/modules/treasury/hooks";
 import type { PaymentOrderDetail } from "@/modules/purchases/api";
+import { PaymentRetentionCertificates } from "@/components/tax/RetentionCertificates";
 import { Info, Timeline, fmtDate, formatMoney } from "./shared";
 
 export function PaymentOrderDetailModal({
@@ -148,6 +149,8 @@ export function PaymentOrderDetailModal({
               ))}
             </ul>
           )}
+
+          <PaymentRetentionCertificates paymentId={p.id} />
 
           <Timeline events={p.events} />
 

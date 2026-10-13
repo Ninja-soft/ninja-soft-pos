@@ -10,3 +10,6 @@
 
 # Golden files del Libro IVA Digital: CRLF exacto (formato de ARCA).
 tests/fixtures/libroIva/*.txt -text
+
+# Golden files de SICORE y ARBA (retenciones como agente): CRLF exacto.
+tests/fixtures/sicore/*.txt -text

@@ -8,6 +8,52 @@ import { taxApi, type PreviewItem, type SaleTaxPreview, type TaxSettings } from 
 
 const KEY = ["tax"] as const;
 
+// ---------------------------------------------------------------------------
+// Retenciones como agente (ADR-079)
+// ---------------------------------------------------------------------------
+export function useRetConcepts(enabled = true) {
+  return useQuery({ queryKey: [...KEY, "ret-concepts"], queryFn: taxApi.retConcepts, enabled, staleTime: 5 * 60_000 });
+}
+
+export function useRetConceptSettings(enabled = true) {
+  return useQuery({ queryKey: [...KEY, "ret-concept-settings"], queryFn: taxApi.retConceptSettings, enabled });
+}
+
+export function useSaveRetConceptSetting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: taxApi.saveRetConceptSetting,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...KEY, "ret-concept-settings"] });
+      void qc.invalidateQueries({ queryKey: [...KEY, "ret-concepts"] });
+    },
+  });
+}
+
+export function useSupplierTaxProfile(supplierId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, "supplier-profile", supplierId],
+    queryFn: () => taxApi.supplierTaxProfile(supplierId!),
+    enabled: enabled && Boolean(supplierId),
+  });
+}
+
+export function useWithholdings(from: string, to: string, enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, "withholdings", from, to],
+    queryFn: () => taxApi.withholdingsList(from, to),
+    enabled,
+  });
+}
+
+export function usePaymentWithholdings(paymentId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, "withholdings-payment", paymentId],
+    queryFn: () => taxApi.withholdingsOfPayment(paymentId!),
+    enabled: enabled && Boolean(paymentId),
+  });
+}
+
 export function useTaxSettings(enabled = true) {
   return useQuery({ queryKey: [...KEY, "settings"], queryFn: taxApi.settings, enabled, staleTime: 5 * 60_000 });
 }

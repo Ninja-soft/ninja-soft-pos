@@ -50,6 +50,7 @@ import {
   FileArchive,
   ListTree,
   FileSpreadsheet,
+  Stamp,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStores } from "@/modules/stock/hooks";
@@ -268,6 +269,8 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/compras/facturas", label: "Facturas y pagos", icon: FileText, feature: "compras" },
         { href: "/compras/lotes", label: "Lotes y despachos", icon: Boxes, feature: "compras" },
         { href: "/compras/proveedores", label: "Proveedores", icon: Truck, feature: "compras" },
+        // Retenciones practicadas como agente (F18 · H106, ADR-079).
+        { href: "/compras/retenciones", label: "Retenciones practicadas", icon: Stamp, feature: "percepciones_retenciones", managersOnly: true },
         // Tesorería (F18 · H111, ADR-059): cuentas, cheques y flujo de fondos.
         { href: "/tesoreria", label: "Tesorería", icon: Landmark, feature: "tesoreria", managersOnly: true },
       ],

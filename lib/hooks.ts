@@ -18,6 +18,8 @@ export const WEBHOOK_FUNCTIONS: Record<string, string> = {
   modo: "modo_webhook",
   mobbex: "mobbex_webhook",
   catalogo: "catalog_purchase_webhook",
+  // Mercado Libre (ventas, publicaciones, envíos; ADR-104). "mercadolibre" ya es Mercado Pago.
+  ml: "ml_webhook",
 };
 
 // URL de destino, "not_found" (host de hooks con proveedor desconocido) o

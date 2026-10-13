@@ -20,10 +20,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
+  useAckKdsVoid,
   useDiningEnabled,
+  useKdsRecentVoids,
+  useKdsSla,
   useKdsTickets,
   useKdsMutations,
 } from "@/modules/dining/hooks";
+import { kdsTone, resolveKdsSla, type KdsSlaRule } from "@/lib/gastro/kdsSla";
 import { ComandaModal } from "@/components/dining/ComandaModal";
 import {
   COURSE_LABELS,
@@ -37,10 +41,8 @@ import {
 import { modifiersSummary } from "@/modules/products/modifiers";
 import { formatQty } from "@/lib/utils/format";
 
-// Umbrales de demora (min) para alertar visualmente en la tarjeta y el timer.
-// >10 min = rojo (demorado), >5 min = ámbar (atención). SLA configurable: H46+.
-const WARN_MIN = 5;
-const LATE_MIN = 10;
+// Umbrales de demora: SLA por estación (pos_settings.kds_sla, Configuración →
+// Salones y mesas). Sin configurar: ámbar a 5 min, rojo a 10 min.
 
 // mm:ss desde un instante ISO hasta `now` (epoch ms). No baja de 0.
 function elapsed(fromISO: string, now: number): { mins: number; label: string } {
@@ -53,20 +55,21 @@ function elapsed(fromISO: string, now: number): { mins: number; label: string } 
 
 // Tono de la tarjeta/timer según demora y estado. "Listo" se ve en verde calmo
 // (ya no corre el tiempo de espera de preparación).
-function tone(mins: number, status: KdsStatus) {
+function tone(mins: number, status: KdsStatus, rule: KdsSlaRule) {
   if (status === "listo") {
     return {
       card: "border-emerald-400/50 bg-emerald-400/[0.08]",
       timer: "text-success",
     };
   }
-  if (mins >= LATE_MIN) {
+  const level = kdsTone(mins, rule);
+  if (level === "late") {
     return {
       card: "border-red-500/60 bg-red-500/[0.10] animate-pulse",
       timer: "text-danger",
     };
   }
-  if (mins >= WARN_MIN) {
+  if (level === "warn") {
     return {
       card: "border-amber-400/50 bg-amber-400/[0.08]",
       timer: "text-warning",
@@ -97,8 +100,10 @@ function TicketCard({
   onAdvance,
   onBack,
   busy,
+  sla,
 }: {
   item: KdsTicketItem;
+  sla: KdsSlaRule;
   now: number;
   showStation: boolean;
   onAdvance: (item: KdsTicketItem) => void;
@@ -106,7 +111,7 @@ function TicketCard({
   busy: boolean;
 }) {
   const { mins, label } = elapsed(item.created_at, now);
-  const t = tone(mins, item.kds_status);
+  const t = tone(mins, item.kds_status, sla);
   const mods = modifiersSummary(item.modifiers ?? []);
   const next = KDS_NEXT_STATUS[item.kds_status];
 
@@ -219,6 +224,10 @@ function KdsInner() {
 
   const { data: items, isFetching, refetch } = useKdsTickets(activeStation);
   const { setStatus } = useKdsMutations();
+  const { data: slaConfig } = useKdsSla();
+  // Anulaciones recientes (H45): aviso a cocina hasta que tocan "Visto".
+  const { data: voids } = useKdsRecentVoids(activeStation, Boolean(diningEnabled));
+  const ackVoid = useAckKdsVoid();
 
   // Comanda impresa (H45) desde el KDS: reimprime la comanda de una mesa. Si hay
   // estación activa, la comanda arranca filtrada a esa estación.
@@ -372,6 +381,37 @@ function KdsInner() {
 
       {/* Tablero de tickets */}
       <main className="flex-1 p-4">
+        {/* Anulaciones (H45): el mozo anuló algo que ya estaba en cocina. */}
+        {(voids ?? []).length > 0 && (
+          <div className="mb-4 space-y-2" role="alert">
+            {(voids ?? []).map((v) => (
+              <div
+                key={v.void_id}
+                className="flex items-center gap-3 rounded-md border-t-2 border-red-500 bg-red-500/10 px-3 py-2"
+              >
+                <AlertTriangle size={18} className="shrink-0 text-danger" />
+                <div className="min-w-0 flex-1 text-sm">
+                  <span className="font-bold uppercase text-danger">Anulado</span>{" "}
+                  <span className="font-semibold">
+                    {formatQty(v.qty)}× {v.name}
+                  </span>
+                  {v.table_label ? ` · Mesa ${v.table_label}` : ""}
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {v.reason}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => ackVoid.mutate(v.void_id)}
+                  disabled={ackVoid.isPending}
+                  className="h-10 shrink-0 rounded-md border border-border px-3 text-sm font-semibold hover:bg-muted"
+                >
+                  Visto
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {totalActive === 0 ? (
           <div className="mx-auto mt-10 flex max-w-md flex-col items-center gap-3 rounded-xl border border-dashed border-border p-10 text-center">
             <Check size={34} className="text-success" />
@@ -428,6 +468,7 @@ function KdsInner() {
                     onAdvance={advance}
                     onBack={back}
                     busy={setStatus.isPending}
+                    sla={resolveKdsSla(slaConfig, it.station)}
                   />
                 ))}
               </section>

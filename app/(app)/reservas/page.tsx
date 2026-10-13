@@ -28,6 +28,7 @@ import {
   type Reservation,
 } from "@/modules/dining/reservations";
 import { ReservationModal } from "@/components/dining/ReservationModal";
+import { WaitlistPanel } from "@/components/dining/WaitlistPanel";
 import { formatCurrency } from "@/lib/utils/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -50,6 +51,8 @@ export default function ReservasPage() {
 
   // Rango de la agenda: hoy o próximos 7 días (desde el inicio de hoy).
   const [range, setRange] = useState<"today" | "week">("today");
+  // Reservas o lista de espera (F13 · H51).
+  const [view, setView] = useState<"reservas" | "espera">("reservas");
   const [newOpen, setNewOpen] = useState(false);
   // Reserva en proceso de sentar sin mesa asignada → elegir mesa libre.
   const [seating, setSeating] = useState<Reservation | null>(null);
@@ -184,6 +187,21 @@ export default function ReservasPage() {
         }
       />
 
+      <Segmented
+        className="mb-4"
+        aria-label="Vista"
+        value={view}
+        onChange={setView}
+        options={[
+          { value: "reservas", label: "Reservas" },
+          { value: "espera", label: "Lista de espera" },
+        ]}
+      />
+
+      {view === "espera" ? (
+        <WaitlistPanel />
+      ) : (
+      <>
       {/* Filtro de rango */}
       <Segmented
         className="mb-4"
@@ -237,6 +255,8 @@ export default function ReservasPage() {
           </div>
         </div>
       ))}
+      </>
+      )}
 
       {/* Alta de reserva */}
       <ReservationModal

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowRightLeft,
   ChefHat,
   Clock,
   CreditCard,
@@ -19,9 +20,15 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
+  useSetTableWaiter,
   useTableOrderItems,
   useTableOrderMutations,
 } from "@/modules/dining/hooks";
+import { useTeamMembers } from "@/modules/customers/hooks";
+import { Select } from "@/components/ui/Select";
+import { diningErrorMessage, isItemSent } from "@/lib/gastro/tableOps";
+import { TableMoveModal } from "./TableMoveModal";
+import { VoidItemModal } from "./VoidItemModal";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import type { DiningTable, TableOrderItem, TableStatus } from "@/modules/dining/api";
 import {
@@ -59,6 +66,21 @@ export function TableAccountModal({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [comandaOpen, setComandaOpen] = useState(false);
+  // Mover / unir / transferir (H44) y anulación con motivo de ítems enviados (H45).
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [voiding, setVoiding] = useState<TableOrderItem | null>(null);
+  const { data: team } = useTeamMembers(open);
+  const setWaiter = useSetTableWaiter();
+
+  async function changeWaiter(userId: string) {
+    if (!table || userId === table.waiter_user_id) return;
+    try {
+      await setWaiter.mutateAsync({ tableId: table.id, waiterUserId: userId });
+      toast({ title: "Mozo actualizado", variant: "success" });
+    } catch (e) {
+      toast({ title: "No se pudo cambiar el mozo", description: diningErrorMessage(e), variant: "error" });
+    }
+  }
 
   const total = useMemo(
     () => (items ?? []).reduce((acc, it) => acc + it.qty * it.unit_price, 0),
@@ -90,15 +112,32 @@ export function TableAccountModal({
   const showCourses = courseGroups.length > 1 || courseGroups.some((g) => g.course !== 1);
 
   async function changeQty(itemId: string, qty: number) {
+    // Un ítem ya enviado a cocina no se baja con el "-": se anula con motivo.
+    const it = (items ?? []).find((x) => x.id === itemId);
+    if (it && qty < it.qty && isItemSent(it)) {
+      setVoiding(it);
+      return;
+    }
     try {
       await setItemQty.mutateAsync({ itemId, qty: Math.max(0, qty) });
     } catch (e) {
       toast({
         title: "No se pudo actualizar",
-        description: e instanceof Error ? e.message : undefined,
+        description: diningErrorMessage(e),
         variant: "error",
       });
     }
+  }
+
+  function removeLine(it: TableOrderItem) {
+    if (isItemSent(it)) {
+      setVoiding(it);
+      return;
+    }
+    removeItem.mutate(it.id, {
+      onError: (e) =>
+        toast({ title: "No se pudo quitar", description: diningErrorMessage(e), variant: "error" }),
+    });
   }
 
   async function changeCourse(itemId: string, course: number) {
@@ -189,6 +228,18 @@ export function TableAccountModal({
             </div>
           )}
 
+          {/* Mozo de la mesa (relevo de turno, audita) */}
+          {table && (team ?? []).length > 0 && (
+            <Select<string>
+              label="Mozo"
+              value={table.waiter_user_id}
+              placeholder="Sin mozo"
+              disabled={setWaiter.isPending}
+              options={(team ?? []).map((m) => ({ value: m.user_id, label: m.name }))}
+              onChange={changeWaiter}
+            />
+          )}
+
           {/* Líneas del pedido — agrupadas por tiempo (course) cuando hay más de
               un tiempo. Los ítems EN ESPERA (fired_at null) se marcan y el tiempo
               ofrece "Disparar Tiempo N". */}
@@ -234,7 +285,7 @@ export function TableAccountModal({
                       item={it}
                       showCourse={showCourses}
                       onQty={changeQty}
-                      onRemove={(id) => removeItem.mutate(id)}
+                      onRemove={() => removeLine(it)}
                       onCourse={changeCourse}
                     />
                   ))}
@@ -296,6 +347,9 @@ export function TableAccountModal({
                 </Button>
               )
             )}
+            <Button variant="secondary" onClick={() => setMoveOpen(true)}>
+              <ArrowRightLeft size={15} /> Mover / unir
+            </Button>
             <Button
               variant="ghost"
               onClick={() => setConfirmCancel(true)}
@@ -320,6 +374,22 @@ export function TableAccountModal({
         onOpenChange={setComandaOpen}
         orderId={orderId}
         businessName={brand?.legal_name ?? null}
+      />
+
+      {/* Mover / unir / transferir ítems (H44) */}
+      <TableMoveModal
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        table={table}
+        items={items ?? []}
+        onDone={onClose}
+      />
+
+      {/* Anulación con motivo de un ítem enviado (H45) */}
+      <VoidItemModal
+        item={voiding}
+        tableLabel={table?.label ?? null}
+        onClose={() => setVoiding(null)}
       />
 
       {/* Confirmación de cancelación (libera la mesa, anula el pedido) */}
@@ -353,6 +423,7 @@ function ItemRow({
   onCourse: (itemId: string, course: number) => void;
 }) {
   const held = item.fired_at === null;
+  const sent = isItemSent(item);
   return (
     <div
       className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
@@ -432,7 +503,8 @@ function ItemRow({
         type="button"
         onClick={() => onRemove(item.id)}
         className="shrink-0 rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-danger"
-        aria-label="Quitar"
+        aria-label={sent ? "Anular (ya en cocina)" : "Quitar"}
+        title={sent ? "Ya está en cocina: anular con motivo" : "Quitar"}
       >
         <Trash2 size={15} />
       </button>

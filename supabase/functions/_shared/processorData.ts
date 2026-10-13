@@ -505,9 +505,41 @@ export function normalizeCloverPayment(raw: unknown): ProcessorPaymentData {
 
 // ── Getnet (GET /api/v2/orders/{id}) ─────────────────────────────────────────
 
+// Web Checkout (ADR-065): GET /payment-intent/{id}. Montos en centavos; la
+// tarjeta sale del intento aprobado de records[].
+function normalizeGetnetIntent(root: Record<string, unknown>): ProcessorPaymentData {
+  const d = empty("getnet");
+  d.external_id = str(root.payment_intent_id);
+  d.order_id = str(root.order_id) ?? d.external_id;
+  const status = (str(root.status) ?? "unknown").toLowerCase();
+  d.status = status === "paid" ? "approved" : status;
+  d.status_detail = str(root.status);
+  const pay = obj(root.payment);
+  const cents = num(pay?.amount);
+  d.gross = cents === null ? null : cents / 100;
+  d.currency = str(pay?.currency);
+  const ok = arr(root.records)
+    .map((r) => obj(obj(r)?.payment))
+    .filter((p): p is Record<string, unknown> => Boolean(p))
+    .find((p) => ["authorized", "approved"].includes((str(obj(p.result)?.status) ?? "").toLowerCase()));
+  const src = ok ?? pay;
+  if (src) {
+    d.installments = num(obj(src.installment)?.number);
+    d.payment_method = str(src.method);
+    d.authorization = str(obj(src.result)?.authorization_code);
+    d.operation_at = isoOrNull(obj(src.result)?.transaction_datetime);
+    d.card = src.last_four_digits
+      ? { brand: brandLabel(src.brand), last4: last4Of(src.last_four_digits), first6: null, holder: null }
+      : null;
+  }
+  if (d.operation_at) d.timeline.push({ at: d.operation_at, label: statusLabel(d.status) });
+  return finish(d);
+}
+
 export function normalizeGetnetOrder(raw: unknown): ProcessorPaymentData {
   const d = empty("getnet");
   const root = obj(raw);
+  if (root && str(root.payment_intent_id)) return normalizeGetnetIntent(root);
   const o = obj(root?.data) ?? root;
   if (!o) return d;
   const attrs = obj(o.attributes) ?? o;

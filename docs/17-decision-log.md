@@ -2205,6 +2205,39 @@ El dueño pidió mandar las ventas a NubCeo (conciliación de cobros) configurad
 
 ---
 
+## ADR-065: Getnet con dos APIs: tipo de API detectado, ambiente explícito y diagnóstico de credenciales
+
+**Fecha:** 2026-10-12 · **Estado:** aceptada (código en `fix/getnet-credenciales`; sin migraciones; Edges `getnet`, `getnet_webhook` y `payment_provider_data` sin redesplegar) · **Base:** ADR-031 (Getnet QR + link), ADR-057 (credenciales por sucursal), ADR-061 (datos del procesador) · **Numeración:** si otra rama tomó el 065, renumerar al mergear.
+
+### Contexto
+
+En producción el dueño conectó Getnet y todo cobro QR o link fallaba en el token con "Getnet rechazó las credenciales". El código sólo conocía la API del plugin de WooCommerce de Getnet Argentina (OAuth `auth.geopagos.com`, órdenes en `api.globalgetnet.com.ar/api/v2/orders`). Getnet también publica **Web Checkout** en el portal global (`docs.globalgetnet.com`), disponible en Argentina (ARS: crédito, débito, Click to Pay y QR interoperable), con otro OAuth y otros hosts. Las credenciales de una API no sirven en la otra, y el error no decía qué servicio, qué HTTP ni qué código había devuelto Getnet.
+
+### Decisión
+
+1. **Perfiles de API** (`_shared/getnet.ts`): `geopagos` (sólo producción), `global_prod` (`api.globalgetnet.com`), `global_sbx` (`api-sbx.globalgetnet.com`) y `global_pre` (`api.pre.globalgetnet.com`, homologación). Web Checkout: token `POST /authentication/oauth2/access_token` form-urlencoded `client_credentials`; cobro `POST /dpy/web-checkout/v1/payment-intent` → `redirect_url` (QR y link); estado `GET /dpy/web-checkout/v1/payment-intent/{id}` (`paid`, `denied`, `error`, `expired`, `cancelled`, `pending`, `registered`).
+2. **Autodetección:** se prueban los perfiles del ambiente en orden (producción: Geopagos y Web Checkout; prueba: sandbox y homologación), el guardado primero; el que da token se guarda en `secrets.api_profile` con `secrets.environment`. Si ninguno anda, se prueban los del otro ambiente **sólo para avisar** el error de ambiente (nunca se cobra con ellos). Una credencial vieja sin perfil se detecta en el primer cobro y se guarda sola.
+3. **Ambiente explícito:** Getnet pasa a `SANDBOX_PROVIDERS` (el wizard deja elegir Prueba); el ambiente viaja en la credencial (por sucursal, ADR-057) y, si falta, se usa el switch Sandbox. Un perfil de prueba nunca vale en producción (`profileMatchesEnv`). El intent guarda `mp_env`.
+4. **Diagnóstico sin secretos:** cada rechazo trae API, ambiente, endpoint (host + path), HTTP, código y mensaje de Getnet y una clase (credenciales, producto no habilitado, servicio no encontrado, caída, red). Va en la respuesta de la Edge (`detail`, `attempts`), en el POS y en `console.error` como JSON (`fn`, `step`, `profile`, `status`, `provider_code`). Se borra del texto cualquier aparición del Client ID o el Secret.
+5. **"Probar credenciales"** (action `probe` de la Edge `getnet`, dueño o encargado, no guarda nada): en el paso Ambiente del wizard y "Probar conexión" en Administrar. Con Web Checkout lee `GET /sellers` (nombre del comercio, producto habilitado, país) y muestra la URL del webhook.
+6. **Web Checkout en el cobro:** comprador "Consumidor Final" (el esquema exige customer con documento y domicilio) con email, CUIT, calle y código postal opcionales del comercio; aprobado sólo con `paid` y monto cobrado mayor o igual al de la venta (las cuotas con interés pueden sumar); `mp_payment_id` = `payment_id` del intento aprobado. El webhook de Web Checkout es una URL única por comercio (Portal Getnet, Basic auth): `getnet_webhook` sin `?intent` busca el cobro por `payment_intent_id` y re-consulta la API; sin webhook el POS confirma igual por su consulta.
+
+### Alternativas descartadas
+
+- **Pedirle al dueño que elija la API a mano:** no sabe cuál le dieron; la prueba lo resuelve sin preguntar.
+- **Configurar el webhook por API** (`PUT /technical-configurations`): pisaría la configuración del comercio (otra tienda o integración).
+- **Payment Link API:** según su OpenAPI sólo opera en Brasil.
+
+### Consecuencias
+
+- **Redesplegar** `getnet`, `getnet_webhook` (pública, `verify_jwt = false`) y `payment_provider_data`. Sin migraciones.
+- **Supuestos a validar con un cobro real:** que Getnet acepte el comprador genérico de Web Checkout, la forma exacta del webhook en Argentina y que el checkout hosted muestre el QR interoperable si el comercio lo tiene habilitado. La API Geopagos sigue sin sandbox público (`auth.preprod.geopagos.com` responde 404).
+- **Tests:** `tests/unit/getnetProfiles.test.ts` (requests de token por API, errores y clasificación, sin secretos, orden de autodetección y error de ambiente con fetch simulado, payload, respuesta, estados, webhook, sellers, detalle del procesador y lectura de la prueba en el wizard).
+
+**Fuentes:** [Web Checkout, autenticación](https://docs.globalgetnet.com/en/products/online-payments/web-checkout?doc=authentication-wbc) · [Web Checkout, crear un pago](https://docs.globalgetnet.com/en/products/online-payments/web-checkout?doc=quickstart-create-a-payment-wbc) · [Web Checkout, API reference (OpenAPI 1.6.0)](https://docs.globalgetnet.com/en/products/online-payments/web-checkout/swagger) · [Payment Link API](https://docs.globalgetnet.com/en/products/online-payments/payment-link-api) · [Plugin Getnet Argentina para WooCommerce](https://wordpress.org/plugins/integrar-getnet-con-woo/).
+
+---
+
 ## ADR-064: Contracargos, reclamos y devoluciones de Mercado Pago: detección, avisos, Ventas y conciliación
 
 **Fecha:** 2026-10-12 · **Estado:** aceptada (código en `feat/contracargos-devoluciones`; migración `20261027100000_payment_disputes.sql` sin aplicar; Edges `settlements` y `mp_webhook` sin redesplegar) · **Base:** ADR-061 (conciliación de procesadores, `settlement_lines`, Edge `settlements` y cron `settlements-sync`), ADR-052 (`internal_scope`), ADR-057 (credenciales por sucursal), ADR-048 (patrón de notificaciones del sistema) · **Numeración:** ADR-063 queda para otra rama.

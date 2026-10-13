@@ -20,8 +20,10 @@ import {
 import { PaymentMethodsView } from "@/components/dashboard-team/payments/PaymentMethodsView";
 import {
   ConnectProviderModal,
+  type ConnectProbe,
   type ConnectSave,
 } from "@/components/dashboard-team/payments/ConnectProviderModal";
+import type { GetnetProbeResult } from "@/lib/payments/getnetProbe";
 import { MpQrPosSetup } from "@/components/dashboard-team/payments/MpQrPosSetup";
 import { DirectoInfo } from "@/components/dashboard-team/payments/DirectoInfo";
 import { TransferAccountsSetup } from "@/components/dashboard-team/payments/TransferAccountsSetup";
@@ -43,6 +45,23 @@ async function invokeSecret(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("set_payment_secret", { body });
   if (error) throw error;
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+}
+
+// "Probar credenciales" de Getnet (ADR-065): la Edge prueba cada API y no
+// guarda nada. Sin secrets prueba la credencial guardada del alcance.
+async function probeGetnet(v: ConnectProbe, storeId: string | null): Promise<GetnetProbeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.functions.invoke("getnet", {
+    body: {
+      action: "probe",
+      environment: v.env,
+      ...(v.secrets?.client_id ? { client_id: v.secrets.client_id } : {}),
+      ...(v.secrets?.client_secret ? { client_secret: v.secrets.client_secret } : {}),
+      ...(storeId ? { store_id: storeId } : {}),
+    },
+  });
+  if (error) throw error;
+  return data as GetnetProbeResult;
 }
 
 export function PaymentMethodsCard() {
@@ -345,6 +364,7 @@ export function PaymentMethodsCard() {
             await invalidate();
             await qc.invalidateQueries({ queryKey: ["payment-secret-scopes", tenantId] });
           }}
+          onProbe={connKey === "getnet" ? (v) => probeGetnet(v, connectScope) : undefined}
           onOAuth={connKey === "mercadopago" ? () => oauthStart.mutate(connectScope) : undefined}
           oauthPending={oauthStart.isPending}
           // El ambiente y el token de prueba son del negocio.

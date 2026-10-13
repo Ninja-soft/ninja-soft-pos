@@ -125,7 +125,13 @@ async function edgeErrorCode(e: unknown): Promise<{ code: string; detail?: strin
 
 // Copy honesto por código y proveedor (antes todo caía a un genérico que
 // mencionaba a Mercado Pago aunque el cobro fuera de MODO/Mobbex/Pagos360).
-function qrErrorCopy(code: string, providerName: string): string {
+function qrErrorCopy(code: string, providerName: string, detail?: string): string {
+  // Getnet (ADR-065): la Edge manda un diagnóstico legible y sin secretos
+  // (API, ambiente, HTTP y código del proveedor).
+  if (code === "getnet_no_token" && detail) {
+    return `Getnet no aceptó las credenciales. ${detail} Probalas en Configuración → Medios de pago → Getnet.`;
+  }
+  if (code === "getnet_error" && detail) return `Getnet no pudo crear el cobro: ${detail}`;
   switch (code) {
     case "payment_method_disabled_in_store":
       return `${providerName} está apagado en esta sucursal o caja (Configuración → Medios de pago).`;
@@ -314,8 +320,8 @@ export function QrCheckoutModal({
     setPhase("waiting");
   }
 
-  function onCreateError(code: string) {
-    const msg = qrErrorCopy(code, providerName);
+  function onCreateError(code: string, detail?: string) {
+    const msg = qrErrorCopy(code, providerName, detail);
     setErrorMsg(msg);
     setPhase("error");
     toast({ title: msg, variant: "error" });
@@ -393,7 +399,10 @@ export function QrCheckoutModal({
                       : posApi.createMpQr;
     create(amt, "Venta NinjaPos")
       .then(onCreated)
-      .catch(async (e) => onCreateError((await edgeErrorCode(e)).code));
+      .catch(async (e) => {
+        const { code, detail } = await edgeErrorCode(e);
+        onCreateError(code, detail);
+      });
   }
 
   // "Enviar link" (sólo MP con QR de caja): cancela la order QR y genera un

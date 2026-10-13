@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  AlertTriangle,
   BarChart3,
   Building2,
   CreditCard,
@@ -35,6 +36,8 @@ import { PlanBadge } from "@/components/internal/plans/PlanBadge";
 import { NoData } from "@/components/ui/NoData";
 import { PageContainer, PageHeader, SectionHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Callout } from "@/components/ui/Callout";
+import { pendingAlertCount } from "@/lib/reports/paymentDisputes";
 
 const STATUS_LABELS: Record<string, string> = {
   trial: "Prueba",
@@ -149,7 +152,7 @@ export default async function DashboardTeamPage() {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenant.id)
       .is("deleted_at", null);
-  const [subRes, brandingRes, gatingRes, usersRes, storesRes, productsRes, registersRes] =
+  const [subRes, brandingRes, gatingRes, usersRes, storesRes, productsRes, registersRes, disputesRes] =
     await Promise.all([
       supabase
         .from("subscriptions")
@@ -176,12 +179,29 @@ export default async function DashboardTeamPage() {
         .select("store_id")
         .eq("tenant_id", tenant.id)
         .is("deleted_at", null),
+      // Contracargos, reclamos y devoluciones de MP sin ver (ADR-064). Sin la
+      // migración o sin permiso, error: no se muestra la tarjeta.
+      canManage
+        ? supabase
+            .from("payment_disputes" as never)
+            .select("kind, origin, status, acknowledged_at")
+            .eq("tenant_id", tenant.id)
+            .is("acknowledged_at", null)
+            .is("deleted_at", null)
+            .limit(500)
+        : Promise.resolve({ data: [], error: null }),
     ]);
   const registerRows = (registersRes.data ?? []) as { store_id: string }[];
   const registersCount = registersRes.error ? null : registerRows.length;
   const perStore = new Map<string, number>();
   for (const r of registerRows) perStore.set(r.store_id, (perStore.get(r.store_id) ?? 0) + 1);
   const maxRegistersInStore = registersRes.error ? null : Math.max(0, ...perStore.values());
+
+  const disputeAlerts = disputesRes.error
+    ? 0
+    : pendingAlertCount(
+        (disputesRes.data ?? []) as unknown as Parameters<typeof pendingAlertCount>[0],
+      );
 
   const sub = (subRes.data?.[0] as unknown as Sub) ?? null;
   const branding =
@@ -412,6 +432,37 @@ export default async function DashboardTeamPage() {
           </div>
         </SummaryTile>
       </section>
+
+      {/* ── Alertas de Mercado Pago: contracargos, reclamos y devoluciones ── */}
+      {canManage && disputeAlerts > 0 && (
+        <Callout
+          tone="danger"
+          icon={AlertTriangle}
+          className="mt-6"
+          title={
+            disputeAlerts === 1
+              ? "1 alerta de Mercado Pago para revisar"
+              : `${disputeAlerts} alertas de Mercado Pago para revisar`
+          }
+          actions={
+            <>
+              <Link href="/ventas?alertas=1" className={buttonVariants({ size: "sm" })}>
+                Ver ventas con alertas
+              </Link>
+              {hasFeature("conciliacion_procesadores") && (
+                <Link
+                  href="/reportes/conciliacion?vista=procesadores&filtro=disputas"
+                  className={buttonVariants({ size: "sm", variant: "secondary" })}
+                >
+                  Ver en la conciliación
+                </Link>
+              )}
+            </>
+          }
+        >
+          Contracargos, reclamos o devoluciones hechas desde Mercado Pago que todavía no marcaste como vistos.
+        </Callout>
+      )}
 
       {/* ── Hoy: ventas, cajas abiertas y personal (dueño y encargado) ── */}
       {canManage && <OwnerLive />}

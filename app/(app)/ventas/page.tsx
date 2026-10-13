@@ -25,6 +25,8 @@ import { Badge } from "@/components/ui/Badge";
 import { TableStateRow, TableWrap } from "@/components/ui/Table";
 import { useBranchContext } from "@/modules/branches/hooks";
 import { BranchDot } from "@/components/branches/BranchSwitcher";
+import { saleAlertBadges, type PaymentDisputeRow } from "@/lib/reports/paymentDisputes";
+import { useSaleDisputes } from "@/modules/reports/paymentDisputes";
 
 // Modales en chunks aparte, montados recién al abrirlos (ticket, devolución /
 // cambio y cobros QR son pesados y no hacen falta para listar ventas).
@@ -85,6 +87,7 @@ export default function VentasPage() {
   const voidSale = useVoidSale();
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [ticketOpen, setTicketOpen] = useState(false);
+  const [ticketTab, setTicketTab] = useState<"ticket" | "cobros">("ticket");
   const [returnId, setReturnId] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<{ id: string; number: number } | null>(null);
@@ -93,9 +96,34 @@ export default function VentasPage() {
   // Devoluciones/cambios es feature de plan (Pro): gatea el botón por fila.
   const returnGate = useFeatureGate("devoluciones", "Devoluciones");
 
-  function openTicket(id: string) {
+  function openTicket(id: string, tab: "ticket" | "cobros" = "ticket") {
     setTicketId(id);
+    setTicketTab(tab);
     setTicketOpen(true);
+  }
+
+  // Links de los avisos (ADR-064): /ventas?venta=<id>&tab=cobros abre el
+  // detalle; /ventas?alertas=1 filtra las ventas con alertas.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const venta = q.get("venta");
+    if (venta && /^[0-9a-f-]{36}$/i.test(venta)) {
+      setTicketId(venta);
+      setTicketTab(q.get("tab") === "cobros" ? "cobros" : "ticket");
+      setTicketOpen(true);
+    }
+    if (q.get("alertas") === "1") setStatusFilter("alerts");
+  }, []);
+
+  // Marcas de contracargos y devoluciones de MP (sólo dueño o encargado: RLS).
+  const disputesQ = useSaleDisputes(
+    visible.map((s) => s.id),
+    visible.length > 0,
+  );
+  const disputesBySale = new Map<string, PaymentDisputeRow[]>();
+  for (const d of disputesQ.data ?? []) {
+    if (!d.sale_id) continue;
+    disputesBySale.set(d.sale_id, [...(disputesBySale.get(d.sale_id) ?? []), d]);
   }
 
   async function exportVentas() {
@@ -226,6 +254,7 @@ export default function VentasPage() {
             <option value="">Todos los estados</option>
             <option value="completed">Completadas</option>
             <option value="voided">Anuladas</option>
+            <option value="alerts">Con alertas (contracargos y devoluciones de MP)</option>
           </select>
         </div>
 
@@ -294,12 +323,23 @@ export default function VentasPage() {
                     {formatCurrency(s.total)}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
                       {s.status === "voided" ? (
                         <Badge tone="danger">Anulada</Badge>
                       ) : (
                         <Badge tone="success">Completada</Badge>
                       )}
+                      {saleAlertBadges(disputesBySale.get(s.id) ?? []).map((a) => (
+                        <button
+                          key={a.key}
+                          type="button"
+                          onClick={() => openTicket(s.id, "cobros")}
+                          title={a.title}
+                          className="rounded-full"
+                        >
+                          <Badge tone={a.tone}>{a.label}</Badge>
+                        </button>
+                      ))}
                       {s.receipt_emailed_at && (
                         <span title="Email enviado" className="inline-flex text-muted-foreground">
                           <Mail size={14} aria-label="Email enviado" />
@@ -372,7 +412,7 @@ export default function VentasPage() {
 
       {returnGate.modal}
       <MountWhenOpened open={ticketOpen}>
-        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} />
+        <TicketModal open={ticketOpen} onOpenChange={setTicketOpen} saleId={ticketId} initialTab={ticketTab} />
       </MountWhenOpened>
       <MountWhenOpened open={returnOpen}>
         <ReturnModal open={returnOpen} onOpenChange={setReturnOpen} saleId={returnId} />

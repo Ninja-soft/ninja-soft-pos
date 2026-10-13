@@ -6,11 +6,12 @@
 // cruce con las ventas es automático y esta pantalla muestra el resumen en
 // lenguaje simple, los gráficos y las excepciones para resolver.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -26,7 +27,6 @@ import {
 } from "lucide-react";
 import { startOfDay, startOfMonth, subDays } from "date-fns";
 import { Button } from "@/components/ui/Button";
-import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -56,6 +56,7 @@ import {
   dailySeries,
   feeBreakdown,
   filterLines,
+  lineDispute,
   matchMethodLabel,
   moneyState,
   providerLabel,
@@ -63,7 +64,6 @@ import {
   summarySentences,
   xlsxLineRows,
   type LineFilter,
-  type MatchTone,
   type SettlementLineRow,
   type UnmatchedPayment,
 } from "@/lib/reports/processorReconciliation";
@@ -77,17 +77,25 @@ import {
   useSettlementSync,
   useSettlementSyncState,
 } from "@/modules/reports/processorReconciliation";
+import {
+  lineDisputeLabel,
+  indexDisputes,
+  type DisputeIndex,
+  type LineDisputeState,
+  type PaymentDisputeRow,
+} from "@/lib/reports/paymentDisputes";
+import { useDisputesForPayments, useOpenDisputes } from "@/modules/reports/paymentDisputes";
+import { DisputeCard } from "@/components/disputes/DisputeCard";
 import { useFeature } from "@/modules/saas/gating";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useSaleNumberFormat } from "@/modules/sales/hooks";
 import { usePaymentMethodsStatus } from "@/modules/pos/layoutHooks";
+import { ProviderTile, StatusChip } from "@/components/reports/conciliacion/ui";
 import { ImportSettlementModal } from "./ImportSettlementModal";
 import { MpConnectModal } from "./MpConnectModal";
 import { CreateSaleFromLineModal, IgnoreLineModal, LinkLineModal } from "./LineActionModals";
 
 const FEATURE = "conciliacion_procesadores";
-
-const TONE: Record<MatchTone, BadgeTone> = { success: "success", warning: "warning", danger: "danger", neutral: "neutral" };
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
 const fmtLongDate = (iso: string) =>
@@ -149,6 +157,7 @@ function Locked() {
 
 function ProviderLogo({ provider, size = 18 }: { provider: string; size?: number }) {
   const src = paymentIcon(provider);
+  if (size > 24) return <ProviderTile logo={src ? provider : null} label={providerLabel(provider)} size={size} />;
   return src ? (
     <ThemedLogo src={src} alt="" className="h-[18px] w-[18px] shrink-0" />
   ) : (
@@ -160,10 +169,20 @@ function ProviderLogo({ provider, size = 18 }: { provider: string; size?: number
 
 function MatchBadge({ status }: { status: keyof typeof MATCH_LABEL }) {
   const m = MATCH_LABEL[status];
+  return <StatusChip label={m.label} tone={m.tone} title={m.help} icon={status === "ignored" ? "seen" : undefined} />;
+}
+
+function DisputeBadge({ state, disputes = [] }: { state: LineDisputeState | null; disputes?: PaymentDisputeRow[] }) {
+  if (!state) return null;
+  // ADR-067: "Devuelto (POS)" si la devolución salió de una devolución del POS.
+  const d = lineDisputeLabel(state, disputes);
   return (
-    <Badge tone={TONE[m.tone]} title={m.help}>
-      {m.label}
-    </Badge>
+    <StatusChip
+      label={d.label}
+      tone={d.tone}
+      title={d.help}
+      icon={state === "refunded" || state === "partially_refunded" ? "refund" : "risk"}
+    />
   );
 }
 
@@ -185,10 +204,33 @@ const FILTERS: { value: LineFilter; label: string }[] = [
   { value: "matched", label: "Conciliados" },
   { value: "pending_money", label: "Por acreditar" },
   { value: "pos_only", label: "Venta sin cobro" },
+  { value: "disputes", label: "Devoluciones y contracargos" },
   { value: "ignored", label: "Revisados" },
 ];
 
-export function ProcessorReconciliation() {
+const DISPUTE_FILTER_LABEL: Partial<Record<LineFilter, string>> = {
+  d_refunded: "Devueltos",
+  d_partially_refunded: "Devueltos en parte",
+  d_chargeback: "Contracargos",
+  d_claim: "Reclamos abiertos",
+};
+
+/**
+ * Sin props: vista completa con selector de procesador y período. Con
+ * `provider` (y el período del hub), es el detalle de un procesador dentro de
+ * /reportes/conciliacion: sin selector propio y con "Volver".
+ */
+export function ProcessorReconciliation({
+  provider: providerProp,
+  fromISO: fromProp,
+  toISO: toProp,
+  onBack,
+}: {
+  provider?: string;
+  fromISO?: string;
+  toISO?: string;
+  onBack?: () => void;
+} = {}) {
   const { toast } = useToast();
   const enabled = useFeature(FEATURE);
   const { data: me } = useMyTenant();
@@ -196,19 +238,31 @@ export function ProcessorReconciliation() {
   const { data: numFmt } = useSaleNumberFormat();
   const { data: methods } = usePaymentMethodsStatus();
 
-  const [provider, setProvider] = useState<string>("mercadopago");
-  const providerDef = SETTLEMENT_PROVIDERS.find((p) => p.key === provider)!;
+  const [providerState, setProvider] = useState<string>(providerProp ?? "mercadopago");
+  const provider = providerProp ?? providerState;
+  const embedded = providerProp != null;
+  const providerDef = SETTLEMENT_PROVIDERS.find((p) => p.key === provider) ?? {
+    key: provider,
+    label: providerLabel(provider),
+    api: false,
+    logo: null,
+  };
   const [range, setRange] = useState<DateRange | undefined>(() => ({
     from: startOfDay(subDays(new Date(), 29)),
     to: startOfDay(new Date()),
   }));
   const { fromISO, toISO } = useMemo(() => {
+    if (fromProp && toProp) return { fromISO: fromProp, toISO: toProp };
     const f = startOfDay(range?.from ?? new Date());
     const t = startOfDay(range?.to ?? range?.from ?? new Date());
     t.setDate(t.getDate() + 1);
     return { fromISO: f.toISOString(), toISO: t.toISOString() };
-  }, [range]);
+  }, [range, fromProp, toProp]);
   const [filter, setFilter] = useState<LineFilter>("exceptions");
+  // Link de los avisos: /reportes/conciliacion?vista=procesadores&filtro=disputas
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("filtro") === "disputas") setFilter("disputes");
+  }, []);
   const [open, setOpen] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -227,9 +281,20 @@ export function ProcessorReconciliation() {
 
   const all = useMemo(() => lines.data ?? [], [lines.data]);
   const unmatched: UnmatchedPayment[] = useMemo(() => match.data?.unmatched_payments ?? [], [match.data]);
-  const summary = useMemo(() => summarize(all, unmatched), [all, unmatched]);
+  // Contracargos, reclamos y devoluciones de los cobros del período (ADR-064).
+  const disputesQ = useDisputesForPayments(
+    all.map((l) => l.external_id ?? ""),
+    active && provider === "mercadopago",
+  );
+  const dIndex = useMemo(() => indexDisputes(disputesQ.data ?? []), [disputesQ.data]);
+  const openDisputes = useOpenDisputes(active && provider === "mercadopago");
+  const openCases = useMemo(
+    () => (openDisputes.data ?? []).filter((d) => d.kind !== "refund" && !d.resolved_at),
+    [openDisputes.data],
+  );
+  const summary = useMemo(() => summarize(all, unmatched, undefined, dIndex), [all, unmatched, dIndex]);
   const sentences = summarySentences(summary, provider, formatCurrency, fmtLongDate);
-  const visible = useMemo(() => filterLines(all, filter), [all, filter]);
+  const visible = useMemo(() => filterLines(all, filter, undefined, dIndex), [all, filter, dIndex]);
   const series = useMemo(() => dailySeries(all), [all]);
   const fees = useMemo(() => feeBreakdown(all), [all]);
   const saleIds = useMemo(
@@ -277,7 +342,7 @@ export function ProcessorReconciliation() {
   }
 
   async function exportAll() {
-    const tag = localISODate(range?.from ?? new Date());
+    const tag = fromProp ? fromProp.slice(0, 10) : localISODate(range?.from ?? new Date());
     await exportXlsx(`conciliacion-${provider}_${tag}`, [
       {
         name: "Resumen",
@@ -299,13 +364,18 @@ export function ProcessorReconciliation() {
           { k: "Cobro sin venta", v: summary.amounts.missing_in_pos, n: summary.counts.missing_in_pos },
           { k: "Venta sin cobro", v: summary.amounts.pos_only, n: summary.counts.pos_only },
           { k: "Revisados", v: summary.amounts.ignored, n: summary.counts.ignored },
+          { k: "Devuelto", v: summary.disputes.amounts.refunded, n: summary.disputes.counts.refunded },
+          { k: "Devuelto parcial", v: summary.disputes.amounts.partially_refunded, n: summary.disputes.counts.partially_refunded },
+          { k: "Contracargos", v: summary.disputes.amounts.chargeback, n: summary.disputes.counts.chargeback },
+          { k: "Reclamos abiertos", v: summary.disputes.amounts.claim, n: summary.disputes.counts.claim },
+          { k: "En riesgo (contracargos y reclamos abiertos)", v: summary.disputes.atRisk },
         ],
       },
       {
         name: "Cobros",
         title: `Cobros de ${providerLabel(provider)}`,
         columns: XLSX_LINE_COLUMNS,
-        rows: xlsxLineRows(all, (id) => ticket(id) ?? ""),
+        rows: xlsxLineRows(all, (id) => ticket(id) ?? "", undefined, dIndex),
         totals: {
           bruto: summary.sold + summary.refunded,
           devuelto: summary.refunded,
@@ -349,6 +419,22 @@ export function ProcessorReconciliation() {
     <div className="mt-6 space-y-6">
       {/* Proveedor y período */}
       <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        {embedded && (
+          <div className="flex min-w-0 items-center gap-3">
+            {onBack && (
+              <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2">
+                <ArrowLeft size={15} /> Procesadores
+              </Button>
+            )}
+            <ProviderLogo provider={provider} size={32} />
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold">{providerDef.label}</h2>
+              <p className="text-xs text-muted-foreground">{providerDef.api ? "Automático" : "Por archivo"}</p>
+            </div>
+          </div>
+        )}
+        {!embedded && (
+        <>
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-xs text-muted-foreground">Procesador</span>
           <select
@@ -397,6 +483,8 @@ export function ProcessorReconciliation() {
             ))}
           </div>
         </div>
+        </>
+        )}
         <div className="flex flex-wrap gap-2 sm:ml-auto">
           {providerDef.api ? (
             <Button onClick={runSync} disabled={sync.isPending || needsConnect}>
@@ -490,6 +578,47 @@ export function ProcessorReconciliation() {
         </div>
       </section>
 
+      {/* Contracargos y reclamos abiertos (de cualquier período) */}
+      {provider === "mercadopago" && openCases.length > 0 && <OpenCases items={openCases} />}
+
+      {/* Devoluciones y contracargos del período */}
+      {summary.disputes.total > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Devoluciones, contracargos y reclamos del período</h3>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {(
+              [
+                { f: "d_refunded", label: "Devuelto", st: "refunded", tone: "warning" },
+                { f: "d_partially_refunded", label: "Devuelto parcial", st: "partially_refunded", tone: "warning" },
+                { f: "d_chargeback", label: "Contracargos", st: "chargeback", tone: "danger" },
+                { f: "d_claim", label: "Reclamos abiertos", st: "claim", tone: "warning" },
+              ] as const
+            ).map((k) => (
+              <button
+                key={k.f}
+                type="button"
+                onClick={() => setFilter(k.f)}
+                aria-pressed={filter === k.f}
+                className={cn("min-w-0 text-left transition-opacity", filter !== k.f && filter.startsWith("d_") && "opacity-70")}
+              >
+                <Kpi
+                  label={k.label}
+                  tone={summary.disputes.counts[k.st] > 0 ? k.tone : undefined}
+                  value={formatCurrency(summary.disputes.amounts[k.st])}
+                  sub={`${summary.disputes.counts[k.st]} ${summary.disputes.counts[k.st] === 1 ? "cobro" : "cobros"}`}
+                />
+              </button>
+            ))}
+            <Kpi
+              label="En riesgo"
+              tone={summary.disputes.atRisk > 0 ? "danger" : undefined}
+              value={formatCurrency(summary.disputes.atRisk)}
+              sub={summary.disputes.netLost > 0 ? `Neto perdido: ${formatCurrency(summary.disputes.netLost)}` : "Contracargos y reclamos abiertos"}
+            />
+          </div>
+        </section>
+      )}
+
       {/* Gráficos */}
       {all.length > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -542,14 +671,19 @@ export function ProcessorReconciliation() {
             size="sm"
             value={filter}
             onChange={setFilter}
-            options={FILTERS.map((f) => ({
+            options={[
+              ...FILTERS,
+              ...(DISPUTE_FILTER_LABEL[filter] ? [{ value: filter, label: DISPUTE_FILTER_LABEL[filter]! }] : []),
+            ].map((f) => ({
               value: f.value,
               label:
                 f.value === "exceptions"
                   ? `${f.label} (${summary.counts.missing_in_pos + summary.counts.amount_diff + summary.counts.pos_only})`
                   : f.value === "pos_only"
                     ? `${f.label} (${summary.counts.pos_only})`
-                    : f.label,
+                    : f.value === "disputes"
+                      ? `${f.label} (${summary.disputes.total})`
+                      : f.label,
             }))}
           />
           {match.isFetching && (
@@ -589,6 +723,7 @@ export function ProcessorReconciliation() {
                 onCreate={provider === "mercadopago" ? setCreating : undefined}
                 onUnlink={(l) => act(l, "unlink")}
                 onUnignore={(l) => act(l, "unignore")}
+                dIndex={dIndex}
                 emptyText={filter === "exceptions" ? "No hay cobros para revisar. Todo cierra." : "No hay cobros con este filtro."}
               />
             )}
@@ -622,6 +757,7 @@ interface LinesTableProps {
   onCreate?: (l: SettlementLineRow) => void;
   onUnlink: (l: SettlementLineRow) => void;
   onUnignore: (l: SettlementLineRow) => void;
+  dIndex: DisputeIndex;
   emptyText: string;
 }
 
@@ -639,7 +775,10 @@ function MediumCell({ l }: { l: SettlementLineRow }) {
   );
 }
 
-function LineActions({ l, ...p }: Omit<LinesTableProps, "lines" | "loading" | "open" | "onToggle" | "ticket" | "emptyText"> & { l: SettlementLineRow }) {
+function LineActions({
+  l,
+  ...p
+}: Omit<LinesTableProps, "lines" | "loading" | "open" | "onToggle" | "ticket" | "emptyText" | "dIndex"> & { l: SettlementLineRow }) {
   return (
     <Dropdown>
       <DropdownTrigger asChild>
@@ -677,7 +816,8 @@ function LineActions({ l, ...p }: Omit<LinesTableProps, "lines" | "loading" | "o
   );
 }
 
-function LineDetail({ l }: { l: SettlementLineRow }) {
+function LineDetail({ l, dIndex }: { l: SettlementLineRow; dIndex: DisputeIndex }) {
+  const disputes = l.external_id ? (dIndex.get(l.external_id) ?? []) : [];
   const ids: [string, string | null][] = [
     ["Id del pago", l.external_id],
     ["Orden", l.order_id],
@@ -723,6 +863,13 @@ function LineDetail({ l }: { l: SettlementLineRow }) {
         )}
         {l.match_method && <p className="mt-2 text-xs text-muted-foreground">Cruzado {matchMethodLabel(l.match_method)}.</p>}
         {l.review_note && <p className="mt-2 text-xs text-muted-foreground">Nota: {l.review_note}</p>}
+        {disputes.length > 0 && (
+          <div className="mt-4 space-y-4 border-t border-border pt-3">
+            {disputes.map((d) => (
+              <DisputeCard key={d.id} d={d} />
+            ))}
+          </div>
+        )}
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         {ids
@@ -741,7 +888,7 @@ function LineDetail({ l }: { l: SettlementLineRow }) {
 }
 
 function LinesTable(p: LinesTableProps) {
-  const { lines, loading, open, onToggle, ticket, emptyText } = p;
+  const { lines, loading, open, onToggle, ticket, emptyText, dIndex } = p;
   return (
     <>
       {/* Desktop */}
@@ -791,7 +938,8 @@ function LinesTable(p: LinesTableProps) {
                   {ticket(l.sale_id) ? ` · Venta ${ticket(l.sale_id)}` : ""}
                 </div>
               </button>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                <DisputeBadge state={lineDispute(l, dIndex)} disputes={l.external_id ? (dIndex.get(l.external_id) ?? []) : []} />
                 <MatchBadge status={l.match_status} />
                 <LineActions l={l} {...p} />
               </div>
@@ -805,7 +953,7 @@ function LinesTable(p: LinesTableProps) {
             </div>
             {open === l.id && (
               <div className="mt-3 border-t border-border pt-3">
-                <LineDetail l={l} />
+                <LineDetail l={l} dIndex={dIndex} />
               </div>
             )}
           </div>
@@ -856,7 +1004,10 @@ function LineRowDesktop({
         </td>
         <td className="whitespace-nowrap px-2.5 py-2.5 font-mono text-xs">{t ?? <NoData />}</td>
         <td className="whitespace-nowrap px-2.5 py-2.5">
-          <MatchBadge status={l.match_status} />
+          <span className="inline-flex flex-wrap items-center gap-1">
+            <MatchBadge status={l.match_status} />
+            <DisputeBadge state={lineDispute(l, p.dIndex)} disputes={l.external_id ? (p.dIndex.get(l.external_id) ?? []) : []} />
+          </span>
         </td>
         <td className="px-2 py-2.5">
           <LineActions l={l} {...p} />
@@ -866,7 +1017,7 @@ function LineRowDesktop({
         <tr className="bg-muted/20">
           <td />
           <td colSpan={9} className="px-2.5 pb-4 pt-2">
-            <LineDetail l={l} />
+            <LineDetail l={l} dIndex={p.dIndex} />
           </td>
         </tr>
       )}
@@ -921,5 +1072,41 @@ function PosOnlyList({
         ))}
       </ul>
     </div>
+  );
+}
+
+// ── Contracargos y reclamos abiertos ─────────────────────────────────────────
+
+function OpenCases({ items }: { items: PaymentDisputeRow[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, 3);
+  return (
+    <section className="rounded-lg border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-danger" />
+          <h3 className="text-sm font-semibold">
+            {items.length === 1 ? "1 contracargo o reclamo abierto" : `${items.length} contracargos o reclamos abiertos`}
+          </h3>
+        </div>
+        <span className="text-xs text-muted-foreground">De cualquier fecha: revisá los plazos</span>
+      </div>
+      <ul className="divide-y divide-border border-t border-border">
+        {shown.map((d) => (
+          <li key={d.id} className="px-4 py-3">
+            <DisputeCard d={d} compact />
+          </li>
+        ))}
+      </ul>
+      {items.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full border-t border-border px-4 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          {expanded ? "Ver menos" : `Ver los ${items.length}`}
+        </button>
+      )}
+    </section>
   );
 }

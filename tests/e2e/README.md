@@ -94,9 +94,32 @@ Todo lo que crea el suite lleva el prefijo `E2E-<timestamp>` (un id por corrida)
 - Medios de pago: el wizard se recorre con valores dummy y se cancela; nunca se guarda.
 - Tiendita: se abre el editor de importación y se cancela.
 - Diseño del POS: se vuelve al del negocio.
+- Compras (`compras.spec.ts`): un proveedor `E2E-… Proveedor` que termina **archivado**
+  y una orden de compra en borrador que se **cancela** (motivo `E2E-… limpieza e2e`).
+- Cobros en espera, precio validado, conciliación: no escriben nada (ver abajo).
+- Terminales, Mis PINes, transferencias, listas de precios, hardware: sólo lectura
+  o wizard recorrido y cancelado.
 
 Si una corrida se corta a mitad, buscar por el prefijo `E2E-` en productos,
-categorías y ventas del tenant QA.
+categorías, ventas y proveedores (con "Ver archivados") del tenant QA.
+
+## Proveedores de pago: nunca reales
+
+Contra producción ninguna Edge Function de cobro llega al servidor:
+`support/mocks.ts` (`guardEdgeFunctions`) responde las que el test necesita y
+corta el resto en el navegador. Los flujos que dependen de un proveedor
+conectado se simulan sin escribir en la base:
+
+- `cobros-en-espera.spec.ts`: Mercado Pago "conectado" sólo en el navegador
+  (lecturas reales + parche), link de `mp_create_qr` simulado y
+  `park_pending_charge` / `cancel_pending_charge` respondidos (estacionar exige
+  un intent real del proveedor).
+- `precio-validado.spec.ts`: `create_sale` responde `price_mismatch` y se
+  valida el aviso; la venta nunca se registra.
+
+Specs de funciones que todavía pueden no estar desplegadas (balanza y cajón por
+caja, aviso de NubCeo, filtro "Con alertas") se saltean con el motivo cuando la
+UI no aparece.
 
 ## Visual
 

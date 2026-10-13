@@ -11,6 +11,7 @@ import {
   KeyRound,
   Lock,
   Mail,
+  PlugZap,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -22,6 +23,12 @@ import { CredentialInput } from "@/components/ui/CredentialInput";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { SANDBOX_PROVIDERS, type BrandDef } from "@/lib/payments/catalog";
+import {
+  probeAttemptLine,
+  probeMismatchEnv,
+  probeSecrets,
+  type GetnetProbeResult,
+} from "@/lib/payments/getnetProbe";
 import {
   CHANNEL_CAPS,
   CONNECT_GUIDE,
@@ -60,6 +67,8 @@ type Field = {
   hint?: string;
   // Validación extra (devuelve el error o undefined).
   validate?: (v: string) => string | undefined;
+  // Sólo se pide si "Probar credenciales" detectó esa API (Getnet, ADR-065).
+  onlyApi?: "global";
 };
 
 const httpsUrl = (v: string) => {
@@ -109,8 +118,15 @@ const FORMS: Record<string, FormSpec> = {
     fields: [
       { name: "client_id", label: "Client ID", min: 4, placeholder: "Tu Client ID" },
       { name: "client_secret", label: "Client Secret", secret: true, min: 8, placeholder: "Tu Client Secret" },
+      // Web Checkout exige un comprador: si el cliente no se identifica va
+      // "Consumidor Final" con estos datos del comercio.
+      { name: "customer_email", label: "Email del comercio", optional: true, onlyApi: "global", placeholder: "ventas@tunegocio.com" },
+      { name: "customer_document", label: "CUIT del comercio", optional: true, onlyApi: "global", placeholder: "30712345678" },
+      { name: "customer_address", label: "Calle y número", optional: true, onlyApi: "global", placeholder: "Av. Corrientes 1234" },
+      { name: "customer_postal_code", label: "Código postal", optional: true, onlyApi: "global", placeholder: "C1043AAZ" },
     ],
-    envNote: "Getnet no tiene ambiente de prueba: las credenciales son de producción.",
+    envNote:
+      "Prueba usa el sandbox u homologación de Web Checkout. La API Getnet Argentina (la del plugin de WooCommerce) sólo tiene producción.",
   },
   pagos360: {
     fields: [{ name: "api_key", label: "API Key", secret: true, min: 10, placeholder: "Tu API Key" }],
@@ -205,6 +221,8 @@ function fieldError(f: Field, v: string): string | undefined {
 }
 
 export type ConnectSave = { secrets?: Record<string, string>; token?: string; env?: Env };
+/** Sin secrets = prueba la credencial guardada del alcance. */
+export type ConnectProbe = { secrets?: Record<string, string>; env: Env };
 
 export function ConnectProviderModal({
   open,
@@ -221,6 +239,7 @@ export function ConnectProviderModal({
   onMpEnv,
   scopeSlot,
   scopeName = null,
+  onProbe,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -239,6 +258,8 @@ export function ConnectProviderModal({
   scopeSlot?: React.ReactNode;
   /** Sucursal de la credencial que se edita (null = la del negocio). */
   scopeName?: string | null;
+  /** "Probar credenciales" (hoy sólo Getnet, ADR-065). */
+  onProbe?: (v: ConnectProbe) => Promise<GetnetProbeResult>;
 }) {
   const { toast } = useToast();
   const isMp = providerKey === "mercadopago";
@@ -262,6 +283,9 @@ export function ConnectProviderModal({
   const [mpToken, setMpToken] = useState("");
   const [mpTestToken, setMpTestToken] = useState("");
   const [showManual, setShowManual] = useState(false);
+  // Resultado de "Probar credenciales" (null = sin probar).
+  const [probe, setProbe] = useState<GetnetProbeResult | null>(null);
+  const [probing, setProbing] = useState(false);
 
   // Cada apertura arranca limpia.
   useEffect(() => {
@@ -278,10 +302,16 @@ export function ConnectProviderModal({
     setMpToken("");
     setMpTestToken("");
     setShowManual(false);
+    setProbe(null);
+    setProbing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const fields = spec?.fields ?? [];
+  const allFields = spec?.fields ?? [];
+  // Paso 1: credenciales. Los campos de una API puntual aparecen en el paso
+  // Ambiente, cuando la prueba detectó esa API.
+  const fields = allFields.filter((f) => !f.onlyApi);
+  const apiFields = allFields.filter((f) => f.onlyApi && probe?.ok && probe.api === f.onlyApi);
   const errorOf = (f: Field) =>
     showErrors || touched[f.name] ? fieldError(f, values[f.name] ?? "") : undefined;
   const credsValid = isMp
@@ -335,12 +365,34 @@ export function ConnectProviderModal({
       run(() => onMpEnv(change), () => setStep(2));
       return;
     }
+    const secrets = typedSecrets();
+    // Getnet: ambiente explícito + API detectada por la prueba (si la hubo).
+    if (onProbe) Object.assign(secrets, probeSecrets(probe, env));
+    run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
+  };
+
+  function typedSecrets(): Record<string, string> {
     const secrets: Record<string, string> = {};
-    for (const f of fields) {
+    for (const f of [...fields, ...apiFields]) {
       const v = (values[f.name] ?? "").trim();
       if (v) secrets[f.name] = v;
     }
-    run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
+    return secrets;
+  }
+
+  // Prueba las credenciales tipeadas (o, sin tipear, las guardadas) sin guardar.
+  const runProbe = async (saved: boolean) => {
+    if (!onProbe) return;
+    setProbing(true);
+    setProbe(null);
+    try {
+      const probeEnv = saved ? currentEnv : env;
+      setProbe(await onProbe(saved ? { env: probeEnv } : { secrets: typedSecrets(), env: probeEnv }));
+    } catch {
+      setProbe({ ok: false, summary: "No pudimos probar las credenciales. Revisá tu conexión y probá de nuevo." });
+    } finally {
+      setProbing(false);
+    }
   };
 
   const closeOrBack = () => (connected ? setView("manage") : onOpenChange(false));
@@ -529,6 +581,21 @@ export function ConnectProviderModal({
               </button>
             )}
 
+            {onProbe && (
+              <div className="space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => runProbe(true)}
+                  disabled={probing}
+                  className="flex w-full items-center gap-2 rounded-xl bg-fg-4 px-3.5 py-3 text-left text-sm font-medium transition hover:bg-fg-6 disabled:opacity-50"
+                >
+                  <PlugZap size={15} className="text-muted-foreground" />
+                  {probing ? "Probando la conexión..." : "Probar conexión"}
+                </button>
+                {probe && <ProbePanel result={probe} />}
+              </div>
+            )}
+
             {serverError && <Notice tone="danger">{serverError}</Notice>}
           </div>
         )}
@@ -600,7 +667,10 @@ export function ConnectProviderModal({
                         data-1p-ignore
                         data-lpignore="true"
                         value={values[f.name] ?? ""}
-                        onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                        onChange={(e) => {
+                          setValues((v) => ({ ...v, [f.name]: e.target.value }));
+                          setProbe(null);
+                        }}
                         onBlur={() => setTouched((t) => ({ ...t, [f.name]: true }))}
                         placeholder={connected ? "Pegá el valor nuevo" : f.placeholder}
                         hint={f.hint}
@@ -626,7 +696,10 @@ export function ConnectProviderModal({
               <Eyebrow>{isMp ? "¿Dónde vas a cobrar?" : "¿De qué ambiente son estas credenciales?"}</Eyebrow>
               <EnvPicker
                 value={hasSandbox ? env : "prod"}
-                onChange={setEnv}
+                onChange={(v) => {
+                  setEnv(v);
+                  setProbe(null);
+                }}
                 disabledTest={!hasSandbox}
                 testHint={hasSandbox ? undefined : "No disponible"}
               />
@@ -642,6 +715,47 @@ export function ConnectProviderModal({
                   : "Los cobros son reales y la plata entra a tu cuenta."}
                 {hasSandbox && spec?.envNote ? ` ${spec.envNote}` : ""}
               </Notice>
+            )}
+
+            {onProbe && (
+              <div className="space-y-2.5">
+                <Button variant="secondary" className="w-full" loading={probing} onClick={() => runProbe(false)}>
+                  <PlugZap size={15} /> Probar credenciales
+                </Button>
+                {probe && (
+                  <ProbePanel
+                    result={probe}
+                    onSwitchEnv={(v) => {
+                      setEnv(v);
+                      setProbe(null);
+                    }}
+                  />
+                )}
+                {apiFields.length > 0 && (
+                  <div className="space-y-3.5">
+                    <Eyebrow>Comprador por defecto (opcional)</Eyebrow>
+                    <p className="text-[13px] text-muted-foreground">
+                      Web Checkout pide datos del comprador. Si el cliente no se identifica, mandamos
+                      &quot;Consumidor Final&quot; con estos datos de tu comercio.
+                    </p>
+                    {apiFields.map((f) => (
+                      <CredentialInput
+                        key={f.name}
+                        label={f.label}
+                        optional
+                        mono
+                        name={`${providerKey}_${f.name}`}
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
+                        value={values[f.name] ?? ""}
+                        onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                        placeholder={f.placeholder}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {isMp && env === "test" && (
@@ -736,6 +850,73 @@ function NextStep({ n, children }: { n: number; children: React.ReactNode }) {
       </span>
       <span className="text-muted-foreground">{children}</span>
     </li>
+  );
+}
+
+// Resultado de "Probar credenciales" (Getnet, ADR-065): qué API respondió, y
+// si falló, cada servicio probado con su HTTP y el código de Getnet.
+function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwitchEnv?: (v: Env) => void }) {
+  const { toast } = useToast();
+  const attempts = result.attempts ?? [];
+  const switchTo = probeMismatchEnv(result);
+  if (result.error === "not_connected") {
+    return <Notice tone="warning">Cargá el Client ID y el Client Secret para probarlos.</Notice>;
+  }
+  if (result.ok) {
+    return (
+      <div className="space-y-2">
+        <Notice title="Las credenciales funcionan">
+          {result.label}
+          {result.seller?.trade_name ? ` · Comercio: ${result.seller.trade_name}` : ""}. Se guarda esta API con la conexión.
+        </Notice>
+        {(result.warnings ?? []).map((w) => (
+          <Notice key={w} tone="warning">
+            {w}
+          </Notice>
+        ))}
+        {result.api === "global" && result.webhook_url && (
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-fg-4 px-2.5 py-2 font-mono text-[11px]">
+              {result.webhook_url}
+            </code>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(result.webhook_url ?? "")
+                  .then(() => toast({ title: "URL copiada", variant: "success" }))
+                  .catch(() => toast({ title: "No se pudo copiar", variant: "error" }))
+              }
+            >
+              <Copy size={14} /> Copiar
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <Notice tone="danger" title="Getnet no aceptó las credenciales">
+        {result.summary ?? "No pudimos validar las credenciales."}
+      </Notice>
+      {switchTo && onSwitchEnv && (
+        <Button type="button" size="sm" variant="secondary" className="w-full" onClick={() => onSwitchEnv(switchTo)}>
+          Cambiar a {switchTo === "test" ? "Prueba" : "Producción"}
+        </Button>
+      )}
+      {attempts.length > 0 && (
+        <ul className="space-y-1 rounded-lg bg-fg-4 p-3 text-xs text-muted-foreground">
+          {attempts.map((a) => (
+            <li key={`${a.profile}:${a.step}`} className="break-words">
+              {probeAttemptLine(a)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -2,6 +2,8 @@
 
 Programa chico que corre en la PC de la caja y deja que el POS web hable con una terminal de tarjeta conectada a esa PC: posnet integrado por cable (puerto COM) o por red (TCP), o un pinpad. Sirve cuando el navegador no puede usar Web Serial / WebUSB (Firefox, Safari, el puerto lo usa otro programa, o la terminal está en la LAN). Ver ADR-053 y `docs/payments/terminal-integrada-payway.md`.
 
+También lo usan la **balanza** (puerto serie de la PC) y el **cajón de dinero** (pulso ESC/POS a la impresora por puerto serie o por red en el 9100), configurados por caja en Configuración, Hardware (ADR-063). El token y la URL se guardan una vez por PC.
+
 El puente **no entiende el protocolo** de la terminal: pasa bytes. El protocolo (Payway VPI, etc.) lo arma el adaptador en el navegador (`lib/payments/terminal/adapters`).
 
 Esto es una implementación de referencia: no se distribuye un binario. Para producción hace falta empaquetarlo (servicio de Windows, arranque con la sesión, firma de código).

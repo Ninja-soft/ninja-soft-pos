@@ -27,6 +27,7 @@ import { MyPinsPanel } from "@/components/security/MyPins";
 import { useStaffPeople } from "@/modules/staff/hooks";
 import {
   ACTION_INFO,
+  ALWAYS_PIN,
   PIN_ACTIONS,
   modesProblem,
   type PinAction,
@@ -160,7 +161,7 @@ function PolicyPanel({ editable }: { editable: boolean }) {
           {PIN_ACTIONS.map((a) => {
             const info = ACTION_INFO[a];
             const r = draft.pin_policy[a];
-            const always = a === "shift_force_close";
+            const always = ALWAYS_PIN.includes(a);
             return (
               <li key={a} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">

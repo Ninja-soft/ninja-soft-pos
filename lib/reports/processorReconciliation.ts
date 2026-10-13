@@ -4,7 +4,8 @@
 //
 //  * Estados en lenguaje simple: cruce (Conciliado, Cobro sin venta, Venta sin
 //    cobro, Diferencia de monto, Revisado) y plata (Acreditado, Pendiente de
-//    acreditación).
+//    acreditación). Y por disputa (ADR-064): Devuelto, Devuelto parcial,
+//    Contracargo, Reclamo abierto, con el neto efectivo (paymentDisputes.ts).
 //  * Resumen para el dueño: "Vendiste $X con Mercado Pago, te cobró $Y de
 //    comisiones e impuestos, te acreditó $Z, falta acreditar $W (fecha)".
 //  * Datos de los gráficos, filas del XLSX.
@@ -12,6 +13,15 @@
 //    columnas: detección por encabezado, números y fechas argentinas.
 // =============================================================================
 import type { ProcessorFee, SettlementLineInput } from "@/supabase/functions/_shared/processorData";
+import {
+  LINE_DISPUTE_LABEL,
+  disputeSummary,
+  effectiveNet,
+  lineDisputeState,
+  type DisputeIndex,
+  type DisputeSummary,
+  type LineDisputeState,
+} from "./paymentDisputes";
 
 export type LineMatchStatus = "matched" | "amount_diff" | "missing_in_pos" | "ignored";
 
@@ -85,8 +95,14 @@ export const SETTLEMENT_PROVIDERS: SettlementProvider[] = [
   { key: "mercadopago", label: "Mercado Pago", api: true, logo: "mercadopago" },
   { key: "payway", label: "Payway", api: false, logo: "payway" },
   { key: "getnet", label: "Getnet", api: false, logo: "getnet" },
-  { key: "fiserv", label: "Fiserv / Posnet", api: false, logo: "fiserv" },
+  { key: "fiserv", label: "Fiserv / Clover", api: false, logo: "fiserv" },
   { key: "nave", label: "Nave", api: false, logo: "nave" },
+  // Sin API de liquidaciones: por archivo (cualquier provider_key sirve en
+  // settlement_import_lines; ADR-061, pendiente "por archivo con preset").
+  { key: "directo", label: "Directo", api: false, logo: "directo" },
+  { key: "gocuotas", label: "GO Cuotas", api: false, logo: "gocuotas" },
+  { key: "modo", label: "MODO", api: false, logo: "modo" },
+  { key: "transfer", label: "Transferencias", api: false, logo: "transfer" },
   { key: "otro", label: "Otro adquirente", api: false, logo: null },
 ];
 
@@ -145,9 +161,28 @@ export const matchMethodLabel = (m: string | null) => (m ? (METHOD_LABEL[m] ?? m
 
 // ── Filtros ──────────────────────────────────────────────────────────────────
 
-export type LineFilter = "all" | "exceptions" | LineMatchStatus | "pending_money" | "pos_only";
+export type LineFilter =
+  | "all"
+  | "exceptions"
+  | LineMatchStatus
+  | "pending_money"
+  | "pos_only"
+  | "disputes"
+  | `d_${LineDisputeState}`;
 
-export function filterLines(lines: SettlementLineRow[], f: LineFilter, now: Date = new Date()): SettlementLineRow[] {
+const disputesOf = (l: SettlementLineRow, index?: DisputeIndex) => (l.external_id ? (index?.get(l.external_id) ?? []) : []);
+
+/** Estado de disputa de una línea (ADR-064). */
+export const lineDispute = (l: SettlementLineRow, index?: DisputeIndex) => lineDisputeState(l, disputesOf(l, index));
+
+export function filterLines(
+  lines: SettlementLineRow[],
+  f: LineFilter,
+  now: Date = new Date(),
+  index?: DisputeIndex,
+): SettlementLineRow[] {
+  if (f === "disputes") return lines.filter((l) => lineDispute(l, index) !== null);
+  if (f.startsWith("d_")) return lines.filter((l) => `d_${lineDispute(l, index)}` === f);
   switch (f) {
     case "all":
     case "pos_only":
@@ -185,6 +220,8 @@ export interface OwnerSummary {
   amounts: Record<LineMatchStatus | "pos_only", number>;
   /** Tasa efectiva de costo (comisiones + impuestos / vendido). */
   costPct: number;
+  /** Devoluciones, contracargos y reclamos (ADR-064). */
+  disputes: DisputeSummary;
 }
 
 export function localDay(iso: string): string {
@@ -199,6 +236,7 @@ export function summarize(
   lines: SettlementLineRow[],
   unmatched: UnmatchedPayment[] = [],
   now: Date = new Date(),
+  index?: DisputeIndex,
 ): OwnerSummary {
   const counts = { matched: 0, amount_diff: 0, missing_in_pos: 0, ignored: 0, pos_only: 0 };
   const amounts = { matched: 0, amount_diff: 0, missing_in_pos: 0, ignored: 0, pos_only: 0 };
@@ -213,22 +251,24 @@ export function summarize(
   const byDay = new Map<string, number>();
   for (const l of lines) {
     const eff = Number(l.gross) - Number(l.refunded);
+    // Neto efectivo: devolución total o contracargo no ganado = 0 (ADR-064).
+    const lineNet = effectiveNet(l, lineDispute(l, index));
     sold += eff;
     refunded += Number(l.refunded);
     fees += Number(l.fee);
     taxes += Number(l.taxes);
-    net += Number(l.net);
+    net += lineNet;
     counts[l.match_status] += 1;
     amounts[l.match_status] += eff;
     const ms = moneyState(l, now);
     if (ms === "pending") {
-      pending += Number(l.net);
-      if (l.release_date) {
+      pending += lineNet;
+      if (l.release_date && lineNet !== 0) {
         if (!nextRelease || l.release_date < nextRelease) nextRelease = l.release_date;
         const day = localDay(l.release_date);
-        byDay.set(day, (byDay.get(day) ?? 0) + Number(l.net));
+        byDay.set(day, (byDay.get(day) ?? 0) + lineNet);
       }
-    } else if (ms === "released") released += Number(l.net);
+    } else if (ms === "released") released += lineNet;
   }
   for (const u of unmatched) {
     counts.pos_only += 1;
@@ -254,6 +294,7 @@ export function summarize(
     counts,
     amounts,
     costPct: sold > 0 ? round2(((fees + taxes) / sold) * 100) : 0,
+    disputes: disputeSummary(lines, index),
   };
 }
 
@@ -276,6 +317,17 @@ export function summarySentences(
   }
   const issues = s.counts.missing_in_pos + s.counts.amount_diff + s.counts.pos_only;
   out.push(issues === 0 ? "Todo cierra con tus ventas." : `Hay ${issues} ${issues === 1 ? "cobro para revisar" : "cobros para revisar"}.`);
+  const d = s.disputes;
+  if (d && d.counts.chargeback > 0) {
+    out.push(
+      `Tuviste ${d.counts.chargeback} ${d.counts.chargeback === 1 ? "contracargo" : "contracargos"} por ${fmt(d.amounts.chargeback)}.`,
+    );
+  }
+  if (d && d.counts.refunded + d.counts.partially_refunded > 0) {
+    const n = d.counts.refunded + d.counts.partially_refunded;
+    out.push(`${p} devolvió ${fmt(d.amounts.refunded + d.amounts.partially_refunded)} en ${n} ${n === 1 ? "cobro" : "cobros"}.`);
+  }
+  if (d && d.atRisk > 0) out.push(`Hay ${fmt(d.atRisk)} en riesgo por contracargos o reclamos abiertos.`);
   return out;
 }
 
@@ -336,6 +388,7 @@ export const XLSX_LINE_COLUMNS = [
   { header: "Plata", key: "plata", width: 22 },
   { header: "Venta", key: "venta", width: 12 },
   { header: "Estado", key: "estado", width: 20 },
+  { header: "Disputa", key: "disputa", width: 18 },
   { header: "Diferencia", key: "diferencia", type: "money" as const, width: 12 },
   { header: "Nota", key: "nota", width: 30 },
 ];
@@ -346,6 +399,7 @@ export function xlsxLineRows(
   lines: SettlementLineRow[],
   saleLabel: (saleId: string | null) => string,
   now: Date = new Date(),
+  index?: DisputeIndex,
 ): Record<string, unknown>[] {
   return lines.map((l) => ({
     fecha: new Date(l.operation_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }),
@@ -361,6 +415,10 @@ export function xlsxLineRows(
     plata: MONEY_LABEL[moneyState(l, now)],
     venta: saleLabel(l.sale_id),
     estado: MATCH_LABEL[l.match_status].label,
+    disputa: (() => {
+      const st = lineDispute(l, index);
+      return st ? LINE_DISPUTE_LABEL[st].label : "";
+    })(),
     diferencia: l.match_status === "amount_diff" ? Number(l.diff_amount) : "",
     nota: l.review_note ?? "",
   }));

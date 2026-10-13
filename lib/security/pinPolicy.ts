@@ -16,7 +16,9 @@ export type PinAction =
   | "sale_return"
   | "cash_out"
   | "cash_in"
-  | "shift_force_close";
+  | "shift_force_close"
+  | "abrir_cajon"
+  | "reintegro_mp";
 
 export interface PinRule {
   enabled: boolean;
@@ -55,7 +57,12 @@ export const PIN_ACTIONS: PinAction[] = [
   "cash_out",
   "cash_in",
   "shift_force_close",
+  "abrir_cajon",
+  "reintegro_mp",
 ];
+
+/** Acciones que siempre piden PIN cuando se consultan (espejo de pin_action_required). */
+export const ALWAYS_PIN: PinAction[] = ["shift_force_close", "abrir_cajon", "reintegro_mp"];
 
 export const DEFAULT_POLICY: PinPolicy = {
   discount_over: { enabled: false, threshold: 20 },
@@ -66,6 +73,10 @@ export const DEFAULT_POLICY: PinPolicy = {
   cash_out: { enabled: false, threshold: 0 },
   cash_in: { enabled: false, threshold: 0 },
   shift_force_close: { enabled: true, threshold: 0 },
+  // ADR-063: siempre; la pide la política del cajón de la sucursal.
+  abrir_cajon: { enabled: true, threshold: 0 },
+  // ADR-067: siempre; la plata sale de la cuenta de Mercado Pago.
+  reintegro_mp: { enabled: true, threshold: 0 },
 };
 
 export const DEFAULT_SECURITY: SecuritySettings = {
@@ -129,6 +140,18 @@ export const ACTION_INFO: Record<
     unit: "none",
     reasonRequired: true,
   },
+  abrir_cajon: {
+    label: "Abrir el cajón sin venta",
+    desc: "Se pide cuando la sucursal tiene el cajón sin venta \"Con PIN de supervisor\" (Configuración, Hardware). El cajero ya dejó el motivo.",
+    unit: "none",
+    reasonRequired: false,
+  },
+  reintegro_mp: {
+    label: "Reintegrar por Mercado Pago",
+    desc: "Siempre pide supervisor: devuelve la plata de una venta a la tarjeta o cuenta de Mercado Pago del cliente. El dueño y los supervisores lo hacen sin PIN.",
+    unit: "money",
+    reasonRequired: false,
+  },
 };
 
 /** Política completa (acciones nuevas con su default). */
@@ -140,7 +163,7 @@ export function normalizeSettings(raw: Partial<SecuritySettings> | null | undefi
     if (r) {
       const modes = cleanModes(r.modes);
       policy[a] = {
-        enabled: a === "shift_force_close" ? true : Boolean(r.enabled),
+        enabled: ALWAYS_PIN.includes(a) ? true : Boolean(r.enabled),
         threshold: Math.max(0, Number(r.threshold ?? DEFAULT_POLICY[a].threshold) || 0),
         ...(modes.length ? { modes } : {}),
       };
@@ -202,7 +225,7 @@ export function modesProblem(s: SecuritySettings): string | null {
 
 /** ¿La acción pide PIN para ese monto? (porcentaje para discount_over) */
 export function pinRequired(policy: PinPolicy, action: PinAction, amount: number | null): boolean {
-  if (action === "shift_force_close") return true;
+  if (ALWAYS_PIN.includes(action)) return true;
   const r = policy[action];
   if (!r?.enabled) return false;
   const v = amount ?? 0;

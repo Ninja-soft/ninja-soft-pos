@@ -106,6 +106,10 @@ import {
 } from "@/modules/pending-charges/logic";
 import type { CartLine } from "@/modules/pos/store";
 import { Modal } from "@/components/ui/Modal";
+import { usePosHardware } from "@/modules/hardware/pos";
+import { scaleLine } from "@/lib/barcode/scaleLabel";
+import { ScaleLiveWeight } from "@/components/hardware/ScaleLiveWeight";
+import { PosDrawerButton } from "@/components/hardware/PosDrawerButton";
 
 // Pantalla de venta. La página orquesta datos y reglas de negocio (carrito,
 // orígenes, promos, venta); la piel la decide el diseño elegido (PosShell +
@@ -634,6 +638,9 @@ function PosPageInner() {
   const shiftOwnership = useShiftOwnership(shift);
   const hasShift = Boolean(shift) && shiftOwnership.usable;
 
+  // Balanza y cajón de esta caja con las reglas de su sucursal (ADR-063).
+  const posHw = usePosHardware(register?.id ?? null, register?.store_id ?? null, hasShift);
+
   // Publica el estado a la pantalla del cliente (H25).
   useEffect(() => {
     const phase: DisplayState["phase"] = paidView
@@ -680,6 +687,25 @@ function PosPageInner() {
   // Código encontrado (escáner, Enter en Caja rápida): variante directo; el
   // resto pasa por pickProduct. Devuelve false si no hay producto.
   async function addByCode(code: string): Promise<boolean> {
+    // Etiqueta de balanza (H23, ADR-063): EAN-13 con prefijo 20-29 y precio o
+    // peso embebido según el formato de la sucursal.
+    const scan = await posHw.scanScaleLabel(code);
+    if (scan) {
+      if (scan.kind === "error") {
+        toast({ title: scan.message, variant: "error" });
+        return true;
+      }
+      const p = scan.product;
+      const price = priceFor(p.id, null, p.price);
+      const line = scaleLine(scan.decoded, price);
+      if (!line) {
+        toast({ title: `${p.name} no tiene precio por kilo: cargalo para vender con etiqueta`, variant: "error" });
+        return true;
+      }
+      if (!branchStockGate(p.id, null, line.quantityKg)) return true;
+      addWeighed({ id: p.id, name: p.name, sku: p.sku, price, categoryId: p.category_id }, line.quantityKg);
+      return true;
+    }
     const res = await productsApi.findByCode(code);
     if (!res) return false;
     const { product: p, variant } = res;
@@ -899,7 +925,11 @@ function PosPageInner() {
     appointmentId: origins.appointmentId,
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
-    onSuccess: ({ saleId, change }) => {
+    onSuccess: ({ saleId, change, hadCash }) => {
+      // Cajón al cobrar en efectivo (ADR-063): la venta ya está; un fallo sólo avisa.
+      void posHw.openOnSale(saleId, hadCash).then((warn) => {
+        if (warn) toast({ title: warn, variant: "info" });
+      });
       // Se cobró en el momento lo que estaba en espera: el cobro viejo se cancela.
       if (editingCharge) {
         const ed = editingCharge;
@@ -1279,6 +1309,11 @@ function PosPageInner() {
             onOpenShift={() => setOpenShiftModal(true)}
             onCloseShift={() => setCloseShiftModal(true)}
             onCustomerDisplay={openCustomerDisplay}
+            drawerSlot={
+              posHw.hasDrawer ? (
+                <PosDrawerButton hw={posHw.hw} decision={posHw.noSaleDecision} open={posHw.opener} />
+              ) : null
+            }
             pendingSlot={
               parkFeature !== false || pendingWatch.open.length > 0 ? (
                 <button
@@ -1524,6 +1559,15 @@ function PosPageInner() {
         onGrams={setWeighGrams}
         onClose={() => setWeighProduct(null)}
         onConfirm={confirmWeigh}
+        scaleSlot={
+          posHw.liveScale && posHw.hw ? (
+            <ScaleLiveWeight
+              hw={posHw.hw}
+              active={weighProduct !== null}
+              onStableGrams={(g) => setWeighGrams(String(g))}
+            />
+          ) : null
+        }
       />
       <SerialDialog
         product={serialProduct}

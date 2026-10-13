@@ -4,6 +4,8 @@
 // procesador, tarjeta, cupón, comercio, terminal, ids, estado de conciliación,
 // línea de tiempo y los datos que informa el procesador. Se actualiza sola
 // (sondeo) mientras haya cobros pendientes o plata por acreditar.
+// ADR-064: marca "Contracargo" / "Devuelto por MP" / "Reclamo abierto" y el
+// detalle de la disputa (plazo, línea de tiempo) en el cobro afectado.
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
@@ -18,6 +20,12 @@ import { normalizeCardBrand } from "@/lib/payments/terminal/normalize";
 import { useMyTenant } from "@/modules/tenants/hooks";
 import { useSalePaymentIntents } from "@/modules/sales/providerData";
 import { ProcessorDataPanel } from "@/components/sales/ProcessorDataPanel";
+import { DisputeCard } from "@/components/disputes/DisputeCard";
+import { saleAlertBadges, type PaymentDisputeRow } from "@/lib/reports/paymentDisputes";
+import { useSaleDisputes } from "@/modules/reports/paymentDisputes";
+import { useSaleMpRefunds } from "@/modules/sales/mpRefund";
+import { MpRefundPanel } from "@/components/sales/MpRefundPanel";
+import type { MpRefundRow } from "@/lib/payments/mpRefund";
 import {
   isLocalOnly,
   methodLabel,
@@ -80,6 +88,14 @@ export function SalePayments({
     { enabled: active, live: active && live },
   );
   const intents = intentsQ.data?.intents ?? [];
+  // Disputas de la venta (sólo dueño o encargado: RLS).
+  const disputesQ = useSaleDisputes([saleId], active && canSeeFees);
+  const disputes = disputesQ.data ?? [];
+  const disputesFor = (paymentId: string) =>
+    disputes.filter((d) => d.payment_id === paymentId || (!d.payment_id && rows.length === 1));
+  // H21h: reintegros por Mercado Pago de la venta (estado y acciones).
+  const mpRefundsQ = useSaleMpRefunds(saleId, active);
+  const mpRefunds = mpRefundsQ.data ?? [];
   const terminals = intentsQ.data?.terminals ?? {};
   const shouldPoll = needsLivePolling(intents, []);
   const fetched = intentsQ.isFetched || rows.every((r) => !r.reference);
@@ -109,6 +125,9 @@ export function SalePayments({
           saleCreatedAt={saleCreatedAt}
           canSeeFees={canSeeFees}
           live={live}
+          disputes={disputesFor(p.id)}
+          mpRefunds={mpRefunds.filter((r) => r.payment_id === p.id)}
+          onMpRefundChange={() => void mpRefundsQ.refetch()}
         />
       ))}
     </div>
@@ -122,7 +141,13 @@ function PaymentCard({
   saleCreatedAt,
   canSeeFees,
   live,
+  disputes,
+  mpRefunds,
+  onMpRefundChange,
 }: {
+  disputes: PaymentDisputeRow[];
+  mpRefunds: MpRefundRow[];
+  onMpRefundChange: () => void;
   payment: SalePaymentRow;
   intent: PaymentIntentRow | null;
   terminals: Record<string, string>;
@@ -140,6 +165,7 @@ function PaymentCard({
   const fields = paymentFields(payment, intent, terminalName);
   const timeline = paymentTimeline(payment, intent, saleCreatedAt);
   const local = isLocalOnly(payment.method) && !intent;
+  const alerts = saleAlertBadges(disputes);
 
   return (
     <div className="rounded-lg border border-border">
@@ -162,6 +188,11 @@ function PaymentCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="font-semibold tabular-nums">{formatCurrency(payment.amount)}</span>
+          {alerts.map((a) => (
+            <Badge key={a.key} tone={a.tone} title={a.title}>
+              {a.label}
+            </Badge>
+          ))}
           {payment.reconciled_at ? (
             <Badge tone="success">Conciliado</Badge>
           ) : intent?.status === "pending" ? (
@@ -202,6 +233,23 @@ function PaymentCard({
             </li>
           ))}
         </ol>
+      )}
+
+      {mpRefunds.length > 0 && (
+        <div className="space-y-2 border-t border-border p-3">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reintegros desde el POS</div>
+          {mpRefunds.map((r) => (
+            <MpRefundPanel key={r.id} refund={r} compact onChange={onMpRefundChange} />
+          ))}
+        </div>
+      )}
+
+      {disputes.length > 0 && (
+        <div className="space-y-4 border-t border-border p-3">
+          {disputes.map((d) => (
+            <DisputeCard key={d.id} d={d} />
+          ))}
+        </div>
       )}
 
       {intent && (

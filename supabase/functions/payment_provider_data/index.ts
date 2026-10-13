@@ -33,7 +33,8 @@ import { resolveOrder as goResolveOrder } from "../_shared/gocuotas.ts";
 import { envOfIntent as goEnvOf, loadApiKeyScoped as goKey } from "../_shared/gocuotas_server.ts";
 import { loadConnectionForIntent as cloverConn } from "../_shared/clover_server.ts";
 import { cloverApiBase, isSafeCloverId } from "../_shared/clover.ts";
-import { fetchGetnetOrder, fetchGetnetToken } from "../_shared/getnet.ts";
+import { fetchGetnetOrderFor } from "../_shared/getnet.ts";
+import { getnetAuth } from "../_shared/getnet_server.ts";
 import { type ProcessorPaymentData, normalizeProcessorPayment } from "../_shared/processorData.ts";
 
 const cors = {
@@ -157,13 +158,13 @@ async function fetchClover(admin: Admin, it: Intent): Promise<Fetched> {
 }
 
 async function fetchGetnet(admin: Admin, it: Intent): Promise<Fetched> {
-  const sec = (await loadProviderSecret(admin, it.tenant_id, "getnet", { scopeStoreId: it.secret_store_id }))
-    ?.secrets as { client_id?: string; client_secret?: string } | undefined;
-  if (!sec?.client_id || !sec.client_secret) return { ok: false, error: "not_connected" };
+  const row = await loadProviderSecret(admin, it.tenant_id, "getnet", { scopeStoreId: it.secret_store_id });
+  const sec = row?.secrets as { client_id?: string; client_secret?: string } | undefined;
+  if (!row || !sec?.client_id || !sec.client_secret) return { ok: false, error: "not_connected" };
   if (!it.preference_id) return { ok: false, error: "no_external_id" };
-  const token = await fetchGetnetToken(sec.client_id, sec.client_secret);
-  if (!token) return { ok: false, error: "provider_auth_failed" };
-  const r = await fetchGetnetOrder(token, it.preference_id);
+  const auth = await getnetAuth(admin, it.tenant_id, row, "payment_provider_data");
+  if (!auth.ok) return { ok: false, error: "provider_auth_failed", detail: auth.detail };
+  const r = await fetchGetnetOrderFor(auth.profile, auth.token, it.preference_id);
   if (!r.ok) return { ok: false, error: "provider_error", detail: r.detail };
   return { ok: true, externalId: it.preference_id, raw: r.order };
 }

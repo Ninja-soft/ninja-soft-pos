@@ -303,14 +303,14 @@ export const CONNECT_GUIDE: Record<string, ConnectGuide> = {
   },
   getnet: {
     steps: [
-      { icon: "login", text: "Entrá al Portal Getnet." },
-      { icon: "key", text: "En Credenciales, copiá el Client ID y el Client Secret." },
-      { icon: "paste", text: "Pegalos acá abajo." },
+      { icon: "login", text: "Entrá al Portal Getnet o pedíselas a tu ejecutivo." },
+      { icon: "key", text: "Copiá el Client ID y el Client Secret de cobros online." },
+      { icon: "paste", text: "Pegalos acá y, en el paso siguiente, tocá Probar credenciales." },
     ],
     where: "Portal Getnet › Credenciales",
     warning: {
-      title: "Sin ambiente de prueba",
-      text: "Getnet no tiene sandbox: desde el primer cobro, la plata es real.",
+      title: "Getnet tiene dos APIs",
+      text: "Sus credenciales son de la API Getnet Argentina (la del plugin de WooCommerce, sólo producción) o de Web Checkout (sandbox, homologación o producción). Al probarlas detectamos cuál es.",
     },
   },
   pagos360: {

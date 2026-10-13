@@ -18,6 +18,8 @@ export type MethodConfig = {
   // Transferencia (ADR-055): base del negocio (transfer_settings_save).
   transfer_show_screen?: boolean;
   transfer_require_reference?: boolean;
+  // Reintegro por Mercado Pago (ADR-067): lo prende el dueño (mp_refund_settings_save).
+  mp_refunds_enabled?: boolean;
 };
 
 export type Method = {

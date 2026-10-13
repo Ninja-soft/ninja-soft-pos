@@ -180,7 +180,8 @@ export const IMPLEMENTED = new Set([
 
 // Proveedores cuyo ambiente de prueba cambia de verdad el host de la Edge.
 // Mercado Pago tiene el suyo aparte (token de prueba, ADR-032).
-export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv"]);
+// getnet (ADR-065): prueba = Web Checkout sandbox u homologación.
+export const SANDBOX_PROVIDERS = new Set(["modo", "pagos360", "payway", "nave", "gocuotas", "directo", "fiserv", "getnet"]);
 
 // Planes (cuotas por tarjeta + recargo): canal que los MUESTRA → provider_key
 // con el que se guardan en payment_plans. Mercado Pago los presenta en Point

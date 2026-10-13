@@ -166,7 +166,7 @@ export interface SalesPageParams {
   page: number; // 1-based
   pageSize: number;
   search?: string;
-  status?: string; // 'completed' | 'voided' | ''
+  status?: string; // 'completed' | 'voided' | 'alerts' (ADR-064) | ''
   range?: { from?: Date; to?: Date };
   // F17 · H90: sucursal (null/undefined = todas las que el usuario ve por RLS).
   storeId?: string | null;
@@ -178,6 +178,30 @@ function searchToNumber(search: string): number | null {
   if (!digits) return null;
   const n = Number(digits);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Ventas con alertas (ADR-064, filtro "Con alertas"): contracargos, reclamos
+ * y devoluciones hechas desde Mercado Pago (no las registradas en el POS).
+ * RLS: sólo dueño o encargado; para el resto (o sin la migración) no hay.
+ * Tope de 1.000 ventas, las más recientes.
+ */
+async function saleIdsWithAlerts(): Promise<string[]> {
+  const tenantId = await getCurrentTenantId();
+  let q = createClient()
+    .from("payment_disputes" as never)
+    .select("sale_id, kind, origin, status")
+    .not("sale_id", "is", null)
+    .is("deleted_at", null);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { data, error } = await q.order("first_seen_at", { ascending: false }).limit(1000);
+  if (error) return [];
+  const rows = (data ?? []) as unknown as { sale_id: string; kind: string; origin: string; status: string }[];
+  return [
+    ...new Set(
+      rows.filter((r) => !(r.kind === "refund" && (r.origin === "pos" || r.status === "closed"))).map((r) => r.sale_id),
+    ),
+  ];
 }
 
 export const salesApi = {
@@ -202,7 +226,11 @@ export const salesApi = {
       })
       .order("created_at", { ascending: false });
 
-    if (status) query = query.eq("status", status);
+    if (status === "alerts") {
+      const ids = await saleIdsWithAlerts();
+      if (ids.length === 0) return { rows: [], total: 0 };
+      query = query.in("id", ids);
+    } else if (status) query = query.eq("status", status);
     if (storeId) query = query.eq("store_id", storeId);
     if (range?.from) query = query.gte("created_at", range.from.toISOString());
     if (range?.to) {
@@ -347,7 +375,11 @@ export const salesApi = {
     refund: "cash" | "store_credit";
     customerId?: string | null;
     allowedBranchIds?: string[] | null;
+    /** H21h: parte que se reintegra por Mercado Pago (cobro y monto). */
+    mpPaymentId?: string | null;
+    mpAmount?: number | null;
   }): Promise<ReturnV2Result> => {
+    const mp = input.mpPaymentId && (input.mpAmount ?? 0) > 0;
     const run = async (): Promise<ReturnV2Result> => {
     const { data, error } = await looseClient().rpc("return_sale_v2", {
       p_sale_id: input.saleId,
@@ -358,11 +390,16 @@ export const salesApi = {
       p_allowed_branch_ids: input.allowedBranchIds ?? undefined,
       // F17 · H90: turno de la caja en uso (si este dispositivo tiene uno).
       ...shiftArg(),
+      // Sin pata MP no se mandan: una base sin la migración de H21h no los conoce.
+      ...(mp ? { p_mp_payment_id: input.mpPaymentId, p_mp_amount: input.mpAmount } : {}),
     });
     if (error) throw error;
     return data as unknown as ReturnV2Result;
     };
-    return withSupervisor(run, async () => ({ sale_return: await saleTotal(input.saleId) }));
+    return withSupervisor(run, async () => ({
+      sale_return: await saleTotal(input.saleId),
+      ...(mp ? { reintegro_mp: input.mpAmount ?? null } : {}),
+    }));
   },
 
   // CAMBIO con diferencia (exchange_sale): orquesta devolución + venta nueva en
@@ -436,6 +473,10 @@ export interface ReturnV2Result {
   stock_destination: StockDestination;
   voucher_code: string | null;
   voucher_expires_at: string | null;
+  /** H21h: parte por Mercado Pago (0 si no hubo), fila del reintegro y resto. */
+  mp_amount?: number;
+  mp_refund_id?: string | null;
+  rest_amount?: number;
 }
 
 // Política de devolución + validez de vale (pos_settings, sección Devoluciones).

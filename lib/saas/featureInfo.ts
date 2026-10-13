@@ -54,6 +54,20 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["pin_supervisor"],
   },
+  balanza: {
+    desc: "Balanza y códigos pesables: el POS lee las etiquetas de la balanza etiquetadora (EAN-13 con prefijo 20 a 29 y precio o peso embebido, con el formato de cada sucursal) y el peso en vivo de la balanza conectada a la caja (Web Serial o puente local), con peso estable y tara.",
+    impact: "Desactivado, los productos por kilo se cargan tipeando el peso y las etiquetas de balanza no se reconocen.",
+    minPlan: "Start",
+    requires: ["pos"],
+    needs: "Para el peso en vivo: una balanza con salida a PC y Chrome o Edge de escritorio (o el puente local).",
+  },
+  cajon_dinero: {
+    desc: "Cajón de dinero: se abre solo al cobrar en efectivo y con el botón Abrir cajón según la política de la sucursal (permitido, con PIN de supervisor o prohibido). Cada apertura queda auditada con usuario, caja, turno y motivo.",
+    impact: "Desactivado, el cajón no se abre desde el sistema (queda la llave).",
+    minPlan: "Start",
+    requires: ["caja"],
+    needs: "Un cajón enchufado a la impresora térmica de la caja (pulso ESC/POS por USB, serie o el puente local).",
+  },
   monitor_cajas: {
     desc: "Monitor de cajas abiertas: por sucursal, quién tiene cada caja, desde cuándo, ventas del turno y efectivo esperado, con cierre forzado.",
     impact: "Desactivado, no se ve qué cajas están abiertas ni quién las tiene.",
@@ -147,6 +161,19 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Pro",
     requires: ["transferencia"],
     needs: "Mercado Pago conectado en Medios de pago y una cuenta de transferencia de Mercado Pago (CVU) con la detección prendida.",
+  },
+  alertas_contracargos: {
+    desc: "Alertas de contracargos y devoluciones de Mercado Pago: todos los días (y al instante si Mercado Pago avisa) revisa tus cobros y te avisa a vos y a tus encargados cuando un comprador desconoce un pago (contracargo), abre un reclamo o cuando se hace una devolución desde Mercado Pago que no está registrada en el POS. Marca esas ventas en Ventas (\"Contracargo\", \"Devuelto por MP\", filtro \"Con alertas\") y muestra el plazo para presentar la documentación. Con la conciliación de procesadores, además, suma estados, totales y neto efectivo por devoluciones y contracargos.",
+    impact: "Desactivado, los contracargos y las devoluciones hechas desde Mercado Pago sólo se ven entrando a la cuenta de Mercado Pago; se puede perder el plazo para presentar la documentación.",
+    minPlan: "Start",
+    needs: "Mercado Pago conectado en Medios de pago. Para el aviso al instante, conexión por OAuth (por token manual llega con la revisión diaria).",
+  },
+  reintegro_mp: {
+    desc: "Reintegro por Mercado Pago: en una devolución, la plata vuelve a la tarjeta o a la cuenta de Mercado Pago con la que pagó el cliente (QR, link o Point), total o parcial, hasta lo cobrado por ese pago menos lo ya devuelto. Lo hace un supervisor o un cajero con PIN de supervisor, con motivo; queda el id de la devolución de Mercado Pago, auditado, en el detalle del cobro, en la ficha del cliente y en la conciliación como \"Devuelto (POS)\" (sin aviso de devolución desde Mercado Pago). Si Mercado Pago no puede (saldo insuficiente, plazo vencido, pago en disputa), se devuelve en efectivo o con un vale.",
+    impact: "Desactivado, las devoluciones de ventas cobradas con Mercado Pago se reintegran en efectivo o con un vale; devolver a la tarjeta hay que hacerlo a mano desde Mercado Pago.",
+    minPlan: "Pro",
+    requires: ["mercado_pago"],
+    needs: "Mercado Pago conectado y \"Permitir devolver el dinero por Mercado Pago\" prendido por el dueño en Medios de pago. La plata sale del saldo de la cuenta de Mercado Pago.",
   },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
@@ -336,6 +363,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Grupos de clientes: segmenta clientes en grupos para precios, promociones o reportes por segmento.",
     impact: "Sin grupos no se puede segmentar la base de clientes ni aplicar reglas por grupo.",
     minPlan: "Pro",
+  },
+  clientes_360: {
+    desc: "Ficha del cliente 360: en una página propia, todo lo del cliente: datos y datos fiscales, indicadores (total comprado, cantidad de compras, frecuencia, ticket promedio, última compra, sucursal de alta y compras por sucursal), segmentos automáticos (nuevo, frecuente, VIP, en riesgo, inactivo, con deuda), línea de tiempo unificada con filtros (ventas, devoluciones, cobranzas y movimientos de cuenta corriente, vales, cobros en espera, reintegros por Mercado Pago, contracargos y notas internas), productos y medios de pago preferidos, gráficos de compras por mes y exportación a Excel.",
+    impact: "Desactivado, queda el historial básico del cliente (vale, compras y devoluciones) en la lista de clientes.",
+    minPlan: "Pro",
+    requires: ["clientes"],
   },
   roles_permisos: {
     desc: "Roles y permisos: define qué puede hacer cada usuario (cajero, encargado, dueño) dentro del sistema.",

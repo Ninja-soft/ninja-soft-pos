@@ -383,12 +383,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       },
       {
         key: "hardware",
-        label: "Diagnóstico",
-        title: "Diagnóstico de hardware",
+        label: "Hardware",
+        title: "Balanza, cajón y diagnóstico",
         description:
-          "Estado de los periféricos y pruebas guiadas. Si algo falla, exportá el diagnóstico y mandalo a soporte.",
+          "Reglas de balanza y cajón por negocio o sucursal, equipos de cada caja, pruebas guiadas y diagnóstico para soporte.",
         icon: Wrench,
-        keywords: "hardware impresora cajon balanza soporte prueba",
+        keywords: "hardware impresora cajon cajón balanza pesables etiqueta peso soporte prueba diagnostico",
       },
     ],
   },

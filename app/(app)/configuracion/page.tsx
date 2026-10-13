@@ -67,6 +67,11 @@ const HardwareCard = dynamic(
   () => import("@/components/dashboard-team/HardwareCard").then((m) => m.HardwareCard),
   { loading },
 );
+// Balanza y cajón: reglas por negocio o sucursal y equipos por caja (ADR-063).
+const HardwareSetup = dynamic(
+  () => import("@/components/hardware/HardwareSetup").then((m) => m.HardwareSetup),
+  { loading },
+);
 const WarrantyPlansManager = dynamic(
   () => import("@/components/products/WarrantyPlansManager").then((m) => m.WarrantyPlansManager),
   { loading },
@@ -320,9 +325,14 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
           <CustomerDisplayCard />
         </ScopedSection>
       );
-    // Centro de diagnóstico de hardware (F10 · H26).
+    // Balanza y cajón (ADR-063) y centro de diagnóstico de hardware (F10 · H26).
     case "hardware":
-      return <HardwareCard />;
+      return (
+        <div className="space-y-8">
+          <HardwareSetup />
+          <HardwareCard />
+        </div>
+      );
     // Promociones (F9 · H53) y cupones (F9 · H54, tope de uso atómico en
     // create_sale). Escritura RLS owner/manager.
     case "promociones":

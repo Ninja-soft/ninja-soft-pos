@@ -1,27 +1,29 @@
 // =============================================================================
 // Edge Function: getnet_webhook · notificaciones + retorno del checkout de
-// Getnet Argentina (F8 · H18, ADR-031). verify_jwt = false (la llaman Getnet
-// y el navegador del cliente).
+// Getnet Argentina (F8 · H18, ADR-031, ADR-065). verify_jwt = false (la llaman
+// Getnet y el navegador del cliente).
 //
 //   * GET  ?view=success|failed → pantalla neutra de retorno para el cliente
 //     (redirect_urls de la orden). El POS se entera por su propio poll.
-//   * POST ?intent=<uuid> → webhookUrl de la orden. NUNCA confía en el cuerpo:
-//     la orden a consultar es la que guardamos al crearla (preference_id); el
-//     data.order.uuid del cuerpo sólo se usa para descartar notificaciones que
-//     no corresponden. Re-consulta GET /api/v2/orders/{uuid} con el token del
-//     tenant y acredita sólo APPROVED/PROCESSED/SUCCESS con monto exacto.
-//     Idempotente: updates condicionales por estado; un intent ya approved no
-//     se toca. Un intent que el POS dio por rechazado puede pasar a approved
-//     si Getnet lo confirma (queda en la conciliación como cobro sin venta).
-//     Siempre responde 200 para que Getnet no reintente en loop.
+//   * POST ?intent=<uuid> → webhookUrl por orden (API Geopagos).
+//   * POST sin ?intent → webhook de Web Checkout (URL única del comercio,
+//     configurada en el Portal Getnet): el cobro se busca por el
+//     payment_intent_id del cuerpo (preference_id del intent).
+//   En los dos casos NUNCA confía en el cuerpo: re-consulta la orden con el
+//   token del tenant y acredita sólo con la confirmación de la API y el monto
+//   verificado. Idempotente: updates condicionales por estado; un intent ya
+//   approved no se toca. Un intent que el POS dio por rechazado puede pasar a
+//   approved si Getnet lo confirma (queda en la conciliación como cobro sin
+//   venta). Siempre responde 200 para que Getnet no reintente en loop.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import {
-  decideIntentUpdate,
+  decideFor,
+  extractWebhookIntentId,
   extractWebhookOrderId,
-  fetchGetnetOrder,
-  fetchGetnetToken,
+  fetchGetnetOrderFor,
 } from "../_shared/getnet.ts";
+import { getnetAuth } from "../_shared/getnet_server.ts";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
 
 const html = (body: string) =>
@@ -32,6 +34,9 @@ const html = (body: string) =>
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ok = () => new Response("ok", { status: 200 });
+
+type Row = { id: string; tenant_id: string; status: string; amount: number | string; preference_id: string | null };
+const COLS = "id, tenant_id, status, amount, preference_id";
 
 Deno.serve(async (req: Request) => {
   const reqUrl = new URL(req.url);
@@ -49,41 +54,64 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return new Response("method_not_allowed", { status: 405 });
 
   try {
-    const intentId = reqUrl.searchParams.get("intent") ?? "";
-    if (!UUID_RE.test(intentId)) return ok();
-
-    let hinted: string | null = null;
+    let body: unknown = null;
     try {
-      hinted = extractWebhookOrderId(await req.json());
+      body = await req.json();
     } catch {
       /* cuerpo no-JSON: se ignora (igual re-consultamos) */
     }
+    const hinted = extractWebhookOrderId(body) ?? extractWebhookIntentId(body);
+    const intentParam = reqUrl.searchParams.get("intent") ?? "";
 
     const url = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-    const { data: row } = await admin
-      .from("mp_payment_intents")
-      .select("id, tenant_id, status, amount, preference_id")
-      .eq("id", intentId)
-      .eq("provider_key", "getnet")
-      .maybeSingle();
+    let row: Row | null = null;
+    if (UUID_RE.test(intentParam)) {
+      const { data } = await admin
+        .from("mp_payment_intents")
+        .select(COLS)
+        .eq("id", intentParam)
+        .eq("provider_key", "getnet")
+        .maybeSingle();
+      row = (data as Row | null) ?? null;
+      if (row && hinted && hinted !== String(row.preference_id)) return ok(); // notificación ajena
+    } else if (hinted) {
+      // Web Checkout: el id del cuerpo sólo elige QUÉ intent re-consultar.
+      const { data } = await admin
+        .from("mp_payment_intents")
+        .select(COLS)
+        .eq("provider_key", "getnet")
+        .eq("preference_id", hinted)
+        .limit(1);
+      row = ((data as Row[] | null) ?? [])[0] ?? null;
+    }
     if (!row || !row.preference_id) return ok();
     if (row.status === "approved") return ok(); // idempotente
     const orderId = String(row.preference_id);
-    if (hinted && hinted !== orderId) return ok(); // notificación ajena
 
-    const secretRow = await loadProviderSecret(admin, row.tenant_id, "getnet", { scopeStoreId: await intentSecretScope(admin, row.id) });
+    const secretRow = await loadProviderSecret(admin, row.tenant_id, "getnet", {
+      scopeStoreId: await intentSecretScope(admin, row.id),
+    });
     const sec = (secretRow?.secrets ?? {}) as { client_id?: string; client_secret?: string };
-    if (!sec.client_id || !sec.client_secret) return ok();
+    if (!secretRow || !sec.client_id || !sec.client_secret) return ok();
 
-    const token = await fetchGetnetToken(sec.client_id, sec.client_secret);
-    if (!token) return ok();
-    const res = await fetchGetnetOrder(token, orderId);
-    if (!res.ok) return ok();
+    const auth = await getnetAuth(admin, row.tenant_id, secretRow, "getnet_webhook");
+    if (!auth.ok) return ok();
+    const res = await fetchGetnetOrderFor(auth.profile, auth.token, orderId);
+    if (!res.ok) {
+      console.error(JSON.stringify({
+        fn: "getnet_webhook",
+        step: "status",
+        profile: auth.profile.key,
+        status: res.httpStatus,
+        detail: res.detail.slice(0, 200),
+      }));
+      return ok();
+    }
 
-    const d = decideIntentUpdate(res.order, Number(row.amount));
+    const d = decideFor(auth.profile, res.order, Number(row.amount));
     if (d.status === "pending") return ok();
 
     // approved puede venir después de que el POS lo dio por rechazado; el
@@ -93,7 +121,7 @@ Deno.serve(async (req: Request) => {
       .from("mp_payment_intents")
       .update({
         status: d.status,
-        mp_payment_id: d.status === "approved" ? orderId : null,
+        mp_payment_id: d.status === "approved" ? (d.paymentId ?? orderId) : null,
       })
       .eq("id", row.id)
       .in("status", from)
@@ -108,16 +136,18 @@ Deno.serve(async (req: Request) => {
         action: `getnet_payment_${d.status}`,
         after_data: {
           order_id: orderId,
+          payment_id: d.paymentId,
           state: d.state,
           reason: d.reason ?? null,
           amount: Number(row.amount),
           previous_status: row.status,
+          api_profile: auth.profile.key,
           via: "webhook",
         },
       });
     }
   } catch (e) {
-    console.error("getnet_webhook", e);
+    console.error(JSON.stringify({ fn: "getnet_webhook", step: "unhandled", error: String(e).slice(0, 300) }));
   }
   return ok();
 });

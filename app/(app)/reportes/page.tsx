@@ -131,10 +131,13 @@ const DEFAULT_VIS: Record<ReportKey, boolean> = {
 };
 
 export default function ReportesPage() {
-  const [range, setRange] = useState<DateRange | undefined>(() => ({
-    from: startOfDay(subDays(new Date(), 6)),
-    to: startOfDay(new Date()),
-  }));
+  // El rango por defecto se arma después de montar, con la hora del navegador:
+  // en el servidor (UTC) después de las 21 h de Argentina ya es "mañana" y el
+  // HTML no coincidía con el cliente (errores de hidratación #425/#422).
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
+  useEffect(() => {
+    setRange((r) => r ?? { from: startOfDay(subDays(new Date(), 6)), to: startOfDay(new Date()) });
+  }, []);
 
   const { fromISO, toISO } = useMemo(() => {
     const f = startOfDay(range?.from ?? new Date());

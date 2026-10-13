@@ -9,7 +9,6 @@ import {
   Download,
   ExternalLink,
   FileJson,
-  Inbox,
   MinusCircle,
   MonitorSmartphone,
   Printer,
@@ -24,6 +23,12 @@ import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/components/ui/Toast";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
+import { RegisterHardwareTests } from "@/components/hardware/RegisterHardwareTests";
+import { useBranchContext } from "@/modules/branches/hooks";
+import { branchLabel } from "@/modules/branches/logic";
+import { useRegisterHardwareList } from "@/modules/hardware/hooks";
+import { emptyRegisterHardware } from "@/lib/hardware/config";
 import { cn } from "@/lib/utils/cn";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
 import { useTicketBranding } from "@/modules/tickets/hooks";
@@ -56,9 +61,10 @@ import {
 // perifericos del POS, corre pruebas guiadas y exporta un diagnostico para
 // soporte, sin que soporte tenga que conectarse a la maquina del cliente.
 //
-// Honestidad sobre limites del navegador: el browser NO controla cajon USB,
-// balanza serial ni monitores como una app nativa. Cada tarjeta dice con
-// claridad que se puede probar de verdad y que requiere conector local.
+// Honestidad sobre limites del navegador: balanza y cajon funcionan con Web
+// Serial / WebUSB (Chrome o Edge de escritorio) o el puente local (ADR-063);
+// los monitores no se controlan como en una app nativa. Cada tarjeta dice
+// con claridad que se puede probar de verdad.
 // =============================================================================
 
 // ---- Badge de estado reutilizable -------------------------------------------
@@ -309,28 +315,6 @@ export function HardwareCard() {
     setTimeout(() => finish(false), 800);
   }
 
-  // -- Cajon de dinero: el browser NO puede abrirlo directo (honestidad total).
-  function explainDrawer() {
-    log(
-      "cash_drawer",
-      "Abrir cajon",
-      "info",
-      "El navegador no puede abrir un cajon USB directamente. El cajon se abre por el pulso ESC/POS de la impresora termica via un conector local (no disponible en este navegador).",
-    );
-    toast({ title: "Requiere conector local", variant: "info" });
-  }
-
-  // -- Balanza: pendiente (H24) - placeholder honesto.
-  function explainScale() {
-    log(
-      "scale",
-      "Probar balanza",
-      "info",
-      "Balanza no configurada. La lectura por puerto serie (WebSerial) es parte de H24 y aun no esta implementada.",
-    );
-    toast({ title: "Balanza no configurada", variant: "info" });
-  }
-
   // -- Export del diagnostico ----------------------------------------------------
   const [exporting, setExporting] = useState(false);
   function buildPayload() {
@@ -411,8 +395,8 @@ export function HardwareCard() {
               <Printer size={14} /> {printing ? "Abriendo..." : "Imprimir ticket de prueba"}
             </Button>
             <span className="text-xs text-muted-foreground">
-              Para termicas USB/LAN avanzadas (corte de papel, pulso de cajon) hace
-              falta un conector local ESC/POS, pendiente (H22).
+              El pulso del cajon se manda directo a la termica (Web Serial, WebUSB o el
+              puente local): ver Balanza y cajon.
             </span>
           </div>
         </PeripheralCard>
@@ -523,44 +507,15 @@ export function HardwareCard() {
           </div>
         </PeripheralCard>
 
-        {/* Cajon de dinero */}
-        <PeripheralCard
-          icon={Inbox}
-          title="Cajon de dinero"
-          description="El navegador no abre un cajon USB directamente. Se abre con el pulso ESC/POS de la impresora termica conectada por un conector local."
-          status="connector"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={explainDrawer}>
-              <Inbox size={14} /> Abrir cajon
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              No disponible en navegador. Requiere conector local ESC/POS (pendiente
-              H22). El boton registra el intento en el log.
-            </span>
-          </div>
-        </PeripheralCard>
-
-        {/* Balanza */}
+        {/* Balanza y cajon por caja (ADR-063): prueban la config efectiva de la caja. */}
         <PeripheralCard
           icon={Scale}
-          title="Balanza"
-          description="Lectura de peso por puerto serie (WebSerial). Pendiente de implementacion (H24)."
-          status="unavailable"
-          statusLabel="No configurada"
+          title="Balanza y cajon"
+          description="Prueban los equipos cargados en la caja elegida (Configuracion, Hardware, Que tiene cada caja). El cajon pasa por el servidor, que registra la prueba, y se abre con el pulso ESC/POS de su impresora."
+          status={capByKey.webserial?.status === "unavailable" ? "warn" : "ok"}
+          statusLabel={capByKey.webserial?.status === "unavailable" ? "Sin Web Serial (usa el puente)" : "Web Serial disponible"}
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={explainScale}>
-              <Scale size={14} /> Probar balanza
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              WebSerial en este navegador:{" "}
-              {capByKey.webserial?.status === "unavailable"
-                ? "no disponible"
-                : "presente (la integracion de balanza llega en H24)"}
-              .
-            </span>
-          </div>
+          <RegisterTestsPicker />
         </PeripheralCard>
       </div>
 
@@ -683,6 +638,39 @@ export function HardwareCard() {
         </div>
       )}
     </section>
+  );
+}
+
+// Caja a probar: por defecto la de este equipo.
+function RegisterTestsPicker() {
+  const ctx = useBranchContext();
+  const { data: current } = useDefaultRegister();
+  const { data: list } = useRegisterHardwareList();
+  const options = ctx.allowed
+    .filter((b) => !b.deleted_at)
+    .flatMap((b) =>
+      b.registers
+        .filter((r) => !r.deleted_at)
+        .map((r) => ({ value: r.id, storeId: b.id, label: ctx.isMulti ? `${branchLabel(b)} · ${r.name}` : r.name })),
+    );
+  const [picked, setPicked] = useState<string | null>(null);
+  const id = picked ?? current?.id ?? options[0]?.value ?? null;
+  const opt = options.find((o) => o.value === id) ?? null;
+  if (!opt) return <p className="text-sm text-muted-foreground">No hay cajas cargadas.</p>;
+  const hw = list?.find((h) => h.registerId === opt.value) ?? emptyRegisterHardware(opt.value, opt.storeId);
+  return (
+    <div className="space-y-3">
+      {options.length > 1 && (
+        <Select<string>
+          label="Caja a probar"
+          value={opt.value}
+          onChange={setPicked}
+          options={options.map((o) => ({ value: o.value, label: o.label }))}
+          className="sm:max-w-xs"
+        />
+      )}
+      <RegisterHardwareTests key={opt.value} hw={hw} label={opt.label} />
+    </div>
   );
 }
 

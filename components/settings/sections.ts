@@ -29,8 +29,8 @@ import {
   Utensils,
   Wallet,
   Wrench,
-  type LucideIcon,
 } from "lucide-react";
+import { ArcaIcon, MercadoLibreIcon, NubceoIcon, type SettingsIcon } from "./brandIcons";
 
 // Mapa del centro de Configuración: grupos, secciones, textos del encabezado
 // y palabras clave del buscador. Las keys son las de `?seccion=` (no se
@@ -80,7 +80,7 @@ export type SettingsSectionDef = {
   /** Título del encabezado de la sección (puede ser más largo). */
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: SettingsIcon;
   /** Términos extra para el buscador del menú. */
   keywords?: string;
   // `feature` (opcional): si el plan no la incluye, la sección queda
@@ -352,7 +352,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Facturación electrónica ARCA",
         description:
           "Facturas A, B y C con CAE de ARCA, paso a paso: certificado, punto de venta, prueba y paso a real.",
-        icon: FileCheck2,
+        icon: ArcaIcon,
         feature: "facturacion_afip",
         keywords: "arca afip cae caea factura electronica certificado punto de venta homologacion produccion contingencia wsfe qr",
       },
@@ -386,7 +386,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "NubCeo",
         description:
           "Mandá cada venta con sus cobros a NubCeo para conciliar tarjetas y billeteras, mirá lo enviado y traé los asientos contables.",
-        icon: Plug,
+        icon: NubceoIcon,
         feature: "integracion_nubceo",
         keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
       },
@@ -431,7 +431,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Mercado Libre",
         description:
           "Conectá tus cuentas de Mercado Libre: stock y precio de las publicaciones desde el POS, ventas que entran solas, facturación y etiquetas.",
-        icon: ShoppingBag,
+        icon: MercadoLibreIcon,
         feature: "mercadolibre",
         keywords: "mercado libre mercadolibre meli publicaciones ventas online marketplace sincronizar stock precio etiquetas envios preguntas canal ecommerce",
       },

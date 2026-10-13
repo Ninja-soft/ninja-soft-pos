@@ -534,6 +534,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Business",
     needs: "Credenciales de la API de NubCeo (API key, API secret y tenant) y el código de sucursal cabecera de cada sucursal.",
   },
+  canales_delivery: {
+    desc: "Canales de delivery: los pedidos de PedidosYa, Rappi, Uber Eats y Mercado Pago Delivery entran solos al tablero de Delivery de la sucursal, mandan la comanda a cocina (al instante si se aceptan solos, o al tocar Aceptar con el tiempo de preparación), avisan a la app aceptado, rechazado, listo y retirado con reintentos, muestran al repartidor (nombre, teléfono, cuánto falta y mapa) y se facturan solos al retirarse o con un botón, con la facturación electrónica del negocio. Si la app cancela, se anula la comanda y, si ya estaba facturado, sale la nota de crédito. Mapeo de productos con sugerencias por nombre y SKU, comisión estimada por pedido y un simulador para probar todo sin la app.",
+    impact: "Desactivado, no se conectan apps de delivery, el servidor no procesa los pedidos que mandan ni las acciones sobre ellos y no se puede cobrar con el medio Plataforma; los pedidos ya recibidos se siguen viendo.",
+    minPlan: "Pro",
+    needs: "Delivery activado en Operación y el alta como integración con cada app (PedidosYa, Rappi, Uber Eats); el simulador funciona sin trámite.",
+  },
   facturacion_afip: {
     desc: "Facturación electrónica con ARCA (ex AFIP): factura A, B y C y notas de crédito con CAE por cada venta, devolución o anulación, con el tipo de comprobante según la condición fiscal del negocio y del cliente. Asistente paso a paso (certificado generado en NinjaSoft, punto de venta, prueba en homologación y paso a producción con checklist), cola con reintentos que nunca frena la venta, contingencia con CAEA si ARCA no responde, QR fiscal en el ticket, monitor de comprobantes y Libro IVA Digital del mes (archivos de ventas y compras para importar en el Portal IVA, con revisión previa).",
     impact: "Desactivado, el sistema sólo emite comprobantes no fiscales, el servidor no encola ni emite facturas y no genera el Libro IVA Digital (lo ya emitido se puede seguir consultando).",

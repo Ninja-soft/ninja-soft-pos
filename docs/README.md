@@ -59,6 +59,7 @@ Documentación viva del proyecto. **Si un dato no está acá, no es fuente de ve
 | [32](./32-impuestos.md) | **Impuestos**: IVA por alícuota, internos, condición fiscal, comprobante, percepciones, padrones (diseños de registro) y retenciones | Producto, backend, soporte |
 | [33](./33-facturacion-arca.md) | **Facturación electrónica ARCA**: WSFEv1, cola fiscal, certificados, homologación y producción, contingencia CAEA, asistente, errores frecuentes y smoke test | Producto, backend, soporte |
 | [34](./34-venta-offline.md) | **Venta offline**: qué se vende sin conexión, límites del dueño, cola local, sincronización idempotente, conflictos y revisión | Producto, backend, soporte |
+| [36](./36-canales-delivery.md) | **Canales de delivery**: PedidosYa, Rappi, Uber Eats y MP Delivery, ingesta idempotente, comanda automática, facturación, repartidor, simulador y qué tramitar con cada app | Producto, backend, soporte |
 | [Auditoría Napse vs NinjaPOS](./auditoria-napse-vs-ninjapos.md) | **Multi-sucursal:** sucursal y caja como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal (F17) | Producto, backend, UI |
 | [Auditoría fiscal y contable](./auditoria-fiscal-contable-precios.md) | **Fiscal, contable, precios y compras (Argentina):** listas PRO, importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos (F18) | Producto, backend, contable |
 | [Post-mortems](./post-mortems/README.md) | Incidentes productivos y degradaciones serias | Devops, soporte |

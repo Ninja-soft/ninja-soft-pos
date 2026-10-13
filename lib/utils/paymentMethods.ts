@@ -11,4 +11,6 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   other: "Otro",
   directo: "Directo",
   sena: "Seña",
+  // ADR-102: lo cobró una app de delivery por cuenta del local (sin caja).
+  plataforma: "App de delivery",
 };

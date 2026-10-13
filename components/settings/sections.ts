@@ -66,6 +66,7 @@ export type SettingsSectionKey =
   | "promociones"
   | "nubceo"
   | "api"
+  | "canales-delivery"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -385,6 +386,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         feature: "integracion_nubceo",
         keywords: "nubceo conciliacion conciliar liquidaciones asientos contables contabilidad integracion api envio ventas",
       },
+      // Canales de delivery (ADR-102): PedidosYa, Rappi, Uber Eats y simulador.
+      {
+        key: "canales-delivery",
+        label: "Canales de delivery",
+        title: "Canales de delivery",
+        description:
+          "Pedidos de PedidosYa, Rappi y Uber Eats que entran solos, van a cocina, se facturan y muestran al repartidor. Con simulador para probar.",
+        icon: Bike,
+        feature: "canales_delivery",
+        requiresDelivery: true,
+        keywords: "pedidosya rappi uber eats mp apps marketplace webhook simulador repartidor comanda mapeo",
+      },
       // API pública v1 (ADR-094): credenciales OAuth2 por negocio, sólo el dueño.
       {
         key: "api",
@@ -456,6 +469,9 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   supervisor: "seguridad",
   integraciones: "nubceo",
   "api-publica": "api",
+  pedidosya: "canales-delivery",
+  rappi: "canales-delivery",
+  "apps-delivery": "canales-delivery",
   credenciales: "api",
   conciliacion: "nubceo",
   fiscal: "impuestos",

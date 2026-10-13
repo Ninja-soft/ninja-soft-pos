@@ -40,6 +40,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Segmented } from "@/components/ui/Segmented";
 import { Card } from "@/components/ui/Card";
 import { IntegrationLogo } from "@/components/ui/IntegrationLogo";
+import { ChannelBadge, ChannelOrderActions, ChannelOrderInfo } from "@/components/deliveryChannels/ChannelOrderCard";
+import { CHANNEL_LABELS, type ChannelOrder, type ChannelProvider } from "@/modules/deliveryChannels/api";
+import {
+  useAutoBillPending,
+  useChannelOrdersByDeliveryId,
+  useChannelsAccess,
+} from "@/modules/deliveryChannels/hooks";
+import { useMyTenant } from "@/modules/tenants/hooks";
 
 // Tablero de delivery / take away (F13 · H49): columnas por estado (recibido →
 // preparando → en camino → entregado), cada tarjeta con cliente/tel/dirección/
@@ -53,6 +61,17 @@ export default function DeliveryPage() {
   const { data: orders, isLoading } = useDeliveryOrders();
   const { data: itemTotals } = useDeliveryItemTotals();
   const { setStatus } = useDeliveryMutations();
+  // Pedidos de apps de delivery (ADR-102): badge, estado en la app, repartidor
+  // y acciones. Con la feature apagada no se consulta nada.
+  const channelsAccess = useChannelsAccess();
+  const { data: channelOrders, map: channelByDelivery } = useChannelOrdersByDeliveryId(channelsAccess.enabled);
+  useAutoBillPending(channelOrders, channelsAccess.enabled);
+  const { data: me } = useMyTenant();
+  const [channelFilter, setChannelFilter] = useState<"all" | "propios" | ChannelProvider>("all");
+  const channelBrands = useMemo(
+    () => Array.from(new Set((channelOrders ?? []).map((o) => o.brand))),
+    [channelOrders],
+  );
   // Zonas (incl. inactivas) para resolver el nombre de la zona en las tarjetas.
   const { data: zones } = useDeliveryZones(true);
   const zoneNameById = useMemo(() => {
@@ -77,10 +96,11 @@ export default function DeliveryPage() {
 
   const visible = useMemo(() => {
     const list = orders ?? [];
-    return typeFilter === "all"
-      ? list
-      : list.filter((o) => o.order_type === typeFilter);
-  }, [orders, typeFilter]);
+    const byType = typeFilter === "all" ? list : list.filter((o) => o.order_type === typeFilter);
+    if (channelFilter === "all") return byType;
+    if (channelFilter === "propios") return byType.filter((o) => !channelByDelivery.has(o.id));
+    return byType.filter((o) => channelByDelivery.get(o.id)?.brand === channelFilter);
+  }, [orders, typeFilter, channelFilter, channelByDelivery]);
 
   // Columnas a mostrar: unión de delivery + takeaway según el filtro. Con "all",
   // usamos las columnas de delivery (en_camino) + "listo" si hay takeaways.
@@ -88,10 +108,17 @@ export default function DeliveryPage() {
     // Mostrador usa las mismas columnas que takeaway (con "listo").
     if (typeFilter === "takeaway" || typeFilter === "mostrador")
       return TAKEAWAY_BOARD_COLUMNS;
-    if (typeFilter === "delivery") return DELIVERY_BOARD_COLUMNS;
-    const hasListo = (orders ?? []).some(
-      (o) => o.order_type === "takeaway" || o.order_type === "mostrador",
-    );
+    // Un pedido de app de delivery puede estar "listo para retirar" (ADR-102).
+    const anyListo = (orders ?? []).some((o) => o.status === "listo");
+    if (typeFilter === "delivery")
+      return anyListo
+        ? ["recibido", "preparando", "listo", "en_camino", "entregado"]
+        : DELIVERY_BOARD_COLUMNS;
+    const hasListo =
+      anyListo ||
+      (orders ?? []).some(
+        (o) => o.order_type === "takeaway" || o.order_type === "mostrador",
+      );
     const hasDelivery = (orders ?? []).some((o) => o.order_type === "delivery");
     const cols: DeliveryStatus[] = ["recibido", "preparando"];
     if (hasDelivery) cols.push("en_camino");
@@ -194,6 +221,22 @@ export default function DeliveryPage() {
         ]}
       />
 
+      {/* Filtro por canal (apps de delivery, ADR-102) */}
+      {channelsAccess.enabled && channelBrands.length > 0 && (
+        <Segmented
+          className="mb-4"
+          aria-label="Canal"
+          size="sm"
+          value={channelFilter}
+          onChange={setChannelFilter}
+          options={[
+            { value: "all", label: "Todos los canales" },
+            { value: "propios", label: "Propios" },
+            ...channelBrands.map((b) => ({ value: b, label: CHANNEL_LABELS[b] })),
+          ]}
+        />
+      )}
+
       {/* Aviso si no hay pedidos */}
       {!isLoading && !hasOrders && (
         <Card>
@@ -238,6 +281,8 @@ export default function DeliveryPage() {
                       onOpen={() => setActiveId(o.id)}
                       onAdvance={() => advance(o)}
                       advancing={setStatus.isPending}
+                      channelOrder={channelByDelivery.get(o.id) ?? null}
+                      canManage={Boolean(me?.canManage)}
                     />
                   ))}
                   {list.length === 0 && (
@@ -274,6 +319,8 @@ function OrderCard({
   onOpen,
   onAdvance,
   advancing,
+  channelOrder,
+  canManage,
 }: {
   order: DeliveryOrder;
   total: number;
@@ -281,9 +328,12 @@ function OrderCard({
   onOpen: () => void;
   onAdvance: () => void;
   advancing: boolean;
+  channelOrder: ChannelOrder | null;
+  canManage: boolean;
 }) {
   const isDelivery = order.order_type === "delivery";
-  const next = nextDeliveryStatus(order.order_type, order.status);
+  // Los pedidos de apps avanzan con sus propias acciones (la app se entera).
+  const next = channelOrder ? null : nextDeliveryStatus(order.order_type, order.status);
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <button
@@ -309,11 +359,16 @@ function OrderCard({
 
         <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
-            <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide">
-              {order.channel === "whatsapp" && <IntegrationLogo name="whatsapp" size={14} />}
-              {DELIVERY_CHANNEL_LABELS[order.channel]}
-            </span>
+            {channelOrder ? (
+              <ChannelBadge order={channelOrder} />
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide">
+                {order.channel === "whatsapp" && <IntegrationLogo name="whatsapp" size={14} />}
+                {DELIVERY_CHANNEL_LABELS[order.channel]}
+              </span>
+            )}
           </div>
+          {channelOrder && <ChannelOrderInfo order={channelOrder} />}
           {order.customer_phone && (
             <div className="flex items-center gap-1">
               <Phone size={11} /> {order.customer_phone}
@@ -341,13 +396,15 @@ function OrderCard({
               })}
             </div>
           )}
-          {order.courier_name && (
+          {order.courier_name && !channelOrder && (
             <div className="flex items-center gap-1">
               <Truck size={11} /> {order.courier_name}
             </div>
           )}
         </div>
       </button>
+
+      {channelOrder && <ChannelOrderActions order={channelOrder} canManage={canManage} />}
 
       {/* Avanzar de estado (recibido → preparando → …). 'entregado' se alcanza al
           cobrar (no por este botón). */}

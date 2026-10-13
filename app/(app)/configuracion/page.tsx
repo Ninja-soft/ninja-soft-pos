@@ -514,9 +514,10 @@ function ConfiguracionInner() {
         />
       </div>
 
-      <div className="mt-5 grid gap-8 lg:mt-8 lg:grid-cols-[248px_minmax(0,1fr)] xl:gap-12">
+      <div className="mt-5 grid gap-8 lg:mt-8 lg:grid-cols-[260px_minmax(0,1fr)] xl:gap-12">
         <aside className="hidden lg:block">
-          <div className="slim-scrollbar sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto pb-4 pr-1">
+          {/* Sticky con alto máximo: el buscador queda fijo y la lista scrollea sola. */}
+          <div className="sticky top-6 -mx-1 flex max-h-[calc(100dvh-3rem)] flex-col">
             <SettingsSideNav
               groups={visibleGroups}
               active={section}

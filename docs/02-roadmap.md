@@ -29,7 +29,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F15** | Escuela NinjaSoft + onboarding guiado configurable | 5–7 semanas | 🟡 Planificación |
 | **F16** | Comercio unificado tipo Napse/TOTVS (Omni, VTOL, Fiscal Flow, Promo) | 10–14 semanas | 🟡 Planificación |
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057) |
-| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059) |
+| **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; base fiscal ADR-068) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 Planificación |
 
 > **Orden de ejecución acordado (2026-05-30):** **TX (quick wins) → F6 → F7 → F8 → F10 → F11 → F12 → F13 → F9 → F14 → F15 → F16 → F3 (AFIP)**. Las **mejoras transversales (TX)** — calendario unificado con react-day-picker y export XLSX — se hacen primero por ser pedidos explícitos y de bajo costo, y luego se aplican de forma continua. Ver [§ Plan ampliado](#plan-ampliado-2026-05-30), [§ Mejoras transversales](#tx--mejoras-transversales-ux-y-datos) y los cortes de control obligatorios al cierre de cada hito.
@@ -1227,30 +1227,30 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] **N° de despacho** (`AAaaaTTTTnnnnnnX`) por lote, disponible para consignarlo en la factura de venta cuando la norma lo exija; datos del importador y de licencias. *(ADR-059: consumo por lote FEFO/FIFO en la venta y trazabilidad lote y despacho → ventas; falta imprimirlo en la factura, F3/H107)*
   - [ ] *Criterio:* una carpeta con 3 productos, flete prorrateado por peso y seguro por valor da el costo unitario y el n° de despacho aparece en la venta del lote.
 
-- [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.*
-  - [ ] Catálogo cerrado de condición IVA por producto: **21 %, 10,5 %, 27 %, 5 %, 2,5 %, 0 %, exento, no gravado** (exento y no gravado separados para el Libro IVA); migración de `products.tax_rate`.
+- [ ] **H103: Motor de impuestos: IVA por alícuota e impuestos internos.** · *BASE `impuestos_iva` (catálogo de alícuotas IVA) + OPTIONAL `impuestos_internos` (nueva, Pro). Prerrequisito de F3.* · *ADR-068, `feat/impuestos`, migraciones `20261028100000` a `20261028100300` sin aplicar.*
+  - [x] Catálogo cerrado de condición IVA por producto: **21 %, 10,5 %, 27 %, 5 %, 2,5 %, 0 %, exento, no gravado** (exento y no gravado separados para el Libro IVA); migración de `products.tax_rate`. *(ADR-068: `tax_rate_code` con `tax_rate` espejo, por variante, servicio)*
   - [ ] Alícuota por operación cuando depende del receptor o del destino (por ejemplo 27 % a responsables inscriptos en ciertos servicios).
-  - [ ] Cálculo por ítem de neto, IVA y precio final, con precios cargados con o sin IVA.
-  - [ ] Impuestos internos por rubro con alícuota y vigencia, **tasa nominal vs. efectiva**, "incluido en precio" sí/no, discriminación en factura A y tratamiento en la base de IVA; por producto y por sucursal.
-  - [ ] Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido y otros impuestos nacionales indirectos por ítem para la factura B y, si corresponde, para la exhibición.
+  - [x] Cálculo por ítem de neto, IVA y precio final, con precios cargados con o sin IVA. *(ADR-068: lista con o sin IVA, reparto por resto mayor, IVA por alícuota sobre base agregada, paridad TS/SQL)*
+  - [ ] Impuestos internos por rubro con alícuota y vigencia, **tasa nominal vs. efectiva**, "incluido en precio" sí/no, discriminación en factura A y tratamiento en la base de IVA; por producto y por sucursal. *(ADR-068: por producto, fijo, % sobre precio nominal o % sobre costo, incluido o adicional, fuera de la base de IVA; faltan vigencia por decreto y por sucursal)*
+  - [ ] Transparencia Fiscal al Consumidor (Ley 27.743): IVA contenido y otros impuestos nacionales indirectos por ítem para la factura B y, si corresponde, para la exhibición. *(ADR-068: en el ticket B; falta en la exhibición y en la factura con F3)*
   - [ ] *Criterio:* una venta mixta (21 %, 10,5 %, exento y una bebida con internos) calcula por ítem y totaliza igual que el Libro IVA.
 
-- [ ] **H104: Padrones y condición fiscal de clientes y proveedores.** · *BASE (carga manual) + OPTIONAL `padrones` (nueva, Pro: consultas e imports automáticos).*
-  - [ ] Condición fiscal ampliada: RI, monotributo (categoría), monotributo social, exento, CF, no alcanzado, sujeto no categorizado.
+- [ ] **H104: Padrones y condición fiscal de clientes y proveedores.** · *BASE `impuestos_iva` (carga manual) + OPTIONAL `percepciones_retenciones` (Business: padrones; ADR-068 unifica `padrones`, `percepciones` y `retenciones`).*
+  - [x] Condición fiscal ampliada: RI, monotributo (categoría), monotributo social, exento, CF, no alcanzado, sujeto no categorizado. *(ADR-068, más no responsable, IVA liberado y exterior, con ids de ARCA, documento validado en el servidor y letra inferida; falta la categoría de monotributo)*
   - [ ] Consulta de constancia de inscripción de ARCA por CUIT (web service de padrón vigente) al alta: razón social, domicilio fiscal, condición IVA, actividades; cache con fecha y re-validación periódica.
-  - [ ] Padrones provinciales periódicos (ARBA, AGIP y otras jurisdicciones) importados por job con alícuotas de percepción y retención por CUIT y vigencia; historial (se usa la alícuota vigente a la fecha del comprobante).
-  - [ ] Certificados de exclusión (IVA, Ganancias, IIBB) con vigencia y porcentaje, cargados o consultados.
+  - [ ] Padrones provinciales periódicos (ARBA, AGIP y otras jurisdicciones) importados por job con alícuotas de percepción y retención por CUIT y vigencia; historial (se usa la alícuota vigente a la fecha del comprobante). *(ADR-068: import manual por partes de ARBA, AGIP y genérico con historial por período; falta la descarga programada)*
+  - [ ] Certificados de exclusión (IVA, Ganancias, IIBB) con vigencia y porcentaje, cargados o consultados. *(ADR-068: cargados; falta la consulta)*
   - [ ] Alertas: CUIT dado de baja, padrón vencido sin actualizar, monotributista cerca de tope.
   - [ ] *Criterio:* al cargar un CUIT se completan razón social y condición IVA, y la percepción de ARBA usa la alícuota del padrón del mes.
 
-- [ ] **H105: Percepciones (el comercio como agente).** · *OPTIONAL `percepciones` (nueva, Business). Requiere H103 y H104; jurisdicción por sucursal en F17/H98.*
-  - [ ] Motor de reglas: jurisdicción × impuesto × condición del cliente → alícuota (padrón o general) + mínimo de base + mínimo de percepción + exclusiones vigentes.
-  - [ ] Percepción de IVA para agentes designados (RG 2408 y regímenes específicos).
-  - [ ] Percepción de IIBB: ARBA, AGIP/ARCIBA (incluido alto riesgo fiscal), Convenio Multilateral y jurisdicción genérica con padrón importable; percepciones municipales como "otros tributos".
-  - [ ] Percepciones en el comprobante, en el array `Tributos` de WSFE, en el ticket y en NC (reversa proporcional).
+- [ ] **H105: Percepciones (el comercio como agente).** · *OPTIONAL `percepciones_retenciones` (nueva, Business, ADR-068). Requiere H103 y H104; jurisdicción por sucursal en F17/H98.*
+  - [x] Motor de reglas: jurisdicción × impuesto × condición del cliente → alícuota (padrón o general) + mínimo de base + mínimo de percepción + exclusiones vigentes. *(ADR-068, `tax_regimes`)*
+  - [x] Percepción de IVA para agentes designados (RG 2408 y regímenes específicos). *(ADR-068: régimen configurable con alícuota por condición)*
+  - [ ] Percepción de IIBB: ARBA, AGIP/ARCIBA (incluido alto riesgo fiscal), Convenio Multilateral y jurisdicción genérica con padrón importable; percepciones municipales como "otros tributos". *(ADR-068: ARBA, AGIP y genérica con padrón; faltan coeficientes de CM y municipales)*
+  - [ ] Percepciones en el comprobante, en el array `Tributos` de WSFE, en el ticket y en NC (reversa proporcional). *(ADR-068: en la venta con id de tributo, en el POS y en el ticket; faltan WSFE y NC)*
   - [ ] *Criterio:* una factura A a un RI de Provincia de Buenos Aires suma la percepción de IIBB del padrón y de IVA si corresponde, y ambas salen en la DDJJ del mes.
 
-- [ ] **H106: Retenciones (como agente y como sujeto).** · *OPTIONAL `retenciones` (nueva, Business). Requiere H101 y H104.*
+- [ ] **H106: Retenciones (como agente y como sujeto).** · *OPTIONAL `percepciones_retenciones` (Business, ADR-068). Requiere H101 y H104.* · *ADR-068: retenciones de IIBB e IVA sugeridas desde el padrón en la orden de pago y vista `tax_suffered` de percepciones sufridas en compras; faltan Ganancias (RG 830), SUSS, certificado PDF y SIRTAC / SIRCREB.*
   - [ ] Como agente al pagar a proveedores: Ganancias (RG 830: concepto, escala, mínimo no sujeto, acumulado mensual), IVA (agentes designados), IIBB por jurisdicción, SUSS (contratistas de construcción, limpieza, seguridad); certificado de retención en PDF.
   - [ ] Como sujeto: registro de retenciones y percepciones sufridas (proveedores, tarjetas vía **SIRTAC**, bancos vía **SIRCREB**, impuesto a los débitos y créditos) para imputarlas en DDJJ; import desde la liquidación (H110) y desde "Mis Retenciones" de ARCA.
   - [ ] *Criterio:* una orden de pago calcula la retención de Ganancias con el acumulado del mes, emite el certificado y queda para SICORE/SIRE.

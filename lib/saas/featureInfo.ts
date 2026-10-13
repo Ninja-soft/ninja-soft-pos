@@ -459,9 +459,11 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     needs: "Credenciales de la API de NubCeo (API key, API secret y tenant) y el código de sucursal cabecera de cada sucursal.",
   },
   facturacion_afip: {
-    desc: "Facturación electrónica AFIP/ARCA: emite comprobantes fiscales (factura A/B/C) integrados con AFIP.",
-    impact: "Desactivado, el sistema sólo emite comprobantes no fiscales; no factura ante AFIP.",
+    desc: "Facturación electrónica con ARCA (ex AFIP): factura A, B y C y notas de crédito con CAE por cada venta, devolución o anulación, con el tipo de comprobante según la condición fiscal del negocio y del cliente. Asistente paso a paso (certificado generado en NinjaSoft, punto de venta, prueba en homologación y paso a producción con checklist), cola con reintentos que nunca frena la venta, contingencia con CAEA si ARCA no responde, QR fiscal en el ticket y monitor de comprobantes.",
+    impact: "Desactivado, el sistema sólo emite comprobantes no fiscales y el servidor no encola ni emite facturas (lo ya emitido se puede seguir consultando).",
     minPlan: "Pro",
+    requires: ["impuestos_iva"],
+    needs: "Clave fiscal de ARCA nivel 3 del titular para autorizar el certificado y dar de alta un punto de venta Web Services.",
   },
 
   // ── Extras ──────────────────────────────────────────────────────────────────

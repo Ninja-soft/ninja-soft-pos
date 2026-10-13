@@ -135,27 +135,30 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
 
 **Duración:** 4–6 semanas. **Objetivo:** el cliente piloto puede facturar electrónicamente con CAE válido.
 
+> **2026-10-13 (ADR-072):** implementado en `feat/arca-wsfe` sin certificado real: migraciones `20261101100000` a `20261101100200` y Edge `arca_wsfe` sin aplicar ni desplegar; probado con fixtures SOAP, FEDummy real de homologación y el certificado de homologación firmando localmente. Doc: [`33-facturacion-arca.md`](./33-facturacion-arca.md). Quedan abiertos los criterios que piden emitir de verdad.
+
 ### Entregables
-- [ ] Edge Function `submit_invoice_afip` con manejo completo de:
-  - [ ] Solicitud de CAE para Factura A, B, C, Nota de Crédito.
-  - [ ] Reintentos con backoff exponencial.
-  - [ ] Almacenamiento de XML de request/response.
-  - [ ] Cola fiscal robusta: pendientes, reintentos, bloqueados, rechazados, dead-letter y reproceso manual.
-  - [ ] Idempotencia fiscal por venta/tipo de comprobante/punto de venta.
-  - [ ] Conciliación contra AFIP (`FECompUltimoAutorizado`) para detectar drift de numeración.
+- [x] Edge Function (`arca_wsfe`, el nombre de diseño era `submit_invoice_afip`) con manejo completo de: *(ADR-072, `feat/arca-wsfe`)*
+  - [x] Solicitud de CAE para Factura A, B, C, Nota de Crédito. *(tipo por letra del motor de impuestos; NC por devolución y por anulación; M mapeada; E queda para WSFEX)*
+  - [x] Reintentos con backoff exponencial. *(1 a 60 minutos, dead-letter a los 10 intentos)*
+  - [x] Almacenamiento de XML de request/response. *(sin Token ni Sign, por comprobante y por intento)*
+  - [x] Cola fiscal robusta: pendientes, reintentos, bloqueados, rechazados, dead-letter y reproceso manual.
+  - [x] Idempotencia fiscal por venta/tipo de comprobante/punto de venta. *(más recuperación con FECompConsultar ante un resultado incierto)*
+  - [x] Conciliación contra AFIP (`FECompUltimoAutorizado`) para detectar drift de numeración.
 - [ ] **Prerrequisitos fiscales (2026-10-12, ADR-043):** alícuotas IVA con exento y no gravado e impuestos internos (F18/H103), condición fiscal del receptor y padrones (F18/H104), punto de venta por sucursal (F17/H98). Comprobantes completos (tributos, M, FCE MiPyME, E, Transparencia Fiscal) en F18/H107.
-- [ ] Gestión de certificados AFIP por tenant (almacenados encriptados).
-- [ ] Panel de monitoreo de facturación electrónica:
-  - [ ] Comprobantes pendientes.
-  - [ ] Errores recientes con código AFIP.
-  - [ ] Última conexión al webservice AFIP.
-- [ ] Modo **homologación** vs **producción** por tenant, con certificados separados, checklist de habilitación y bloqueo de cambio si faltan pruebas.
+- [x] Gestión de certificados AFIP por tenant (almacenados encriptados). *(clave y CSR generados en la Edge, AES-256-GCM con `ARCA_KEY_ENC`; el front sólo ve metadata; delegación en NinjaSoft modelada y apagada hasta tener CUIT)*
+- [x] Panel de monitoreo de facturación electrónica:
+  - [x] Comprobantes pendientes.
+  - [x] Errores recientes con código AFIP.
+  - [x] Última conexión al webservice AFIP.
+- [x] Modo **homologación** vs **producción** por tenant, con certificados separados, checklist de habilitación y bloqueo de cambio si faltan pruebas. *(asistente paso a paso; producción sólo el dueño con checklist completo)*
 - [ ] **Venta offline / AFIP offline:**
-  - [ ] La venta no se bloquea si no hay internet o AFIP no responde.
-  - [ ] Se emite comprobante interno/provisorio y la factura queda en cola fiscal.
-  - [ ] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante.
-  - [ ] El POS muestra estado fiscal claro: `pendiente`, `enviando`, `aprobado`, `rechazado`, `requiere acción`.
-- [ ] Numeración de comprobantes por punto de venta.
+  - [x] La venta no se bloquea si no hay internet o AFIP no responde. *(ARCA caído: cola y contingencia CAEA; sin internet en el POS depende de la venta offline del POS)*
+  - [x] Se emite comprobante interno/provisorio y la factura queda en cola fiscal. *(ticket "Comprobante pendiente de autorización ARCA")*
+  - [ ] Al reconectar, el sistema sincroniza ventas pendientes, pide CAE y actualiza el comprobante. *(ARCA: sí, la cola reintenta y el ticket muestra el CAE; falta la venta offline del POS sin conexión a NinjaSoft)*
+  - [x] El POS muestra estado fiscal claro: `pendiente`, `enviando`, `aprobado`, `rechazado`, `requiere acción`. *(detalle de la venta, ticket e indicador de contingencia)*
+- [x] Numeración de comprobantes por punto de venta. *(caja o sucursal; serie CAEA propia)*
+- [x] **Contingencia CAEA** (pedido del dueño): CAEA por quincena, emisión al instante si ARCA falla de forma cierta, informe posterior y sin movimiento. *(ADR-072, `feat/arca-wsfe`)*
 
 ### Criterios de cierre
 - [ ] 100 comprobantes consecutivos en homologación sin error de integración.
@@ -1257,13 +1260,13 @@ Objetivo: que el sistema **registre lo que exige la normativa argentina y le ent
   - [ ] Como sujeto: registro de retenciones y percepciones sufridas (proveedores, tarjetas vía **SIRTAC**, bancos vía **SIRCREB**, impuesto a los débitos y créditos) para imputarlas en DDJJ; import desde la liquidación (H110) y desde "Mis Retenciones" de ARCA.
   - [ ] *Criterio:* una orden de pago calcula la retención de Ganancias con el acumulado del mes, emite el certificado y queda para SICORE/SIRE.
 
-- [ ] **H107: Facturación electrónica completa.** · *OPTIONAL `facturacion_afip` (existe, MARKETING-FUTURO) + OPTIONAL `factura_exportacion` (nueva, Enterprise). Extiende F3; requiere H103, H104 y F17/H98.*
-  - [ ] Decisión automática del tipo de comprobante: A, B, C, M según emisor y receptor; tope de identificación del consumidor final como parámetro con vigencia.
-  - [ ] Condición frente al IVA del receptor informada en WSFE; arrays `AlicIva` y `Tributos` (internos, percepciones) desde H103 y H105; ids desde `FEParamGetTiposIva` y `FEParamGetTiposTributos`.
+- [ ] **H107: Facturación electrónica completa.** · *OPTIONAL `facturacion_afip` (función real desde ADR-072) + OPTIONAL `factura_exportacion` (nueva, Enterprise). Extiende F3; requiere H103, H104 y F17/H98.*
+  - [x] Decisión automática del tipo de comprobante: A, B, C, M según emisor y receptor; tope de identificación del consumidor final como parámetro con vigencia. *(ADR-068 y ADR-072)*
+  - [x] Condición frente al IVA del receptor informada en WSFE; arrays `AlicIva` y `Tributos` (internos, percepciones) desde H103 y H105; ids desde `FEParamGetTiposIva` y `FEParamGetTiposTributos`. *(ADR-072; las tablas se consultan desde el asistente)*
   - [ ] Moneda extranjera (`MonId`, `MonCotiz`); conceptos de servicios con fechas; comprobantes asociados en NC y ND.
   - [ ] **Factura de Crédito Electrónica MiPyME** (Ley 27.440, tipos 201 a 213): monto mínimo, CBU, aceptación o rechazo, vínculo con cuenta corriente.
   - [ ] **Factura E** de exportación (WSFEX) con incoterm y permiso de embarque.
-  - [ ] QR fiscal en el impreso, CAEA de contingencia por PV, almacenamiento del request y response.
+  - [x] QR fiscal en el impreso, CAEA de contingencia por PV, almacenamiento del request y response. *(ADR-072)*
   - [ ] *Criterio:* el sistema emite A, B, C, NC, FCE y E en homologación con percepciones e internos y todas cierran contra el Libro IVA.
 
 - [ ] **H108: Libros y regímenes de información.** · *OPTIONAL `export_contable` (nueva, Pro). Requiere F3 (ventas) y H101 (compras).*

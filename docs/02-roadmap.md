@@ -193,6 +193,12 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Mercado Pago Point (QR + tarjeta). *Hecho: QR dinámico y Point sobre la Orders API (ADR-027, ADR-032); falta el primer cobro en vivo.*
   - [x] Modo (transferencia). *Hecho: Edges `modo_create_qr` y `modo_webhook`.*
   - [x] Conciliación automática. *Hecho: conciliación de procesadores, Mercado Pago automático (ADR-061) y tarjetas (ADR-044).*
+- [~] **Rendimiento de base (escalado):** *Primer corte hecho (2026-10-13, ADR-090, rama `perf/f4-escalado`, migración `20261108500000_perf_f4_indices_rls_initplan` sin aplicar): auditoría reutilizable `scripts/db-audit-perf.mjs` (estática sobre las migraciones y `--catalog` sobre una base en sólo lectura), índices de listas y FKs en `payments`, `sales`, `cash_movements`, `stock_movements`, `table_order_items` y `fiscal_documents`, tres índices redundantes fuera, todas las policies con initplan (`perf_initplan_wrap`) y guardarraíles en CI (`rls_policies_without_initplan`, `perf_fk_without_index`). Script `scripts/prod-indexes-concurrently.sql` para producción con volumen.*
+  - [x] Índices de listas y FKs de las tablas operativas grandes.
+  - [x] Policies sin llamadas por fila (initplan) y guardarraíl en CI.
+  - [ ] `create_sale` con `tenant_id` explícito (hoy el DEFAULT `current_tenant_id()` hace un lookup por fila insertada).
+  - [ ] Medir con volumen real el `exists` sobre `sales` de la policy de `payments` (ADR-080) y la búsqueda de `catalog_products` bajo RLS.
+  - [ ] FKs e índices redundantes del resto del esquema (`db-audit-perf.mjs --all-tables`) cuando crezca el volumen.
 - [~] **Observabilidad avanzada:** *Webhooks de cobro con log propio (ADR-070); sin Sentry por decisión de ADR-070.*
   - [ ] Sentry para errores frontend.
   - [~] Logs estructurados centralizados. *`webhook_events` y log JSON en las Edge de cobro (ADR-070); faltan los crons y el resto de la app.*
@@ -1488,7 +1494,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F1.5** | 8/14 | 3 | 3 | 57% | 68% |
 | **F2** | 16/16 | 0 | 0 | 100% | 100% |
 | **F3** | 21/29 | 7 | 1 | 72% | 84% |
-| **F4** | 10/23 | 9 | 4 | 43% | 63% |
+| **F4** | 12/29 | 10 | 7 | 41% | 59% |
 | **F5** | 16/38 | 7 | 15 | 42% | 51% |
 | **F6** | 55/62 | 4 | 3 | 89% | 92% |
 | **F7** | 44/61 | 12 | 5 | 72% | 82% |
@@ -1504,7 +1510,7 @@ Calculado con `node scripts/roadmap-progress.mjs --write` (cuenta los checkboxes
 | **F17** | 98/130 | 18 | 14 | 75% | 82% |
 | **F18** | 33/106 | 56 | 17 | 31% | 58% |
 | **TX** | 19/27 | 4 | 4 | 70% | 78% |
-| **Total** | 536/998 | 273 | 189 | 54% | 67% |
+| **Total** | 538/1004 | 274 | 192 | 54% | 67% |
 <!-- roadmap-progress:end -->
 
 ---

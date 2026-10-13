@@ -30,6 +30,7 @@
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 // ⚠️ VALIDAR MODO — base URLs / endpoints (mismos overrides que modo_create_qr).
 const MODO_API_BASE =
@@ -77,7 +78,7 @@ function readModo(obj: Record<string, unknown> | undefined): ModoView {
   return { status, amount: Number.isFinite(amount as number) ? (amount as number) : null, extRef };
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("modo", "modo_webhook", async (req: Request, wh) => {
   const ok = () =>
     new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -90,6 +91,7 @@ Deno.serve(async (req: Request) => {
     const reqUrl = new URL(req.url);
     const intentId = reqUrl.searchParams.get("intent");
     if (!intentId || req.method !== "POST") return ok();
+    wh.ref(intentId);
 
     // ⚠️ VALIDAR MODO — forma del body de la notificación.
     let body: {
@@ -137,6 +139,7 @@ Deno.serve(async (req: Request) => {
       .eq("provider_key", "modo")
       .maybeSingle();
     if (!intent) return ok();
+    wh.tenant(intent.tenant_id);
     if (intent.status === "approved") return ok(); // idempotencia barata.
 
     const modoPaymentId =
@@ -196,6 +199,7 @@ Deno.serve(async (req: Request) => {
                 intentId,
                 status: qRes.status,
               });
+              wh.fail(`MODO respondió ${qRes.status} al re-consultar`);
             }
           }
         } else {
@@ -203,12 +207,14 @@ Deno.serve(async (req: Request) => {
             intentId,
             status: tokRes.status,
           });
+          wh.fail(`MODO rechazó el token (${tokRes.status})`);
         }
       } catch (e) {
         console.error("[modo_webhook] reconsult_unreachable", {
           intentId,
           detail: String(e).slice(0, 200),
         });
+        wh.fail(e);
       }
     }
 
@@ -221,6 +227,7 @@ Deno.serve(async (req: Request) => {
           intentId,
           extRef: verified.extRef,
         });
+        wh.fail("reference_mismatch");
         return ok();
       }
       finalStatus = mapStatus(verified.status || rawStatus);
@@ -232,6 +239,7 @@ Deno.serve(async (req: Request) => {
             "[modo_webhook] reconsult_amount_mismatch, leaving pending (NOT crediting)",
             { intentId, paid, expected },
           );
+          wh.fail("amount_mismatch");
           return ok();
         }
       }
@@ -260,9 +268,11 @@ Deno.serve(async (req: Request) => {
       .eq("id", intentId)
       .neq("status", "approved");
 
+    wh.done();
     return ok();
   } catch (e) {
     console.error("[modo_webhook] unexpected", String(e).slice(0, 200));
+    wh.fail(e);
     return ok();
   }
-});
+}));

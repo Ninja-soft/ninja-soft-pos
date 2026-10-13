@@ -16,6 +16,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { decidePaymentStatus, paywayPaymentId, paywayV2Base } from "../_shared/payway.ts";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
 const html = (body: string) =>
   new Response(
@@ -23,7 +24,7 @@ const html = (body: string) =>
     { headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("payway", "payway_webhook", async (req: Request, wh) => {
   const reqUrl = new URL(req.url);
 
   // Pantallas de retorno del cliente (GET desde el navegador).
@@ -55,6 +56,7 @@ Deno.serve(async (req: Request) => {
   if (!/^[0-9a-f]{12}$/.test(shortRef)) {
     return new Response("ok", { status: 200 });
   }
+  wh.ref(shortRef);
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data: pendings } = await admin
     .from("mp_payment_intents")
@@ -71,10 +73,14 @@ Deno.serve(async (req: Request) => {
   if (!row || row.status !== "pending") {
     return new Response("ok", { status: 200 });
   }
+  wh.tenant(row.tenant_id);
 
   const secretRow = await loadProviderSecret(admin, row.tenant_id, "payway", { scopeStoreId: await intentSecretScope(admin, row.id) });
   const sec = (secretRow?.secrets ?? {}) as { private_apikey?: string };
-  if (!sec.private_apikey) return new Response("ok", { status: 200 });
+  if (!sec.private_apikey) {
+    wh.fail("sin apikey privada de Payway");
+    return new Response("ok", { status: 200 });
+  }
 
   const { data: methodRow } = await admin
     .from("tenant_payment_methods")
@@ -101,12 +107,16 @@ Deno.serve(async (req: Request) => {
     /* cuerpo no-JSON: se ignora */
   }
   if (!notifiedId) return new Response("ok", { status: 200 });
+  wh.ref(notifiedId);
 
   // Verificación independiente (nunca confiar en el cuerpo del webhook).
   const r = await fetch(`${base}/payments/${notifiedId}`, {
     headers: { apikey: sec.private_apikey },
   }).catch(() => null);
-  if (!r || !r.ok) return new Response("ok", { status: 200 });
+  if (!r || !r.ok) {
+    wh.fail(r ? `Payway respondió ${r.status} al consultar el pago` : "Payway no respondió");
+    return new Response("ok", { status: 200 });
+  }
   const decision = decidePaymentStatus(
     await r.json().catch(() => null),
     Number(row.amount),
@@ -124,5 +134,6 @@ Deno.serve(async (req: Request) => {
     )
     .eq("id", row.id)
     .eq("status", "pending");
+  wh.done();
   return new Response("ok", { status: 200 });
-});
+}));

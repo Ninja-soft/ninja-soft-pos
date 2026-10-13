@@ -2472,3 +2472,34 @@ Ley de IVA (texto ordenado 1997), art. 10 (internos discriminados fuera del prec
 - Ventas viejas: sin desglose (el reporte las cuenta aparte). Productos con `tax_rate` fuera del catálogo quedan en 21 % hasta que se editen.
 - **Deuda:** devoluciones y notas de crédito con reversa proporcional de IVA, internos y percepciones (H105, con F3); alícuota por operación según receptor (27 % a RI en ciertos servicios); internos por sucursal y con vigencia por decreto; Convenio Multilateral con coeficientes; constancia de ARCA por CUIT y alertas de CUIT dado de baja; descarga programada de padrones; retenciones de Ganancias (RG 830 con acumulado mensual) y SUSS; certificados de retención en PDF; SICORE, SIRE, Libro IVA Digital y DDJJ de IIBB (H108); un recargo de tarjeta con percepción puede dejar centavos por cobrar al cerrar el pago (el cajero agrega el resto).
 - Tests: `tests/unit/taxEngine.test.ts`, `tests/unit/taxComprobante.test.ts`, `tests/unit/taxPadron.test.ts`, `tests/unit/featureInfo.test.ts`; RLS `tests/integration/rls-impuestos.test.ts` (paridad SQL, datos fiscales por rol, regímenes y padrón por rol y plan, percepción en `create_sale` con pago insuficiente, monotributista con alícuota 0, retención sugerida, documento y gating de internos, reporte y `rls_internal_scope_leaks` = 0). Cadena completa de migraciones sobre PGlite con humo de todo lo anterior y de las policies con rol `authenticated`.
+
+## ADR-070: Observabilidad de los webhooks de cobro sin servicios externos (webhook_events y Salud de webhooks)
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/observabilidad`; migración `20261031100000_webhook_events.sql` sin aplicar; Edges sin desplegar) · **Base:** ADR-052 (`internal_scope`), ADR-048 (log JSON de tiempos en las Edge de cobro). **Numeración:** 069 queda libre para otra rama.
+
+### Contexto
+
+Cuando un webhook de un procesador falla (credencial vencida, API del proveedor caída, monto que no coincide) hoy sólo queda una línea suelta en los logs de cada Edge en Supabase, sin negocio asociado y sin vista de conjunto. Soporte se entera porque el cajero dice que "el QR no se acreditó". No queremos sumar Sentry ni otro servicio, ni dependencias nuevas.
+
+### Decisión
+
+1. **Tabla `webhook_events`** (log técnico, no dato de negocio): `tenant_id` (nullable: hay avisos sin negocio identificable), `provider`, `function_name`, `status` (`ok` procesado, `error`, `ignored` aviso válido sin nada que hacer: ajeno, duplicado, intent ya aprobado), `http_status`, `error` (500 caracteres como máximo, con tokens tapados), `duration_ms`, `payload_ref` (id externo de la notificación, pago, orden o intent). **Nunca el payload** ni secretos. Sin `deleted_at`: se borra físicamente a los **30 días** con el cron `webhook-events-retention` (pg_cron; se omite si no existe). Es distinta de `mp_webhook_events`, que es el dedup de `mp_billing_webhook`.
+2. **RLS (ADR-052):** `internal_scope() or (tenant_id = current_tenant_id() and is_tenant_manager())`. Nada de `is_internal()` suelto: `rls_internal_scope_leaks()` sigue en 0. Sin policies de escritura: escribe sólo `service_role`.
+3. **Helper Deno `_shared/webhookLog.ts`:** `withWebhookLog(provider, fn, handler)` envuelve el handler de `Deno.serve`. El handler marca `wh.tenant()`, `wh.ref()`, `wh.done()` y `wh.fail()`; `wh.defer()` para el trabajo en segundo plano (`mp_orders_webhook`). Resultado: `error` si se marcó un fallo, si respondió 5xx, 401 o 403 o si lanzó; `ok` si se procesó; `ignored` en el resto. Escribe una línea JSON (`{"evt":"webhook",...}`) y la fila por PostgREST con `service_role` (sin cliente ni dependencias), en segundo plano con `EdgeRuntime.waitUntil` y con timeout de 3 s. **La respuesta del webhook no cambia** y un fallo del registro no lo rompe; una excepción del handler se vuelve a lanzar como antes. Las GET (páginas de retorno del navegador) no se registran.
+4. **Instrumentados:** `mp_webhook`, `mp_orders_webhook`, `getnet_webhook`, `payway_webhook`, `nave_webhook`, `gocuotas_webhook`, `directo_webhook`, `clover_webhook`, `modo_webhook` y `mobbex_webhook`. Cambio mínimo: envoltura, `ref` y `tenant` donde se conocen, `done` al aplicar el estado y `fail` en los caminos que ya logueaban un error (sin credencial, el proveedor respondió mal, monto o referencia que no coinciden, excepción).
+5. **Panel interno, Operaciones > Webhooks (`/internal/webhooks`):** server component con `createClient({ scope: "internal" })`. RPC `webhook_health(p_hours)` (security invoker, respeta la RLS) con procesados, errores, ignorados, último aviso, último error y duración promedio por proveedor en las últimas 24 h; tarjetas con franja de estado arriba y punto de color (brand book: sin sombras, sin bordes laterales) y tabla de los últimos 20 errores con negocio, status HTTP y referencia. Normalización pura en `lib/internal/webhookHealth.ts`.
+6. **No es feature de plan:** es una herramienta de plataforma (Operaciones), no una función que el cliente contrata. No va en `features` ni en la comparación de planes. El dueño puede leer lo suyo por RLS, pero no hay UI de cliente por ahora.
+
+### Alternativas descartadas
+
+- **Sentry, Logflare u otro servicio:** costo, otra cuenta y datos de cobro fuera de Supabase; pedido explícito de no sumar servicios.
+- **Guardar el payload completo:** útil para depurar, pero mete datos de tarjetas, pagadores y firmas en una tabla legible por el staff; alcanza con el id externo para ir al panel del proveedor.
+- **Leer los logs de Edge con la Management API:** requiere un token de plataforma y no da negocio ni resultado normalizado.
+- **Insertar con supabase-js en cada Edge:** más acoplamiento; el `fetch` a PostgREST no suma dependencias ni cambia los imports de las funciones.
+
+### Consecuencias
+
+- Deploy: aplicar `20261031100000_webhook_events.sql` **antes** de redesplegar las 10 Edge (si la tabla no existe, el insert falla en silencio y el webhook sigue igual). Las Edge mantienen su `verify_jwt` actual.
+- Volumen: una fila por aviso POST; con la retención de 30 días queda acotado. Índices por fecha, proveedor y negocio.
+- **Deuda:** alertas activas (mail o campana interna cuando un proveedor pasa a "Con errores"); instrumentar los crons (`settlements`, `nubceo_sync`, `pending_charges_sync`) y `mp_billing_webhook` y `catalog_purchase_webhook` con el mismo helper; vista para el dueño en Configuración > Medios de pago.
+- Tests: `tests/unit/webhookLog.test.ts` (estado, saneo del error, fila, respuesta intacta, registro que falla, excepción, diferido, GET), `tests/unit/webhookHealth.test.ts` y caso en `tests/integration/rls.test.ts` (A no ve los de B, el cajero no ve nada, `webhook_health` respeta la RLS, nadie inserta desde el cliente).

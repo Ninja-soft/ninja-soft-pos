@@ -30,8 +30,9 @@ import {
   webhookType,
 } from "../_shared/mobbex.ts";
 import { intentSecretScope, loadProviderSecret } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("mobbex", "mobbex_webhook", async (req: Request, wh) => {
   const ok = () =>
     new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -44,6 +45,7 @@ Deno.serve(async (req: Request) => {
     const reqUrl = new URL(req.url);
     const intentId = reqUrl.searchParams.get("intent");
     if (!intentId || req.method !== "POST") return ok();
+    wh.ref(intentId);
 
     // El body sólo se usa como PISTA (id de la operación y tipo de webhook).
     let body: unknown;
@@ -62,12 +64,14 @@ Deno.serve(async (req: Request) => {
       .eq("provider_key", "mobbex")
       .maybeSingle();
     if (!intent) return ok();
+    wh.tenant(intent.tenant_id);
     if (intent.status === "approved") return ok(); // idempotencia barata.
 
     const secretRow = await loadProviderSecret(admin, intent.tenant_id, "mobbex", { scopeStoreId: await intentSecretScope(admin, intent.id) });
     const sec = (secretRow?.secrets ?? {}) as { api_key?: string; access_token?: string };
     if (!sec.api_key || !sec.access_token) {
       console.error("[mobbex_webhook] no_credentials, leaving pending", { intentId });
+      wh.fail("sin credenciales de Mobbex");
       return ok();
     }
     const headers = {
@@ -125,9 +129,11 @@ Deno.serve(async (req: Request) => {
     // conciliación); pending/rejected sólo mueven un intent todavía pendiente.
     await (decision.status === "approved" ? q.neq("status", "approved") : q.eq("status", "pending"));
 
+    wh.done();
     return ok();
   } catch (e) {
     console.error("[mobbex_webhook] unexpected", String(e).slice(0, 200));
+    wh.fail(e);
     return ok();
   }
-});
+}));

@@ -18,6 +18,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
 import { tenantMpCredential } from "../_shared/mpAuth.ts";
 import { intentSecretScope } from "../_shared/paymentSecrets.ts";
+import { withWebhookLog } from "../_shared/webhookLog.ts";
 import { amountsMatch, type MpEnv } from "../_shared/mpOrders.ts";
 import {
   claimPaymentId,
@@ -104,7 +105,7 @@ const MP_STATUS: Record<string, string> = {
   pending: "pending",
 };
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withWebhookLog("mercadopago", "mp_webhook", async (req: Request, wh) => {
   const ok = () => new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -142,12 +143,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    wh.ref(paymentId || intentId);
+
     // ADR-064: contracargos y reclamos (avisos de la aplicación, sin intent).
     const disputeKind = webhookTopicKind(topic);
     if (disputeKind) {
       if (paymentId && mpUserId) {
         const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
         await handleDisputeNotice(admin, disputeKind, paymentId, mpUserId, hintPaymentId);
+        wh.done();
       }
       return ok();
     }
@@ -164,6 +168,7 @@ Deno.serve(async (req: Request) => {
       .eq("id", intentId)
       .maybeSingle();
     if (!intent) return ok();
+    wh.tenant(intent.tenant_id);
 
     // ADR-057: verifica con la misma credencial (negocio o sucursal) con la
     // que se creó el cobro.
@@ -173,14 +178,20 @@ Deno.serve(async (req: Request) => {
       ((intent as { mp_env?: MpEnv | null }).mp_env ?? "prod") as MpEnv,
       { scopeStoreId: await intentSecretScope(admin, intentId) },
     );
-    if (!cred) return ok();
+    if (!cred) {
+      wh.fail("sin credencial de Mercado Pago");
+      return ok();
+    }
     const accessToken = cred.token;
 
     const payRes = await fetch(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
-    if (!payRes.ok) return ok();
+    if (!payRes.ok) {
+      wh.fail(`MP /v1/payments respondió ${payRes.status}`);
+      return ok();
+    }
     const pay = (await payRes.json()) as {
       status?: string;
       external_reference?: string;
@@ -204,6 +215,7 @@ Deno.serve(async (req: Request) => {
           paid,
           expected,
         });
+        wh.fail("amount_mismatch");
         return ok();
       }
     }
@@ -214,8 +226,10 @@ Deno.serve(async (req: Request) => {
       .eq("id", intentId)
       .neq("status", "approved");
 
+    wh.done();
     return ok();
-  } catch {
+  } catch (e) {
+    wh.fail(e);
     return ok();
   }
-});
+}));

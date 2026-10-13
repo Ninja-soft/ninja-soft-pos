@@ -25,6 +25,7 @@ import {
   Tag,
   UserCog,
   Users,
+  Webhook,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -66,6 +67,7 @@ const NAV = [
   { href: "/internal/notificaciones", label: "Notificaciones", icon: Bell },
   { href: "/internal/addons", label: "Complementos", icon: Sparkles },
   { href: "/internal/catalogos", label: "Catálogos", icon: Boxes },
+  { href: "/internal/webhooks", label: "Webhooks", icon: Webhook },
   { href: "/internal/audit", label: "Auditoría", icon: ScrollText },
 ];
 const LEVEL_LABELS: Record<string, string> = {

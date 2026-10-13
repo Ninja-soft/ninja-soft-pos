@@ -46,6 +46,7 @@ import {
   Landmark,
   BookOpenCheck,
   BookText,
+  FileArchive,
   ListTree,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -260,6 +261,9 @@ const NAV: { top: Item[]; groups: Group[] } = {
         { href: "/contabilidad/asientos", label: "Asientos", icon: FileText, feature: "contabilidad", managersOnly: true },
         { href: "/contabilidad/libros", label: "Libros", icon: BookText, feature: "contabilidad", managersOnly: true },
         { href: "/contabilidad/plan-de-cuentas", label: "Plan de cuentas", icon: ListTree, feature: "contabilidad", managersOnly: true },
+        // Libro IVA Digital (F18 · H108, ADR-076): va con la facturación
+        // electrónica, no con la contabilidad.
+        { href: "/contabilidad/libro-iva", label: "Libro IVA Digital", icon: FileArchive, feature: "facturacion_afip", managersOnly: true },
       ],
     },
     {

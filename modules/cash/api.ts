@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { Tables } from "@/types/database";
 import { withSupervisor } from "@/modules/security/supervisor";
 import type { BranchOverview } from "@/lib/branches/monitorAlerts";
@@ -142,17 +143,22 @@ export const cashApi = {
 
   // Historial inmutable de cierres Z (más reciente primero).
   // storeId (F17 · H90): sucursal del filtro global; null = todas las visibles.
+  // registerId (F17 · H97): sólo los Z de esa caja.
   zClosures: async (
     range?: { from?: Date; to?: Date },
     storeId?: string | null,
+    registerId?: string | null,
   ): Promise<ZClosure[]> => {
     const supabase = createClient();
+    const tenantId = await getCurrentTenantId();
     let query = supabase
       .from("cash_z_closures")
       .select("*")
       .order("z_number", { ascending: false })
       .order("closed_at", { ascending: false });
+    if (tenantId) query = query.eq("tenant_id", tenantId);
     if (storeId) query = query.eq("store_id", storeId);
+    if (registerId) query = query.eq("cash_register_id", registerId);
     if (range?.from) {
       const from = new Date(range.from);
       from.setHours(0, 0, 0, 0);

@@ -474,6 +474,7 @@ export type Database = {
           account_collected: Json
           cash_in: number
           cash_out: number
+          cash_register_id: string | null
           cash_shift_id: string
           closed_at: string
           closed_by: string | null
@@ -487,9 +488,11 @@ export type Database = {
           opened_by: string | null
           opening_amount: number
           payment_breakdown: Json
+          register_z_number: number | null
           sales_count: number
           sales_total: number
           store_id: string | null
+          store_z_number: number | null
           tenant_id: string
           voids_count: number
           voids_total: number
@@ -499,6 +502,7 @@ export type Database = {
           account_collected?: Json
           cash_in?: number
           cash_out?: number
+          cash_register_id?: string | null
           cash_shift_id: string
           closed_at?: string
           closed_by?: string | null
@@ -512,9 +516,11 @@ export type Database = {
           opened_by?: string | null
           opening_amount?: number
           payment_breakdown?: Json
+          register_z_number?: number | null
           sales_count?: number
           sales_total?: number
           store_id?: string | null
+          store_z_number?: number | null
           tenant_id?: string
           voids_count?: number
           voids_total?: number
@@ -524,6 +530,7 @@ export type Database = {
           account_collected?: Json
           cash_in?: number
           cash_out?: number
+          cash_register_id?: string | null
           cash_shift_id?: string
           closed_at?: string
           closed_by?: string | null
@@ -537,9 +544,11 @@ export type Database = {
           opened_by?: string | null
           opening_amount?: number
           payment_breakdown?: Json
+          register_z_number?: number | null
           sales_count?: number
           sales_total?: number
           store_id?: string | null
+          store_z_number?: number | null
           tenant_id?: string
           voids_count?: number
           voids_total?: number

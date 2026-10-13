@@ -15,7 +15,11 @@ export function useShiftMovements(shiftId: string | null) {
   });
 }
 
-export function useZClosures(range?: { from?: Date; to?: Date }, storeId?: string | null) {
+export function useZClosures(
+  range?: { from?: Date; to?: Date },
+  storeId?: string | null,
+  registerId?: string | null,
+) {
   return useQuery({
     queryKey: [
       "cash",
@@ -23,8 +27,9 @@ export function useZClosures(range?: { from?: Date; to?: Date }, storeId?: strin
       range?.from?.toISOString() ?? null,
       range?.to?.toISOString() ?? null,
       storeId ?? null,
+      registerId ?? null,
     ],
-    queryFn: () => cashApi.zClosures(range, storeId),
+    queryFn: () => cashApi.zClosures(range, storeId, registerId),
   });
 }
 

@@ -3,13 +3,16 @@
 // Genera un magic link de acceso para el dueño de un tenant. Solo admin y
 // super_admin pueden usarlo (support: denegado). El link se abre en incógnito
 // para no cerrar la sesión del staff. Auditado.
+// ADR-073: motivo obligatorio (5 a 500 caracteres) y el audit_logs se escribe
+// ANTES de devolver el link: si no se puede auditar, no hay link.
 // =============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.47.10";
+import { isValidReason } from "../_shared/tenantAdmin.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-ninja-scope",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 function json(b: unknown, s = 200) {
@@ -47,13 +50,15 @@ Deno.serve(async (req: Request) => {
   if (meta.internal_level === "support")
     return json({ error: "forbidden_support_level" }, 403);
 
-  let body: { tenant_id?: string };
+  let body: { tenant_id?: string; reason?: string };
   try {
     body = await req.json();
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
   if (!body.tenant_id) return json({ error: "missing_tenant_id" }, 400);
+  if (!isValidReason(body.reason)) return json({ error: "reason_required" }, 400);
+  const reason = body.reason!.trim();
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false } });
 
@@ -91,14 +96,16 @@ Deno.serve(async (req: Request) => {
   if (linkErr)
     return json({ error: "link_generation_failed", detail: linkErr.message }, 500);
 
-  await admin.from("audit_logs").insert({
+  const { error: auditErr } = await admin.from("audit_logs").insert({
     tenant_id: body.tenant_id,
     actor_user_id: user.id,
     entity_type: "impersonation",
     entity_id: body.tenant_id,
     action: "impersonation_link_generated",
     after_data: { owner_email: ownerEmail, actor_email: user.email },
+    reason,
   });
+  if (auditErr) return json({ error: "audit_failed" }, 500);
 
   return json({
     ok: true,

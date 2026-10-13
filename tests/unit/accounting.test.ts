@@ -272,7 +272,7 @@ describe("exportadores", () => {
   });
 
   it("Latin-1 reemplaza lo que no entra", () => {
-    expect(Array.from(encodeText("a—b", "latin1"))).toEqual([0x61, 0x3f, 0x62]);
+    expect(Array.from(encodeText("a€b", "latin1"))).toEqual([0x61, 0x3f, 0x62]);
   });
 
   it("cada formato documenta sus columnas", () => {

@@ -200,6 +200,15 @@ Deno.serve(async (req: Request) => {
     connected: hasSecret || Boolean(next.test_access_token),
   };
   if (providerKey === "mercadopago") config.test_connected = Boolean(next.test_access_token);
+  // Getnet (ADR-069): dos slots en la misma credencial. `connected` = alguno
+  // cargado; el POS ofrece QR y link sólo con Web Checkout y el checkout
+  // propio sólo con Checkout API.
+  if (providerKey === "getnet") {
+    const has = (k: string) => typeof next[k] === "string" && (next[k] as string).trim() !== "";
+    config.web_checkout_connected = has("client_id") && has("client_secret");
+    config.checkout_api_connected = has("api_client_id") && has("api_client_secret");
+    config.connected = config.web_checkout_connected === true || config.checkout_api_connected === true;
+  }
   await admin.from("tenant_payment_methods").upsert(
     { tenant_id: tenantId, provider_key: providerKey, config },
     { onConflict: "tenant_id,provider_key" },

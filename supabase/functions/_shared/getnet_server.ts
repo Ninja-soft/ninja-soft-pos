@@ -12,10 +12,50 @@ import {
   resolveGetnetAuth,
   type ResolvedAuth,
 } from "./getnet.ts";
-import { type LoadedSecret, updateSecretRow } from "./paymentSecrets.ts";
+import { type LoadedSecret, loadProviderSecret, updateSecretRow } from "./paymentSecrets.ts";
+import { apiCredsOf, hasWebCheckoutCreds, type SlotKey } from "./getnet_api.ts";
 
 // deno-lint-ignore no-explicit-any
 type Admin = any;
+
+// =============================================================================
+// Dos slots de credenciales en la misma fila de Getnet (ADR-069):
+//   * web_checkout: client_id / client_secret (QR + link hosted, ADR-065).
+//   * checkout_api: api_client_id / api_client_secret (checkout propio /pagar).
+// Cada slot se hereda por separado: si la credencial de la sucursal no trae
+// ese slot, se usa el del negocio.
+// =============================================================================
+const hasSlot = (slot: SlotKey, sec: Record<string, unknown> | null | undefined) =>
+  slot === "checkout_api" ? apiCredsOf(sec) !== null : hasWebCheckoutCreds(sec);
+
+/**
+ * Credencial de Getnet con el slot pedido. `storeId`: sucursal donde se cobra
+ * (create). `scopeStoreId`: alcance registrado en el intent (status, pay).
+ */
+export async function loadGetnetSlot(
+  admin: Admin,
+  tenantId: string,
+  slot: SlotKey,
+  opts: { storeId?: string | null; scopeStoreId?: string | null },
+): Promise<LoadedSecret | null> {
+  const row = await loadProviderSecret(admin, tenantId, "getnet", opts);
+  if (row && hasSlot(slot, row.secrets)) return row;
+  if (row?.scopeStoreId) {
+    const tenantRow = await loadProviderSecret(admin, tenantId, "getnet", { scopeStoreId: null });
+    if (tenantRow && tenantRow.scopeStoreId === null && hasSlot(slot, tenantRow.secrets)) return tenantRow;
+  }
+  return null;
+}
+
+/**
+ * Checkout propio con la Checkout API: la tarjeta pasa por nuestra Edge para
+ * tokenizarla (Getnet no ofrece tokenización desde el navegador). Queda
+ * APAGADO hasta que NinjaSoft tenga la validación PCI DSS que lo permite
+ * (secret de Supabase GETNET_CHECKOUT_API_PCI_ATTESTED=true). ADR-069.
+ */
+export function getnetPanRelayEnabled(): boolean {
+  return (Deno.env.get("GETNET_CHECKOUT_API_PCI_ATTESTED") ?? "").trim().toLowerCase() === "true";
+}
 
 /** Switch Sandbox del medio (fallback del ambiente si la credencial no lo trae). */
 export async function loadGetnetSandbox(admin: Admin, tenantId: string): Promise<boolean> {

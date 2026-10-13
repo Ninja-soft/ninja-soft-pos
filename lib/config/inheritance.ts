@@ -314,6 +314,9 @@ export interface ProviderRow {
   surcharge_pct: number;
   merchant_numbers: Partial<Record<string, string>>;
   plan_mode: string | null;
+  /** Sólo 'getnet' (ADR-069): juegos de credenciales cargados. */
+  web_checkout_connected?: boolean;
+  checkout_api_connected?: boolean;
   /** Sólo 'transfer' (ADR-055): base del negocio, no se resuelve acá. */
   transfer_show_screen?: boolean;
   transfer_require_reference?: boolean;

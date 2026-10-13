@@ -24,11 +24,18 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils/cn";
 import { SANDBOX_PROVIDERS, type BrandDef } from "@/lib/payments/catalog";
 import {
+  probeApiAttemptLine,
   probeAttemptLine,
   probeMismatchEnv,
   probeSecrets,
   type GetnetProbeResult,
 } from "@/lib/payments/getnetProbe";
+import {
+  GETNET_SLOTS,
+  GETNET_SLOT_BY_KEY,
+  getnetSlotSave,
+  type GetnetSlot,
+} from "@/lib/payments/getnetSlots";
 import {
   CHANNEL_CAPS,
   CONNECT_GUIDE,
@@ -128,6 +135,36 @@ const FORMS: Record<string, FormSpec> = {
     envNote:
       "Prueba usa el sandbox u homologación de Web Checkout. La API Getnet Argentina (la del plugin de WooCommerce) sólo tiene producción.",
   },
+  // Getnet, slot Checkout API (ADR-069): credenciales "Checkout API / Plugin
+  // VTEX". Se guardan con claves api_* en la misma conexión.
+  getnet_api: {
+    fields: [
+      { name: "api_client_id", label: "Client ID (Checkout API)", min: 4, placeholder: "Client ID de Checkout API / VTEX" },
+      {
+        name: "api_client_secret",
+        label: "Client Secret (Checkout API)",
+        secret: true,
+        min: 8,
+        placeholder: "Client Secret de Checkout API / VTEX",
+      },
+      {
+        name: "api_seller_id",
+        label: "Seller ID",
+        optional: true,
+        placeholder: "Sólo si Getnet te lo dio",
+        hint: "Normalmente lo leemos solo al probar las credenciales.",
+        validate: (v) => (/^[0-9a-f-]{36}$/i.test(v) ? undefined : "Es un código de 36 caracteres (con guiones)."),
+      },
+      {
+        name: "api_channel_entry",
+        label: "Código de canal",
+        optional: true,
+        placeholder: "Sólo si Getnet te lo pidió",
+        hint: "El x-transaction-channel-entry que Getnet asigna a la plataforma.",
+      },
+    ],
+    envNote: "Prueba usa el sandbox u homologación de la Checkout API de Getnet.",
+  },
   pagos360: {
     fields: [{ name: "api_key", label: "API Key", secret: true, min: 10, placeholder: "Tu API Key" }],
   },
@@ -220,9 +257,17 @@ function fieldError(f: Field, v: string): string | undefined {
   return f.validate?.(t);
 }
 
-export type ConnectSave = { secrets?: Record<string, string>; token?: string; env?: Env };
+export type ConnectSave = {
+  secrets?: Record<string, string>;
+  token?: string;
+  env?: Env;
+  /** Getnet (ADR-069): guarda un slot sin pisar el otro. */
+  merge?: boolean;
+  remove?: string[];
+  slot?: GetnetSlot;
+};
 /** Sin secrets = prueba la credencial guardada del alcance. */
-export type ConnectProbe = { secrets?: Record<string, string>; env: Env };
+export type ConnectProbe = { secrets?: Record<string, string>; env: Env; slot?: GetnetSlot };
 
 export function ConnectProviderModal({
   open,
@@ -240,6 +285,8 @@ export function ConnectProviderModal({
   scopeSlot,
   scopeName = null,
   onProbe,
+  getnetSlots,
+  onClearSlot,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -260,12 +307,22 @@ export function ConnectProviderModal({
   scopeName?: string | null;
   /** "Probar credenciales" (hoy sólo Getnet, ADR-065). */
   onProbe?: (v: ConnectProbe) => Promise<GetnetProbeResult>;
+  /** Getnet: slots cargados en este alcance (ADR-069). */
+  getnetSlots?: Record<GetnetSlot, boolean>;
+  /** Getnet: borra sólo un slot. */
+  onClearSlot?: (slot: GetnetSlot) => Promise<void>;
 }) {
   const { toast } = useToast();
   const isMp = providerKey === "mercadopago";
-  const spec = FORMS[providerKey];
+  const isGetnet = providerKey === "getnet" && Boolean(getnetSlots);
+  // Getnet: slot que se edita (Web Checkout o Checkout API).
+  const firstSlot: GetnetSlot = getnetSlots && !getnetSlots.web_checkout && getnetSlots.checkout_api ? "checkout_api" : "web_checkout";
+  const [slot, setSlot] = useState<GetnetSlot>(firstSlot);
+  const spec = isGetnet && slot === "checkout_api" ? FORMS.getnet_api : FORMS[providerKey];
   const guide = CONNECT_GUIDE[providerKey];
   const connected = Boolean(method?.config?.connected);
+  // Credencial cargada en el slot que se edita (Getnet) o en la conexión.
+  const slotConnected = isGetnet ? Boolean(getnetSlots?.[slot]) : connected;
   const hasSandbox = SANDBOX_PROVIDERS.has(providerKey) || isMp;
   const currentEnv: Env = isMp ? mpEnvOf(method) : method?.sandbox && hasSandbox ? "test" : "prod";
   const caps: ChannelCap[] = Array.from(new Set(channelKeys.flatMap((k) => CHANNEL_CAPS[k] ?? [])));
@@ -304,8 +361,20 @@ export function ConnectProviderModal({
     setShowManual(false);
     setProbe(null);
     setProbing(false);
+    setSlot(firstSlot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Getnet: cambiar de slot arranca el formulario limpio.
+  const pickSlot = (s: GetnetSlot) => {
+    if (s === slot) return;
+    setSlot(s);
+    setValues({});
+    setTouched({});
+    setShowErrors(false);
+    setProbe(null);
+    setServerError(null);
+  };
 
   const allFields = spec?.fields ?? [];
   // Paso 1: credenciales. Los campos de una API puntual aparecen en el paso
@@ -368,6 +437,15 @@ export function ConnectProviderModal({
     const secrets = typedSecrets();
     // Getnet: ambiente explícito + API detectada por la prueba (si la hubo).
     if (onProbe) Object.assign(secrets, probeSecrets(probe, env));
+    if (isGetnet) {
+      // Un slot por vez, sin pisar el otro (merge) y sin dejar datos viejos del mismo.
+      const save = getnetSlotSave(slot, secrets, env);
+      run(
+        () => onSave({ secrets: save.secrets, remove: save.remove, merge: true, slot, env: slot === "web_checkout" ? env : undefined }),
+        () => setStep(2),
+      );
+      return;
+    }
     run(() => onSave({ secrets, env: SANDBOX_PROVIDERS.has(providerKey) ? env : undefined }), () => setStep(2));
   };
 
@@ -387,7 +465,8 @@ export function ConnectProviderModal({
     setProbe(null);
     try {
       const probeEnv = saved ? currentEnv : env;
-      setProbe(await onProbe(saved ? { env: probeEnv } : { secrets: typedSecrets(), env: probeEnv }));
+      const slotArg = isGetnet ? { slot } : {};
+      setProbe(await onProbe(saved ? { env: probeEnv, ...slotArg } : { secrets: typedSecrets(), env: probeEnv, ...slotArg }));
     } catch {
       setProbe({ ok: false, summary: "No pudimos probar las credenciales. Revisá tu conexión y probá de nuevo." });
     } finally {
@@ -581,7 +660,30 @@ export function ConnectProviderModal({
               </button>
             )}
 
-            {onProbe && (
+            {isGetnet && getnetSlots && (
+              <GetnetSlotCards
+                slots={getnetSlots}
+                active={slot}
+                onPick={pickSlot}
+                onEdit={(s) => {
+                  pickSlot(s);
+                  setView("wizard");
+                  setStep(0);
+                }}
+                onClear={
+                  onClearSlot && getnetSlots.web_checkout && getnetSlots.checkout_api
+                    ? (s) =>
+                        run(
+                          () => onClearSlot(s),
+                          () => toast({ title: `Credenciales de ${GETNET_SLOT_BY_KEY[s].title} quitadas`, variant: "success" }),
+                        )
+                    : undefined
+                }
+                pending={saving}
+              />
+            )}
+
+            {onProbe && (!isGetnet || getnetSlots?.[slot]) && (
               <div className="space-y-2.5">
                 <button
                   type="button"
@@ -590,7 +692,11 @@ export function ConnectProviderModal({
                   className="flex w-full items-center gap-2 rounded-xl bg-fg-4 px-3.5 py-3 text-left text-sm font-medium transition hover:bg-fg-6 disabled:opacity-50"
                 >
                   <PlugZap size={15} className="text-muted-foreground" />
-                  {probing ? "Probando la conexión..." : "Probar conexión"}
+                  {probing
+                    ? "Probando la conexión..."
+                    : isGetnet
+                      ? `Probar ${GETNET_SLOT_BY_KEY[slot].title}`
+                      : "Probar conexión"}
                 </button>
                 {probe && <ProbePanel result={probe} />}
               </div>
@@ -626,6 +732,12 @@ export function ConnectProviderModal({
               </>
             ) : (
               <>
+                {isGetnet && getnetSlots && (
+                  <div className="space-y-2.5">
+                    <Eyebrow>¿Qué credenciales vas a cargar?</Eyebrow>
+                    <GetnetSlotCards slots={getnetSlots} active={slot} onPick={pickSlot} />
+                  </div>
+                )}
                 {guide && (
                   <div className="space-y-3">
                     <Eyebrow>Cómo conectarlo</Eyebrow>
@@ -660,7 +772,7 @@ export function ConnectProviderModal({
                         optional={f.optional}
                         secret={f.secret}
                         mono
-                        configured={connected && !f.optional}
+                        configured={slotConnected && !f.optional}
                         configuredLabel="Configurada"
                         name={`${providerKey}_${f.name}`}
                         autoComplete={f.secret ? "new-password" : "off"}
@@ -672,7 +784,7 @@ export function ConnectProviderModal({
                           setProbe(null);
                         }}
                         onBlur={() => setTouched((t) => ({ ...t, [f.name]: true }))}
-                        placeholder={connected ? "Pegá el valor nuevo" : f.placeholder}
+                        placeholder={slotConnected && !f.optional ? "Pegá el valor nuevo" : f.placeholder}
                         hint={f.hint}
                         error={errorOf(f)}
                       />
@@ -788,7 +900,9 @@ export function ConnectProviderModal({
               <Check size={32} strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-lg font-bold">{brand.name} quedó conectado</p>
+              <p className="text-lg font-bold">
+                {isGetnet ? `${GETNET_SLOT_BY_KEY[slot].title} de ${brand.name} quedó conectado` : `${brand.name} quedó conectado`}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {finalEnv === "test"
                   ? "Ambiente de prueba: los cobros no mueven plata real."
@@ -811,6 +925,15 @@ export function ConnectProviderModal({
               )}
               {(providerKey === "payway" || providerKey === "mobbex") && (
                 <NextStep n={2}>Armá tus planes de cuotas y recargo por tarjeta.</NextStep>
+              )}
+              {isGetnet && slot === "checkout_api" && (
+                <NextStep n={2}>
+                  Armá tus planes de cuotas de Getnet: son las cuotas que el cliente ve en tu checkout. En el POS elegís
+                  Getnet, Link (checkout propio).
+                </NextStep>
+              )}
+              {isGetnet && slot === "web_checkout" && (
+                <NextStep n={2}>En el POS elegís Getnet, QR o Link: el cliente paga en la página de Getnet.</NextStep>
               )}
             </ul>
           </div>
@@ -861,6 +984,44 @@ function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwit
   const switchTo = probeMismatchEnv(result);
   if (result.error === "not_connected") {
     return <Notice tone="warning">Cargá el Client ID y el Client Secret para probarlos.</Notice>;
+  }
+  if (!result.ok && result.slot_mismatch) {
+    return (
+      <Notice tone="warning" title="Estas credenciales van en el otro lugar">
+        {result.summary}
+      </Notice>
+    );
+  }
+  if (result.slot === "checkout_api") {
+    const apiAttempts = result.api_attempts ?? [];
+    return result.ok ? (
+      <div className="space-y-2">
+        <Notice title="Las credenciales funcionan">
+          {result.label}
+          {result.seller_id ? ` · Seller ID ${result.seller_id}` : ""}. Se guarda con la conexión.
+        </Notice>
+        {(result.warnings ?? []).map((w) => (
+          <Notice key={w} tone="warning">
+            {w}
+          </Notice>
+        ))}
+      </div>
+    ) : (
+      <div className="space-y-2">
+        <Notice tone="danger" title="Getnet no aceptó las credenciales">
+          {result.summary ?? "No pudimos validar las credenciales."}
+        </Notice>
+        {apiAttempts.length > 0 && (
+          <ul className="space-y-1 rounded-lg bg-fg-4 p-3 text-xs text-muted-foreground">
+            {apiAttempts.map((a) => (
+              <li key={a.endpoint} className="break-words">
+                {probeApiAttemptLine(a)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
   }
   if (result.ok) {
     return (
@@ -916,6 +1077,92 @@ function ProbePanel({ result, onSwitchEnv }: { result: GetnetProbeResult; onSwit
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// Getnet (ADR-069): los dos juegos de credenciales, qué es cada uno y si está
+// cargado. Elegible (paso de datos) o con acciones (Administrar).
+function GetnetSlotCards({
+  slots,
+  active,
+  onPick,
+  onEdit,
+  onClear,
+  pending = false,
+}: {
+  slots: Record<GetnetSlot, boolean>;
+  active: GetnetSlot;
+  onPick: (s: GetnetSlot) => void;
+  onEdit?: (s: GetnetSlot) => void;
+  onClear?: (s: GetnetSlot) => void;
+  pending?: boolean;
+}) {
+  return (
+    <div className="grid gap-2.5" role="radiogroup" aria-label="Credenciales de Getnet">
+      {GETNET_SLOTS.map((d) => {
+        const on = active === d.key;
+        const loaded = slots[d.key];
+        return (
+          <div
+            key={d.key}
+            role="radio"
+            aria-checked={on}
+            tabIndex={0}
+            onClick={() => onPick(d.key)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPick(d.key);
+              }
+            }}
+            className={cn(
+              "cursor-pointer rounded-lg border p-3.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              on ? "border-foreground/40 bg-fg-4" : "border-border hover:bg-fg-4",
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">{d.title}</p>
+              <StatusChip tone={loaded ? "ok" : "idle"}>{loaded ? "Cargadas" : "Sin cargar"}</StatusChip>
+            </div>
+            <p className="mt-1 text-[13px] text-muted-foreground">{d.purpose}</p>
+            <p className="mt-1 text-[13px] text-muted-foreground">{d.credentials}</p>
+            {(onEdit || (onClear && loaded)) && (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {onEdit && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(d.key);
+                    }}
+                  >
+                    <KeyRound size={14} /> {loaded ? "Actualizar" : "Cargar credenciales"}
+                  </Button>
+                )}
+                {onClear && loaded && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger"
+                    disabled={pending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClear(d.key);
+                    }}
+                  >
+                    Quitar
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

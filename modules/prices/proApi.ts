@@ -15,10 +15,12 @@ import type {
   MarkupMode,
   PaymentTermLike,
   PriceScheduleLike,
+  PricingTax,
   PricingWorld,
   ProPriceItem,
   ProPriceList,
   ProductCostsLike,
+  ProductTaxLike,
   QtyBreak,
 } from "@/lib/prices/resolve";
 import type { BulkPreviewRow, TermRateMode } from "@/lib/prices/bulk";
@@ -246,6 +248,31 @@ function normalizeSnapshot(raw: Any): PricingSnapshot {
     ),
     assigned: (raw.assigned ?? []) as (string | null)[],
     customerTermId: raw.customerTermId ?? null,
+    tax: normalizeTax(raw.tax),
+  };
+}
+
+// ADR-068: datos fiscales para llevar el precio a final (lista neta o internos).
+function normalizeTax(raw: Any): PricingTax | null {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    discriminates: raw.discriminates !== false,
+    internalEnabled: Boolean(raw.internalEnabled),
+    products: Object.fromEntries(
+      Object.entries((raw.products ?? {}) as Record<string, Any>).map(([k, p]) => [
+        k,
+        {
+          rate_code: p.rate_code ?? "21",
+          mode: p.mode ?? "none",
+          base: p.base ?? "price",
+          rate: p.rate == null ? null : Number(p.rate),
+          amount: p.amount == null ? null : Number(p.amount),
+          included: p.included !== false,
+          cost: p.cost == null ? null : Number(p.cost),
+          variants: p.variants ?? null,
+        } satisfies ProductTaxLike,
+      ]),
+    ),
   };
 }
 

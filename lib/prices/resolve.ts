@@ -20,8 +20,13 @@
 //   4. PRO: escala por cantidad (precio fijo o %), recargo de la condición de
 //      pago (contado, 30, 60, 90 días), redondeo de la lista sobre lo
 //      calculado y piso (precio mínimo del producto y margen mínimo de la lista).
-//   5. Siempre a centavos con mitad hacia arriba (igual que Postgres).
+//   5. Impuestos (ADR-068): lista neta (sin IVA) o internos adicionales →
+//      precio final con priceToFinal (espejo de _tax_price_to_final). En el
+//      caso común (lista con IVA, sin internos adicionales) no cambia nada.
+//   6. Siempre a centavos con mitad hacia arriba (igual que Postgres).
 
+import type { IvaCode } from "@/lib/tax/catalog";
+import { priceToFinal, type InternalTax } from "@/lib/tax/engine";
 import {
   applyRounding,
   fromCents,
@@ -91,6 +96,8 @@ export interface ProPriceList {
   deleted_at?: string | null;
   pos_selectable?: boolean;
   created_at?: string;
+  /** false: precios netos (sin IVA); el resolver suma el IVA del producto. */
+  prices_include_tax?: boolean;
 }
 
 export interface ProPriceItem {
@@ -144,6 +151,28 @@ export interface ProductCostsLike {
   min_price?: number | null;
 }
 
+/** Datos fiscales de un producto para llevar el precio a final (ADR-068). */
+export interface ProductTaxLike {
+  rate_code: IvaCode;
+  mode: InternalTax["mode"];
+  base: InternalTax["base"];
+  rate: number | null;
+  amount: number | null;
+  included: boolean;
+  cost: number | null;
+  /** Alícuota propia de cada variante (sólo las que la tienen). */
+  variants?: Record<string, IvaCode> | null;
+}
+
+export interface PricingTax {
+  /** El emisor discrimina IVA (responsable inscripto o sin configurar). */
+  discriminates: boolean;
+  /** El negocio tiene `impuestos_internos`. */
+  internalEnabled: boolean;
+  /** Sólo viene cuando algún precio cambia (lista neta o internos adicionales). */
+  products: Record<string, ProductTaxLike>;
+}
+
 export interface PricingWorld {
   /** El negocio tiene `listas_precios_pro`. */
   pro: boolean;
@@ -158,6 +187,8 @@ export interface PricingWorld {
   assigned: (string | null)[];
   /** Condición de pago de la ficha del cliente. */
   customerTermId: string | null;
+  /** Datos fiscales (ADR-068). Sin esto, el precio de lista es el final. */
+  tax?: PricingTax | null;
 }
 
 export interface PriceQuery {
@@ -435,7 +466,26 @@ export function resolveUnitPrice(w: PricingWorld, q: PriceQuery): PriceResolutio
     if (step.cents < floor) step = { cents: floor, computed: true };
   }
 
-  return { price: fromCents(Math.max(0, step.cents)), listId: list?.id ?? null, termId };
+  // Impuestos (ADR-068): lista neta o internos adicionales.
+  let cents = Math.max(0, step.cents);
+  const pt = w.tax?.products?.[pid];
+  if (w.tax && pt) {
+    const includes = list?.prices_include_tax !== false;
+    if (!includes || (w.tax.internalEnabled && pt.mode !== "none")) {
+      cents = toCents(
+        priceToFinal(fromCents(cents), {
+          rateCode: (vid && pt.variants?.[vid]) || pt.rate_code,
+          internal: { mode: pt.mode, base: pt.base, rate: pt.rate, amount: pt.amount, included: pt.included },
+          unitCost: pt.cost,
+          discriminates: w.tax.discriminates,
+          internalEnabled: w.tax.internalEnabled,
+          listIncludesIva: includes,
+        }),
+      );
+    }
+  }
+
+  return { price: fromCents(Math.max(0, cents)), listId: list?.id ?? null, termId };
 }
 
 /** Recargo de una condición sobre un monto (para mostrar "precio por plazo"). */

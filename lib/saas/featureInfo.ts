@@ -532,6 +532,16 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     impact: "Desactivada, el equipo sigue teniendo la ayuda de cada pantalla pero no puede hacer cursos ni certificarse.",
     minPlan: "Start",
   },
+  tours: {
+    desc: "Recorridos guiados: pasos sobre la pantalla (primer cobro, recorrido por rubro como heladería) con foco en el botón a tocar y \"hacer ahora\". NinjaSoft los actualiza sin que el negocio tenga que hacer nada.",
+    impact: "Desactivado, nadie del negocio ve recorridos; la ayuda y la Escuela siguen disponibles.",
+    minPlan: "Start",
+  },
+  sugerencias: {
+    desc: "Sugerencias de uso: avisos cortos según lo que pasa en el negocio (sin productos, caja cerrada, prueba por vencer, cobro fallido), con límite por día para no molestar.",
+    impact: "Desactivado, el negocio no recibe sugerencias en pantalla; los anuncios de la campana siguen llegando.",
+    minPlan: "Start",
+  },
 };
 
 // Dependencias directas de plan de una feature (vacío si no depende de otra).

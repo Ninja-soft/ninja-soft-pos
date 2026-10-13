@@ -38,7 +38,7 @@ export function OpenShiftModal({
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button loading={loading} onClick={() => onConfirm(Number(amount) || 0)}>
+          <Button loading={loading} onClick={() => onConfirm(Number(amount) || 0)} data-tour="caja-abrir-confirmar">
             Abrir
           </Button>
         </div>

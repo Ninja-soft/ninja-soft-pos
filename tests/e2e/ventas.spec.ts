@@ -37,19 +37,30 @@ test.describe("ventas", () => {
     test.skip(!hasAlerts, "Filtro Con alertas (ADR-064) todavía no está desplegado");
 
     await status.selectOption("alerts");
-    await settle(page);
-    await expect(page.getByText("Error al cargar")).toHaveCount(0);
-    // Con alertas: sólo ventas marcadas; sin alertas en QA: estado vacío.
-    const rows = page.locator("tbody tr");
-    await expect(rows.first()).toBeVisible();
-    const empty = await page.getByText("Todavía no hay ventas").isVisible();
-    if (!empty) {
-      await expect(page.getByText(/contracargo|reclamo|devolución|devuelto/i).first()).toBeVisible();
-    }
+    await expect(status).toHaveValue("alerts");
+
     // El link de los avisos (/ventas?alertas=1) deja el filtro aplicado.
     await gotoClean(page, "/ventas?alertas=1");
     await expect(status).toHaveValue("alerts");
-    await status.selectOption("");
-    await expect(status).toHaveValue("");
+    await settle(page);
+    await expect(page.getByText("Error al cargar")).toHaveCount(0);
+    // Con alertas: sólo ventas marcadas; sin alertas en QA: estado vacío del
+    // filtro (no el de "todavía no vendiste") con "Limpiar filtros".
+    const body = page.locator("tbody");
+    const filteredEmpty = body.getByText("No hay ventas con alertas en este período");
+    const legacyEmpty = body.getByText("Todavía no hay ventas");
+    const alertRow = body.locator("tr").filter({ hasText: /contracargo|reclamo|devoluci|devuelto|reintegr/i });
+    await expect(filteredEmpty.or(legacyEmpty).or(alertRow).first()).toBeVisible();
+    test.skip(
+      await legacyEmpty.isVisible(),
+      "Estado vacío filtrado de Ventas todavía no desplegado (muestra 'Todavía no hay ventas')",
+    );
+    if (await filteredEmpty.isVisible()) {
+      await body.getByRole("button", { name: "Limpiar filtros" }).click();
+      await expect(status).toHaveValue("");
+    } else {
+      await status.selectOption("");
+      await expect(status).toHaveValue("");
+    }
   });
 });

@@ -185,7 +185,9 @@ export async function resetPosPreset(page: Page) {
     await openPresetPopover(page);
     const reset = page.getByRole("button", { name: "Volver al del negocio" });
     if (await appears(reset, 1_000)) {
-      await reset.click();
+      // El popover se re-renderiza mientras llegan datos del POS: clic corto
+      // para que toPass reintente en vez de agotar el timeout en un solo intento.
+      await reset.click({ timeout: 3_000 });
       await expect(page.getByText("Diseño de esta pantalla")).toHaveCount(0);
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
       await openPresetPopover(page);

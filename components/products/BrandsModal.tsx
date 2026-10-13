@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useBrands, useCreateBrand, useBrandMutations } from "@/modules/products/hooks";
 import type { Brand } from "@/modules/products/api";
+import { errorDescription } from "@/lib/permissions/errors";
 
 interface Props {
   open: boolean;
@@ -31,8 +32,8 @@ export function BrandsModal({ open, onOpenChange }: Props) {
       await create.mutateAsync(newName.trim());
       setNewName("");
       toast({ title: "Marca creada", variant: "success" });
-    } catch {
-      toast({ title: "No se pudo crear", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo crear", description: errorDescription(e), variant: "error" });
     }
   }
 
@@ -52,8 +53,8 @@ export function BrandsModal({ open, onOpenChange }: Props) {
       await update.mutateAsync({ id: editId, name: editName.trim() });
       cancelEdit();
       toast({ title: "Marca actualizada", variant: "success" });
-    } catch {
-      toast({ title: "No se pudo actualizar", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo actualizar", description: errorDescription(e), variant: "error" });
     }
   }
 
@@ -62,8 +63,8 @@ export function BrandsModal({ open, onOpenChange }: Props) {
     try {
       await remove.mutateAsync(deleteTarget.id);
       toast({ title: "Marca eliminada", variant: "success" });
-    } catch {
-      toast({ title: "No se pudo eliminar", variant: "error" });
+    } catch (e) {
+      toast({ title: "No se pudo eliminar", description: errorDescription(e), variant: "error" });
     } finally {
       setDeleteTarget(null);
     }

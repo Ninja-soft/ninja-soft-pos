@@ -18,6 +18,7 @@ import { useProductMutations } from "@/modules/products/hooks";
 import { formatQty } from "@/lib/utils/format";
 import { useMultiStoreStock } from "@/modules/stock/hooks";
 import { StoreStockAdjustForm } from "@/components/stock/StoreStockAdjustForm";
+import { errorDescription } from "@/lib/permissions/errors";
 
 interface Props {
   open: boolean;
@@ -56,7 +57,7 @@ export function StockAdjustModal({ open, onOpenChange, product }: Props) {
     } catch (e) {
       toast({
         title: "No se pudo ajustar",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     }

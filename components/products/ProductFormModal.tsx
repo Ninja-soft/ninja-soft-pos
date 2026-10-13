@@ -73,6 +73,7 @@ import {
   useProductPackages,
   useVariants,
 } from "@/modules/products/hooks";
+import { errorDescription } from "@/lib/permissions/errors";
 
 interface Props {
   open: boolean;
@@ -406,7 +407,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
     } catch (e) {
       toast({
         title: "No se pudo guardar",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     } finally {

@@ -14,6 +14,7 @@ import {
 import type { Product } from "@/modules/products/api";
 import { useProductMutations } from "@/modules/products/hooks";
 import { formatQty } from "@/lib/utils/format";
+import { errorDescription } from "@/lib/permissions/errors";
 
 // F13 · H50 — Registrar producción / batch (preparación previa) de un producto:
 // helado, masa, prep de barra. SIEMPRE es un INGRESO: se ingresa la cantidad
@@ -57,7 +58,7 @@ export function ProductionModal({ open, onOpenChange, product }: Props) {
     } catch (e) {
       toast({
         title: "No se pudo registrar la producción",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     }

@@ -29,6 +29,7 @@ import {
   useCustomerGroups,
   useRequiredCustomerFields,
 } from "@/modules/customers/hooks";
+import { errorDescription } from "@/lib/permissions/errors";
 
 const selectCls =
   "h-11 w-full rounded-lg border border-input bg-background px-4 text-sm text-foreground outline-none focus:border-ninja-flameSoft focus:ring-4 focus:ring-ninja-flameSoft/15";
@@ -163,7 +164,7 @@ export function CustomerFormModal({
     } catch (e) {
       toast({
         title: "No se pudo guardar",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     }

@@ -27,6 +27,9 @@ import { useBranchContext } from "@/modules/branches/hooks";
 import { BranchDot } from "@/components/branches/BranchSwitcher";
 import { saleAlertBadges, type PaymentDisputeRow } from "@/lib/reports/paymentDisputes";
 import { useSaleDisputes } from "@/modules/reports/paymentDisputes";
+import { errorDescription } from "@/lib/permissions/errors";
+import { useRolePermissions } from "@/lib/permissions/useRole";
+import { RoleIconButton } from "@/components/permissions/RoleGate";
 
 // Modales en chunks aparte, montados recién al abrirlos (ticket, devolución /
 // cambio y cobros QR son pesados y no hacen falta para listar ventas).
@@ -95,6 +98,10 @@ export default function VentasPage() {
   const [exporting, setExporting] = useState(false);
   // Devoluciones/cambios es feature de plan (Pro): gatea el botón por fila.
   const returnGate = useFeatureGate("devoluciones", "Devoluciones");
+  // Permisos por rol (ADR-071): solo lectura no anula ni devuelve; el cajero
+  // anula sólo ventas del día (hora de Argentina). La base lo rechaza igual.
+  const perms = useRolePermissions();
+  const deniedReturn = perms.denied("sales:return");
 
   function openTicket(id: string, tab: "ticket" | "cobros" = "ticket") {
     setTicketId(id);
@@ -166,7 +173,7 @@ export default function VentasPage() {
     } catch (e) {
       toast({
         title: "No se pudo exportar",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     } finally {
@@ -184,7 +191,7 @@ export default function VentasPage() {
     } catch (e) {
       toast({
         title: "No se pudo anular",
-        description: e instanceof Error ? e.message : undefined,
+        description: errorDescription(e),
         variant: "error",
       });
     }
@@ -383,7 +390,7 @@ export default function VentasPage() {
                       >
                         <Receipt size={16} />
                       </button>
-                      {s.status === "completed" && (
+                      {s.status === "completed" && !deniedReturn && (
                         <button
                           onClick={() =>
                             returnGate.run(() => {
@@ -412,13 +419,14 @@ export default function VentasPage() {
                         </button>
                       )}
                       {s.status === "completed" && (
-                        <button
+                        <RoleIconButton
+                          denied={perms.denied("sales:void", { saleDate: s.created_at })}
                           onClick={() => setVoidTarget({ id: s.id, number: s.number })}
                           title="Anular"
                           className="rounded-md p-2 text-muted-foreground transition hover:bg-red-400/15 hover:text-danger"
                         >
                           <Ban size={16} />
-                        </button>
+                        </RoleIconButton>
                       )}
                     </div>
                   </td>

@@ -75,6 +75,7 @@ import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { useAccountStatus } from "@/modules/saas/accountStatus";
 import { SuspendedGate } from "@/components/saas/SuspendedGate";
 import { PastDueBanner } from "@/components/saas/PastDueBanner";
+import { ReadOnlyBanner } from "@/components/permissions/RoleGate";
 import { InactivityGuard } from "@/components/system/InactivityGuard";
 import { MountWhenOpened } from "@/components/ui/MountWhenOpened";
 import { useCartStore } from "@/modules/pos/store";
@@ -696,6 +697,7 @@ export function AppShell({
         >
           <PastDueBanner />
           <BlockingNotificationBanner />
+          <ReadOnlyBanner />
           {children}
         </main>
       </div>

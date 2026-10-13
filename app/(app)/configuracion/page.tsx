@@ -180,6 +180,9 @@ const ApiSettings = dynamic(
 // Envíos y logística (ADR-103): conexiones por negocio o sucursal.
 const ShippingSettings = dynamic(
   () => import("@/components/shipping/ShippingSettings").then((m) => m.ShippingSettings),
+// Mercado Libre (H87 · ADR-104): cuentas y configuración por cuenta.
+const MlSettings = dynamic(
+  () => import("@/components/integrations/mercadolibre/MlSettings").then((m) => m.MlSettings),
   { loading },
 );
 
@@ -417,6 +420,8 @@ function SectionBody({ section }: { section: SettingsSectionKey }) {
       return <ApiSettings />;
     case "envios":
       return <ShippingSettings />;
+    case "mercadolibre":
+      return <MlSettings />;
     // Facturación electrónica ARCA (ADR-072): dueño o encargado.
     case "facturacion":
       return <ArcaSettings />;

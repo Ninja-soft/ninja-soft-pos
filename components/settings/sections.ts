@@ -19,6 +19,7 @@ import {
   ScanLine,
   Landmark,
   ShieldCheck,
+  ShoppingBag,
   SlidersHorizontal,
   KeyRound,
   Store,
@@ -68,6 +69,7 @@ export type SettingsSectionKey =
   | "nubceo"
   | "api"
   | "envios"
+  | "mercadolibre"
   | "facturacion";
 
 export type SettingsSectionDef = {
@@ -408,6 +410,16 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Truck,
         feature: "envios",
         keywords: "envios logistica andreani correo argentino oca pickit hop andesmar bluemail cabify enviopack etiqueta despacho carrier courier seguimiento tracking",
+      // Mercado Libre (H87 · ADR-104): cuentas conectadas y su sincronización.
+      {
+        key: "mercadolibre",
+        label: "Mercado Libre",
+        title: "Mercado Libre",
+        description:
+          "Conectá tus cuentas de Mercado Libre: stock y precio de las publicaciones desde el POS, ventas que entran solas, facturación y etiquetas.",
+        icon: ShoppingBag,
+        feature: "mercadolibre",
+        keywords: "mercado libre mercadolibre meli publicaciones ventas online marketplace sincronizar stock precio etiquetas envios preguntas canal ecommerce",
       },
     ],
   },
@@ -468,6 +480,8 @@ export const SECTION_ALIASES: Record<string, SettingsSectionKey> = {
   pin: "seguridad",
   supervisor: "seguridad",
   integraciones: "nubceo",
+  meli: "mercadolibre",
+  "mercado-libre": "mercadolibre",
   "api-publica": "api",
   logistica: "envios",
   logisticas: "envios",

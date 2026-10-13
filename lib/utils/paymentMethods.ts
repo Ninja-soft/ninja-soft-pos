@@ -11,4 +11,5 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   other: "Otro",
   directo: "Directo",
   sena: "Seña",
+  mercadolibre: "Mercado Libre",
 };

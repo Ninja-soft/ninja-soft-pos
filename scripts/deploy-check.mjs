@@ -65,6 +65,8 @@ export const PUBLIC_FUNCTIONS = [
   "getnet_checkout",
   "getnet_webhook",
   "gocuotas_webhook",
+  "ml_oauth_callback",
+  "ml_webhook",
   "mobbex_webhook",
   "modo_webhook",
   "mp_billing_webhook",

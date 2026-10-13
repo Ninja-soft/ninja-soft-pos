@@ -234,15 +234,29 @@ Una sesión de venta completa: apertura de caja → 20 ventas con productos real
   - [x] Vigencia por fecha/horario. *Hecho: vigencia, días y franja horaria (ADR-074).*
   - [x] Combinables o exclusivas. *Hecho: excluyentes o acumulables (`stackable`, ADR-074).*
 - [ ] **Marketplace de integraciones:**
-  - [ ] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06)*
-    - [ ] **Conexión por tenant**: OAuth "Conectar con Mercado Libre" (un click, mismo patrón que MP en H15); tokens y refresh en tabla de secretos con RLS deny-all (solo Edge Functions), renovación automática.
-    - [ ] **Publicar desde el POS**: crear/editar publicaciones ML desde la ficha del producto — título, precio, fotos (reusa WebP de H7), categoría ML sugerida y atributos obligatorios. Vincular productos existentes con publicaciones ya creadas (matcheo por SKU/EAN de H10b).
-    - [ ] **Gestor de publicaciones**: pantalla dedicada con listado y estado (activa, pausada, sin stock, con problemas), pausar/reactivar, edición rápida de precio/stock y métricas básicas (visitas, preguntas pendientes).
-    - [ ] **Sincronización de stock y precio**: venta en mostrador descuenta stock de la publicación; cambio de precio/stock en el POS impacta en ML. Lista de precios por canal (gancha con H10: mostrador vs. ML con margen propio).
-    - [ ] **Ventas de ML dentro del POS**: las órdenes de ML entran por webhook/notificaciones como ventas del canal "Mercado Libre" — descuentan stock, aparecen en /ventas y reportes con comisión ML y costo de envío visibles por venta.
-    - [ ] **Conciliación**: cobros de ML (vía Mercado Pago) cruzados con sus órdenes; divergencias de stock detectadas con resolución manual (gancha con cockpit H84).
-    - [ ] **Preguntas y mensajería** de compradores: bandeja básica para responder desde el POS *(etapa 2)*.
-    - [ ] *Criterio:* el dueño conecta su cuenta ML, publica un producto del catálogo con foto y precio propio del canal, una venta en ML descuenta stock y aparece en /ventas con su comisión, y una venta en mostrador baja el stock de la publicación sin tocar ML a mano.
+  - [~] **H87 — Mercado Libre: gestor de publicaciones y ventas desde el POS.** *(agregado 2026-06-06; ampliado 2026-10-13 con la doc oficial de ML, ADR-104, guía `docs/38-mercadolibre.md`)* Feature `mercadolibre` OPTIONAL desde Pro.
+    - **Fase MVP** *(rama `feat/mercadolibre-mvp`, migraciones `20261110400000` a `20261110400300` sin aplicar; falta crear la app en DevCenter y cargar `ML_CLIENT_ID`/`ML_CLIENT_SECRET`)*:
+      - [x] **Conexión**: OAuth con PKCE por negocio, varias cuentas por negocio (una cuenta de ML en un solo negocio), tokens sólo service_role, renovación con lock por cuenta (refresh de un solo uso), estado de la conexión y reconexión.
+      - [x] **Notificaciones**: `ml_webhook` responde sin llamar a ML (inbox idempotente), worker con GET autenticado, reconciliación por `missed_feeds` y búsqueda de órdenes, cola de escrituras con coalescing, límite de llamadas por cuenta y backoff.
+      - [x] **Publicaciones**: vincular existentes por SKU/GTIN, publicar desde la ficha del producto (predictor de categoría, atributos obligatorios, `/items/validate`, fotos, tipo de publicación, precio del canal por lista o margen, User Products y clásico), pausar/activar en lote, estado y calidad.
+      - [x] **Sincronización**: stock absoluto de la sucursal/depósito de la cuenta (x-version y 409 en `selling_address`), precio por `PUT /items` respetando la automatización de precios de ML.
+      - [x] **Ventas**: orden (o carrito) -> UNA venta del POS, canal Mercado Libre, medio Mercado Libre sin caja, stock una sola vez, comisión y envío visibles, cancelación que revierte y anula, bloqueo por fraude.
+      - [x] **Facturación**: al pagar, al despachar o a mano con la cola ARCA (CUIT -> A, DNI -> B para RI) y PDF subido a `/packs/{id}/fiscal_documents`.
+      - [x] **Envíos y preguntas**: etiquetas ME2 PDF/ZPL de a 50 (ZPL a la cola de impresión), estado y tracking; bandeja de preguntas.
+      - [ ] *Criterio:* checklist de aceptación de `docs/38-mercadolibre.md` §1.6 con usuarios de test (pendiente: app de ML y secrets).
+    - **Fase v2: logística y stock avanzado**:
+      - [ ] Panel por logística (ME1, ME2 drop_off / Colecta / Places, Flex, Full) con KPIs.
+      - [ ] Convivencia Full/Flex con `selling_address` separado y depósito virtual "Full" (sólo lectura) con inventario, no disponibles y operaciones (`fbm_stock_operations`).
+      - [ ] Multi-origen: mapeo de depósitos de ML a sucursales/depósitos del POS (`ml_location_map` tipo `seller_warehouse`).
+      - [ ] Planificador de envíos a Full (replenishment) con reserva en tránsito y conciliación por `inbound_reception`.
+      - [ ] ME1: tracking y estados por `/v2/shipments/{id}/seller_notifications` (punto de enganche `ml_shipments.me1_tracking`; se integra con la rama de envíos).
+      - [ ] Flex: zonas, rangos, feriados, registro del cadete y conciliación con `flex-handshakes`.
+      - [ ] Reclamos y devoluciones que generan `sale_return` y NC ARCA; NC subida al pack.
+      - [ ] Mensajería postventa con motivos; catálogo (elegibilidad, opt-in, `price_to_win`); edición masiva grande por la cola.
+    - **Fase v3: crecimiento**:
+      - [ ] Central de promociones: invitaciones con deadline, simulador de margen (costo POS + comisión + envío - bonificación ML), adhesión masiva, campaña propia, relámpago con stock, alertas por margen negativo.
+      - [ ] Métricas: visitas, conversión, reputación, calidad por ítem (`performance`); Product Ads en lectura (ACOS, ROAS).
+      - [ ] Sugerencias de precio, Facturador de ML como alternativa (`invoice_mode = ml_billing`) y asistente IA para títulos y atributos.
   - [ ] Tienda Nube.
   - [~] **H88 — Asistente IA como addon del plan.** *(agregado 2026-06-07; base hecha 2026-06-08)* Como en Ninja Food: una IA embebida en el POS, **gateada como addon de pago** (feature flag `ai_assistant` + addon en el plan). — *Addon completo: config por proveedor, contexto amplio, cuota, burbuja con compra y explicador sin addon. Falta el tool-use que aplica cambios al ticket (hoy guía/consulta).*
     - [x] **Burbuja de chat** en el shell (visible solo con el addon activo) con **Gemini o Claude** vía Edge Function `ai_assistant` (la key vive en `platform_secrets` por proveedor, nunca en el cliente); burbuja con spinner/gif/ícono de proveedor y **botón de compra** cuando no está el addon. — *PRs #208, #231, #238.*

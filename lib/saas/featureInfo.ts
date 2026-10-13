@@ -563,6 +563,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Enterprise",
     needs: "Un sistema que se integre por HTTP y guarde el client_id y el secreto de forma segura.",
   },
+  mercadolibre: {
+    desc: "Mercado Libre integrado al POS: conectás una o varias cuentas (OAuth seguro, renovación automática y aviso para reconectar), importás tus publicaciones y las vinculás con tus productos por SKU o código de barras, o publicás desde la ficha del producto con la categoría sugerida, los datos que pide la categoría y validación previa. El stock publicable sale de la sucursal o depósito que elijas (con reserva de seguridad) y el precio de una lista propia del canal o de un margen sobre el precio del POS, sin pisar la automatización de precios de Mercado Libre. Cada orden pagada entra sola como venta del canal Mercado Libre con su comisión y envío, descuenta el stock una sola vez y una cancelación la revierte. Facturación ARCA al pagarse, al despacharse o a mano, con la letra según el comprador, y el PDF subido a la venta en Mercado Libre. Etiquetas de envío en PDF o ZPL de a 50, bloqueo por riesgo de fraude y bandeja de preguntas.",
+    impact: "Desactivado, no se conectan cuentas, no se publican ni sincronizan publicaciones y las órdenes no entran como ventas (el servidor lo exige); lo ya registrado se puede consultar.",
+    minPlan: "Pro",
+    needs: "Una cuenta de Mercado Libre del dueño (usuario administrador, no colaborador) y la app de Mercado Libre de NinjaSoft configurada.",
+  },
   integracion_nubceo: {
     desc: "Integración con NubCeo: cada venta viaja sola a NubCeo con sus cobros (tarjeta, QR, transferencia, cupón, lote, autorización, n° de comercio) para conciliarla contra las liquidaciones. Ritmo y ventana horaria configurables, modo solo simular, mapeo de campos y medios, monitor de lo enviado con reintentos, anulaciones que se borran de NubCeo, devoluciones como nota de crédito e importación de los asientos contables que arma NubCeo.",
     impact: "Desactivado, no se mandan ventas a NubCeo ni se importan asientos (el servidor lo rechaza); lo ya enviado se puede seguir mirando.",

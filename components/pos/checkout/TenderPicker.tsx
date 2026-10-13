@@ -2,9 +2,9 @@
 
 import { Fragment } from "react";
 import { Check, ChevronRight, CreditCard, Link2, QrCode, Smartphone } from "lucide-react";
-import { brandRuns, type CheckoutSection, type ResolvedTender } from "@/lib/pos/tenders";
+import { brandRuns, isManualTender, type CheckoutSection, type ResolvedTender } from "@/lib/pos/tenders";
 import { cn } from "@/lib/utils/cn";
-import { TenderLogo, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
+import { TenderLogo, tenderColorIcon, tenderFallback, tenderGlyph } from "../ui/TenderLogo";
 import { money } from "../ui/posStyles";
 
 // Selector de medios de cobro de la hoja de cobro, agrupado por medio, marca y
@@ -20,6 +20,10 @@ import { money } from "../ui/posStyles";
 // los genéricos (efectivo, transferencia, posnet, vale, cuenta corriente), el
 // set propio Phosphor duotone (TenderLogo → tenderGlyph). El título usa hasta
 // dos líneas y la bajada completa queda en el tooltip (title).
+//
+// Los tres medios manuales (efectivo, transferencia y tarjeta en posnet) van
+// juntos en UNA fila de botones compactos con su ícono a color (Flaticon,
+// tenderColorIcon) y un título de una palabra; la bajada queda en el title.
 //
 // Variantes:
 //   tiles   → grilla de tiles (Dos columnas)
@@ -120,9 +124,18 @@ export function TenderPicker({
   /** Sólo `list`: contenido desplegado debajo del medio activo (el editor). */
   renderExpanded?: () => React.ReactNode;
 }) {
-  const expanded = (ids: string[]) =>
+  // `detached`: debajo de la fila de manuales (tres botones) el editor va como
+  // card propia, no pegado a un solo botón.
+  const expanded = (ids: string[], detached = false) =>
     variant === "list" && renderExpanded && activeId && ids.includes(activeId) ? (
-      <div className="rounded-b-lg border border-t-0 border-border bg-card px-3 pb-3 pt-1">{renderExpanded()}</div>
+      <div
+        className={cn(
+          "border border-border bg-card px-3 pb-3",
+          detached ? "rounded-lg pt-3" : "rounded-b-lg border-t-0 pt-1",
+        )}
+      >
+        {renderExpanded()}
+      </div>
     ) : null;
   const blocks = blocksOf(sections, channelChips);
 
@@ -145,7 +158,34 @@ export function TenderPicker({
     );
   };
 
-  const grid = (tenders: ResolvedTender[], wallets: boolean) => (
+  const grid = (all: ResolvedTender[], wallets: boolean) => {
+    const manual = wallets ? [] : all.filter(isManualTender);
+    const tenders = manual.length > 0 ? all.filter((t) => !isManualTender(t)) : all;
+    return (
+      <div className={cn(variant === "list" ? "space-y-1.5" : "space-y-2")}>
+        {manual.length > 0 && (
+          <>
+            <ManualRow
+              tenders={manual}
+              activeId={activeId}
+              onPick={onPick}
+              promoBadge={promoBadge}
+              disabled={disabled}
+              variant={variant}
+              dense={dense}
+            />
+            {expanded(
+              manual.map((t) => t.id),
+              true,
+            )}
+          </>
+        )}
+        {tenders.length > 0 && rest(tenders, wallets)}
+      </div>
+    );
+  };
+
+  const rest = (tenders: ResolvedTender[], wallets: boolean) => (
     <div
       className={cn(
         "grid",
@@ -215,6 +255,100 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <h3 className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
       {children}
     </h3>
+  );
+}
+
+// Fila de los medios manuales: hasta tres botones iguales en una sola fila,
+// en todos los tamaños. Se decide por el ancho de la FILA (container query
+// con variante arbitraria, sin plugin), no de la pantalla, porque la hoja de
+// cobro cambia de columnas: angosta (celular, o tablet con el panel al lado)
+// ícono arriba y título abajo (64px, cabe "Transferencia"); desde 500px,
+// ícono y título en una línea (48px, siempre >= 44px táctiles). El ícono a
+// color llena su caja.
+function ManualRow({
+  tenders,
+  activeId,
+  onPick,
+  promoBadge,
+  disabled,
+  variant,
+  dense,
+}: {
+  tenders: ResolvedTender[];
+  activeId: string | null;
+  onPick: (t: ResolvedTender) => void;
+  promoBadge?: (t: ResolvedTender) => number;
+  disabled?: boolean;
+  variant: TenderPickerVariant;
+  dense: boolean;
+}) {
+  const big = variant === "big";
+  const icon = big ? 32 : 28;
+  return (
+    <div
+      role="group"
+      aria-label="Medios manuales"
+      className="grid gap-2 [container-type:inline-size]"
+      style={{
+        gridTemplateColumns: `repeat(${tenders.length}, minmax(0, 1fr))`,
+      }}
+    >
+      {tenders.map((t) => {
+        const on = t.id === activeId;
+        const promo = promoBadge?.(t) ?? 0;
+        const short = t.shortLabel ?? t.label;
+        const tip = [t.label, t.hint, promo > 0 ? `Descuento ${money(promo)}` : null].filter(Boolean).join(": ");
+        return (
+          <button
+            key={t.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(t)}
+            aria-pressed={on}
+            title={tip}
+            className={cn(
+              "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+              "[@container(min-width:500px)]:flex-row [@container(min-width:500px)]:gap-2 [@container(min-width:500px)]:px-2.5",
+              // Seleccionado: borde neutro fuerte + relleno + tilde. Sin sombras.
+              on ? "border-foreground/60 bg-[var(--choice-fill)]" : cn(SURFACE, SURFACE_HOVER),
+              big
+                ? "min-h-[76px] [@container(min-width:500px)]:min-h-[60px]"
+                : dense
+                  ? "min-h-[60px] [@container(min-width:500px)]:min-h-[44px]"
+                  : "min-h-[64px] [@container(min-width:500px)]:min-h-[48px]",
+            )}
+          >
+            <TenderLogo source={t} alt="" size={icon} colorIcon={tenderColorIcon(t)} glyph={tenderGlyph(t)} />
+            <span
+              aria-hidden={short !== t.label}
+              className={cn(
+                "min-w-0 max-w-full truncate font-semibold leading-tight text-foreground",
+                big
+                  ? "text-sm [@container(min-width:500px)]:text-base"
+                  : "text-xs [@container(min-width:500px)]:text-sm",
+              )}
+            >
+              {short}
+            </span>
+            {short !== t.label && <span className="sr-only">{t.label}</span>}
+            {t.hint && <span className="sr-only">. {t.hint}</span>}
+            {promo > 0 && (
+              <span className="absolute left-1.5 top-1.5 text-[11px] font-semibold text-success" aria-hidden>
+                %
+              </span>
+            )}
+            {on && (
+              <span
+                aria-hidden
+                className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-[var(--pos-solid)] text-white"
+              >
+                <Check size={10} strokeWidth={3.5} />
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

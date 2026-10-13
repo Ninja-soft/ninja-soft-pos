@@ -54,6 +54,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## `iconos-color/*.png` (efectivo, transferencia y tarjeta en posnet)
+
+Íconos a color de los tres medios manuales de la hoja de cobro (fila
+"¿Cómo paga?") y del encabezado del medio activo
+(`components/pos/ui/TenderLogo.tsx` → `tenderColorIcon`). Recortados al borde
+(sin margen transparente) a 256 x 256 px.
+
+Fuente: **Flaticon** (www.flaticon.com), licencia gratuita de Flaticon con
+atribución obligatoria. Atribución requerida por Flaticon: "Icons made by
+{autor} from www.flaticon.com".
+
+| Archivo | Medio | Origen | Atribución |
+|---|---|---|---|
+| `posnet.png` | Tarjeta en posnet | https://cdn-icons-png.flaticon.com/512/7338/7338577.png (ícono Flaticon 7338577) | Icons made by **autor a verificar** from www.flaticon.com |
+| `efectivo.png` | Efectivo | Flaticon, provistos por el dueño, verificar autor | Icons made by **autor a verificar** from www.flaticon.com |
+| `transferencia.png` | Transferencia | Flaticon, provistos por el dueño, verificar autor | Icons made by **autor a verificar** from www.flaticon.com |
+
+Pendiente: completar el autor de cada ícono. El del 7338577 no se pudo
+confirmar (flaticon.com rechaza las consultas automáticas con 403 y el ícono no
+aparece indexado en buscadores); se ve en
+https://www.flaticon.com/free-icon/_7338577 abriéndolo desde un navegador. No
+se inventa un autor: mientras falte, esta atribución queda incompleta.
+
 ## Logos de marca (`*_cube.webp`, `public/images/payments`, `public/images/cards`)
 
 Logos oficiales de cada marca (Mercado Pago, Payway, MODO, Mobbex, Pagos360,

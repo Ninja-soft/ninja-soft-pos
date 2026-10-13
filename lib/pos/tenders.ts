@@ -93,6 +93,8 @@ export interface TenderDef {
   pointProvider?: PointProviderKey;
   /** Ayuda corta debajo del rótulo. */
   hint?: string;
+  /** Rótulo de una palabra para los botones compactos ("Posnet"). */
+  shortLabel?: string;
   /**
    * Getnet (ADR-069): juego de credenciales que exige el canal. QR y link
    * hosted usan Web Checkout; el checkout propio, Checkout API.
@@ -245,6 +247,7 @@ export const TENDERS: TenderDef[] = [
     brandLabel: "Tarjeta en posnet",
     channel: "manual",
     label: "Tarjeta en posnet",
+    shortLabel: "Posnet",
     method: null,
     provider: null,
     connection: null,
@@ -560,6 +563,16 @@ export function normalizeTenderId(id: string): string {
 
 function normalizeIds(ids: string[] | undefined): string[] {
   return Array.from(new Set((ids ?? []).map(normalizeTenderId)));
+}
+
+/**
+ * Medios manuales de la hoja de cobro (efectivo, transferencia y tarjeta en
+ * posnet sin integrar): van juntos en una fila de botones compactos.
+ */
+export const MANUAL_TENDER_IDS = ["cash", "transfer", "card"] as const;
+
+export function isManualTender(t: Pick<TenderDef, "id">): boolean {
+  return (MANUAL_TENDER_IDS as readonly string[]).includes(t.id);
 }
 
 export interface TenderSection {

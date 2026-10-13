@@ -58,7 +58,7 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Vender productos | ✅ | ✅ | ✅ | ❌ |
 | Aplicar descuento ≤ 10% | ✅ | ✅ | ✅ | ❌ |
 | Aplicar descuento > 10% | ✅ | ✅ | ⚠️ (requiere PIN de manager) | ❌ |
-| Anular venta del día | ✅ | ✅ | ⚠️ (requiere PIN) | ❌ |
+| Anular venta del día | ✅ | ✅ | ⚠️ (PIN de supervisor sólo si el dueño prende la regla "Anular una venta"; apagada por defecto) | ❌ |
 | Anular venta días anteriores | ✅ | ✅ | ❌ | ❌ |
 | Ver ventas propias | ✅ | ✅ | ✅ | ✅ |
 | Ver ventas de otros cajeros | ✅ | ✅ | ❌ | ✅ |
@@ -70,7 +70,7 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Abrir turno propio | ✅ | ✅ | ✅ | ❌ |
 | Cerrar turno propio | ✅ | ✅ | ✅ | ❌ |
 | Cerrar turno de otro | ✅ | ✅ | ❌ | ❌ |
-| Movimientos de caja (retiros, ingresos) | ✅ | ✅ | ⚠️ (solo ingresos < $10k) | ❌ |
+| Movimientos de caja (retiros, ingresos) | ✅ | ✅ | ⚠️ (sólo en su turno; PIN de supervisor desde el monto que fije el dueño en las reglas "Retiro de caja" e "Ingreso de caja", apagadas por defecto) | ❌ |
 | Ver arqueo histórico | ✅ | ✅ | ✅ (solo el propio) | ✅ |
 
 ### 4.3 Productos y stock
@@ -111,7 +111,7 @@ Notación: ✅ tiene el permiso · ❌ no lo tiene · ⚠️ con restricciones.
 | Acción | Owner | Manager | Cashier | Viewer |
 |---|---|---|---|---|
 | Reporte del día (propio) | ✅ | ✅ | ✅ | ✅ |
-| Reporte completo del negocio | ✅ | ✅ | ❌ | ✅ |
+| Reporte completo del negocio | ✅ | ✅ | ⚠️ (ve Reportes, acotado a sus sucursales) | ✅ (sus sucursales) |
 | Exportar reportes | ✅ | ✅ | ❌ | ✅ |
 | Ver audit_logs | ✅ | ✅ | ❌ | ✅ |
 
@@ -142,7 +142,7 @@ Notación: ✅ puede · ❌ la base lo rechaza · ⚠️ con condición.
 | Devoluciones y reintegros | ✅ | ✅ | ⚠️ PIN por política | ❌ | `return_sale` / `return_sale_v2` + `sale_returns_supervisor` (ADR-067) |
 | Listas de precios, condiciones de pago, escalas | ✅ | ✅ | ❌ | ❌ | `price_can_write()` / `price_pro_can_write()` (ADR-058) |
 | Planes de cuotas | ✅ | ✅ | ❌ | ❌ | policies de `payment_plans` |
-| Configuración del POS (`pos_settings`) | ✅ | ❌ | ❌ | ❌ | policies de `pos_settings` |
+| Configuración del POS (`pos_settings`) | ✅ | ⚠️ sólo la política de venta offline | ❌ | ❌ | policies de `pos_settings`; `offline_policy_save` acepta dueño o encargado (ADR-077) |
 | Medios de pago y cuentas de transferencia | ✅ | ✅ | ❌ | ❌ | policies de `transfer_accounts`, `payment_terminals` (ADR-055) |
 | Seguridad y PIN de supervisor | ✅ | ❌ | ❌ | ❌ | `security_settings_save` exige dueño |
 | Impuestos (regímenes, exenciones) | ✅ | ✅ | ❌ | ❌ | `tax_can_write()` (ADR-068) |
@@ -155,7 +155,13 @@ Reglas del trigger `role_write_guard` (migración `20261031200000_permisos_por_r
 - `viewer` no escribe nunca en las tablas operativas, ni por REST ni a través de una RPC.
 - `cashier` no escribe catálogo ni stock por REST ni por RPC `SECURITY INVOKER`; las RPC `SECURITY DEFINER` (vender, anular, devolver, recibir compras, traslados) siguen moviendo stock en su nombre.
 
-Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de contacto para el cajero, tope de $10k en ingresos del cajero (hoy es PIN por política), importación masiva con confirmación para el encargado y el cambio de rol de usuarios (lo hacen las Edge Functions `member_admin` e `invite_user`, sin test de integración en esta suite).
+Notas sobre lo que hace cumplir la base (diferencias detectadas en ADR-086):
+
+- **Anular venta del día:** el cajero anula ventas del día sin PIN salvo que el dueño prenda la regla "Anular una venta" (`security_settings.pin_policy.sale_void`, apagada por defecto).
+- **Reportes:** no hay corte por rol. Todos los roles ven Reportes; la base limita ventas, turnos, movimientos y cierres Z por sucursal (`user_allowed_store_ids()`, ADR-045).
+- **Ingresos de caja del cajero:** no hay un tope fijo de $10k. Lo reemplaza la regla configurable "Ingreso de caja" (`pin_policy.cash_in`, con umbral en pesos, apagada por defecto): sobre el umbral, quien no es supervisor necesita PIN (`require_supervisor` en `trg_cash_movements_guard`). Un tope nominal fijo no se implementó a propósito: en pesos queda viejo enseguida y bloquearía cajas que hoy operan. Deuda: si se quiere un tope duro por rol, sumarlo como umbral configurable por rol en `security_settings`.
+
+Pendiente (no lo hace cumplir la base): edición de clientes acotada a datos de contacto para el cajero, importación masiva con confirmación para el encargado y el cambio de rol de usuarios (lo hacen las Edge Functions `member_admin` e `invite_user`, sin test de integración en esta suite).
 
 ## 5. Matriz de permisos — Internos NinjaSoft
 

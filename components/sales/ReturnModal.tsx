@@ -18,6 +18,7 @@ import {
   Tag,
   Ticket,
   UserPlus,
+  Wallet,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -53,6 +54,18 @@ import { formatCurrency, formatQty } from "@/lib/utils/format";
 import { formatSaleNumber } from "@/lib/utils/saleNumber";
 import { cn } from "@/lib/utils/cn";
 import { SpinnerBlock } from "@/components/ui/Spinner";
+import { MpRefundPanel, type MpRefundPanelRefund } from "@/components/sales/MpRefundPanel";
+import { runMpRefund, useMpRefundOptions } from "@/modules/sales/mpRefund";
+import {
+  clampMpAmount,
+  maxMpAmount,
+  mpRefundAvailable,
+  mpRefundErrorMessage,
+  mpRefundUnavailableReason,
+  usablePayments,
+  type MpRefundablePayment,
+  type MpRefundStatus,
+} from "@/lib/payments/mpRefund";
 
 type Refund = "cash" | "store_credit";
 
@@ -88,6 +101,8 @@ export function ReturnModal({
   const { data: branches } = useBranches(open);
   const { data: numFmt } = useSaleNumberFormat();
   const ret = useReturnSaleV2();
+  // H21h: cobros de Mercado Pago reintegrables de esta venta.
+  const { data: mpOpts } = useMpRefundOptions(saleId, open);
 
   // Modo del flujo: devolución pura (dinero/vale al cliente) o CAMBIO (devuelve y
   // se lleva otros productos; la diferencia se cobra o reintegra).
@@ -106,9 +121,17 @@ export function ReturnModal({
     | null
   >(null);
   const [exchangeResult, setExchangeResult] = useState<ExchangeResult | null>(null);
+  const [useMp, setUseMp] = useState(false);
+  const [mpPaymentId, setMpPaymentId] = useState<string | null>(null);
+  const [mpAmountStr, setMpAmountStr] = useState("");
+  const [mpRefund, setMpRefund] = useState<MpRefundPanelRefund | null>(null);
 
   useEffect(() => {
     if (open) {
+      setUseMp(false);
+      setMpPaymentId(null);
+      setMpAmountStr("");
+      setMpRefund(null);
       setMode("return");
       setStep(0);
       setQtys({});
@@ -125,7 +148,6 @@ export function ReturnModal({
   // La política puede forzar el reintegro; si no, manda la elección del cajero.
   const effectiveRefund: Refund =
     policy === "always_credit" ? "store_credit" : policy === "always_cash" ? "cash" : refundChoice;
-  const isVoucher = effectiveRefund === "store_credit";
   const multiBranch = (branches ?? []).length > 1;
 
   const chosenReason = (reasons ?? []).find((r) => r.id === reasonId) ?? null;
@@ -137,7 +159,6 @@ export function ReturnModal({
   const saleCustomerId = data?.sale.customer_id ?? null;
   const saleCustomerName = data?.sale.customers?.name ?? null;
   const voucherCustomerId = saleCustomerId ?? customer?.id ?? null;
-  const needsCustomer = isVoucher && !voucherCustomerId;
 
   const total = useMemo(() => {
     if (!data) return 0;
@@ -147,6 +168,17 @@ export function ReturnModal({
       return acc + unit * q;
     }, 0);
   }, [data, qtys]);
+
+  // H21h: parte por Mercado Pago (hasta lo devuelto y lo disponible del cobro).
+  const mpPays = usablePayments(mpOpts);
+  const mpAvailable = mpRefundAvailable(mpOpts);
+  const mpPay: MpRefundablePayment | null =
+    mpPays.find((p) => p.payment_id === mpPaymentId) ?? mpPays[0] ?? null;
+  const mpMax = maxMpAmount(total, mpPay);
+  const mpOn = useMp && mpAvailable && Boolean(mpPay);
+  const mpAmount = mpOn ? clampMpAmount(Number(mpAmountStr.replace(",", ".")), mpMax) : 0;
+  const rest = Math.max(0, Math.round((total - mpAmount) * 100) / 100);
+  const isVoucher = effectiveRefund === "store_credit" && (!mpOn || rest > 0.009);
 
   const totalUnits = useMemo(
     () => Object.values(qtys).reduce((a, q) => a + (q > 0 ? q : 0), 0),
@@ -168,6 +200,7 @@ export function ReturnModal({
 
   const stepKey = steps[Math.min(step, steps.length - 1)]?.key ?? "items";
   const isLastStep = step >= steps.length - 1;
+  const needsCustomer = isVoucher && !voucherCustomerId;
 
   function setQty(itemId: string, qty: number, max: number) {
     setQtys((p) => ({ ...p, [itemId]: Math.max(0, Math.min(qty, max)) }));
@@ -209,6 +242,15 @@ export function ReturnModal({
       toast({ title: "El vale necesita un cliente. Cargá uno abajo.", variant: "error" });
       return;
     }
+    if (mpOn && !reasonId) {
+      toast({ title: "Elegí el motivo de la devolución para reintegrar por Mercado Pago", variant: "error" });
+      setStep(1);
+      return;
+    }
+    if (mpOn && mpAmount <= 0) {
+      toast({ title: "Indicá cuánto se reintegra por Mercado Pago", variant: "error" });
+      return;
+    }
     const snapshot = data.items
       .filter((it) => (qtys[it.id] ?? 0) > 0)
       .map((it) => {
@@ -225,9 +267,31 @@ export function ReturnModal({
         customerId: voucherCustomerId,
         // Sin selección = válido en todas las sucursales (null).
         allowedBranchIds: isVoucher && allowedBranchIds.length > 0 ? allowedBranchIds : null,
+        mpPaymentId: mpOn ? (mpPay?.payment_id ?? null) : null,
+        mpAmount: mpOn ? mpAmount : null,
       });
       toast({ title: `Devolución #${res.number} registrada`, variant: "success" });
       setResult({ ...res, items: snapshot, reasonLabel: chosenReason?.label ?? "" });
+      // H21h: la devolución ya quedó; ahora el pedido a Mercado Pago.
+      if (res.mp_refund_id && Number(res.mp_amount ?? 0) > 0) {
+        const base: MpRefundPanelRefund = {
+          id: res.mp_refund_id,
+          amount: Number(res.mp_amount),
+          status: "processing",
+          error_code: null,
+          mp_refund_id: null,
+        };
+        setMpRefund(base);
+        const r = await runMpRefund(res.mp_refund_id);
+        const status: MpRefundStatus =
+          r.status === "error" && r.error === "in_progress" ? "processing" : (r.status as MpRefundStatus);
+        setMpRefund({ ...base, status, error_code: r.error ?? null, mp_refund_id: r.mp_refund_id ?? null });
+        if (status === "approved" || status === "in_process") {
+          toast({ title: "Reintegro hecho por Mercado Pago", variant: "success" });
+        } else {
+          toast({ title: mpRefundErrorMessage(r.error), variant: "error" });
+        }
+      }
     } catch (e) {
       toast({ title: returnError(e), variant: "error" });
     }
@@ -238,7 +302,13 @@ export function ReturnModal({
       {!data ? (
         <SpinnerBlock className="py-6" />
       ) : result ? (
-        <ReturnResult result={result} onClose={() => onOpenChange(false)} />
+        <ReturnResult
+          result={result}
+          mpRefund={mpRefund}
+          customerId={voucherCustomerId}
+          onMpChange={setMpRefund}
+          onClose={() => onOpenChange(false)}
+        />
       ) : exchangeResult ? (
         <ExchangeResultView result={exchangeResult} onClose={() => onOpenChange(false)} />
       ) : (
@@ -317,6 +387,28 @@ export function ReturnModal({
                 policy={policy}
                 effectiveRefund={effectiveRefund}
                 onChoose={setRefundChoice}
+                mp={{
+                  available: mpAvailable,
+                  unavailableReason: mpRefundUnavailableReason(mpOpts),
+                  on: mpOn,
+                  payments: mpPays,
+                  paymentId: mpPay?.payment_id ?? null,
+                  amountStr: mpAmountStr,
+                  max: mpMax,
+                  amount: mpAmount,
+                  rest,
+                  needsPin: Boolean(mpOpts && !mpOpts.is_supervisor),
+                  onToggle: (v) => {
+                    setUseMp(v);
+                    if (v) setMpAmountStr(String(maxMpAmount(total, mpPay)));
+                  },
+                  onPayment: (id) => {
+                    setMpPaymentId(id);
+                    const p = mpPays.find((x) => x.payment_id === id) ?? null;
+                    setMpAmountStr(String(maxMpAmount(total, p)));
+                  },
+                  onAmount: setMpAmountStr,
+                }}
               />
             )}
 
@@ -375,7 +467,11 @@ export function ReturnModal({
                   disabled={total <= 0 || needsCustomer}
                   onClick={confirm}
                 >
-                  {isVoucher ? (
+                  {mpOn ? (
+                    <>
+                      <Wallet size={16} /> Reintegrar
+                    </>
+                  ) : isVoucher ? (
                     <>
                       <Ticket size={16} /> Emitir vale
                     </>
@@ -745,16 +841,115 @@ function ReasonStep({
   );
 }
 
+interface MpStepProps {
+  available: boolean;
+  unavailableReason: string | null;
+  on: boolean;
+  payments: MpRefundablePayment[];
+  paymentId: string | null;
+  amountStr: string;
+  max: number;
+  amount: number;
+  rest: number;
+  needsPin: boolean;
+  onToggle: (v: boolean) => void;
+  onPayment: (id: string) => void;
+  onAmount: (v: string) => void;
+}
+
+// H21h: reintegro por Mercado Pago (total o parcial) al medio con el que pagó
+// el cliente. Lo que no va por MP sale por efectivo o vale.
+function MpRefundChoice({ mp }: { mp: MpStepProps }) {
+  if (!mp.available) {
+    return mp.unavailableReason ? (
+      <p className="rounded-xl border border-dashed border-border px-3.5 py-3 text-xs text-muted-foreground">
+        <Wallet size={13} className="mr-1.5 inline align-[-2px]" />
+        {mp.unavailableReason}
+      </p>
+    ) : null;
+  }
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={() => mp.onToggle(!mp.on)}
+        className={cn(
+          "flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors",
+          mp.on ? "choice-on choice-check" : "border-border hover:bg-muted/40",
+        )}
+      >
+        <span
+          className={cn(
+            "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+            mp.on ? "bg-ninja-flame/20 text-ninja-flameSoft" : "bg-muted text-muted-foreground",
+          )}
+        >
+          <Wallet size={18} />
+        </span>
+        <span>
+          <span className="block text-sm font-semibold">Reintegrar por Mercado Pago</span>
+          <span className="block text-xs text-muted-foreground">
+            Vuelve a la tarjeta o cuenta con la que pagó el cliente. Hasta {formatCurrency(mp.max)}.
+            {mp.needsPin ? " Pide PIN de supervisor." : ""}
+          </span>
+        </span>
+      </button>
+
+      {mp.on && (
+        <div className="space-y-3 rounded-xl bg-muted/30 p-3.5">
+          {mp.payments.length > 1 && (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Cobro de Mercado Pago</span>
+              <select
+                value={mp.paymentId ?? ""}
+                onChange={(e) => mp.onPayment(e.target.value)}
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ninja-flameSoft focus:ring-2 focus:ring-ninja-flameSoft/20"
+              >
+                {mp.payments.map((p) => (
+                  <option key={p.payment_id} value={p.payment_id} className="bg-popover text-popover-foreground">
+                    {p.provider_key === "mercadopago_point" ? "Point" : "QR o link"} · cobrado{" "}
+                    {formatCurrency(p.paid)} · disponible {formatCurrency(p.refundable)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <Input
+            label="Monto a reintegrar por Mercado Pago"
+            inputMode="decimal"
+            value={mp.amountStr}
+            onChange={(e) => mp.onAmount(e.target.value)}
+            className="h-10"
+          />
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Por Mercado Pago</span>
+            <span className="font-semibold tabular-nums">{formatCurrency(mp.amount)}</span>
+          </div>
+          {mp.rest > 0.009 && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">El resto, por el medio de abajo</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(mp.rest)}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Paso 3 — Reintegro: efectivo / vale como tarjetas grandes. Respeta la política.
 function RefundStep({
   policy,
   effectiveRefund,
   onChoose,
+  mp,
 }: {
   policy: "cashier_choice" | "always_credit" | "always_cash";
   effectiveRefund: Refund;
   onChoose: (r: Refund) => void;
+  mp: MpStepProps;
 }) {
+  const restHidden = mp.on && mp.rest <= 0.009;
   if (policy !== "cashier_choice") {
     const credit = policy === "always_credit";
     return (
@@ -762,6 +957,8 @@ function RefundStep({
         <span className="block text-sm font-medium text-muted-foreground">
           ¿Cómo se reintegra?
         </span>
+        <MpRefundChoice mp={mp} />
+        {!restHidden && (
         <div className="flex items-center gap-3 rounded-xl bg-ninja-flame/[0.08] px-4 py-3.5">
           <span className="grid h-10 w-10 place-items-center rounded-lg bg-ninja-flame/15 text-ninja-flameSoft">
             {credit ? <Ticket size={18} /> : <Banknote size={18} />}
@@ -775,6 +972,7 @@ function RefundStep({
             </div>
           </div>
         </div>
+        )}
       </div>
     );
   }
@@ -784,6 +982,8 @@ function RefundStep({
       <span className="block text-sm font-medium text-muted-foreground">
         ¿Cómo se reintegra?
       </span>
+      <MpRefundChoice mp={mp} />
+      {!restHidden && (
       <div className="grid grid-cols-2 gap-3">
         <RefundCard
           active={effectiveRefund === "cash"}
@@ -800,6 +1000,7 @@ function RefundStep({
           hint="Saldo a favor del cliente"
         />
       </div>
+      )}
     </div>
   );
 }
@@ -1127,12 +1328,18 @@ function VoucherCustomerPicker({
 // ticket activa (no inventa layout). Imprimible.
 function ReturnResult({
   result,
+  mpRefund,
+  customerId,
+  onMpChange,
   onClose,
 }: {
   result: ReturnV2Result & {
     items: { name: string; qty: number; subtotal: number }[];
     reasonLabel: string;
   };
+  mpRefund: MpRefundPanelRefund | null;
+  customerId: string | null;
+  onMpChange: (r: MpRefundPanelRefund) => void;
   onClose: () => void;
 }) {
   const { data: brand } = useTicketBranding(true);
@@ -1142,6 +1349,8 @@ function ReturnResult({
   const returnProfile = printProfiles?.return;
   const ticketRef = useRef<HTMLDivElement>(null);
   const isVoucher = result.refund === "store_credit" && Boolean(result.voucher_code);
+  const mpAmount = Number(result.mp_amount ?? 0);
+  const restAmount = Math.max(0, Math.round((result.total - mpAmount) * 100) / 100);
 
   const fallbackBlocks = useMemo(
     () =>
@@ -1173,7 +1382,12 @@ function ReturnResult({
       unit_price: it.qty > 0 ? it.subtotal / it.qty : it.subtotal,
       subtotal: it.subtotal,
     })),
-    payments: [{ id: "r", method: isVoucher ? "store_credit" : "cash", amount: result.total }],
+    payments: [
+      ...(mpAmount > 0 ? [{ id: "mp", method: "mercadopago", amount: mpAmount }] : []),
+      ...(restAmount > 0.009
+        ? [{ id: "r", method: isVoucher ? "store_credit" : "cash", amount: restAmount }]
+        : []),
+    ],
     customer: null,
     brand: brand ?? null,
   };
@@ -1195,10 +1409,20 @@ function ReturnResult({
         <div className="text-sm">
           <div className="font-semibold">Devolución #{result.number} registrada</div>
           <div className="text-xs text-muted-foreground">
-            {isVoucher ? "Se emitió un vale con saldo a favor." : "Reintegro en efectivo por caja."}
+            {mpAmount > 0 && restAmount <= 0.009
+              ? "Reintegro por Mercado Pago."
+              : isVoucher
+                ? "Se emitió un vale con saldo a favor."
+                : "Reintegro en efectivo por caja."}
           </div>
         </div>
       </div>
+
+      {mpRefund && (
+        <div className="no-print">
+          <MpRefundPanel refund={mpRefund} customerId={customerId} onChange={onMpChange} />
+        </div>
+      )}
 
       <div className="ticket-print" ref={ticketRef}>
         <TemplateRenderer
@@ -1236,7 +1460,15 @@ function ReturnResult({
         </div>
         <div className="mt-1 flex items-center justify-between">
           <span className="text-muted-foreground">Reintegro</span>
-          <span>{isVoucher ? "Vale (saldo a favor)" : "Efectivo"}</span>
+          <span>
+            {mpAmount > 0
+              ? restAmount > 0.009
+                ? `Mercado Pago ${formatCurrency(mpAmount)} + ${isVoucher ? "vale" : "efectivo"} ${formatCurrency(restAmount)}`
+                : "Mercado Pago"
+              : isVoucher
+                ? "Vale (saldo a favor)"
+                : "Efectivo"}
+          </span>
         </div>
         {result.reasonLabel && (
           <div className="mt-1 flex items-center justify-between">
@@ -1276,6 +1508,8 @@ function returnError(e: unknown): string {
     empty_return: "Elegí al menos un ítem a devolver",
     item_not_found: "Un ítem ya no existe; refrescá e intentá de nuevo",
   };
+  // H21h: errores de la pata Mercado Pago.
+  if (/mp_|reintegro_mp/.test(msg)) return mpRefundErrorMessage(msg);
   const key = Object.keys(map).find((k) => msg.includes(k));
   return (key && map[key]) || "No se pudo registrar la devolución";
 }

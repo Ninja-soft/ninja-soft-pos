@@ -105,6 +105,32 @@ export const LINE_DISPUTE_LABEL: Record<LineDisputeState, { label: string; tone:
   },
 };
 
+/**
+ * ADR-067: devoluciones hechas desde el POS (reintegro por Mercado Pago de una
+ * devolución registrada). Si todas las devoluciones de la línea son del POS,
+ * la conciliación la muestra "Devuelto (POS)" en vez de "Devuelto".
+ */
+export function refundsFromPos(disputes: Pick<PaymentDisputeRow, "kind" | "origin" | "status">[]): boolean {
+  const refunds = disputes.filter((d) => d.kind === "refund" && d.status !== "closed");
+  return refunds.length > 0 && refunds.every((d) => d.origin === "pos");
+}
+
+/** Etiqueta del estado de la línea, con el origen POS de las devoluciones. */
+export function lineDisputeLabel(
+  state: LineDisputeState,
+  disputes: Pick<PaymentDisputeRow, "kind" | "origin" | "status">[] = [],
+): { label: string; tone: Tone; help: string } {
+  const base = LINE_DISPUTE_LABEL[state];
+  if ((state === "refunded" || state === "partially_refunded") && refundsFromPos(disputes)) {
+    return {
+      label: state === "refunded" ? "Devuelto (POS)" : "Devuelto parcial (POS)",
+      tone: "neutral",
+      help: "Se devolvió por Mercado Pago desde una devolución registrada en el POS.",
+    };
+  }
+  return base;
+}
+
 export interface LineLike {
   external_id: string | null;
   status: string;

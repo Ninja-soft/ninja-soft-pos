@@ -17,7 +17,8 @@ export type PinAction =
   | "cash_out"
   | "cash_in"
   | "shift_force_close"
-  | "abrir_cajon";
+  | "abrir_cajon"
+  | "reintegro_mp";
 
 export interface PinRule {
   enabled: boolean;
@@ -57,10 +58,11 @@ export const PIN_ACTIONS: PinAction[] = [
   "cash_in",
   "shift_force_close",
   "abrir_cajon",
+  "reintegro_mp",
 ];
 
 /** Acciones que siempre piden PIN cuando se consultan (espejo de pin_action_required). */
-export const ALWAYS_PIN: PinAction[] = ["shift_force_close", "abrir_cajon"];
+export const ALWAYS_PIN: PinAction[] = ["shift_force_close", "abrir_cajon", "reintegro_mp"];
 
 export const DEFAULT_POLICY: PinPolicy = {
   discount_over: { enabled: false, threshold: 20 },
@@ -73,6 +75,8 @@ export const DEFAULT_POLICY: PinPolicy = {
   shift_force_close: { enabled: true, threshold: 0 },
   // ADR-063: siempre; la pide la política del cajón de la sucursal.
   abrir_cajon: { enabled: true, threshold: 0 },
+  // ADR-067: siempre; la plata sale de la cuenta de Mercado Pago.
+  reintegro_mp: { enabled: true, threshold: 0 },
 };
 
 export const DEFAULT_SECURITY: SecuritySettings = {
@@ -140,6 +144,12 @@ export const ACTION_INFO: Record<
     label: "Abrir el cajón sin venta",
     desc: "Se pide cuando la sucursal tiene el cajón sin venta \"Con PIN de supervisor\" (Configuración, Hardware). El cajero ya dejó el motivo.",
     unit: "none",
+    reasonRequired: false,
+  },
+  reintegro_mp: {
+    label: "Reintegrar por Mercado Pago",
+    desc: "Siempre pide supervisor: devuelve la plata de una venta a la tarjeta o cuenta de Mercado Pago del cliente. El dueño y los supervisores lo hacen sin PIN.",
+    unit: "money",
     reasonRequired: false,
   },
 };

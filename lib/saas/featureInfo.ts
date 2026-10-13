@@ -168,6 +168,13 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     minPlan: "Start",
     needs: "Mercado Pago conectado en Medios de pago. Para el aviso al instante, conexión por OAuth (por token manual llega con la revisión diaria).",
   },
+  reintegro_mp: {
+    desc: "Reintegro por Mercado Pago: en una devolución, la plata vuelve a la tarjeta o a la cuenta de Mercado Pago con la que pagó el cliente (QR, link o Point), total o parcial, hasta lo cobrado por ese pago menos lo ya devuelto. Lo hace un supervisor o un cajero con PIN de supervisor, con motivo; queda el id de la devolución de Mercado Pago, auditado, en el detalle del cobro, en la ficha del cliente y en la conciliación como \"Devuelto (POS)\" (sin aviso de devolución desde Mercado Pago). Si Mercado Pago no puede (saldo insuficiente, plazo vencido, pago en disputa), se devuelve en efectivo o con un vale.",
+    impact: "Desactivado, las devoluciones de ventas cobradas con Mercado Pago se reintegran en efectivo o con un vale; devolver a la tarjeta hay que hacerlo a mano desde Mercado Pago.",
+    minPlan: "Pro",
+    requires: ["mercado_pago"],
+    needs: "Mercado Pago conectado y \"Permitir devolver el dinero por Mercado Pago\" prendido por el dueño en Medios de pago. La plata sale del saldo de la cuenta de Mercado Pago.",
+  },
   modo: {
     desc: "Cobros con MODO: habilita el medio de pago MODO (QR / billetera) en el POS.",
     impact: "Sin esto MODO no aparece como medio de pago disponible al cobrar.",
@@ -356,6 +363,12 @@ export const FEATURE_INFO: Record<string, FeatureInfo> = {
     desc: "Grupos de clientes: segmenta clientes en grupos para precios, promociones o reportes por segmento.",
     impact: "Sin grupos no se puede segmentar la base de clientes ni aplicar reglas por grupo.",
     minPlan: "Pro",
+  },
+  clientes_360: {
+    desc: "Ficha del cliente 360: en una página propia, todo lo del cliente: datos y datos fiscales, indicadores (total comprado, cantidad de compras, frecuencia, ticket promedio, última compra, sucursal de alta y compras por sucursal), segmentos automáticos (nuevo, frecuente, VIP, en riesgo, inactivo, con deuda), línea de tiempo unificada con filtros (ventas, devoluciones, cobranzas y movimientos de cuenta corriente, vales, cobros en espera, reintegros por Mercado Pago, contracargos y notas internas), productos y medios de pago preferidos, gráficos de compras por mes y exportación a Excel.",
+    impact: "Desactivado, queda el historial básico del cliente (vale, compras y devoluciones) en la lista de clientes.",
+    minPlan: "Pro",
+    requires: ["clientes"],
   },
   roles_permisos: {
     desc: "Roles y permisos: define qué puede hacer cada usuario (cajero, encargado, dueño) dentro del sistema.",

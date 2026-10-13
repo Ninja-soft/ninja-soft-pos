@@ -65,6 +65,8 @@ export const metadata: Metadata = {
     icon: "/brand/favicon.webp",
     apple: "/brand/apple-icon.webp",
   },
+  // PWA (H65, ADR-087): el manifest sale de app/manifest.ts.
+  appleWebApp: { capable: true, title: "NinjaSoft POS", statusBarStyle: "black-translucent" },
 };
 
 // viewport-fit=cover habilita env(safe-area-inset-*) en iPhone (notch y home
@@ -73,6 +75,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0a0518",
 };
 
 export default function RootLayout({

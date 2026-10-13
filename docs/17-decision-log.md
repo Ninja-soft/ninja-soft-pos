@@ -3835,3 +3835,37 @@ Pedido literal del dueño: "si estoy cobrando y el cliente quiere hacer algo e i
 - **Riesgos:** si el servidor rechaza la pausa, la venta vuelve al POS tal cual, pero un QR que se pausó vivo queda sin seguimiento (si se paga, aparece en Cobros QR para conciliar). Una pausada retomada en un equipo que se corta queda "en curso": la ve y la retoma quien la tenía, o el encargado.
 - **Pendiente:** Realtime para el aviso de QR cobrado en la pausa (hoy sondeo cada 10 s con QR esperando), notas de venta en el POS (el campo ya viaja), e2e con un proveedor de pago real.
 - Tests: `tests/unit/pausedSales.test.ts` (serialización y restauración, pagos acreditados contra el SQL, reglas de descarte y de Limpiar, cambios de precio, copia local), `tests/unit/posShortcuts.test.ts` (atajos nuevos sin pisar F2, F4, F8 ni F9) y RLS `tests/integration/rls-pausar-venta.test.ts` (cajero en su turno, otro cajero y otro negocio no ven, escritura directa bloqueada, inserts multi-fila con todas las claves, intent único, conciliación por webhook, descarte con pagos, ensayo sin ventas, venta que completa la pausada, cierre y apertura de caja, Limpiar auditado).
+
+---
+
+## ADR-108: Ventas pausadas que vencen a las 24 h (baja lógica, job cada 15 min, criterio del servidor) y las que tienen pagos no se borran solas
+
+**Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/pausadas-24h`, migración `20261111100100_pausadas_vencen_24h` sin aplicar) · **Base:** ADR-106 (pausar venta). ADR-107 queda reservado para el PR abierto del catálogo.
+
+### Contexto
+
+Pedido del dueño: "que se borren a las 24 hs y mejorame el diseño: acá no muestra el contenido, ni si tiene cliente o no". Con ADR-106 una pausada vivía para siempre (pasaba de turno en turno) y la lista mostraba un input editable, el total y una línea gris.
+
+### Decisión
+
+1. **Vencimiento a las 24 h del último movimiento** (pausar o retomar; volver a pausar reinicia el reloj). Columna `paused_sales.expires_at` mantenida por el trigger `paused_sales_set_expiry`, con `paused_sale_ttl()` = 24 h (espejo `PAUSED_TTL_HOURS` en TS, con test que los compara).
+2. **Baja lógica:** estado nuevo `expired` + `expired_at`. Nunca DELETE. La fila y sus pagos quedan para auditoría.
+3. **Pagos (lo importante):** una pausada con **pagos vivos** (línea confirmada en la hoja: efectivo en el cajón, tarjeta con cupón, transferencia; o un QR o link pendiente o aprobado) **no vence en silencio**. La plata ya está en el cajón o en el proveedor, y ADR-106 exige devolverla a mano (y, si está acreditada, que lo confirme dueño o encargado con motivo); anularla sola sería perder el rastro del cobro. El job la deja abierta, marca `expiry_held_at` y audita `paused_sale_expiry_held` una sola vez; el POS la muestra como **"Venció: tiene pagos, resolvela"** (retomar y terminar el cobro, o descartar con las reglas de siempre). Los intents muertos (rechazado, cancelado, vencido) no cuentan como pago: esa pausada vence. Un pago tardío sobre una vencida queda `needs_review` (igual que sobre una descartada).
+4. **Criterio del servidor aunque el job no haya corrido:** `list_open_paused_sales(p_store_id)` (SECURITY INVOKER, respeta la RLS de ADR-106, devuelve filas de `paused_sales` para embeber los pagos) no lista las vencidas sin pagos, y `resume_paused_sale` rechaza con `paused_sale_expired` las vencidas por estado o por reloj (sin pagos vivos). Renombrar una vencida da `paused_sale_closed`.
+5. **Job pg_cron `paused-sales-expire` cada 15 min** (`expire_paused_sales(500)`, SECURITY DEFINER, sólo `service_role`, `FOR UPDATE SKIP LOCKED`, idempotente). Primero concilia los intents: si alguno ya es venta, la pausada queda `completed`. **Auditoría:** una fila por pausada (`paused_sale_expired` o `paused_sale_expiry_held`), actor nulo (sistema), con total, nombre, cliente y resumen de pagos.
+6. **Retomadas abandonadas:** una `resumed` también vence 24 h después de retomarla (el POS que la tenía ya no tiene el carrito). Si igual se cobra, `complete_paused_sale` la completa (no rechaza las vencidas: la venta existió).
+7. **Sin conexión:** las pausadas guardadas en el equipo también vencen: sin pagos, se borran del `localStorage` al cargar.
+8. **Rediseño de la lista:** cada pausada es una tarjeta con el cliente destacado (avatar con iniciales y nombre, o "Consumidor final" con el chip "Sin cliente"), el nombre o nota editable en línea con un lápiz (ya no un input grande), el total grande y la cantidad de productos, el contenido (foto del producto si tiene o iniciales, nombre, variante o modificadores, cantidad y subtotal; las primeras 3 y "+N productos más" desplegable), la hora de pausa, quién la pausó ("por vos" o el nombre del equipo) y cuánto falta para que venza ("Vence en 3 h"; menos de 2 h, resaltada; vencida con pagos, en rojo con la explicación). Retomar primario, Descartar secundario con la confirmación de ADR-106. Los chips de la barra superior muestran "Vence en 40 min" o "Venció" cuando corresponde. Tokens del tema, sin sombras, gradientes ni bordes de color.
+
+### Alternativas descartadas
+
+- **Vencer también las que tienen pagos y anular los pagos solos:** el efectivo no se puede "anular" (hay que devolverlo en mano) y devolver un cobro de proveedor sin una persona es riesgoso; se perdería el rastro de plata que entró.
+- **Filtrar sólo en el front:** el reloj del equipo puede estar mal y otra caja podría retomarla.
+- **Columna generada para `expires_at`:** `timestamptz + interval` no es inmutable en Postgres; va por trigger.
+- **DELETE físico a los N días:** contra la regla de baja lógica.
+
+### Consecuencias
+
+- **Deploy:** aplicar `20261111100100_pausadas_vencen_24h` después de `20261111100000_pausar_venta`. Al aplicarla, las pausadas de más de 24 h sin pagos vencen en la próxima corrida del job (cada 15 min). Sin la migración, el POS usa la lectura de ADR-106 (sin vencimiento).
+- Sin Edges ni secrets nuevos (el job es SQL puro en pg_cron).
+- Tests: `tests/unit/pausedSalesExpiry.test.ts` (vencimiento, "vence pronto", retenidas con pagos, TTL contra el SQL, contenido de la tarjeta) y `tests/integration/rls-pausadas-24h.test.ts` (vencida no se lista ni se retoma sin job, otro negocio no ve nada, el job sólo con `service_role`, baja lógica con auditoría idempotente, retenida con efectivo y QR pendiente, QR vencido no retiene, retomar reinicia el reloj, pago tardío para revisión).

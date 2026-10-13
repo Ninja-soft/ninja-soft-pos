@@ -9,8 +9,18 @@ import { getCurrentTenantId } from "@/lib/supabase/currentUser";
 import type { CheckoutSnapshot } from "@/components/pos/checkout/types";
 import { readPausedCart, type PausedCart, type PausedPayment, type PausedSale } from "./logic";
 
-const COLS =
-  "id, tenant_id, store_id, register_id, cash_shift_id, created_by, resumed_by, customer_id, customer_name, label, cart, checkout, total, paid_amount, item_count, status, carry_over, needs_review, source, paused_at, resumed_at, version, paused_sale_payments(id, kind, method, amount, reference, card_voucher, intent_id, provider_key, channel, line, status, credited, position)";
+const BASE_COLS =
+  "id, tenant_id, store_id, register_id, cash_shift_id, created_by, resumed_by, customer_id, customer_name, label, cart, checkout, total, paid_amount, item_count, status, carry_over, needs_review, source, paused_at, resumed_at, version";
+const PAY_COLS =
+  "paused_sale_payments(id, kind, method, amount, reference, card_voucher, intent_id, provider_key, channel, line, status, credited, position)";
+// Con el vencimiento a las 24 h (ADR-108).
+const COLS = `${BASE_COLS}, expires_at, expiry_held_at, ${PAY_COLS}`;
+const LEGACY_COLS = `${BASE_COLS}, ${PAY_COLS}`;
+
+/** ¿Falta la migración de ADR-108 (RPC o columnas)? */
+function isMissingExpiry(message: string): boolean {
+  return /list_open_paused_sales|PGRST202|could not find the function|expires_at|expiry_held_at/i.test(message);
+}
 
 type Row = Record<string, unknown> & { paused_sale_payments?: Record<string, unknown>[] };
 
@@ -60,6 +70,8 @@ export function normalizePaused(r: Row, payments?: Record<string, unknown>[]): P
     source: (r.source as "online" | "offline") ?? "online",
     paused_at: String(r.paused_at ?? new Date().toISOString()),
     resumed_at: (r.resumed_at as string | null) ?? null,
+    expires_at: (r.expires_at as string | null) ?? null,
+    expiry_held_at: (r.expiry_held_at as string | null) ?? null,
     version: Number(r.version) || 1,
     payments: pays,
   };
@@ -101,13 +113,22 @@ export interface ResumeResult {
 }
 
 export const pausedSalesApi = {
-  /** Abiertas (pausadas o retomadas) de la sucursal, siempre del negocio activo. */
+  /**
+   * Abiertas (pausadas o retomadas) de la sucursal, siempre del negocio
+   * activo. El servidor descarta las vencidas sin pagos (ADR-108) aunque el
+   * job todavía no haya corrido. Sin esa migración, la lectura de ADR-106.
+   */
   listOpen: async (storeId: string | null): Promise<PausedSale[]> => {
     const tenantId = await getCurrentTenantId();
     if (!tenantId || !storeId) return [];
+    const res = await createClient()
+      .rpc("list_open_paused_sales" as never, { p_store_id: storeId } as never)
+      .select(COLS);
+    if (!res.error) return ((res.data ?? []) as Row[]).map((r) => normalizePaused(r));
+    if (!isMissingExpiry(res.error.message)) throw new Error(res.error.message);
     const { data, error } = await createClient()
       .from("paused_sales" as never)
-      .select(COLS)
+      .select(LEGACY_COLS)
       .eq("tenant_id", tenantId)
       .eq("store_id", storeId)
       .in("status", ["paused", "resumed"])

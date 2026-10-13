@@ -4,7 +4,14 @@ import { ChevronRight, Pause } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils/cn";
 import { money } from "@/components/pos/ui/posStyles";
-import { pausedBadges, pausedTimeLabel, pausedTitle, type PausedSale } from "@/modules/paused-sales/logic";
+import {
+  pausedBadges,
+  pausedExpiry,
+  pausedTimeLabel,
+  pausedTitle,
+  type PausedBadge,
+  type PausedSale,
+} from "@/modules/paused-sales/logic";
 
 // Barra de "Ventas pausadas" del POS (ADR-106): un chip por venta con su
 // nombre, monto y hora; tocarlo la retoma. Scroll horizontal sólo dentro de
@@ -13,6 +20,7 @@ import { pausedBadges, pausedTimeLabel, pausedTitle, type PausedSale } from "@/m
 const TONE: Record<string, string> = {
   success: "text-success",
   warning: "text-warning",
+  danger: "text-danger",
   info: "text-ninja-flameSoft",
   neutral: "text-muted-foreground",
 };
@@ -43,7 +51,14 @@ export function PausedSalesBar({
       </button>
       <ul className="slim-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto">
         {list.map((s) => {
-          const badge = pausedBadges(s)[0];
+          // Vencimiento a las 24 h (ADR-108): lo que vence pronto va primero.
+          const exp = pausedExpiry(s);
+          const badge: PausedBadge | { tone: "danger"; text: string } | undefined =
+            exp.kind === "held"
+              ? { tone: "danger", text: "Venció" }
+              : exp.kind === "soon"
+                ? { tone: "warning", text: exp.label }
+                : pausedBadges(s)[0];
           const busy = busyId === s.id;
           return (
             <li key={s.id} className="shrink-0">

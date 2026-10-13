@@ -147,3 +147,23 @@ export function mpRefundedTotal(rows: Pick<MpRefundRow, "amount" | "status">[]):
       .reduce((a, r) => a + Number(r.amount), 0),
   );
 }
+
+/**
+ * Datos del reintegro de Mercado Pago para el comprobante de devolución
+ * (H21h, ADR-099): sólo cuando Mercado Pago lo aceptó y devolvió su id.
+ */
+export function mpRefundReceipt(
+  r: { amount: number; status: MpRefundStatus; mp_refund_id: string | null } | null | undefined,
+): { title: string; id: string; amount: number; note: string } | null {
+  if (!r || !r.mp_refund_id) return null;
+  if (r.status !== "approved" && r.status !== "in_process") return null;
+  return {
+    title: "Reintegro por Mercado Pago",
+    id: String(r.mp_refund_id),
+    amount: round2(Number(r.amount) || 0),
+    note:
+      r.status === "approved"
+        ? "Se acredita en la tarjeta o cuenta del cliente según su banco."
+        : "Mercado Pago lo está procesando.",
+  };
+}

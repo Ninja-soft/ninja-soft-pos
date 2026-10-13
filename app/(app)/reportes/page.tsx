@@ -74,6 +74,7 @@ import { loadReportPrefs, saveReportPrefs } from "@/lib/theme/preferences";
 import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from "@/lib/utils/paymentMethods";
 import { ReportSection, type ReportChartSpec } from "@/components/reports/ReportSection";
 import { KpiCard } from "@/components/reports/KpiCard";
+import { PaymentFeesSection } from "@/components/reports/PaymentFeesSection";
 import { Segmented, type SegmentedOption } from "@/components/ui/Segmented";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import {
@@ -1033,6 +1034,10 @@ export default function ReportesPage() {
                 }
                 table={<BareTable cols={["Medio", "Total", "%"]} rows={withShare(chart.by_method)} />}
               />
+            )}
+            {vis.by_method && (
+              // F8 · ADR-099: comisiones estimadas y propinas por medio.
+              <PaymentFeesSection fromISO={fromISO} toISO={toISO} storeId={storeId} />
             )}
             {vis.by_category && (
               <ReportSection<"treemap" | "doughnut" | "ranking">

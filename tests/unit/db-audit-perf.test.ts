@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-type Finding = { code: string; severity: string; table: string | null; object: string; detail: string };
+type Finding = { code: string; severity: string; table: string | null; object: string; detail: string; file?: string };
 type AuditMod = {
   splitStatements: (sql: string) => { sql: string; line: number }[];
   bareCalls: (expr: string, funcs: string[], lit?: string[]) => string[];
@@ -64,5 +64,20 @@ describe("db-audit-perf · migraciones del repo", () => {
     const res = mod.auditMigrations(MIGRATIONS);
     expect(blocking(res.findings).map((f) => `${f.code} ${f.object}`)).toEqual([]);
     expect(res.findings.filter((f) => f.code === "P7").map((f) => f.object)).toEqual([]);
+  });
+
+  it("ADR-093: antes de 20261108600000 create_sale y return_sale_v2 insertaban sin tenant_id (P8)", () => {
+    const res = mod.auditMigrations(MIGRATIONS, { before: "20261108600000" });
+    const p8 = res.findings.filter((f) => f.code === "P8").map((f) => f.object);
+    expect(p8).toContain("create_sale() insert into sales");
+    expect(p8).toContain("create_sale() insert into sale_items");
+    expect(p8).toContain("create_sale() insert into payments");
+    expect(p8).toContain("create_sale() insert into stock_movements");
+    expect(p8).toContain("return_sale_v2() insert into sale_returns");
+  });
+
+  it("ADR-093: con todas las migraciones las RPC calientes pasan tenant_id en cada insert", () => {
+    const res = mod.auditMigrations(MIGRATIONS);
+    expect(res.findings.filter((f) => f.code === "P8").map((f) => `${f.object} (${f.file})`)).toEqual([]);
   });
 });

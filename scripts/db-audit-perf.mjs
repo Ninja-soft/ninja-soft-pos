@@ -25,6 +25,8 @@
 //        P6  tablas operativas grandes sin índice compuesto para las listas
 //            (tenant_id + created_at, tenant_id + store_id, tenant_id + status).
 //        P7  índices redundantes (prefijo de otro con el mismo predicado).
+//        P8  RPCs calientes del POS (HOT_FUNCTIONS) que insertan en una tabla
+//            con DEFAULT current_tenant_id() sin pasar tenant_id (ADR-093).
 //
 //   2) Catálogo (--catalog): consultas de sólo lectura a pg_catalog de una
 //      base real (FKs sin índice, policies sin initplan, tamaños y scans).
@@ -37,7 +39,7 @@
 //   node scripts/db-audit-perf.mjs --all-tables    # P5/P6 sobre todas las tablas con tenant_id
 //   node scripts/db-audit-perf.mjs --catalog       # contra una base (sólo lectura)
 //   node scripts/db-audit-perf.mjs --before=20261108500000  # estado anterior a una migración
-//   node scripts/db-audit-perf.mjs --strict        # exit 1 si hay hallazgos P1, P2, P5 o P6
+//   node scripts/db-audit-perf.mjs --strict        # exit 1 si hay hallazgos P1, P2, P5, P6 o P8 altos
 //
 // La lógica estática se exporta (auditMigrations) para los tests unitarios.
 // =============================================================================
@@ -60,6 +62,10 @@ export const LARGE_TABLES = [
 // Tablas hijas: se listan por su padre (sale_id, order_id), no por negocio y
 // fecha. P6 no aplica (un índice más en la tabla con más inserts no paga).
 export const CHILD_TABLES = ["sale_items", "table_order_items"];
+
+// RPCs calientes del POS (ADR-093): una llamada inserta muchas filas; cada
+// insert pasa tenant_id explícito (P8).
+export const HOT_FUNCTIONS = ["create_sale", "return_sale_v2"];
 
 // Funciones cuyo resultado no depende de la fila: se pueden (y deben) evaluar
 // una vez por consulta con "(select fn())".
@@ -859,6 +865,32 @@ export function auditMigrations(migrationsDir, opts = {}) {
     }
   }
 
+  // P8 (ADR-093): RPCs calientes del POS que insertan en una tabla con
+  // DEFAULT current_tenant_id() sin pasar tenant_id: el default hace un
+  // lookup en tenant_users por fila. Tienen v_tenant a mano: va explícito.
+  for (const f of model.functions.values()) {
+    if (!HOT_FUNCTIONS.includes(f.name)) continue;
+    const re = new RegExp(String.raw`\binsert\s+into\s+(${QNAME})\s*\(`, "gi");
+    let m;
+    while ((m = re.exec(f.body))) {
+      const tname = unq(m[1]);
+      const t = model.tables.get(tname);
+      const tc = t && t.columns.get("tenant_id");
+      if (!tc || !tc.default || !/current_tenant_id\s*\(\s*\)/i.test(tc.default)) continue;
+      const { inner } = balanced(f.body, m.index + m[0].length - 1);
+      const cols = splitTopLevel(inner).map((c) => unq(c.trim()));
+      if (cols.includes("tenant_id")) continue;
+      add({
+        code: "P8",
+        severity: LARGE_TABLES.includes(tname) ? "high" : "medium",
+        table: tname,
+        object: `${f.name}() insert into ${tname}`,
+        detail: "RPC caliente inserta sin tenant_id: DEFAULT current_tenant_id() por fila (pasar v_tenant)",
+        file: f.file,
+      });
+    }
+  }
+
   // P7: índices redundantes (prefijo de otro índice btree de la misma tabla,
   // mismo predicado, no únicos): cuestan en cada escritura y no suman lecturas.
   for (const tname of scope) {
@@ -991,6 +1023,6 @@ if (isMain) {
     });
     if (args.has("--json")) console.log(JSON.stringify({ ...res, model: undefined }, null, 2));
     else printStatic(res);
-    if (args.has("--strict") && res.findings.some((f) => ["P1", "P2", "P5", "P6"].includes(f.code) && f.severity === "high")) process.exit(1);
+    if (args.has("--strict") && res.findings.some((f) => ["P1", "P2", "P5", "P6", "P8"].includes(f.code) && f.severity === "high")) process.exit(1);
   }
 }

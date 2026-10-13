@@ -72,17 +72,43 @@ describe("seña de turnos: helpers", () => {
 });
 
 describe("migración 20261108200000", () => {
+  // ADR-093 (20261108600000) recrea las dos copiando esta definición y sólo
+  // agrega tenant_id explícito en los inserts: es la única posterior permitida.
+  const ADR093 = "20261108600000_perf_f4_create_sale_tenant.sql";
   const later = readdirSync(DIR)
-    .filter((f) => f.endsWith(".sql") && f > MIG)
+    .filter((f) => f.endsWith(".sql") && f > MIG && f !== ADR093)
     .map((f) => readFileSync(join(DIR, f), "utf8"));
+  const adr093 = readFileSync(join(DIR, ADR093), "utf8");
+  const body = (s: string, fn: RegExp) => {
+    const i = s.search(fn);
+    const end = s.slice(i).search(/\n\$(function)?\$;/);
+    return s.slice(i, i + end);
+  };
+  const norm = (s: string) =>
+    s
+      .split("\n")
+      .filter((l) => !l.includes("ADR-093"))
+      .join("\n")
+      .replace(/\btenant_id, /g, "")
+      .replace(/\bv_tenant, (?=v_|p_)/g, "")
+      .replace(/\s+/g, " ");
 
-  it("es la última definición de create_sale y de return_sale_v2", () => {
+  it("es la última definición de create_sale y de return_sale_v2 (salvo la copia de ADR-093)", () => {
     for (const s of later) {
       expect(s).not.toMatch(/function (public\.)?create_sale\(/);
       expect(s).not.toMatch(/function (public\.)?return_sale_v2\(/);
     }
     expect(sql).toMatch(/create or replace function public\.create_sale\(p_items jsonb/);
     expect(sql).toMatch(/create or replace function return_sale_v2\(/);
+  });
+
+  it("ADR-093 copia estas definiciones y sólo agrega tenant_id en los inserts", () => {
+    for (const fn of [/create or replace function public\.create_sale\(/, /create or replace function return_sale_v2\(/]) {
+      const a = norm(body(sql, fn));
+      const b = norm(body(adr093, fn));
+      expect(b.length).toBeGreaterThan(1000);
+      expect(b).toBe(a);
+    }
   });
 
   it("conserva los bloques de impuestos, promociones, offline y precio en el servidor", () => {

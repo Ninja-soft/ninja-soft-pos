@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { SpinnerBlock } from "@/components/ui/Spinner";
 import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { SettingRow, SettingsCard } from "@/components/settings/Settings";
+import { SettingRow, SettingsCard, SettingsNotice } from "@/components/settings/Settings";
 import { UpgradeModal } from "@/components/saas/UpgradeModal";
 import { selectCls } from "@/components/stock/transfers/shared";
 import { useFeature } from "@/modules/saas/gating";
@@ -345,11 +345,11 @@ export function MlSettings() {
         }
       >
         {connectError && (
-          <div className="p-5">
+          <SettingsNotice>
             <Callout tone="warning" title="No se pudo conectar">
               {connectError}
             </Callout>
-          </div>
+          </SettingsNotice>
         )}
         {accounts.length === 0 ? (
           <EmptyState

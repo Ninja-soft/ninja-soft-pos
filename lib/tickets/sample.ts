@@ -16,6 +16,10 @@ export interface SampleBrand {
   // Condición frente al IVA del emisor (monotributo / responsable_inscripto /
   // exento / consumidor_final). Opcional: aparece en la plantilla A4 legal.
   iva_condition?: string | null;
+  // Datos fiscales del emisor para la factura (ADR-112): N° de Ingresos Brutos
+  // e inicio de actividades. Opcionales: vienen de useInvoiceSettings.
+  iibb?: string | null;
+  activity_start?: string | null;
 }
 
 export interface SampleTicketData {
@@ -41,10 +45,20 @@ export interface SampleTicketData {
     fiscal?: TicketFiscal | null;
     /** ADR-074: cada promoción aplicada (descuentos y regalos). */
     promotions?: { label: string; kind: "discount" | "gift"; amount: number }[];
+    /** ADR-112: IVA discriminado por alícuota (sale_tax_lines kind iva), para la factura A. */
+    ivaLines?: { rate: number; base: number; amount: number }[];
   };
   items: { id: string; product_name: string; quantity: number; unit_price: number; subtotal: number }[];
   payments: { id: string; method: string; amount: number }[];
-  customer?: { name: string; email?: string | null } | null;
+  customer?: {
+    name: string;
+    email?: string | null;
+    // ADR-112: datos del receptor para la factura (opcionales).
+    document_type?: string | null;
+    document_number?: string | null;
+    iva_condition?: string | null;
+    address?: string | null;
+  } | null;
   brand: SampleBrand | null;
   // Sucursal y caja de la venta (F17 · H90). Sólo viene con 2+ sucursales: con
   // una, el ticket queda igual que siempre.

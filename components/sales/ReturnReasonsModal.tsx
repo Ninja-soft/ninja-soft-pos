@@ -277,7 +277,7 @@ function DestinationBadge({ destination }: { destination: StockDestination }) {
         ? "bg-sky-400/15 text-info"
         : "bg-amber-400/15 text-warning";
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>
+    <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${tone}`}>
       {meta?.label ?? destination}
     </span>
   );

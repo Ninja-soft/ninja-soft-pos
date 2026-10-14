@@ -64,10 +64,10 @@ describe("estimateEta", () => {
 });
 
 describe("StoreLogo", () => {
-  it("padding de la baldosa proporcional, mínimo 2 px", () => {
-    expect(storeTilePadding(16)).toBe(2);
-    expect(storeTilePadding(28)).toBe(4);
-    expect(storeTilePadding(36)).toBe(5);
+  it("margen mínimo del ícono, sin baldosa", () => {
+    expect(storeTilePadding(16)).toBe(1);
+    expect(storeTilePadding(28)).toBe(1);
+    expect(storeTilePadding(36)).toBe(1);
   });
 
   it("iniciales", () => {

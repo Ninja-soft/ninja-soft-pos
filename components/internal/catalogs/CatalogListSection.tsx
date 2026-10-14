@@ -3,7 +3,7 @@
 // Catálogos vendibles: agrupan tiendas con nombre, carátula y precio único.
 // Tarjeta por catálogo con carátula, estado, tiendas (logos), productos,
 // negocios con acceso, precio y acciones (Accesos / Editar).
-import { Boxes, Gift, Package, Pencil, Plus, Users } from "lucide-react";
+import { Boxes, Gift, Package, Pencil, Plus, Store, Tags, Users } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -113,11 +113,23 @@ export function CatalogListSection({
                 </div>
 
                 <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
+                  <div title="Productos únicos que ve quien compra el catálogo (con o sin EAN). Se actualiza al terminar cada sincronización y al editar sus tiendas.">
                     <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Package size={12} aria-hidden /> Productos
+                      <Package size={12} aria-hidden /> Productos únicos
                     </dt>
                     <dd className="font-semibold tabular-nums text-foreground">{fmtNum(c.productCount)}</dd>
+                  </div>
+                  <div title="Publicaciones de sus tiendas (un mismo producto puede estar en varias).">
+                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Tags size={12} aria-hidden /> Ofertas
+                    </dt>
+                    <dd className="font-semibold tabular-nums text-foreground">{fmtNum(c.offerCount)}</dd>
+                  </div>
+                  <div>
+                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Store size={12} aria-hidden /> Tiendas
+                    </dt>
+                    <dd className="font-semibold tabular-nums text-foreground">{fmtNum(c.storeKeys.length)}</dd>
                   </div>
                   <div>
                     <dt className="flex items-center gap-1 text-xs text-muted-foreground">

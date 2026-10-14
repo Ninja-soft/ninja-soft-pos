@@ -721,7 +721,7 @@ function InterestPill({ quote }: { quote: ReturnType<typeof quoteInstallments> }
   const free = quote.interest <= 0;
   return (
     <span
-      className="mt-1.5 inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 tabular-nums"
+      className="mt-1.5 inline-flex items-center whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold leading-4 tabular-nums"
       style={
         free
           ? { background: "var(--acc)", color: "#fff" }
@@ -766,7 +766,7 @@ function MerchantHeader({
           {info?.tenant_name ?? <span className="inline-block h-5 w-32 animate-pulse rounded bg-neutral-200" />}
         </h1>
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
         <LockIcon className="h-3 w-3" />
         Seguro
       </span>

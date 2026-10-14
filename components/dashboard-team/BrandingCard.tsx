@@ -205,7 +205,7 @@ export function BrandingCard() {
               />
             ))}
             <label
-              className="flex h-8 cursor-pointer items-center gap-2 rounded-full border border-border px-3 text-xs text-muted-foreground"
+              className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-xs text-muted-foreground"
               title="Color personalizado"
             >
               <span

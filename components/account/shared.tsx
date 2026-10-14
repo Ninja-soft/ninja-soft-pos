@@ -59,7 +59,7 @@ export function CreditStatusPill({ status }: { status: "ok" | "watch" | "blocked
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold",
+        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold",
         status === "ok" && "bg-emerald-400/15 text-success",
         status === "watch" && "bg-amber-400/15 text-warning",
         status === "blocked" && "bg-red-400/15 text-danger",

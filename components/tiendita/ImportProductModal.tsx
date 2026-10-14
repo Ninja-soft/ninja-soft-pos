@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Barcode, ImageOff, ImagePlus, Package, RotateCcw } from "lucide-react";
+import { AlertTriangle, Barcode, ImageOff, ImagePlus, Package, RotateCcw, Ruler } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -25,6 +25,7 @@ import { uploadProductImage } from "@/modules/products/images";
 import { useCategories } from "@/modules/products/hooks";
 import { useImportCatalogProduct } from "@/modules/tiendita/hooks";
 import { MarketReferencePanel } from "@/components/catalog/MarketReferencePanel";
+import { isValidGtin, measureLines } from "@/lib/catalog/importInfo";
 import type { CatalogSearchResult } from "@/modules/tiendita/storefront";
 
 const ADD_ERRORS: Record<string, string> = {
@@ -33,6 +34,7 @@ const ADD_ERRORS: Record<string, string> = {
   catalog_product_not_found: "Ese producto ya no está en el catálogo.",
   no_tenant: "Tu sesión no tiene un negocio activo. Cerrá sesión y volvé a entrar.",
   forbidden: "Sólo el dueño o un encargado pueden agregar productos.",
+  sku_taken: "Ese SKU ya lo usa otro de tus productos. Cambialo o dejalo vacío.",
 };
 
 export function importErrorDetail(e: unknown): string | undefined {
@@ -96,7 +98,8 @@ function initialDraft(p: CatalogSearchResult, cats: CategoryLike[]): Draft {
     brand: p.marca ?? "",
     model: "",
     barcode: p.ean ?? "",
-    sku: "",
+    // Sin EAN (ADR-118): el código de la tienda queda como SKU de referencia.
+    sku: p.ean ? "" : (p.codigoTienda ?? ""),
     // Precio de venta SIEMPRE vacío: lo pone el negocio. El de las tiendas se
     // muestra abajo como referencia de mercado, nunca se copia (ADR-109).
     price: "",
@@ -163,6 +166,9 @@ export function ImportProductModal({
   }, [price, cost]);
 
   const shownPhoto = photoPreview ?? (draft?.keepImage ? product?.fotoUrl ?? null : null);
+  const measures = useMemo(() => measureLines(product?.medidas), [product?.medidas]);
+  const typedBarcode = draft?.barcode.trim() ?? "";
+  const barcodeLooksWrong = typedBarcode !== "" && !isValidGtin(typedBarcode);
 
   async function submit() {
     if (!product || !draft) return;
@@ -219,7 +225,9 @@ export function ImportProductModal({
         res.existing
           ? {
               title: "Ya lo tenías en tus productos",
-              description: "Hay un producto con ese código de barras; no se duplicó.",
+              description: draft.barcode.trim()
+                ? "Hay un producto con ese código de barras; no se duplicó."
+                : "Ya habías importado este producto del catálogo; no se duplicó.",
               variant: "success",
             }
           : {
@@ -276,7 +284,7 @@ export function ImportProductModal({
                 </div>
               )}
               {photo && (
-                <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
+                <span className="absolute left-1.5 top-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
                   Nueva
                 </span>
               )}
@@ -326,6 +334,82 @@ export function ImportProductModal({
               />
             </div>
           </div>
+
+          <Section title="Lo que trae del catálogo">
+            <div className="grid gap-2.5 sm:grid-cols-2" data-testid="import-catalog-info">
+              {product.ean ? (
+                <div className="flex items-start gap-2.5 rounded-xl bg-muted px-3 py-2.5 text-sm" data-testid="import-ean">
+                  <Barcode size={16} className="mt-0.5 shrink-0 text-success" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">Con EAN</span>
+                    <span className="block font-mono text-xs tabular-nums text-muted-foreground">{product.ean}</span>
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className="space-y-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm sm:col-span-2"
+                  data-testid="import-sin-ean"
+                >
+                  <p className="flex items-start gap-2 text-foreground">
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+                    <span>
+                      <span className="font-medium">Sin EAN:</span> se carga con el código de la tienda
+                      {product.codigoTienda ? (
+                        <>
+                          {" "}
+                          (<span className="font-mono">{product.codigoTienda}</span>, como SKU)
+                        </>
+                      ) : null}
+                      ; podés agregar el código de barras después.
+                    </span>
+                  </p>
+                  <Input
+                    variant="filled"
+                    className="bg-card"
+                    label="Código de barras (EAN), si lo tenés"
+                    placeholder="Opcional"
+                    inputMode="numeric"
+                    value={draft.barcode}
+                    onChange={(e) => set("barcode", e.target.value)}
+                  />
+                  {barcodeLooksWrong && (
+                    <p className="text-xs text-muted-foreground">
+                      No parece un EAN válido (revisá los dígitos). Se guarda igual.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div
+                className={cn("flex items-start gap-2.5 rounded-xl bg-muted px-3 py-2.5 text-sm", !product.ean && "sm:col-span-2")}
+                data-testid={measures.length ? "import-medidas" : "import-sin-medidas"}
+              >
+                <Ruler
+                  size={16}
+                  className={cn("mt-0.5 shrink-0", measures.length ? "text-success" : "text-muted-foreground")}
+                  aria-hidden
+                />
+                {measures.length ? (
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">Con medidas</span>
+                    <span className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      {measures.map((m) => (
+                        <span key={m.key}>
+                          {m.label}: <span className="tabular-nums text-foreground">{m.value}</span>
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="min-w-0">
+                    <span className="block font-medium text-foreground">Sin medidas</span>
+                    <span className="block text-xs text-muted-foreground">
+                      El catálogo no trae peso, volumen ni dimensiones. Podés cargarlas en la ficha después.
+                    </span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </Section>
 
           <Section title="Datos">
             <Input
@@ -438,22 +522,27 @@ export function ImportProductModal({
 
           <Section title="Códigos">
             <div className="grid grid-cols-2 gap-3">
+              {product.ean && (
+                <Input
+                  variant="filled"
+                  label="Código de barras (EAN)"
+                  inputMode="numeric"
+                  value={draft.barcode}
+                  onChange={(e) => set("barcode", e.target.value)}
+                />
+              )}
               <Input
                 variant="filled"
-                label="Código de barras (EAN)"
-                inputMode="numeric"
-                value={draft.barcode}
-                onChange={(e) => set("barcode", e.target.value)}
-              />
-              <Input
-                variant="filled"
-                label="SKU"
+                label={product.ean ? "SKU" : "SKU (código de la tienda)"}
                 placeholder="Opcional"
                 value={draft.sku}
                 onChange={(e) => set("sku", e.target.value)}
               />
             </div>
-            {draft.barcode.trim() && draft.barcode.trim() !== product.ean && (
+            {product.ean && barcodeLooksWrong && (
+              <p className="text-xs text-muted-foreground">No parece un EAN válido (revisá los dígitos).</p>
+            )}
+            {product.ean && draft.barcode.trim() && draft.barcode.trim() !== product.ean && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Barcode size={13} /> Cambiaste el EAN del catálogo ({product.ean}).
               </p>

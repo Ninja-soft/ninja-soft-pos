@@ -26,7 +26,7 @@ import { useSaveTaxSettings } from "@/modules/tax/hooks";
 import { useToast } from "@/components/ui/Toast";
 import { Dot, ExtLink } from "./shared";
 
-// Guía "qué facturas vas a emitir y qué necesitás de ARCA" (ADR-123). Todo lo
+// Guía "qué facturas vas a emitir y qué necesitás de ARCA" (ADR-125). Todo lo
 // que dice de letras sale de lib/billing/letter.ts (inferLetter); el estado de
 // cada requisito, de la configuración real de ARCA.
 

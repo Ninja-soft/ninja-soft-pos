@@ -3,7 +3,7 @@
 import { InfoHint } from "@/components/ui/InfoHint";
 import { letterReason } from "@/lib/billing/letter";
 
-// "¿Por qué C?" junto al comprobante de una venta (ADR-123). Archivo aparte
+// "¿Por qué C?" junto al comprobante de una venta (ADR-125). Archivo aparte
 // para no sumar al POS los hooks de la guía de configuración.
 
 /** "¿Por qué C?": ayuda breve junto a la letra de un comprobante emitido. */

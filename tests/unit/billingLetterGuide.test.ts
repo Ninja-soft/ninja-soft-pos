@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Guía de letras para el dueño (ADR-123): la matriz sale de inferLetter, la
+// Guía de letras para el dueño (ADR-125): la matriz sale de inferLetter, la
 // misma regla que usan la venta y el worker de ARCA.
 import { describe, expect, it } from "vitest";
 import {

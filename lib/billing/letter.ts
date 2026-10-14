@@ -69,7 +69,7 @@ export function conditionLabel(c: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-// Guía de letras para el dueño (ADR-123). PURO.
+// Guía de letras para el dueño (ADR-125). PURO.
 //
 // Qué facturas emite el negocio según SU condición frente al IVA. Todo sale de
 // inferLetter (la misma regla que usa la venta y el worker de ARCA): acá no se

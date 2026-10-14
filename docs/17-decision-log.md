@@ -4514,7 +4514,7 @@ El dueño pidió emitir presupuestos desde el POS, un modelo de presupuesto y, p
 - Deuda: la firma es una leyenda (los modelos del motor no tienen bloque de firma); la conversión sin conexión no marca el presupuesto; no hay vencimiento por cron (el estado vencido se calcula al leer).
 - Tests: `tests/unit/presupuestos.test.tsx`, `tests/unit/aiCoverImage.test.ts` (Gemini con mocks) y `tests/integration/rls-presupuestos.test.ts`.
 
-## ADR-123: La guía de letras y requisitos de ARCA para el dueño se deriva de la regla real (inferLetter) y del estado real de la configuración; nada de tablas hardcodeadas
+## ADR-125: La guía de letras y requisitos de ARCA para el dueño se deriva de la regla real (inferLetter) y del estado real de la configuración; nada de tablas hardcodeadas
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (sin cambios de esquema) · **Base:** ADR-068 (letra del comprobante), ADR-072 (facturación electrónica ARCA), ADR-117 (padrón de la plataforma)
 

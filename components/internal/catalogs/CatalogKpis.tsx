@@ -4,6 +4,7 @@
 // sincronización y próxima automática.
 import { CalendarClock, History, Layers, Store, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { NoData } from "@/components/ui/NoData";
 import {
   useCatalogDedupeStats,
   useCatalogStores,
@@ -28,7 +29,7 @@ export function CatalogKpis() {
   const enVenta = s?.tiendas.filter((t) => t.enCatalogo).length ?? 0;
   // Los números salen de una caché que recalcula un cron cada 30 min.
   const statValue = (n: number | undefined) =>
-    stats.isError ? "—" : s?.pending ? <span className="text-lg">Calculando…</span> : fmtNum(n ?? 0);
+    stats.isError ? <NoData /> : s?.pending ? <span className="text-lg">Calculando…</span> : fmtNum(n ?? 0);
   const statsHint = (text: string | undefined) =>
     stats.isError
       ? "No se pudo leer"

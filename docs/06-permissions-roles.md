@@ -36,6 +36,20 @@ Definidos por la combinación `is_internal = true` + `internal_level` en `app_me
 | `admin` | Operaciones NinjaSoft | Gestiona tenants, planes, estados, flags y soporte. No puede quitar el último super-admin. |
 | `support` | Equipo de soporte | Lectura + acciones acotadas de soporte con motivo. No cambia planes ni staff. |
 
+### 3.1b Permiso Cobranzas (implementado, F20-1 · ADR-115)
+
+Permiso que **se suma al nivel** (tabla `platform_staff_permissions`, no viaja en el JWT): una persona de `support` con **Cobranzas** ve y opera las cuentas corrientes de la plataforma (registrar pagos, bonificar, cargo manual, anular un cargo, revertir un pago) sin administrar negocios, porque las RPC de negocios siguen rechazando a `support`. `admin` y `super_admin` operan cobranzas por su nivel. Lo da o lo quita un `super_admin` desde `/internal/staff` con motivo (`internal_set_staff_permission`).
+
+| Acción de cobranza | support | support + Cobranzas | admin | super_admin |
+|---|---|---|---|---|
+| Ver estado de cuenta, Cobranzas e historia | ✅ | ✅ | ✅ | ✅ |
+| Registrar pago, cargo manual, revertir pago | ❌ | ✅ | ✅ | ✅ |
+| Bonificar o anular un cargo | ❌ | ✅ hasta el tope | ✅ hasta el tope | ✅ (tope configurable, por defecto sin tope) |
+| Condiciones de cobro (modalidad, plazo) | ❌ | ❌ | ✅ (exento no) | ✅ |
+| Marcar negocio de prueba, editar topes, dar Cobranzas | ❌ | ❌ | ❌ | ✅ |
+
+Los **topes** (`platform_billing_caps`, por nivel: `cobranzas`, `admin`, `super_admin`) son por operación y por mes calendario por negocio, suman bonificaciones, anulaciones, ajustes a favor y condonaciones de todo el staff, y se validan en el servidor (`platform_assert_forgiveness_cap`). Defaults: $ 50.000 por operación y $ 150.000 por mes para Cobranzas y admin; super_admin sin tope.
+
 ### 3.2 Roles objetivo por área
 
 Estos roles pueden implementarse como permisos granulares sobre `internal_level` o como una tabla futura `internal_staff_roles`:

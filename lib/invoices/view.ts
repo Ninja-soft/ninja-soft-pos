@@ -133,6 +133,12 @@ export function invoiceView(doc: InvoiceDoc): InvoiceViewModel {
         title: TRANSPARENCY_TITLE,
         rows: [
           { label: "IVA contenido", value: money(doc.transparency!.iva), legal: "transparencia" as const },
+          // ADR-119: IVA contenido por alícuota (sólo B, opción del negocio).
+          ...(doc.letter === "B"
+            ? (doc.transparencyBreakdown ?? [])
+                .filter((r) => r.amount > 0)
+                .map((r) => ({ label: `IVA ${fmtRate(r.rate)} contenido`, value: money(r.amount) }))
+            : []),
           { label: "Otros impuestos nacionales indirectos", value: money(doc.transparency!.others), legal: "transparencia" as const },
         ],
       }

@@ -34,9 +34,11 @@ import { cn } from "@/lib/utils/cn";
 import { useScanner, type ScanInfo } from "@/modules/pos/useScanner";
 import { useTicketBranding } from "@/modules/tickets/hooks";
 import { useDefaultRegister } from "@/modules/pos/hooks";
-import { TicketRenderer } from "@/components/tickets/TicketRenderer";
-import { defaultSaleBlocks } from "@/lib/tickets/blocks";
 import { sampleTicketData } from "@/lib/tickets/sample";
+import { InvoiceDocument } from "@/components/invoices/InvoiceDocument";
+import { ticketStyle } from "@/components/invoices/InvoicePreview";
+import { docOptions, invoiceFromTicket } from "@/lib/invoices/fromTicket";
+import { useInvoiceStyle } from "@/modules/invoices/hooks";
 import { DISPLAY_CHANNEL } from "@/lib/pos/customerDisplay";
 import {
   detectCapabilities,
@@ -216,7 +218,16 @@ export function HardwareCard() {
   const [printing, setPrinting] = useState(false);
   const ticketRef = useRef<HTMLDivElement>(null);
   const sample = useMemo(() => sampleTicketData(brand ?? null), [brand]);
-  const printBlocks = useMemo(() => defaultSaleBlocks(), []);
+  // ADR-119: la prueba sale con el modelo de ticket del negocio.
+  const invoice = useInvoiceStyle(brand ?? null, true);
+  const sampleDoc = useMemo(
+    () =>
+      invoiceFromTicket(
+        { ...sample, brand: invoice.brand ?? sample.brand },
+        docOptions(invoice.style, { nonFiscalLabel: "Ticket de prueba" }),
+      ),
+    [sample, invoice],
+  );
   function testPrint() {
     if (typeof window === "undefined" || typeof window.print !== "function") {
       log("printer", "Imprimir ticket de prueba", "error", "El navegador no expone window.print().");
@@ -633,11 +644,10 @@ export function HardwareCard() {
           aria-hidden
           className="ticket-print pointer-events-none fixed -left-[9999px] top-0"
         >
-          <TicketRenderer
-            blocks={printBlocks}
-            data={sample}
-            paper={brand?.ticket_width === "58" ? "58" : "80"}
-            showNinjaLogo
+          <InvoiceDocument
+            doc={sampleDoc}
+            style={ticketStyle(invoice.style, brand?.ticket_show_logo)}
+            format={brand?.ticket_width === "58" ? "58" : "80"}
           />
         </div>
       )}

@@ -166,13 +166,7 @@ export function RubroCard() {
                     : "border-border hover:bg-muted",
                 )}
               >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      active ? "bg-ninja-flame" : "bg-transparent",
-                    )}
-                  />
+                <div className="flex items-center gap-2 pr-6">
                   <span className="text-sm font-medium">{VERTICAL_LABELS[v]}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">

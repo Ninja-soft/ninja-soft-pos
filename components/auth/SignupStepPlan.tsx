@@ -118,9 +118,9 @@ export function SignupStepPlan({
         onClick={() => onAddonAiChange(!addonAi)}
         aria-pressed={addonAi}
         className={cn(
-          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 pr-10 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "mt-4 flex w-full flex-col gap-3 rounded-lg border p-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           addonAi
-            ? "choice-on choice-check"
+            ? "choice-on"
             : "border-border bg-card hover:bg-secondary",
         )}
       >

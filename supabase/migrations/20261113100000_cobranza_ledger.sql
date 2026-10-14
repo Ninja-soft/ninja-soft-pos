@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261113100000_cobranza_ledger  (F20-1 · H127 · ADR-110 · ADR-113)
+-- 20261113100000_cobranza_ledger  (F20-1 · H127 · ADR-110 · ADR-115)
 --
 -- Cuenta corriente de la PLATAFORMA: lo que cada negocio le debe a NinjaSoft
 -- por su suscripción (spec docs/40-cobranza-saas.md §3, §5, §6.2, §6.3, §10,

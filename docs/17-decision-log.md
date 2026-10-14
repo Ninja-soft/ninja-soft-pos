@@ -4059,7 +4059,7 @@ En "Pagos de plataforma", el Client ID tiene cargado un email.
 
 ---
 
-## ADR-113: Cuenta corriente de la plataforma (F20-1): ledger inmutable con imputación FIFO alimentado por billing_records, cargos por período con descuentos y prorrateo, permiso Cobranzas con topes por nivel y exclusión de negocios del staff y de prueba
+## ADR-115: Cuenta corriente de la plataforma (F20-1): ledger inmutable con imputación FIFO alimentado por billing_records, cargos por período con descuentos y prorrateo, permiso Cobranzas con topes por nivel y exclusión de negocios del staff y de prueba
 
 **Fecha:** 2026-10-14 · **Estado:** aceptada (código en `feat/cobranza-ledger`; migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar) · **Hito:** H127 (F20-1) · **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §6.3, §10, §17, §18 y §22 · **Base:** ADR-110, ADR-037 (ledger tipado e imputaciones), ADR-052 (`internal_scope`), ADR-083 (auditoría inmutable). **Numeración:** 112 la toma `feat/plantillas-factura`.
 

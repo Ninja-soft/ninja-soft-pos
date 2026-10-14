@@ -36,7 +36,7 @@ Definidos por la combinación `is_internal = true` + `internal_level` en `app_me
 | `admin` | Operaciones NinjaSoft | Gestiona tenants, planes, estados, flags y soporte. No puede quitar el último super-admin. |
 | `support` | Equipo de soporte | Lectura + acciones acotadas de soporte con motivo. No cambia planes ni staff. |
 
-### 3.1b Permiso Cobranzas (implementado, F20-1 · ADR-113)
+### 3.1b Permiso Cobranzas (implementado, F20-1 · ADR-115)
 
 Permiso que **se suma al nivel** (tabla `platform_staff_permissions`, no viaja en el JWT): una persona de `support` con **Cobranzas** ve y opera las cuentas corrientes de la plataforma (registrar pagos, bonificar, cargo manual, anular un cargo, revertir un pago) sin administrar negocios, porque las RPC de negocios siguen rechazando a `support`. `admin` y `super_admin` operan cobranzas por su nivel. Lo da o lo quita un `super_admin` desde `/internal/staff` con motivo (`internal_set_staff_permission`).
 

@@ -31,7 +31,7 @@ Plan de ejecución por fases. Cada fase tiene salida verificable, criterios de �
 | **F17** | Multi-sucursal real (sucursal como contexto, configuración heredable, terminales, stock, clientes y reportes por sucursal) | 10–14 semanas | 🟡 En curso: H89, H90 y H91 (ADR-043, ADR-045); stock por sucursal y traslados (H94 parcial, H95, ADR-046); configuración heredable, terminales e impresoras (H92, H93, ADR-049); credenciales y planes por sucursal, plantilla de sucursal, clientes por sucursal, comparativo y monitor de sucursales (ADR-057); cobros y traslados por sucursal, Z por sucursal y caja, heartbeat de cajas, tránsito y contexto cruzado (ADR-080) |
 | **F18** | Fiscal, contable, precios y compras (listas PRO, compras e importaciones, IVA, internos, percepciones, retenciones, padrones, libros, asientos, conciliaciones) | 16–24 semanas | 🟡 En curso (auditoría fiscal 2026-10-12, ADR-043; compras v1 ADR-050; compras v2 y tesorería ADR-059; contabilidad v1 ADR-066; base fiscal ADR-068; Libro IVA ADR-076; retenciones ADR-079; impuestos 100 % personalizables por negocio ADR-105) |
 | **F19** | Envíos y logística (carriers integrados, etiquetas, seguimiento, puntos de retiro, Mercado Libre) | 14–18 semanas | 🟡 En curso: fase 1 (núcleo, Andreani real y simulador, ADR-103) |
-| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-113; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
+| **F20** | Cobranza SaaS (factura de plataforma con CAE, datos fiscales con padrón ARCA, NC y ND, cuenta corriente, punitorios, mora, conciliación y KPIs) | 10–14 semanas | 🟡 En curso: F20-0a, F20-0b y F20-1 con código (ADR-110, ADR-115; spec [`40-cobranza-saas.md`](./40-cobranza-saas.md)); facturar depende de la CUIT de NinjaSoft |
 | **F21** | Participación del staff y gastos recurrentes | a definir | ⚪ Futuro, no construir aún (diseño en spec §20; depende de F20) |
 | **TX** | Mejoras transversales (UX y datos) — quick wins | continuo | 🟡 En curso (importaciones XLSX ADR-078) |
 
@@ -1406,7 +1406,7 @@ Objetivo: que NinjaSoft cobre, facture y gestione la deuda de sus clientes sin p
   - [ ] Clave del webhook y validación de `x-signature` en `mp_billing_webhook`.
   - [ ] Ambiente, "Probar conexión" (`/users/me`), URL del webhook para copiar y últimos eventos.
   - [ ] *Criterio:* un webhook con firma inválida se descarta y queda en Salud de webhooks; "Probar conexión" muestra la cuenta y el ambiente.
-- [ ] **H127 · F20-1: ledger económico de la plataforma.** Código en `feat/cobranza-ledger` ([ADR-113](./17-decision-log.md)); migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar.
+- [ ] **H127 · F20-1: ledger económico de la plataforma.** Código en `feat/cobranza-ledger` ([ADR-115](./17-decision-log.md)); migraciones `20261113100000_cobranza_ledger` y `20261113100100_cobranza_ledger_rpc` sin aplicar.
   - [x] Tablas nuevas:
     - `tenant_billing_terms`, con las modalidades MP, cuenta corriente, manual y exento;
     - `platform_charges` y sus líneas;

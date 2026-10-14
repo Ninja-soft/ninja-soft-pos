@@ -1,7 +1,7 @@
 "use client";
 
 // =============================================================================
-// "Mi suscripción > Estado de cuenta" (F20-1 · ADR-113, spec docs/40 §14.5).
+// "Mi suscripción > Estado de cuenta" (F20-1 · ADR-115, spec docs/40 §14.5).
 // Lo que el negocio le debe a NinjaSoft: saldo, vencimientos y movimientos.
 // Sólo lectura, para el dueño y el encargado (my_billing_statement valida el
 // rol en el servidor). Sin motivos internos ni nombres del staff.

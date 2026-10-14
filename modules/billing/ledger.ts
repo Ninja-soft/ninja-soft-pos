@@ -1,7 +1,7 @@
 "use client";
 
 // =============================================================================
-// Cuenta corriente de la plataforma (F20-1 · ADR-113): tipos y hooks sobre las
+// Cuenta corriente de la plataforma (F20-1 · ADR-115): tipos y hooks sobre las
 // RPC de 20261113100100_cobranza_ledger_rpc. Todo pasa por RPC (security
 // definer, guard internal_scope o dueño/encargado); el front nunca escribe
 // tablas del ledger.

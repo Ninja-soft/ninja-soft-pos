@@ -1,5 +1,5 @@
 -- =============================================================================
--- 20261113100100_cobranza_ledger_rpc  (F20-1 · H127 · ADR-113)
+-- 20261113100100_cobranza_ledger_rpc  (F20-1 · H127 · ADR-115)
 --
 -- Operación de la cuenta corriente de la plataforma (modelo en
 -- 20261113100000_cobranza_ledger.sql):

@@ -1,7 +1,7 @@
 "use client";
 
 // Modales de operación de la cuenta corriente de la plataforma (F20-1 ·
-// ADR-113). Cada uno pide motivo (queda en la auditoría) y muestra el efecto
+// ADR-115). Cada uno pide motivo (queda en la auditoría) y muestra el efecto
 // sobre el saldo antes de confirmar. El servidor valida rol y topes: la UI
 // sólo anticipa.
 

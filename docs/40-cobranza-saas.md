@@ -1,6 +1,6 @@
 # Cobranza SaaS: cómo NinjaSoft cobra, factura y gestiona la deuda de sus clientes
 
-> **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-113), ver §23.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
+> **Estado:** diseño (2026-10-13). **F20-1 (cuenta corriente) tiene código desde el 2026-10-14 (ADR-115), ver §23.** El resto no está construido salvo lo que figura en "Qué existe hoy". Decisión de arquitectura: [ADR-110](./17-decision-log.md). Hitos: F20 en [`02-roadmap.md`](./02-roadmap.md).
 >
 > **Alcance.** Es la cobranza de la **plataforma**: NinjaSoft le cobra la suscripción a cada negocio (tenant). No hay que confundirla con la cuenta corriente que un negocio le da a **sus** clientes (ADR-037, `customer_account_*`) ni con la facturación ARCA de las ventas del negocio (ADR-072, `fiscal_documents`). Este diseño reutiliza patrones y código de las dos, pero sus tablas son otras.
 >
@@ -1540,7 +1540,7 @@ Respuestas a las preguntas de la sección 21. Mandan sobre lo propuesto arriba c
 
 ## 23. Estado de F20-1: cuenta corriente de la plataforma (2026-10-14)
 
-Código en `feat/cobranza-ledger`, decisión [ADR-113](./17-decision-log.md). Migraciones **sin aplicar**: `20261113100000_cobranza_ledger` (modelo, motor, backfill y cron) y `20261113100100_cobranza_ledger_rpc` (permisos, topes, estado de cuenta y operaciones).
+Código en `feat/cobranza-ledger`, decisión [ADR-115](./17-decision-log.md). Migraciones **sin aplicar**: `20261113100000_cobranza_ledger` (modelo, motor, backfill y cron) y `20261113100100_cobranza_ledger_rpc` (permisos, topes, estado de cuenta y operaciones).
 
 **Construido**
 

@@ -1,6 +1,6 @@
 // =============================================================================
 // Cuenta corriente de la plataforma (F20-1 · H127, spec docs/40 §6.3, §10,
-// §17 y §22; ADR-113).
+// §17 y §22; ADR-115).
 //
 // Funciones puras, espejo de la lógica SQL de las migraciones
 // 20261113100000_cobranza_ledger y 20261113100100_cobranza_ledger_rpc:

@@ -1,6 +1,6 @@
 // @vitest-environment node
 // =============================================================================
-// F20-1 (H127 · ADR-113): cuenta corriente de la plataforma (migraciones
+// F20-1 (H127 · ADR-115): cuenta corriente de la plataforma (migraciones
 // 20261113100000_cobranza_ledger y 20261113100100_cobranza_ledger_rpc).
 //   · Un negocio sólo ve su estado de cuenta (dueño o encargado); el cajero y
 //     el dueño de otro negocio no. El ledger no se lee directo.

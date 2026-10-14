@@ -490,7 +490,7 @@ export default function InternalTenantDetail({
           </>
         )}
 
-        {/* ── Cuenta corriente (F20-1 · ADR-113) ────────────────────────── */}
+        {/* ── Cuenta corriente (F20-1 · ADR-115) ────────────────────────── */}
         {tab === "cuenta" && <TenantLedgerTab tenantId={params.id} tenantName={tenant?.name ?? "El negocio"} />}
 
         {/* ── Miembros y acceso ─────────────────────────────────────────── */}

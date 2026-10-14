@@ -1,7 +1,7 @@
 "use client";
 
 // =============================================================================
-// Cobranzas (F20-1 · ADR-113, spec docs/40 §14.1 y §14.3): deuda de toda la
+// Cobranzas (F20-1 · ADR-115, spec docs/40 §14.1 y §14.3): deuda de toda la
 // plataforma por antigüedad, negocios con saldo y próximos vencimientos.
 // Excluye los negocios que no se cobran (prueba, del staff, lifetime, exentos).
 // =============================================================================

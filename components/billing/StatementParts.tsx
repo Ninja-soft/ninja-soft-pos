@@ -1,7 +1,7 @@
 "use client";
 
 // =============================================================================
-// Piezas del estado de cuenta de la plataforma (F20-1 · ADR-113), compartidas
+// Piezas del estado de cuenta de la plataforma (F20-1 · ADR-115), compartidas
 // por el panel interno (pestaña "Cuenta corriente") y el panel del cliente
 // ("Mi suscripción > Estado de cuenta"). Presentacionales: reciben los datos
 // ya cargados por las RPC.

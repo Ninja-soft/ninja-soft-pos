@@ -2,7 +2,7 @@
 
 // =============================================================================
 // Pestaña "Cuenta corriente" del detalle del negocio en el panel interno
-// (F20-1 · ADR-113, spec docs/40 §14.4). Saldo, vencido, a vencer y a favor;
+// (F20-1 · ADR-115, spec docs/40 §14.4). Saldo, vencido, a vencer y a favor;
 // movimientos con saldo corrido; vencimientos con su detalle; pagos;
 // imputaciones y la historia (auditoría de cobranza). Registrar pago,
 // bonificar, cargo manual, anular un cargo y revertir un pago, todo con

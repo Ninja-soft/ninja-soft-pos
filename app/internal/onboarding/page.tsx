@@ -34,7 +34,7 @@ export default function InternalOnboardingPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Panel interno"
+        eyebrow="Comunicaciones"
         title="Onboarding"
         icon={Compass}
         description="Activación por negocio, recorridos guiados y sugerencias por evento. Lo publicado llega sin deploy."

@@ -153,7 +153,15 @@ export type SaleItem = Tables<"sale_items">;
 export type Payment = Tables<"payments">;
 
 export type SaleWithCustomer = Sale & {
-  customers: { name: string; email: string | null } | null;
+  customers: {
+    name: string;
+    email: string | null;
+    // ADR-112: receptor de la factura (documento, condición IVA y domicilio).
+    document_type?: string | null;
+    document_number?: string | null;
+    iva_condition?: string | null;
+    address?: string | null;
+  } | null;
 };
 
 export interface SaleDetail {
@@ -290,7 +298,7 @@ export const salesApi = {
   get: async (id: string): Promise<SaleDetail> => {
     const supabase = createClient();
     const [saleRes, itemsRes, paymentsRes] = await Promise.all([
-      supabase.from("sales").select("*, customers(name, email)").eq("id", id).single(),
+      supabase.from("sales").select("*, customers(name, email, document_type, document_number, iva_condition, address)").eq("id", id).single(),
       supabase.from("sale_items").select("*").eq("sale_id", id),
       supabase.from("payments").select("*").eq("sale_id", id),
     ]);

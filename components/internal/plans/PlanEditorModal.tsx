@@ -30,6 +30,8 @@ import { FEATURE_INFO } from "@/lib/saas/featureInfo";
 import { PLAN_ICONS, DEFAULT_PLAN_ICON } from "./planIcons";
 import { PlanBadge } from "./PlanBadge";
 import { NoData } from "@/components/ui/NoData";
+import { Badge } from "@/components/ui/Badge";
+import { Switch } from "@/components/ui/Switch";
 
 const PLAN_ASSETS_BUCKET = "plan-assets";
 
@@ -446,6 +448,16 @@ export function PlanEditorModal({
         onOpenChange={onOpenChange}
         title={isEdit ? "Editar plan" : "Nuevo plan"}
         className="max-w-2xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button loading={save.isPending} onClick={handleSave}>
+              {isEdit ? "Guardar cambios" : "Crear plan"}
+            </Button>
+          </div>
+        }
       >
         <div className="space-y-5">
           {/* Preview del plan (PlanBadge) */}
@@ -461,9 +473,9 @@ export function PlanEditorModal({
                 </span>
               </span>
               {recommended && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-ninja-gold/10 px-2 py-0.5 text-[11px] font-semibold text-ninja-gold">
-                  <Star size={11} className="fill-ninja-gold" /> Recomendado
-                </span>
+                <Badge tone="gold">
+                  <Star size={11} className="fill-current" aria-hidden /> Recomendado
+                </Badge>
               )}
             </div>
           </div>
@@ -647,7 +659,7 @@ export function PlanEditorModal({
                   label={LIMIT_LABELS[k]}
                   type="number"
                   min="0"
-                  placeholder="∞"
+                  placeholder="Sin tope"
                   value={limits[k]}
                   onChange={(e) =>
                     setLimits((s) => ({ ...s, [k]: e.target.value }))
@@ -699,23 +711,12 @@ export function PlanEditorModal({
           )}
 
           {/* Activo */}
-          <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(e) => setActive(e.target.checked)}
-              className="h-4 w-4 accent-ninja-flame"
-            />
-            Plan activo (visible para nuevos negocios)
-          </label>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button loading={save.isPending} onClick={handleSave}>
-              {isEdit ? "Guardar cambios" : "Crear plan"}
-            </Button>
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Plan activo</p>
+              <p className="text-xs text-muted-foreground">Visible para los negocios nuevos.</p>
+            </div>
+            <Switch checked={active} onCheckedChange={setActive} label="Plan activo" />
           </div>
         </div>
       </Modal>

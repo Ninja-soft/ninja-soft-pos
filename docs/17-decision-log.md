@@ -4153,3 +4153,38 @@ Hasta ahora el comprobante sin plantilla propia era el ticket de bloques y el "A
 - Migración `20261112100000_comprobantes_plantillas` (sin aplicar).
 - `fiscal_documents` ahora se lee con `doc_tipo`, `doc_nro` y `concepto`, y el detalle de la venta trae documento, condición IVA y domicilio del cliente para el receptor. `saleTaxTicket` devuelve el IVA por alícuota para discriminarlo en la A.
 - Deuda: la nota de crédito de una devolución todavía se imprime con el ticket de devolución; el motor ya la soporta (comprobante asociado) y falta conectarla a la ventana de devolución y al detalle fiscal. Las líneas de venta no guardan código ni alícuota propios: en la A se usa la alícuota única de la venta (o "Varias") y el código es el número de renglón. Los textos legales son orientativos: validar con el contador del negocio.
+
+---
+
+## ADR-117: Datos fiscales del cliente para la factura de NinjaSoft: emisor configurable con letra pendiente, verificación sólo desde una consulta al padrón grabada por el servidor e historia por vigencia (F20-3)
+
+**Fecha:** 2026-10-14 · **Estado:** aceptada (migración sin aplicar, Edge sin desplegar) · **Base:** ADR-110 (cobranza SaaS), ADR-068 (letra, `cbte_letter_infer`), ADR-072 (`arca_platform`, WSAA), ADR-052 (`internal_scope`), ADR-083 (auditoría). **Spec:** [`40-cobranza-saas.md`](./40-cobranza-saas.md) §6.2, §7.2, §8 y §22. **Numeración:** 113 lo toma `feat/catalogo-sync-config`; 114 está en `main`.
+
+### Contexto
+
+F20-3 pide que cada negocio elija a nombre de quién le factura NinjaSoft, vea la letra antes de confirmar y que el CUIT se verifique con el padrón de ARCA. NinjaSoft todavía no tiene CUIT ni certificado (§22 #1): no hay condición del emisor para calcular la letra ni forma de consultar el padrón. Los datos fiscales del negocio ya existen (`tax_settings`, `tenant_branding`) con el vocabulario de condiciones de ADR-068.
+
+### Decisión
+
+1. **Emisor configurable** (`platform_issuer_profile`, una fila por ambiente y una activa): condición frente al IVA, CUIT, razón social, domicilio e interruptor del padrón. Lo edita sólo super_admin, con motivo. Condición vacía = **letra pendiente** para todos (`pending_issuer`). El certificado sigue en `arca_platform`.
+2. **Letra** con `platform_cbte_letter` (SQL) y `lib/billing/letter.ts`, sobre `cbte_letter_infer`: misma regla que las ventas, sin M. Receptor sin condición = `pending_receptor`.
+3. **Condición con el vocabulario de ADR-068** (texto) en lugar del id de ARCA que proponía §6.2; el id sale de `fiscal_condition_arca_id`. Se reutilizan los checks, la letra y las etiquetas.
+4. **Perfil con historia por vigencia** (`tenant_billing_profiles`): cada cambio cierra la fila vigente y abre otra; un índice único parcial garantiza una sola abierta; baja lógica y auditoría con `before/after`. Sin fila se usan los datos de la empresa; sin CUIT, consumidor final. Con datos de la empresa la fila guarda el email y, si se verificó, la copia de ese CUIT (si el negocio cambia de CUIT, la verificación no se arrastra).
+5. **La verificación nunca la declara el cliente.** `owner_set_billing_profile({use_padron: true})` exige una consulta `ok` del mismo CUIT de los últimos 30 días en `platform_fiscal_lookups`, que sólo escribe `service_role` (Edge `platform_billing`), y toma de ahí razón social, condición y domicilio. Cambiar sólo el email conserva la verificación; cambiar datos fiscales la pierde.
+6. **Nivel `staff`** además de `padron`, `manual` y `none`: un admin puede marcar como verificados datos revisados a mano (constancia por email), con motivo. Es la salida mientras no haya certificado y habilita la factura A.
+7. **Padrón por la Edge `platform_billing`** con el WSAA existente (`_shared/arca`), `service = ws_sr_constancia_inscripcion` y ticket propio en `arca_platform_tickets`; parser puro en `_shared/arca/padron.ts`. Sin certificado responde `platform_not_configured` sin llamar a ARCA. Cache de 30 días, 10 consultas por hora por negocio y 300 en total. La autorización la decide la base con el JWT del usuario (`my_billing_profile`, o `internal_billing_profile_get` con `x-ninja-scope`).
+8. **RLS:** el negocio con `(select current_tenant_id())` y `(select is_tenant_manager())` (dueño o encargado lee y edita por RPC); el staff con `(select internal_scope())`; sin políticas de escritura. No es una feature de plan (ADR-110, punto 12).
+
+### Alternativas descartadas
+
+- **Calcular la letra con un emisor supuesto (monotributo):** mostraría "Factura C" a clientes que quizás reciban A. Es mejor "pendiente" con la explicación.
+- **Que el cliente mande los datos del padrón y un flag "verificado":** cualquiera podría declararse verificado.
+- **Guardar sólo la fila vigente y dejar la historia en `audit_logs`:** la historia del titular es dato de negocio (refacturación, §17.7), no sólo auditoría.
+- **Reutilizar `customers` o `tax_settings`:** mezclaría los datos con los que el negocio factura con los que NinjaSoft le factura a él.
+
+### Consecuencias
+
+- Migración `20261113300000_cobranza_datos_fiscales` (sin aplicar) y Edge `platform_billing` (sin desplegar; `verify_jwt` por defecto).
+- Para que el padrón funcione hace falta el certificado de la plataforma con `ws_sr_constancia_inscripcion` autorizado (spec §16.1) y elegir el ambiente activo.
+- Cuando F20-1 llegue a `main`: sumar el permiso "Cobranzas" a `internal_set_billing_profile` y decidir si `tenant_billing_terms.send_to` reemplaza a `email_facturacion` o lo usa como primer destinatario.
+- Deuda: cron de revalidación del padrón (F20-11) y FCE MiPyME.

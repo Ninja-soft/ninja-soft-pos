@@ -10,6 +10,7 @@ import {
   MonitorDot,
   ShieldCheck,
   Palette,
+  ReceiptText,
   Settings,
   ShoppingCart,
   Store,
@@ -305,6 +306,16 @@ export default async function DashboardTeamPage() {
             title: "Suscripción y facturación",
             description: "Tu plan, complementos y registro de pagos.",
             icon: CreditCard,
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            href: "/configuracion?seccion=datos-facturacion",
+            title: "Datos de facturación",
+            description: "A nombre de quién te factura NinjaSoft y a qué email.",
+            icon: ReceiptText,
           },
         ]
       : []),

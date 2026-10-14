@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { BillingCard } from "@/components/internal/BillingCard";
+import { BillingProfileInternalCard } from "@/components/internal/BillingProfileInternalCard";
 import { PlanCard } from "@/components/internal/PlanCard";
 import { TenantLedgerTab } from "@/components/internal/billing/TenantLedgerTab";
 import { ImpersonationCard } from "@/components/internal/ImpersonationCard";
@@ -407,6 +408,8 @@ export default function InternalTenantDetail({
               subStatus={tenant?.subStatus ?? null}
               planKey={tenant?.planKey ?? null}
             />
+
+            <BillingProfileInternalCard tenantId={params.id} />
 
             <section>
               <SectionHeader

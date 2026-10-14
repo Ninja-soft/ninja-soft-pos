@@ -19,7 +19,7 @@ export function webPrintCopies(copies = 1, gapMs = 350): void {
   }
 }
 
-// Imprime SOLO el ticket que está dentro de `target` (ADR-109). Con el
+// Imprime SOLO el ticket que está dentro de `target` (ADR-111). Con el
 // auto-imprimir sin ventana puede haber más de un `.ticket-print` montado (el
 // de la venta anterior todavía esperando el CAE, o una ventana abierta): el
 // body se marca para aislar y sólo el ticket marcado queda visible al imprimir

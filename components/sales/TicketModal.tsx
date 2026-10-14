@@ -60,7 +60,7 @@ interface Props {
   /** Pestaña con la que abre (los avisos de contracargo abren en Cobros, ADR-064). */
   initialTab?: DetailTab;
   /**
-   * Recién cobrada con "Imprimir ticket al cobrar" (ADR-109): imprime sola
+   * Recién cobrada con "Imprimir ticket al cobrar" (ADR-111): imprime sola
    * (con CAE si es fiscal) y no abre la ventana; la abre sólo si ARCA falla,
    * tarda demasiado o la impresión falla.
    */
@@ -74,7 +74,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   // ADR-068: percepciones como líneas aparte y transparencia fiscal (B).
   const taxLines = useSaleTaxLines(open ? saleId : null);
   // F3 · ADR-072: factura electrónica de la venta (CAE + QR en el ticket).
-  // Mientras se espera el CAE se refresca seguido (ADR-109).
+  // Mientras se espera el CAE se refresca seguido (ADR-111).
   const fiscalDocs = useSaleFiscalDocuments(open ? saleId : null, { fastPoll: true });
   const saleFiscalDoc = (fiscalDocs.data ?? []).find((d) => d.origin === "sale") ?? null;
   // ADR-074: promociones aplicadas, una línea por promo en el ticket.
@@ -122,7 +122,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   // Detalle de la venta (ADR-061). Cada apertura arranca en Ticket (o en la
   // pestaña pedida).
   const [tab, setTab] = useState<DetailTab>(initialTab ?? "ticket");
-  // ADR-109: comprobante provisorio (sin CAE) pedido a mano, ventana visible
+  // ADR-111: comprobante provisorio (sin CAE) pedido a mano, ventana visible
   // en modo silencioso, falla de impresión y detalle fiscal desplegado.
   const [provisional, setProvisional] = useState(false);
   const [printProvisional, setPrintProvisional] = useState(false);
@@ -214,7 +214,7 @@ export function TicketModal({ open, onOpenChange, saleId, autoPrint, initialTab,
   }, [open, step]);
 
   // Auto-imprimir y auto-email, una sola vez por apertura y recién con el
-  // comprobante listo: si la venta es fiscal, con el CAE (ADR-109). Nunca
+  // comprobante listo: si la venta es fiscal, con el CAE (ADR-111). Nunca
   // bloquean ni molestan el flujo de venta: el email falla en silencio.
   const prefsReady = printProfilesQ.isFetched && !autoEmailQ.isPending;
   const ready = open && phase.kind === "ready" && Boolean(data) && prefsReady;

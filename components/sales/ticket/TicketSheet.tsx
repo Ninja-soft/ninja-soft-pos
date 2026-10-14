@@ -1,6 +1,6 @@
 "use client";
 
-// Ventana del ticket (ADR-109). PRESENTACIONAL: la arma TicketModal con los
+// Ventana del ticket (ADR-111). PRESENTACIONAL: la arma TicketModal con los
 // datos de la venta. Mismo ancho y lenguaje que la hoja de cobro (PosSheet
 // xl): en la compu, vista previa del comprobante a la izquierda y acciones a
 // la derecha; en el celular, apiladas (resumen y acciones arriba, vista previa

@@ -185,7 +185,7 @@ export function SendReceiptEmailButton({
   className?: string;
   // Modo compacto: solo el ícono Mail (fila de acciones del ticket).
   iconOnly?: boolean;
-  /** Rótulo corto ("Email" / "Reenviar") para grillas angostas (ADR-109). */
+  /** Rótulo corto ("Email" / "Reenviar") para grillas angostas (ADR-111). */
   short?: boolean;
 }) {
   const label = short ? (sentAt ? "Reenviar" : "Email") : sentAt ? "Reenviar email" : "Enviar por email";

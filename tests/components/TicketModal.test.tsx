@@ -1,4 +1,4 @@
-// ADR-109: la ventana del ticket espera el CAE en ventas fiscales y, con
+// ADR-111: la ventana del ticket espera el CAE en ventas fiscales y, con
 // "Imprimir ticket al cobrar", imprime sola sin abrir la ventana salvo error.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";

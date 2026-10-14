@@ -3905,7 +3905,7 @@ El catálogo precargado se cargaba con un Excel gigante que el dueño bajaba del
 
 ---
 
-## ADR-109: Ticket después de cobrar: ventana ancha, comprobante fiscal recién con CAE y auto-imprimir sin ventana
+## ADR-111: Ticket después de cobrar: ventana ancha, comprobante fiscal recién con CAE y auto-imprimir sin ventana
 
 **Fecha:** 2026-10-13 · **Estado:** aceptada (código en `feat/ticket-post-venta`; sin migraciones ni cambios de SQL o Edge) · **Base:** ADR-072 (facturación ARCA, cola fiscal y CAEA), ADR-061 (pestaña Cobros), H22 (perfiles de impresión), ADR-049 (impresora por caja).
 

@@ -1,4 +1,4 @@
-// ADR-109: estados del ticket después de cobrar y auto-imprimir sin ventana.
+// ADR-111: estados del ticket después de cobrar y auto-imprimir sin ventana.
 import { describe, expect, it } from "vitest";
 import {
   AUTHORIZING_SLOW_MS,

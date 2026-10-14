@@ -255,7 +255,7 @@ function PosPageInner() {
   const [checkoutTender, setCheckoutTender] = useState<string | null>(null);
   // Garantía pre-seleccionada por la oferta contextual (H28).
   const [offeredWarrantyId, setOfferedWarrantyId] = useState("");
-  // Tickets abiertos (ADR-109). Con "Imprimir ticket al cobrar" el de la venta
+  // Tickets abiertos (ADR-111). Con "Imprimir ticket al cobrar" el de la venta
   // recién cobrada es silencioso (imprime solo, con CAE si es fiscal) y puede
   // seguir esperando a ARCA mientras se cobra la siguiente: por eso es una
   // lista y no un único ticket.

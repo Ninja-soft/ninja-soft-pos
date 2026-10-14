@@ -1,4 +1,4 @@
-// Ticket después de cobrar (ADR-072 · ADR-109). PURO: decide qué muestra la
+// Ticket después de cobrar (ADR-072 · ADR-111). PURO: decide qué muestra la
 // ventana del ticket según el comprobante fiscal de la venta y qué hace el
 // auto-imprimir. No cambia la emisión ni el CAE: sólo lee `fiscal_documents`
 // (cola, reintentos y contingencia CAEA los maneja el worker).

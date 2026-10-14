@@ -39,7 +39,7 @@ export function useSaleFiscalDocuments(saleId: string | null, opts: { fastPoll?:
     enabled: Boolean(saleId),
     retry: false,
     // Mientras la factura está en camino, se refresca sola. El ticket recién
-    // cobrado (ADR-109) espera el CAE para mostrarse: ahí se mira más seguido.
+    // cobrado (ADR-111) espera el CAE para mostrarse: ahí se mira más seguido.
     refetchInterval: (q) => {
       const docs = q.state.data;
       if (!docs?.some((d) => d.status === "pendiente" || d.status === "enviando")) return false;

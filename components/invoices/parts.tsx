@@ -24,6 +24,41 @@ export const HAIR = "#e4e6eb";
 export const PAPER = "#ffffff";
 export const NUM: CSSProperties = { fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
 
+/**
+ * Texto debajo del nombre de un renglón (ADR-116): descripción ampliada del
+ * servicio, aclaraciones predefinidas y aclaración libre. Más chico y gris,
+ * con viñetas para las listas.
+ */
+export function LineDetail({
+  lines,
+  fontSize,
+  color = MUTED,
+  style,
+}: {
+  lines: InvoiceDoc["lines"][number]["detailLines"];
+  fontSize?: number | string;
+  color?: string;
+  style?: CSSProperties;
+}) {
+  if (!lines || lines.length === 0) return null;
+  return (
+    <div data-service-detail="" style={{ marginTop: 3, fontSize, lineHeight: 1.4, color, fontWeight: 400, ...style }}>
+      {lines.map((l, i) =>
+        l.bullet ? (
+          <div key={i} style={{ display: "flex", gap: 5 }}>
+            <span aria-hidden>•</span>
+            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{l.text}</span>
+          </div>
+        ) : (
+          <div key={i} style={{ overflowWrap: "anywhere" }}>
+            {l.text}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 /** Medida de la hoja A4 a 96 dpi. */
 export const A4_W = 794;
 export const A4_H = 1123;
@@ -282,7 +317,10 @@ export function LinesTable({
         {doc.lines.map((l, i) => (
           <tr key={i} style={{ background: zebra && i % 2 === 1 ? zebra : undefined }}>
             {!compact && <td style={{ ...td, textAlign: "left", color: MUTED }}>{l.code ?? i + 1}</td>}
-            <td style={{ ...td, textAlign: "left", fontWeight: descStrong ? 600 : 400, whiteSpace: "normal" }}>{l.description}</td>
+            <td style={{ ...td, textAlign: "left", fontWeight: descStrong ? 600 : 400, whiteSpace: "normal" }}>
+              {l.description}
+              <LineDetail lines={l.detailLines} fontSize={fontSize - 1.5} />
+            </td>
             <td style={td}>
               {fmtQty(l.quantity)}
               {compact && <span style={{ color: MUTED }}> {l.unit === "unidad" || !l.unit ? "u." : l.unit}</span>}

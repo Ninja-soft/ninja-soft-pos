@@ -26,6 +26,7 @@ import {
   letterOfTipo,
   pickCbteDate,
   scaleBreakdown,
+  serviceDates,
   ymdToIso,
   type Breakdown,
   type TaxLine,
@@ -80,6 +81,10 @@ export interface Snapshot {
     iva_total?: number | string | null;
     cbte_letter?: string | null;
     receptor?: Receptor | null;
+    /** ADR-116: período del servicio y vencimiento del pago (AAAA-MM-DD). */
+    service_from?: string | null;
+    service_to?: string | null;
+    payment_due?: string | null;
   };
   tax_lines: TaxLine[];
   has_services: boolean;
@@ -143,6 +148,8 @@ export function planDocument(s: Snapshot): { ok: true; plan: Plan } | { ok: fals
 
 export function detalleFor(s: Snapshot, p: Plan, nro: number, fch: string, cuitEmisor: string | null): CbteDetalle {
   const serv = p.concepto !== 1;
+  // ADR-116: período y vencimiento de la venta (antes iba siempre fch).
+  const sd = serv ? serviceDates(s.sale, fch) : null;
   return {
     ...p.breakdown,
     Concepto: p.concepto,
@@ -151,9 +158,9 @@ export function detalleFor(s: Snapshot, p: Plan, nro: number, fch: string, cuitE
     CbteDesde: nro,
     CbteHasta: nro,
     CbteFch: fch,
-    FchServDesde: serv ? fch : null,
-    FchServHasta: serv ? fch : null,
-    FchVtoPago: serv ? fch : null,
+    FchServDesde: sd ? sd.desde : null,
+    FchServHasta: sd ? sd.hasta : null,
+    FchVtoPago: sd ? sd.vto : null,
     MonId: "PES",
     MonCotiz: 1,
     CondicionIVAReceptorId: p.condIva,

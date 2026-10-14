@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createWsfeClient, type FetchLike } from "@/supabase/functions/_shared/arca/client";
 import {
+  detalleFor,
   informCaeaDocument,
   planDocument,
   processDocument,
@@ -15,6 +16,7 @@ import {
 import { runCaeaTasks, type CaeaTasks } from "@/supabase/functions/_shared/arca/caeaTasks";
 import { caeaPeriodsToRequest, nextQuincena, quincenaOf } from "@/supabase/functions/_shared/arca/caea";
 import { decodeQrUrl } from "@/supabase/functions/_shared/arca/qr";
+import { serviceDates } from "@/supabase/functions/_shared/arca/comprobante";
 import * as F from "../fixtures/arcaSoap";
 
 const NOW = new Date("2026-10-13T13:00:00Z");
@@ -335,5 +337,82 @@ describe("contingencia CAEA", () => {
     expect(synced.map((x) => x[1])).toEqual([1, 3, 6, 8]);
     expect(sinMov).toEqual([["c0", true]]);
     expect(checked).toContain("CAEA al día");
+  });
+});
+
+// ADR-116: servicios profesionales. Concepto 2 / 3 con el período del servicio
+// y el vencimiento del pago de la venta (antes iba siempre la fecha del
+// comprobante).
+describe("servicios (ADR-116)", () => {
+  const serviceSale = (over: Partial<Snapshot["sale"]> = {}) => ({
+    ...snap().sale,
+    service_from: "2026-10-01",
+    service_to: "2026-10-10",
+    payment_due: "2026-10-30",
+    ...over,
+  });
+
+  it("concepto 1 con sólo productos, 2 con sólo servicios y 3 con ambos", () => {
+    const c = (has_services: boolean, has_goods: boolean) => {
+      const r = planDocument(snap({}, { has_services, has_goods }));
+      return r.ok ? r.plan.concepto : null;
+    };
+    expect(c(false, true)).toBe(1);
+    expect(c(true, false)).toBe(2);
+    expect(c(true, true)).toBe(3);
+  });
+
+  it("manda el período y el vencimiento de la venta en el FECAESolicitar", async () => {
+    const h = harness(snap({}, { has_services: true, has_goods: false, sale: serviceSale() }), {
+      FECompUltimoAutorizado: F.ULTIMO(11),
+      FECAESolicitar: F.CAE_APROBADO(12),
+    });
+    expect((await processDocument(h.deps, "doc-1")).outcome).toBe("aprobado");
+    const body = h.calls.find((c) => c.op === "FECAESolicitar")!.body;
+    expect(body).toContain("<ar:Concepto>2</ar:Concepto>");
+    expect(body).toContain("<ar:FchServDesde>20261001</ar:FchServDesde>");
+    expect(body).toContain("<ar:FchServHasta>20261010</ar:FchServHasta>");
+    expect(body).toContain("<ar:FchVtoPago>20261030</ar:FchVtoPago>");
+    expect(last(h.log, "markSending")).toMatchObject({ concepto: 2 });
+  });
+
+  it("productos y servicios: concepto 3 con las mismas fechas", () => {
+    const s = snap({}, { has_services: true, has_goods: true, sale: serviceSale() });
+    const p = planDocument(s);
+    if (!p.ok) throw new Error("plan");
+    expect(detalleFor(s, p.plan, 12, "20261013", "30500000003")).toMatchObject({
+      Concepto: 3,
+      FchServDesde: "20261001",
+      FchServHasta: "20261010",
+      FchVtoPago: "20261030",
+    });
+  });
+
+  it("venta vieja sin período: la fecha del comprobante, como antes", () => {
+    const s = snap({}, { has_services: true, has_goods: false });
+    const p = planDocument(s);
+    if (!p.ok) throw new Error("plan");
+    expect(detalleFor(s, p.plan, 12, "20261013", null)).toMatchObject({
+      FchServDesde: "20261013",
+      FchServHasta: "20261013",
+      FchVtoPago: "20261013",
+    });
+  });
+
+  it("el vencimiento nunca queda antes del comprobante y hasta nunca antes que desde", () => {
+    expect(serviceDates({ service_from: "2026-10-01", service_to: "2026-10-05", payment_due: "2026-10-02" }, "20261013")).toEqual({
+      desde: "20261001",
+      hasta: "20261005",
+      vto: "20261013",
+    });
+    expect(serviceDates({ service_from: "2026-10-20" }, "20261013")).toEqual({ desde: "20261020", hasta: "20261020", vto: "20261013" });
+    expect(serviceDates({ service_from: "2026-10-09", service_to: "2026-10-01" }, "20261013").hasta).toBe("20261009");
+  });
+
+  it("productos solos no llevan fechas de servicio", () => {
+    const s = snap({}, { sale: serviceSale() });
+    const p = planDocument(s);
+    if (!p.ok) throw new Error("plan");
+    expect(detalleFor(s, p.plan, 12, "20261013", null)).toMatchObject({ Concepto: 1, FchServDesde: null, FchVtoPago: null });
   });
 });

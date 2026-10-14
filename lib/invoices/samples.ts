@@ -187,6 +187,78 @@ export function sampleInvoice(
 }
 
 /**
+ * Factura A de servicios profesionales (ADR-116): un laboratorio de
+ * bromatología factura análisis a una planta, con descripción ampliada,
+ * aclaraciones predefinidas y la aclaración de cada renglón, período del
+ * servicio y vencimiento del pago (concepto 2).
+ */
+export function sampleServiceSale(brand: SampleBrand | null | undefined): SampleTicketData {
+  const b = previewBrand(brand, "A");
+  const cuit = b.cuit ?? DEMO_ISSUER.cuit;
+  const total = 653400;
+  const f = fiscal(1, "Factura A", "A", 412, total, cuit, { tipo: 80, nro: "30712345678" });
+  return {
+    sale: {
+      number: 2207,
+      numberLabel: "#0002207",
+      created_at: DATE,
+      subtotal: total,
+      discount_total: 0,
+      total,
+      status: "completed",
+      ivaLines: [{ rate: 21, base: 540000, amount: 113400 }],
+      fiscal: { ...f, concepto: 2 },
+      service_from: "2026-10-01",
+      service_to: "2026-10-10",
+      payment_due: "2026-10-30",
+    },
+    items: [
+      {
+        id: "v1",
+        product_name: "Análisis microbiológico de agua potable",
+        quantity: 3,
+        unit_price: 72600,
+        subtotal: 217800,
+        unit_label: "analisis",
+        line_detail: "Según CAA art. 982\n- Recuento de aerobios mesófilos\n- Coliformes totales y Escherichia coli\n- Pseudomonas aeruginosa",
+        line_clarifications: ["Incluye toma de muestras en planta"],
+        line_note: "Muestras N° 45, 46 y 47 · Tanque de reserva y línea de envasado",
+      },
+      {
+        id: "v2",
+        product_name: "Relevamiento higiénico-sanitario de planta",
+        quantity: 1,
+        unit_price: 290400,
+        subtotal: 290400,
+        unit_label: "visita",
+        line_detail: "Inspección de BPM, POES y registros de limpieza con informe y plan de acción.",
+        line_clarifications: ["Normativa CAA capítulo II, Res. GMC 80/96"],
+        line_note: "Planta Ruta 9 km 285, Pueblo Esther",
+      },
+      {
+        id: "v3",
+        product_name: "Informe técnico firmado",
+        quantity: 1,
+        unit_price: 145200,
+        subtotal: 145200,
+        unit_label: "informe",
+        line_note: "Lote 2381 · Para presentar en ASSAL",
+      },
+    ],
+    payments: [{ id: "p1", method: "transfer", amount: total }],
+    customer: {
+      name: "Lácteos del Litoral S.A.",
+      email: "calidad@lacteoslitoral.com.ar",
+      document_type: "CUIT",
+      document_number: "30-71234567-8",
+      iva_condition: "responsable_inscripto",
+      address: "Ruta 9 km 285, Pueblo Esther, Santa Fe",
+    },
+    brand: { ...b, legal_name: brand?.legal_name || "Laboratorio Bromatológico Rosario S.R.L." },
+  };
+}
+
+/**
  * Factura de servicios de la plataforma (NinjaSoft a un negocio), para
  * mostrar que el mismo motor sirve a la cobranza SaaS (ADR-110): período
  * facturado, vencimiento del pago y emisor Ninja Soft.

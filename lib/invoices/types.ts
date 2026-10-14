@@ -53,6 +53,11 @@ export interface InvoiceLine {
   ivaRate?: number | null;
   /** Importe de la línea tal como se muestra (neto en A, final en B/C). */
   subtotal: number;
+  /**
+   * ADR-116: texto debajo del nombre (descripción ampliada del servicio,
+   * aclaraciones predefinidas y aclaración libre del renglón), línea por línea.
+   */
+  detailLines?: { bullet: boolean; text: string }[] | null;
 }
 
 export interface InvoiceIvaRow {

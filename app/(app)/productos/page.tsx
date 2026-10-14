@@ -17,6 +17,7 @@ import {
   Trash2,
   Upload,
   Package,
+  MessageSquareText,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -34,6 +35,8 @@ import { ProductionModal } from "@/components/products/ProductionModal";
 import { StockHistoryModal } from "@/components/products/StockHistoryModal";
 import { ImportProductsModal } from "@/components/products/ImportProductsModal";
 import { BrandsModal } from "@/components/products/BrandsModal";
+import { ClarificationsModal } from "@/components/services/ClarificationsModal";
+import { useCatalogMode } from "@/modules/services/hooks";
 import { CategoriesModal } from "@/components/products/CategoriesModal";
 import { WarrantyPlansModal } from "@/components/products/WarrantyPlansModal";
 import {
@@ -93,6 +96,9 @@ export default function ProductosPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [brandsOpen, setBrandsOpen] = useState(false);
+  // ADR-116: negocio de servicios (vocabulario y aclaraciones predefinidas).
+  const { mode: catalogMode, vocab } = useCatalogMode();
+  const [clarificationsOpen, setClarificationsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
   const [pluPromptOpen, setPluPromptOpen] = useState(false);
@@ -271,7 +277,7 @@ export default function ProductosPage() {
       <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pt-8">
         <PageHeader
           eyebrow="Catálogo"
-          title="Productos"
+          title={vocab.title}
           icon={Package}
           help={<InfoHint section="productos" size={18} />}
           actions={
@@ -316,6 +322,16 @@ export default function ProductosPage() {
             >
               <Tag size={16} /> Marcas
             </RoleButton>
+            {catalogMode !== "productos" && (
+              <RoleButton
+                denied={deniedTaxonomy}
+                variant="secondary"
+                className="shrink-0"
+                onClick={() => setClarificationsOpen(true)}
+              >
+                <MessageSquareText size={16} /> Aclaraciones
+              </RoleButton>
+            )}
             <GatedButton
               feature="garantias"
               featureLabel="Garantías"
@@ -326,7 +342,7 @@ export default function ProductosPage() {
               <ShieldCheck size={16} /> Garantías
             </GatedButton>
             <RoleButton denied={deniedCatalog} className="shrink-0" onClick={openNew} data-tour="productos-nuevo">
-              <Plus size={16} /> Nuevo producto
+              <Plus size={16} /> {vocab.newLabel}
             </RoleButton>
           </div>
           }
@@ -413,12 +429,12 @@ export default function ProductosPage() {
                     <EmptyState
                       compact
                       icon={Package}
-                      title="Todavía no cargaste productos"
+                      title={`Todavía no cargaste ${vocab.many}`}
                       description="Creá el primero y empezá a vender."
                       action={
                         deniedCatalog ? undefined : (
                           <Button size="sm" onClick={openNew}>
-                            <Plus size={16} /> Nuevo producto
+                            <Plus size={16} /> {vocab.newLabel}
                           </Button>
                         )
                       }
@@ -649,6 +665,7 @@ export default function ProductosPage() {
       />
       <ImportProductsModal open={importOpen} onOpenChange={setImportOpen} />
       <BrandsModal open={brandsOpen} onOpenChange={setBrandsOpen} />
+      <ClarificationsModal open={clarificationsOpen} onOpenChange={setClarificationsOpen} />
       <CategoriesModal open={categoriesOpen} onOpenChange={setCategoriesOpen} />
       <WarrantyPlansModal open={warrantyOpen} onOpenChange={setWarrantyOpen} />
       <ConfirmDialog

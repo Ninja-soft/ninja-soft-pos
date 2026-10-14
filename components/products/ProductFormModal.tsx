@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Barcode as BarcodeIcon,
   Boxes,
+  BriefcaseBusiness,
   Camera,
   ChevronDown,
   CircleDollarSign,
@@ -76,6 +77,9 @@ import {
   useVariants,
 } from "@/modules/products/hooks";
 import { errorDescription } from "@/lib/permissions/errors";
+import { SERVICE_UNITS, itemNoun } from "@/lib/catalog/mode";
+import { useCatalogMode, useServiceClarifications } from "@/modules/services/hooks";
+import { ClarificationsModal } from "@/components/services/ClarificationsModal";
 
 interface Props {
   open: boolean;
@@ -85,6 +89,7 @@ interface Props {
 
 type TabKey =
   | "general"
+  | "servicio"
   | "precios"
   | "stock"
   | "codigos"
@@ -101,6 +106,8 @@ const MlProductPanel = dynamic(
 
 const TABS: { key: TabKey; label: string; icon: typeof Info }[] = [
   { key: "general", label: "General", icon: LayoutGrid },
+  // ADR-116: sólo para servicios (unidad, duración, detalle y aclaraciones).
+  { key: "servicio", label: "Servicio", icon: BriefcaseBusiness },
   { key: "precios", label: "Precios", icon: CircleDollarSign },
   { key: "stock", label: "Stock", icon: Warehouse },
   { key: "codigos", label: "Códigos", icon: BarcodeIcon },
@@ -132,7 +139,11 @@ const FIELD_TAB: Partial<Record<keyof ProductInput, TabKey>> = {
   plu: "codigos",
   service_duration_min: "mas",
   commission_pct: "mas",
+  invoice_detail: "servicio",
 };
+
+// ADR-116: pestañas que no aplican a un servicio (sin stock, variantes ni bultos).
+const SERVICE_HIDDEN_TABS: TabKey[] = ["stock", "atributos", "medidas"];
 
 const selectCls =
   "h-11 w-full appearance-none rounded-xl border-0 bg-muted px-3.5 pr-9 text-sm text-foreground outline-none transition focus:bg-secondary focus:shadow-[inset_0_0_0_1px_var(--border)]";
@@ -222,6 +233,10 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   // Mercado Libre (ADR-104): sólo con la feature y el producto guardado.
   const mlAllowed = useFeature("mercadolibre") === true;
   const { data: myTenant } = useMyTenant();
+  // ADR-116: modo del catálogo (vocabulario y si lo nuevo nace como servicio).
+  const { mode: catalogMode, vocab } = useCatalogMode();
+  const { data: clarifications = [] } = useServiceClarifications(false, open);
+  const [clarificationsOpen, setClarificationsOpen] = useState(false);
   const { data: savedPackages = [], isLoading: packagesLoading } = useProductPackages(
     active?.id ?? null,
   );
@@ -261,6 +276,10 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const costRaw = watch("cost");
   const barcodeVal = watch("barcode");
   const nameVal = watch("name");
+  const isService = Boolean(watch("is_service"));
+  const clarificationIds = watch("service_clarification_ids") ?? [];
+  const noun = itemNoun(isService);
+  const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
 
   // Tipos de producto mutuamente excluyentes (constraint también en DB).
   const kitDisabled = Boolean(isSerialized || hasVariants);
@@ -293,6 +312,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       unit: product?.unit ?? "un",
       tax_rate: product?.tax_rate ?? 21,
       ...productTaxDefaults(product),
+      // ADR-116: en un negocio de servicios lo nuevo nace como servicio.
+      ...(product ? {} : { is_service: vocab.newIsService }),
       season: product?.season ?? "",
       tags: product?.tags?.join(", ") ?? "",
       image_url: product?.image_url ?? "",
@@ -303,7 +324,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       is_kit: product?.is_kit ?? false,
       is_serialized: product?.is_serialized ?? false,
       has_variants: product?.has_variants ?? false,
-      track_stock: product?.track_stock ?? true,
+      track_stock: product ? (product.track_stock ?? true) : !vocab.newIsService,
       allow_negative:
         product?.allow_negative == null ? "inherit" : product.allow_negative ? "yes" : "no",
       warranty_months: product?.warranty_months ?? 0,
@@ -312,6 +333,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       service_duration_min: product?.service_duration_min ?? "",
       commission_pct: product?.commission_pct ?? "",
       station: product?.station ?? "",
+      invoice_detail: product?.invoice_detail ?? "",
+      service_clarification_ids: product?.service_clarification_ids ?? [],
     });
     // categories entra aparte (abajo) para no resetear el form al llegar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -401,7 +424,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       if (active) {
         await update.mutateAsync({ id: active.id, input });
         await saveExtras(active.id);
-        toast({ title: "Producto actualizado", variant: "success" });
+        toast({ title: `${Noun} actualizado`, variant: "success" });
         onOpenChange(false);
         return;
       }
@@ -409,8 +432,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       await saveExtras(nuevo.id);
       setCreated(nuevo);
       toast({
-        title: "Producto creado",
-        description: "Ahora podés subir fotos o cargar componentes.",
+        title: `${Noun} creado`,
+        description: isService ? undefined : "Ahora podés subir fotos o cargar componentes.",
         variant: "success",
       });
     } catch (e) {
@@ -440,11 +463,32 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
   const saving = create.isPending || update.isPending || savingExtras;
   const show = (k: TabKey) => (tab === k ? "space-y-6" : "hidden");
 
+  // ADR-116: producto o servicio. Un servicio no lleva stock.
+  function setItemType(service: boolean) {
+    setValue("is_service", service, { shouldDirty: true });
+    if (service) {
+      setValue("track_stock", false, { shouldDirty: true });
+      if (!SERVICE_UNITS.some((u) => u.value === watch("unit"))) setValue("unit", "un", { shouldDirty: true });
+      if (SERVICE_HIDDEN_TABS.includes(tab)) setTab("general");
+    } else if (tab === "servicio") {
+      setTab("general");
+    }
+  }
+  function toggleClarification(id: string, on: boolean) {
+    const next = on ? [...clarificationIds.filter((x) => x !== id), id] : clarificationIds.filter((x) => x !== id);
+    setValue("service_clarification_ids", next, { shouldDirty: true });
+  }
+  const visibleTabs = TABS.filter((t) => {
+    if (t.key === "historial") return isEdit && historyAllowed;
+    if (t.key === "servicio") return isService;
+    return !(isService && SERVICE_HIDDEN_TABS.includes(t.key));
+  });
+
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? "Editar producto" : "Nuevo producto"}
+      title={isEdit ? `Editar ${noun}` : `Nuevo ${noun}`}
       className="sm:max-w-3xl"
       footer={
         <>
@@ -452,7 +496,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             {created ? "Cerrar" : "Cancelar"}
           </Button>
           <Button type="submit" form="product-form" loading={saving}>
-            {isEdit ? "Guardar" : "Crear producto"}
+            {isEdit ? "Guardar" : `Crear ${noun}`}
           </Button>
         </>
       }
@@ -460,7 +504,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
       {/* Pestañas de secciones (relleno en la activa, sin bordes de color). */}
       <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-5 bg-popover px-5 pb-3 pt-4 backdrop-blur sm:-top-6 sm:-mx-6 sm:-mt-6 sm:px-6">
         <div className="-mx-1 flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden gap-1 overflow-x-auto px-1">
-          {TABS.filter((t) => t.key !== "historial" || (isEdit && historyAllowed)).map((t) => {
+          {visibleTabs.map((t) => {
             const on = tab === t.key;
             const Icon = t.icon;
             return (
@@ -486,7 +530,37 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         {/* ── General ─────────────────────────────────────────────── */}
         <div className={show("general")}>
           <Group>
-            <Input variant="filled" label="Nombre" error={errors.name?.message} {...register("name")} />
+            {/* ADR-116: con servicios en el catálogo, cada ítem dice qué es. */}
+            {catalogMode !== "productos" && (
+              <div role="radiogroup" aria-label="Tipo de ítem" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+                {[
+                  { v: false, label: "Producto" },
+                  { v: true, label: "Servicio" },
+                ].map((o) => (
+                  <button
+                    key={o.label}
+                    type="button"
+                    role="radio"
+                    aria-checked={isService === o.v}
+                    onClick={() => setItemType(o.v)}
+                    className={cn(
+                      "h-9 rounded-lg text-sm font-semibold outline-none transition focus-visible:bg-secondary",
+                      isService === o.v ? "bg-popover text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <Input
+              variant="filled"
+              label="Nombre"
+              placeholder={isService ? "Ej. Análisis microbiológico de agua" : undefined}
+              error={errors.name?.message}
+              {...register("name")}
+            />
+            {!isService && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Marca</label>
@@ -509,7 +583,8 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               </div>
               <Input variant="filled" label="Modelo" placeholder="Opcional" {...register("model")} />
             </div>
-            {addingBrand ? (
+            )}
+            {isService ? null : addingBrand ? (
               <div className="flex gap-2">
                 <Input
                   variant="filled"
@@ -536,10 +611,16 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               </button>
             )}
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Descripción</span>
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                {isService ? "Descripción del servicio" : "Descripción"}
+              </span>
               <textarea
                 className={textareaCls}
-                placeholder="Qué es, para qué sirve, presentación, cuidados..."
+                placeholder={
+                  isService
+                    ? "Qué incluye, alcance, metodología, plazos de entrega..."
+                    : "Qué es, para qué sirve, presentación, cuidados..."
+                }
                 maxLength={4000}
                 {...register("description")}
               />
@@ -581,6 +662,108 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           </Group>
         </div>
 
+        {/* ── Servicio (ADR-116) ──────────────────────────────────── */}
+        {isService && (
+          <div className={show("servicio")}>
+            <Group title="Unidad y duración" description="Cómo se cobra: por hora, visita, informe, análisis, muestra o mes.">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Unidad</label>
+                  <div className="relative">
+                    <select className={selectCls} {...register("unit")}>
+                      {SERVICE_UNITS.map((u) => (
+                        <option key={u.value} value={u.value} className="bg-popover text-popover-foreground">
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={15}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                  </div>
+                </div>
+                <Input
+                  variant="filled"
+                  label="Duración estimada (min)"
+                  type="number"
+                  step="5"
+                  min="0"
+                  placeholder="Ej. 90"
+                  error={errors.service_duration_min?.message}
+                  {...register("service_duration_min")}
+                />
+                <Input
+                  variant="filled"
+                  label="Comisión (%)"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  placeholder="Opcional"
+                  error={errors.commission_pct?.message}
+                  {...register("commission_pct")}
+                />
+              </div>
+            </Group>
+
+            <Group
+              title="Detalle para la factura"
+              description="Sale debajo del nombre en la factura y el ticket. Empezá una línea con un guion para armar una lista. En el POS se puede cambiar en cada venta."
+            >
+              <textarea
+                className={textareaCls}
+                placeholder={"Recuento de aerobios mesófilos\n- Coliformes totales y fecales\n- Informe firmado por profesional matriculado"}
+                maxLength={2000}
+                {...register("invoice_detail")}
+              />
+              {errors.invoice_detail?.message && (
+                <span className="block text-xs text-destructive">{errors.invoice_detail.message}</span>
+              )}
+            </Group>
+
+            <Group
+              title="Aclaraciones que se suman solas"
+              description="Plantillas de texto del negocio. Al vender se pueden sacar o sumar otras."
+              aside={
+                <button
+                  type="button"
+                  onClick={() => setClarificationsOpen(true)}
+                  className="shrink-0 rounded-md px-1 text-xs font-semibold text-ninja-flameSoft outline-none hover:underline focus-visible:underline"
+                >
+                  Administrar
+                </button>
+              }
+            >
+              {clarifications.filter((c) => c.is_active).length === 0 ? (
+                <SaveFirst>
+                  Todavía no cargaste aclaraciones. Tocá Administrar para crear, por ejemplo, &quot;Incluye toma de
+                  muestras&quot; o &quot;Normativa CAA art. 1413&quot;.
+                </SaveFirst>
+              ) : (
+                <div className="divide-y divide-border rounded-lg bg-muted">
+                  {clarifications
+                    .filter((c) => c.is_active)
+                    .map((c) => (
+                      <SettingRow
+                        key={c.id}
+                        title={c.title}
+                        description={c.body}
+                        control={
+                          <Switch
+                            checked={clarificationIds.includes(c.id)}
+                            onCheckedChange={(v) => toggleClarification(c.id, v)}
+                            label={`Sumar ${c.title}`}
+                          />
+                        }
+                      />
+                    ))}
+                </div>
+              )}
+            </Group>
+          </div>
+        )}
+
         {/* ── Precios ─────────────────────────────────────────────── */}
         <div className={show("precios")}>
           <Group
@@ -616,7 +799,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               />
               <Input
                 variant="filled"
-                label="Precio de venta"
+                label={isService ? "Honorarios" : "Precio de venta"}
                 type="number"
                 step="0.01"
                 inputMode="decimal"
@@ -712,7 +895,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 disabled={Boolean(hasVariants)}
                 {...register("stock_min")}
               />
-              <Input variant="filled" label="Unidad" placeholder="un, kg, lt" {...register("unit")} />
+              {!isService && <Input variant="filled" label="Unidad" placeholder="un, kg, lt" {...register("unit")} />}
             </div>
             {hasVariants && (
               <p className="text-xs text-muted-foreground">
@@ -747,21 +930,28 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
         <div className={show("codigos")}>
           <Group>
             <div className="grid grid-cols-2 gap-3">
-              <Input variant="filled" label="SKU" placeholder="Código interno" {...register("sku")} />
               <Input
                 variant="filled"
-                label="Código de barras (EAN)"
-                inputMode="numeric"
-                {...register("barcode")}
+                label={isService ? "Código interno" : "SKU"}
+                placeholder={isService ? "Ej. AN-MIC-01" : "Código interno"}
+                {...register("sku")}
               />
+              {!isService && (
+                <Input
+                  variant="filled"
+                  label="Código de barras (EAN)"
+                  inputMode="numeric"
+                  {...register("barcode")}
+                />
+              )}
             </div>
-            {barcodeVal?.trim() ? (
+            {!isService && barcodeVal?.trim() ? (
               <div className="flex flex-col items-center gap-1.5 rounded-lg bg-white px-4 py-4 text-black">
                 <Barcode value={barcodeVal.trim().toUpperCase()} height={44} />
                 <span className="font-mono text-xs tracking-widest">{barcodeVal.trim()}</span>
               </div>
             ) : null}
-            {pluEnabled && (
+            {pluEnabled && !isService && (
               <Input
                 variant="filled"
                 label="PLU (código corto)"
@@ -841,6 +1031,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
 
         {/* ── Más (tipo de producto, servicio, cocina) ────────────── */}
         <div className={show("mas")}>
+          {!isService && (
           <Group title="Tipo de producto">
             <div className="divide-y divide-border rounded-lg bg-muted">
               <SettingRow
@@ -902,7 +1093,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
                 <SaveFirst>Guardá el producto primero; después definís los ejes y generás las combinaciones.</SaveFirst>
               ))}
           </Group>
+          )}
 
+          {!isService && (
           <Disclosure title="Servicio para agenda (duración y comisión)">
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
@@ -933,8 +1126,9 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
               </div>
             </div>
           </Disclosure>
+          )}
 
-          {diningEnabled && (
+          {diningEnabled && !isService && (
             <Disclosure title="Estación de cocina (KDS)">
               <div className="relative">
                 <select className={selectCls} {...register("station")}>
@@ -963,13 +1157,15 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
             )}
           </Disclosure>
 
-          <Disclosure title="Receta / escandallo (costo y margen)">
-            {active ? (
-              <RecipeEditor productId={active.id} salePrice={active.price} />
-            ) : (
-              <SaveFirst>Guardá el producto primero; después cargás la receta (insumos y costos).</SaveFirst>
-            )}
-          </Disclosure>
+          {!isService && (
+            <Disclosure title="Receta / escandallo (costo y margen)">
+              {active ? (
+                <RecipeEditor productId={active.id} salePrice={active.price} />
+              ) : (
+                <SaveFirst>Guardá el producto primero; después cargás la receta (insumos y costos).</SaveFirst>
+              )}
+            </Disclosure>
+          )}
 
           {mlAllowed && active && (
             <Disclosure title="Mercado Libre">
@@ -990,6 +1186,7 @@ export function ProductFormModal({ open, onOpenChange, product }: Props) {
           />
         </div>
       )}
+      <ClarificationsModal open={clarificationsOpen} onOpenChange={setClarificationsOpen} />
     </Modal>
   );
 }

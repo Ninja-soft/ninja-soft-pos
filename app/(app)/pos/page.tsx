@@ -59,6 +59,10 @@ import { useCartReprice } from "@/modules/pos/screen/useCartReprice";
 import { PosPriceContextBar } from "@/components/pos/PosPriceContextBar";
 import { selectList } from "@/lib/prices/resolve";
 import { useDiningEnabled } from "@/modules/dining/hooks";
+import { useCatalogMode, useServiceClarifications, useServiceProducts } from "@/modules/services/hooks";
+import { defaultServicePeriod } from "@/lib/catalog/mode";
+import { ServicePeriodBar } from "@/components/pos/ServicePeriodBar";
+import { ServiceLineModal } from "@/components/pos/ServiceLineModal";
 import { useMenus, useActiveMenuIds, useMenuProductIds } from "@/modules/menus/hooks";
 import { useCustomerPackCredits } from "@/modules/packs/hooks";
 import type { CustomerPackCredit } from "@/modules/packs/api";
@@ -513,6 +517,21 @@ function PosPageInner() {
     });
   }
   const clear = useCartStore((s) => s.clear);
+  // ADR-116: servicios profesionales. Con el catálogo en servicios (o mixto),
+  // cada renglón de servicio admite aclaraciones para la factura y la venta
+  // pide el período del servicio y el vencimiento del pago (ARCA, concepto 2/3).
+  const { mode: catalogMode } = useCatalogMode();
+  const servicesOn = catalogMode !== "productos";
+  const serviceProducts = useServiceProducts(servicesOn);
+  const { data: activeClarifications = [] } = useServiceClarifications(true, servicesOn);
+  const servicePeriod = useCartStore((s) => s.servicePeriod);
+  const setServicePeriod = useCartStore((s) => s.setServicePeriod);
+  const setLineService = useCartStore((s) => s.setLineService);
+  const [serviceLineId, setServiceLineId] = useState<string | null>(null);
+  const isServiceLine = useCallback(
+    (l: CartLine) => Boolean(servicesOn && l.productId && serviceProducts.map.has(l.productId)),
+    [servicesOn, serviceProducts.map],
+  );
 
   // Precio de lista (ADR-058): el mismo resolver que el servidor, con la foto de
   // precios de la sucursal y el cliente y la lista o condición elegidas acá.
@@ -635,6 +654,9 @@ function PosPageInner() {
   });
   const appliedListName = appliedList?.name ?? null;
   const { lines, discountTotal, subtotal, total, rawTotal } = pricing;
+  // ADR-116: la venta lleva servicios (pide período y vencimiento).
+  const hasServiceLines = servicesOn && lines.some(isServiceLine);
+  const serviceLine = serviceLineId ? lines.find((l) => l.lineId === serviceLineId) ?? null : null;
   // ADR-088: seña del turno que se cobra. Entra como pago fijo en la hoja y
   // create_sale exige ese pago 'sena' (sin cobrar dos veces).
   const { data: apptDeposits } = useAppointmentDeposits(origins.appointmentId);
@@ -1078,6 +1100,8 @@ function PosPageInner() {
     reservationId: origins.reservationId,
     salePromo: pricing.salePromo,
     couponId: pricing.couponDiscount > 0 ? pricing.appliedCoupon?.coupon_id ?? null : null,
+    // ADR-116: sólo con servicios en el carrito.
+    service: hasServiceLines ? (servicePeriod ?? defaultServicePeriod()) : null,
     onSuccess: ({ saleId, change, hadCash }) => {
       // Cajón al cobrar en efectivo (ADR-063): la venta ya está; un fallo sólo avisa.
       void posHw.openOnSale(saleId, hadCash).then((warn) => {
@@ -1422,6 +1446,8 @@ function PosPageInner() {
       onUncover={uncoverLine}
       onEditPrice={openPriceEdit}
       emptyHint={preset === "caja_rapida" ? "Escaneá un código o tipeá un PLU." : undefined}
+      isServiceLine={servicesOn ? isServiceLine : undefined}
+      onEditService={servicesOn ? setServiceLineId : undefined}
     />
   );
 
@@ -1473,6 +1499,11 @@ function PosPageInner() {
           onClear={() => pauser.requestClear()}
           compact={preset === "caja_rapida"}
         />
+      }
+      serviceSlot={
+        hasServiceLines ? (
+          <ServicePeriodBar period={servicePeriod ?? defaultServicePeriod()} onChange={setServicePeriod} />
+        ) : null
       }
       priceSlot={
         priceResolver.world && !origins.tableActive && !origins.deliveryActive ? (
@@ -2004,6 +2035,18 @@ function PosPageInner() {
           }}
         />
       </MountWhenOpened>
+      {servicesOn && (
+        <ServiceLineModal
+          open={serviceLine != null}
+          onOpenChange={(o) => !o && setServiceLineId(null)}
+          line={serviceLine}
+          info={serviceLine?.productId ? serviceProducts.map.get(serviceLine.productId) ?? null : null}
+          clarifications={activeClarifications}
+          onSave={(v) => {
+            if (serviceLine) setLineService(serviceLine.lineId, v);
+          }}
+        />
+      )}
       <PriceOverrideDialog
         line={priceTarget}
         onClose={() => setPriceTarget(null)}

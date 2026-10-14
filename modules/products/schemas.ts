@@ -85,6 +85,10 @@ export const ProductSchema = z.object({
   // producto (cocina/barra/cafeteria/parrilla/postres/despacho). "" → null = sin
   // estación. El POS/Salón snapshotea esto en la línea del pedido al cargarla.
   station: optionalText(20),
+  // Servicios profesionales (ADR-116): descripción ampliada que viaja a la
+  // factura y aclaraciones predefinidas que se suman solas al venderlo.
+  invoice_detail: optionalText(2000),
+  service_clarification_ids: z.array(z.string().uuid()).max(20).default([]),
 });
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductOutput = z.output<typeof ProductSchema>;

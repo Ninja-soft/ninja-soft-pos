@@ -302,7 +302,10 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const notificationUrl = `${url}/functions/v1/mp_billing_webhook`;
+  // Aviso por el dominio propio (hooks.soft.ninja reescribe a la Edge
+  // mp_billing_webhook); configurable para entornos sin ese host.
+  const hooksBase = (Deno.env.get("PUBLIC_HOOKS_BASE") ?? "https://hooks.soft.ninja").replace(/\/$/, "");
+  const notificationUrl = `${hooksBase}/mercadopago-billing`;
 
   const res = await fetch("https://api.mercadopago.com/preapproval", {
     method: "POST",

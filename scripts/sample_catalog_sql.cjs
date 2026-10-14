@@ -4,7 +4,9 @@
  * Sonda de muestra para Tiendita (DEMO, no es el import productivo).
  *
  * Lee ~N filas reales por tienda del Excel (streaming) y emite sentencias
- * INSERT multi-fila para `catalog_products` por stdout. Se usa para cargar un
+ * por stdout que cargan el catálogo con la RPC `catalog_sync_upsert_products`
+ * (ADR-109: producto maestro + publicación por tienda; `catalog_products`
+ * quedó congelada). Se usa para cargar un
  * SAMPLE vía mcp__supabase__execute_sql cuando no se tiene el service_role key
  * para correr el import completo (scripts/import_catalog.cjs).
  *
@@ -121,11 +123,13 @@ async function main() {
 
     if (rows.length > 0) {
       console.log(
-        "insert into catalog_products " +
-          "(store_key, ean, titulo, precio, precio_lista, marca, categoria_path, foto_url, disponible, estado, id_origen) values",
+        `select catalog_sync_upsert_products(null, '${storeKey}', false, (select jsonb_agg(to_jsonb(v)) from (values`,
       );
       console.log(rows.join(",\n"));
-      console.log("on conflict (store_key, ean) do nothing;");
+      console.log(
+        ") as v(store_key, ean, titulo, precio, precio_lista, marca, categoria_path, foto_url, disponible, estado, id_origen)));",
+      );
+      console.log(`select catalog_sync_finish_store(null, '${storeKey}', false);`);
       console.error(`[sample] ${storeKey}: ${rows.length} filas`);
     }
   }

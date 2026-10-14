@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -195,11 +196,14 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
   // no sea un scroll infinito. Por defecto sólo "Modo de operación" (lo nuevo e
   // importante) queda abierto. Las Cards NO se desmontan al colapsar (se ocultan
   // con `hidden`): el estado de cada input se preserva y el guardado no se rompe.
+  // ?grupo=productos abre ese grupo (p. ej. "Ocultar" desde la referencia de
+  // mercado en la ficha del producto).
+  const grupoParam = useSearchParams()?.get("grupo") ?? null;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    operacion: true,
-    cobro: false,
-    productos: false,
-    comprobante: false,
+    operacion: grupoParam === null || grupoParam === "operacion",
+    cobro: grupoParam === "cobro",
+    productos: grupoParam === "productos",
+    comprobante: grupoParam === "comprobante",
   });
   const toggleGroup = (key: string) =>
     setOpenGroups((p) => ({ ...p, [key]: !p[key] }));
@@ -758,22 +762,24 @@ export function OperationSettingsCard({ view = "operacion" }: { view?: View }) {
           listas de precios aparecen flechas (verde = más barato, roja = más
           caro) comparando contra el precio de mercado. Es orientativo. */}
       {hasCatalog && (
-        <Card>
+        <Card id="referencia-mercado">
           <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div>
               <div className="flex items-center gap-2 font-semibold">
-                <TrendingUp size={16} className="text-ninja-flameSoft" /> Comparar precios con el catálogo
+                <TrendingUp size={16} className="text-ninja-flameSoft" /> Mostrar precios de referencia del mercado en productos
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Muestra flechas en Productos y en las listas de precios indicando
-                si tu precio está por encima o por debajo del catálogo de
-                referencia. Información orientativa de mercado, no vinculante.
+                En la ficha de cada producto, en Productos, en las listas de
+                precios y al importar del catálogo: a cuánto lo venden las
+                tiendas y vendedores de tus catálogos y si tu precio está por
+                debajo, en rango o por encima. Información orientativa de
+                mercado, no vinculante. Apagado, no se muestra en ningún lado.
               </p>
             </div>
             <Switch
               checked={showCatalogPriceHints}
               onCheckedChange={setShowCatalogPriceHints}
-              label="Mostrar comparación de precios con el catálogo de referencia"
+              label="Mostrar precios de referencia del mercado en productos"
             />
           </CardContent>
         </Card>

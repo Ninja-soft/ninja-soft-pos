@@ -32,6 +32,8 @@ import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/
 import { TienditaIntro } from "./TienditaIntro";
 import { ImportProductModal } from "./ImportProductModal";
 import { appOrigin } from "@/lib/site";
+import { useCatalogHintsActive } from "@/modules/catalog/hooks";
+import { StoreLogo } from "@/components/catalog/StoreLogo";
 
 // Mensajes honestos para los códigos de error del checkout.
 const CHECKOUT_ERRORS: Record<string, string> = {
@@ -282,6 +284,8 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
   const [editing, setEditing] = useState<CatalogSearchResult | null>(null);
 
   const { data: results, isFetching, isError, isLoading } = useCatalogSearch(catalog.id, debounced, true);
+  // El precio de la tienda es referencia de mercado: respeta el switch del dueño.
+  const { active: showMarketPrice } = useCatalogHintsActive();
   const hasQuery = debounced.length > 0;
   const empty = !isFetching && (results?.length ?? 0) === 0;
 
@@ -371,6 +375,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
                   key={p.catalogProductId}
                   product={p}
                   added={added.has(p.catalogProductId)}
+                  showMarketPrice={showMarketPrice}
                   onAdd={() => setEditing(p)}
                 />
               ))}
@@ -393,15 +398,17 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
 function ProductTile({
   product: p,
   added,
+  showMarketPrice,
   onAdd,
 }: {
   product: CatalogSearchResult;
   added: boolean;
+  showMarketPrice: boolean;
   onAdd: () => void;
 }) {
   const path = splitCategoryPath(p.categoriaPath);
   const leaf = path[path.length - 1];
-  const onSale = p.precioLista != null && p.precio != null && p.precioLista > p.precio;
+  const onSale = showMarketPrice && p.precioLista != null && p.precio != null && p.precioLista > p.precio;
   return (
     <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
       <div className="relative aspect-square bg-white">
@@ -435,18 +442,22 @@ function ProductTile({
         </h3>
         {leaf && <p className="mt-1 truncate text-xs text-muted-foreground">{leaf}</p>}
         <div className="mt-auto pt-2.5">
-          <div className="flex items-baseline gap-1.5">
-            {p.precio != null && (
+          {showMarketPrice && p.precio != null && (
+            <div className="flex items-center gap-1.5">
+              <StoreLogo storeKey={p.storeKey} name={p.storeKey} size={16} />
               <span className="font-price text-base font-bold tabular-nums text-foreground">
                 {formatCurrency(p.precio)}
               </span>
-            )}
-            {onSale && (
-              <span className="truncate text-[11px] text-muted-foreground line-through">
-                {formatCurrency(p.precioLista)}
-              </span>
-            )}
-          </div>
+              {onSale && (
+                <span className="truncate text-[11px] text-muted-foreground line-through">
+                  {formatCurrency(p.precioLista)}
+                </span>
+              )}
+            </div>
+          )}
+          {showMarketPrice && p.precio != null && (
+            <p className="text-[10px] text-muted-foreground">Precio de referencia; al importar ponés el tuyo.</p>
+          )}
           {added ? (
             <span className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-success/15 text-xs font-semibold text-success">
               <Check size={14} /> Importado

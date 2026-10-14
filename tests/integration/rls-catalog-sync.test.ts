@@ -8,6 +8,8 @@
 // service_role: alta sola de tiendas nuevas, upsert por (tienda, EAN),
 // faltantes no disponibles (sin borrar), una sola corrida abierta, auditoría
 // de la manual y cierre con notify_catalog_update server-side.
+// ADR-109: las RPC de ADR-107 escriben el modelo nuevo (catalog_items +
+// catalog_offers); catalog_products quedó congelada.
 //
 // Corre contra un Supabase LOCAL con las migraciones aplicadas (mismas
 // variables que tests/integration/rls.test.ts). Sin ellas la suite se salta.
@@ -136,7 +138,13 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
     ctx.catalog = cat.id as string;
     await admin.from("catalog_store_map").insert({ catalog_id: ctx.catalog, store_key: STORE });
     // Producto "viejo" cargado por Excel: no vendrá en el feed.
-    await admin.from("catalog_products").insert({ store_key: STORE, ean: `${STAMP}-old`, titulo: "Viejo", disponible: true, estado: "ACTIVO" });
+    const old = await admin.rpc("catalog_sync_upsert_products" as never, {
+      p_run: null,
+      p_store: STORE,
+      p_full: false,
+      p_rows: [{ ean: `${STAMP}-old`, titulo: "Viejo", disponible: true, estado: "ACTIVO" }],
+    } as never);
+    if (old.error) throw old.error;
   }, 120_000);
 
   afterAll(async () => {
@@ -148,7 +156,7 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
     }
     await admin.from("catalog_store_map").delete().eq("catalog_id", ctx.catalog);
     await admin.from("catalogs").delete().eq("id", ctx.catalog);
-    await admin.from("catalog_products").delete().in("store_key", [STORE, STORE_NEW]);
+    await admin.from("catalog_items").delete().in("store_scope", [STORE, STORE_NEW]);
     await admin.from("catalog_stores").delete().in("key", [STORE, STORE_NEW]);
     await admin.from("tenants").delete().eq("id", ctx.tenant);
     for (const id of ctx.userIds) {
@@ -208,10 +216,10 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
     expect(fin.error).toBeNull();
     expect(fin.data).toMatchObject({ marcados: 1, product_count: 3 });
     const { data: old } = await admin
-      .from("catalog_products")
+      .from("catalog_offers")
       .select("disponible, estado")
       .eq("store_key", STORE)
-      .eq("ean", `${STAMP}-old`)
+      .eq("ean_origen", `${STAMP}-old`)
       .single();
     expect(old).toEqual({ disponible: false, estado: "FALTANTE_EN_FEED" });
 
@@ -257,7 +265,7 @@ describe.skipIf(!enabled)("ADR-107 · sync del catálogo Tiendita", () => {
       });
       expect(up.error).not.toBeNull();
     }
-    const { data } = await ctx.admin.from("catalog_products").select("id").eq("ean", `${STAMP}-x`);
+    const { data } = await ctx.admin.from("catalog_offers").select("id").eq("ean_origen", `${STAMP}-x`);
     expect(data ?? []).toEqual([]);
   });
 

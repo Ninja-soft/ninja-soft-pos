@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils/cn";
 import { splitCategoryPath } from "@/lib/products/categoryPath";
 import { useStorefrontCatalogs, useCatalogSearch } from "@/modules/tiendita/hooks";
 import { startCatalogCheckout } from "@/modules/tiendita/storefront";
+import { catalogSearchBusy } from "@/modules/tiendita/searchState";
 import type { StorefrontCatalog, CatalogSearchResult } from "@/modules/tiendita/storefront";
 import { TienditaIntro } from "./TienditaIntro";
 import { ImportProductModal } from "./ImportProductModal";
@@ -330,7 +331,7 @@ function CatalogAccess({ catalog, onBack }: { catalog: StorefrontCatalog; onBack
           autoFocus
           value={query}
           onValueChange={setQuery}
-          loading={isFetching}
+          loading={catalogSearchBusy(query, debounced, isFetching)}
           placeholder="Buscar por nombre o código de barras"
           className="max-w-2xl"
         />

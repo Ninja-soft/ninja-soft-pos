@@ -11,6 +11,16 @@ export function useStorefrontCatalogs() {
   });
 }
 
+// Portada de Tiendita: tiendas de origen + contador real. Cambia poco: se
+// cachea 10 minutos para que la intro no espere red al volver a entrar.
+export function useTienditaIntroShowcase() {
+  return useQuery({
+    queryKey: ["tiendita", "intro-showcase"],
+    queryFn: () => storefrontApi.introShowcase(),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 // Buscador dentro de un catálogo comprado. `enabled` se controla desde la UI
 // (solo busca cuando hay catálogo seleccionado y acceso). keepPreviousData para
 // que la lista no parpadee al tipear.
@@ -25,6 +35,9 @@ export function useCatalogSearch(
     enabled: Boolean(catalogId) && enabled,
     placeholderData: (prev) => prev,
     staleTime: 30 * 1000,
+    // Un solo reintento: si la base corta por timeout, reintentar 3 veces sólo
+    // estira el spinner ~30 s antes de mostrar el error.
+    retry: 1,
   });
 }
 
